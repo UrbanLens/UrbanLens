@@ -18,7 +18,7 @@
     width: 100%;
     max-width: 46rem;
     background: var(--ul-surface, #fff);
-    color: var(--text, #1f2937);
+    color: var(--ul-grey-9, #1f2937);
     border-radius: 16px;
     padding: 1.75rem;
     box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
@@ -33,7 +33,7 @@
         margin: 0 0 1rem;
         font-size: .9rem;
         line-height: 1.55;
-        color: var(--text-muted, #6b7280);
+        color: var(--ul-grey-6, #6b7280);
     }
 }
 
@@ -41,7 +41,7 @@
     display: block;
     padding: .85rem 1rem;
     margin-bottom: 1rem;
-    background: var(--ul-surface-alt, #f3f4f6);
+    background: var(--ul-surface-raised, #f3f4f6);
     border: 1px dashed var(--ul-border, #d1d5db);
     border-radius: 10px;
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -62,12 +62,12 @@
         border: 1px solid var(--ul-border, #d1d5db);
         border-radius: 9px;
         background: var(--ul-surface, #fff);
-        color: var(--text, #1f2937);
+        color: var(--ul-grey-9, #1f2937);
         font-weight: 600;
         cursor: pointer;
 
         &:hover {
-            background: var(--ul-surface-alt, #f3f4f6);
+            background: var(--ul-surface-raised, #f3f4f6);
         }
     }
 }
@@ -94,7 +94,7 @@
     padding: .4rem;
     border: none;
     background: none;
-    color: var(--text-muted, #9ca3af);
+    color: var(--ul-grey-5, #9ca3af);
     font-size: .82rem;
     cursor: pointer;
 
@@ -129,7 +129,7 @@
     margin: .6rem 0 .85rem;
     font-size: .88rem;
     line-height: 1.5;
-    color: var(--text-muted, #6b7280);
+    color: var(--ul-grey-6, #6b7280);
 }
 
 .settings-e2ee-actions {
@@ -203,7 +203,7 @@
 
 .dm-e2ee-hint {
     font-size: .75rem;
-    color: var(--text-muted, #9ca3af);
+    color: var(--ul-grey-5, #9ca3af);
     margin: .35rem 0 0;
 }
 
@@ -214,7 +214,7 @@
     margin-bottom: .9rem;
     font-size: .8rem;
     font-weight: 700;
-    color: var(--text-muted, #6b7280);
+    color: var(--ul-grey-6, #6b7280);
 
     input {
         display: block;
@@ -224,7 +224,7 @@
         border: 1px solid var(--ul-border, #d1d5db);
         border-radius: 9px;
         background: var(--ul-surface, #fff);
-        color: var(--text, #1f2937);
+        color: var(--ul-grey-9, #1f2937);
         font-size: .95rem;
     }
 }
@@ -235,7 +235,7 @@
     font-size: .75rem;
     text-transform: uppercase;
     letter-spacing: .08em;
-    color: var(--text-muted, #9ca3af);
+    color: var(--ul-grey-5, #9ca3af);
 }
 
 .e2ee-unlock-error {
@@ -247,7 +247,7 @@
 .e2ee-unlock-cancel {
     background: transparent !important;
     border: none !important;
-    color: var(--text-muted, #6b7280) !important;
+    color: var(--ul-grey-6, #6b7280) !important;
 }
 
 // -- Reset-keys dialog (merged confirm + password, with a progress state) ----
@@ -256,7 +256,7 @@
     display: flex;
     align-items: center;
     gap: .4rem;
-    color: var(--text-muted, #6b7280);
+    color: var(--ul-grey-6, #6b7280);
     font-size: .85rem;
     margin: 0 0 .75rem;
 }
@@ -274,7 +274,7 @@
 .e2ee-reset-cancel {
     background: transparent !important;
     border: none !important;
-    color: var(--text-muted, #6b7280) !important;
+    color: var(--ul-grey-6, #6b7280) !important;
 }
 
 .e2ee-reset-submit:disabled,

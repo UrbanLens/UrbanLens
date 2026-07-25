@@ -114,6 +114,5 @@ class AnthropicGateway(LLMGateway[Message]):
             logger.error("Anthropic response contained no text content: %s", response)
             return None
 
-        self.receive_tokens(body)
         logger.debug("AI Response: %s", body)
         return body

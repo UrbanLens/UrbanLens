@@ -934,14 +934,14 @@ class PinSuggestionQueueViewOnboardingFlowTests(TestCase):
         response = self.client.get(reverse("memories.locations"), {"onboarding": "1"})
         self.assertTrue(response.context["onboarding_flow"])
         self.assertContains(response, "is-pulsing")
-        self.assertContains(response, "pin-suggestions-onboarding-banner")
+        self.assertContains(response, 'id="pin-suggestions-onboarding-banner"')
         self.assertContains(response, 'data-onboarding="1"')
 
     def test_normal_visit_has_no_onboarding_chrome(self) -> None:
         response = self.client.get(reverse("memories.locations"))
         self.assertFalse(response.context["onboarding_flow"])
         self.assertNotContains(response, "is-pulsing")
-        self.assertNotContains(response, "pin-suggestions-onboarding-banner")
+        self.assertNotContains(response, 'id="pin-suggestions-onboarding-banner"')
 
 
 class PinSuggestionQueueViewSelectMapTests(TestCase):

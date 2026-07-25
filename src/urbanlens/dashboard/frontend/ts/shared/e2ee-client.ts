@@ -27,6 +27,7 @@ import {
 } from "./e2ee-crypto";
 import type { CachedIdentity } from "./e2ee-store";
 import { clearProfileKeys, getConversationKey, getGroupKey, getIdentity, putConversationKey, putGroupKey, putIdentity } from "./e2ee-store";
+import { toast } from "./dialogs";
 
 /** Endpoint URLs, provided by templates via {% url %} (see init()). */
 export interface E2EEUrls {
@@ -529,8 +530,7 @@ export async function enrollOauthIfNeeded(): Promise<boolean> {
 }
 
 function notifyEnrolled(): void {
-    const toastr = (window as { toastr?: { info?: (msg: string, title?: string) => void } }).toastr;
-    toastr?.info?.("Your direct messages are now end-to-end encrypted. Save your recovery key from Settings → Direct Messages.", "Encryption enabled");
+    window.toastr.info("Your direct messages are now end-to-end encrypted. Save your recovery key from Settings → Direct Messages.", "Encryption enabled");
 }
 
 // ---------------------------------------------------------------------------
@@ -1049,11 +1049,10 @@ async function buildResetDialog(hasPassword: boolean, resolve: (value: string | 
                 errorEl.hidden = false;
                 return;
             }
-            const toastr = (window as { toastr?: { success?: (msg: string) => void; warning?: (msg: string) => void } }).toastr;
             if (result.rewrapped > 0) {
-                toastr?.success?.("Your keys were reset and your message history was re-encrypted - everything stays readable.");
+                toast.success("Your keys were reset and your message history was re-encrypted - everything stays readable.");
             } else if (!result.preserved) {
-                toastr?.warning?.("Your keys were reset. Previously encrypted messages are no longer readable on this account.");
+                toast.warning("Your keys were reset. Previously encrypted messages are no longer readable on this account.");
             }
             close(result.recoveryDisplay);
         } catch {

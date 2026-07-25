@@ -296,7 +296,7 @@ def remove_group_member(group: GroupChat, actor: Profile, target: Profile) -> No
 # ---------------------------------------------------------------------------
 
 
-def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = None) -> dict[str, Any]:
+def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = None, has_share: bool | None = None) -> dict[str, Any]:
     """Serialize a group message into the JSON payload pushed over the WebSocket.
 
     Args:
@@ -307,6 +307,12 @@ def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = N
             thread would mask for that viewer (docs/PROBLEMS.md; decision
             2026-07-23: per-recipient payloads). None keeps the raw name -
             correct only for the sender's own sessions.
+        has_share: Whether `message` has any attached `GroupMessageShare` rows.
+            Callers serializing the same message once per group member (e.g.
+            `broadcast_group_message`) should compute this once and pass it
+            through, instead of letting each call re-run
+            ``message.shares.exists()`` for the same message. None computes
+            it here (correct for a single call, just not for a per-member loop).
 
     Returns:
         A JSON-serializable dict; ``group_uuid`` lets the frontend route the
@@ -330,7 +336,7 @@ def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = N
         "sender_name": sender_name,
         # Shares need the full server-rendered card - the client re-fetches
         # the thread partial when this is set (same contract as 1:1 has_share).
-        "has_share": message.shares.exists(),
+        "has_share": message.shares.exists() if has_share is None else has_share,
     }
 
 
@@ -402,6 +408,11 @@ def _notify_group_message(message: GroupMessage) -> None:
 
     Args:
         message: The freshly created message.
+
+    Note:
+        Runs a small, fixed number of queries regardless of group size - see
+        the comments inline for how the per-membership unread check and the
+        notification-preference lookup each avoid a query-per-membership loop.
     """
     from django.urls import reverse
 
@@ -417,12 +428,42 @@ def _notify_group_message(message: GroupMessage) -> None:
 
     group = message.group
     url = reverse("messages.group", kwargs={"group_uuid": group.uuid})
-    memberships = group.active_memberships().exclude(profile_id=message.sender_id).select_related("profile", "profile__user")
+    # profile__notification_preferences is a reverse OneToOne - select_related
+    # pulls it in the same JOIN as profile/profile__user, so the preference
+    # check below never issues its own per-membership query.
+    memberships = list(
+        group.active_memberships().exclude(profile_id=message.sender_id).select_related("profile", "profile__user", "profile__notification_preferences"),
+    )
+    if not memberships:
+        return
+
+    # One query covering every membership's "do they already have an unread
+    # message in this group" check, instead of one `.exists()` query per
+    # membership (~100 extra queries on a full 50-member group otherwise) -
+    # same anti-N+1 shape as `group_conversations_for`/
+    # `unread_group_conversation_count` below, just applied per-member
+    # in Python instead of OR'd into a single Q (each membership's own
+    # join time/read mark still can't be expressed as one shared filter,
+    # but fetching the candidate rows once and checking them in memory
+    # avoids a query per membership either way).
+    earliest_created = min(membership.created for membership in memberships)
+    other_messages = list(
+        GroupMessage.objects.filter(group_id=group.pk, created__gte=earliest_created).exclude(pk=message.pk).values_list("sender_id", "created"),
+    )
+
+    def _already_unread(membership: GroupChatMembership) -> bool:
+        for sender_id, created in other_messages:
+            if sender_id == membership.profile_id or created < membership.created:
+                continue
+            if membership.last_read_at is not None and created <= membership.last_read_at:
+                continue
+            return True
+        return False
+
     for membership in memberships:
         if membership.muted or is_group_thread_open(membership.profile_id, group.pk):
             continue
-        already_unread = GroupMessage.objects.unread_for(membership).exclude(pk=message.pk).exists()
-        if already_unread:
+        if _already_unread(membership):
             continue
         try:
             pref = membership.profile.notification_preferences.message
@@ -534,7 +575,13 @@ def broadcast_group_message(message: GroupMessage) -> None:
     """
     members = list(message.group.active_memberships().select_related("profile__user"))
 
-    deliveries = [(direct_message_group_name(membership.profile_id), serialize_group_message(message, viewer=membership.profile)) for membership in members]
+    # Computed once for the whole broadcast - serialize_group_message would
+    # otherwise re-run this same exists() query once per member.
+    has_share = message.shares.exists()
+
+    deliveries = [
+        (direct_message_group_name(membership.profile_id), serialize_group_message(message, viewer=membership.profile, has_share=has_share)) for membership in members
+    ]
 
     def _send() -> None:
         layer = get_channel_layer()

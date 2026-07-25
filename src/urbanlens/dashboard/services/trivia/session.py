@@ -292,8 +292,17 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
     never blocked from playing).
 
     Raises:
-        TriviaError: if ``profile`` already answered this round.
+        TriviaError: if ``profile`` isn't a JOINED participant of this
+            round's session (e.g. still INVITED, never joined), or if
+            ``profile`` already answered this round.
     """
+    try:
+        participant = TriviaSessionParticipant.objects.get(session=round_.session, profile=profile)
+    except TriviaSessionParticipant.DoesNotExist:
+        raise TriviaError("You must join this session before submitting an answer.") from None
+    if participant.status != TriviaSessionParticipantStatus.JOINED:
+        raise TriviaError("You must join this session before submitting an answer.")
+
     question = round_.question
     is_correct = TriviaQuestion.normalize_answer(raw_answer) == question.answer_normalized
     matched_via = TriviaAnswerMatchKind.EXACT

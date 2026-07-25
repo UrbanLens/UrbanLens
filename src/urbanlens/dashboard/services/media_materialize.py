@@ -69,6 +69,66 @@ def _filename_from_url(url: str) -> str:
     return name[:100] if name and "." in name else _DEFAULT_FILENAME
 
 
+def fetch_with_revalidated_redirects(
+    url: str,
+    *,
+    max_redirects: int = _MAX_REDIRECTS,
+    timeout: float = _DOWNLOAD_TIMEOUT,
+    headers: dict[str, str] | None = None,
+) -> requests.Response:
+    """Fetch ``url`` via GET, manually following redirects with per-hop SSRF re-validation.
+
+    Shared by every service that downloads a user- or provider-supplied url
+    from the server (this module, ``services.pin_suggestions``'s
+    ``_download_photo_bytes``, and ``services.ai.link_extraction``'s
+    ``fetch_page_text`` - previously each had its own copy of this loop).
+
+    ``ensure_public_http_url`` closes the DNS-at-check-time gap but not a
+    rebind that happens *between* a check and the actual connection - each
+    hop here is fetched with ``allow_redirects=False`` and re-validated
+    immediately before connecting (including every redirect hop) to keep
+    that window as small as possible; see that function's docstring.
+
+    Args:
+        url: The url to fetch. Already validated once by the caller, if
+            applicable (e.g. at submission time) - this re-validates it
+            regardless, since time may have passed since then.
+        max_redirects: Maximum redirect hops to follow before giving up.
+        timeout: Per-request timeout in seconds.
+        headers: Extra headers to send (e.g. a descriptive User-Agent some
+            providers require).
+
+    Returns:
+        The final, non-redirect ``requests.Response`` - streamed
+        (``stream=True``), not yet read.
+
+    Raises:
+        UnsafeUrlError: A hop's target failed the public-reachability check,
+            a redirect response had no ``Location`` header, or the chain
+            exceeded ``max_redirects`` hops.
+        requests.RequestException: The underlying request failed.
+    """
+    fetch_url = url
+    for _hop in range(max_redirects + 1):
+        fetch_url = ensure_public_http_url(fetch_url)
+        response = requests.get(
+            fetch_url,
+            timeout=timeout,
+            stream=True,
+            allow_redirects=False,
+            headers=headers,
+        )
+        if response.is_redirect:
+            redirect_target = response.headers.get("Location")
+            response.close()
+            if not redirect_target:
+                raise UnsafeUrlError(f"{url} redirected with no target.")
+            fetch_url = urljoin(fetch_url, redirect_target)
+            continue
+        return response
+    raise UnsafeUrlError(f"{url} redirects too many times.")
+
+
 def materialize_media_item(
     *,
     location: Location,
@@ -150,26 +210,7 @@ def materialize_media_item(
         return existing
 
     try:
-        fetch_url = url
-        for _hop in range(_MAX_REDIRECTS + 1):
-            fetch_url = ensure_public_http_url(fetch_url)
-            response = requests.get(
-                fetch_url,
-                timeout=_DOWNLOAD_TIMEOUT,
-                stream=True,
-                allow_redirects=False,
-                headers=_DOWNLOAD_HEADERS,
-            )
-            if response.is_redirect:
-                redirect_target = response.headers.get("Location")
-                response.close()
-                if not redirect_target:
-                    raise MaterializeError(f"{url} redirected with no target.")
-                fetch_url = urljoin(fetch_url, redirect_target)
-                continue
-            break
-        else:
-            raise MaterializeError(f"{url} redirects too many times.")
+        response = fetch_with_revalidated_redirects(url, max_redirects=_MAX_REDIRECTS, timeout=_DOWNLOAD_TIMEOUT, headers=_DOWNLOAD_HEADERS)
         response.raise_for_status()
         content = response.raw.read(_MAX_DOWNLOAD_BYTES + 1, decode_content=True)
     except (requests.RequestException, OSError, UnsafeUrlError) as exc:

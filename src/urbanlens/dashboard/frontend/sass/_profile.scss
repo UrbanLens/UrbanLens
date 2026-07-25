@@ -838,7 +838,7 @@
     transition: width 0.4s ease;
 
     &--warn {
-        background: var(--ul-danger, #e53e3e);
+        background: var(--ul-color-danger-text, #e53e3e);
     }
 }
 
@@ -1837,7 +1837,7 @@ body div.container .edit-profile-page input[type=text].edit-username-input {
     }
 
     &:hover {
-        color: var(--ul-danger, #e53935);
+        color: var(--ul-color-danger-text, #e53935);
     }
 }
 

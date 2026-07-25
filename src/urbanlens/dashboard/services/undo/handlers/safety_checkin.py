@@ -4,6 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.markup.model import MarkupMap
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner
 from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
 
@@ -37,6 +40,13 @@ _CONTACT_FIELDS = ("email", "name", "notified_at", "found_safe_at")
 _PARTNER_FIELDS = ("status", "accepted_at")
 
 
+#: Registry key for this handler. Exposed as a module-level constant so call
+#: sites can import it (``from ...handlers.safety_checkin import MODEL_LABEL``)
+#: instead of hand-typing ``"safety_checkin"`` - a typo in a hand-typed string
+#: only fails at runtime via ``get_handler``'s ``ValueError``.
+MODEL_LABEL = "safety_checkin"
+
+
 @register
 class SafetyCheckinUndoHandler(UndoHandler):
     """Restores a check-in's own fields, its emergency-contact snapshots, and its partners.
@@ -59,7 +69,7 @@ class SafetyCheckinUndoHandler(UndoHandler):
     minutes on its own - no explicit re-scheduling needed here.
     """
 
-    model_label = "safety_checkin"
+    model_label = MODEL_LABEL
 
     @classmethod
     def serialize(cls, instances: list[SafetyCheckin]) -> list[dict[str, Any]]:
@@ -97,6 +107,46 @@ class SafetyCheckinUndoHandler(UndoHandler):
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[SafetyCheckin]:
+        """Recreate check-ins, their contact snapshots, and their partners.
+
+        Raises:
+            UndoExpiredError: If the owning profile, destination location,
+                attached markup map(s), a contact's linked profile, or a
+                partner's profile/inviter was independently deleted during
+                the retention window, since recreating the row would
+                otherwise fail with an uncaught IntegrityError.
+        """
+        # Deferred import: services.undo.service imports services.undo.handlers
+        # (which imports this module) before UndoExpiredError is defined there.
+        from urbanlens.dashboard.services.undo.service import UndoExpiredError
+
+        for entry in payload:
+            if not Profile.objects.filter(pk=entry["profile_id"]).exists():
+                raise UndoExpiredError("The profile that owned this check-in no longer exists.")
+
+            destination_location_id = entry["destination_location_id"]
+            if destination_location_id is not None and not Location.objects.filter(pk=destination_location_id).exists():
+                raise UndoExpiredError("The destination for this check-in no longer exists.")
+
+            markup_map_id = entry["markup_map_id"]
+            if markup_map_id is not None and not MarkupMap.objects.filter(pk=markup_map_id).exists():
+                raise UndoExpiredError("The route map for this check-in no longer exists.")
+
+            markup_map_ids = entry["markup_map_ids"]
+            if markup_map_ids and MarkupMap.objects.filter(pk__in=markup_map_ids).count() != len(set(markup_map_ids)):
+                raise UndoExpiredError("One of the maps attached to this check-in no longer exists.")
+
+            for contact_entry in entry["contacts"]:
+                contact_profile_id = contact_entry["contact_profile_id"]
+                if contact_profile_id is not None and not Profile.objects.filter(pk=contact_profile_id).exists():
+                    raise UndoExpiredError("One of the people/labels involved in this check-in no longer exists.")
+
+            # .get(): payloads stashed before partners existed have no "partners" key.
+            for partner_entry in entry.get("partners", []):
+                partner_profile_ids = (partner_entry["profile_id"], partner_entry["invited_by_id"])
+                if Profile.objects.filter(pk__in=partner_profile_ids).count() != len(set(partner_profile_ids)):
+                    raise UndoExpiredError("One of the people/labels involved in this check-in no longer exists.")
+
         restored: list[SafetyCheckin] = []
         for entry in payload:
             checkin = SafetyCheckin.objects.create(
@@ -109,7 +159,6 @@ class SafetyCheckinUndoHandler(UndoHandler):
                 checkin.markup_maps.set(entry["markup_map_ids"])
             for contact_entry in entry["contacts"]:
                 SafetyCheckinContact.objects.create(checkin=checkin, **contact_entry)
-            # .get(): payloads stashed before partners existed have no "partners" key.
             for partner_entry in entry.get("partners", []):
                 SafetyCheckinPartner.objects.create(checkin=checkin, **partner_entry)
             restored.append(checkin)

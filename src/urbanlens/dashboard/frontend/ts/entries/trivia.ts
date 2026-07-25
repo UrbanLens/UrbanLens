@@ -183,6 +183,58 @@ async function initFriendPicker(): Promise<void> {
     });
 }
 
+// Builds a small checkbox-picker dialog on the fly and resolves with the
+// chosen profile ids (empty if cancelled). There's no dedicated "invite
+// more" dialog markup in the template (unlike the initial invite flow's
+// trivia-friend-list, which lives inside the settings panel) so this is
+// constructed in JS, but it reuses renderFriendCheckboxes - the exact same
+// checkbox rendering the initial invite flow uses - rather than duplicating
+// it. Replaces the old window.prompt() exact-username-match flow, which
+// silently no-op'd on any typo or case mismatch with zero feedback.
+function pickFriendsToInvite(available: FriendOption[]): Promise<number[]> {
+    return new Promise((resolve) => {
+        const dialog = document.createElement("dialog");
+        dialog.className = "trivia-invite-more-dialog";
+        dialog.style.cssText = "max-width:22rem;width:90vw;padding:1.25rem;border-radius:0.5rem;border:1px solid rgba(0,0,0,0.15);";
+
+        const heading = document.createElement("h3");
+        heading.textContent = "Invite more players";
+        heading.style.marginTop = "0";
+
+        const list = document.createElement("div");
+        list.style.cssText = "display:flex;flex-direction:column;gap:0.5rem;max-height:16rem;overflow-y:auto;margin:0.75rem 0;";
+        renderFriendCheckboxes(list, available, new Set());
+
+        const actions = document.createElement("div");
+        actions.style.cssText = "display:flex;justify-content:flex-end;gap:0.5rem;";
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.textContent = "Cancel";
+        const inviteBtn = document.createElement("button");
+        inviteBtn.type = "button";
+        inviteBtn.textContent = "Invite";
+        actions.append(cancelBtn, inviteBtn);
+
+        dialog.append(heading, list, actions);
+        document.body.appendChild(dialog);
+
+        const cleanup = (result: number[]) => {
+            dialog.close();
+            dialog.remove();
+            resolve(result);
+        };
+        cancelBtn.addEventListener("click", () => cleanup([]));
+        inviteBtn.addEventListener("click", () => {
+            const checked = Array.from(list.querySelectorAll<HTMLInputElement>("input:checked")).map((input) => Number(input.value));
+            cleanup(checked);
+        });
+        // Escape key / native "cancel" - treat like the Cancel button.
+        dialog.addEventListener("cancel", () => cleanup([]));
+
+        dialog.showModal();
+    });
+}
+
 async function handleInviteMore(): Promise<void> {
     if (sessionId === null) return;
     const friends = await loadFriendOptions();
@@ -193,15 +245,13 @@ async function handleInviteMore(): Promise<void> {
         toast.error("Everyone on your friends list is already in this game.");
         return;
     }
-    const chosenName = window.prompt(`Invite who? (${available.map((friend) => friend.username).join(", ")})`);
-    if (!chosenName) return;
-    const chosen = available.find((friend) => friend.username === chosenName);
-    if (!chosen) return;
 
-    const response = await postForm(urlFor(urls.invite, sessionId), { profile_id: String(chosen.profile_id) });
-    if (response.error) {
-        toast.error(response.error);
-        return;
+    const chosenIds = await pickFriendsToInvite(available);
+    if (!chosenIds.length) return;
+
+    for (const profileId of chosenIds) {
+        const response = await postForm(urlFor(urls.invite, sessionId), { profile_id: String(profileId) });
+        if (response.error) toast.error(response.error);
     }
     await refreshLobby();
 }

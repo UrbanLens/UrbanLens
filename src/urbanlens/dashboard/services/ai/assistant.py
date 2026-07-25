@@ -145,9 +145,11 @@ def _tool_find_unvisited_pins(profile: Profile, args: dict) -> dict:
 
 
 def _tool_list_trips(profile: Profile, args: dict) -> dict:
+    from django.db.models import Count
+
     from urbanlens.dashboard.models.trips.model import Trip
 
-    trips = Trip.objects.upcoming(profile)[:_TOOL_ROW_LIMIT]
+    trips = Trip.objects.upcoming(profile).annotate(activity_count=Count("activities", distinct=True))[:_TOOL_ROW_LIMIT]
     return {
         "trips": [
             {
@@ -155,7 +157,7 @@ def _tool_list_trips(profile: Profile, args: dict) -> dict:
                 "slug": trip.slug,
                 "start_date": trip.start_date.isoformat() if trip.start_date else None,
                 "end_date": trip.end_date.isoformat() if trip.end_date else None,
-                "activities": trip.activities.count(),
+                "activities": trip.activity_count,
             }
             for trip in trips
         ],
@@ -163,18 +165,27 @@ def _tool_list_trips(profile: Profile, args: dict) -> dict:
 
 
 def _tool_create_trip(profile: Profile, args: dict) -> dict:
+    from django.db import transaction
+
+    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
     from urbanlens.dashboard.models.site_settings import SiteSettings
     from urbanlens.dashboard.models.trips.model import Trip, TripMembership
     from urbanlens.dashboard.services.trip_names import random_trip_name
 
-    max_upcoming = SiteSettings.get_current().max_upcoming_trips_per_user
-    if max_upcoming > 0 and Trip.objects.upcoming(profile).count() >= max_upcoming:
-        return {"error": f"The user already has the maximum of {max_upcoming} upcoming trips."}
+    # Lock the profile row for the duration of the check-then-create so two
+    # concurrent requests from the same user can't both pass the upcoming-trip
+    # count check and jointly exceed the site's max_upcoming_trips_per_user.
+    with transaction.atomic():
+        ProfileModel.objects.select_for_update().get(pk=profile.pk)
 
-    name = str(args.get("name") or "").strip()[:255] or random_trip_name()
-    description = str(args.get("description") or "").strip()[:1000] or None
-    trip = Trip.objects.create(name=name, description=description, creator=profile)
-    TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
+        max_upcoming = SiteSettings.get_current().max_upcoming_trips_per_user
+        if max_upcoming > 0 and Trip.objects.upcoming(profile).count() >= max_upcoming:
+            return {"error": f"The user already has the maximum of {max_upcoming} upcoming trips."}
+
+        name = str(args.get("name") or "").strip()[:255] or random_trip_name()
+        description = str(args.get("description") or "").strip()[:1000] or None
+        trip = Trip.objects.create(name=name, description=description, creator=profile)
+        TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
     return {"created": {"name": trip.name, "slug": trip.slug}}
 
 
@@ -280,7 +291,7 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
     prompt = (f"{transcript}\n" if transcript else "") + f"USER: {user_message}"
     actions: list[str] = []
 
-    for _ in range(MAX_TOOL_CALLS + 1):
+    for _ in range(MAX_TOOL_CALLS):
         answer = gateway.send_prompt(prompt)
         if not answer:
             return AssistantTurn(reply="Sorry - I couldn't get a response from the assistant just now. Try again in a moment.", actions=actions)

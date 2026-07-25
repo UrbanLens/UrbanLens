@@ -402,6 +402,10 @@ class SafetyCheckin(abstract.PublicDashboardModel):
             Index(fields=["uuid"], name="idxdb_sc_uuid"),
             Index(fields=["profile", "trip", "status"], name="idxdb_sc_profile_trip_status"),
             Index(fields=["status", "checkin_by"], name="idxdb_sc_status_by"),
+            # Backs SafetyCheckinQuerySet.due_for_archival(), polled by the 5-minute
+            # archival sweep beat task forever - without this it's a sequential scan
+            # over every check-in on every tick.
+            Index(fields=["archive_scheduled_at"], name="idxdb_sc_archive_scheduled_at"),
         ]
 
 

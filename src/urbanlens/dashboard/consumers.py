@@ -540,6 +540,27 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
         """
         await self.send(text_data=json.dumps(event["payload"]))
 
+    async def partner_access_revoked(self, event):
+        """Force-close this connection if it belongs to the just-removed partner.
+
+        Delivered to every connection on the check-in's group (owner, every partner,
+        every contact) - only the one whose bound profile matches acts on it. This is
+        the only way to revoke an already-open socket's access: permission is
+        otherwise checked once, at ``connect()`` time, in ``_resolve()``.
+
+        Args:
+            event: The group-send event, with a ``payload`` dict containing the
+                removed partner's ``profile_id`` (see
+                ``services.safety._broadcast_partner_access_revoked``).
+        """
+        if self.contact is not None or getattr(self, "profile_id", None) != event["payload"]["profile_id"]:
+            return
+        # No message frame first - the chat panel's onmessage switch has no case for
+        # this and would otherwise fall through to appendMessage(). Closing with 4404
+        # alone already makes the client show "You don't have access to this chat."
+        # (see _chat_panel.html's onclose handler), same as a revoked contact token.
+        await self.close(code=4404)
+
     @database_sync_to_async
     def _resolve(self, checkin_uuid, token):
         """Resolve the check-in and, for the contact route, the authorizing contact.
@@ -562,6 +583,7 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
         from urbanlens.dashboard.services.safety import is_owner_or_accepted_partner
 
         if token is not None:
+            self.profile_id = None
             contact = SafetyCheckinContact.objects.select_related("checkin").get(token=token)
             return contact.checkin, contact
 
@@ -572,6 +594,10 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
         checkin = SafetyCheckin.objects.get(uuid=checkin_uuid)
         if not is_owner_or_accepted_partner(checkin, profile):
             raise SafetyCheckin.DoesNotExist
+        # Bound for the lifetime of this connection - used to re-check permission on
+        # every incoming message (a partner's access can be removed after connect())
+        # and to target this connection for partner_access_revoked().
+        self.profile_id = profile.pk
         return checkin, None
 
     @database_sync_to_async
@@ -583,12 +609,24 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
 
         Returns:
             A JSON-serializable dict describing the new message.
+
+        Raises:
+            ValueError: Passed through from ``create_chat_message`` (blank/too-long
+                body, or an archived check-in), or raised here directly if the
+                session route's profile is no longer the owner or an accepted
+                partner - permission was only checked once, at ``connect()`` time,
+                so a partner removed mid-connection must be re-checked on every send.
         """
         from django.contrib.auth.models import AnonymousUser
 
-        from urbanlens.dashboard.services.safety import create_chat_message
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.safety import create_chat_message, is_owner_or_accepted_partner
 
         user = self.scope.get("user") or AnonymousUser()
+        if self.contact is None:
+            profile, _ = Profile.objects.get_or_create(user=user)
+            if not is_owner_or_accepted_partner(self.checkin, profile):
+                raise ValueError("You no longer have access to this check-in.")
         message = create_chat_message(self.checkin, user=user, contact=self.contact, body=body)
         return {
             "type": "message",

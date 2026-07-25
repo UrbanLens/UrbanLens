@@ -18,10 +18,12 @@ the recipient has not consented to having their address kept.
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import hashlib
 from typing import TYPE_CHECKING
 
+from django.core.cache import cache
 from django.utils import timezone
 
 from urbanlens.dashboard.models.email_log import EmailSendLog, EmailType
@@ -37,6 +39,21 @@ if TYPE_CHECKING:
 _HOUR = datetime.timedelta(hours=1)
 _DAY = datetime.timedelta(days=1)
 _MONTH = datetime.timedelta(days=30)
+
+# How long an in-flight "attempt" reservation (see `email_rate_limit_error`)
+# stays claimed before it self-expires. Comfortably longer than a single SMTP
+# send should ever take, so a reservation always outlives the gap between the
+# check and the eventual `record_email_sent()` call it guards - but still
+# short enough that a request which never actually results in a sent email
+# (the address matched an existing member, or a join email was already sent
+# to it) only inflates the day/month caps for a brief grace window rather
+# than for the whole window.
+_INFLIGHT_RESERVATION_TTL_SECONDS = 300
+
+
+def _inflight_cache_key(profile_id: int) -> str:
+    """Cache key for a profile's in-flight outbound-email reservation counter."""
+    return f"email_safety:inflight_sends:{profile_id}"
 
 
 def hash_email(email: str) -> str:
@@ -89,6 +106,23 @@ def get_email_limits(profile: Profile) -> tuple[int | None, int | None, int | No
 def email_rate_limit_error(profile: Profile) -> str | None:
     """Check whether the profile may trigger one more outbound email right now.
 
+    The check and the eventual write (`record_email_sent`) are far apart in
+    time - callers only log the send after an outbound SMTP call completes -
+    so a plain "count existing rows, compare to limit" check is not atomic:
+    concurrent requests can all read the same count and all pass before any
+    of them writes its log row, letting the caps be exceeded arbitrarily. To
+    close that window, this atomically reserves an "in-flight" slot in the
+    cache (`cache.add` then `cache.incr`, so concurrent callers for the same
+    profile always observe distinct, strictly increasing reservation counts)
+    and counts that reservation against each limit *before* the caller is
+    allowed to proceed. A rejected request releases its own reservation
+    immediately; an accepted one leaves its reservation in place to be
+    naturally superseded once `record_email_sent` writes the durable log row,
+    and it self-expires shortly after regardless (see
+    `_INFLIGHT_RESERVATION_TTL_SECONDS`) so a request that is accepted here
+    but never actually sends an email doesn't permanently eat into the
+    day/month caps.
+
     Args:
         profile: The profile attempting to send.
 
@@ -99,6 +133,16 @@ def email_rate_limit_error(profile: Profile) -> str | None:
     now = timezone.now()
     logs = EmailSendLog.objects.filter(sender=profile)
 
+    cache_key = _inflight_cache_key(profile.pk)
+    cache.add(cache_key, 0, timeout=_INFLIGHT_RESERVATION_TTL_SECONDS)
+    try:
+        inflight = cache.incr(cache_key)
+    except ValueError:
+        # The reservation expired between `add` and `incr` (a vanishingly
+        # rare timing edge) - reset it as if this were the first reservation.
+        cache.set(cache_key, 1, timeout=_INFLIGHT_RESERVATION_TTL_SECONDS)
+        inflight = 1
+
     for limit, window, label in (
         (per_hour, _HOUR, "hour"),
         (per_day, _DAY, "day"),
@@ -106,7 +150,9 @@ def email_rate_limit_error(profile: Profile) -> str | None:
     ):
         if limit is None:
             continue
-        if logs.filter(created__gte=now - window).count() >= limit:
+        if logs.filter(created__gte=now - window).count() + inflight > limit:
+            with contextlib.suppress(ValueError):
+                cache.decr(cache_key)
             return f"You've reached your invitation email limit for this {label}. Please try again later."
     return None
 

@@ -33,7 +33,7 @@
     align-items: center;
     padding: .35rem .75rem;
     border-radius: .5rem;
-    background: var(--surface-2, rgba(127, 127, 127, .12));
+    background: var(--ul-surface-2, rgba(127, 127, 127, .12));
     min-width: 4.5rem;
 
     &--self {
@@ -120,7 +120,7 @@
     gap: .5rem;
     padding: .75rem;
     border-radius: .5rem;
-    background: var(--surface-2, rgba(127, 127, 127, .06));
+    background: var(--ul-surface-2, rgba(127, 127, 127, .06));
     width: 100%;
     max-width: 24rem;
 }
@@ -153,7 +153,7 @@
         align-items: center;
         padding: .5rem .75rem;
         border-radius: .4rem;
-        background: var(--surface-2, rgba(127, 127, 127, .08));
+        background: var(--ul-surface-2, rgba(127, 127, 127, .08));
     }
 }
 
@@ -161,7 +161,7 @@
     font-size: .75rem;
     padding: .15rem .5rem;
     border-radius: 1rem;
-    background: var(--surface-3, rgba(127, 127, 127, .18));
+    background: var(--ul-surface-3, rgba(127, 127, 127, .18));
 
     &--joined {
         background: rgba(46, 160, 67, .2);

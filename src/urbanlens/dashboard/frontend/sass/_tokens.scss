@@ -471,6 +471,15 @@ $z-nav: 1100;
     --ul-color-danger-border: #{$danger-border};
     --ul-color-danger-bg: #{$danger-bg};
 
+    // Success/info text tokens, kept alongside -bg/-border above so every state
+    // color (success/warning/danger/info) has a matching solid foreground token.
+    --ul-color-success-text: #{$success-color};
+    --ul-color-info-text: #{$color-blue-600};
+
+    // RGB triplet form of --ul-primary-color, for callers that need rgba(var(--x), alpha)
+    // indirection (CSS custom properties can't decompose a hex/var into channels at runtime).
+    --ul-primary-rgb: 73, 103, 147;
+
     // Define sass colors as variables so dark mode can override them.
     --ul-primary-color: #{$primary-color};
     --ul-accent-purple: #{$accent-1};
@@ -562,6 +571,12 @@ $z-nav: 1100;
     --ul-color-danger-text: #f87171;
     --ul-color-danger-border: rgba(239, 68, 68, .4);
     --ul-color-danger-bg: rgba(239, 68, 68, .08);
+
+    --ul-color-success-text: #4ade80;
+    --ul-color-info-text: #{$dk-info-link};
+
+    --ul-primary-rgb: 3, 155, 229;
+
     --card-bg: #1e1e1e;
     --ul-border-color: var(--ul-grey-8b);
 

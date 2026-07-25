@@ -976,6 +976,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
         return counts
 
     gateway = ImmichGateway(account=account)
+    existing_checksums = set(Image.objects.filter(pin=pin, profile=profile).values_list("checksum", flat=True))
     total = len(asset_ids)
     for index, asset_id in enumerate(asset_ids):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -987,7 +988,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
+        if checksum in existing_checksums:
             counts["skipped"] += 1
             continue
         if quota_error_for_upload(profile, len(content)):
@@ -1010,6 +1011,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
         if target_visit is None:
             log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
+        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -1287,6 +1289,7 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
         return counts
 
     gateway = FlickrGateway(account=account)
+    existing_checksums = set(Image.objects.filter(pin=pin, profile=profile).values_list("checksum", flat=True))
     total = len(photo_ids)
     for index, photo_id in enumerate(photo_ids):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -1298,7 +1301,7 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
+        if checksum in existing_checksums:
             counts["skipped"] += 1
             continue
         if quota_error_for_upload(profile, len(content)):
@@ -1317,6 +1320,7 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
         )
         log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
+        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -1384,6 +1388,7 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
     photos_by_id = {photo.id: photo for photo in album.photos}
     selected = [photos_by_id[photo_id] for photo_id in photo_ids if photo_id in photos_by_id]
     dedupe_filter = {"pin": pin} if pin is not None else {"wiki": wiki}
+    existing_checksums = set(Image.objects.filter(profile=profile, **dedupe_filter).values_list("checksum", flat=True))
     total = len(selected)
     for index, photo in enumerate(selected):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -1395,7 +1400,7 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if Image.objects.filter(profile=profile, checksum=checksum, **dedupe_filter).exists():
+        if checksum in existing_checksums:
             counts["skipped"] += 1
             continue
         if quota_error_for_upload(profile, len(content)):
@@ -1416,6 +1421,7 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
             file_size=len(content),
         )
         safely_enqueue_task(process_image_upload, image.pk)
+        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -1481,6 +1487,7 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
         except GatewayRequestError:
             logger.warning("import_google_photos: could not re-list session %s to resolve %d missing item(s)", session_id, len(missing_ids), exc_info=True)
 
+    existing_checksums = set(Image.objects.filter(pin=pin, profile=profile).values_list("checksum", flat=True))
     total = len(media_item_ids)
     for index, item_id in enumerate(media_item_ids):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -1496,7 +1503,7 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
+        if checksum in existing_checksums:
             counts["skipped"] += 1
             continue
         if quota_error_for_upload(profile, len(content)):
@@ -1514,6 +1521,7 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
         )
         log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
+        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -1745,8 +1753,14 @@ def sweep_due_safety_checkin_archival() -> int:
     try:
         count = 0
         for checkin in SafetyCheckin.objects.due_for_archival():
-            archive_checkin(checkin)
-            count += 1
+            # One checkin's failure (e.g. a malformed key bundle) must not stop the
+            # sweep from archiving every other overdue checkin in this same run -
+            # each is independent, and the next sweep will retry only the failed one.
+            try:
+                archive_checkin(checkin)
+                count += 1
+            except Exception:
+                logger.exception("Safety checkin %s failed to archive during sweep; will retry next sweep", checkin.pk)
         if count:
             logger.info("Archived %s overdue safety check-in(s)", count)
         return count
@@ -1771,9 +1785,12 @@ def delete_expired_safety_checkins() -> int:
 def prune_expired_undo_actions() -> int:
     """Delete UndoAction rows past their retention window.
 
-    The cached payload each row points at has already expired via its own
-    TTL by this point - this just tidies up the DB-side index so the
-    settings page's history list doesn't need to filter expired rows forever.
+    Each row's restore payload is stored directly on the row itself (see
+    ``models.undo.UndoAction``'s docstring), not in a cache, specifically so
+    an entry's restorability depends only on its own ``created`` timestamp
+    versus ``UNDO_RETENTION`` - not on a separately-expiring cache TTL. This
+    task just deletes rows once that window has passed, so the settings
+    page's history list doesn't need to filter expired rows forever.
     """
     from urbanlens.dashboard.models.undo import UndoAction
 

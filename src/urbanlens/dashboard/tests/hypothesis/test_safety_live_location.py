@@ -74,6 +74,23 @@ class UpdateLiveLocationTests(TestCase):
         self.assertEqual(self.checkin.live_location_accuracy, 12.5)
         self.assertIsNotNone(self.checkin.live_location_updated_at)
 
+    def test_concurrent_toggle_off_is_not_masked_by_a_stale_in_memory_flag(self):
+        """Regression guard: update_live_location must re-check sharing-enabled against
+        the DB at write time, not the caller's possibly-stale in-memory `checkin` - a
+        toggle-off landing between the caller's own check and this call must never
+        persist a real position onto a row now flagged "sharing disabled".
+        """
+        set_live_location_sharing(self.checkin, enabled=True)
+        # Simulate another request disabling sharing concurrently, without refreshing
+        # this in-memory `self.checkin` - it still reads live_location_sharing_enabled=True.
+        SafetyCheckin.objects.filter(pk=self.checkin.pk).update(live_location_sharing_enabled=False)
+
+        with self.assertRaisesMessage(ValueError, "not enabled"):
+            update_live_location(self.checkin, latitude=40.0, longitude=-74.0, accuracy=12.5)
+
+        self.checkin.refresh_from_db()
+        self.assertIsNone(self.checkin.live_latitude)
+
     def test_disabling_sharing_clears_the_last_known_position(self):
         set_live_location_sharing(self.checkin, enabled=True)
         update_live_location(self.checkin, latitude=40.0, longitude=-74.0, accuracy=12.5)

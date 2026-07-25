@@ -1,5 +1,7 @@
 """User settings form - privacy, contact, and style preferences."""
 
+import re
+
 from django import forms
 
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
@@ -261,6 +263,15 @@ class StyleSettingsForm(forms.ModelForm):
             self.initial["distance_units"] = self.instance.effective_distance_units
 
 
+# Discord usernames (new pomelo system): 2-32 chars, letters/digits/underscores/dots.
+# Also allow the legacy discriminator form (e.g. "user#1234") since older accounts may
+# still show one. Mirrors DiscordHandleForm's public-facing regex in profile_form.py -
+# this is private contact info rather than a public identity claim, so it's kept
+# intentionally permissive (no discriminator-length enforcement) rather than duplicating
+# that field's exact 100-char ceiling.
+_DISCORD_USERNAME_RE = re.compile(r"^[a-zA-Z0-9._#-]{2,100}$")
+
+
 class ContactMethodsForm(forms.ModelForm):
     """Optional contact methods stored on the profile."""
 
@@ -311,6 +322,23 @@ class ContactMethodsForm(forms.ModelForm):
             "telegram_username",
             "matrix_handle",
         ]
+
+    def clean_discord_username(self) -> str:
+        """Validate the Discord username against the allowed character set.
+
+        Returns:
+            The stripped handle, or an empty string when blank.
+
+        Raises:
+            forms.ValidationError: When the handle contains disallowed characters
+                or falls outside the allowed length range.
+        """
+        value = self.cleaned_data.get("discord_username", "").strip()
+        if value and not _DISCORD_USERNAME_RE.match(value):
+            raise forms.ValidationError(
+                "2-100 characters: letters, digits, underscores, dots, hyphens, or #.",
+            )
+        return value
 
 
 class MapDisplayForm(forms.ModelForm):

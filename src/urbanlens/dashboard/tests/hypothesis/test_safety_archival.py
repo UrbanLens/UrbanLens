@@ -150,6 +150,67 @@ class ArchiveCheckinTests(TestCase):
         self.assertNotEqual(contact.email, "watcher@example.com")
         self.assertEqual(contact.name, "")
 
+    def test_scrubs_destination_location_trip_and_markup_map_links(self):
+        """Regression guard: these FKs must not survive archival - a DB-level reader
+        could otherwise join straight through the archived checkin row to plaintext
+        destination/trip/route data, defeating the "only the owner can decrypt this"
+        promise. The linked rows themselves are untouched (severed, not deleted) -
+        they're independently owned/shared resources with their own lifecycle.
+        """
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.markup.model import MarkupMap
+        from urbanlens.dashboard.models.trips.model import Trip
+
+        _enroll(self.owner)
+        location = Location.objects.create(latitude="40.000000", longitude="-74.000000", official_name="Old Mill")
+        trip = baker.make("dashboard.Trip", name="Weekend trip")
+        markup_map = MarkupMap.objects.create(profile=self.owner, title="Route")
+        reference_map = MarkupMap.objects.create(profile=self.owner, title="Reference")
+        self.checkin.destination_location = location
+        self.checkin.trip = trip
+        self.checkin.markup_map = markup_map
+        self.checkin.save(update_fields=["destination_location", "trip", "markup_map"])
+        self.checkin.markup_maps.add(reference_map)
+
+        archive_checkin(self.checkin)
+
+        self.checkin.refresh_from_db()
+        self.assertIsNone(self.checkin.destination_location_id)
+        self.assertIsNone(self.checkin.trip_id)
+        self.assertIsNone(self.checkin.markup_map_id)
+        self.assertEqual(list(self.checkin.markup_maps.all()), [])
+        self.assertTrue(Location.objects.filter(pk=location.pk).exists())
+        self.assertTrue(Trip.objects.filter(pk=trip.pk).exists())
+        self.assertTrue(MarkupMap.objects.filter(pk__in=[markup_map.pk, reference_map.pk]).count() == 2)
+
+    def test_payload_captures_location_trip_and_map_content_before_scrubbing(self):
+        """The owner must not lose the destination/trip/route content just because the
+        checkin's own FKs to them are severed - it has to survive inside what they can
+        decrypt. Round-trips through a real keypair, like SealArchivePayloadInteropTests.
+        """
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.markup.model import MarkupMap
+        from urbanlens.dashboard.models.trips.model import Trip
+
+        keypair = nacl.public.PrivateKey.generate()
+        _enroll(self.owner, public_key=keypair.public_key.encode())
+        location = Location.objects.create(latitude="40.000000", longitude="-74.000000", official_name="Old Mill")
+        trip = baker.make("dashboard.Trip", name="Weekend trip")
+        markup_map = MarkupMap.objects.create(profile=self.owner, title="Route")
+        self.checkin.destination_location = location
+        self.checkin.trip = trip
+        self.checkin.markup_map = markup_map
+        self.checkin.save(update_fields=["destination_location", "trip", "markup_map"])
+
+        archive_checkin(self.checkin)
+
+        archive = SafetyCheckinArchive.objects.get(checkin=self.checkin)
+        symmetric_key = nacl.public.SealedBox(keypair).decrypt(base64.b64decode(archive.sealed_key))
+        payload = json.loads(nacl.secret.SecretBox(symmetric_key).decrypt(base64.b64decode(archive.ciphertext), base64.b64decode(archive.nonce)))
+        self.assertEqual(payload["destination_location"], {"name": "Old Mill", "address": location.address})
+        self.assertEqual(payload["trip"], {"name": "Weekend trip"})
+        self.assertEqual([m["title"] for m in payload["maps"]], ["Route"])
+
     def test_opt_out_still_resolves_after_its_linked_contact_is_scrubbed(self):
         _enroll(self.owner)
         contact_profile = _profile()
@@ -163,6 +224,28 @@ class ArchiveCheckinTests(TestCase):
         self.assertEqual(contact.contact_profile_id, contact_profile.pk)
         self.assertEqual(opt_out.contact_profile_id, contact_profile.pk)
         self.assertEqual(opt_out.checkin_id, self.checkin.pk)
+
+
+class ChatBlockedAfterArchivalTests(TestCase):
+    """create_chat_message must reject new messages once a checkin is archived -
+    otherwise plaintext could keep accumulating in SafetyCheckinMessage.body with no
+    re-archival trigger to ever scrub it again.
+    """
+
+    def setUp(self):
+        self.owner = _profile()
+        self.checkin = _checkin(self.owner)
+        _enroll(self.owner)
+        archive_checkin(self.checkin)
+        self.checkin.refresh_from_db()
+
+    def test_owner_message_is_rejected_after_archival(self):
+        from urbanlens.dashboard.services.safety import create_chat_message
+
+        with self.assertRaisesMessage(ValueError, "concluded"):
+            create_chat_message(self.checkin, user=self.owner.user, contact=None, body="One more thing")
+
+        self.assertEqual(self.checkin.messages.count(), 0)
 
 
 class ScheduleCheckinArchivalTests(TestCase):

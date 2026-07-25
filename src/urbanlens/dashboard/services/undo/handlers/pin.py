@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from typing import Any
 
+from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
 
 # Fields restored verbatim on undo. Deliberately excludes uuid/slug/created/updated
@@ -43,6 +47,13 @@ _RESTORABLE_FIELDS = (
 )
 
 
+#: Registry key for this handler. Exposed as a module-level constant so call
+#: sites can import it (``from ...handlers.pin import MODEL_LABEL``) instead
+#: of hand-typing ``"pin"`` - a typo in a hand-typed string only fails at
+#: runtime via ``get_handler``'s ``ValueError``.
+MODEL_LABEL = "pin"
+
+
 @register
 class PinUndoHandler(UndoHandler):
     """Restores a pin's own fields, hierarchy position, and labels - not its cascade children.
@@ -51,7 +62,7 @@ class PinUndoHandler(UndoHandler):
     are gone the instant the pin is deleted and are not restored.
     """
 
-    model_label = "pin"
+    model_label = MODEL_LABEL
 
     @classmethod
     def serialize(cls, instances: list[Pin]) -> list[dict[str, Any]]:
@@ -81,7 +92,29 @@ class PinUndoHandler(UndoHandler):
 
         Parent/child relationships within the restored batch are relinked in
         a second pass once every pin has a new pk to relink against.
+
+        Raises:
+            UndoExpiredError: If the profile, location, wiki, or any label this
+                batch referenced was independently deleted during the retention
+                window, since recreating the row would otherwise fail with an
+                uncaught IntegrityError.
         """
+        # Deferred import: services.undo.service imports services.undo.handlers
+        # (which imports this module) before UndoExpiredError is defined there.
+        from urbanlens.dashboard.services.undo.service import UndoExpiredError
+
+        for entry in payload:
+            if not Profile.objects.filter(pk=entry["profile_id"]).exists():
+                raise UndoExpiredError("The profile that owned this pin no longer exists.")
+            if not Location.objects.filter(pk=entry["location_id"]).exists():
+                raise UndoExpiredError("The location this pin pointed at no longer exists.")
+            wiki_id = entry["wiki_id"]
+            if wiki_id is not None and not Wiki.objects.filter(pk=wiki_id).exists():
+                raise UndoExpiredError("The wiki this pin was linked to no longer exists.")
+            label_ids = entry["label_ids"]
+            if label_ids and Label.objects.filter(pk__in=label_ids).count() != len(set(label_ids)):
+                raise UndoExpiredError("One of the labels on this pin no longer exists.")
+
         old_to_new: dict[int, Pin] = {}
         restored: list[Pin] = []
         for entry in payload:

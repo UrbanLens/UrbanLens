@@ -30,7 +30,7 @@
 
 		.brand-icon {
 			font-size: 2.2rem;
-			color: var(--ul-accent, #0891b2);
+			color: var(--ul-primary-color, #0891b2);
 			margin-bottom: 0.25rem;
 		}
 
@@ -67,7 +67,7 @@
 
 		.progress-bar {
 			height: 100%;
-			background: var(--ul-accent, #0891b2);
+			background: var(--ul-primary-color, #0891b2);
 			border-radius: 2px;
 			transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 		}
@@ -97,8 +97,8 @@
 			background: rgba(255, 255, 255, 0.07);
 
 			.step-icon {
-				border-color: var(--ul-accent, #0891b2);
-				background: var(--ul-accent, #0891b2);
+				border-color: var(--ul-primary-color, #0891b2);
+				background: var(--ul-primary-color, #0891b2);
 				color: var(--ul-grey-0);
 			}
 		}
@@ -156,7 +156,7 @@
 		font-weight: 700;
 		text-transform: uppercase;
 		letter-spacing: 0.1em;
-		color: var(--ul-accent, #0891b2);
+		color: var(--ul-primary-color, #0891b2);
 	}
 
 	&__title {
@@ -210,7 +210,7 @@
 		.material-symbols-outlined,
 		.material-icons {
 			font-size: 1.15rem;
-			color: var(--ul-accent, #0891b2);
+			color: var(--ul-primary-color, #0891b2);
 			flex-shrink: 0;
 			margin-top: 0.1em;
 		}
@@ -277,7 +277,7 @@
 	&:focus-within {
 		.setup-username-group__prefix,
 		.setup-username-group__input {
-			border-color: var(--ul-accent, #0891b2);
+			border-color: var(--ul-primary-color, #0891b2);
 		}
 	}
 
@@ -322,7 +322,7 @@
 
 		&:focus {
 			outline: none;
-			border-color: var(--ul-accent, #0891b2);
+			border-color: var(--ul-primary-color, #0891b2);
 		}
 
 		&[aria-invalid="true"] {
@@ -397,7 +397,7 @@
 	transition: border-color 0.15s, background-color 0.15s;
 
 	&:hover {
-		border-color: var(--ul-accent, #0891b2);
+		border-color: var(--ul-primary-color, #0891b2);
 		background: var(--ul-hover-bg);
 	}
 }
@@ -433,7 +433,7 @@
 		max-width: 20rem;
 
 		.material-symbols-outlined,
-		.material-icons { font-size: 0.85rem; color: var(--ul-accent, #0891b2); }
+		.material-icons { font-size: 0.85rem; color: var(--ul-primary-color, #0891b2); }
 
 		span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 	}
@@ -556,7 +556,7 @@
 		.material-symbols-outlined,
 		.material-icons {
 			font-size: 2.5rem;
-			color: var(--ul-accent, #0891b2);
+			color: var(--ul-primary-color, #0891b2);
 		}
 	}
 
@@ -574,7 +574,7 @@
 		line-height: 1.55;
 		margin: 0;
 
-		a { color: var(--ul-accent, #0891b2); }
+		a { color: var(--ul-primary-color, #0891b2); }
 	}
 
 	&--actions {

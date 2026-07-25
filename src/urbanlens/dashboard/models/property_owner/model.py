@@ -18,7 +18,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, SET_NULL, CharField, CheckConstraint, DateField, DecimalField, EmailField, ForeignKey, Index, ManyToManyField, Q, TextField
+from django.db.models import CASCADE, SET_NULL, CharField, CheckConstraint, DateField, DecimalField, EmailField, ForeignKey, Index, ManyToManyField, Q, TextField, UniqueConstraint
+from django.db.models.functions import Lower
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.property_owner.meta import OwnerSource
@@ -65,6 +66,13 @@ class PinOwner(_OwnerBase):
     class Meta(_OwnerBase.Meta):
         db_table = "dashboard_pin_owner"
         indexes = [Index(fields=["pin"], name="idxdb_pinowner_pin")]
+        constraints = [
+            # Backs the case-insensitive dedup both PinOwnershipPanelView and
+            # PinPropertySaleTabView already perform in Python
+            # (`name__iexact`) with a real DB guarantee against concurrent
+            # writes racing past that application-level check.
+            UniqueConstraint(Lower("name"), "pin", name="uq_pinowner_pin_name_ci"),
+        ]
 
 
 class WikiOwner(_OwnerBase):

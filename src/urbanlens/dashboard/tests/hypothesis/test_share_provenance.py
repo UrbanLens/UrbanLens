@@ -28,6 +28,7 @@ from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -39,6 +40,15 @@ from urbanlens.dashboard.models.pin_share import ExposureSource, LocationExposur
 from urbanlens.dashboard.services.share_provenance import (
     record_share_exposure,
     resolve_origin_share,
+)
+
+# DB-backed @given tests below never touch self.client - only ORM/service
+# calls - per this repo's documented rule that hypothesis's per-example DB
+# flush and the Django test client don't mix.
+_db_settings = settings(
+    max_examples=15,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
 )
 
 
@@ -508,3 +518,93 @@ class PinShareQuerySetTests(_ProvenanceTestCase):
         result = list(PinShare.objects.received_by(self.profiles["john"]))
 
         self.assertEqual(result, [incoming])
+
+
+class ArbitraryChainDepthPropertyTests(_ProvenanceTestCase):
+    """Property-based generalization of the fixed 2-3-hop chains exercised
+    throughout this module: the provenance invariant - every share, however
+    deep the reshare chain, must be traceable back to a single true origin
+    share (``parent_share`` eventually ``None``), with no cycle and no lost
+    link - must hold for an arbitrary generated chain length/branching factor,
+    not just the hand-picked examples above.
+
+    Each accepted pin in the chain carries its own ``source_share`` lineage
+    (set directly by ``_create_pin_from_share``), so ``parent_share`` forms a
+    genuine linked chain back to the origin one hop at a time - not a single
+    jump straight to the origin past the first hop. ``PinShare.chain_share_count``
+    (see ``test_repin_churn_does_not_grow_sharers_chain`` above) already relies
+    on exactly this structure.
+    """
+
+    @given(chain_length=st.integers(min_value=2, max_value=6))
+    @_db_settings
+    def test_arbitrary_length_reshare_chain_always_walks_back_to_the_true_origin(self, chain_length: int) -> None:
+        origin_share = self._share(self.sarah_pin, "sarah", "john")
+        current_pin = _create_pin_from_share(origin_share)
+        current_from = "john"
+        shares_in_chain = [origin_share]
+
+        for i in range(chain_length):
+            next_name = f"chain_{i}"
+            self.profiles[next_name] = baker.make(User, username=f"chaindepth_{i}").profile
+            onward = self._share(current_pin, current_from, next_name)
+            shares_in_chain.append(onward)
+            current_pin = _create_pin_from_share(onward)
+            current_from = next_name
+
+        # Every share in the chain, walked via parent_share, reaches the true
+        # origin in exactly as many steps as its position in the chain -
+        # never fewer (a lost link), more (a spurious extra hop), and never
+        # loops back on itself (a cycle).
+        for index, share in enumerate(shares_in_chain):
+            walked_pks: set[int] = set()
+            node = share
+            while node is not None:
+                self.assertNotIn(node.pk, walked_pks, "cycle detected in parent_share chain")
+                walked_pks.add(node.pk)
+                node = node.parent_share
+            self.assertEqual(len(walked_pks), index + 1)
+            self.assertIn(origin_share.pk, walked_pks)
+
+    @given(chain_length=st.integers(min_value=2, max_value=6))
+    @_db_settings
+    def test_every_profile_in_an_arbitrary_length_chain_gets_exactly_one_exposure(self, chain_length: int) -> None:
+        origin_share = self._share(self.sarah_pin, "sarah", "john")
+        current_pin = _create_pin_from_share(origin_share)
+        current_from = "john"
+        chain_profiles = [self.profiles["john"]]
+
+        for i in range(chain_length):
+            next_name = f"expo_chain_{i}"
+            self.profiles[next_name] = baker.make(User, username=f"expochain_{i}").profile
+            onward = self._share(current_pin, current_from, next_name)
+            chain_profiles.append(self.profiles[next_name])
+            current_pin = _create_pin_from_share(onward)
+            current_from = next_name
+
+        # Regardless of how many hops preceded it, each recipient's exposure
+        # to the shared location is recorded exactly once - never zero (a
+        # missed recording) and never duplicated (a repeated one).
+        for profile in chain_profiles:
+            self.assertEqual(LocationExposure.objects.filter(profile=profile, location=self.location).count(), 1)
+
+    @given(num_branches=st.integers(min_value=2, max_value=5))
+    @_db_settings
+    def test_arbitrary_number_of_branches_from_one_pin_all_trace_back_to_the_same_origin(self, num_branches: int) -> None:
+        """John re-shares the same accepted pin to an arbitrary number of
+        independent recipients (a branching reshare fan-out, not a linear
+        chain) - every branch must chain back to the same origin share,
+        however many branches there are."""
+        origin_share = self._share(self.sarah_pin, "sarah", "john")
+        john_pin = _create_pin_from_share(origin_share)
+
+        for i in range(num_branches):
+            branch_name = f"branch_{i}"
+            self.profiles[branch_name] = baker.make(User, username=f"branch_{i}").profile
+            onward = self._share(john_pin, "john", branch_name)
+            self.assertEqual(onward.parent_share_id, origin_share.pk)
+            # The exposure created for this branch's recipient references the
+            # branch's own direct share (onward), not the resolved origin -
+            # resolve_origin_share only decides parent_share; record_share_exposure
+            # always records the share that directly caused the exposure.
+            self.assertEqual(LocationExposure.objects.filter(profile=self.profiles[branch_name], location=self.location, share=onward).count(), 1)

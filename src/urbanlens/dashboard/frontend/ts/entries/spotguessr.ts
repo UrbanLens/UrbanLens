@@ -499,7 +499,13 @@ function initFriendListRetry(): void {
     el("sg-friend-list-retry").addEventListener("click", () => void fetchFriendsEagerly());
 }
 
-function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[], excludeIds: Set<number>): void {
+// `targetSet` defaults to the module-level selectedInviteIds (the initial
+// invite flow's source of truth, read at game-start submit time) but can be
+// swapped for a scoped-local Set - see pickFriendsToInvite() below, which
+// reuses this same rendering logic for the "invite more" dialog without
+// polluting selectedInviteIds (that set must only ever reflect the pending
+// game-start invite list, not a completed, already-invited mid-game pick).
+function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[], excludeIds: Set<number>, targetSet: Set<number> = selectedInviteIds): void {
     container.innerHTML = "";
     const available = friends.filter((friend) => !excludeIds.has(friend.profile_id));
     if (!available.length) {
@@ -514,13 +520,13 @@ function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[],
         checkbox.type = "checkbox";
         checkbox.value = String(friend.profile_id);
         // Preserve prior selections across re-renders (e.g. toggling
-        // "play with friends" off then on) - selectedInviteIds is the
-        // source of truth read at submit time, so the checkboxes must
-        // reflect it rather than always starting unchecked.
-        checkbox.checked = selectedInviteIds.has(friend.profile_id);
+        // "play with friends" off then on) - targetSet is the source of
+        // truth read at submit time, so the checkboxes must reflect it
+        // rather than always starting unchecked.
+        checkbox.checked = targetSet.has(friend.profile_id);
         checkbox.addEventListener("change", () => {
-            if (checkbox.checked) selectedInviteIds.add(friend.profile_id);
-            else selectedInviteIds.delete(friend.profile_id);
+            if (checkbox.checked) targetSet.add(friend.profile_id);
+            else targetSet.delete(friend.profile_id);
         });
         const box = document.createElement("span");
         box.className = "ul-checkbox";
@@ -530,6 +536,56 @@ function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[],
         label.append(wrap, nameSpan);
         container.appendChild(label);
     }
+}
+
+// Builds a small checkbox-picker dialog on the fly and resolves with the
+// chosen profile ids (empty if cancelled). There's no dedicated "invite
+// more" dialog markup in the template (unlike the initial invite flow's
+// sg-friend-list, which lives inside sg-settings-dialog) so this is
+// constructed in JS, but it reuses renderFriendCheckboxes - the exact same
+// checkbox rendering the initial invite flow uses - rather than duplicating
+// it. Replaces the old window.prompt() exact-username-match flow, which
+// silently no-op'd on any typo or case mismatch with zero feedback.
+function pickFriendsToInvite(available: FriendOption[]): Promise<Set<number>> {
+    return new Promise((resolve) => {
+        const chosen = new Set<number>();
+        const dialog = document.createElement("dialog");
+        dialog.className = "spotguessr-invite-more-dialog";
+        dialog.style.cssText = "max-width:22rem;width:90vw;padding:1.25rem;border-radius:0.5rem;border:1px solid rgba(0,0,0,0.15);";
+
+        const heading = document.createElement("h3");
+        heading.textContent = "Invite more players";
+        heading.style.marginTop = "0";
+
+        const list = document.createElement("div");
+        list.style.cssText = "display:flex;flex-direction:column;gap:0.5rem;max-height:16rem;overflow-y:auto;margin:0.75rem 0;";
+        renderFriendCheckboxes(list, available, new Set(), chosen);
+
+        const actions = document.createElement("div");
+        actions.style.cssText = "display:flex;justify-content:flex-end;gap:0.5rem;";
+        const cancelBtn = document.createElement("button");
+        cancelBtn.type = "button";
+        cancelBtn.textContent = "Cancel";
+        const inviteBtn = document.createElement("button");
+        inviteBtn.type = "button";
+        inviteBtn.textContent = "Invite";
+        actions.append(cancelBtn, inviteBtn);
+
+        dialog.append(heading, list, actions);
+        document.body.appendChild(dialog);
+
+        const cleanup = (result: Set<number>) => {
+            dialog.close();
+            dialog.remove();
+            resolve(result);
+        };
+        cancelBtn.addEventListener("click", () => cleanup(new Set()));
+        inviteBtn.addEventListener("click", () => cleanup(chosen));
+        // Escape key / native "cancel" - treat like the Cancel button.
+        dialog.addEventListener("cancel", () => cleanup(new Set()));
+
+        dialog.showModal();
+    });
 }
 
 async function handleInviteMore(): Promise<void> {
@@ -542,15 +598,13 @@ async function handleInviteMore(): Promise<void> {
         toast.error("Everyone on your friends list is already in this game.");
         return;
     }
-    const chosenName = window.prompt(`Invite who? (${available.map((friend) => friend.username).join(", ")})`);
-    if (!chosenName) return;
-    const chosen = available.find((friend) => friend.username === chosenName);
-    if (!chosen) return;
 
-    const response = await postForm(urlFor(urls.invite, sessionId), { profile_id: String(chosen.profile_id) });
-    if (response.error) {
-        toast.error(response.error);
-        return;
+    const chosenIds = await pickFriendsToInvite(available);
+    if (!chosenIds.size) return;
+
+    for (const profileId of chosenIds) {
+        const response = await postForm(urlFor(urls.invite, sessionId), { profile_id: String(profileId) });
+        if (response.error) toast.error(response.error);
     }
     const refreshed: SessionPayload = await getJson(urlFor(urls.lobby, sessionId));
     renderLobbyParticipants(refreshed.participants);

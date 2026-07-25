@@ -14,6 +14,8 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from django.core.serializers.json import DjangoJSONEncoder
+
 # Same escapes Django's {% json_script %} applies: neutralizes `</script>` and HTML
 # entity injection when a JSON payload (e.g. user-owned label/tag names) is embedded
 # directly inside an already-open <script> block via `{{ ... |safe }}`, rather than
@@ -24,6 +26,13 @@ _JSON_SCRIPT_ESCAPES = {ord(">"): "\\u003E", ord("<"): "\\u003C", ord("&"): "\\u
 def safe_json_for_script(value: Any) -> str:
     """Serialize a value to JSON that is safe to embed inline inside a `<script>` block.
 
+    Uses Django's own ``DjangoJSONEncoder`` (the same encoder ``{% json_script %}``
+    and ``JsonResponse`` already rely on elsewhere in this project) so values that
+    aren't natively JSON-serializable - ``Decimal``, ``datetime``/``date``, ``UUID``,
+    ``Promise`` (lazy translation strings) - are handled gracefully instead of
+    raising ``TypeError``. Plain ints/strings/lists/dicts (the existing call sites'
+    payloads) serialize identically to before.
+
     Args:
         value: The JSON-serializable value (e.g. a list of dicts of label data).
 
@@ -31,4 +40,4 @@ def safe_json_for_script(value: Any) -> str:
         A JSON string with `<`, `>`, and `&` escaped so it cannot break out of the
         enclosing `<script>` tag or inject HTML, even when rendered with `|safe`.
     """
-    return json.dumps(value).translate(_JSON_SCRIPT_ESCAPES)
+    return json.dumps(value, cls=DjangoJSONEncoder).translate(_JSON_SCRIPT_ESCAPES)

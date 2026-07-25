@@ -134,6 +134,9 @@ async function resolvePlusCode(q: string): Promise<{ lat: number; lng: number } 
         });
     }
     try {
+        // See the KNOWN GAP comment on `nominatimSearch` below - this is a direct,
+        // unproxied browser call to Nominatim, bypassing the app's server-side
+        // rate-limiter/cost-tracking layer.
         const r = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q.trim())}&format=json&limit=1`, {
             headers: { Accept: "application/json", "Accept-Language": "en" },
         });
@@ -177,6 +180,20 @@ function sectionKey(label: string): string {
     return "suggestions";
 }
 
+// KNOWN GAP: unlike Google Places (which is proxied through a server-side
+// endpoint - see `sources.googlePlaces` - so it can go through the app's
+// rate-limiter/cost-tracking service layer), Nominatim is called directly
+// from the browser here and in the other `nominatim.openstreetmap.org` fetch
+// call sites in this file (resolvePlusCode's fallback, runNetworkStage's
+// osmSlot fetch). That bypasses the shared rate-limiter/cost-tracking layer
+// entirely and pushes every user's browser straight at Nominatim's free
+// service, which is against its usage policy (which asks for identified,
+// server-side, rate-limited traffic - not unproxied per-keystroke browser
+// calls). The debounce below and on the input handler is the only
+// client-side mitigation currently in place. Fixing this properly requires a
+// new server-side geocoding proxy endpoint (Python controller/URL route)
+// mirroring the Google Places one; that's out of scope for a TS-only change.
+// TODO: route this through a server-side proxy once that endpoint exists.
 async function nominatimSearch(query: string, { limit = 5, viewbox = null as string | null } = {}): Promise<any[]> {
     const url =
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=${limit}&addressdetails=1`
@@ -889,6 +906,10 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         }
 
         if (osmSlot) {
+            // See the KNOWN GAP comment on `nominatimSearch` above - this fires on
+            // every debounced keystroke as a direct, unproxied browser call to
+            // Nominatim, bypassing the app's server-side rate-limiter/cost-tracking
+            // layer (unlike the Google Places source just below, which is proxied).
             fetchSourceIntoSlot(
                 seq,
                 LABEL_OSM,
@@ -1079,10 +1100,13 @@ function create(options: LocationSearchOptions): LocationSearchEngineInstance {
         // Render everything that doesn't need the network on every keystroke -
         // no debounce, no blanking the box while waiting. Only the network
         // sources (local-pin server search, Nominatim, Google Places) are
-        // debounced, since those are the ones worth rate-limiting.
+        // debounced, since those are the ones worth rate-limiting. Nominatim in
+        // particular is called directly from the browser (see the KNOWN GAP
+        // comment on `nominatimSearch`), so this interval is kept on the higher
+        // end of typical debounce values to reduce request volume against it.
         const seq = ++searchSeq;
         const slots = renderInstantSlots(seq, q);
-        addrBarTimer = setTimeout(() => runNetworkStage(seq, q, slots), 250);
+        addrBarTimer = setTimeout(() => runNetworkStage(seq, q, slots), 400);
     });
 
     input.addEventListener("keydown", function (e) {

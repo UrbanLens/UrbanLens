@@ -97,7 +97,7 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
                 messages=messages,
                 max_tokens=self.max_tokens,
             )
-        except openai.BadRequestError as e:
+        except openai.APIError as e:
             logger.exception("Error sending a message to OpenAI: %s", e)
             return None
 
@@ -118,7 +118,6 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
         """
         try:
             body = response.choices[0].message.content
-            self.receive_tokens(body)
             logger.debug("AI Response: %s", body)
         except (IndexError, AttributeError) as e:
             logger.exception("Error retrieving response: %s", e)

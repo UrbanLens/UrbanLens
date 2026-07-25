@@ -11,7 +11,7 @@
   height: 28px;
   border-radius: 6px;
   cursor: pointer;
-  color: var(--color-muted, #64748b);
+  color: var(--ul-grey-6, #64748b);
   transition: color .15s, background .15s;
 
   &:hover {
@@ -36,7 +36,7 @@
   background: none;
   border-radius: 6px;
   cursor: pointer;
-  color: var(--color-muted, #64748b);
+  color: var(--ul-grey-6, #64748b);
   transition: color .15s, background .15s;
 
   &:hover {
@@ -164,7 +164,7 @@
   font-size: .75rem;
   padding: .25rem .5rem .35rem;
   margin: 0;
-  color: var(--color-text-muted, #64748b);
+  color: var(--ul-grey-6, #64748b);
   @include truncate;
 }
 
@@ -223,7 +223,7 @@
   align-items: center;
   gap: .4rem;
   padding: 2rem;
-  color: var(--color-muted, #94a3b8);
+  color: var(--ul-grey-4, #94a3b8);
   font-size: .9rem;
 
   .material-symbols-outlined,

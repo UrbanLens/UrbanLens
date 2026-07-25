@@ -274,6 +274,12 @@ class SearchForm(forms.Form):
                 op = g.get("op")
                 ids = g.get("ids")
                 if op in {"and", "or", "not"} and isinstance(ids, list):
+                    # str(i).isdigit() returns False for a leading "-", so any
+                    # negative-number id is silently dropped here. This is a known,
+                    # accepted edge case rather than an oversight: label PKs are
+                    # always positive (Django's default auto-incrementing PK), so a
+                    # negative id never occurs for a real label in practice, and this
+                    # function's contract is to never raise on malformed input.
                     validated.append({"op": op, "ids": [int(i) for i in ids if str(i).isdigit()]})
             return validated or None
         except (json.JSONDecodeError, TypeError, ValueError):

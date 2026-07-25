@@ -21,9 +21,10 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinPartner, SafetyCheckinPartnerStatus
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
-from urbanlens.dashboard.services.safety import invite_checkin_partner, is_owner_or_accepted_partner
+from urbanlens.dashboard.services.safety import accept_checkin_partner_invite, invite_checkin_partner, is_owner_or_accepted_partner, remove_checkin_partner
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -94,6 +95,37 @@ class InviteCheckinPartnerTests(TestCase):
         self.assertEqual(partner.status, SafetyCheckinPartnerStatus.INVITED)
         self.assertEqual(partner.profile_id, invitee.pk)
         self.assertEqual(partner.invited_by_id, self.owner.pk)
+
+
+class AcceptCheckinPartnerInviteTests(TestCase):
+    """accept_checkin_partner_invite's idempotency and its concurrent-removal guard."""
+
+    def setUp(self):
+        self.owner = _profile()
+        self.checkin = _checkin(self.owner)
+        self.invitee = _profile()
+        self.partner = SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=self.invitee, invited_by=self.owner)
+
+    def test_repeat_accept_is_a_no_op(self):
+        accept_checkin_partner_invite(self.partner)
+        NotificationLog.objects.all().delete()
+
+        accept_checkin_partner_invite(self.partner)
+
+        self.assertFalse(NotificationLog.objects.exists())
+
+    def test_accept_after_concurrent_removal_is_a_no_op(self):
+        """Regression guard: accepting a stale in-memory ``partner`` whose row the owner
+        already removed concurrently must not resurrect it or send a phantom "partner
+        accepted" notification - save() on a deleted row would otherwise silently
+        no-op the UPDATE while the rest of the function ran anyway.
+        """
+        SafetyCheckinPartner.objects.filter(pk=self.partner.pk).delete()
+
+        accept_checkin_partner_invite(self.partner)
+
+        self.assertFalse(SafetyCheckinPartner.objects.filter(pk=self.partner.pk).exists())
+        self.assertFalse(NotificationLog.objects.filter(profile=self.owner).exists())
 
 
 class IsOwnerOrAcceptedPartnerTests(TestCase):
@@ -272,6 +304,38 @@ class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
 
         await owner_comm.disconnect()
         await partner_comm.disconnect()
+
+    def test_removed_partner_connection_is_force_closed(self):
+        """Regression guard: permission is otherwise only checked once, at connect()
+        time - without a live revocation, a removed partner's already-open socket
+        would keep receiving chat/status/location/archive events indefinitely.
+        """
+        _run(self._removed_partner_connection_is_force_closed())
+
+    async def _removed_partner_connection_is_force_closed(self):
+        from channels.db import database_sync_to_async
+
+        @database_sync_to_async
+        def _make_accepted_partner():
+            partner_user = baker.make("auth.User")
+            partner = SafetyCheckinPartner.objects.create(
+                checkin=self.checkin,
+                profile=partner_user.profile,
+                invited_by=self.owner_profile,
+                status=SafetyCheckinPartnerStatus.ACCEPTED,
+            )
+            return partner_user, partner
+
+        partner_user, partner = await _make_accepted_partner()
+        partner_comm = self._session_communicator(partner_user)
+        connected, _ = await partner_comm.connect()
+        self.assertTrue(connected)
+
+        await database_sync_to_async(remove_checkin_partner)(partner)
+
+        close_message = await partner_comm.receive_output()
+        self.assertEqual(close_message["type"], "websocket.close")
+        self.assertEqual(close_message.get("code"), 4404)
 
     def test_unauthenticated_session_route_is_still_rejected(self):
         _run(self._unauthenticated_session_route_is_still_rejected())

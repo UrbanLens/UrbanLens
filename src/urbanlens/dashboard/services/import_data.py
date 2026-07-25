@@ -230,6 +230,14 @@ class _ImportValidationError(Exception):
 _EXTRACTED_BYTES_FLOOR = 2 * 1024**3
 _MAX_ARCHIVE_MEMBERS = 50_000
 
+#: Chunk size for the bounded per-member read loop in `_extract_zip_members_bounded`.
+#: Bytes are only ever decompressed (via `zipfile.ZipExtFile.read()`) up to
+#: whatever's actually written to disk before the running total is checked
+#: against the ceiling again - this is what makes the ceiling a real, enforced
+#: limit on decompressed output rather than a check against the (attacker-
+#: controlled, forgeable) declared `file_size` header alone.
+_ZIP_EXTRACT_CHUNK_BYTES = 1024 * 1024
+
 
 def _extraction_size_ceiling(profile: Any | None) -> int:
     """Upper bound on an archive's declared uncompressed size, in bytes.
@@ -272,11 +280,20 @@ def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str, profile:
 
     os.makedirs(extract_dir, exist_ok=True)
     extract_root = os.path.realpath(extract_dir)
+    ceiling = _extraction_size_ceiling(profile)
     with zipfile.ZipFile(zip_path, "r") as zf:
         members = zf.infolist()
         if len(members) > _MAX_ARCHIVE_MEMBERS:
             raise _ImportValidationError("Archive contains too many files.")
-        if sum(member.file_size for member in members) > _extraction_size_ceiling(profile):
+        # Fast pre-filter on the declared sizes: cheap, and rejects an obviously
+        # oversized archive before any bytes are read. This is NOT the real
+        # security guard, though - the declared `file_size` on each ZipInfo is
+        # attacker-controlled and independent of the actual compressed payload
+        # (zipfile only detects a declared-vs-actual mismatch via CRC32 *after*
+        # a member is fully decompressed). The real ceiling is enforced live,
+        # against actual decompressed bytes, inside
+        # `_extract_zip_members_bounded` below.
+        if sum(member.file_size for member in members) > ceiling:
             raise _ImportValidationError("Archive is too large to import.")
         # Guard against zip-slip path traversal. The separator is part of the
         # comparison on purpose: a bare prefix check would accept an entry
@@ -286,7 +303,8 @@ def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str, profile:
             dest = os.path.realpath(os.path.join(extract_root, member.filename))
             if dest != extract_root and not dest.startswith(extract_root + os.sep):
                 raise _ImportValidationError("Archive contains invalid file paths.")
-        zf.extractall(extract_root)
+
+        _extract_zip_members_bounded(zf, members, extract_root, ceiling)
 
     _scan_extracted_files(extract_root)
 
@@ -304,6 +322,80 @@ def _extract_and_validate(zip_path: str, extract_dir: str, job_id: str, profile:
         )
 
     return data_dir
+
+
+def _extract_zip_members_bounded(
+    zf: zipfile.ZipFile,
+    members: list[zipfile.ZipInfo],
+    extract_root: str,
+    ceiling: int,
+) -> None:
+    """Extract *members* from *zf* into *extract_root* under a hard, live-enforced byte ceiling.
+
+    Ports the bounded-read pattern already used by
+    ``archive_extractor._extract_zip`` in place of a bare ``ZipFile.extractall()``
+    call: rather than trusting each member's declared (attacker-forgeable)
+    ``file_size`` header, every member is decompressed and written in capped
+    chunks, and the *actual* decompressed byte count accumulated so far is what
+    gets checked against ``ceiling`` after every chunk - extraction aborts
+    mid-stream the instant the real total is exceeded. This is what actually
+    stops a small, highly-compressible ZIP (forged small ``file_size`` fields,
+    huge real payload) from inflating to hundreds of GB on disk before anything
+    catches it; a declared-size check alone (as previously used here) cannot,
+    since zipfile only notices a declared-vs-actual mismatch via CRC32 *after*
+    a member has already been fully decompressed and written.
+
+    Symlink entries are skipped via the same Unix-mode-bit check
+    ``archive_extractor._extract_zip`` uses, so a crafted archive can't plant a
+    symlink for a later step to unknowingly follow.
+
+    Args:
+        zf: The already-open ZipFile.
+        members: ``infolist()`` entries to extract. Directory entries are
+            skipped here. Path-traversal safety of ``member.filename`` must
+            already have been validated by the caller before this is invoked -
+            this function trusts ``extract_root``-relative paths are safe.
+        extract_root: Destination directory, already ``os.path.realpath``'d.
+        ceiling: Maximum total bytes that may be written across all members.
+
+    Raises:
+        _ImportValidationError: If the actual decompressed size of the archive,
+            summed across members as extraction proceeds, exceeds ``ceiling``.
+    """
+    total_written = 0
+
+    for member in members:
+        if member.is_dir():
+            continue
+
+        # Skip symlinks: check Unix mode bits stored in external_attr (same
+        # check as archive_extractor._extract_zip). A symlink entry could
+        # otherwise point extraction output at an arbitrary target path, or
+        # let a later step unknowingly follow it off the extracted tree.
+        if (member.external_attr >> 16) & 0o170000 == 0o120000:
+            logger.warning("Skipping symlink in import archive: %s", member.filename)
+            continue
+
+        dest_path = os.path.join(extract_root, member.filename)
+        parent_dir = os.path.dirname(dest_path)
+        if parent_dir:
+            os.makedirs(parent_dir, exist_ok=True)
+
+        with zf.open(member) as src, open(dest_path, "wb") as dst:
+            while True:
+                remaining_budget = ceiling - total_written
+                if remaining_budget <= 0:
+                    raise _ImportValidationError("Archive is too large to import.")
+                # Never ask for more than the remaining budget: this bounds
+                # the actual number of bytes zipfile decompresses in this call
+                # to what's still allowed, rather than decompressing an
+                # arbitrarily large chunk and discovering only afterwards that
+                # it blew the ceiling.
+                chunk = src.read(min(_ZIP_EXTRACT_CHUNK_BYTES, remaining_budget))
+                if not chunk:
+                    break
+                total_written += len(chunk)
+                dst.write(chunk)
 
 
 def _scan_extracted_files(extract_root: str) -> None:

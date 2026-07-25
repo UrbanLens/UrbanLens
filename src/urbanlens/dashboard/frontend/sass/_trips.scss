@@ -2091,11 +2091,11 @@ a.trip-activity-name {
 .trip-complete-btn {
     opacity: 0;
     transition: opacity .15s;
-    color: $color-green-500 !important;
+    color: var(--ul-color-success-text, $color-green-500) !important;
 
     &:hover {
-        background: $color-green-100 !important;
-        color: $color-green-600 !important;
+        background: var(--ul-color-success-bg, $color-green-100) !important;
+        color: var(--ul-color-success-text, $color-green-600) !important;
     }
 }
 
@@ -2155,8 +2155,8 @@ a.trip-activity-name {
 }
 
 .cal-cell--drag-over {
-    background: $color-blue-100 !important;
-    outline: 2px dashed $color-blue-500;
+    background: var(--ul-hover-bg-primary, $color-blue-100) !important;
+    outline: 2px dashed var(--ul-primary-color, $color-blue-500);
 }
 
 // -- Member RSVP -----------------------------------------------------------

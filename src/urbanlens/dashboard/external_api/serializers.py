@@ -20,6 +20,7 @@ from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
 from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS
 from urbanlens.dashboard.models.push_device import PushTransport
+from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
 
 #: Same scheme restriction as controllers.links._clean_link_input - external
 #: submissions are untrusted input, so this validates before anything else does.
@@ -138,7 +139,7 @@ class PinSyncQuerySerializer(serializers.Serializer):
 
     modified_since = serializers.DateTimeField(required=False, allow_null=True, default=None)
     cursor = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
-    limit = serializers.IntegerField(required=False, allow_null=True, default=None, min_value=1)
+    limit = serializers.IntegerField(required=False, allow_null=True, default=None, min_value=1, max_value=MapPinPayloadService.MAX_LIMIT)
     include_total = serializers.BooleanField(required=False, default=False)
 
 
@@ -147,7 +148,7 @@ class TombstoneSyncQuerySerializer(serializers.Serializer):
 
     deleted_since = serializers.DateTimeField(required=False, allow_null=True, default=None)
     cursor = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
-    limit = serializers.IntegerField(required=False, allow_null=True, default=None, min_value=1)
+    limit = serializers.IntegerField(required=False, allow_null=True, default=None, min_value=1, max_value=MapPinPayloadService.MAX_LIMIT)
 
 
 class SyncPinSerializer(serializers.Serializer):

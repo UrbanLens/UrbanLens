@@ -54,39 +54,3 @@
     </form>
     {% endif %}
 </div>
-
-<style>
-.immich-status-icon {
-    font-size: 1.1rem;
-    vertical-align: middle;
-    margin-right: .3rem;
-}
-.immich-status-icon--connected {
-    color: #388E3C;
-}
-#immich-connect-btn .immich-connect-btn-verifying {
-    display: none;
-}
-#immich-connect-btn.htmx-request {
-    opacity: .8;
-    pointer-events: none;
-}
-#immich-connect-btn.htmx-request::after {
-    content: '';
-    display: inline-block;
-    width: 13px;
-    height: 13px;
-    margin-left: .4rem;
-    border: 2px solid rgba(255, 255, 255, .35);
-    border-top-color: var(--ul-grey-5);
-    border-radius: 50%;
-    vertical-align: middle;
-    animation: ul-spin .65s linear infinite;
-}
-#immich-connect-btn.htmx-request .immich-connect-btn-label {
-    display: none;
-}
-#immich-connect-btn.htmx-request .immich-connect-btn-verifying {
-    display: inline;
-}
-</style>

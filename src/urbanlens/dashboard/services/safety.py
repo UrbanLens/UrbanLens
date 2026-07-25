@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from django.conf import settings
 from django.core.mail import EmailMultiAlternatives
+from django.db import IntegrityError, transaction
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -471,7 +472,13 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
     if max_partners > 0 and checkin.partners.count() >= max_partners:
         raise ValueError(f"A check-in can have at most {max_partners} partners.")
 
-    partner = SafetyCheckinPartner.objects.create(checkin=checkin, profile=invitee, invited_by=inviter)
+    try:
+        partner = SafetyCheckinPartner.objects.create(checkin=checkin, profile=invitee, invited_by=inviter)
+    except IntegrityError:
+        # The .exists() check above isn't atomic against the unique_together
+        # constraint - a double-submitted invite can race past it and only get
+        # caught here. Same outcome as losing the .exists() check normally.
+        raise ValueError(f"{invitee.username} has already been invited.") from None
     _notify_checkin_partner_invite(partner)
     return partner
 
@@ -484,11 +491,18 @@ def accept_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
     Args:
         partner: The invite being accepted.
     """
-    if partner.status == SafetyCheckinPartnerStatus.ACCEPTED:
+    accepted_at = timezone.now()
+    # Conditional UPDATE, not read-then-write: only flips a row that is still INVITED at
+    # write time. Guards against a repeat accept (row already ACCEPTED) *and* against the
+    # owner removing this same invite concurrently (row no longer exists) - either way,
+    # `.update()` on a non-matching/absent row affects 0 rows and this is a clean no-op,
+    # instead of a save() into a phantom row silently succeeding and still sending a
+    # "partner accepted" notification for a partnership that no longer exists.
+    updated = SafetyCheckinPartner.objects.filter(pk=partner.pk, status=SafetyCheckinPartnerStatus.INVITED).update(status=SafetyCheckinPartnerStatus.ACCEPTED, accepted_at=accepted_at, updated=accepted_at)
+    if not updated:
         return
     partner.status = SafetyCheckinPartnerStatus.ACCEPTED
-    partner.accepted_at = timezone.now()
-    partner.save(update_fields=["status", "accepted_at", "updated"])
+    partner.accepted_at = accepted_at
 
     checkin = partner.checkin
     system_message = SafetyCheckinMessage.objects.create(
@@ -515,7 +529,14 @@ def remove_checkin_partner(partner: SafetyCheckinPartner) -> None:
     Args:
         partner: The partner row to remove.
     """
+    checkin, profile_id = partner.checkin, partner.profile_id
     partner.delete()
+    # An accepted partner may already have a live WebSocket connection whose
+    # permission was only checked once, at connect() time (see
+    # SafetyCheckinChatConsumer._resolve) - without this, they'd keep receiving
+    # chat/location/status events (and could keep sending messages) until they
+    # happen to reload or disconnect on their own.
+    _broadcast_partner_access_revoked(checkin, profile_id)
 
 
 def _notify_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
@@ -538,9 +559,10 @@ def _notify_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
     # the message string is stored as plain text, so it must be masked here, not at
     # render time (see identity_visibility.py's docstring).
     inviter_name = resolve_visible_identity(partner.profile, partner.invited_by)["display_name"]
-    # A partner has no slug of their own - the check-in is always reached by uuid
-    # (see SafetyCheckinDetailView._get_checkin_as_partner).
-    checkin_path = reverse("safety.checkin.detail", kwargs={"checkin_slug": str(checkin.uuid)})
+    # Not yet ACCEPTED, so the detail page itself would 404 for this invitee (see
+    # _get_checkin_as_partner) - point at the safety overview page instead, where the
+    # "Pending partner invites" section already renders the accept/decline actions.
+    checkin_path = reverse("safety.home")
 
     if pref in (DeliveryPreference.SITE, DeliveryPreference.BOTH):
         NotificationLog.objects.create(
@@ -642,16 +664,24 @@ def update_live_location(checkin: SafetyCheckin, *, latitude: float, longitude: 
         ValueError: If sharing isn't enabled, or the check-in has already resolved -
             there's no one left to broadcast a live position to either way.
     """
-    if not checkin.live_location_sharing_enabled:
-        raise ValueError("Live location sharing is not enabled for this check-in.")
-    if checkin.is_resolved:
-        raise ValueError("This check-in has already concluded.")
+    updated_at = timezone.now()
+    # Conditional UPDATE (not read-then-write): re-checks sharing-enabled/unresolved
+    # against the DB at write time, not the possibly-stale in-memory `checkin` the
+    # caller passed in - closes a race where a toggle-off lands between the caller's
+    # own checks and this save, which would otherwise persist a real position onto a
+    # row now flagged "sharing disabled" and broadcast a stale sharing_enabled: true.
+    updated = (
+        SafetyCheckin.objects.filter(pk=checkin.pk, live_location_sharing_enabled=True)
+        .exclude(status__in=SafetyCheckinStatus.resolved_statuses())
+        .update(live_latitude=latitude, live_longitude=longitude, live_location_accuracy=accuracy, live_location_updated_at=updated_at, updated=updated_at)
+    )
+    if not updated:
+        raise ValueError("Live location sharing is not enabled for this check-in, or it has already concluded.")
 
     checkin.live_latitude = latitude
     checkin.live_longitude = longitude
     checkin.live_location_accuracy = accuracy
-    checkin.live_location_updated_at = timezone.now()
-    checkin.save(update_fields=["live_latitude", "live_longitude", "live_location_accuracy", "live_location_updated_at", "updated"])
+    checkin.live_location_updated_at = updated_at
     _broadcast_live_location(checkin)
 
 
@@ -750,14 +780,25 @@ def archive_checkin(checkin: SafetyCheckin) -> None:
         return
 
     ciphertext, nonce, sealed_key = _seal_archive_payload(_build_archive_payload(checkin), bundle.public_key)
-    SafetyCheckinArchive.objects.create(
-        checkin=checkin,
-        ciphertext=ciphertext,
-        nonce=nonce,
-        sealed_key=sealed_key,
-        key_bundle_version=bundle.version,
-    )
-    _scrub_checkin_pii(checkin)
+    try:
+        # Atomic so a crash/restart between the two can never leave an archive row
+        # committed with its plaintext still unscrubbed (or vice versa) - the
+        # idempotency check above only means anything if the two always happen together.
+        with transaction.atomic():
+            SafetyCheckinArchive.objects.create(
+                checkin=checkin,
+                ciphertext=ciphertext,
+                nonce=nonce,
+                sealed_key=sealed_key,
+                key_bundle_version=bundle.version,
+            )
+            _scrub_checkin_pii(checkin)
+    except IntegrityError:
+        # The countdown-scheduled task and the periodic sweep can both reach here for
+        # the same checkin at nearly the same time; the loser's unique-constraint
+        # violation just means the winner already did (or is doing) this work.
+        logger.info("Safety checkin %s was already archived by a concurrent task", checkin.pk)
+        return
     _broadcast_checkin_archived(checkin)
 
 
@@ -771,15 +812,28 @@ def _build_archive_payload(checkin: SafetyCheckin) -> dict:
         A JSON-serializable dict of everything scrubbed by ``_scrub_checkin_pii``,
         plus enough context (contacts, partners, chat) to be a meaningful record.
     """
+    location = checkin.destination_location
+    trip = checkin.trip
+    primary_map = checkin.markup_map
+    attached_maps = [*([primary_map] if primary_map is not None else []), *checkin.markup_maps.all()]
     return {
         "title": checkin.title,
         "plan_details": checkin.plan_details,
         "contact_message": checkin.contact_message,
         "destination_latitude": float(checkin.destination_latitude) if checkin.destination_latitude is not None else None,
         "destination_longitude": float(checkin.destination_longitude) if checkin.destination_longitude is not None else None,
+        "destination_location": {"name": location.official_name, "address": location.address} if location is not None else None,
+        "trip": {"name": trip.name} if trip is not None else None,
+        # Snapshots (viewport + drawn shapes) of every map linked to this check-in - the
+        # primary route map (`markup_map`) and any secondary reference maps
+        # (`markup_maps`) alike. The MarkupMap rows themselves are left alone (they're
+        # independently owned/reusable resources, see MarkupMap's own docstring), but the
+        # check-in's own record must not keep a plaintext FK a DB-level reader could join
+        # through, so the content is captured here before those links are severed below.
+        "maps": [{"title": markup_map.title, **markup_map.to_snapshot()} for markup_map in attached_maps],
         "resolved_by_label": checkin.resolved_by_label,
         "resolved_at": checkin.resolved_at.isoformat() if checkin.resolved_at else None,
-        "contacts": [{"display_name": contact.display_name, "email": contact.email} for contact in checkin.contacts.all()],
+        "contacts": [{"display_name": contact.display_name, "email": contact.email} for contact in checkin.contacts.select_related("contact_profile").all()],
         "partners": [partner.profile.username for partner in checkin.partners.select_related("profile").all()],
         "messages": [
             {"sender_name": message.sender_name, "body": message.body, "created": message.created.isoformat()}
@@ -827,9 +881,15 @@ def _seal_archive_payload(payload: dict, owner_public_key_b64: str) -> tuple[str
 def _scrub_checkin_pii(checkin: SafetyCheckin) -> None:
     """Null/blank every PII field an archive now covers, leaving structure intact.
 
-    Status enums, timestamps, FKs, and ``uuid``/``token`` all stay - the undo
+    Status enums, timestamps, and ``uuid``/``token`` all stay - the undo
     framework and ``SafetyContactOptOut`` FK resolution both depend on the rows
     (and, for contacts, the ``contact_profile`` FK) continuing to exist.
+    ``destination_location``/``trip``/``markup_map``/``markup_maps`` are
+    severed (all nullable) rather than left pointing at plaintext a DB-level
+    reader could join through - their content was already captured into the
+    encrypted archive by ``_build_archive_payload``, and the referenced
+    Location/Trip/MarkupMap rows themselves are untouched, shared/reusable
+    data with their own independent lifecycle (see those models' docstrings).
 
     Args:
         checkin: The check-in whose plaintext PII should be scrubbed.
@@ -839,6 +899,9 @@ def _scrub_checkin_pii(checkin: SafetyCheckin) -> None:
     checkin.contact_message = ""
     checkin.destination_latitude = None
     checkin.destination_longitude = None
+    checkin.destination_location = None
+    checkin.trip = None
+    checkin.markup_map = None
     checkin.live_latitude = None
     checkin.live_longitude = None
     checkin.resolved_by_label = ""
@@ -849,12 +912,16 @@ def _scrub_checkin_pii(checkin: SafetyCheckin) -> None:
             "contact_message",
             "destination_latitude",
             "destination_longitude",
+            "destination_location",
+            "trip",
+            "markup_map",
             "live_latitude",
             "live_longitude",
             "resolved_by_label",
             "updated",
         ],
     )
+    checkin.markup_maps.clear()
     # A contact_profile-linked contact already has email=None (the model's own
     # exactly-one-of CheckConstraint enforces that at creation) - blanking name is
     # all that's needed. An email-only contact (no account) can't have its email
@@ -895,6 +962,33 @@ def _broadcast_archive_scheduled(checkin: SafetyCheckin) -> None:
         )
     except Exception:
         logger.exception("Failed to broadcast archive schedule for checkin %s", checkin.pk)
+
+
+def _broadcast_partner_access_revoked(checkin: SafetyCheckin, profile_id: int) -> None:
+    """Tell a just-removed partner's connection(s) to close, if any are open.
+
+    Delivered on the main ``safety_checkin_{pk}`` group - every connection for this
+    check-in receives it, but ``SafetyCheckinChatConsumer.partner_access_revoked``
+    only acts on it when the payload's ``profile_id`` matches its own bound profile,
+    so the owner and every other partner/contact are unaffected.
+
+    Args:
+        checkin: The check-in the partner was removed from.
+        profile_id: PK of the removed partner's profile.
+    """
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+        async_to_sync(channel_layer.group_send)(
+            safety_checkin_group_name(checkin.pk),
+            {"type": "partner.access_revoked", "payload": {"profile_id": profile_id}},
+        )
+    except Exception:
+        logger.exception("Failed to broadcast partner access revocation for checkin %s", checkin.pk)
 
 
 def _broadcast_checkin_archived(checkin: SafetyCheckin) -> None:
@@ -1355,13 +1449,23 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
             from the "everyone else" notification pass so they don't get told
             about their own report.
     """
-    if checkin.is_resolved:
+    resolved_at = timezone.now()
+    # A conditional UPDATE, not a read-then-write - two concurrent reports (a contact and
+    # a partner, or two contacts, racing to mark the same check-in safe) must not both
+    # pass an in-memory `is_resolved` check and double-notify everyone/double-schedule
+    # archival. Only the row matching the WHERE clause at UPDATE time - i.e. still
+    # unresolved - gets touched; the loser's `updated` count is 0.
+    updated = SafetyCheckin.objects.filter(pk=checkin.pk).exclude(status__in=SafetyCheckinStatus.resolved_statuses()).update(
+        status=SafetyCheckinStatus.FOUND_SAFE,
+        resolved_at=resolved_at,
+        resolved_by_label=resolved_by_label,
+        updated=resolved_at,
+    )
+    if not updated:
         return
-
     checkin.status = SafetyCheckinStatus.FOUND_SAFE
-    checkin.resolved_at = timezone.now()
+    checkin.resolved_at = resolved_at
     checkin.resolved_by_label = resolved_by_label
-    checkin.save(update_fields=["status", "resolved_at", "resolved_by_label", "updated"])
     _broadcast_status_update(checkin)
 
     checkin_path = reverse("safety.checkin.detail", kwargs={"checkin_slug": _checkin_url_slug(checkin)})
@@ -1482,11 +1586,14 @@ def create_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, c
         The newly created SafetyCheckinMessage.
 
     Raises:
-        ValueError: If ``body`` is blank or exceeds ``MAX_CHAT_MESSAGE_LENGTH``.
-            Both callers (the WebSocket consumer and the no-JS HTTP fallback)
-            catch this and surface it to the sender - a safety check-in chat
-            failing silently is worse than most other features failing silently.
+        ValueError: If ``body`` is blank or exceeds ``MAX_CHAT_MESSAGE_LENGTH``,
+            or the check-in has already been archived. Both callers (the
+            WebSocket consumer and the no-JS HTTP fallback) catch this and
+            surface it to the sender - a safety check-in chat failing
+            silently is worse than most other features failing silently.
     """
+    if hasattr(checkin, "archive"):
+        raise ValueError("This check-in has concluded and can no longer receive messages.")
     body = body.strip()
     if not body:
         raise ValueError("Message cannot be empty.")

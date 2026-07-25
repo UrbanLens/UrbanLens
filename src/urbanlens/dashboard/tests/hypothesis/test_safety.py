@@ -110,6 +110,27 @@ class SafetyCheckinLifecycleTests(TestCase):
         checkin.refresh_from_db()
         self.assertEqual(checkin.status, SafetyCheckinStatus.CHECKED_IN)
 
+    def test_two_contacts_racing_to_mark_safe_only_resolve_once(self):
+        """Regression guard: the resolution guard is a conditional UPDATE, not an
+        in-memory `is_resolved` read-then-write - two contacts (or a contact and a
+        partner) reporting the same check-in safe at nearly the same moment must not
+        both pass, which would double-notify everyone and double-schedule archival.
+        """
+        checkin = _checkin(self.profile, status=SafetyCheckinStatus.OVERDUE)
+        first = baker.make("dashboard.SafetyCheckinContact", checkin=checkin, contact_profile=baker.make("auth.User").profile, email=None)
+        second = baker.make("dashboard.SafetyCheckinContact", checkin=checkin, contact_profile=baker.make("auth.User").profile, email=None)
+        # Both handlers loaded the same pre-resolution `checkin` row before either wrote -
+        # mirrors two concurrent requests each holding their own stale in-memory copy.
+        first.checkin.refresh_from_db()
+        second.checkin.refresh_from_db()
+
+        mark_found_safe(first)
+        mark_found_safe(second)
+
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.resolved_by_label, first.display_name)
+        self.assertEqual(VisitSuggestion.objects.filter(safety_checkin=checkin).count(), 1)
+
 
 class VisitSuggestionOriginConstraintTests(TestCase):
     """The exactly-one-of-three-origins CheckConstraint on VisitSuggestion."""

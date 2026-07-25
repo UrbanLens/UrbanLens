@@ -142,15 +142,20 @@ class GooglePhotosCallbackView(LoginRequiredMixin, View):
             return redirect(f"{reverse('settings.view')}#google-photos-settings-section")
 
         expires_in = int(tokens.get("expires_in") or 3600)
-        GooglePhotosAccount.objects.update_or_create(
+        account, _created = GooglePhotosAccount.objects.update_or_create(
             profile=profile,
             defaults={
                 "google_email": extract_email_from_id_token(tokens.get("id_token")),
                 "access_token": tokens["access_token"],
-                "refresh_token": tokens.get("refresh_token") or "",
                 "token_expiry": timezone.now() + datetime.timedelta(seconds=expires_in),
             },
         )
+        # A refresh token is only issued on fresh consent; keep the old one
+        # when Google omits it on a re-connect (see calendar_sync.py's
+        # GoogleCalendarAccount callback for the same pattern).
+        if tokens.get("refresh_token"):
+            account.refresh_token = tokens["refresh_token"]
+            account.save(update_fields=["refresh_token", "updated"])
         messages.success(request, "Google Photos connected.")
         return redirect("settings.view")
 

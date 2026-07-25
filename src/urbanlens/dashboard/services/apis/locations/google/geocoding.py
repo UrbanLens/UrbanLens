@@ -351,7 +351,11 @@ class GoogleGeocodingGateway(Gateway):
             logger.debug("Skipping Places Details lookup for CID %d - no API key configured.", cid)
             return None, None
 
-        params = {"cid": str(cid), "fields": "geometry", "key": self.api_key}
+        # Places Details does not accept a bare "cid" parameter - the CID must be
+        # passed as a "place_id" using the "cid:{cid}" prefix form. See the
+        # diagnose_places_api management command (Test 4 vs Test 5) for the
+        # confirmed comparison between the broken and working request shapes.
+        params = {"place_id": f"cid:{cid}", "fields": "geometry", "key": self.api_key}
         response = self.session.get(
             "https://maps.googleapis.com/maps/api/place/details/json",
             params=params,

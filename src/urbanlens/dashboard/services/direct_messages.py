@@ -307,7 +307,12 @@ def _notify_recipient(message: DirectMessage) -> None:
     if DirectMessageMute.objects.for_pair(message.recipient, message.sender).exists():
         return
 
-    already_unread = DirectMessage.objects.filter(sender=message.sender, recipient=message.recipient, read_at__isnull=True).exclude(pk=message.pk).exists()
+    # visible_to: a message the recipient already removed from their own view
+    # (deleted_by_recipient_at) must not keep suppressing new notifications
+    # from this sender - otherwise "Remove for me" on an unread message
+    # silently mutes that sender's future notifications until the recipient
+    # next opens the thread.
+    already_unread = DirectMessage.objects.visible_to(message.recipient).filter(sender=message.sender, recipient=message.recipient, read_at__isnull=True).exclude(pk=message.pk).exists()
     if already_unread:
         return
 
@@ -919,7 +924,11 @@ def conversations_for(profile: Profile) -> list[dict[str, Any]]:
         return []
 
     partners = ProfileModel.objects.select_related("user").in_bulk([row["partner_id"] for row in rows])
-    last_messages = DirectMessage.objects.in_bulk([row["last_message_id"] for row in rows])
+    # prefetch_related("images"): without it, a last message with no body
+    # (image-only or map-only send) makes the `message_preview` template tag's
+    # `images.exists()` fallback issue its own query per such row - an N+1
+    # across the sidebar's conversation list.
+    last_messages = DirectMessage.objects.filter(pk__in=[row["last_message_id"] for row in rows]).prefetch_related("images").in_bulk()
     muted_sender_ids = set(DirectMessageMute.objects.filter(viewer=profile).values_list("sender_id", flat=True))
 
     conversations = []
@@ -1027,7 +1036,10 @@ def thread_page(profile: Profile, partner: Profile, *, before_id: int | None = N
             "share__recommended_profile",
             "markup_map",
         )
-        .prefetch_related("images", "reactions__profile", "markup_map__items", "location_mentions__location", "location_mentions__pin_share")
+        # reply_to__images: without it, the reply-quote payload's fallback
+        # preview (`quoted.images.exists()` in serialize_direct_message)
+        # issues one extra query per reply message in the page.
+        .prefetch_related("images", "reactions__profile", "markup_map__items", "location_mentions__location", "location_mentions__pin_share", "reply_to__images")
     )
     if before_id is not None:
         queryset = queryset.filter(pk__lt=before_id)

@@ -11,6 +11,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from django.core.cache import cache
+
 from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
 
 if TYPE_CHECKING:
@@ -22,6 +24,50 @@ if TYPE_CHECKING:
 COUNTRY_BONUS = 100
 STATE_BONUS = 250
 CITY_BONUS = 400
+
+#: Nominatim is rate-limited to 1 call/minute app-wide (see
+#: ``plugins.builtin.nominatim.NominatimPlugin.get_service_defaults``) - without
+#: caching, any multiplayer round with more than one guess/minute would have
+#: every guess but the first silently lose its bonus to a swallowed
+#: ``RateLimitExceededError``. Country/state/city boundaries don't move, so a
+#: long TTL is safe.
+_REVERSE_GEOCODE_CACHE_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days
+#: Decimal places to round guess coordinates to before keying the cache -
+#: ~111m of latitude at the equator, coarse enough that guesses landing in
+#: the same neighborhood share a cache entry, fine enough to rarely cross a
+#: real city/state/country boundary.
+_REVERSE_GEOCODE_COORD_PRECISION = 3
+
+#: Distinguishes "never cached" from "cached, and the lookup found nothing" -
+#: ``cache.get`` can't tell those apart with a plain ``None`` default, and a
+#: failed/empty lookup is itself worth caching so it doesn't get retried
+#: every guess in the same neighborhood.
+_CACHE_MISS = object()
+
+
+def _reverse_geocode_admin_cached(latitude: float, longitude: float) -> dict[str, str] | None:
+    """Reverse-geocode admin lookup for a guess point, cached by rounded coordinates.
+
+    See ``_REVERSE_GEOCODE_CACHE_TTL_SECONDS``'s docstring for why this cache
+    exists - Nominatim's 1 call/minute app-wide limit otherwise makes this
+    feature non-functional under real multiplayer load.
+
+    Args:
+        latitude: WGS-84 latitude of the guess point.
+        longitude: WGS-84 longitude of the guess point.
+
+    Returns:
+        ``{"country": ..., "state": ..., "city": ...}``, or None if Nominatim
+        had no result (or errored/was rate-limited) - cached either way.
+    """
+    key = f"spotguessr:geo_bonus:reverse:{round(latitude, _REVERSE_GEOCODE_COORD_PRECISION)},{round(longitude, _REVERSE_GEOCODE_COORD_PRECISION)}"
+    cached = cache.get(key, _CACHE_MISS)
+    if cached is not _CACHE_MISS:
+        return cached
+
+    admin = NominatimGateway().reverse_geocode_admin(latitude, longitude)
+    cache.set(key, admin, _REVERSE_GEOCODE_CACHE_TTL_SECONDS)
+    return admin
 
 
 @dataclass(frozen=True)
@@ -80,17 +126,19 @@ def _normalize(value: str | None) -> str:
 def bonus_points_for_guess(guess_point: Point, location: Location, scope: BonusScope) -> BonusResult:
     """Country/state/city bonus points for a guess, honoring ``scope``.
 
-    Reverse-geocodes ``guess_point`` (one Nominatim call - the same
-    dependency this feature's own area-search already uses) and compares
-    against the answer location's own stored ``country``/``state``/``city``.
-    Tiers stack: nailing the city also means the country and state matched,
-    so a spot-on guess earns all three. Skips the call entirely if ``scope``
-    offers no tiers this session (nothing to charge an API call for).
+    Reverse-geocodes ``guess_point`` (one Nominatim call, cached by rounded
+    coordinates - see ``_reverse_geocode_admin_cached`` - since this is the
+    same rate-limited dependency this feature's own area-search already
+    uses) and compares against the answer location's own stored
+    ``country``/``state``/``city``. Tiers stack: nailing the city also means
+    the country and state matched, so a spot-on guess earns all three. Skips
+    the call entirely if ``scope`` offers no tiers this session (nothing to
+    charge an API call for).
     """
     if not (scope.country or scope.state or scope.city):
         return BonusResult(total=0)
 
-    admin = NominatimGateway().reverse_geocode_admin(guess_point.y, guess_point.x)
+    admin = _reverse_geocode_admin_cached(guess_point.y, guess_point.x)
     if admin is None:
         return BonusResult(total=0)
 

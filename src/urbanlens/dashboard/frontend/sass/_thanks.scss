@@ -4,7 +4,9 @@
 
 .page-thanks {
 
+    --ul-text-primary: #{$color-indigo-900};
     --ul-text-secondary: #{$color-indigo-700};
+    --ul-border-subtle: rgba($color-indigo-900, .08);
 
     > div.container {
         max-width: 100%;
@@ -344,6 +346,8 @@
 
 [data-theme="dark"] {
     .page-thanks {
+        --ul-text-primary: #{$color-indigo-50};
         --ul-text-secondary: #{$color-indigo-100};
+        --ul-border-subtle: rgba($color-indigo-100, .15);
     }
 }

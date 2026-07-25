@@ -9,6 +9,7 @@ import json
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -20,6 +21,16 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.map_pins.autocomplete import search_local
+from urbanlens.dashboard.tests.hypothesis.strategies import coord_pair_float, lat_float, lon_float, nonempty_name, priority as priority_strategy
+
+# DB-backed @given tests below never touch self.client - only ORM/service
+# calls - per this repo's documented rule that hypothesis's per-example DB
+# flush and the Django test client don't mix.
+_db_settings = settings(
+    max_examples=15,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
+)
 
 _coord_counter = 0
 
@@ -74,6 +85,39 @@ class MergeRetainsPropertiesTests(TestCase):
         self.assertEqual(self.source.priority, 4)
         self.assertEqual(self.source.danger, 3)
         self.assertIn(self.label, self.source.labels.all())
+
+
+class MergeRetainsPropertiesPropertyTests(TestCase):
+    """Property-based generalization of MergeRetainsPropertiesTests above.
+
+    PinBulkMergeView.post has no extracted service function to call directly
+    (the reparenting - ``source.parent_pin = target; source.save(...)`` - is
+    inline in the view), so this exercises that same ORM-level operation
+    directly rather than going through self.client, per this repo's
+    documented @given + self.client incompatibility. Verifies the merge
+    invariant - a pin's own fields (name, priority, and its Location) survive
+    reparenting unchanged - for arbitrary generated names/priorities/
+    coordinates rather than one hand-picked example.
+    """
+
+    @given(name=nonempty_name, priority=priority_strategy, coords=coord_pair_float)
+    @_db_settings
+    def test_reparenting_retains_name_priority_and_location(self, name: str, priority: int, coords: tuple[float, float]) -> None:
+        lat, lon = coords
+        profile = baker.make(User).profile
+        target = _make_pin(profile, name="Target")
+        location = baker.make(Location, latitude=lat, longitude=lon)
+        source = baker.make(Pin, profile=profile, location=location, name=name, priority=priority)
+        location_id_before = source.location_id
+
+        source.parent_pin = target
+        source.save(update_fields=["parent_pin", "updated"])
+        source.refresh_from_db()
+
+        self.assertEqual(source.parent_pin_id, target.pk)
+        self.assertEqual(source.name, name)
+        self.assertEqual(source.priority, priority)
+        self.assertEqual(source.location_id, location_id_before)
 
 
 class MapChildPinsJsonTests(TestCase):
@@ -370,6 +414,44 @@ class PinSwapWithParentModelTests(TestCase):
         self.assertEqual([p.pk for p in chain], [self.child.pk, self.grandparent.pk])
 
 
+class PinSwapWithParentPropertyTests(TestCase):
+    """Property-based generalization of PinSwapWithParentModelTests above:
+    the "child becomes parent of former parent", "child takes over
+    grandparent slot", and "no cycle results" invariants must hold for a
+    chain of arbitrary depth, not just the one hand-picked 3-level chain
+    above. Pure model-method test (Pin.swap_with_parent()) - no self.client.
+    """
+
+    @given(depth=st.integers(min_value=2, max_value=6))
+    @_db_settings
+    def test_swap_invariants_hold_at_arbitrary_chain_depth(self, depth: int) -> None:
+        profile = baker.make(User).profile
+        chain = [_make_pin(profile, name="Level 0")]
+        for level in range(1, depth):
+            chain.append(_make_pin(profile, name=f"Level {level}", parent_pin=chain[-1]))
+
+        leaf = chain[-1]
+        parent = chain[-2]
+        grandparent = chain[-3] if depth >= 3 else None
+
+        old_parent = leaf.swap_with_parent()
+
+        self.assertEqual(old_parent.pk, parent.pk)
+        parent.refresh_from_db()
+        leaf.refresh_from_db()
+        self.assertEqual(parent.parent_pin_id, leaf.pk)
+        if grandparent is not None:
+            self.assertEqual(leaf.parent_pin_id, grandparent.pk)
+        else:
+            self.assertIsNone(leaf.parent_pin_id)
+
+        # No pin anywhere in the chain can end up in its own ancestor chain.
+        for pin in chain:
+            pin.refresh_from_db()
+            ancestor_ids = {p.pk for p in pin.ancestor_chain()}
+            self.assertNotIn(pin.pk, ancestor_ids)
+
+
 class PinSwapParentViewTests(TestCase):
     """POST /map/pin/<slug>/swap-parent/ - the child-pin popup's promote-to-parent action."""
 
@@ -500,6 +582,35 @@ class DetailPinCoordinateDedupTests(TestCase):
         self.assertEqual(response.status_code, 200)
         second.refresh_from_db()
         self.assertNotEqual(first.location_id, second.location_id)
+
+
+class DetailPinCoordinateDedupPropertyTests(TestCase):
+    """Property-based generalization of DetailPinCoordinateDedupTests above.
+
+    Exercises ``detail_pins._location_for_coords`` - the pure helper function
+    the view calls - directly, rather than through self.client, per this
+    repo's documented @given + self.client incompatibility. Verifies that any
+    two distinct coordinate pairs get distinct Location rows (the whole point
+    of passing ``threshold_meters=0``, bypassing ``get_nearby_or_create``'s
+    default 50m dedup radius), for arbitrary generated base coordinates and
+    small nearby offsets - not just the one hand-picked ~20m-apart example
+    above.
+    """
+
+    @given(
+        lat=lat_float,
+        lon=lon_float,
+        lat_offset=st.floats(min_value=0.0001, max_value=0.001, allow_nan=False, allow_infinity=False),
+        lon_offset=st.floats(min_value=0.0001, max_value=0.001, allow_nan=False, allow_infinity=False),
+    )
+    @_db_settings
+    def test_nearby_coordinates_always_get_distinct_locations(self, lat: float, lon: float, lat_offset: float, lon_offset: float) -> None:
+        from urbanlens.dashboard.controllers.detail_pins import _location_for_coords
+
+        first = _location_for_coords(lat, lon)
+        second = _location_for_coords(lat + lat_offset, lon + lon_offset)
+
+        self.assertNotEqual(first.pk, second.pk)
 
 
 class VisitHistoryChildrenTests(TestCase):

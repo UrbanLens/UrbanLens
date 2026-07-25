@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 import datetime
 import logging
 from typing import TYPE_CHECKING
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urlparse
 
 from django.core.files.base import ContentFile
 from django.db import IntegrityError
@@ -36,8 +36,9 @@ from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DA
 from urbanlens.dashboard.models.profile.model import _haversine_km
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.images import compute_checksum
+from urbanlens.dashboard.services.media_materialize import fetch_with_revalidated_redirects
 from urbanlens.dashboard.services.storage import quota_error_for_upload
-from urbanlens.dashboard.services.url_safety import UnsafeUrlError, ensure_public_http_url
+from urbanlens.dashboard.services.url_safety import UnsafeUrlError
 from urbanlens.dashboard.services.visits import add_visited_status, find_pin_containing_point, resolve_location_for_point, sync_last_visited, visit_logging_allowed
 
 if TYPE_CHECKING:
@@ -629,30 +630,15 @@ def _filename_from_url(url: str) -> str:
 def _download_photo_bytes(url: str) -> bytes:
     """Follow redirects (each hop re-validated) and return the downloaded bytes.
 
-    Factored out of ``attach_suggestion_photos`` so its own raised
-    ``SuggestionPhotoError`` doesn't get caught by the same except clause
-    that handles network/SSRF failures - see that function's try/except.
+    Delegates the redirect-following loop to
+    ``services.media_materialize.fetch_with_revalidated_redirects`` (shared
+    with that module and ``services.ai.link_extraction.fetch_page_text`` -
+    previously each had its own copy of this loop). A rejected hop or an
+    exhausted redirect chain raises ``UnsafeUrlError``, which is already in
+    ``attach_suggestion_photos``'s except clause alongside
+    ``SuggestionPhotoError``, so no translation is needed here.
     """
-    fetch_url = url
-    for _hop in range(_MAX_PHOTO_REDIRECTS + 1):
-        fetch_url = ensure_public_http_url(fetch_url)
-        response = requests.get(
-            fetch_url,
-            timeout=_PHOTO_DOWNLOAD_TIMEOUT,
-            stream=True,
-            allow_redirects=False,
-            headers=_PHOTO_DOWNLOAD_HEADERS,
-        )
-        if response.is_redirect:
-            redirect_target = response.headers.get("Location")
-            response.close()
-            if not redirect_target:
-                raise SuggestionPhotoError(f"{url} redirected with no target.")
-            fetch_url = urljoin(fetch_url, redirect_target)
-            continue
-        break
-    else:
-        raise SuggestionPhotoError(f"{url} redirects too many times.")
+    response = fetch_with_revalidated_redirects(url, max_redirects=_MAX_PHOTO_REDIRECTS, timeout=_PHOTO_DOWNLOAD_TIMEOUT, headers=_PHOTO_DOWNLOAD_HEADERS)
     response.raise_for_status()
     return response.raw.read(_MAX_PHOTO_DOWNLOAD_BYTES + 1, decode_content=True)
 

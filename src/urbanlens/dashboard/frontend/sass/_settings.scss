@@ -87,3 +87,37 @@
         display: none;
     }
 }
+
+// -- Immich (Connections tab) ----------------------------------------------------
+// Connected-status line + connect form loading state for
+// _immich_account.html, re-rendered via HTMX on every connect/disconnect.
+
+.immich-status-icon {
+    font-size: 1.1rem;
+    vertical-align: middle;
+    margin-right: .3rem;
+}
+
+.immich-status-icon--connected {
+    color: $color-green-600;
+}
+
+#immich-connect-btn {
+    .immich-connect-btn-verifying {
+        display: none;
+    }
+
+    &.htmx-request {
+        opacity: .8;
+        pointer-events: none;
+        @include btn-loading-spinner;
+
+        .immich-connect-btn-label {
+            display: none;
+        }
+
+        .immich-connect-btn-verifying {
+            display: inline;
+        }
+    }
+}

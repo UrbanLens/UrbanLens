@@ -1035,7 +1035,7 @@
         &:hover { background: rgba(15, 23, 42, .9); transform: scale(1.08); }
         &.is-active { background: var(--ul-primary-color); }
     }
-    .media-item-vote-down-btn.is-active { background: var(--ul-danger, #dc2626); }
+    .media-item-vote-down-btn.is-active { background: var(--ul-color-danger-text, #dc2626); }
 
     // Net community score chip between the up/down buttons.
     .media-item-votes {
@@ -1057,6 +1057,6 @@
         font-size: .68rem;
         font-weight: 700;
         border-radius: 999px;
-        background: var(--ul-surface-sunken, rgba(0, 0, 0, .06));
+        background: var(--ul-hover-bg, rgba(0, 0, 0, .06));
     }
 }

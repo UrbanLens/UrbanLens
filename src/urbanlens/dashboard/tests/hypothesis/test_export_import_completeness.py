@@ -11,6 +11,7 @@ import os
 import tempfile
 
 from django.contrib.auth.models import User
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -24,6 +25,16 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.services import export as export_service, import_data
 from urbanlens.dashboard.services.articles import save_article
+from urbanlens.dashboard.tests.hypothesis.strategies import nonempty_name, short_text_or_none
+
+# DB-backed @given tests below never touch self.client - only the underlying
+# export/import service functions - per this repo's documented rule that
+# hypothesis's per-example DB flush and the Django test client don't mix.
+_db_settings = settings(
+    max_examples=15,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
+)
 
 
 def _read(temp_dir: str, filename: str):
@@ -283,7 +294,7 @@ class RoundTripCommentsTests(TestCase):
         self.location = baker.make(Location, latitude=41.11, longitude=-73.11)
         self.pin = baker.make(Pin, profile=self.exporter, location=self.location, name="Old Mill")
 
-    def _export_and_import(self, importer_profile, pin_uuid_map) -> "import_data.ImportResult":
+    def _export_and_import(self, importer_profile, pin_uuid_map) -> import_data.ImportResult:
         result = import_data.ImportResult()
         with tempfile.TemporaryDirectory() as temp_dir:
             export_service._export_comments(self.exporter, temp_dir)
@@ -385,6 +396,37 @@ class RoundTripCommentsTests(TestCase):
         imported = Comment.objects.get(profile=self.importer)
         self.assertEqual(imported.created, long_ago)
 
+    @given(text=nonempty_name)
+    @_db_settings
+    def test_arbitrary_comment_text_round_trips(self, text: str) -> None:
+        """Import strips comment text (matching _import_comments' own
+        ``.strip()``) - the invariant is round-tripping to the stripped form,
+        not necessarily to the original generated string verbatim."""
+        from urbanlens.dashboard.models.comments.model import Comment
+
+        Comment.objects.create(profile=self.exporter, pin=self.pin, text=text)
+        my_pin = baker.make(Pin, profile=self.importer)
+
+        result = self._export_and_import(self.importer, {str(self.pin.uuid): my_pin.pk})
+
+        imported = Comment.objects.get(profile=self.importer)
+        self.assertEqual(imported.text, text.strip())
+        self.assertEqual(result.created.get("comments"), 1)
+
+    @given(count=st.integers(min_value=1, max_value=5))
+    @_db_settings
+    def test_arbitrary_number_of_comments_all_round_trip(self, count: int) -> None:
+        from urbanlens.dashboard.models.comments.model import Comment
+
+        for i in range(count):
+            Comment.objects.create(profile=self.exporter, pin=self.pin, text=f"note {i}")
+        my_pin = baker.make(Pin, profile=self.importer)
+
+        result = self._export_and_import(self.importer, {str(self.pin.uuid): my_pin.pk})
+
+        self.assertEqual(Comment.objects.filter(profile=self.importer).count(), count)
+        self.assertEqual(result.created.get("comments"), count)
+
 
 class RoundTripPhotosTests(TestCase):
     """photos/ round-trips: quota-checked re-upload, uuid-matched targets."""
@@ -402,7 +444,7 @@ class RoundTripPhotosTests(TestCase):
         with open(os.path.join(photos_dir, "metadata.json"), "w", encoding="utf-8") as fh:
             json.dump(rows, fh)
 
-    def _import(self, temp_dir: str, pin_uuid_map=None, label_uuid_map=None) -> "import_data.ImportResult":
+    def _import(self, temp_dir: str, pin_uuid_map=None, label_uuid_map=None) -> import_data.ImportResult:
         result = import_data.ImportResult()
         import_data._import_photos(self.importer, temp_dir, result, pin_uuid_map=pin_uuid_map or {}, label_uuid_map=label_uuid_map or {})
         return result
@@ -482,6 +524,20 @@ class RoundTripPhotosTests(TestCase):
         self.assertEqual(Image.objects.filter(profile=self.importer).count(), 1)
         self.assertEqual(result.skipped.get("photos"), 1)
 
+    @given(caption=short_text_or_none)
+    @_db_settings
+    def test_arbitrary_caption_round_trips(self, caption: str | None) -> None:
+        row = {"uuid": "8a4f0a53-1111-4f77-9111-000000000009", "filename": "mill.jpg", "caption": caption, "media_type": "photo"}
+        with tempfile.TemporaryDirectory() as temp_dir:
+            self._archive(temp_dir, [row], {"mill.jpg": b"fake-jpeg-bytes"})
+            result = self._import(temp_dir)
+
+        image = Image.objects.get(profile=self.importer)
+        # _import_photos computes caption as (row["caption"] or "")[:500] or None -
+        # a falsy (None) caption round-trips to None, never to an empty string.
+        self.assertEqual(image.caption, caption or None)
+        self.assertEqual(result.created.get("photos"), 1)
+
 
 class RoundTripTripsTests(TestCase):
     """trips.json round-trips: owned trips rebuilt, members become invitations."""
@@ -491,7 +547,7 @@ class RoundTripTripsTests(TestCase):
         self.exporter = baker.make(User).profile
         self.importer = baker.make(User).profile
 
-    def _export_and_import(self) -> "import_data.ImportResult":
+    def _export_and_import(self) -> import_data.ImportResult:
         result = import_data.ImportResult()
         with tempfile.TemporaryDirectory() as temp_dir:
             export_service._export_trips(self.exporter, temp_dir)
@@ -573,6 +629,29 @@ class RoundTripTripsTests(TestCase):
         self.assertTrue(TripMembership.objects.filter(trip=rebuilt, profile=friend, status=TripMembership.STATUS_INVITED).exists())
         self.assertFalse(TripMembership.objects.filter(trip=rebuilt, profile=stranger).exists())
 
+    @given(name=nonempty_name, description=short_text_or_none)
+    @_db_settings
+    def test_arbitrary_name_and_description_round_trip(self, name: str, description: str | None) -> None:
+        """Restore flow with generated content: _import_trips strips/truncates
+        ``name`` to 255 chars, and collapses a falsy ``description`` (None or
+        exported "") to None - the round-trip invariant accounts for both."""
+        from urbanlens.dashboard.models.trips.model import Trip
+
+        original = self._make_trip(self.exporter, name=name, description=description)
+        original_uuid = original.uuid
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            export_service._export_trips(self.exporter, temp_dir)
+            original.delete()
+            result = import_data.ImportResult()
+            import_data._import_trips(self.importer, temp_dir, result, pin_uuid_map={}, label_uuid_map={})
+
+        rebuilt = Trip.objects.get(creator=self.importer)
+        self.assertEqual(rebuilt.name, name.strip()[:255])
+        self.assertEqual(rebuilt.description, description or None)
+        self.assertEqual(rebuilt.uuid, original_uuid)
+        self.assertEqual(result.created.get("trips"), 1)
+
 
 class RoundTripDirectMessagesTests(TestCase):
     """direct_messages.json restore: own sent plaintext only, spam-free."""
@@ -589,7 +668,7 @@ class RoundTripDirectMessagesTests(TestCase):
         # bare baker strangers mask each other under the default setting.
         ProfileModel.objects.filter(pk__in=[self.me.pk, self.partner.pk]).update(community_enabled=True, direct_message_visibility="anyone", profile_visibility="anyone")
 
-    def _export_and_import(self, exporter=None, importer=None) -> "import_data.ImportResult":
+    def _export_and_import(self, exporter=None, importer=None) -> import_data.ImportResult:
         result = import_data.ImportResult()
         with tempfile.TemporaryDirectory() as temp_dir:
             export_service._export_direct_messages(exporter or self.me, temp_dir)
@@ -670,3 +749,23 @@ class RoundTripDirectMessagesTests(TestCase):
 
         self.assertEqual(DirectMessage.objects.count(), 1)
         self.assertEqual(result.skipped.get("direct_messages"), 1)
+
+    @given(body=nonempty_name)
+    @_db_settings
+    def test_arbitrary_sent_body_round_trips_after_deletion(self, body: str) -> None:
+        """_import_direct_messages strips the body (matching its own
+        ``.strip()``) before re-creating the message - the round-trip
+        invariant is against the stripped form."""
+        from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+
+        DirectMessage.objects.create(sender=self.me, recipient=self.partner, body=body)
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            export_service._export_direct_messages(self.me, temp_dir)
+            DirectMessage.objects.all().delete()
+            result = import_data.ImportResult()
+            import_data._import_direct_messages(self.me, temp_dir, result, pin_uuid_map={}, label_uuid_map={})
+
+        restored = DirectMessage.objects.get(sender=self.me, recipient=self.partner)
+        self.assertEqual(restored.body, body.strip())
+        self.assertEqual(result.created.get("direct_messages"), 1)

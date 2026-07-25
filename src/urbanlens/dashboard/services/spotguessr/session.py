@@ -349,8 +349,17 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
         here, not recovered later from the ``Guess`` row alone.
 
     Raises:
-        SpotGuessrError: if ``profile`` already guessed this round.
+        SpotGuessrError: if ``profile`` isn't a JOINED participant of this
+            round's session (e.g. still INVITED, never joined), or if
+            ``profile`` already guessed this round.
     """
+    try:
+        participant = GameSessionParticipant.objects.get(session=round_.session, profile=profile)
+    except GameSessionParticipant.DoesNotExist:
+        raise SpotGuessrError("You must join this session before submitting a guess.") from None
+    if participant.status != GameSessionParticipantStatus.JOINED:
+        raise SpotGuessrError("You must join this session before submitting a guess.")
+
     distance = scoring.distance_for_guess(
         round_.location,
         guess_point,

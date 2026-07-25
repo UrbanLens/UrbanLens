@@ -197,17 +197,30 @@ class ViewMapContextTests(TestCase):
         resp = self.client.get(_MAP_URL)
         self.assertNotContains(resp, 'id="addr-search-history"')
 
+
+class RootPinCountQueryTests(TestCase):
+    """MapController.view_map's ``pin_count`` is computed as
+    ``Pin.objects.filter(profile=profile).root_pins().count()`` - verify that
+    query returns exactly the number of root pins created, for arbitrary N.
+
+    Kept in its own class, entirely separate from any Django test-client
+    usage: per this repo's CLAUDE.md, hypothesis's per-example DB flush (via
+    hypothesis.extra.django's _pre_setup/_post_teardown) doesn't interact
+    safely with self.client's session state. See test_safety_partners.py's
+    IsOwnerOrAcceptedPartnerHypothesisTests (and its sibling
+    IsOwnerOrAcceptedPartnerTests) for the same split applied there: a
+    @given-decorated pure-logic test in its own class, with any view-level
+    smoke test living as a plain (non-@given) method elsewhere - here, that's
+    ViewMapContextTests.test_pin_count_reflects_actual_root_pin_count above.
+    """
+
     @given(n=st.integers(min_value=0, max_value=6))
     @_db_settings
-    def test_pin_count_equals_root_pin_count_for_n_pins(self, n: int) -> None:
-        # hypothesis.extra.django flushes the DB session between examples via
-        # _pre_setup/_post_teardown even though setUp data survives in the outer
-        # class transaction.  Re-login here so each example has a valid session.
-        self.client.force_login(self.user)
+    def test_root_pin_count_matches_created_count(self, n: int) -> None:
+        profile = baker.make(User).profile
         for _ in range(n):
-            baker.make(Pin, profile=self.profile, parent_pin=None)
-        resp = self.client.get(_MAP_URL)
-        self.assertEqual(resp.context["pin_count"], n)
+            baker.make(Pin, profile=profile, parent_pin=None)
+        self.assertEqual(Pin.objects.filter(profile=profile).root_pins().count(), n)
 
 
 class ShowPinCountTests(TestCase):

@@ -938,12 +938,22 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # expired -- bounded staleness beats an unbounded inline refetch.
         coord_query = f"{lat:.5f}, {lng:.5f}"
         default: tuple[list[_SlideT], list[ProviderFetchResult]] = ([], [])
-        slides, provider_results = call_with_deadline(
-            lambda: collector(float(lat), float(lng)),
-            timeout=EXTERNAL_CALL_DEADLINE,
-            default=default,
-            name=deadline_name,
-        )
+        try:
+            # call_with_deadline only catches its own timeout internally (see
+            # timeout_utils.py) - collector() itself has no surrounding handler here,
+            # so an unexpected per-provider exception (vs. the count=0-per-result
+            # failures the providers are supposed to report themselves) is caught at
+            # this call site instead, preserving the documented "failures surface as
+            # count=0 entries" contract rather than turning into an unhandled 500.
+            slides, provider_results = call_with_deadline(
+                lambda: collector(float(lat), float(lng)),
+                timeout=EXTERNAL_CALL_DEADLINE,
+                default=default,
+                name=deadline_name,
+            )
+        except (OSError, ValueError, RuntimeError) as e:
+            logger.exception("Unable to collect %s slides for pin: %s", deadline_name, e)
+            slides, provider_results = default
         # Failures surface as count=0 entries, matching the old inline behaviour.
         debug_entries = []
         for result in provider_results:

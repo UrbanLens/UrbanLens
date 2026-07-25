@@ -17,8 +17,18 @@ class UnsafeUrlError(ValueError):
     """Raised when a url fails the public-reachability check."""
 
 
+#: RFC 6598 Carrier-Grade-NAT / Shared-Address-Space range. Many cloud providers (AWS NAT
+#: gateways, GCP internal load balancers, some Kubernetes CNI setups) route internal-only
+#: infrastructure through this range, but Python's ipaddress module doesn't classify it as
+#: private/reserved/link-local/loopback, so it previously sailed straight through the checks
+#: below - the only IP-range guard several SSRF-sensitive callers rely on.
+_CGNAT_NETWORK = ipaddress.ip_network("100.64.0.0/10")
+
+
 def is_blocked_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """True if ``address`` shouldn't be reachable from a user-directed fetch."""
+    if isinstance(address, ipaddress.IPv4Address) and address in _CGNAT_NETWORK:
+        return True
     return address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_multicast
 
 

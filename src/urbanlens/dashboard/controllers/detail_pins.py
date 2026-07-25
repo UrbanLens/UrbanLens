@@ -7,6 +7,7 @@ import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ObjectDoesNotExist
+from django.db import transaction
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -216,8 +217,14 @@ class DetailPinEditView(LoginRequiredMixin, View):
         detail_pin = self._get_detail_pin(request, pin_slug, detail_pin_uuid)
         subtree = list(Pin.objects.filter(pk=detail_pin.pk).with_descendants())
         stash_for_undo("pin", subtree, detail_pin.profile)
-        for descendant in subtree:
-            descendant.delete()
+        with transaction.atomic():
+            # Pin.parent_pin is on_delete=CASCADE, so deleting just the detail pin
+            # itself already cascades to every descendant captured in `subtree`
+            # above in one bulk operation - no need to delete each subtree member
+            # individually. Wrapping in transaction.atomic() also ensures a
+            # mid-delete failure can't leave the just-created UndoAction claiming
+            # a full deletion that only partially happened.
+            Pin.objects.filter(pk=detail_pin.pk).delete()
         response = HttpResponse("", status=200)
         response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Detail pin deleted. Undo within 7 days from Settings → Undo History."}})
         return response
@@ -422,8 +429,14 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
 
         subtree = with_wiki_descendants([child_wiki])
         stash_for_undo("wiki", subtree, profile)
-        for descendant in subtree:
-            descendant.delete()
+        with transaction.atomic():
+            # Wiki.parent_wiki is on_delete=CASCADE, so deleting just the child wiki
+            # itself already cascades to every descendant captured in `subtree`
+            # above in one bulk operation - no need to delete each subtree member
+            # individually. Wrapping in transaction.atomic() also ensures a
+            # mid-delete failure can't leave the just-created UndoAction claiming
+            # a full deletion that only partially happened.
+            Wiki.objects.filter(pk=child_wiki.pk).delete()
 
         WikiEdit.objects.create(
             wiki=wiki,

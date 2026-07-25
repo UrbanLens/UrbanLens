@@ -541,6 +541,36 @@ pipeline), so it was folded into
 `0011_trivia_wiki_incorporation_setting.py` alongside the Trivia field rather than filed away
 again - see that migration's own comment.
 
+## Setup wizard sidebar reuses inverting `--ul-grey-N` tokens on an always-dark panel (found 2026-07-25)
+
+`_setup.scss`'s `.setup-wizard__sidebar` sets `background: rgba(0,0,0,0.3)` on top of whatever
+the parent `@include surface()` background is - like the map filter panel and a few other
+"always dark" chrome panels called out in `_tokens.scss`'s comments, it reads as a fixed dark
+strip in both themes rather than genuinely inverting. But unlike those other always-dark panels,
+its child text (`.brand-name`, `.setup-stepper__item`, etc.) uses the regular inverting
+`var(--ul-grey-1)` / `var(--ul-grey-5)` / `var(--ul-grey-6)` / `var(--ul-grey-7)` tokens. In light
+mode `--ul-grey-1` is a near-white (`#dfdfdf`), which reads fine against the dark sidebar overlay.
+In dark mode `--ul-grey-1` flips to a near-black grey (`$color-grey-8`, `#373737`), which is
+low-to-no contrast against that same dark sidebar background - the sidebar text likely becomes
+close to unreadable in dark mode. Not fixed here because it's a structural mismatch (the
+component assumes a static-dark treatment but was styled with tokens meant to invert), not a
+missing/undefined custom property - fixing it means either converting the sidebar's own text
+tokens to a fixed light-on-dark scheme (like `_tokens.scss`'s `$ui-fp-*`/`$ui-link-on-dark`
+pattern for the map filter panel) or making the sidebar itself genuinely theme-aware. Worth a
+manual dark-mode check of `/setup` before shipping.
+
+## A few more hardcoded danger-red controls without dark overrides in `_pin_lists.scss` (found 2026-07-25)
+
+While fixing the `.saved-filter-region-mode-btn--active` include/exclude buttons (raw
+`#2e7d32`/`#c62828`, now real `--ul-color-success-text`/`--ul-color-danger-text` tokens), noticed
+several sibling controls in the same file with the identical pattern that were **not** in scope
+for that fix: `.pin-list-more-menu-danger` (`color: #ef4444 !important`, ~line 325),
+`.saved-filter-delete-btn` (`color: #ef4444`, ~line 629), and a related hover state at ~line 521
+(`color: #fca5a5`). None has a `[data-theme="dark"]`/`_dark.scss` counterpart. Given
+`--ul-color-danger-text` now exists and already resolves correctly in both themes, these three
+are likely a quick follow-up: swap the raw hex for `var(--ul-color-danger-text, <original-hex>)`
+the same way the region-mode buttons were fixed.
+
 ## `test_post_without_name_returns_400` is stale against UL-360's optional-name behavior
 
 `test_trip_controller.py::TripCreateViewTests::test_post_without_name_returns_400` (line ~224)
