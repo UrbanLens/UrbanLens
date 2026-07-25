@@ -67,6 +67,15 @@ class SanitizeArticlePlainTextTests(SimpleTestCase):
     def test_strips_html_tags(self) -> None:
         self.assertEqual(sanitize_article_plain_text("<p>Hello <b>world</b></p>"), "Hello world")
 
+    def test_strips_entity_encoded_and_double_encoded_html(self) -> None:
+        cleaned = sanitize_article_plain_text(
+            "&amp;lt;script&amp;gt;alert(1)&amp;lt;/script&amp;gt;Built in 1920."
+        )
+        self.assertNotIn("<", cleaned)
+        self.assertNotIn(">", cleaned)
+        self.assertNotIn("alert", cleaned)
+        self.assertIn("Built in 1920.", cleaned)
+
     def test_strips_script_and_keeps_text(self) -> None:
         text = sanitize_article_plain_text("<script>alert(1)</script>Built in 1920.")
         self.assertNotIn("<script", text)

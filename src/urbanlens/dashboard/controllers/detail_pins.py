@@ -141,7 +141,9 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         pin_type, pin_type_chosen = _requested_pin_type(body)
         detail_pin = Pin.objects.create(
             name=detail_name,
-            name_is_user_provided=bool((detail_name or "").strip()),
+            # Creation is not an explicit rename; imported/generated detail
+            # names must remain eligible for later canonical-name cleanup.
+            name_is_user_provided=False,
             description=body.get("description") or None,
             pin_type=pin_type,
             pin_type_is_user_provided=pin_type_chosen,
