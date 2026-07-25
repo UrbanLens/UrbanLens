@@ -342,6 +342,10 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
     Everyone connected for a given check-in - the owner, its accepted
     partners, and all of its contacts - joins the same channel group, so a
     message from any one of them is broadcast to all the others immediately.
+    The session route additionally joins a second, narrower group carrying
+    live-location updates (``services.safety._broadcast_live_location``) -
+    contacts never join it, matching the model-level rule that live location
+    is visible to partners only, never to emergency contacts.
 
     Close codes used on ``connect()`` failure (the frontend branches on these
     to decide whether to keep retrying):
@@ -373,8 +377,15 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
             return
 
         self.group_name = f"safety_checkin_{self.checkin.pk}"
+        # Live location is never shared with token-route contacts (see the model's
+        # own docstring on live_location_sharing_enabled) - only the session route
+        # (owner or an accepted partner, both already verified by _resolve()) joins
+        # the location group.
+        self.location_group_name = f"safety_checkin_location_{self.checkin.pk}" if self.contact is None else None
         try:
             await self.channel_layer.group_add(self.group_name, self.channel_name)
+            if self.location_group_name:
+                await self.channel_layer.group_add(self.location_group_name, self.channel_name)
             await self.accept()
         except Exception:
             logger.exception("Safety chat failed to join group for checkin %s", self.checkin.pk)
@@ -383,12 +394,17 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
         logger.info("Safety chat connected: checkin=%s contact=%s", self.checkin.pk, getattr(self.contact, "pk", None))
 
     async def disconnect(self, close_code):
-        """Leave the check-in's group, if we ever joined one."""
+        """Leave the check-in's group(s), if we ever joined any."""
         if hasattr(self, "group_name"):
             try:
                 await self.channel_layer.group_discard(self.group_name, self.channel_name)
             except Exception:
                 logger.exception("Safety chat failed to leave group %s cleanly", self.group_name)
+        if getattr(self, "location_group_name", None):
+            try:
+                await self.channel_layer.group_discard(self.location_group_name, self.channel_name)
+            except Exception:
+                logger.exception("Safety chat failed to leave group %s cleanly", self.location_group_name)
 
     async def receive(self, text_data):
         """Persist an incoming chat message and broadcast it to the check-in's group.
@@ -442,6 +458,18 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
         Args:
             event: The group-send event, with a ``payload`` dict (see
                 ``services.safety._broadcast_status_update``).
+        """
+        await self.send(text_data=json.dumps(event["payload"]))
+
+    async def location_update(self, event):
+        """Deliver a live-location update to this connection.
+
+        Only ever received on the session route's location group - see
+        ``connect()``'s ``location_group_name`` gate.
+
+        Args:
+            event: The group-send event, with a ``payload`` dict (see
+                ``services.safety._broadcast_live_location``).
         """
         await self.send(text_data=json.dumps(event["payload"]))
 

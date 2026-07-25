@@ -1431,6 +1431,8 @@ urlpatterns = [
                 path("<uuid:checkin_uuid>/partners/accept/", safety.SafetyCheckinPartnerInviteAcceptView.as_view(), name="safety.partner.accept"),
                 path("<uuid:checkin_uuid>/partners/decline/", safety.SafetyCheckinPartnerInviteDeclineView.as_view(), name="safety.partner.decline"),
                 path("<uuid:checkin_uuid>/partners/mark-safe/", safety.SafetyCheckinPartnerMarkSafeView.as_view(), name="safety.partner.mark_safe"),
+                path("<slug:checkin_slug>/location/toggle/", safety.SafetyCheckinLocationSharingToggleView.as_view(), name="safety.checkin.location.toggle"),
+                path("<slug:checkin_slug>/location/", safety.SafetyCheckinLocationUpdateView.as_view(), name="safety.checkin.location.update"),
                 path("<slug:checkin_slug>/gallery/", safety.SafetyGalleryView.as_view(), name="safety.checkin.gallery"),
                 path("<slug:checkin_slug>/gallery/<int:image_id>/", safety.SafetyImageView.as_view(), name="safety.checkin.gallery.image"),
                 # No-trailing-slash variant so DELETE/POST fetch calls work even

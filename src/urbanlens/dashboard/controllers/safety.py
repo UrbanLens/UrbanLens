@@ -47,6 +47,8 @@ from urbanlens.dashboard.services.safety import (
     remove_checkin_partner,
     save_contact_defaults,
     set_checkin_contacts,
+    set_live_location_sharing,
+    update_live_location,
     validate_notifiable_contacts,
     wiki_notify_stats,
 )
@@ -1041,6 +1043,61 @@ class SafetyCheckinPartnerMarkSafeView(LoginRequiredMixin, View):
             raise Http404
         mark_found_safe_by_partner(checkin, profile)
         return redirect("safety.checkin.detail", checkin_slug=checkin_uuid)
+
+
+class SafetyCheckinLocationSharingToggleView(LoginRequiredMixin, View):
+    """Turn live location sharing on or off for a check-in (owner-only).
+
+    POST /safety/<slug:checkin_slug>/location/toggle/
+    """
+
+    def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
+        """Toggle sharing and return the refreshed toggle state.
+
+        Args:
+            request: Incoming HTTP request. Reads ``enabled`` (``"1"``/``"0"``).
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
+
+        Returns:
+            JSON with the new ``enabled`` state.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        enabled = request.POST.get("enabled") == "1"
+        set_live_location_sharing(checkin, enabled=enabled)
+        return JsonResponse({"enabled": enabled})
+
+
+class SafetyCheckinLocationUpdateView(LoginRequiredMixin, View):
+    """Record the owner's current position while live location sharing is enabled (owner-only).
+
+    POST /safety/<slug:checkin_slug>/location/
+    """
+
+    def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
+        """Update the check-in's live position.
+
+        Args:
+            request: Incoming HTTP request. Reads ``latitude``/``longitude``/``accuracy``.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
+
+        Returns:
+            204 on success, or a 400 if sharing is disabled/the check-in already
+            concluded, or the coordinates couldn't be parsed.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        try:
+            latitude = float(request.POST["latitude"])
+            longitude = float(request.POST["longitude"])
+            accuracy = float(request.POST["accuracy"]) if request.POST.get("accuracy") else None
+        except (KeyError, ValueError):
+            return HttpResponseBadRequest("Invalid coordinates.")
+        try:
+            update_live_location(checkin, latitude=latitude, longitude=longitude, accuracy=accuracy)
+        except ValueError as exc:
+            return HttpResponseBadRequest(str(exc))
+        return HttpResponse(status=204)
 
 
 class SafetyCheckinWikiOptionView(LoginRequiredMixin, View):

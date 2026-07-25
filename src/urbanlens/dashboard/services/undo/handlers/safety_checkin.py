@@ -23,6 +23,11 @@ _RESTORABLE_FIELDS = (
     "plan_update_notified_at",
     "notify_community_wiki",
     "wiki_notified_at",
+    "live_location_sharing_enabled",
+    "live_latitude",
+    "live_longitude",
+    "live_location_accuracy",
+    "live_location_updated_at",
 )
 
 _CONTACT_FIELDS = ("email", "name", "notified_at", "found_safe_at")

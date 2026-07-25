@@ -537,6 +537,89 @@ def _notify_checkin_partner_accepted(partner: SafetyCheckinPartner) -> None:
         )
 
 
+def set_live_location_sharing(checkin: SafetyCheckin, *, enabled: bool) -> None:
+    """Turn live location sharing on or off for a check-in.
+
+    Disabling immediately clears the last-known position rather than leaving
+    a stale marker visible to partners after the owner turns sharing off.
+
+    Args:
+        checkin: The check-in whose sharing state is changing.
+        enabled: The new sharing state.
+    """
+    checkin.live_location_sharing_enabled = enabled
+    update_fields = ["live_location_sharing_enabled", "updated"]
+    if not enabled:
+        checkin.live_latitude = None
+        checkin.live_longitude = None
+        checkin.live_location_accuracy = None
+        checkin.live_location_updated_at = None
+        update_fields += ["live_latitude", "live_longitude", "live_location_accuracy", "live_location_updated_at"]
+    checkin.save(update_fields=update_fields)
+    _broadcast_live_location(checkin)
+
+
+def update_live_location(checkin: SafetyCheckin, *, latitude: float, longitude: float, accuracy: float | None) -> None:
+    """Record the owner's current position and broadcast it to connected partners.
+
+    Args:
+        checkin: The check-in being updated.
+        latitude: Current latitude.
+        longitude: Current longitude.
+        accuracy: Reported accuracy in meters, if the browser/device provided one.
+
+    Raises:
+        ValueError: If sharing isn't enabled, or the check-in has already resolved -
+            there's no one left to broadcast a live position to either way.
+    """
+    if not checkin.live_location_sharing_enabled:
+        raise ValueError("Live location sharing is not enabled for this check-in.")
+    if checkin.is_resolved:
+        raise ValueError("This check-in has already concluded.")
+
+    checkin.live_latitude = latitude
+    checkin.live_longitude = longitude
+    checkin.live_location_accuracy = accuracy
+    checkin.live_location_updated_at = timezone.now()
+    checkin.save(update_fields=["live_latitude", "live_longitude", "live_location_accuracy", "live_location_updated_at", "updated"])
+    _broadcast_live_location(checkin)
+
+
+def _broadcast_live_location(checkin: SafetyCheckin) -> None:
+    """Push the check-in's current live-location state to its connected location group.
+
+    Best-effort, same as ``_broadcast_chat_message``/``_broadcast_status_update`` -
+    the position is already durably saved regardless of whether anyone is
+    connected right now.
+
+    Args:
+        checkin: The check-in whose location group should receive the update.
+    """
+    try:
+        from asgiref.sync import async_to_sync
+        from channels.layers import get_channel_layer
+
+        channel_layer = get_channel_layer()
+        if channel_layer is None:
+            return
+        async_to_sync(channel_layer.group_send)(
+            f"safety_checkin_location_{checkin.pk}",
+            {
+                "type": "location.update",
+                "payload": {
+                    "type": "location_update",
+                    "sharing_enabled": checkin.live_location_sharing_enabled,
+                    "latitude": float(checkin.live_latitude) if checkin.live_latitude is not None else None,
+                    "longitude": float(checkin.live_longitude) if checkin.live_longitude is not None else None,
+                    "accuracy": checkin.live_location_accuracy,
+                    "updated_at": checkin.live_location_updated_at.isoformat() if checkin.live_location_updated_at else None,
+                },
+            },
+        )
+    except Exception:
+        logger.exception("Failed to broadcast live location for checkin %s", checkin.pk)
+
+
 def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:
     """Re-notify already-notified contacts that the owner changed something after escalation.
 

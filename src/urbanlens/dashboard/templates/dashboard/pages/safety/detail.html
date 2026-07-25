@@ -139,6 +139,26 @@
         {% include "dashboard/partials/safety/_partner_picker.html" with partners=partners viewer_is_partner=viewer_is_partner %}
     </div>
 
+    <div class="card safety-section-card" id="safety-live-location-card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">my_location</i>
+            <h3>Live location</h3>
+        </div>
+        <div class="card__body">
+            {% if viewer_is_partner %}
+            <p class="form-hint" id="safety-live-location-status">
+                {% if checkin.live_location_sharing_enabled %}Live location sharing is on - waiting for an update.{% else %}{{ checkin.profile.username }} is not sharing their live location.{% endif %}
+            </p>
+            {% else %}
+            <label class="safety-live-location-toggle-row">
+                <input type="checkbox" id="safety-live-location-toggle" {% if checkin.live_location_sharing_enabled %}checked{% endif %} {% if checkin.is_resolved %}disabled{% endif %}>
+                <span>Share my live location with partners</span>
+            </label>
+            <p class="form-hint" id="safety-live-location-status">Only accepted partners can see this - never emergency contacts.</p>
+            {% endif %}
+        </div>
+    </div>
+
     {% if not viewer_is_partner %}
     {% include "dashboard/partials/safety/_map_picker_dialog.html" %}
     {% endif %}
@@ -361,6 +381,102 @@
                 })
                 .catch(function () { if (window.toastr) toastr.error('Could not delete this check-in.'); });
         });
+    });
+}());
+</script>
+{% if not viewer_is_partner %}
+<script>
+(function () {
+    // -- Live location sharing toggle + throttled position reporting -----------
+    // 30s balances "a partner watching in an emergency wants a current position"
+    // against battery/bandwidth - tightening it wouldn't meaningfully help a
+    // partner (someone overdue on a hike isn't moving fast enough for sub-30s
+    // updates to matter).
+    var MIN_INTERVAL_MS = 30000;
+    var toggle = document.getElementById('safety-live-location-toggle');
+    if (!toggle) return;
+    var toggleUrl = "{% url 'safety.checkin.location.toggle' checkin.slug|default:checkin.uuid %}";
+    var updateUrl = "{% url 'safety.checkin.location.update' checkin.slug|default:checkin.uuid %}";
+    var csrfToken = document.querySelector('#safety-checkin-form [name=csrfmiddlewaretoken]').value;
+    var watchId = null;
+    var lastSentAt = 0;
+    var pendingPosition = null;
+    var sendTimer = null;
+
+    function sendPosition(position) {
+        lastSentAt = Date.now();
+        var body = new FormData();
+        body.append('latitude', position.coords.latitude);
+        body.append('longitude', position.coords.longitude);
+        if (position.coords.accuracy != null) body.append('accuracy', position.coords.accuracy);
+        fetch(updateUrl, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: body }).catch(function () {});
+    }
+
+    function onPosition(position) {
+        var elapsed = Date.now() - lastSentAt;
+        if (elapsed >= MIN_INTERVAL_MS) {
+            sendPosition(position);
+            return;
+        }
+        pendingPosition = position;
+        if (sendTimer) return;
+        sendTimer = setTimeout(function () {
+            sendTimer = null;
+            if (pendingPosition) { sendPosition(pendingPosition); pendingPosition = null; }
+        }, MIN_INTERVAL_MS - elapsed);
+    }
+
+    function startWatching() {
+        if (watchId !== null || !navigator.geolocation) return;
+        watchId = navigator.geolocation.watchPosition(onPosition, function () {
+            if (window.toastr) toastr.error('Could not get your location - live location sharing may not work.');
+        }, { enableHighAccuracy: true });
+    }
+
+    function stopWatching() {
+        if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+        window.clearTimeout(sendTimer);
+        sendTimer = null;
+        pendingPosition = null;
+    }
+
+    toggle.addEventListener('change', function () {
+        var enabled = toggle.checked;
+        var body = new FormData();
+        body.append('enabled', enabled ? '1' : '0');
+        fetch(toggleUrl, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: body })
+            .catch(function () { if (window.toastr) toastr.error('Could not update live location sharing.'); });
+        if (enabled) startWatching(); else stopWatching();
+    });
+
+    if (toggle.checked) startWatching();
+}());
+</script>
+{% endif %}
+<script>
+(function () {
+    // -- Live location marker (owner sees their own share confirmed; a partner
+    // sees it update in real time) -------------------------------------------
+    var liveMarker = null;
+    document.body.addEventListener('safetyLocationUpdate', function (e) {
+        var data = e.detail;
+        var statusEl = document.getElementById('safety-live-location-status');
+        if (data.latitude == null || data.longitude == null) {
+            if (liveMarker && window.map) { window.map.removeLayer(liveMarker); liveMarker = null; }
+            if (statusEl) statusEl.textContent = "{{ checkin.profile.username }} is not sharing their live location.";
+            return;
+        }
+        if (window.map && typeof L !== 'undefined') {
+            if (!liveMarker) {
+                liveMarker = L.circleMarker([data.latitude, data.longitude], { radius: 8, color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.9 }).addTo(window.map);
+            } else {
+                liveMarker.setLatLng([data.latitude, data.longitude]);
+            }
+        }
+        if (statusEl) {
+            var updated = new Date(data.updated_at);
+            statusEl.textContent = 'Live location updated ' + (isNaN(updated.getTime()) ? 'just now' : updated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })) + '.';
+        }
     });
 }());
 </script>

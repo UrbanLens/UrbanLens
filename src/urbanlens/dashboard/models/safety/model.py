@@ -15,6 +15,7 @@ from django.db.models import (
     DecimalField,
     DurationField,
     EmailField,
+    FloatField,
     ForeignKey,
     Index,
     IntegerField,
@@ -234,6 +235,12 @@ class SafetyCheckin(abstract.PublicDashboardModel):
             community wiki and notify users with pins there (see ``services.safety.notify_community_wiki``).
         wiki_notified_at: When the community wiki comment was posted, if at all - also makes the
             escalation-time wiki notification idempotent.
+        live_location_sharing_enabled: Whether the owner has opted into sharing their current
+            position with accepted partners (see ``services.safety.set_live_location_sharing``).
+        live_latitude: The owner's most recently shared position, if sharing is/was enabled.
+        live_longitude: The owner's most recently shared position, if sharing is/was enabled.
+        live_location_accuracy: Accuracy (meters) reported alongside ``live_latitude``/``live_longitude``.
+        live_location_updated_at: When the live position was last updated, if ever.
     """
 
     title = CharField(max_length=200)
@@ -254,6 +261,18 @@ class SafetyCheckin(abstract.PublicDashboardModel):
 
     notify_community_wiki = BooleanField(default=False)
     wiki_notified_at = DateTimeField(null=True, blank=True)
+
+    # Opt-in, owner-controlled live position feed - visible only to accepted
+    # partners (see consumers.SafetyCheckinChatConsumer), never to emergency
+    # contacts. Default off: continuous GPS is a real battery/privacy cost the
+    # owner must actively choose, not something a check-in should assume.
+    # Current point only, overwritten on each update - no history/breadcrumb
+    # trail (deliberately out of scope; see docs/designs' safety-partner plan).
+    live_location_sharing_enabled = BooleanField(default=False)
+    live_latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    live_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    live_location_accuracy = FloatField(null=True, blank=True)
+    live_location_updated_at = DateTimeField(null=True, blank=True)
 
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="safety_checkins")
     destination_location = ForeignKey(

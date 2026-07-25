@@ -130,6 +130,12 @@ JavaScript is unavailable.
                 document.body.dispatchEvent(new CustomEvent('safetyStatusUpdate', { detail: msg }));
                 return;
             }
+            if (msg.type === 'location_update') {
+                // Only ever arrives on the session route (owner/accepted partner) - the
+                // live-location marker/status lives on the detail page, not this panel.
+                document.body.dispatchEvent(new CustomEvent('safetyLocationUpdate', { detail: msg }));
+                return;
+            }
             appendMessage(msg);
         };
     }
