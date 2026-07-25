@@ -559,6 +559,10 @@ _PHOTO_DOWNLOAD_TIMEOUT = 15
 _MAX_PHOTO_DOWNLOAD_BYTES = 20 * 1024 * 1024
 _MAX_PHOTO_REDIRECTS = 5
 _DEFAULT_PHOTO_FILENAME = "photo.jpg"
+# Same descriptive UA as media_materialize - Wikimedia 403s the default
+# python-requests User-Agent (see https://w.wiki/4wJS).
+_PHOTO_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
+_PHOTO_DOWNLOAD_HEADERS = {"User-Agent": _PHOTO_USER_AGENT}
 
 
 class SuggestionPhotoError(RuntimeError):
@@ -581,7 +585,13 @@ def _download_photo_bytes(url: str) -> bytes:
     fetch_url = url
     for _hop in range(_MAX_PHOTO_REDIRECTS + 1):
         fetch_url = ensure_public_http_url(fetch_url)
-        response = requests.get(fetch_url, timeout=_PHOTO_DOWNLOAD_TIMEOUT, stream=True, allow_redirects=False)
+        response = requests.get(
+            fetch_url,
+            timeout=_PHOTO_DOWNLOAD_TIMEOUT,
+            stream=True,
+            allow_redirects=False,
+            headers=_PHOTO_DOWNLOAD_HEADERS,
+        )
         if response.is_redirect:
             redirect_target = response.headers.get("Location")
             response.close()

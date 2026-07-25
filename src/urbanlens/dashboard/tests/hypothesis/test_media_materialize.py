@@ -59,6 +59,14 @@ class MaterializeMediaItemTests(TestCase):
         self.assertEqual(image.caption, "A photo")
         self.assertTrue(image.checksum)
 
+    def test_sends_descriptive_user_agent(self) -> None:
+        """Wikimedia Commons 403s the default python-requests UA; materialize
+        must send the same descriptive UrbanLens agent the API gateways use."""
+        with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=_ok_response()) as mocked:
+            materialize_media_item(location=self.location, profile=self.profile, source="wikimedia", url="https://example.test/photo.jpg")
+        headers = mocked.call_args.kwargs.get("headers") or {}
+        self.assertIn("UrbanLens", headers.get("User-Agent", ""))
+
     def test_panel_key_loc_translates_to_library_of_congress(self) -> None:
         """The "loc" panel key never matched ImageSource.LIBRARY_OF_CONGRESS's
         real value ("library_of_congress") - without the translation this

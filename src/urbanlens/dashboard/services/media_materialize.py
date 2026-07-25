@@ -41,6 +41,10 @@ _DEFAULT_FILENAME = "photo.jpg"
 # Redirects are followed manually (see materialize_media_item) so each hop can
 # be SSRF-validated; this bounds how many hops a hostile server can chain.
 _MAX_REDIRECTS = 5
+# Wikimedia (and several other public CDNs) 403 the default python-requests UA;
+# match the descriptive string the Wikimedia/Wikipedia gateways already send.
+_USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.mann@gmail.com) python-requests/2.x"
+_DOWNLOAD_HEADERS = {"User-Agent": _USER_AGENT}
 
 # The Media gallery's per-provider panel key (GalleryMediaSource.key, what's
 # actually sent as `source` here) doesn't always match the ImageSource value
@@ -149,7 +153,13 @@ def materialize_media_item(
         fetch_url = url
         for _hop in range(_MAX_REDIRECTS + 1):
             fetch_url = ensure_public_http_url(fetch_url)
-            response = requests.get(fetch_url, timeout=_DOWNLOAD_TIMEOUT, stream=True, allow_redirects=False)
+            response = requests.get(
+                fetch_url,
+                timeout=_DOWNLOAD_TIMEOUT,
+                stream=True,
+                allow_redirects=False,
+                headers=_DOWNLOAD_HEADERS,
+            )
             if response.is_redirect:
                 redirect_target = response.headers.get("Location")
                 response.close()
