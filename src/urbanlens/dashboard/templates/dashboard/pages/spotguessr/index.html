@@ -1,5 +1,6 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
+{% load map_components %}
 
 {% block header %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -18,12 +19,12 @@
         </div>
         <div class="spotguessr-ratings">
             <div class="spotguessr-rating-chip spotguessr-rating-chip--self">
-                <span class="spotguessr-rating-label">Your rating</span>
+                <span class="spotguessr-rating-label">Your rating{% if own_rating %} ({{ own_rating.get_mode_display }}){% endif %}</span>
                 <span class="spotguessr-rating-value">{{ own_rating.rating|default:"1500"|floatformat:0 }}</span>
             </div>
             {% for entry in friend_ratings %}
             <div class="spotguessr-rating-chip">
-                <span class="spotguessr-rating-label">{{ entry.profile.username }}</span>
+                <span class="spotguessr-rating-label">{{ entry.profile.username }}{% if entry.rating %} ({{ entry.rating.get_mode_display }}){% endif %}</span>
                 <span class="spotguessr-rating-value">{{ entry.rating.rating|default:"1500"|floatformat:0 }}</span>
             </div>
             {% endfor %}
@@ -80,6 +81,9 @@
         <div class="spotguessr-game-status">
             <span id="sg-round-status"></span>
             <span id="sg-score-status"></span>
+            <button type="button" id="sg-game-settings-btn" class="btn--card spotguessr-game-settings-btn" aria-label="Game settings" hidden>
+                <i class="material-symbols-outlined">settings</i>
+            </button>
         </div>
         <ul id="sg-scoreboard" class="spotguessr-scoreboard" hidden></ul>
         <div class="spotguessr-game-layout">
@@ -93,6 +97,10 @@
                     <datalist id="sg-pin-options"></datalist>
                 </div>
                 <div id="sg-guess-map" class="spotguessr-guess-map"></div>
+                <div class="spotguessr-guess-map-toolbar">
+                    {% map_layers_panel "street,satellite,terrain,borders" variant="strip" panel_id="sg-guess-map-layers" %}
+                    <span id="sg-guess-map-attribution" class="spotguessr-map-attribution"></span>
+                </div>
                 <div id="sg-date-field" class="spotguessr-field" hidden>
                     <label for="sg-guessed-date">Guess the date the photo was taken</label>
                     <input type="date" id="sg-guessed-date">

@@ -28,7 +28,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     SpotGuessrMode,
 )
 from urbanlens.dashboard.services.connections import are_connections
-from urbanlens.dashboard.services.spotguessr import eligibility, named_place, photo_coordinates, photos, realtime, relevance, scoring, selection, serializers, street_view
+from urbanlens.dashboard.services.spotguessr import eligibility, geo_bonus, named_place, photo_coordinates, photos, realtime, relevance, scoring, selection, serializers, street_view
 from urbanlens.dashboard.services.spotguessr.ratings import apply_round_ratings
 
 if TYPE_CHECKING:
@@ -62,7 +62,6 @@ class GameConfig:
     """
 
     difficulty: float = 0.5
-    external_media_only: bool = False
     allow_arbitrary_external_photos: bool = False
     require_visited_all: bool = False
     date_guessing_enabled: bool = False
@@ -266,6 +265,22 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
     excluded_ids = [round_.location_id for round_ in existing_rounds]
     previous_location = existing_rounds[-1].location if existing_rounds else None
 
+    # Country/state/city bonus eligibility (services.spotguessr.geo_bonus) is
+    # computed once, from the full eligible pool - this is the earliest point
+    # multiplayer's actual joined-roster eligibility is known (mirrors why
+    # SpotGuessrBeginView can't pre-check eligibility before the roster
+    # locks), and freezing it here means later rounds excluding already-used
+    # locations can't spuriously narrow it.
+    if not existing_rounds and "bonus_scope" not in (session.config or {}):
+        initial_candidates = eligibility.eligible_locations(
+            participants,
+            require_visited_by_all=config.require_visited_all,
+            geo_bounds=config.geo_bounds,
+        )
+        scope = geo_bonus.bonus_scope_for(initial_candidates)
+        session.config = {**(session.config or {}), "bonus_scope": scope.to_dict()}
+        session.save(update_fields=["config", "updated"])
+
     for _attempt in range(_MAX_LOCATION_ATTEMPTS):
         candidates = eligibility.eligible_locations(
             participants,
@@ -282,7 +297,6 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
         if session.mode == SpotGuessrMode.PHOTOS:
             image = photos.candidate_image_for_location(
                 location,
-                external_media_only=config.external_media_only,
                 allow_arbitrary_external_photos=config.allow_arbitrary_external_photos,
             )
             if image is None:
@@ -316,7 +330,7 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
     return None
 
 
-def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guessed_date: date | None = None) -> Guess:
+def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guessed_date: date | None = None) -> tuple[Guess, list[str]]:
     """Score and record ``profile``'s guess for ``round_``.
 
     Triggers the Glicko-2 rating update (``apply_round_ratings``) once
@@ -326,6 +340,13 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
     completes (see "Real-time sync" in the design doc). Solo sessions still
     work exactly as in Phase 1; broadcasting is simply a no-op without a
     channel layer listener.
+
+    Returns:
+        The saved ``Guess``, plus which bonus tiers (if any) it matched -
+        e.g. ``["country", "state"]`` - for the immediate reveal response;
+        the tier breakdown itself isn't persisted (see
+        ``Guess.bonus_points``'s docstring), so it can only be handed back
+        here, not recovered later from the ``Guess`` row alone.
 
     Raises:
         SpotGuessrError: if ``profile`` already guessed this round.
@@ -344,6 +365,9 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
     date_points = 0
     if config.date_guessing_enabled and guessed_date is not None and round_.image is not None and round_.image.taken_at is not None:
         date_points = scoring.points_for_date_guess(guessed_date, round_.image.taken_at.date())
+
+    bonus_scope = geo_bonus.BonusScope.from_dict((session.config or {}).get("bonus_scope", {}))
+    bonus = geo_bonus.bonus_points_for_guess(guess_point, round_.location, bonus_scope)
 
     # Two participants can submit their round-completing guess at nearly
     # the same instant - without a lock, both inserts commit and both would
@@ -366,11 +390,12 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
                 points=points,
                 guessed_date=guessed_date,
                 date_points=date_points,
+                bonus_points=bonus.total,
             )
         except IntegrityError:
             raise SpotGuessrError("This profile has already guessed this round.") from None
 
-        GameSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=F("total_points") + points + date_points)
+        GameSessionParticipant.objects.filter(session=session, profile=profile).update(total_points=F("total_points") + points + date_points + bonus.total)
 
         joined_count = session.participants.joined().count()
         if locked_round.revealed_at is None and Guess.objects.for_round(locked_round).count() >= joined_count:
@@ -394,7 +419,7 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
             complete_session(session)
             realtime.broadcast(session.pk, "session.completed", session_summary(session))
 
-    return guess
+    return guess, bonus.matched_tiers
 
 
 def rounds_played(session: GameSession) -> int:

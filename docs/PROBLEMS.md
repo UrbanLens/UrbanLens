@@ -105,6 +105,143 @@ match current behavior. The pod is left running on chiron for it.
 
 ---
 
+## Full-codebase audit (2026-07-25): curated high-severity findings
+
+A systematic full-codebase audit (every model/controller/service/template/TS/SCSS file, all
+migrations, the full test suite) ran 2026-07-25, tracked in `docs/prompts/codebase-audit.md` (35
+units, full findings with file:line references for every bug/inefficiency/improvement found — see
+that doc for anything not listed here, including all "improvement"-grade and maintainability
+findings). This section curates only the highest-severity/highest-impact items into this file's
+convention; the full ranked list per feature area is more complete.
+
+**SSRF: Immich server URL is user-controlled with no private-IP/scheme guard.**
+`models/immich/model.py:83` (`ImmichAccount.server_url`, via `forms/immich_form.py`) accepts any
+well-formed URL with no loopback/private/link-local restriction. `controllers/immich.py:108-110`
+(`ImmichSettingsView.post`) pings it server-side before saving, and later flows
+(`get_map_markers`/`get_asset_thumbnail`/`get_asset_original`) proxy the response back to the
+browser. Any authenticated user can point `server_url` at internal infrastructure
+(`http://169.254.169.254/`, `http://localhost:6379/`, an internal admin panel) and use the
+ping/thumbnail endpoints as an authenticated blind-SSRF oracle. Self-hosted-by-design feature, so
+risk is single-tenant, but worth a scheme/private-IP guard in `clean_server_url`.
+
+**SSRF: `services/url_safety.py`'s IP blocklist misses RFC 6598 CGNAT space.**
+`is_blocked_address` (`url_safety.py:20-22`) checks `is_private`/`is_loopback`/`is_link_local`/
+`is_reserved`/`is_multicast` but not the `100.64.0.0/10` Carrier-Grade-NAT range — verified
+`ipaddress.ip_address("100.64.0.5")` returns `False` for every one of those checks. Many cloud
+providers route internal-only infra (AWS NAT gateways, GCP internal LBs) through this range, so a
+user-supplied URL resolving there sails through `ensure_public_http_url` unblocked. This is the
+*only* IP-range guard for AI link extraction (`services/ai/link_extraction.py`), pin-suggestion
+photo download (`services/pin_suggestions.py`), and media materialization
+(`services/media_materialize.py`) — one missed CIDR range is a gap in three subsystems at once.
+
+**Decompression-bomb protection in the full-archive importer only checks forgeable declared
+sizes.** `services/import_data.py:275-289` sums each ZIP member's *declared* `file_size` against a
+ceiling, then calls `zf.extractall()` unbounded. `file_size` in ZIP headers is attacker-controlled;
+Python's `zipfile` only detects a declared-vs-actual mismatch via CRC32 *after* a member is fully
+decompressed and written to disk. A crafted archive well within the 500MB upload cap
+(`controllers/tools.py:330`) with forged small `file_size` fields but highly compressible payloads
+can decompress to hundreds of GB before the mismatch is caught. The project's own
+`services/archive_extractor.py:_extract_zip` (lines 299-311) already guards this correctly (caps
+each member read, rejects on overrun) — `import_data.py` just doesn't reuse it. A companion gap:
+`services/import_formats/gpx.py:41` / `gpx_tracks.py:140` parse GPX XML via `gpxpy` with no
+`defusedxml` wrapper (unlike `osm_xml.py`, which correctly uses one) — a latent XXE surface since
+`lxml` is installed and `gpxpy` prefers it.
+
+**WebSocket consumers crash on any binary frame, leaking channel-layer group membership.**
+Every consumer in `dashboard/consumers.py` (lines 54, 133, 409, 599, 733) declares
+`async def receive(self, text_data):` with no `bytes_data` parameter. Channels' base
+`AsyncWebsocketConsumer` calls `receive(bytes_data=...)` for any binary WS frame, raising an
+uncaught `TypeError` that propagates out of the ASGI coroutine — `disconnect()`/`group_discard()`
+never runs, so the dead `channel_name` stays registered in whatever group(s) it had joined. Any
+client (buggy library, proxy, or deliberate probe) sending one binary frame on `ws/notifications/`,
+`ws/messages/`, or either safety-checkin socket kills the connection ungracefully. Affects all five
+consumer classes identically — fix once at the base-class level.
+
+**Two rate-limit/quota checks with the same non-atomic check-then-act race**, each independently
+discovered:
+- `services/rate_limiter.py:279-491` — `check_rate_limit` (COUNT) and `log_api_call` (INSERT) are
+  separate operations with no locking; concurrent requests can all pass the check before any log,
+  breaching even Nominatim's hard 1 req/sec ToS limit under a handful of simultaneous pin-detail loads.
+- `services/email_safety.py:89-111` (`email_rate_limit_error`) — same shape for outbound
+  friend-invite/visit-invite emails (`controllers/friendship.py:649-720`,
+  `services/visit_invites.py:82-109`); concurrent requests can exceed the configured hourly/daily/
+  monthly cap arbitrarily.
+Both need either `select_for_update()` around the count+log pair or an atomic increment
+(`cache.add()`-style) rather than read-then-write.
+
+**AI provider token/cost accounting is silently doubled for 2 of 3 wired providers.**
+`services/ai/gateway.py:385-391` calls `self.receive_tokens(message)` in the shared
+`send_prompt`/`send_prompt_list`, but `services/ai/anthropic.py:117` and `services/ai/openai.py:121`
+*also* call `self.receive_tokens(body)` inside their own `_parse_response()` — double-counting the
+same response. `services/ai/cloudflare.py`'s parser correctly does *not* self-call, proving the
+other two are a regression rather than by design. Every assistant-chat, document-import, vision-keyword,
+and auto-tag cost/token estimate for Anthropic and OpenAI is currently ~2x actual.
+
+**Friend-request-visibility bypass via the email-invite path.**
+`controllers/friendship.py:666` (`invite_by_email`) only checks
+`to_profile.friend_request_visibility != VisibilityChoice.NO_ONE` for a matched existing account,
+unlike `request_friend` (line 317) which runs the full `Profile.visibility_permits` evaluator. A
+profile restricted to `FRIENDS`/`COMMON_PIN`/`COMMON_FRIEND`/`COMMON_TRIP`/`ANYTHING_IN_COMMON`
+(anything short of `NO_ONE`) can still be friend-requested by any stranger who knows their email.
+Only the `NO_ONE` case has test coverage (`test_friend_invite_privacy.py`).
+
+**`common_pin_count` is shown regardless of its own visibility gate.**
+`controllers/userprofile.py:157-158` + `templates/pages/profile/index.html:66-77` — the *count* of
+shared pins between two profiles is computed and rendered unconditionally; only the link to the
+detail page is gated by `can_view_common_pins_with` (default `FRIENDS`). Any two logged-in
+strangers see e.g. "3 Places in Common" even when the setting says only friends should know the
+overlap exists at all.
+
+**Login-lockout is keyed on the raw submitted string, not the resolved account — brute-force is
+bypassable.** `controllers/account.py:51-58,623-634,657-692` keys failed-attempt/lockout counters
+by the literal POSTed "username" value, but `EmailOrUsernameModelBackend`
+(`services/auth_backend.py:14-36`) resolves that same field against primary email, verified
+secondary email, and Gmail dot/plus-normalized variants before authenticating. An attacker can
+brute-force one account indefinitely by rotating through equivalent-but-textually-distinct login
+strings (`victim@gmail.com`, `vic.tim@gmail.com`, `v.ictim+x@gmail.com`, a secondary email — each
+gets its own untripped counter). `test_email_login.py` proves the login path treats these as
+identical; no equivalent test exists for the lockout path.
+
+**`Label` kind-conversion has no branch for converting to Category — silently orphans the row.**
+`controllers/labels.py:467-478` (`_apply_kind_conversion`) handles converting to Status/Tag but has
+no branch for `new_kind == KIND_CATEGORY`. Converting a global Tag to a Category via the standard
+edit form leaves `label.profile=None`, but Category lookups use exact-match `.for_profile()` with
+no global fallback — the label vanishes from every Organize > Categories listing, and
+`_can_modify_label` returns `False` for any non-tag label with `profile=None`, making the row
+**permanently un-editable and un-deletable through the UI** (recoverable only via direct DB access).
+
+**Safety check-in escalation can re-email every emergency contact on any partial failure.**
+`services/safety.py:940-981` (`escalate_checkin`) loops all contacts unconditionally (no
+`notified_at__isnull=True` filter) and only saves `status`/`escalated_at` *after* the whole loop
+completes. If anything raises mid-loop (bad email address, a non-SMTP/OSError mail-backend
+exception), the checkin never flips to `OVERDUE`, so the next 5-minute beat tick re-matches it and
+re-emails every contact already notified — including real emergency contacts during an actual
+safety incident. Compare `_resolve_as_found_safe` (line 1038-1044), which correctly flips status
+*before* its own contact loop for exactly this reason. Compounding gap: the three checkin beat
+tasks (`tasks.py:1629-1671`) run every 5 minutes with no locking, unlike the `RUN_LOCK_CACHE_KEY`
+pattern already established elsewhere in the same file for this exact problem.
+
+**SpotGuessr/Trivia: an invited-but-never-joined participant can still submit a scoring answer.**
+`services/trivia/session.py:279-349` + `controllers/trivia.py:43-52` (`submit_answer`) never
+verifies `TriviaSessionParticipant.status == JOINED` before accepting an answer — an
+INVITED-but-not-joined participant can score points and inflate the answer count used to decide
+round completion, potentially closing a round before all actually-joined players have answered.
+**The identical gap exists in `services/spotguessr/session.py:submit_guess`** (no status check
+there either) — a shared architectural hole across both game features, not specific to either one.
+
+**Undefined CSS custom-property references silently disable dark-mode theming in ~10 SCSS files.**
+`var(--text, …)`, `var(--text-muted, …)`, `var(--ul-surface-alt, …)`, `var(--ul-accent, …)`, and
+several others are used throughout `_e2ee.scss` (13x), `_setup.scss` (12x), `_markup.scss`,
+`_webauthn.scss`, `_messages.scss`, `_gallery.scss`, `_games.scss`, `_trivia.scss`,
+`_assistant.scss`, `_pin-detail.scss`, `_profile.scss`, and `_wiki.scss` — but none of these custom
+properties is ever defined anywhere (`_tokens.scss`/`_surfaces.scss` grepped, zero matches). Every
+one of these rules permanently renders its hex fallback and can never respond to
+`[data-theme="dark"]`, despite reading as token-driven. This is a broader, previously-uncaught
+instance of the color-token issue the 2026-07-23 `_explainer`/`_map`/`_e2ee` review resolved as
+"fine" — that review apparently didn't verify the referenced tokens actually exist.
+
+---
+
 ## UL-277: pin-detail external-data freshness window is one global knob, not per-source
 
 **PARKED 2026-07-23 at Jess's request ("skip over this one for right now. I need to reassess
@@ -359,3 +496,30 @@ or CI may run tests a different way that sidesteps it entirely - e.g. a dedicate
 profile). Until fixed, verify backend changes on these dev machines via direct DB-layer/service
 tests (no Django test client, no `realtime.broadcast`) plus a manual browser walkthrough against
 the running `docker compose up` stack, rather than the full `pytest` suite.
+
+## SpotGuessr: down-voted photos permanently shrink a small pin pool's playable rounds, with no expiry (found 2026-07-25)
+
+Reported symptom: after playing one full solo session against a ~10-pin pool, starting a new
+session sometimes shows the empty state ("Nothing to play yet") even though the profile clearly
+has pins and no restrictive settings are active.
+
+Root cause: `services.spotguessr.photos.candidate_image_for_location()`'s default
+(`allow_arbitrary_external_photos=False`) excludes any externally-sourced candidate photo whose
+`services.media_relevance.effective_relevance()` score is negative. That score is fed by
+`GamePhotoFeedback` rows (`services.spotguessr.relevance`) - thumbs-down/report reactions from
+*any* past session, against *any* profile - and those rows never expire or get reset. For a
+small pin pool where most or all locations have exactly one candidate photo, a handful of
+thumbs-down votes accumulated during ordinary play can permanently knock that pool's only
+playable photos below the eligibility threshold in *every future session*, with no way for the
+player to know that's what happened (the empty-state copy just says nothing matched their
+settings).
+
+This is a real, separate bug from the "nothing to play yet" UX/response-shape issues fixed
+alongside this note (see `docs/designs/spotguessr.md` and `controllers.spotguessr
+.SpotGuessrStartView`) - it's a photo-inventory/relevance-decay *policy* question (should
+`GamePhotoFeedback`'s influence decay over time? should a location with zero remaining eligible
+photos fall back to `allow_arbitrary_external_photos`-style leniency automatically rather than
+requiring the player to discover and toggle it? should thumbs-down carry less weight than it
+currently does for small pools specifically?) that's bigger than a UX pass should decide
+unprompted. Not investigated further here; worth a dedicated look before it's reported again as
+"the game stopped working."

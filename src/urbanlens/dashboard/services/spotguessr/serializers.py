@@ -8,18 +8,37 @@ A round's answer is never included until it's actually revealed.
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING, Any
+
+from django.contrib.gis.geos import GEOSGeometry
 
 from urbanlens.dashboard.models.spotguessr.model import Guess, SpotGuessrMode
 from urbanlens.dashboard.services.spotguessr import street_view
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from urbanlens.dashboard.models.spotguessr.model import (
         GameRound,
         GameSession,
         GameSessionChatMessage,
         GameSessionParticipant,
     )
+
+
+def _geo_bounds_bbox(session: GameSession) -> list[list[float]] | None:
+    """The session's configured ``geo_bounds``, as a Leaflet-ready ``[[south, west], [north, east]]`` bbox.
+
+    Lets the frontend zoom the guess map to the configured area (see
+    ``docs/designs/spotguessr.md``'s eligibility rule 3) instead of always
+    opening on a fixed default view. None when no area was configured.
+    """
+    geo_bounds_geojson = (session.config or {}).get("geo_bounds_geojson")
+    if not geo_bounds_geojson:
+        return None
+    xmin, ymin, xmax, ymax = GEOSGeometry(json.dumps(geo_bounds_geojson)).extent
+    return [[ymin, xmin], [ymax, xmax]]
 
 
 def serialize_round(round_: GameRound) -> dict[str, Any]:
@@ -35,6 +54,7 @@ def serialize_round(round_: GameRound) -> dict[str, Any]:
         "mode": round_.session.mode,
         "sequence_index": round_.sequence_index,
         "revealed": round_.revealed_at is not None,
+        "geo_bounds": _geo_bounds_bbox(round_.session),
     }
     if round_.session.mode == SpotGuessrMode.PHOTOS:
         if round_.image_id and round_.image is not None and round_.image.image:
@@ -47,7 +67,7 @@ def serialize_round(round_: GameRound) -> dict[str, Any]:
     return data
 
 
-def serialize_reveal(round_: GameRound, guess: Guess) -> dict[str, Any]:
+def serialize_reveal(round_: GameRound, guess: Guess, bonus_tiers: Sequence[str] = ()) -> dict[str, Any]:
     """One guess's own score - the HTTP response to whoever just guessed.
 
     The answer is only included once ``round_`` is actually revealed
@@ -58,12 +78,21 @@ def serialize_reveal(round_: GameRound, guess: Guess) -> dict[str, Any]:
     chat would otherwise let them relay it and defeat the round entirely.
     Withheld rounds are completed for the guesser by the ``round.revealed``
     broadcast (``serialize_round_reveal``) once everyone else catches up.
+
+    Args:
+        round_: The round just guessed.
+        guess: The saved guess.
+        bonus_tiers: Which country/state/city tiers this guess matched (see
+            ``services.spotguessr.session.submit_guess``'s return value) -
+            not persisted on ``Guess``, so only available right here.
     """
     data: dict[str, Any] = {
         "round_id": round_.pk,
         "distance_meters": guess.distance_meters,
         "points": guess.points,
         "date_points": guess.date_points,
+        "bonus_points": guess.bonus_points,
+        "bonus_tiers": list(bonus_tiers),
         "revealed": round_.revealed_at is not None,
     }
     if round_.revealed_at is not None:
@@ -91,6 +120,7 @@ def serialize_round_reveal(round_: GameRound) -> dict[str, Any]:
                 "distance_meters": guess.distance_meters,
                 "points": guess.points,
                 "date_points": guess.date_points,
+                "bonus_points": guess.bonus_points,
             }
             for guess in guesses
         ],
@@ -117,6 +147,7 @@ def serialize_session(session: GameSession) -> dict[str, Any]:
         "status": session.status,
         "total_rounds": session.total_rounds,
         "host_profile_id": session.host_profile_id,
+        "geo_bounds": _geo_bounds_bbox(session),
         "participants": [serialize_participant(participant) for participant in session.participants.select_related("profile__user")],
     }
 

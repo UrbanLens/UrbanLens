@@ -368,8 +368,14 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             status = metadata.get("status", "")
             if status == "OK":
                 logger.debug("Found street view at radius %s", radius)
+                # Keep `radius` in image_params (don't pop it) - metadata may
+                # have only found a pano by searching out to the current,
+                # possibly-expanded radius. Dropping it here would let the
+                # image request re-search with Google's own smaller default
+                # radius, miss that same pano, and silently return Google's
+                # "Sorry, we have no imagery here" placeholder JPEG as a
+                # normal HTTP 200 instead of the real photo.
                 image_params = params.copy()
-                image_params.pop("radius")
                 image_params["heading"] = self.calculate_heading(
                     metadata["location"]["lat"],
                     metadata["location"]["lng"],
@@ -379,6 +385,15 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 image_url = "https://maps.googleapis.com/maps/api/streetview"
                 image_response = self.session.get(image_url, params=image_params)
                 image_response.raise_for_status()
+                # Defense in depth: Google's "no imagery" placeholder is a
+                # small, fixed-size graphic - a real 600x300 pano photo is
+                # reliably larger. Treat a suspiciously small response as
+                # unavailable rather than trusting the 200 status alone, so
+                # a mismatch the radius fix doesn't catch still degrades to
+                # "try another location" instead of showing the placeholder.
+                if len(image_response.content) < 2000:
+                    radius += radius_increment
+                    continue
                 return image_response.content, metadata.get("date")
 
             if status in {"REQUEST_DENIED", "INVALID_REQUEST", "UNKNOWN_ERROR"}:

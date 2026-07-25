@@ -48,9 +48,13 @@ class QuietTestRunner(unittest.TextTestRunner):
         """
         Wrap the super().run(test) call with log suppression logic.
         """
-        # Remove all existing handlers
-        default_handlers = logging.root.handlers
-        for handler in logging.root.handlers[:]:
+        # Remove all existing handlers. `logging.root.handlers` must be copied here (not just
+        # sliced in the loop below) - removeHandler() mutates that same list object in place,
+        # so without the copy `default_handlers` would end up empty too and the restoration
+        # loop further down would silently do nothing, leaving the root logger with zero
+        # handlers for the rest of the process after the suite finishes.
+        default_handlers = list(logging.root.handlers)
+        for handler in default_handlers:
             logging.root.removeHandler(handler)
 
         # Before running the test, add the custom log handler to root logger.

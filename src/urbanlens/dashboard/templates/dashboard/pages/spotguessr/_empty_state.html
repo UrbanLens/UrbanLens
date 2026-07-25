@@ -1,16 +1,19 @@
 {% comment %}
 Shown instead of a fake "Game over!" when a chosen mode/settings combination
 has no eligible locations (no shared pins yet, or a chosen area/visited-only
-filter excludes everything). See controllers.spotguessr's "no_eligible_locations"
-response shapes and spotguessr.ts's showNoEligibleLocations().
+filter excludes everything, or every pinned location's photo turned out
+unusable). See controllers.spotguessr's "no_eligible_locations" response
+shapes and spotguessr.ts's showNoEligibleLocations().
 {% endcomment %}
 <section id="sg-empty-state-panel" class="spotguessr-panel card spotguessr-empty-state-panel" hidden>
     <i class="material-symbols-outlined spotguessr-empty-state-icon">explore_off</i>
     <h2>Nothing to play yet</h2>
     <p class="spotguessr-panel-hint">
-        You need at least one pinned location that matches your settings to play SpotGuessr.
+        No pinned location matches your current settings.
     </p>
+    <ul id="sg-empty-state-active-filters" class="spotguessr-empty-state-filters" hidden></ul>
     <div class="spotguessr-empty-state-actions">
+        <button type="button" id="sg-empty-state-clear-filters-btn" class="btn btn--secondary" hidden>Clear filters and try again</button>
         <button type="button" id="sg-empty-state-settings-btn" class="btn btn--secondary">Adjust settings</button>
         <a href="{% url 'map.view' %}" class="btn btn--primary">Go pin some places</a>
     </div>

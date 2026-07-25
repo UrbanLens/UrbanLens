@@ -102,6 +102,27 @@ class SpotGuessrStartViewTests(TestCase):
         self.assertNotIn("summary", data)
         self.assertFalse(GameSession.objects.filter(host_profile=other_profile).exists())
 
+    def test_a_pinned_location_with_no_usable_photo_reports_no_eligible_locations_too(self) -> None:
+        """Regression guard: a profile can have pins (passing the cheap
+        pre-check) but every pinned location's photo pool turns out
+        unusable once round generation actually runs (e.g. filtered out by
+        relevance) - this used to silently complete the freshly-created
+        session and report a fake 'Game over! Your score: 0 pts', which
+        reads as a real (if confusing) finished game rather than nothing
+        having been playable at all."""
+        bare_profile = _make_profile()
+        bare_location = _make_location()
+        baker.make(Pin, profile=bare_profile, location=bare_location)
+        # No Image at all for bare_location - get_or_create_round can never
+        # produce a Photos-mode round for it.
+        self.client.force_login(bare_profile.user)
+        response = self.client.post(self.start_url, {})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data.get("error_code"), "no_eligible_locations")
+        self.assertNotIn("finished", data)
+        self.assertNotIn("summary", data)
+
     def test_no_eligible_locations_within_a_restrictive_geo_bounds_is_also_reported(self) -> None:
         far_away_bounds = json.dumps(
             {"type": "Polygon", "coordinates": [[[-1, -1], [-1, 1], [1, 1], [1, -1], [-1, -1]]]},

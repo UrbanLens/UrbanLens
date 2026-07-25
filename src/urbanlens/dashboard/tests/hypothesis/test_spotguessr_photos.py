@@ -69,24 +69,6 @@ class CandidateImageForLocationPrivacyTests(TestCase):
         self.assertIsNone(candidate_image_for_location(location))
 
 
-class CandidateImageForLocationExternalMediaOnlyTests(TestCase):
-    def setUp(self) -> None:
-        self.location = _make_location()
-        self.wiki = baker.make(Wiki, location=self.location)
-
-    def test_external_media_only_excludes_wiki_attached_uploads(self) -> None:
-        baker.make(Image, location=self.location, wiki=self.wiki, media_type=MediaKind.PHOTO, source=ImageSource.UPLOAD)
-        self.assertIsNone(candidate_image_for_location(self.location, external_media_only=True))
-
-    def test_external_media_only_still_allows_externally_sourced_wiki_photos(self) -> None:
-        image = baker.make(Image, location=self.location, wiki=self.wiki, media_type=MediaKind.PHOTO, source=ImageSource.WIKIMEDIA, media_source_key="wikimedia", media_item_key="a" * 40)
-        self.assertEqual(candidate_image_for_location(self.location, external_media_only=True), image)
-
-    def test_default_allows_both_uploads_and_external_media(self) -> None:
-        upload = baker.make(Image, location=self.location, wiki=self.wiki, media_type=MediaKind.PHOTO, source=ImageSource.UPLOAD)
-        self.assertEqual(candidate_image_for_location(self.location), upload)
-
-
 class CandidateImageForLocationRelevanceTests(TestCase):
     """Only externally-sourced wiki photos are relevance-gated - personal uploads have no relevance identity at all."""
 

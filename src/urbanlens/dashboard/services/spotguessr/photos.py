@@ -32,17 +32,12 @@ if TYPE_CHECKING:
 def candidate_image_for_location(
     location: Location,
     *,
-    external_media_only: bool = False,
     allow_arbitrary_external_photos: bool = False,
 ) -> Image | None:
     """Pick a photo to show for ``location``, or None if it has no eligible photo.
 
     Args:
         location: The round's answer location.
-        external_media_only: When True (``config.external_media_only``),
-            excludes plain personal uploads (``ImageSource.UPLOAD``),
-            keeping only externally-sourced media (Wikimedia, Google
-            Images, Smithsonian, etc.) that's been shared to the wiki.
         allow_arbitrary_external_photos: When False (the default -
             ``config.allow_arbitrary_external_photos``), an externally-
             sourced candidate must have a *non-negative*
@@ -64,8 +59,6 @@ def candidate_image_for_location(
             the first place.
     """
     images = Image.objects.filter(location=location, media_type=MediaKind.PHOTO, wiki__isnull=False)
-    if external_media_only:
-        images = images.exclude(source=ImageSource.UPLOAD)
     candidates = list(images)
     if not allow_arbitrary_external_photos:
         candidates = [image for image in candidates if image.source == ImageSource.UPLOAD or effective_relevance(image) >= 0]

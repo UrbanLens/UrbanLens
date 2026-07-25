@@ -39,6 +39,13 @@ def _make_named_place_round() -> GameRound:
     return baker.make(GameRound, session=session, location=location, image=None)
 
 
+def _make_street_view_round() -> GameRound:
+    """Street View rounds have no Image row - imagery is fetched live, never stored."""
+    location = _make_location()
+    session = baker.make(GameSession, mode=SpotGuessrMode.STREET_VIEW)
+    return baker.make(GameRound, session=session, location=location, image=None)
+
+
 class RecordFeedbackTests(TestCase):
     def test_records_an_explicit_reaction(self) -> None:
         round_ = _make_photo_round()
@@ -56,11 +63,23 @@ class RecordFeedbackTests(TestCase):
         feedback = GamePhotoFeedback.objects.get(round=round_, profile=profile)
         self.assertEqual(feedback.kind, GamePhotoFeedbackKind.REPORTED)
 
-    def test_a_round_with_no_photo_is_a_no_op(self) -> None:
+    def test_a_named_place_round_is_a_no_op(self) -> None:
         round_ = _make_named_place_round()
         profile = _make_profile()
         self.assertIsNone(record_feedback(round_, profile, GamePhotoFeedbackKind.THUMBS_UP))
         self.assertFalse(GamePhotoFeedback.objects.filter(round=round_).exists())
+
+    def test_a_street_view_round_with_no_image_row_still_records_feedback(self) -> None:
+        """Regression guard: Street View shows real imagery (fetched live,
+        never stored as an Image row) - gating on `round.image_id is None`
+        wrongly treated it the same as Named Place's "no photo" case,
+        producing a false "no photo to react to" 400 for a round that
+        clearly did show a photo."""
+        round_ = _make_street_view_round()
+        profile = _make_profile()
+        feedback = record_feedback(round_, profile, GamePhotoFeedbackKind.THUMBS_DOWN)
+        assert feedback is not None
+        self.assertEqual(feedback.kind, GamePhotoFeedbackKind.THUMBS_DOWN)
 
 
 class BackfillNoReactionTests(TestCase):
@@ -80,7 +99,7 @@ class BackfillNoReactionTests(TestCase):
         feedback = GamePhotoFeedback.objects.get(round=round_, profile=profile)
         self.assertEqual(feedback.kind, GamePhotoFeedbackKind.THUMBS_UP)
 
-    def test_a_round_with_no_photo_is_a_no_op(self) -> None:
+    def test_a_named_place_round_is_a_no_op(self) -> None:
         round_ = _make_named_place_round()
         profile = _make_profile()
         backfill_no_reaction(round_, [profile])

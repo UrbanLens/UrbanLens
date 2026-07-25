@@ -114,7 +114,7 @@ class SubmitGuessTests(TestCase):
 
     def test_guessing_inside_the_boundary_scores_full_points(self) -> None:
         guess_point = Point(float(self.location.longitude), float(self.location.latitude), srid=4326)
-        guess = submit_guess(self.round_, self.profile, guess_point)
+        guess, _bonus_tiers = submit_guess(self.round_, self.profile, guess_point)
         self.assertEqual(guess.points, 5000)
         self.assertEqual(guess.distance_meters, 0.0)
 

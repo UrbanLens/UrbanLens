@@ -6,6 +6,7 @@
 from urbanlens.dashboard.services.spotguessr.chat import CHAT_HISTORY_LIMIT, recent_messages, send_chat_message
 from urbanlens.dashboard.services.spotguessr.distance import geodesic_distance_meters, location_boundary_polygon
 from urbanlens.dashboard.services.spotguessr.eligibility import eligible_locations
+from urbanlens.dashboard.services.spotguessr.geo_bonus import BonusScope, bonus_points_for_guess, bonus_scope_for
 from urbanlens.dashboard.services.spotguessr.glicko2 import DEFAULT_TAU, Opponent, Rating, rate
 from urbanlens.dashboard.services.spotguessr.named_place import candidate_name_for_location
 from urbanlens.dashboard.services.spotguessr.photo_coordinates import record_guess

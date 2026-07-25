@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.models.friendship.model import Friendship
-from urbanlens.dashboard.models.spotguessr.model import PlayerModeRating, SpotGuessrMode, SpotGuessrPreference
+from urbanlens.dashboard.models.spotguessr.model import PlayerModeRating, SpotGuessrPreference
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -20,8 +20,13 @@ def friend_profiles(profile: Profile) -> list[Profile]:
     return [row.to_profile if row.from_profile_id == profile.pk else row.from_profile for row in rows]
 
 
-def visible_friend_ratings(profile: Profile, mode: str = SpotGuessrMode.PHOTOS) -> list[dict]:
-    """Friends' ratings for ``mode``, excluding anyone who has opted out.
+def visible_friend_ratings(profile: Profile) -> list[dict]:
+    """Each visible friend's most-recently-played mode rating, excluding anyone who has opted out.
+
+    Each friend's own most-recently-played mode is used independently
+    (rather than a single fixed mode for everyone) - a Named Place/Street
+    View-only friend previously showed no rating at all, since the lookup
+    was hardcoded to Photos mode.
 
     Returns:
         A list of ``{"profile": Profile, "rating": PlayerModeRating | None}``
@@ -37,6 +42,6 @@ def visible_friend_ratings(profile: Profile, mode: str = SpotGuessrMode.PHOTOS) 
             preference = None
         if preference is not None and not preference.show_ratings_to_friends:
             continue
-        rating = PlayerModeRating.objects.filter(profile=friend, mode=mode).first()
+        rating = PlayerModeRating.objects.filter(profile=friend).order_by("-last_played_at").first()
         visible.append({"profile": friend, "rating": rating})
     return visible

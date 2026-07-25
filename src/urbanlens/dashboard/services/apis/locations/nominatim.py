@@ -155,6 +155,49 @@ class NominatimGateway(Gateway):
             return []
         return [self._normalise(item) for item in raw if isinstance(item, dict)]
 
+    def reverse_geocode_admin(self, latitude: float, longitude: float) -> dict[str, str] | None:
+        """
+        Reverse-geocode coordinates to just their country/state/city, for admin-level comparisons.
+
+        A lighter sibling of ``reverse_geocode()`` - used by
+        ``services.spotguessr.geo_bonus`` to score a guess point's
+        administrative area against a round's answer location, which only
+        needs these three fields, not the full place-metadata shape
+        ``_normalise()`` builds for the location-info panel.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+
+        Returns:
+            ``{"country": ..., "state": ..., "city": ...}`` (each possibly
+            an empty string if Nominatim didn't report it), or None on
+            error/no result.
+        """
+        try:
+            params: dict[str, str | int | float] = {"lat": latitude, "lon": longitude, "format": "json", "addressdetails": 1}
+            resp = self.session.get(
+                f"{self.base_url}/reverse",
+                params=params,
+                timeout=10,
+            )
+            resp.raise_for_status()
+            raw = resp.json()
+        except Exception:
+            logger.exception("Nominatim admin reverse geocode failed for %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
+            return None
+
+        if "error" in raw:
+            return None
+
+        address = raw.get("address") or {}
+        city = address.get("city") or address.get("town") or address.get("village") or address.get("municipality") or address.get("hamlet") or ""
+        return {
+            "country": address.get("country") or "",
+            "state": address.get("state") or "",
+            "city": city,
+        }
+
     def reverse_geocode(self, latitude: float, longitude: float) -> dict[str, Any] | None:
         """
         Reverse-geocode coordinates and return structured place metadata.

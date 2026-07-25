@@ -1,84 +1,12 @@
 
 from __future__ import annotations
-import re
 
-import collections.abc
-from typing import Callable, Dict, Iterable, List, Collection, TYPE_CHECKING, NotRequired, Tuple, Any, Optional, NamedTuple, cast
 import logging
-from unittest.mock import AsyncMock, MagicMock, patch
 
 from django import test
 from hypothesis.extra.django._impl import HypothesisTestCase as _HypothesisMixin
 
 logger = logging.getLogger(__name__)
-
-class TestCases(Iterable):
-    entries : list[TestEntry]
-    output_callback: Callable[..., Any] | None
-    def __init__(self, entries: Iterable[TestEntry | tuple], callback: Callable[..., Any] | None = None):
-        self.entries = [TestEntry(*entry) if isinstance(entry, tuple) else entry for entry in entries]
-        self.output_callback = callback
-
-    def items(self):
-        # Return (key, value) pairs. Ensure callback is triggered.
-        for entry in self:
-            yield entry.params, entry.expected_output
-
-    def __iter__(self):
-        for i, entry in enumerate(self.entries):
-            if self.output_callback:
-                output = self.output_callback(entry, i)
-                yield TestEntry(entry.params, output, entry.message)
-            else:
-                yield entry
-
-    def __getitem__(self, index):
-        return self.entries[index]
-
-    def __len__(self):
-        return len(self.entries)
-
-    def __add__(self, other):
-        self.entries = self.entries + getattr(other, 'entries',  other)
-        return self
-
-class TestCasesTemplate(TestCases):
-
-    def __init__(self, entries: Iterable[TestEntry | tuple], substitutions: dict[str, str] | Callable[..., Any], callback: Callable[..., Any] | None = None):
-        final_entries = []
-        for entry in entries:
-            if isinstance(entry, tuple):
-                entry = TestEntry(*entry)
-            params, expected_output, message = entry
-
-            if isinstance(params, str):
-                params = (params,)
-            if callable(substitutions):
-                # If substitutions is a function, apply it directly
-                results = substitutions(params, expected_output, message)
-                final_entries.extend([TestEntry(*result) for result in results])
-            else:
-                # Apply each substitution to a fresh copy of params and expected_output
-                for key, values in substitutions.items():
-                    for in_value, out_value in values:
-                        # Create fresh copies for each substitution
-                        substituted_params = [
-                            param.replace(key, in_value) if isinstance(param, str) else param
-                            for param in params
-                        ]
-                        substituted_output = expected_output.replace(key, out_value) if isinstance(expected_output, str) else expected_output
-                        if len(substituted_params) == 1:
-                            substituted_params = substituted_params[0]  # type: ignore[assignment]
-
-                        # Add the substituted entry
-                        final_entries.append(TestEntry(substituted_params, substituted_output, message))
-
-        super().__init__(final_entries, callback)
-
-class TestEntry(NamedTuple):
-    params: Any | tuple[Any]
-    expected_output: Any | None = None
-    message: str | None = None
 
 
 class _MessagePrefixMixin:

@@ -22,9 +22,16 @@ if TYPE_CHECKING:
 
 #: See docs/designs/spotguessr.md's config table - keep these in sync.
 MAX_ROUND_POINTS = 5000
-DISTANCE_DECAY_KM = 2.0
 MAX_DATE_POINTS = 1000
 DATE_DECAY_DAYS = 180.0
+
+#: points_for_distance()'s two-component blend: a fast near-field decay
+#: (rewards "a few blocks" precision) plus a slow city-scale decay (keeps
+#: "same city" meaningfully non-zero) - see docs/designs/spotguessr.md's
+#: Points section for the full rationale and sample values.
+NEAR_DECAY_KM = 1.5
+CITY_DECAY_KM = 40.0
+NEAR_WEIGHT = 0.65
 
 
 @dataclass(frozen=True)
@@ -81,10 +88,29 @@ def distance_for_guess(location: Location, guess_point: Point, *, target_is_poin
     return geodesic_distance_meters(location, guess_point, target)
 
 
-def points_for_distance(distance_meters: float, *, decay_km: float = DISTANCE_DECAY_KM, max_points: int = MAX_ROUND_POINTS) -> int:
-    """Exponential-decay points curve: nearby precision matters far more than distant precision."""
+def points_for_distance(
+    distance_meters: float,
+    *,
+    near_decay_km: float = NEAR_DECAY_KM,
+    city_decay_km: float = CITY_DECAY_KM,
+    near_weight: float = NEAR_WEIGHT,
+    max_points: int = MAX_ROUND_POINTS,
+) -> int:
+    """Two-component exponential-decay points curve.
+
+    A single exponential makes anything past ~10-15km read as zero, which
+    feels unfairly harsh - guessing the right city, or even just getting
+    within a few blocks, should still feel like progress. Blending a fast
+    near-field decay (rewards precision) with a slow city-scale decay
+    (keeps "same city" meaningfully non-zero) gives: full points only at
+    (or inside) the target boundary, "a few blocks off" reading as
+    excellent, "same city" reading as a reasonable partial score, and only
+    genuinely distant guesses trailing off toward zero.
+    """
     distance_km = max(distance_meters, 0.0) / 1000.0
-    return round(max_points * math.exp(-distance_km / decay_km))
+    near = math.exp(-distance_km / near_decay_km)
+    city = math.exp(-distance_km / city_decay_km)
+    return round(max_points * (near_weight * near + (1 - near_weight) * city))
 
 
 def points_for_date_guess(

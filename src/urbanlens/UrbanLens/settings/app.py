@@ -184,13 +184,13 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     twilio_sms_from_number: str | None = Field(default=None, description="The Twilio phone number SMS notifications are sent from (E.164 format)")
     twilio_whatsapp_from_number: str | None = Field(default=None, description="The Twilio-approved WhatsApp sender number (E.164 format, without the 'whatsapp:' prefix)")
 
-    # DB
-    database_engine: str = Field(default="psqlextra.backend", description="The database engine")
-    database_host: str = Field(default="localhost", description="The database host")
-    database_port: str = Field(default="5432", description="The database port")
-    database_name: str = Field(default="urbanlens", description="The database name")
-    database_user: str = Field(default="urbanlens", description="The database user")
-    database_pass: str = Field(default="urbanlens", description="The database password")
+    # Note: there are deliberately no database_* fields here. DATABASES is built directly in
+    # settings/base.py from UL_DB_* environment variables (not the UL_ prefix + field-name
+    # convention pydantic-settings would derive, e.g. UL_DATABASE_HOST) and exposed back to
+    # callers via the `databases` property below. A prior set of database_* fields here was
+    # never actually read by anything and used a different, non-working env var prefix -
+    # removed rather than wired up, since fixing the prefix mismatch without a live deployment
+    # to verify against risked silently breaking existing UL_DB_* configurations.
 
     _secrets: dict | None = None
     _environment: BaseEnvironment | None = None
@@ -315,11 +315,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                     setattr(self, key, value)
 
                 if not value.exists():
-                    # If the path contains a period, infer it is a file, and don't create it
+                    # If the path contains a period, infer it is a file and only ensure its
+                    # parent directory exists; otherwise it's a directory and should be created
+                    # itself. (These two branches were previously swapped, which meant
+                    # directory-valued settings like backups_dir/downloads_dir/exports_dir/
+                    # static_root never actually got created - only their parent did.)
                     if "." not in value.name:
-                        value.parent.mkdir(parents=True, exist_ok=True)
-                    else:
                         value.mkdir(parents=True, exist_ok=True)
+                    else:
+                        value.parent.mkdir(parents=True, exist_ok=True)
             except FileNotFoundError:
                 logger.error("Error ensuring path: %s - %s", key, value)
 

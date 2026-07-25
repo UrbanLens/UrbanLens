@@ -82,17 +82,37 @@ it being right at small (sub-km) scales, not just roughly right at trip-planning
 ## Points
 
 ```
-location_points = round(MAX_ROUND_POINTS * exp(-distance_km / DISTANCE_DECAY_KM))   # floor 0
-date_points     = round(MAX_DATE_POINTS  * exp(-abs(days_off) / DATE_DECAY_DAYS))    # floor 0, only when date guessing is on
+near            = exp(-distance_km / NEAR_DECAY_KM)
+city            = exp(-distance_km / CITY_DECAY_KM)
+location_points = round(MAX_ROUND_POINTS * (NEAR_WEIGHT * near + (1 - NEAR_WEIGHT) * city))   # floor 0
+date_points     = round(MAX_DATE_POINTS  * exp(-abs(days_off) / DATE_DECAY_DAYS))              # floor 0, only when date guessing is on
 ```
 
-Exponential decay (not linear) so precision near the target matters far more than precision
-far away — a guess 50m off and a guess 200m off should feel meaningfully different; a guess
-20km off and a guess 40km off should both just read as "wrong." `location_points` is what
-feeds the Glicko-2 rating update (see below); `date_points` is purely a side-score, never
+A single exponential decay makes anything past ~10-15km read as an undifferentiated zero,
+which feels unfairly harsh — a guess in the right city, or even just a few blocks off, should
+still feel like progress, while full points remain reserved for landing at (or inside) the
+target boundary. Blending a fast near-field decay (`NEAR_DECAY_KM`, rewards "a few blocks"
+precision) with a slow city-scale decay (`CITY_DECAY_KM`, keeps "same city" meaningfully
+non-zero) achieves that without flattening the curve near the target. `location_points` is
+what feeds the Glicko-2 rating update (see below); `date_points` is purely a side-score, never
 mixed into skill rating — guessing well from a photo and guessing well from EXIF-adjacent
 reasoning ("this car model dates the photo") are different skills, and conflating them would
 make the core rating noisier for players who never enable date guessing.
+
+### Country/state/city bonus points
+
+`services.spotguessr.geo_bonus` adds a small, independent bonus on top of `location_points` for
+guessing the right general area, even when the exact guess is off — reducing how often a round
+reads as "basically zero." A guess's reverse-geocoded country/state/city (via
+`NominatimGateway.reverse_geocode_admin`) is compared against the answer location's own stored
+`country`/`state`/`city`; each matching tier stacks (`COUNTRY_BONUS` + `STATE_BONUS` +
+`CITY_BONUS` all apply for a spot-on city guess). A tier is only offered when the session's
+eligible-location pool actually varies on it (`bonus_scope_for()`, computed once at round 1 and
+frozen on `GameSession.config["bonus_scope"]`) — a session already constrained to one state (by
+`geo_bounds`, `require_visited_all`, or simply a small pin pool) doesn't hand out a "right
+state" bonus for free. Stored on `Guess.bonus_points` and, unlike `date_points`, folded into
+the Glicko-2 outcome fraction — admin-area correctness is the same "know where this is" skill
+the rating measures.
 
 ## Glicko-2 ratings: player skill vs. location difficulty
 
@@ -158,10 +178,6 @@ wiki through an explicit share (or, once the game gets its own upload flow, by a
 the wiki at upload time), which is the one signal that reliably means a profile chose to make
 it public. See `services.spotguessr.photos`'s module docstring for the same invariant stated
 at the code level.
-
-`config.external_media_only`, if set, additionally excludes `Image.source == upload` (uses the
-existing `ImageSource` enum) from the wiki-attached pool, keeping only externally-sourced
-media (Wikimedia, Google Images, Smithsonian, etc.) that's been shared to the wiki.
 
 ### Photo relevance feedback
 
@@ -448,9 +464,14 @@ is lifted; all three modes are now startable, solo or multiplayer.
 | Constant | Default | Note |
 |---|---|---|
 | `MAX_ROUND_POINTS` | 5000 | GeoGuessr-familiar scale |
-| `DISTANCE_DECAY_KM` | 2.0 | tuned for metro-area pin density, not GeoGuessr's world scale |
+| `NEAR_DECAY_KM` | 1.5 | "a few blocks" reads as excellent |
+| `CITY_DECAY_KM` | 40.0 | "same city" stays meaningfully non-zero |
+| `NEAR_WEIGHT` | 0.65 | blend toward near-field precision |
 | `MAX_DATE_POINTS` | 1000 | secondary to location score |
 | `DATE_DECAY_DAYS` | 180 | half a year |
+| `COUNTRY_BONUS` | 100 | `services.spotguessr.geo_bonus` |
+| `STATE_BONUS` | 250 | `services.spotguessr.geo_bonus` |
+| `CITY_BONUS` | 400 | `services.spotguessr.geo_bonus` |
 | `DEFAULT_ROUNDS_PER_SESSION` | 5 | |
 | `MIN_ROUNDS_PER_SESSION` / `MAX_ROUNDS_PER_SESSION` | 3 / 20 | |
 | `MIN_LOCATION_RATING` / `MAX_LOCATION_RATING` | 1000 / 2000 | difficulty-slider target band |

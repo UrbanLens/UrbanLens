@@ -9,6 +9,15 @@
     display: flex;
     flex-direction: column;
     gap: 1rem;
+
+    // Several elements below set an explicit `display` (flex/grid/etc.) with
+    // no [hidden] override - author CSS always beats the UA stylesheet's
+    // `[hidden] { display: none }`, regardless of specificity, so those
+    // elements silently ignored the `hidden` attribute entirely. This single
+    // rule guarantees `hidden` always wins on this page.
+    [hidden] {
+        display: none !important;
+    }
 }
 
 .spotguessr-header {
@@ -40,7 +49,7 @@
     align-items: center;
     padding: .35rem .75rem;
     border-radius: .5rem;
-    background: var(--surface-2, rgba(127, 127, 127, .12));
+    background: var(--ul-surface-2);
     min-width: 4.5rem;
 
     &--self {
@@ -222,6 +231,23 @@ $spotguessr-mode-accents: (
     margin-bottom: .5rem;
 }
 
+.spotguessr-empty-state-filters {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .4rem;
+    justify-content: center;
+
+    li {
+        font-size: .8rem;
+        padding: .2rem .6rem;
+        border-radius: 1rem;
+        background: var(--ul-surface-2);
+    }
+}
+
 .spotguessr-empty-state-actions {
     display: flex;
     gap: .75rem;
@@ -286,15 +312,15 @@ $spotguessr-mode-accents: (
 
 .spotguessr-area-search-result {
     text-align: left;
-    background: var(--surface-2, rgba(127, 127, 127, .08));
-    border: 1px solid var(--border, rgba(127, 127, 127, .25));
+    background: var(--ul-surface-2);
+    border: 1px solid var(--ul-surface-2-border);
     border-radius: .4rem;
     padding: .4rem .6rem;
     font-size: .82rem;
     cursor: pointer;
 
     &:hover {
-        border-color: var(--primary-color);
+        border-color: var(--ul-primary-color);
     }
 }
 
@@ -313,9 +339,16 @@ $spotguessr-mode-accents: (
 
 .spotguessr-game-status {
     display: flex;
+    align-items: center;
     justify-content: space-between;
+    gap: .5rem;
     font-weight: 600;
     margin-bottom: .75rem;
+}
+
+.spotguessr-game-settings-btn {
+    @include icon-btn(28px);
+    margin-left: auto;
 }
 
 .spotguessr-game-layout {
@@ -333,7 +366,7 @@ $spotguessr-mode-accents: (
     max-height: 480px;
     object-fit: contain;
     border-radius: .5rem;
-    background: var(--surface-2, rgba(127, 127, 127, .08));
+    background: var(--ul-surface-2);
     animation: spotguessr-fade-in .3s ease-out;
 }
 
@@ -351,10 +384,23 @@ $spotguessr-mode-accents: (
     height: 320px;
 }
 
+.spotguessr-guess-map-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: .5rem;
+    margin-top: .35rem;
+}
+
+.spotguessr-map-attribution {
+    font-size: .7rem;
+    opacity: .6;
+}
+
 .spotguessr-reveal-panel {
     margin-top: 1.25rem;
     padding-top: 1.25rem;
-    border-top: 1px solid var(--border, rgba(127, 127, 127, .25));
+    border-top: 1px solid var(--ul-border);
     text-align: center;
     animation: spotguessr-fade-in .3s ease-out;
 }
@@ -386,7 +432,7 @@ $spotguessr-mode-accents: (
     font-size: 1.75rem;
     padding: 2.5rem 1rem;
     border-radius: .5rem;
-    background: var(--surface-2, rgba(127, 127, 127, .08));
+    background: var(--ul-surface-2);
     animation: spotguessr-fade-in .3s ease-out;
 }
 
@@ -396,7 +442,7 @@ $spotguessr-mode-accents: (
     gap: .5rem;
     padding: .75rem;
     border-radius: .5rem;
-    background: var(--surface-2, rgba(127, 127, 127, .06));
+    background: var(--ul-surface-2);
 }
 
 .spotguessr-friend-list {
@@ -427,7 +473,7 @@ $spotguessr-mode-accents: (
         align-items: center;
         padding: .5rem .75rem;
         border-radius: .4rem;
-        background: var(--surface-2, rgba(127, 127, 127, .08));
+        background: var(--ul-surface-2);
     }
 }
 
@@ -435,7 +481,7 @@ $spotguessr-mode-accents: (
     font-size: .75rem;
     padding: .15rem .5rem;
     border-radius: 1rem;
-    background: var(--surface-3, rgba(127, 127, 127, .18));
+    background: var(--ul-surface-3);
 
     &--joined {
         background: rgba(46, 160, 67, .2);
@@ -460,7 +506,7 @@ $spotguessr-mode-accents: (
 .spotguessr-chat-panel {
     margin-top: 1.25rem;
     padding-top: 1rem;
-    border-top: 1px solid var(--border, rgba(127, 127, 127, .25));
+    border-top: 1px solid var(--ul-border);
     display: flex;
     flex-direction: column;
     gap: .5rem;
@@ -499,7 +545,7 @@ $spotguessr-mode-accents: (
     gap: .5rem;
     padding: .35rem .6rem;
     border-radius: .5rem;
-    background: var(--surface-2, rgba(127, 127, 127, .08));
+    background: var(--ul-surface-2);
     font-size: .85rem;
 
     &--rank-1 {

@@ -34,16 +34,15 @@ class DashboardModel(django_models.Model):
 
     class Meta:
         """
-        Metadata about this model (such as the table name)
+        Base Meta options shared by every dashboard model.
+
+        This class only sets ``abstract``/``app_label`` - it does not itself define
+        ``db_table``, ``unique_together``, or ``indexes``. Concrete subclasses are free to
+        add any of those in their own ``Meta`` (which should inherit from this one).
 
         Attributes:
-            db_table (str):
-                The name of the table in the DB
-            unique_together (list of str):
-                A list of attributes which form unique keys
-            indexes (list of Index):
-                A list of indexes to create on the table
-
+            abstract (bool): Always True - this class is never instantiated directly.
+            app_label (str): The Django app this model belongs to ("dashboard").
         """
 
         abstract = True

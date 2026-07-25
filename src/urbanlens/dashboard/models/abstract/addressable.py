@@ -29,10 +29,12 @@ class AddressableModel(DashboardModel):
 
     @property
     def latitude(self) -> Decimal:
+        """Latitude of the linked Location."""
         return self.location.latitude
 
     @property
     def longitude(self) -> Decimal:
+        """Longitude of the linked Location."""
         return self.location.longitude
 
     @property
@@ -52,18 +54,22 @@ class AddressableModel(DashboardModel):
 
     @property
     def state(self) -> str | None:
+        """State/province component of the linked Location's address, if known."""
         return self.location.state
 
     @property
     def county(self) -> str | None:
+        """County component of the linked Location's address, if known."""
         return self.location.county
 
     @property
     def city(self) -> str | None:
+        """City/locality component of the linked Location's address, if known."""
         return self.location.city
 
     @property
     def country(self) -> str | None:
+        """Country component of the linked Location's address, if known."""
         return self.location.country
 
     @property
@@ -83,6 +89,7 @@ class AddressableModel(DashboardModel):
 
     @property
     def place_name(self) -> str | None:
+        """Best-known display name for the linked Location, if any."""
         return self.location.place_name
 
     @property

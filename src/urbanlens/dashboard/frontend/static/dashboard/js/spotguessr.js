@@ -1,4 +1,7 @@
 import {
+  createMapLayers
+} from "./article-wysiwyg-f04nz5p5.js";
+import {
   getCsrfToken,
   toast
 } from "./article-wysiwyg-5jnnp4sj.js";
@@ -6,8 +9,8 @@ import"./article-wysiwyg-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/entries/spotguessr.ts
 var urls = window.SPOTGUESSR_URLS;
-var DEFAULT_CENTER = [39.5, -98.35];
-var DEFAULT_ZOOM = 4;
+var DEFAULT_CENTER = [20, 0];
+var DEFAULT_ZOOM = 2;
 var pageEl = document.querySelector(".spotguessr-page");
 var myProfileId = Number(pageEl?.dataset.myProfileId ?? "0");
 var regionSearchUrl = pageEl?.dataset.regionSearchUrl ?? "";
@@ -86,7 +89,7 @@ function openSettingsDialog(mode) {
   el("sg-settings-dialog").showModal();
   if (areaMap) {
     areaMap.invalidateSize();
-  } else if (el("sg-restrict-area").checked) {
+  } else {
     ensureAreaMap();
     if (restoredGeoBounds) {
       setAreaGeometry(restoredGeoBounds);
@@ -142,34 +145,57 @@ function setAreaGeometry(geometry) {
   const layer = L.geoJSON(geometry);
   layer.eachLayer((shapeLayer) => areaDrawnItems?.addLayer(shapeLayer));
   el("sg-area-geo-bounds").value = JSON.stringify(geometry);
+  el("sg-restrict-area").checked = true;
+  el("sg-area-clear-btn").hidden = false;
   const bounds = areaDrawnItems?.getBounds();
   if (bounds?.isValid())
     map.fitBounds(bounds, { padding: [40, 40] });
+  updateAreaPinCount();
+}
+function clearAreaGeometry() {
+  areaDrawnItems?.clearLayers();
+  el("sg-area-geo-bounds").value = "";
+  el("sg-restrict-area").checked = false;
+  el("sg-area-clear-btn").hidden = true;
+  el("sg-area-pin-count").hidden = true;
+  areaMap?.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+}
+async function updateAreaPinCount() {
+  const geoBounds = currentGeoBoundsGeoJson();
+  const countEl = el("sg-area-pin-count");
+  if (!geoBounds) {
+    countEl.hidden = true;
+    return;
+  }
+  let data;
+  try {
+    data = await getJson(`${urls.area_pin_count}?geo_bounds=${encodeURIComponent(geoBounds)}`);
+  } catch {
+    countEl.hidden = true;
+    return;
+  }
+  const count = data.count ?? 0;
+  countEl.textContent = count === 1 ? "1 of your pins is in this area." : `${count} of your pins are in this area.`;
+  countEl.hidden = false;
 }
 function initAreaRestriction() {
-  const toggle = el("sg-restrict-area");
-  const wrap = el("sg-area-map-wrap");
-  toggle.addEventListener("change", () => {
-    wrap.hidden = !toggle.checked;
-    if (!toggle.checked)
-      return;
-    if (areaMap) {
-      areaMap.invalidateSize();
-      return;
-    }
-    ensureAreaMap();
-  });
+  el("sg-area-clear-btn").addEventListener("click", clearAreaGeometry);
 }
 async function searchAreaRegion() {
   const input = el("sg-area-search-input");
   const query = input.value.trim();
+  const searchBtn = el("sg-area-search-btn");
   const resultsEl = el("sg-area-search-results");
   const messageEl = el("sg-area-search-message");
   resultsEl.hidden = true;
   resultsEl.innerHTML = "";
-  messageEl.hidden = true;
-  if (!query || !regionSearchUrl)
+  messageEl.hidden = false;
+  messageEl.textContent = "Searching…";
+  if (!query || !regionSearchUrl) {
+    messageEl.hidden = true;
     return;
+  }
+  searchBtn.disabled = true;
   let data;
   try {
     data = await getJson(`${regionSearchUrl}?q=${encodeURIComponent(query)}`);
@@ -177,6 +203,8 @@ async function searchAreaRegion() {
     messageEl.textContent = "Could not search for that place right now.";
     messageEl.hidden = false;
     return;
+  } finally {
+    searchBtn.disabled = false;
   }
   const results = data.results ?? [];
   if (!results.length) {
@@ -184,6 +212,7 @@ async function searchAreaRegion() {
     messageEl.hidden = false;
     return;
   }
+  messageEl.hidden = true;
   const [onlyResult] = results;
   if (results.length === 1 && onlyResult) {
     setAreaGeometry(onlyResult.geojson);
@@ -289,17 +318,6 @@ function renderFriendCheckboxes(container, friends, excludeIds) {
     container.appendChild(label);
   }
 }
-function initFriendPicker() {
-  const toggle = el("sg-play-with-friends");
-  const wrap = el("sg-invite-wrap");
-  toggle.addEventListener("change", async () => {
-    wrap.hidden = !toggle.checked;
-    if (!toggle.checked)
-      return;
-    const friends = await loadFriendOptions();
-    renderFriendCheckboxes(el("sg-friend-list"), friends, new Set);
-  });
-}
 async function handleInviteMore() {
   if (sessionId === null)
     return;
@@ -328,8 +346,15 @@ async function handleInviteMore() {
 function ensureGuessMap() {
   if (guessMap)
     return guessMap;
-  guessMap = L.map("sg-guess-map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(guessMap);
+  guessMap = L.map("sg-guess-map", { attributionControl: false }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+  createMapLayers(guessMap, {
+    root: document.getElementById("sg-guess-map-layers"),
+    onAttribution: (text) => {
+      const attributionEl = document.getElementById("sg-guess-map-attribution");
+      if (attributionEl)
+        attributionEl.textContent = text;
+    }
+  });
   guessMap.on("click", (event) => placeGuessMarker(event.latlng));
   return guessMap;
 }
@@ -342,7 +367,7 @@ function placeGuessMarker(latlng) {
   }
   el("sg-submit-guess-btn").disabled = false;
 }
-function resetGuessMap() {
+function resetGuessMap(bounds) {
   const map = ensureGuessMap();
   if (guessMarker) {
     map.removeLayer(guessMarker);
@@ -357,7 +382,11 @@ function resetGuessMap() {
     resultLine = null;
   }
   el("sg-submit-guess-btn").disabled = true;
-  map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+  if (bounds) {
+    map.fitBounds(bounds, { padding: [20, 20] });
+  } else {
+    map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+  }
 }
 function renderLobbyParticipants(participants) {
   const list = el("sg-lobby-participants");
@@ -405,6 +434,7 @@ function renderRound(round, roundNumber) {
   el("sg-reveal-panel").hidden = true;
   el("sg-round-status").textContent = `Round ${roundNumber} of ${totalRounds}`;
   el("sg-score-status").textContent = isMultiplayer ? "" : `Score: ${sessionScore}`;
+  el("sg-game-settings-btn").hidden = isMultiplayer;
   const photo = el("sg-round-photo");
   const nameHeading = el("sg-round-name");
   const pinSearchWrap = el("sg-pin-search-wrap");
@@ -422,7 +452,7 @@ function renderRound(round, roundNumber) {
   el("sg-date-field").hidden = !dateGuessingEnabled;
   el("sg-photo-feedback").hidden = true;
   el("sg-photo-feedback-thanks").hidden = true;
-  resetGuessMap();
+  resetGuessMap(round.geo_bounds);
   setTimeout(() => guessMap?.invalidateSize(), 0);
 }
 function avatarInitial(username) {
@@ -490,7 +520,7 @@ function renderResultsList(results) {
     profileId: result.profile_id,
     username: result.username,
     avatarUrl: result.avatar_url,
-    points: result.points + result.date_points,
+    points: result.points + result.date_points + result.bonus_points,
     subtitle: `${(result.distance_meters / 1000).toFixed(2)} km away`
   })), { solo: false });
 }
@@ -501,7 +531,7 @@ function updateScoreboardFromResults(results) {
       entry = { profile_id: result.profile_id, username: result.username, avatar_url: result.avatar_url, total_points: 0 };
       scoreboard.push(entry);
     }
-    entry.total_points += result.points + result.date_points;
+    entry.total_points += result.points + result.date_points + result.bonus_points;
   }
   renderScoreboard();
   const list = el("sg-scoreboard");
@@ -523,15 +553,18 @@ function renderScoreboard() {
   renderScoreCardList(list, scoreboard.map((entry) => ({ profileId: entry.profile_id, username: entry.username, avatarUrl: entry.avatar_url, points: entry.total_points })), { solo: false });
 }
 function showPhotoFeedbackIfApplicable() {
-  el("sg-photo-feedback").hidden = currentMode !== "photos";
+  el("sg-photo-feedback").hidden = !["photos", "street_view"].includes(currentMode);
   el("sg-photo-feedback-thanks").hidden = true;
 }
 function dropInMarker(marker) {
   marker.getElement()?.classList.add("spotguessr-marker-drop");
 }
+function bonusSuffix(bonusPoints, bonusTiers) {
+  return bonusPoints ? ` (+${bonusPoints} bonus: ${bonusTiers.join(", ")})` : "";
+}
 function showReveal(reveal) {
   el("sg-submit-guess-btn").disabled = true;
-  sessionScore += reveal.points + reveal.date_points;
+  sessionScore += reveal.points + reveal.date_points + reveal.bonus_points;
   el("sg-score-status").textContent = isMultiplayer ? "" : `Score: ${sessionScore}`;
   showPhotoFeedbackIfApplicable();
   const distanceKm = (reveal.distance_meters / 1000).toFixed(2);
@@ -541,6 +574,7 @@ function showReveal(reveal) {
     let detail2 = `${reveal.points} points – ${distanceKm} km away. Waiting for other players…`;
     if (reveal.date_points)
       detail2 = `${reveal.points} points (+${reveal.date_points} for the date guess) – ${distanceKm} km away. Waiting for other players…`;
+    detail2 += bonusSuffix(reveal.bonus_points, reveal.bonus_tiers);
     el("sg-reveal-detail").textContent = detail2;
     el("sg-reveal-results").hidden = true;
     el("sg-next-round-btn").hidden = true;
@@ -563,6 +597,7 @@ function showReveal(reveal) {
   let detail = `${reveal.points} points – ${distanceKm} km away`;
   if (reveal.date_points)
     detail += ` (+${reveal.date_points} for the date guess)`;
+  detail += bonusSuffix(reveal.bonus_points, reveal.bonus_tiers);
   el("sg-reveal-detail").textContent = detail;
   el("sg-reveal-results").hidden = true;
   el("sg-next-round-btn").hidden = isMultiplayer;
@@ -616,7 +651,6 @@ async function startGame(mode) {
     mode: currentMode,
     difficulty: String(currentDifficulty()),
     total_rounds: el("sg-rounds").value,
-    external_media_only: el("sg-external-media-only").checked ? "on" : "off",
     allow_arbitrary_external_photos: el("sg-allow-arbitrary-external-photos").checked ? "on" : "off",
     require_visited_all: el("sg-require-visited-all").checked ? "on" : "off",
     date_guessing_enabled: dateGuessingEnabled ? "on" : "off",
@@ -739,10 +773,44 @@ function resetToSettings() {
   el("sg-empty-state-panel").hidden = true;
   el("sg-settings-panel").hidden = false;
 }
+function activeFilterLabels() {
+  const labels = [];
+  if (el("sg-require-visited-all").checked)
+    labels.push("Only places I've visited");
+  if (el("sg-restrict-area").checked && currentGeoBoundsGeoJson())
+    labels.push("Restricted to a chosen area");
+  return labels;
+}
+function clearActiveFilters() {
+  el("sg-require-visited-all").checked = false;
+  clearAreaGeometry();
+}
 function showNoEligibleLocations() {
+  const mode = currentMode;
   resetToSettings();
   el("sg-settings-panel").hidden = true;
   el("sg-empty-state-panel").hidden = false;
+  const filters = activeFilterLabels();
+  const filtersList = el("sg-empty-state-active-filters");
+  const clearBtn = el("sg-empty-state-clear-filters-btn");
+  filtersList.innerHTML = "";
+  if (filters.length) {
+    for (const label of filters) {
+      const item = document.createElement("li");
+      item.textContent = label;
+      filtersList.appendChild(item);
+    }
+    filtersList.hidden = false;
+    clearBtn.hidden = false;
+    clearBtn.onclick = () => {
+      clearActiveFilters();
+      el("sg-empty-state-panel").hidden = true;
+      startGame(mode);
+    };
+  } else {
+    filtersList.hidden = true;
+    clearBtn.hidden = true;
+  }
 }
 function initEmptyState() {
   el("sg-empty-state-settings-btn").addEventListener("click", () => {
@@ -764,14 +832,14 @@ function applyLastConfig() {
     }
   }
   el(`sg-difficulty-${nearestDifficulty}`).checked = true;
-  el("sg-external-media-only").checked = config.external_media_only;
   el("sg-allow-arbitrary-external-photos").checked = config.allow_arbitrary_external_photos;
   el("sg-date-guessing").checked = config.date_guessing_enabled;
   el("sg-use-aliases").checked = config.use_aliases;
   el("sg-require-visited-all").checked = config.require_visited_all;
   if (config.geo_bounds_geojson) {
     el("sg-restrict-area").checked = true;
-    el("sg-area-map-wrap").hidden = false;
+    el("sg-area-geo-bounds").value = JSON.stringify(config.geo_bounds_geojson);
+    el("sg-area-clear-btn").hidden = false;
     restoredGeoBounds = config.geo_bounds_geojson;
   }
 }
@@ -882,7 +950,6 @@ initRatingsToggle();
 initAreaRestriction();
 initAreaSearch();
 initPinSearch();
-initFriendPicker();
 initFriendListRetry();
 initEmptyState();
 initChat();
@@ -893,6 +960,7 @@ el("sg-start-form").addEventListener("submit", (event) => {
   el("sg-settings-dialog").close();
   startGame(mode);
 });
+el("sg-game-settings-btn").addEventListener("click", () => openSettingsDialog(currentMode));
 el("sg-submit-guess-btn").addEventListener("click", () => void submitGuess());
 el("sg-photo-thumbs-up-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_up"));
 el("sg-photo-thumbs-down-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_down"));

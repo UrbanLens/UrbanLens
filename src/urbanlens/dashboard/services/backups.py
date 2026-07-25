@@ -21,10 +21,19 @@ class BackupStats:
 
 
 def backup_files(backup_dir: Path | None = None) -> list[Path]:
+    from urbanlens.core.controllers.backups.db import is_backup_filename
+
     root = Path(backup_dir or app_settings.backups_dir)
     if not root.exists():
         return []
-    return sorted((p for p in root.iterdir() if p.is_file()), key=lambda p: p.stat().st_mtime, reverse=True)
+    # Only files matching DatabaseBackup's own naming scheme count - a stray non-backup file
+    # (or a `.tmp` left behind by a killed pg_dump) must never inflate admin-facing stats or
+    # be treated as a completed backup.
+    return sorted(
+        (p for p in root.iterdir() if p.is_file() and is_backup_filename(p.name)),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
 
 
 def collect_backup_stats(site_settings=None) -> BackupStats:

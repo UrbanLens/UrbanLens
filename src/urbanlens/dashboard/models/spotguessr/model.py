@@ -200,7 +200,7 @@ class GameSession(abstract.DashboardModel):
         mode: Which game mode this session plays.
         status: Lifecycle state.
         config: Snapshot of the settings this session was started with -
-            ``difficulty`` (0.0-1.0 slider), ``external_media_only``,
+            ``difficulty`` (0.0-1.0 slider), ``allow_arbitrary_external_photos``,
             ``require_visited_all``, ``date_guessing_enabled``, and
             ``geo_bounds`` (a GeoJSON polygon/bbox, or None). Snapshotted
             (not read live from preferences) so a session's rules stay
@@ -371,11 +371,12 @@ class GameRound(abstract.DashboardModel):
 class Guess(abstract.DashboardModel):
     """One participant's answer to one GameRound.
 
-    ``distance_meters``/``points``/``date_points`` are computed once at
-    submission time (``services.spotguessr.scoring``) and stored, rather
-    than recomputed on every read - a round's boundary-based target can
-    drift as the community edits the boundary later, and a settled guess
-    must not silently re-score itself when that happens.
+    ``distance_meters``/``points``/``date_points``/``bonus_points`` are
+    computed once at submission time (``services.spotguessr.scoring``,
+    ``services.spotguessr.geo_bonus``) and stored, rather than recomputed on
+    every read - a round's boundary-based target can drift as the community
+    edits the boundary later, and a settled guess must not silently re-score
+    itself when that happens.
     """
 
     guess_point = PointField(geography=True, srid=4326)
@@ -383,6 +384,11 @@ class Guess(abstract.DashboardModel):
     points = PositiveIntegerField(default=0)
     guessed_date = DateField(null=True, blank=True)
     date_points = PositiveIntegerField(default=0)
+    #: Country/state/city bonus (services.spotguessr.geo_bonus) - unlike
+    #: date_points, this folds into the Glicko outcome fraction (see
+    #: services.spotguessr.ratings) since admin-area correctness is the same
+    #: "know where this is" skill the rating measures.
+    bonus_points = PositiveIntegerField(default=0)
     submitted_at = DateTimeField(auto_now_add=True)
 
     round = ForeignKey(

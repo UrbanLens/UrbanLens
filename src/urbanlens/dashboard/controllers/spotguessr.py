@@ -76,15 +76,14 @@ def _joined_participant(profile: Profile, session: GameSession) -> GameSessionPa
     return participant
 
 
-def _parse_geo_bounds(request: HttpRequest) -> tuple[dict | None, JsonResponse | None]:
-    """Parse+validate the optional ``geo_bounds`` GeoJSON field.
+def _parse_geo_bounds(geo_bounds_raw: str | None) -> tuple[dict | None, JsonResponse | None]:
+    """Parse+validate an optional ``geo_bounds`` GeoJSON string.
 
     Returns:
         ``(geojson, None)`` on success, or ``(None, error_response)`` on
         failure - the caller should return ``error_response`` immediately
         when it's not None.
     """
-    geo_bounds_raw = request.POST.get("geo_bounds")
     try:
         geo_bounds_geojson = json.loads(geo_bounds_raw) if geo_bounds_raw else None
     except (TypeError, ValueError):
@@ -107,7 +106,7 @@ def _config_from_request(request: HttpRequest) -> tuple[spotguessr_session.GameC
     Returns:
         ``(config, None)`` on success, or ``(None, error_response)``.
     """
-    geo_bounds_geojson, error = _parse_geo_bounds(request)
+    geo_bounds_geojson, error = _parse_geo_bounds(request.POST.get("geo_bounds"))
     if error is not None:
         return None, error
 
@@ -118,7 +117,6 @@ def _config_from_request(request: HttpRequest) -> tuple[spotguessr_session.GameC
 
     config = spotguessr_session.GameConfig(
         difficulty=difficulty,
-        external_media_only=request.POST.get("external_media_only") == "on",
         allow_arbitrary_external_photos=request.POST.get("allow_arbitrary_external_photos") == "on",
         require_visited_all=request.POST.get("require_visited_all") == "on",
         date_guessing_enabled=request.POST.get("date_guessing_enabled") == "on",
@@ -150,6 +148,7 @@ def _url_templates() -> dict[str, str]:
     return {
         "start": reverse("spotguessr.start"),
         "pins": reverse("spotguessr.pins"),
+        "area_pin_count": reverse("spotguessr.area_pin_count"),
         "settings": reverse("spotguessr.settings"),
         "friends": reverse("spotguessr.friends"),
         "lobby": reverse("spotguessr.lobby", kwargs=session_kwargs),
@@ -190,7 +189,11 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
     def get(self, request: HttpRequest) -> HttpResponse:
         profile = _current_profile(request)
         preference, _ = SpotGuessrPreference.objects.get_or_create(profile=profile)
-        own_rating = PlayerModeRating.objects.filter(profile=profile, mode=SpotGuessrMode.PHOTOS).first()
+        # Whichever mode the player most recently played, not hardcoded to
+        # Photos - a rating for a Named Place/Street View-only player was
+        # updating correctly all along, the homepage chip just never looked
+        # at the right row (see docs/PROBLEMS.md/git history for the report).
+        own_rating = PlayerModeRating.objects.filter(profile=profile).order_by("-last_played_at").first()
 
         # An invite notification links here with ?session=<id> (there's no
         # dedicated per-session page - this single-page view holds all
@@ -207,7 +210,7 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
             {
                 "page_name": "spotguessr",
                 "own_rating": own_rating,
-                "friend_ratings": visible_friend_ratings(profile, SpotGuessrMode.PHOTOS),
+                "friend_ratings": visible_friend_ratings(profile),
                 "show_ratings_to_friends": preference.show_ratings_to_friends,
                 "last_config": preference.last_config,
                 "min_rounds": spotguessr_session.MIN_ROUNDS_PER_SESSION,
@@ -305,13 +308,19 @@ class SpotGuessrStartView(LoginRequiredMixin, View):
 
         round_ = spotguessr_session.get_or_create_round(game_session)
         if round_ is None:
-            # The pre-check above already ruled out "nothing eligible at
-            # all" - reaching None here means every eligible location was
-            # tried and failed to yield a playable round (e.g. no usable
-            # photo/name/imagery), a rarer failure that only surfaces once
-            # generation is attempted. Still a legitimate (if empty) finish.
+            # The pre-check above only ruled out "no location is pinned by
+            # everyone at all" - reaching None here means every eligible
+            # location was tried and failed to yield a playable round (e.g.
+            # no usable photo/name/imagery), a rarer failure that only
+            # surfaces once generation is attempted. This is the exact same
+            # "nothing playable" condition SpotGuessrBeginView/RoundView
+            # report as `no_eligible_locations` (rounds_played == 0,
+            # necessarily true for a session that was just created) - report
+            # it identically here instead of a fake "Game over! 0 pts"
+            # completed summary, which read as a real (if confusing) result
+            # rather than "nothing was actually playable."
             spotguessr_session.complete_session(game_session)
-            return JsonResponse({"session_id": game_session.pk, "finished": True, "summary": spotguessr_session.session_summary(game_session)})
+            return JsonResponse({"error_code": "no_eligible_locations"})
 
         return JsonResponse({"session_id": game_session.pk, "finished": False, "round": serializers.serialize_round(round_)})
 
@@ -451,12 +460,12 @@ class SpotGuessrGuessView(LoginRequiredMixin, View):
 
         guess_point = Point(longitude, latitude, srid=4326)
         try:
-            guess = spotguessr_session.submit_guess(round_, profile, guess_point, guessed_date)
+            guess, bonus_tiers = spotguessr_session.submit_guess(round_, profile, guess_point, guessed_date)
         except spotguessr_session.SpotGuessrError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
 
         round_.refresh_from_db()
-        return JsonResponse(serializers.serialize_reveal(round_, guess))
+        return JsonResponse(serializers.serialize_reveal(round_, guess, bonus_tiers))
 
 
 class SpotGuessrPhotoFeedbackView(LoginRequiredMixin, View):
@@ -533,6 +542,29 @@ class SpotGuessrPinsView(LoginRequiredMixin, View):
                 ],
             },
         )
+
+
+class SpotGuessrAreaPinCountView(LoginRequiredMixin, View):
+    """How many of the profile's own pins fall inside a candidate ``geo_bounds`` selection.
+
+    GET /spotguessr/area_pin_count/?geo_bounds=<geojson>
+
+    Lets the settings dialog show "N of your pins are in this area" the
+    moment a region is drawn/searched, instead of leaving the player to
+    guess whether their chosen area contains anything playable.
+    """
+
+    def get(self, request: HttpRequest) -> HttpResponse:
+        profile = _current_profile(request)
+        geo_bounds_geojson, error = _parse_geo_bounds(request.GET.get("geo_bounds"))
+        if error is not None:
+            return error
+        if geo_bounds_geojson is None:
+            return JsonResponse({"error": "geo_bounds is required."}, status=400)
+
+        geo_bounds = spotguessr_session.GameConfig(geo_bounds_geojson=geo_bounds_geojson).geo_bounds
+        count = Pin.objects.filter(profile=profile, location__point__within=geo_bounds).count()
+        return JsonResponse({"count": count})
 
 
 class SpotGuessrSummaryView(LoginRequiredMixin, View):

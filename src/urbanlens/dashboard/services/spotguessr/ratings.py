@@ -34,7 +34,10 @@ def apply_round_ratings(round_: GameRound, guesses: list[Guess]) -> None:
     location_opponents = []
 
     for guess in guesses:
-        fraction = max(0.0, min(1.0, guess.points / MAX_ROUND_POINTS))
+        # bonus_points (country/state/city) folds in here - it's the same
+        # "know where this is" skill the rating measures, unlike date_points
+        # (deliberately excluded - see Guess.bonus_points' docstring).
+        fraction = max(0.0, min(1.0, (guess.points + guess.bonus_points) / MAX_ROUND_POINTS))
         player_rating = PlayerModeRating.objects.get_or_create_for(guess.profile, mode)
         player_before = glicko2.Rating(mu=player_rating.mu, phi=player_rating.phi, sigma=player_rating.sigma)
 

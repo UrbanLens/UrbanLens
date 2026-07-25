@@ -152,6 +152,7 @@ urlpatterns = [
                 path("friends/", spotguessr.SpotGuessrFriendsView.as_view(), name="spotguessr.friends"),
                 path("start/", spotguessr.SpotGuessrStartView.as_view(), name="spotguessr.start"),
                 path("pins/", spotguessr.SpotGuessrPinsView.as_view(), name="spotguessr.pins"),
+                path("area_pin_count/", spotguessr.SpotGuessrAreaPinCountView.as_view(), name="spotguessr.area_pin_count"),
                 path("session/<int:session_id>/lobby/", spotguessr.SpotGuessrLobbyView.as_view(), name="spotguessr.lobby"),
                 path("session/<int:session_id>/invite/", spotguessr.SpotGuessrInviteView.as_view(), name="spotguessr.invite"),
                 path("session/<int:session_id>/join/", spotguessr.SpotGuessrJoinView.as_view(), name="spotguessr.join"),

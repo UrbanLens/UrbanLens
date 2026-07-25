@@ -10,6 +10,7 @@
  */
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
+import { createMapLayers } from "../shared/map-layers";
 
 declare const L: typeof import("leaflet");
 import type {} from "leaflet-draw";
@@ -19,6 +20,7 @@ declare global {
         SPOTGUESSR_URLS: {
             start: string;
             pins: string;
+            area_pin_count: string;
             settings: string;
             friends: string;
             lobby: string;
@@ -43,7 +45,6 @@ declare global {
 // SpotGuessrPreference, so the rounds slider always starts at the default.
 interface LastConfig {
     difficulty: number;
-    external_media_only: boolean;
     allow_arbitrary_external_photos: boolean;
     require_visited_all: boolean;
     date_guessing_enabled: boolean;
@@ -51,12 +52,16 @@ interface LastConfig {
     geo_bounds_geojson: GeoJSON.Geometry | null;
 }
 
+// [[south, west], [north, east]] - matches Leaflet's LatLngBoundsExpression shape directly.
+type GeoBoundsBox = [[number, number], [number, number]];
+
 interface RoundPayload {
     round_id: number;
     session_id: number;
     mode: string;
     sequence_index: number;
     revealed: boolean;
+    geo_bounds?: GeoBoundsBox | null;
     image_url?: string;
     display_text?: string | null;
     street_view_image?: string | null;
@@ -68,6 +73,8 @@ interface RevealPayload {
     distance_meters: number;
     points: number;
     date_points: number;
+    bonus_points: number;
+    bonus_tiers: string[];
     // Only present when `revealed` is true - see showReveal().
     actual_latitude?: number;
     actual_longitude?: number;
@@ -82,6 +89,7 @@ interface RoundRevealResult {
     distance_meters: number;
     points: number;
     date_points: number;
+    bonus_points: number;
 }
 
 interface RoundRevealBroadcast {
@@ -107,6 +115,7 @@ interface SessionPayload {
     status: string;
     total_rounds: number;
     host_profile_id: number;
+    geo_bounds?: GeoBoundsBox | null;
     participants: ParticipantPayload[];
 }
 
@@ -144,8 +153,11 @@ interface ChatMessagePayload {
 }
 
 const urls = window.SPOTGUESSR_URLS;
-const DEFAULT_CENTER: L.LatLngExpression = [39.5, -98.35];
-const DEFAULT_ZOOM = 4;
+// A true world view - both the area-restriction map and the guess map
+// should start zoomed all the way out when nothing more specific applies,
+// not centered on any one region.
+const DEFAULT_CENTER: L.LatLngExpression = [20, 0];
+const DEFAULT_ZOOM = 2;
 
 const pageEl = document.querySelector<HTMLElement>(".spotguessr-page");
 const myProfileId = Number(pageEl?.dataset.myProfileId ?? "0");
@@ -249,14 +261,15 @@ function openSettingsDialog(mode: string): void {
     el<HTMLInputElement>("sg-settings-mode").value = mode;
     updateModeVisibility();
     el<HTMLDialogElement>("sg-settings-dialog").showModal();
+    // The area map is always shown (not gated behind the "restrict to area"
+    // toggle) - build it the first time the dialog is opened, since a
+    // <dialog> without `open` has zero size before showModal() and Leaflet
+    // needs real size to lay out tiles correctly.
     if (areaMap) {
         // Already built while the dialog was previously closed (0-size) -
         // nudge Leaflet now that it's actually visible.
         areaMap.invalidateSize();
-    } else if (el<HTMLInputElement>("sg-restrict-area").checked) {
-        // First time the dialog's ever been opened with restrict-area
-        // already on (applyLastConfig pre-checked it) - build the map now
-        // that it has real size, and draw the restored region once.
+    } else {
         ensureAreaMap();
         if (restoredGeoBounds) {
             setAreaGeometry(restoredGeoBounds);
@@ -315,40 +328,71 @@ function ensureAreaMap(): L.Map {
 // Exactly one region is ever active - a new search selection or hand-drawn
 // polygon always replaces whatever was there before, matching the old
 // rectangle-only tool's single-shape behavior (no include/exclude sets).
+// Setting a region always turns "restrict to area" on - drawing/searching a
+// region is an unambiguous signal the player wants it applied; they can
+// still uncheck the toggle afterward to keep the shape but not apply it, or
+// use "Clear area" to drop it entirely.
 function setAreaGeometry(geometry: GeoJSON.Geometry): void {
     const map = ensureAreaMap();
     areaDrawnItems?.clearLayers();
     const layer = L.geoJSON(geometry as GeoJSON.GeoJsonObject);
     layer.eachLayer((shapeLayer) => areaDrawnItems?.addLayer(shapeLayer));
     el<HTMLInputElement>("sg-area-geo-bounds").value = JSON.stringify(geometry);
+    el<HTMLInputElement>("sg-restrict-area").checked = true;
+    el<HTMLButtonElement>("sg-area-clear-btn").hidden = false;
     const bounds = areaDrawnItems?.getBounds();
     if (bounds?.isValid()) map.fitBounds(bounds, { padding: [40, 40] });
+    void updateAreaPinCount();
+}
+
+function clearAreaGeometry(): void {
+    areaDrawnItems?.clearLayers();
+    el<HTMLInputElement>("sg-area-geo-bounds").value = "";
+    el<HTMLInputElement>("sg-restrict-area").checked = false;
+    el<HTMLButtonElement>("sg-area-clear-btn").hidden = true;
+    el("sg-area-pin-count").hidden = true;
+    areaMap?.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+}
+
+async function updateAreaPinCount(): Promise<void> {
+    const geoBounds = currentGeoBoundsGeoJson();
+    const countEl = el("sg-area-pin-count");
+    if (!geoBounds) {
+        countEl.hidden = true;
+        return;
+    }
+    let data: { count?: number };
+    try {
+        data = await getJson(`${urls.area_pin_count}?geo_bounds=${encodeURIComponent(geoBounds)}`);
+    } catch {
+        countEl.hidden = true;
+        return;
+    }
+    const count = data.count ?? 0;
+    countEl.textContent = count === 1 ? "1 of your pins is in this area." : `${count} of your pins are in this area.`;
+    countEl.hidden = false;
 }
 
 function initAreaRestriction(): void {
-    const toggle = el<HTMLInputElement>("sg-restrict-area");
-    const wrap = el("sg-area-map-wrap");
-    toggle.addEventListener("change", () => {
-        wrap.hidden = !toggle.checked;
-        if (!toggle.checked) return;
-        if (areaMap) {
-            areaMap.invalidateSize();
-            return;
-        }
-        ensureAreaMap();
-    });
+    el("sg-area-clear-btn").addEventListener("click", clearAreaGeometry);
 }
 
 async function searchAreaRegion(): Promise<void> {
     const input = el<HTMLInputElement>("sg-area-search-input");
     const query = input.value.trim();
+    const searchBtn = el<HTMLButtonElement>("sg-area-search-btn");
     const resultsEl = el("sg-area-search-results");
     const messageEl = el("sg-area-search-message");
     resultsEl.hidden = true;
     resultsEl.innerHTML = "";
-    messageEl.hidden = true;
-    if (!query || !regionSearchUrl) return;
+    messageEl.hidden = false;
+    messageEl.textContent = "Searching…";
+    if (!query || !regionSearchUrl) {
+        messageEl.hidden = true;
+        return;
+    }
 
+    searchBtn.disabled = true;
     let data: { results?: RegionSearchResult[] };
     try {
         data = await getJson(`${regionSearchUrl}?q=${encodeURIComponent(query)}`);
@@ -356,6 +400,8 @@ async function searchAreaRegion(): Promise<void> {
         messageEl.textContent = "Could not search for that place right now.";
         messageEl.hidden = false;
         return;
+    } finally {
+        searchBtn.disabled = false;
     }
 
     const results = data.results ?? [];
@@ -364,6 +410,7 @@ async function searchAreaRegion(): Promise<void> {
         messageEl.hidden = false;
         return;
     }
+    messageEl.hidden = true;
     const [onlyResult] = results;
     if (results.length === 1 && onlyResult) {
         setAreaGeometry(onlyResult.geojson);
@@ -427,10 +474,10 @@ async function loadFriendOptions(): Promise<FriendOption[]> {
     return friendOptions;
 }
 
-// Fetched unconditionally at page load (not gated behind the "Play with
-// friends" toggle) so the list is ready the moment someone opens that
-// section, instead of the old permanent "Loading friends..." whenever the
-// toggle was never successfully clicked.
+// Fetched unconditionally at page load so the friend list is ready the
+// moment the settings dialog opens - there's no separate opt-in toggle to
+// gate it behind (any friend selected just starts a multiplayer lobby
+// instead of a solo game).
 async function fetchFriendsEagerly(): Promise<void> {
     const loadingEl = el("sg-friend-list-loading");
     const errorEl = el("sg-friend-list-error");
@@ -485,20 +532,6 @@ function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[],
     }
 }
 
-function initFriendPicker(): void {
-    const toggle = el<HTMLInputElement>("sg-play-with-friends");
-    const wrap = el("sg-invite-wrap");
-    toggle.addEventListener("change", async () => {
-        wrap.hidden = !toggle.checked;
-        if (!toggle.checked) return;
-        // Friends are already fetched eagerly at page load (see
-        // fetchFriendsEagerly) - this await is just a safety net for the
-        // rare case the toggle is checked before that fetch resolves.
-        const friends = await loadFriendOptions();
-        renderFriendCheckboxes(el("sg-friend-list"), friends, new Set());
-    });
-}
-
 async function handleInviteMore(): Promise<void> {
     if (sessionId === null) return;
     const friends = await loadFriendOptions();
@@ -529,8 +562,14 @@ async function handleInviteMore(): Promise<void> {
 
 function ensureGuessMap(): L.Map {
     if (guessMap) return guessMap;
-    guessMap = L.map("sg-guess-map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(guessMap);
+    guessMap = L.map("sg-guess-map", { attributionControl: false }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    createMapLayers(guessMap, {
+        root: document.getElementById("sg-guess-map-layers"),
+        onAttribution: (text) => {
+            const attributionEl = document.getElementById("sg-guess-map-attribution");
+            if (attributionEl) attributionEl.textContent = text;
+        },
+    });
     guessMap.on("click", (event) => placeGuessMarker(event.latlng));
     return guessMap;
 }
@@ -545,7 +584,10 @@ function placeGuessMarker(latlng: L.LatLng): void {
     el<HTMLButtonElement>("sg-submit-guess-btn").disabled = false;
 }
 
-function resetGuessMap(): void {
+// When the session was configured with a geo_bounds restriction, the guess
+// map opens zoomed to that area instead of the default world view - see
+// docs/designs/spotguessr.md's eligibility rule 3.
+function resetGuessMap(bounds?: GeoBoundsBox | null): void {
     const map = ensureGuessMap();
     if (guessMarker) {
         map.removeLayer(guessMarker);
@@ -560,7 +602,11 @@ function resetGuessMap(): void {
         resultLine = null;
     }
     el<HTMLButtonElement>("sg-submit-guess-btn").disabled = true;
-    map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    if (bounds) {
+        map.fitBounds(bounds, { padding: [20, 20] });
+    } else {
+        map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -620,6 +666,11 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
     el("sg-reveal-panel").hidden = true;
     el("sg-round-status").textContent = `Round ${roundNumber} of ${totalRounds}`;
     el("sg-score-status").textContent = isMultiplayer ? "" : `Score: ${sessionScore}`;
+    // Changing settings mid-game starts an entirely new session (see
+    // sg-game-settings-btn's click handler) - safe to abandon a solo game in
+    // progress, but would desync a shared multiplayer session's other
+    // participants, so this is solo-only.
+    el<HTMLButtonElement>("sg-game-settings-btn").hidden = isMultiplayer;
 
     const photo = el<HTMLImageElement>("sg-round-photo");
     const nameHeading = el("sg-round-name");
@@ -640,7 +691,7 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
     el("sg-date-field").hidden = !dateGuessingEnabled;
     el("sg-photo-feedback").hidden = true;
     el("sg-photo-feedback-thanks").hidden = true;
-    resetGuessMap();
+    resetGuessMap(round.geo_bounds);
     // The map container was hidden (display:none) while another panel was
     // showing, so Leaflet needs a nudge once it's visible again.
     setTimeout(() => guessMap?.invalidateSize(), 0);
@@ -729,7 +780,7 @@ function renderResultsList(results: RoundRevealResult[]): void {
             profileId: result.profile_id,
             username: result.username,
             avatarUrl: result.avatar_url,
-            points: result.points + result.date_points,
+            points: result.points + result.date_points + result.bonus_points,
             subtitle: `${(result.distance_meters / 1000).toFixed(2)} km away`,
         })),
         { solo: false },
@@ -743,7 +794,7 @@ function updateScoreboardFromResults(results: RoundRevealResult[]): void {
             entry = { profile_id: result.profile_id, username: result.username, avatar_url: result.avatar_url, total_points: 0 };
             scoreboard.push(entry);
         }
-        entry.total_points += result.points + result.date_points;
+        entry.total_points += result.points + result.date_points + result.bonus_points;
     }
     renderScoreboard();
     // Pulse whichever cards actually changed this round - renderScoreboard()
@@ -776,9 +827,9 @@ function showPhotoFeedbackIfApplicable(): void {
     // The photo itself (unlike the answer) has been visible since the round
     // started, whether or not everyone's guessed yet - so feedback on it is
     // always fair game once there's a reveal panel to put the buttons in.
-    // Street View also shows imagery, but only Photos-mode rounds have a
-    // `round.image` for GamePhotoFeedback to attach to server-side.
-    el("sg-photo-feedback").hidden = currentMode !== "photos";
+    // Photos and Street View both show real imagery worth reacting to;
+    // Named Place shows only text.
+    el("sg-photo-feedback").hidden = !["photos", "street_view"].includes(currentMode);
     el("sg-photo-feedback-thanks").hidden = true;
 }
 
@@ -786,9 +837,16 @@ function dropInMarker(marker: L.Marker): void {
     marker.getElement()?.classList.add("spotguessr-marker-drop");
 }
 
+// e.g. "+750 bonus (country, state, city)" - the exact per-tier point
+// values live server-side (services.spotguessr.geo_bonus) to avoid drift;
+// the client just reports the total and which tiers matched.
+function bonusSuffix(bonusPoints: number, bonusTiers: string[]): string {
+    return bonusPoints ? ` (+${bonusPoints} bonus: ${bonusTiers.join(", ")})` : "";
+}
+
 function showReveal(reveal: RevealPayload): void {
     el<HTMLButtonElement>("sg-submit-guess-btn").disabled = true;
-    sessionScore += reveal.points + reveal.date_points;
+    sessionScore += reveal.points + reveal.date_points + reveal.bonus_points;
     el("sg-score-status").textContent = isMultiplayer ? "" : `Score: ${sessionScore}`;
     showPhotoFeedbackIfApplicable();
 
@@ -803,6 +861,7 @@ function showReveal(reveal: RevealPayload): void {
         el("sg-reveal-title").textContent = "Guess submitted!";
         let detail = `${reveal.points} points – ${distanceKm} km away. Waiting for other players…`;
         if (reveal.date_points) detail = `${reveal.points} points (+${reveal.date_points} for the date guess) – ${distanceKm} km away. Waiting for other players…`;
+        detail += bonusSuffix(reveal.bonus_points, reveal.bonus_tiers);
         el("sg-reveal-detail").textContent = detail;
         el("sg-reveal-results").hidden = true;
         el<HTMLButtonElement>("sg-next-round-btn").hidden = true;
@@ -827,6 +886,7 @@ function showReveal(reveal: RevealPayload): void {
     el("sg-reveal-title").textContent = reveal.location_name || "Revealed!";
     let detail = `${reveal.points} points – ${distanceKm} km away`;
     if (reveal.date_points) detail += ` (+${reveal.date_points} for the date guess)`;
+    detail += bonusSuffix(reveal.bonus_points, reveal.bonus_tiers);
     el("sg-reveal-detail").textContent = detail;
     el("sg-reveal-results").hidden = true; // filled in by the round.revealed broadcast, for multiplayer
     el<HTMLButtonElement>("sg-next-round-btn").hidden = isMultiplayer; // multiplayer advances automatically
@@ -892,7 +952,6 @@ async function startGame(mode: string): Promise<void> {
         mode: currentMode,
         difficulty: String(currentDifficulty()),
         total_rounds: el<HTMLInputElement>("sg-rounds").value,
-        external_media_only: el<HTMLInputElement>("sg-external-media-only").checked ? "on" : "off",
         allow_arbitrary_external_photos: el<HTMLInputElement>("sg-allow-arbitrary-external-photos").checked ? "on" : "off",
         require_visited_all: el<HTMLInputElement>("sg-require-visited-all").checked ? "on" : "off",
         date_guessing_enabled: dateGuessingEnabled ? "on" : "off",
@@ -1021,13 +1080,52 @@ function resetToSettings(): void {
     el("sg-settings-panel").hidden = false;
 }
 
+// Which currently-checked settings could plausibly be why nothing matched -
+// shown on the empty state so the player isn't left guessing (a restrictive
+// carried-over filter is a common, non-obvious cause - see
+// controllers.spotguessr.SpotGuessrStartView's docstring).
+function activeFilterLabels(): string[] {
+    const labels: string[] = [];
+    if (el<HTMLInputElement>("sg-require-visited-all").checked) labels.push("Only places I've visited");
+    if (el<HTMLInputElement>("sg-restrict-area").checked && currentGeoBoundsGeoJson()) labels.push("Restricted to a chosen area");
+    return labels;
+}
+
+function clearActiveFilters(): void {
+    el<HTMLInputElement>("sg-require-visited-all").checked = false;
+    clearAreaGeometry();
+}
+
 // Distinguishes "never got to play a single round because nothing eligible
 // matched this mode/settings combination" from a real completed game -
 // see controllers.spotguessr's error_code/no_eligible_locations shapes.
 function showNoEligibleLocations(): void {
+    const mode = currentMode;
     resetToSettings();
     el("sg-settings-panel").hidden = true;
     el("sg-empty-state-panel").hidden = false;
+
+    const filters = activeFilterLabels();
+    const filtersList = el("sg-empty-state-active-filters");
+    const clearBtn = el<HTMLButtonElement>("sg-empty-state-clear-filters-btn");
+    filtersList.innerHTML = "";
+    if (filters.length) {
+        for (const label of filters) {
+            const item = document.createElement("li");
+            item.textContent = label;
+            filtersList.appendChild(item);
+        }
+        filtersList.hidden = false;
+        clearBtn.hidden = false;
+        clearBtn.onclick = () => {
+            clearActiveFilters();
+            el("sg-empty-state-panel").hidden = true;
+            void startGame(mode);
+        };
+    } else {
+        filtersList.hidden = true;
+        clearBtn.hidden = true;
+    }
 }
 
 function initEmptyState(): void {
@@ -1057,7 +1155,6 @@ function applyLastConfig(): void {
     }
     el<HTMLInputElement>(`sg-difficulty-${nearestDifficulty}`).checked = true;
 
-    el<HTMLInputElement>("sg-external-media-only").checked = config.external_media_only;
     el<HTMLInputElement>("sg-allow-arbitrary-external-photos").checked = config.allow_arbitrary_external_photos;
     el<HTMLInputElement>("sg-date-guessing").checked = config.date_guessing_enabled;
     el<HTMLInputElement>("sg-use-aliases").checked = config.use_aliases;
@@ -1065,7 +1162,14 @@ function applyLastConfig(): void {
 
     if (config.geo_bounds_geojson) {
         el<HTMLInputElement>("sg-restrict-area").checked = true;
-        el("sg-area-map-wrap").hidden = false;
+        // Populate the hidden input immediately (just a value assignment,
+        // no map needed) so a "quick start" from a mode card - which never
+        // opens this dialog at all - still sends the geo_bounds that
+        // "restrict to area" implies. Drawing it onto the actual map is
+        // deferred to openSettingsDialog(), which needs the dialog visible
+        // first for Leaflet to lay out correctly.
+        el<HTMLInputElement>("sg-area-geo-bounds").value = JSON.stringify(config.geo_bounds_geojson);
+        el<HTMLButtonElement>("sg-area-clear-btn").hidden = false;
         restoredGeoBounds = config.geo_bounds_geojson;
     }
 }
@@ -1195,7 +1299,6 @@ initRatingsToggle();
 initAreaRestriction();
 initAreaSearch();
 initPinSearch();
-initFriendPicker();
 initFriendListRetry();
 initEmptyState();
 initChat();
@@ -1206,6 +1309,7 @@ el("sg-start-form").addEventListener("submit", (event) => {
     el<HTMLDialogElement>("sg-settings-dialog").close();
     void startGame(mode);
 });
+el("sg-game-settings-btn").addEventListener("click", () => openSettingsDialog(currentMode));
 el("sg-submit-guess-btn").addEventListener("click", () => void submitGuess());
 el("sg-photo-thumbs-up-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_up"));
 el("sg-photo-thumbs-down-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_down"));
