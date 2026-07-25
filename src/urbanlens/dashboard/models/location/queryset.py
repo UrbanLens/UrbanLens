@@ -8,6 +8,7 @@ from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 
 # Django Imports
+from django.db import IntegrityError
 from django.db.models import Q
 
 # App Imports
@@ -144,7 +145,17 @@ class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuer
             "longitude": longitude,
             **(defaults or {}),
         }
-        location = self.create(**location_data)
+        try:
+            location = self.create(**location_data)
+        except IntegrityError:
+            # A concurrent request created a Location at these exact coordinates between
+            # the existence check above and this insert (the (latitude, longitude)
+            # unique_together constraint) - return that row instead of letting the race
+            # surface as an unhandled 500.
+            existing_locations = self.filter(point__distance_lte=(point, D(m=threshold_meters)))
+            if existing_locations.exists():
+                return existing_locations.first(), False
+            raise
 
         # Return the new location and True for 'created'
         return location, True

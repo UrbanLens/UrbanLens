@@ -7,6 +7,7 @@ from __future__ import annotations
 import datetime
 import json
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 from asgiref.sync import async_to_sync
 from channels.testing import WebsocketCommunicator
@@ -334,6 +335,43 @@ class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
         await database_sync_to_async(remove_checkin_partner)(partner)
 
         close_message = await partner_comm.receive_output()
+        self.assertEqual(close_message["type"], "websocket.close")
+        self.assertEqual(close_message.get("code"), 4404)
+
+    def test_dropped_revocation_broadcast_is_caught_by_periodic_revalidation(self):
+        """Regression guard: partner_access_revoked (the group_send remove_checkin_partner
+        fires) is best-effort, like every other broadcast in this module - if it's ever
+        lost (a channel-layer hiccup), the periodic re-validation backstop must still
+        close the connection on its own, rather than leaving it open indefinitely.
+        """
+        _run(self._dropped_revocation_broadcast_is_caught_by_periodic_revalidation())
+
+    async def _dropped_revocation_broadcast_is_caught_by_periodic_revalidation(self):
+        from channels.db import database_sync_to_async
+
+        @database_sync_to_async
+        def _make_accepted_partner():
+            partner_user = baker.make("auth.User")
+            partner = SafetyCheckinPartner.objects.create(
+                checkin=self.checkin,
+                profile=partner_user.profile,
+                invited_by=self.owner_profile,
+                status=SafetyCheckinPartnerStatus.ACCEPTED,
+            )
+            return partner_user, partner
+
+        partner_user, partner = await _make_accepted_partner()
+        with patch("urbanlens.dashboard.consumers._PARTNER_REVALIDATION_INTERVAL_SECONDS", 0.05):
+            partner_comm = self._session_communicator(partner_user)
+            connected, _ = await partner_comm.connect()
+            self.assertTrue(connected)
+
+            # Remove the row directly via the ORM - unlike remove_checkin_partner, this
+            # fires no partner_access_revoked broadcast at all, simulating one that was
+            # lost in transit.
+            await database_sync_to_async(SafetyCheckinPartner.objects.filter(pk=partner.pk).delete)()
+
+            close_message = await partner_comm.receive_output(timeout=2)
         self.assertEqual(close_message["type"], "websocket.close")
         self.assertEqual(close_message.get("code"), 4404)
 

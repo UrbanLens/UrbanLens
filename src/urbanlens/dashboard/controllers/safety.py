@@ -55,6 +55,7 @@ from urbanlens.dashboard.services.safety import (
     validate_notifiable_contacts,
     wiki_notify_stats,
 )
+from urbanlens.dashboard.services.undo.handlers.safety_checkin import MODEL_LABEL as SAFETY_CHECKIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 if TYPE_CHECKING:
@@ -928,7 +929,7 @@ class SafetyCheckinDeleteView(LoginRequiredMixin, View):
         checkin = _get_checkin_by_slug(profile, checkin_slug)
         if not checkin.is_resolved:
             check_in(checkin, profile)
-        stash_for_undo("safety_checkin", [checkin], profile)
+        stash_for_undo(SAFETY_CHECKIN_MODEL_LABEL, [checkin], profile)
         checkin.delete()
         messages.success(request, "Check-in deleted. You can undo this from Settings → Undo History within 7 days.")
         return redirect("safety.home")
@@ -1350,6 +1351,12 @@ class SafetyCheckinMapAttachView(LoginRequiredMixin, View):
             markup_map = MarkupMap.objects.get(uuid=map_uuid, profile=profile)
         except (MarkupMap.DoesNotExist, ValidationError, ValueError):
             return HttpResponseBadRequest("Invalid map.")
+        if markup_map.pk == checkin.markup_map_id:
+            # The picker (SafetyCheckinMapPickerView) already excludes the primary map from
+            # its candidate list, but that's UI-only - re-enforce it here too, since
+            # services.safety._build_archive_payload's "maps" list is keyed by primary map
+            # first and would otherwise carry the same map twice once archived.
+            return HttpResponseBadRequest("This map is already the check-in's primary route map.")
         checkin.markup_maps.add(markup_map)
         return HttpResponse(_render_attached_maps(request, checkin))
 
@@ -1439,20 +1446,21 @@ class SafetyGalleryView(LoginRequiredMixin, View):
         checksum = compute_checksum(image_file)
         if Image.objects.filter(safety_checkin=checkin, checksum=checksum).exists():
             return JsonResponse({"error": "That photo is already on this check-in."}, status=409)
-        from urbanlens.dashboard.services.storage import quota_error_for_upload
+        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
 
-        quota_error = quota_error_for_upload(profile, image_file.size)
-        if quota_error:
-            return JsonResponse({"error": quota_error}, status=413)
-        img = Image.objects.create(
-            image=image_file,
-            safety_checkin=checkin,
-            location=checkin.destination_location,
-            profile=profile,
-            caption=request.POST.get("caption", "").strip() or None,
-            checksum=checksum,
-            file_size=image_file.size,
-        )
+        with per_profile_upload_lock(profile):
+            quota_error = quota_error_for_upload(profile, image_file.size)
+            if quota_error:
+                return JsonResponse({"error": quota_error}, status=413)
+            img = Image.objects.create(
+                image=image_file,
+                safety_checkin=checkin,
+                location=checkin.destination_location,
+                profile=profile,
+                caption=request.POST.get("caption", "").strip() or None,
+                checksum=checksum,
+                file_size=image_file.size,
+            )
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 

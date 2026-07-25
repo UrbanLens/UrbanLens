@@ -171,21 +171,25 @@ class NominatimGateway(Gateway):
 
         Returns:
             ``{"country": ..., "state": ..., "city": ...}`` (each possibly
-            an empty string if Nominatim didn't report it), or None on
-            error/no result.
+            an empty string if Nominatim didn't report it), or None if
+            Nominatim returned a genuine "nothing found" response.
+
+        Raises:
+            Exception: on a request/transport failure (including a
+                ``RateLimitExceededError`` from the shared rate-limited
+                session) - deliberately NOT swallowed to None here, so a
+                transient failure isn't indistinguishable from a real
+                "no result" to ``geo_bonus``'s caching layer (which gives
+                the two cases very different TTLs; see its docstring).
         """
-        try:
-            params: dict[str, str | int | float] = {"lat": latitude, "lon": longitude, "format": "json", "addressdetails": 1}
-            resp = self.session.get(
-                f"{self.base_url}/reverse",
-                params=params,
-                timeout=10,
-            )
-            resp.raise_for_status()
-            raw = resp.json()
-        except Exception:
-            logger.exception("Nominatim admin reverse geocode failed for %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
-            return None
+        params: dict[str, str | int | float] = {"lat": latitude, "lon": longitude, "format": "json", "addressdetails": 1}
+        resp = self.session.get(
+            f"{self.base_url}/reverse",
+            params=params,
+            timeout=10,
+        )
+        resp.raise_for_status()
+        raw = resp.json()
 
         if "error" in raw:
             return None

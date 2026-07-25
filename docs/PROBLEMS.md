@@ -571,6 +571,35 @@ for that fix: `.pin-list-more-menu-danger` (`color: #ef4444 !important`, ~line 3
 are likely a quick follow-up: swap the raw hex for `var(--ul-color-danger-text, <original-hex>)`
 the same way the region-mode buttons were fixed.
 
+## Safety check-in partners: two residual gaps found during a fresh-eyes feature review (2026-07-25)
+
+A full review of the partner/live-location/post-resolution-encryption feature (two independent
+review agents, backend-correctness and frontend-security) found and fixed nine issues directly
+in `services/safety.py`/`consumers.py`/`tasks.py`/`models/safety/model.py` (archival payload not
+capturing/severing `destination_location`/`trip`/`markup_map`/`markup_maps`, `archive_checkin`
+non-atomicity, chat messages postable after archival, three TOCTOU races, a missing index, an
+N+1, and no live-connection revocation on partner removal - all covered by new tests in
+`test_safety_archival.py`/`test_safety_partners.py`/`test_safety_live_location.py`/`test_safety.py`).
+Two narrower items were identified but deliberately left open:
+
+- **Blocking a partner doesn't revoke their existing access.** `Profile.are_blocked` creation has
+  no signal wired to `SafetyCheckinPartner` cleanup - blocking someone who is already an accepted
+  partner on one of your check-ins leaves that `SafetyCheckinPartner` row (and any open WebSocket
+  connection) intact. `remove_checkin_partner` now correctly force-closes a live connection and
+  is the right mechanism to call, but nothing currently calls it from the blocking flow. Fix would
+  be a signal/hook on block-creation that calls `remove_checkin_partner` for every
+  `SafetyCheckinPartner` row between the two profiles (either direction).
+- **A malformed/corrupted `MessagingKeyBundle.public_key` makes `archive_checkin` fail forever,
+  loudly but without escalation.** `archive_checkin` now isolates one checkin's failure from
+  others in the 5-minute sweep (a bad row no longer blocks the rest of the batch) and every
+  attempt is logged via `logger.exception`, but there's still no cap or alerting on repeated
+  failures for the *same* checkin - it will silently retry and re-fail every 5 minutes
+  indefinitely if a specific owner's key bundle is genuinely corrupt, with only a log line as the
+  trail. Not expected to happen in practice (enrollment writes a fresh valid key), but there's no
+  guard against it happening anyway (e.g. a future data-migration bug). Worth a "give up and flag
+  for manual review after N failed attempts" backstop if this class of bug ever surfaces in
+  practice.
+
 ## `test_post_without_name_returns_400` is stale against UL-360's optional-name behavior
 
 `test_trip_controller.py::TripCreateViewTests::test_post_without_name_returns_400` (line ~224)
@@ -582,3 +611,114 @@ submission has deliberately generated a random name instead of rejecting the req
 shipped (2026-07-24, see the Feature build entry above). The test predates that change and was
 never updated; it should either assert `200` + a non-empty generated `trip.name`, or be deleted
 if UL-360's own test coverage (`test_trip_names.py`?) already covers the generated-name path.
+
+---
+
+## Full-codebase audit: re-verification pass (2026-07-25)
+
+After the initial 35-unit audit (above) was worked through fix-by-fix in an earlier session, six
+independent re-verification passes re-read every finding in `docs/notes/ai/codebase-audit.md`
+against the current code (not trusting the earlier session's own claims) and reported per-finding
+FIXED/PARTIALLY-FIXED/NOT-FIXED/REGRESSED verdicts. Most findings held up as genuinely fixed; the
+handful of regressions and higher-value gaps the re-verification surfaced were fixed directly in
+this pass:
+
+- **`services/ai/openai.py`'s `get_client()`** unconditionally passed `base_url=str(self.api_url)`
+  to the OpenAI SDK. `OpenAIGateway.setup()` never actually sets `api_url` (unlike the
+  Cloudflare/HuggingFace gateways), so this was always `str(None)` - the literal string `"None"` -
+  meaning a real OpenAI call would have tried to connect to that instead of the SDK's real default
+  endpoint. Pre-existing bug, not a regression from the earlier fix pass; now only passes
+  `base_url` when set.
+- **SpotGuessr's new reverse-geocode cache (`services/spotguessr/geo_bonus.py`) treated a rate-limit
+  failure as a genuine "no result" and cached it for the full 30-day TTL** - a transient Nominatim
+  rate-limit hit (the exact failure mode the cache exists to work around) would have silently
+  disabled the country/state/city bonus for an entire ~111m cell for a month. `reverse_geocode_admin`
+  (`services/apis/locations/nominatim.py`) now lets request/transport failures propagate instead of
+  swallowing them to `None`, and `geo_bonus.py` gives a failed lookup a 60-second TTL instead of 30
+  days, while a genuine "nothing found" result still gets the long TTL.
+- **The undo framework's `stash_for_undo()` calls in `pin_bulk.py`, `detail_pins.py` (×2), and
+  `location_wiki.py` ran *before* the `transaction.atomic()` block wrapping the delete**, with a
+  comment claiming the atomic wrapper prevented a partial-delete-with-stashed-undo inconsistency -
+  it didn't, since the stash (an immediate `UndoAction.objects.create()`) had already committed
+  before the atomic block even opened. Moved the stash call inside each atomic block, before the
+  delete, so a mid-delete failure now rolls back both together.
+- **The storage-quota check-then-create race (`services/storage.py`'s `per_profile_upload_lock`)
+  was only wired up at 2 of 8 call sites** (`photos.py`, `image_gallery.py`) - `article.py`,
+  `direct_messages.py`, `maps.py`, `safety.py`, `tools.py`, and `visits.py` still raced. All six now
+  wrap their check-then-create in `per_profile_upload_lock`.
+- **`LocationManager.get_nearby_or_create()`** (unlike `PinManager`'s already-fixed version) had no
+  `try/except IntegrityError` around its `create()` call, despite `Location` having a real
+  `unique_together = ["latitude", "longitude"]` constraint that two concurrent requests creating a
+  Location at the exact same coordinates could hit. Now catches it and returns the
+  concurrently-created row, matching `PinManager`'s pattern.
+- **`services/direct_messages.py`'s email/text-alert debounce (`is_email_debounced`/
+  `is_text_alert_debounced`) was still a plain `cache.get()` check-then-later-`cache.set()`** - the
+  same TOCTOU shape already fixed in the sibling `notification_text_alerts.py` via atomic
+  `cache.add()`. Ported the same fix; the now-redundant `cache.set()` calls inside
+  `send_message_email_now`/`send_message_text_alerts_now` were removed since the marker is claimed
+  atomically by the check itself. (`test_direct_messages.py`'s debounce test was rewritten to
+  exercise this through the real task entry point, matching how the sibling module's tests already
+  verify the same pattern.)
+- **`services/ai/assistant.py`'s `_tool_add_trip_activity`** had the identical TOCTOU race
+  (`trip.activities.count() >= max_activities` check-then-create) that `_tool_create_trip` and
+  `link_extraction.start_link_extraction` had just been fixed for in the same pass - it wasn't
+  itself covered. Now locks the `Trip` row (not the profile - the count is per-trip, and other
+  members can add activities to the same trip) for the check-then-create.
+- **Duplicate, conflicting dark-mode CSS for `.subscription-admin-page .role-pill`** - independent
+  fix passes had added a `[data-theme="dark"]` override in both `_admin.scss` and `_dark.scss`,
+  with different colors; `_admin.scss`'s `@use` order meant its version always won, making the
+  `_dark.scss` copy dead and misleading. Removed the dead copy.
+- **The undo framework's `MODEL_LABEL` constants** (added to `handlers/pin.py`, `handlers/wiki.py`,
+  `handlers/safety_checkin.py` specifically to stop call sites hand-typing `"pin"`/`"wiki"`/
+  `"safety_checkin"` as bare strings) were never actually imported at any of the ~8
+  `stash_for_undo(...)` call sites - the fix added the constants but didn't wire them up. Added the
+  missing `MODEL_LABEL` constants to `handlers/saved_filter.py`/`handlers/trip.py` and updated every
+  call site (`pin_bulk.py`, `detail_pins.py`, `location_wiki.py`, `safety.py`, `saved_filters.py`,
+  `trip.py`, `models/pin/viewset.py`) to import and use the shared constant instead of a literal.
+
+**Confirmed still open** (verified genuinely unfixed, not worth blocking on for this pass - listed
+here so the next session doesn't have to re-derive them from `docs/notes/ai/codebase-audit.md`'s
+full per-unit detail):
+
+- `services/direct_messages.py`'s TOCTOU fix above only covers the DM email/text debounce; the
+  underlying **`quota_error_for_upload`/`per_profile_upload_lock` pattern itself is a "soft" lock**
+  (proceeds without the lock if it can't be acquired promptly) - fine for its stated purpose but
+  worth remembering it's not a hard guarantee.
+- **Unit 08**: `pin.py`'s `media_send_to_wiki` still synchronously downloads up to 20 media items
+  in the request handler; no shared upload helper exists despite the sequence being duplicated
+  across ~8 call sites now sharing the same lock.
+- **Unit 09/10**: bulk-accept/reject's per-item failures still aren't surfaced in the frontend
+  toast; both trip-invite paths and calendar-push still loop per-invitee/per-activity without
+  batching or debounce; `TripActivity.order` still has no uniqueness constraint or locking.
+- **Unit 13/14/19**: `controllers/labels.py`'s `ai_kind_enabled`/`keyword_kind_enabled` duplication
+  between `.get`/`.post` is unchanged; `NotificationPreference` still only models 12 of 30
+  `NotificationType` values; no admin can see/revoke another admin's subscription grants; no
+  restore tooling exists for the Postgres backups.
+- **Unit 20**: `PinSerializer.create()` and `parse_for_preview` still make synchronous/blocking AI
+  calls in the request cycle rather than via Celery; `services/ai/huggingface.py` is still an
+  unwired, `NotImplementedError`-raising stub (now explicitly documented as such, rather than a
+  silent dead end).
+- **Unit 21/22/23**: `models/pin/viewset.py`'s post-`get_object()` ownership re-check is still dead
+  code (queryset already filters it); `GroupMessage` still carries no images/markup_map/
+  location_mentions/reply_to fields; `GameSessionConsumer`/`TriviaSessionConsumer` are still
+  near-duplicate classes with no shared base, no per-connection rate limiting on any WS `receive()`.
+- **Unit 24/25**: the SpotGuessr/Trivia `eligible_locations()`/`eligible_questions()` retry loops
+  still re-run the full query on every attempt instead of computing the eligible set once; no
+  moderation UI exists for AI-flagged trivia questions; neither game has a leave/cancel/kick path
+  once a lobby exists.
+- **Unit 31**: `_dark.scss` is still ~1100 lines of per-selector overrides (the role-pill fix above
+  removed one duplicate, not the pattern); `_pin_lists.scss` still has 3 sibling raw-hex danger-red
+  controls without dark overrides (`.pin-list-more-menu-danger`, `.saved-filter-delete-btn`, and its
+  hover state) that PROBLEMS.md already flagged as a follow-up.
+- **Unit 34**: only ~30/111 `@given`-using test files import the shared `strategies.py` module
+  (up from 8/97, but still a minority); `test_trivia_wiki_incorporation.py` has zero `@given` tests
+  despite an obvious property-testing candidate (the upvote-count threshold logic); a prior
+  session's claim that hypothesis tests were added to `test_safety.py`/
+  `test_safety_checkin_slugs.py`/`test_trip_controller.py` does not hold up under inspection - those
+  three files still have zero `@given` tests (only `test_trip_helpers.py` and the two genuinely new
+  files, `test_safety_archival.py` and `test_trivia_wiki_incorporation.py`, show real hypothesis
+  work, and the latter's own tests are all hardcoded-value examples).
+
+All of the above are maintainability/completeness gaps, not active security or correctness bugs
+(those categories were the ones fixed directly, above) - reasonable to pick up as a dedicated
+follow-up rather than blocking this pass.

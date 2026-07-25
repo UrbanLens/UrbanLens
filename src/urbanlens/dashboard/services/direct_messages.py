@@ -393,27 +393,41 @@ def _text_alert_debounce_key(sender_id: int, recipient_id: int) -> str:
 def is_email_debounced(sender_id: int, recipient_id: int) -> bool:
     """Return True if an email was already sent for this sender/recipient's current unread streak.
 
+    Checks and claims the debounce marker in one atomic ``cache.add`` - two
+    Celery workers racing on the same (sender, recipient) delayed task can't
+    both pass: only the first caller's ``cache.add`` succeeds (winning the
+    right to send), and it sets the marker in that same step rather than in
+    a later, separate ``cache.set`` inside ``send_message_email_now`` (which
+    previously left a plain check-then-act gap between the two).
+
     Args:
         sender_id: PK of the message sender.
         recipient_id: PK of the recipient.
 
     Returns:
-        True if the debounce marker is set.
+        True if an email for this streak already went out (or was just
+        claimed by a concurrent caller); False when this call just claimed
+        the marker and the caller should proceed to send.
     """
-    return bool(cache.get(_email_debounce_key(sender_id, recipient_id)))
+    return not cache.add(_email_debounce_key(sender_id, recipient_id), value=True, timeout=_EMAIL_DEBOUNCE_TTL_SECONDS)
 
 
 def is_text_alert_debounced(sender_id: int, recipient_id: int) -> bool:
     """Return True if a WhatsApp/SMS alert already went out for this unread streak.
 
+    Same atomic check-and-claim shape as :func:`is_email_debounced` - see its
+    docstring for why this can't be a plain ``cache.get``.
+
     Args:
         sender_id: PK of the message sender.
         recipient_id: PK of the recipient.
 
     Returns:
-        True if the debounce marker is set.
+        True if an alert for this streak already went out (or was just
+        claimed by a concurrent caller); False when this call just claimed
+        the marker and the caller should proceed to send.
     """
-    return bool(cache.get(_text_alert_debounce_key(sender_id, recipient_id)))
+    return not cache.add(_text_alert_debounce_key(sender_id, recipient_id), value=True, timeout=_EMAIL_DEBOUNCE_TTL_SECONDS)
 
 
 def clear_email_debounce(sender_id: int, recipient_id: int) -> None:
@@ -506,7 +520,8 @@ def send_message_text_alerts_now(message: DirectMessage) -> None:
     except AttributeError:
         return
 
-    cache.set(_text_alert_debounce_key(message.sender_id, message.recipient_id), 1, timeout=_EMAIL_DEBOUNCE_TTL_SECONDS)
+    # The debounce marker is already claimed atomically by the caller's
+    # is_text_alert_debounced() check - no separate cache.set() needed here.
 
     # Recipient-scoped masking, same as the thread/email/notification paths.
     sender_display_name = display_identity_for(message.recipient, message.sender)["display_name"]
@@ -537,7 +552,8 @@ def send_message_email_now(message: DirectMessage) -> None:
     if not recipient_email:
         return
 
-    cache.set(_email_debounce_key(message.sender_id, message.recipient_id), 1, timeout=_EMAIL_DEBOUNCE_TTL_SECONDS)
+    # The debounce marker is already claimed atomically by the caller's
+    # is_email_debounced() check - no separate cache.set() needed here.
 
     if message.is_encrypted:
         # End-to-end encrypted - the server has no plaintext to preview.

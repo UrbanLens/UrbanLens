@@ -20,6 +20,7 @@ from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, s
 from urbanlens.dashboard.services.geo import dissolve_polygons
 from urbanlens.dashboard.services.pin_list_membership import filter_matching_ids, resync_smart_list
 from urbanlens.dashboard.services.saved_filter_cache import get_or_compute_matching_uuids
+from urbanlens.dashboard.services.undo.handlers.saved_filter import MODEL_LABEL as SAVED_FILTER_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 if TYPE_CHECKING:
@@ -331,7 +332,7 @@ class SavedFilterDeleteView(LoginRequiredMixin, View):
     def post(self, request, filter_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         saved_filter = get_object_or_404(SavedFilter, uuid=filter_uuid, profile=profile)
-        stash_for_undo("saved_filter", [saved_filter], profile)
+        stash_for_undo(SAVED_FILTER_MODEL_LABEL, [saved_filter], profile)
         saved_filter.delete()
         response = _render_section(request, profile)
         response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Filter deleted. Undo within 7 days from Settings → Undo History."}})

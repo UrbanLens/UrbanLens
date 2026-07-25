@@ -415,7 +415,7 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
         """
         from urbanlens.dashboard.models.images.model import Image, MediaKind
         from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
-        from urbanlens.dashboard.services.storage import quota_error_for_upload
+        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
 
         profile = _get_profile(request)
         image_file = request.FILES.get("image")
@@ -429,12 +429,13 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
             message, status = upload_error
             return JsonResponse({"error": message}, status=status)
 
-        quota_error = quota_error_for_upload(profile, image_file.size)
-        if quota_error:
-            return JsonResponse({"error": quota_error}, status=413)
-
         checksum = compute_checksum(image_file)
-        image = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size)
+        with per_profile_upload_lock(profile):
+            quota_error = quota_error_for_upload(profile, image_file.size)
+            if quota_error:
+                return JsonResponse({"error": quota_error}, status=413)
+
+            image = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size)
 
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload

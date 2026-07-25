@@ -9,12 +9,18 @@ from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, 
 
 _RESTORABLE_FIELDS = ("name", "icon", "criteria", "order")
 
+#: Registry key for this handler. Exposed as a module-level constant so call
+#: sites can import it (``from ...handlers.saved_filter import MODEL_LABEL``)
+#: instead of hand-typing ``"saved_filter"`` - a typo in a hand-typed string
+#: only fails at runtime via ``get_handler``'s ``ValueError``.
+MODEL_LABEL = "saved_filter"
+
 
 @register
 class SavedFilterUndoHandler(UndoHandler):
     """Restores a saved filter's name, icon, criteria, and sidebar order."""
 
-    model_label = "saved_filter"
+    model_label = MODEL_LABEL
 
     @classmethod
     def serialize(cls, instances: list[SavedFilter]) -> list[dict[str, Any]]:

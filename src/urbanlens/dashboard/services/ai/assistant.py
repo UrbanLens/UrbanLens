@@ -190,6 +190,8 @@ def _tool_create_trip(profile: Profile, args: dict) -> dict:
 
 
 def _tool_add_trip_activity(profile: Profile, args: dict) -> dict:
+    from django.db import transaction
+
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.site_settings import SiteSettings
     from urbanlens.dashboard.models.trips.model import Trip, TripActivity
@@ -201,10 +203,6 @@ def _tool_add_trip_activity(profile: Profile, args: dict) -> dict:
     pin = Pin.objects.filter(slug=str(args.get("pin_slug") or ""), profile=profile, parent_pin__isnull=True).select_related("location").first()
     if pin is None:
         return {"error": "No such pin (it must be one of the user's own pins)."}
-
-    max_activities = SiteSettings.get_current().max_trip_activities
-    if max_activities > 0 and trip.activities.count() >= max_activities:
-        return {"error": f"That trip already has the maximum of {max_activities} activities."}
 
     scheduled_at = None
     raw_date = str(args.get("scheduled_date") or "").strip()
@@ -219,16 +217,29 @@ def _tool_add_trip_activity(profile: Profile, args: dict) -> dict:
             # 9am local: an arbitrary-but-sane default hour for a date-only plan.
             scheduled_at = datetime.combine(day, time(hour=9), tzinfo=get_current_timezone())
 
-    activity = TripActivity.objects.create(
-        trip=trip,
-        pin=pin,
-        location=pin.location,
-        added_by=profile,
-        title=None,
-        scheduled_at=scheduled_at,
-        order=trip.activities.count(),
-        status=TripActivity.STATUS_PROPOSED,
-    )
+    # Lock the trip row for the duration of the check-then-create so two concurrent
+    # requests (e.g. two members adding activities to the same trip at once, or the
+    # user double-submitting) can't both pass the max_trip_activities count check
+    # and jointly exceed it - same shape/reason as _tool_create_trip's profile-row
+    # lock above. Locked on the trip (not the profile) since the count this guards
+    # is per-trip and other members can add activities to it too.
+    with transaction.atomic():
+        Trip.objects.select_for_update().get(pk=trip.pk)
+
+        max_activities = SiteSettings.get_current().max_trip_activities
+        if max_activities > 0 and trip.activities.count() >= max_activities:
+            return {"error": f"That trip already has the maximum of {max_activities} activities."}
+
+        activity = TripActivity.objects.create(
+            trip=trip,
+            pin=pin,
+            location=pin.location,
+            added_by=profile,
+            title=None,
+            scheduled_at=scheduled_at,
+            order=trip.activities.count(),
+            status=TripActivity.STATUS_PROPOSED,
+        )
     # Same rule as the trip view: putting a place on an itinerary reveals it
     # to every member and must count in the sharer's reshare chain.
     record_trip_activity_shares(activity)

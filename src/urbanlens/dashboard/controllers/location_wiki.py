@@ -31,7 +31,7 @@ from urbanlens.dashboard.services.boundary_voting import BoundaryVoteError, boun
 from urbanlens.dashboard.services.locations import site_scope
 from urbanlens.dashboard.services.public_pins import PublicVoteError, cast_public_vote, public_vote_context
 from urbanlens.dashboard.services.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
-from urbanlens.dashboard.services.undo.handlers.wiki import with_wiki_descendants
+from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
@@ -300,13 +300,15 @@ class LocationWikiDeleteView(LoginRequiredMixin, View):
         user_pin = location.pins.filter(profile=profile).first()
 
         subtree = with_wiki_descendants([wiki])
-        stash_for_undo("wiki", subtree, profile)
         with transaction.atomic():
-            # Wiki.parent_wiki is on_delete=CASCADE, so deleting just the originally-selected
-            # wiki already cascades to every descendant captured in `subtree` above in one
-            # bulk operation - no need to delete each subtree member individually. Wrapping
-            # in transaction.atomic() also ensures a mid-delete failure can't leave the
-            # just-created UndoAction claiming a full deletion that only partially happened.
+            # The stash must happen inside the same atomic block as the delete: stashing
+            # first and deleting after ensures a mid-delete failure rolls back both together,
+            # rather than leaving a committed UndoAction claiming a deletion that never
+            # actually happened. Wiki.parent_wiki is on_delete=CASCADE, so deleting just the
+            # originally-selected wiki already cascades to every descendant captured in
+            # `subtree` above in one bulk operation - no need to delete each subtree member
+            # individually.
+            stash_for_undo(WIKI_MODEL_LABEL, subtree, profile)
             Wiki.objects.filter(pk=wiki.pk).delete()
 
         redirect_url = reverse("pin.details", kwargs={"pin_slug": user_pin.slug}) if user_pin else reverse("map.view")

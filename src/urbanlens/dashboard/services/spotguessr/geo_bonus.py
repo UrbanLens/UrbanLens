@@ -9,17 +9,21 @@ independent of (and added on top of) the distance curve in ``scoring``.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import logging
 from typing import TYPE_CHECKING
 
 from django.core.cache import cache
 
 from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+from urbanlens.dashboard.services.redact import redact_coordinate
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import Point
     from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.location.model import Location
+
+logger = logging.getLogger(__name__)
 
 COUNTRY_BONUS = 100
 STATE_BONUS = 250
@@ -28,10 +32,17 @@ CITY_BONUS = 400
 #: Nominatim is rate-limited to 1 call/minute app-wide (see
 #: ``plugins.builtin.nominatim.NominatimPlugin.get_service_defaults``) - without
 #: caching, any multiplayer round with more than one guess/minute would have
-#: every guess but the first silently lose its bonus to a swallowed
+#: every guess but the first silently lose its bonus to a
 #: ``RateLimitExceededError``. Country/state/city boundaries don't move, so a
-#: long TTL is safe.
+#: long TTL is safe for a *genuine* "nothing found" result.
 _REVERSE_GEOCODE_CACHE_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days
+#: TTL for a lookup that *failed* (network error, timeout, or the same
+#: rate limit this cache exists to work around) rather than genuinely
+#: returning "no result". Using the 30-day TTL here would let one transient
+#: failure or rate-limited call silently disable the bonus for an entire
+#: ~111m cell for a month; a short TTL just means the next guess in that
+#: cell retries soon instead.
+_REVERSE_GEOCODE_ERROR_CACHE_TTL_SECONDS = 60
 #: Decimal places to round guess coordinates to before keying the cache -
 #: ~111m of latitude at the equator, coarse enough that guesses landing in
 #: the same neighborhood share a cache entry, fine enough to rarely cross a
@@ -50,7 +61,10 @@ def _reverse_geocode_admin_cached(latitude: float, longitude: float) -> dict[str
 
     See ``_REVERSE_GEOCODE_CACHE_TTL_SECONDS``'s docstring for why this cache
     exists - Nominatim's 1 call/minute app-wide limit otherwise makes this
-    feature non-functional under real multiplayer load.
+    feature non-functional under real multiplayer load. A failed/rate-limited
+    lookup is cached only briefly (``_REVERSE_GEOCODE_ERROR_CACHE_TTL_SECONDS``)
+    rather than for the full 30 days, so it doesn't get confused with a
+    genuine "nothing found" result - see that constant's docstring.
 
     Args:
         latitude: WGS-84 latitude of the guess point.
@@ -58,14 +72,21 @@ def _reverse_geocode_admin_cached(latitude: float, longitude: float) -> dict[str
 
     Returns:
         ``{"country": ..., "state": ..., "city": ...}``, or None if Nominatim
-        had no result (or errored/was rate-limited) - cached either way.
+        had no result or the lookup failed - cached either way, but for very
+        different durations.
     """
     key = f"spotguessr:geo_bonus:reverse:{round(latitude, _REVERSE_GEOCODE_COORD_PRECISION)},{round(longitude, _REVERSE_GEOCODE_COORD_PRECISION)}"
     cached = cache.get(key, _CACHE_MISS)
     if cached is not _CACHE_MISS:
         return cached
 
-    admin = NominatimGateway().reverse_geocode_admin(latitude, longitude)
+    try:
+        admin = NominatimGateway().reverse_geocode_admin(latitude, longitude)
+    except Exception:
+        logger.exception("Nominatim admin reverse geocode failed for %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
+        cache.set(key, None, _REVERSE_GEOCODE_ERROR_CACHE_TTL_SECONDS)
+        return None
+
     cache.set(key, admin, _REVERSE_GEOCODE_CACHE_TTL_SECONDS)
     return admin
 

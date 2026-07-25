@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action, stash_for_undo
 
 if TYPE_CHECKING:
@@ -79,13 +80,15 @@ class PinBulkDeleteView(LoginRequiredMixin, View):
             return HttpResponse("No matching pins.", status=404)
 
         subtree = list(Pin.objects.filter(pk__in=[p.pk for p in pins]).with_descendants())
-        undo_action = stash_for_undo("pin", subtree, profile)
         with transaction.atomic():
-            # Pin.parent_pin is on_delete=CASCADE, so deleting just the originally-selected
-            # pins already cascades to every descendant captured in `subtree` above in one
-            # bulk operation - no need to delete each subtree member individually. Wrapping
-            # in transaction.atomic() also ensures a mid-delete failure can't leave the
-            # just-created UndoAction claiming a full deletion that only partially happened.
+            # The stash must happen inside the same atomic block as the delete: stashing
+            # first and deleting after ensures a mid-delete failure rolls back both together,
+            # rather than leaving a committed UndoAction claiming a deletion that never
+            # actually happened. Pin.parent_pin is on_delete=CASCADE, so deleting just the
+            # originally-selected pins already cascades to every descendant captured in
+            # `subtree` above in one bulk operation - no need to delete each subtree member
+            # individually.
+            undo_action = stash_for_undo(PIN_MODEL_LABEL, subtree, profile)
             Pin.objects.filter(pk__in=[p.pk for p in pins]).delete()
 
         descendant_count = len(subtree) - len(pins)

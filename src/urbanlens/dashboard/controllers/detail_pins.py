@@ -18,7 +18,8 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
-from urbanlens.dashboard.services.undo.handlers.wiki import with_wiki_descendants
+from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
+from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
 
@@ -216,14 +217,14 @@ class DetailPinEditView(LoginRequiredMixin, View):
     def delete(self, request, pin_slug, detail_pin_uuid):
         detail_pin = self._get_detail_pin(request, pin_slug, detail_pin_uuid)
         subtree = list(Pin.objects.filter(pk=detail_pin.pk).with_descendants())
-        stash_for_undo("pin", subtree, detail_pin.profile)
         with transaction.atomic():
-            # Pin.parent_pin is on_delete=CASCADE, so deleting just the detail pin
-            # itself already cascades to every descendant captured in `subtree`
-            # above in one bulk operation - no need to delete each subtree member
-            # individually. Wrapping in transaction.atomic() also ensures a
-            # mid-delete failure can't leave the just-created UndoAction claiming
-            # a full deletion that only partially happened.
+            # The stash must happen inside the same atomic block as the delete: stashing
+            # first and deleting after ensures a mid-delete failure rolls back both together,
+            # rather than leaving a committed UndoAction claiming a deletion that never
+            # actually happened. Pin.parent_pin is on_delete=CASCADE, so deleting just the
+            # detail pin itself already cascades to every descendant captured in `subtree`
+            # above in one bulk operation - no need to delete each subtree member individually.
+            stash_for_undo(PIN_MODEL_LABEL, subtree, detail_pin.profile)
             Pin.objects.filter(pk=detail_pin.pk).delete()
         response = HttpResponse("", status=200)
         response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Detail pin deleted. Undo within 7 days from Settings → Undo History."}})
@@ -428,14 +429,14 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         child_name = child_wiki.name
 
         subtree = with_wiki_descendants([child_wiki])
-        stash_for_undo("wiki", subtree, profile)
         with transaction.atomic():
-            # Wiki.parent_wiki is on_delete=CASCADE, so deleting just the child wiki
-            # itself already cascades to every descendant captured in `subtree`
-            # above in one bulk operation - no need to delete each subtree member
-            # individually. Wrapping in transaction.atomic() also ensures a
-            # mid-delete failure can't leave the just-created UndoAction claiming
-            # a full deletion that only partially happened.
+            # The stash must happen inside the same atomic block as the delete: stashing
+            # first and deleting after ensures a mid-delete failure rolls back both together,
+            # rather than leaving a committed UndoAction claiming a deletion that never
+            # actually happened. Wiki.parent_wiki is on_delete=CASCADE, so deleting just the
+            # child wiki itself already cascades to every descendant captured in `subtree`
+            # above in one bulk operation - no need to delete each subtree member individually.
+            stash_for_undo(WIKI_MODEL_LABEL, subtree, profile)
             Wiki.objects.filter(pk=child_wiki.pk).delete()
 
         WikiEdit.objects.create(

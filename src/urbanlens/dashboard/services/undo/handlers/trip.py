@@ -20,6 +20,12 @@ _RESTORABLE_FIELDS = (
 
 _MEMBERSHIP_FIELDS = ("rsvp", "is_organizer")
 
+#: Registry key for this handler. Exposed as a module-level constant so call
+#: sites can import it (``from ...handlers.trip import MODEL_LABEL``) instead
+#: of hand-typing ``"trip"`` - a typo in a hand-typed string only fails at
+#: runtime via ``get_handler``'s ``ValueError``.
+MODEL_LABEL = "trip"
+
 
 @register
 class TripUndoHandler(UndoHandler):
@@ -29,7 +35,7 @@ class TripUndoHandler(UndoHandler):
     gets a chance to capture them, and are not restored.
     """
 
-    model_label = "trip"
+    model_label = MODEL_LABEL
 
     @classmethod
     def serialize(cls, instances: list[Trip]) -> list[dict[str, Any]]:

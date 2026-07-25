@@ -247,6 +247,97 @@ class ChatBlockedAfterArchivalTests(TestCase):
 
         self.assertEqual(self.checkin.messages.count(), 0)
 
+    def test_accepting_a_pending_partner_invite_after_archival_writes_no_plaintext_message(self):
+        """Regression guard: a partner invite can still be legitimately accepted after its
+        checkin has already resolved and archived (e.g. the owner self-checked-in with no
+        other viewers yet, archived immediately, and the invitee accepts hours later) -
+        the ACCEPTED status flip must still happen, but no system chat message may be
+        written into the already-archived (never-to-be-scrubbed-again) record.
+        """
+        from urbanlens.dashboard.services.safety import accept_checkin_partner_invite
+
+        invitee = _profile()
+        partner = SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=invitee, invited_by=self.owner)
+
+        accept_checkin_partner_invite(partner)
+
+        partner.refresh_from_db()
+        self.assertEqual(partner.status, SafetyCheckinPartnerStatus.ACCEPTED)
+        self.assertEqual(self.checkin.messages.count(), 0)
+
+    def test_mark_found_safe_after_archival_writes_no_plaintext_message(self):
+        """Regression guard: a stale contact token or partner mark-safe link remains a
+        live, POST-able endpoint after resolution/archival (the UI only hides the
+        button) - hitting it again must be a clean no-op, not a fresh plaintext message
+        into a record that already claims to have no more plaintext left.
+        """
+        from urbanlens.dashboard.services.safety import mark_found_safe
+
+        contact = SafetyCheckinContact.objects.create(checkin=self.checkin, email="watcher@example.com", name="Watcher")
+
+        mark_found_safe(contact)
+
+        self.assertEqual(self.checkin.messages.count(), 0)
+
+    def test_mark_found_safe_by_partner_after_archival_writes_no_plaintext_message(self):
+        from urbanlens.dashboard.services.safety import mark_found_safe_by_partner
+
+        partner_profile = _profile()
+        SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=partner_profile, invited_by=self.owner, status=SafetyCheckinPartnerStatus.ACCEPTED)
+
+        mark_found_safe_by_partner(self.checkin, partner_profile)
+
+        self.assertEqual(self.checkin.messages.count(), 0)
+
+
+class ArchivePayloadMapDedupTests(TestCase):
+    """_build_archive_payload must not double-count a map that ended up in both
+    `markup_map` and `markup_maps` - the attach endpoint's own exclusion of the primary
+    map is UI-only (SafetyCheckinMapPickerView), not re-enforced server-side, so the
+    payload builder is the actual backstop.
+    """
+
+    def test_a_map_that_is_both_primary_and_attached_is_only_listed_once(self):
+        from urbanlens.dashboard.models.markup.model import MarkupMap
+        from urbanlens.dashboard.services.safety import _build_archive_payload
+
+        owner = _profile()
+        checkin = _checkin(owner)
+        shared_map = MarkupMap.objects.create(profile=owner, title="Route")
+        checkin.markup_map = shared_map
+        checkin.save(update_fields=["markup_map"])
+        checkin.markup_maps.add(shared_map)
+
+        payload = _build_archive_payload(checkin)
+
+        self.assertEqual([m["title"] for m in payload["maps"]], ["Route"])
+
+
+class MapAttachViewRejectsPrimaryMapTests(TestCase):
+    """SafetyCheckinMapAttachView must not let the primary route map also be attached
+    as a secondary reference map - the picker (SafetyCheckinMapPickerView) already
+    excludes it from candidates shown in the UI, but that alone doesn't stop a direct
+    POST with the primary map's own uuid.
+    """
+
+    def test_attaching_the_checkins_own_primary_map_is_rejected(self):
+        from urbanlens.dashboard.models.markup.model import MarkupMap
+
+        owner = _profile()
+        checkin = _checkin(owner)
+        primary_map = MarkupMap.objects.create(profile=owner, title="Route")
+        checkin.markup_map = primary_map
+        checkin.save(update_fields=["markup_map"])
+        self.client.force_login(owner.user)
+
+        response = self.client.post(
+            reverse("safety.checkin.maps.attach", kwargs={"checkin_slug": str(checkin.uuid)}),
+            {"map_uuid": str(primary_map.uuid)},
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(list(checkin.markup_maps.all()), [])
+
 
 class ScheduleCheckinArchivalTests(TestCase):
     """schedule_checkin_archival picks immediate vs. +1h archival correctly across

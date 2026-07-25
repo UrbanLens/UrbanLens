@@ -9,6 +9,7 @@ from rest_framework.response import Response
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.serializer import PinSerializer
+from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 logger = logging.getLogger(__name__)
@@ -128,11 +129,11 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
             if descendant_count and children_mode == "keep":
                 deferred_ids = self._promote_children(instance)
                 subtree = [instance]
-                stash_for_undo("pin", subtree, instance.profile)
+                stash_for_undo(PIN_MODEL_LABEL, subtree, instance.profile)
                 instance.delete()
                 self._finish_deferred_promotions(instance.profile_id, deferred_ids)
             else:
-                stash_for_undo("pin", subtree, instance.profile)
+                stash_for_undo(PIN_MODEL_LABEL, subtree, instance.profile)
                 for descendant in subtree:
                     descendant.delete()
         logger.info("Pin with id %s deleted", instance.id)

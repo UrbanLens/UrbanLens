@@ -151,45 +151,49 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
     from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.celery import safely_enqueue_task
     from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
-    from urbanlens.dashboard.services.storage import quota_error_for_upload
+    from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
     from urbanlens.dashboard.tasks import process_image_upload
 
     owner_gallery = Image.objects.filter(pin=pin, profile=pin.profile)
 
     uploaded_pks: list[int] = []
     reattached_pks: list[int] = []
-    for image_file in request.FILES.getlist("photos"):
-        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
-        if upload_error:
-            # Same "skip this file, keep processing the rest" treatment as the
-            # quota-exceeded case below - one bad file in a multi-file visit
-            # upload shouldn't block the others.
-            message, _status = upload_error
-            messages.warning(request, message)
-            continue
-        checksum = compute_checksum(image_file)
-        existing = owner_gallery.filter(checksum=checksum).first()
-        if existing is not None:
-            # Same file already in this pin's gallery - link it instead of
-            # storing a second copy.
-            reattached_pks.append(existing.pk)
-            continue
-        quota_error = quota_error_for_upload(pin.profile, image_file.size)
-        if quota_error:
-            # Linking existing photos is still fine - only new files need space.
-            messages.warning(request, quota_error)
-            continue
-        img = Image.objects.create(
-            image=image_file,
-            pin=pin,
-            location=pin.location,
-            profile=pin.profile,
-            visit=visit,
-            checksum=checksum,
-            file_size=image_file.size,
-        )
-        safely_enqueue_task(process_image_upload, img.pk)
-        uploaded_pks.append(img.pk)
+    # One lock for the whole multi-file batch: quota is rechecked per file below (each
+    # upload counts against the running total), and the lock also protects against a
+    # concurrent upload elsewhere (another tab, the gallery page) racing this same profile.
+    with per_profile_upload_lock(pin.profile):
+        for image_file in request.FILES.getlist("photos"):
+            upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+            if upload_error:
+                # Same "skip this file, keep processing the rest" treatment as the
+                # quota-exceeded case below - one bad file in a multi-file visit
+                # upload shouldn't block the others.
+                message, _status = upload_error
+                messages.warning(request, message)
+                continue
+            checksum = compute_checksum(image_file)
+            existing = owner_gallery.filter(checksum=checksum).first()
+            if existing is not None:
+                # Same file already in this pin's gallery - link it instead of
+                # storing a second copy.
+                reattached_pks.append(existing.pk)
+                continue
+            quota_error = quota_error_for_upload(pin.profile, image_file.size)
+            if quota_error:
+                # Linking existing photos is still fine - only new files need space.
+                messages.warning(request, quota_error)
+                continue
+            img = Image.objects.create(
+                image=image_file,
+                pin=pin,
+                location=pin.location,
+                profile=pin.profile,
+                visit=visit,
+                checksum=checksum,
+                file_size=image_file.size,
+            )
+            safely_enqueue_task(process_image_upload, img.pk)
+            uploaded_pks.append(img.pk)
 
     selected_ids = {int(pid) for pid in request.POST.getlist("existing_photo_ids") if pid.strip().isdigit()}
     attach_ids = selected_ids | set(reattached_pks)

@@ -43,6 +43,7 @@ if TYPE_CHECKING:
     from django.contrib.auth.models import AnonymousUser, User
 
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.markup.model import MarkupMap
     from urbanlens.dashboard.models.safety.queryset import SafetyCheckinQuerySet
     from urbanlens.dashboard.models.trips.model import Trip
     from urbanlens.dashboard.models.wiki.model import Wiki
@@ -505,12 +506,18 @@ def accept_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
     partner.accepted_at = accepted_at
 
     checkin = partner.checkin
-    system_message = SafetyCheckinMessage.objects.create(
-        checkin=checkin,
-        sender_profile=partner.profile,
-        body=f"{partner.profile.username} is now a partner on this check-in.",
-    )
-    broadcast_chat_message(checkin, system_message)
+    # A partner invite can still be legitimately outstanding (and acceptable) after its
+    # checkin has already resolved and archived - e.g. the owner self-checked-in with no
+    # other viewers yet, archived immediately, and the invitee accepts hours later. The
+    # ACCEPTED status flip above is fine either way (it's not PII), but a plaintext system
+    # message must not be written into an archived record - it would never be scrubbed again.
+    if not hasattr(checkin, "archive"):
+        system_message = SafetyCheckinMessage.objects.create(
+            checkin=checkin,
+            sender_profile=partner.profile,
+            body=f"{partner.profile.username} is now a partner on this check-in.",
+        )
+        broadcast_chat_message(checkin, system_message)
     _notify_checkin_partner_accepted(partner)
 
 
@@ -779,26 +786,31 @@ def archive_checkin(checkin: SafetyCheckin) -> None:
         logger.warning("Safety checkin %s is due for archival, but owner %s has no E2EE key bundle yet - will retry", checkin.uuid, checkin.profile_id)
         return
 
-    ciphertext, nonce, sealed_key = _seal_archive_payload(_build_archive_payload(checkin), bundle.public_key)
-    try:
-        # Atomic so a crash/restart between the two can never leave an archive row
-        # committed with its plaintext still unscrubbed (or vice versa) - the
-        # idempotency check above only means anything if the two always happen together.
-        with transaction.atomic():
-            SafetyCheckinArchive.objects.create(
-                checkin=checkin,
-                ciphertext=ciphertext,
-                nonce=nonce,
-                sealed_key=sealed_key,
-                key_bundle_version=bundle.version,
-            )
-            _scrub_checkin_pii(checkin)
-    except IntegrityError:
-        # The countdown-scheduled task and the periodic sweep can both reach here for
-        # the same checkin at nearly the same time; the loser's unique-constraint
-        # violation just means the winner already did (or is doing) this work.
-        logger.info("Safety checkin %s was already archived by a concurrent task", checkin.pk)
-        return
+    with transaction.atomic():
+        # select_for_update() makes the countdown-scheduled task and the periodic sweep
+        # sequential instead of racing: the loser blocks here until the winner commits,
+        # then sees the archive already exists and returns - never a double-create on the
+        # unique archive row, and never a torn read of the payload (see below). Re-checking
+        # idempotency on the *locked* row, not the possibly-already-checked `checkin`
+        # argument, is what actually makes this correct - the top-of-function check above
+        # is just a fast path to skip the lock/bundle-lookup entirely in the common case.
+        locked_checkin = SafetyCheckin.objects.select_for_update().get(pk=checkin.pk)
+        if hasattr(locked_checkin, "archive"):
+            return
+        # Building the payload and sealing it while holding the row lock (rather than
+        # before starting the transaction) closes a narrower gap: a chat message posted
+        # in the window between "read the payload" and "scrub the messages table" would
+        # otherwise be captured by neither - not sealed into the archive, and silently
+        # blanked by the scrub with no record anywhere.
+        ciphertext, nonce, sealed_key = _seal_archive_payload(_build_archive_payload(locked_checkin), bundle.public_key)
+        SafetyCheckinArchive.objects.create(
+            checkin=locked_checkin,
+            ciphertext=ciphertext,
+            nonce=nonce,
+            sealed_key=sealed_key,
+            key_bundle_version=bundle.version,
+        )
+        _scrub_checkin_pii(locked_checkin)
     _broadcast_checkin_archived(checkin)
 
 
@@ -814,8 +826,17 @@ def _build_archive_payload(checkin: SafetyCheckin) -> dict:
     """
     location = checkin.destination_location
     trip = checkin.trip
-    primary_map = checkin.markup_map
-    attached_maps = [*([primary_map] if primary_map is not None else []), *checkin.markup_maps.all()]
+    # Keyed by pk, not concatenated, because the `markup_maps` picker's exclusion of the
+    # primary map (controllers.safety._render_map_picker) is a UI convenience only - the
+    # attach endpoint doesn't re-enforce it server-side, so the owner's own primary map can
+    # end up double-listed in `markup_maps` too. Deduping here keeps the archived payload
+    # correct regardless of how that M2M ended up populated.
+    maps_by_id: dict[int, MarkupMap] = {}
+    if checkin.markup_map is not None:
+        maps_by_id[checkin.markup_map.pk] = checkin.markup_map
+    for markup_map in checkin.markup_maps.all():
+        maps_by_id.setdefault(markup_map.pk, markup_map)
+    attached_maps = list(maps_by_id.values())
     return {
         "title": checkin.title,
         "plan_details": checkin.plan_details,
@@ -1405,13 +1426,17 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
     contact.save(update_fields=["found_safe_at", "updated"])
 
     checkin = contact.checkin
-    system_message = SafetyCheckinMessage.objects.create(
-        checkin=checkin,
-        sender_contact=contact,
-        body=f"Marked {checkin.profile.username} as safe.",
-    )
-    broadcast_chat_message(checkin, system_message)
-    _resolve_as_found_safe(checkin, resolved_by_label=contact.display_name, exclude_contact=contact)
+    if _resolve_as_found_safe(checkin, resolved_by_label=contact.display_name, exclude_contact=contact):
+        # Only post the system chat message if this call actually performed the
+        # resolution - otherwise a checkin that's already resolved (including one
+        # already archived, or a duplicate report racing another contact/partner) would
+        # get a fresh, never-to-be-scrubbed plaintext message with nothing behind it.
+        system_message = SafetyCheckinMessage.objects.create(
+            checkin=checkin,
+            sender_contact=contact,
+            body=f"Marked {checkin.profile.username} as safe.",
+        )
+        broadcast_chat_message(checkin, system_message)
 
 
 def mark_found_safe_by_partner(checkin: SafetyCheckin, partner: Profile) -> None:
@@ -1425,21 +1450,24 @@ def mark_found_safe_by_partner(checkin: SafetyCheckin, partner: Profile) -> None
         checkin: The check-in being resolved.
         partner: The accepted partner's profile reporting the owner as safe.
     """
-    system_message = SafetyCheckinMessage.objects.create(
-        checkin=checkin,
-        sender_profile=partner,
-        body=f"Marked {checkin.profile.username} as safe.",
-    )
-    broadcast_chat_message(checkin, system_message)
-    _resolve_as_found_safe(checkin, resolved_by_label=partner.username)
+    if _resolve_as_found_safe(checkin, resolved_by_label=partner.username):
+        system_message = SafetyCheckinMessage.objects.create(
+            checkin=checkin,
+            sender_profile=partner,
+            body=f"Marked {checkin.profile.username} as safe.",
+        )
+        broadcast_chat_message(checkin, system_message)
 
 
-def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, exclude_contact: SafetyCheckinContact | None = None) -> None:
+def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, exclude_contact: SafetyCheckinContact | None = None) -> bool:
     """Shared resolution logic for ``mark_found_safe``/``mark_found_safe_by_partner``.
 
     No-ops if the check-in is already resolved - a contact and a partner (or
     two contacts) racing to mark the same check-in safe must not double-notify
-    everyone or re-raise the concluding VisitSuggestion.
+    everyone or re-raise the concluding VisitSuggestion. This also covers an
+    already-*archived* checkin, since archival only ever happens after resolution -
+    an archived checkin is necessarily already resolved, so this returns False for
+    it exactly the same way it does for any other already-resolved checkin.
 
     Args:
         checkin: The check-in being resolved.
@@ -1448,6 +1476,11 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
         exclude_contact: The contact who just reported this, if any - excluded
             from the "everyone else" notification pass so they don't get told
             about their own report.
+
+    Returns:
+        True if this call actually performed the resolution, False if the checkin
+        was already resolved (a no-op) - callers use this to decide whether posting
+        a "marked safe" system chat message is appropriate.
     """
     resolved_at = timezone.now()
     # A conditional UPDATE, not a read-then-write - two concurrent reports (a contact and
@@ -1462,7 +1495,7 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
         updated=resolved_at,
     )
     if not updated:
-        return
+        return False
     checkin.status = SafetyCheckinStatus.FOUND_SAFE
     checkin.resolved_at = resolved_at
     checkin.resolved_by_label = resolved_by_label
@@ -1516,6 +1549,7 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
 
     _conclude_checkin(checkin)
     schedule_checkin_archival(checkin)
+    return True
 
 
 def _conclude_checkin(checkin: SafetyCheckin) -> None:

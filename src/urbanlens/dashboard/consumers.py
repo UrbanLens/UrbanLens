@@ -1,3 +1,4 @@
+import asyncio
 import json
 import logging
 
@@ -5,6 +6,12 @@ from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
 
 logger = logging.getLogger(__name__)
+
+# How often SafetyCheckinChatConsumer re-validates a session-route connection's
+# permission, as a backstop for a dropped partner_access_revoked broadcast. Frequent
+# enough that a revoked partner's live-location stream can't leak for long; infrequent
+# enough not to add meaningful DB load for what's normally a no-op check.
+_PARTNER_REVALIDATION_INTERVAL_SECONDS = 60
 
 
 class UserNotificationConsumer(AsyncWebsocketConsumer):
@@ -432,9 +439,23 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
             await self.close(code=4500)
             return
         logger.info("Safety chat connected: checkin=%s contact=%s", self.checkin.pk, getattr(self.contact, "pk", None))
+        if self.contact is None:
+            # Defense-in-depth against a dropped partner_access_revoked broadcast: that
+            # group_send is best-effort, same as every other broadcast in this module, but
+            # unlike the others it's the *only* mechanism that revokes an already-open
+            # connection's access (permission is otherwise checked once, at connect() time).
+            # A channel-layer hiccup at the exact moment a partner is removed would
+            # otherwise leave their live-location stream open indefinitely with no
+            # self-healing path. The token/contact route never joins the location group and
+            # its access can't be revoked mid-connection (a magic link is either valid or
+            # it isn't), so it doesn't need this.
+            self._revalidation_task = asyncio.create_task(self._revalidate_access_periodically())
 
     async def disconnect(self, close_code):
-        """Leave the check-in's group(s), if we ever joined any."""
+        """Leave the check-in's group(s), if we ever joined any, and stop re-validating."""
+        task = getattr(self, "_revalidation_task", None)
+        if task is not None:
+            task.cancel()
         if hasattr(self, "group_name"):
             try:
                 await self.channel_layer.group_discard(self.group_name, self.channel_name)
@@ -445,6 +466,43 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
                 await self.channel_layer.group_discard(self.location_group_name, self.channel_name)
             except Exception:
                 logger.exception("Safety chat failed to leave group %s cleanly", self.location_group_name)
+
+    async def _revalidate_access_periodically(self):
+        """Periodically re-check that this session-route connection is still authorized.
+
+        Closes the connection with code 4404 the moment it isn't - a backstop for when
+        ``partner_access_revoked`` (services.safety._broadcast_partner_access_revoked)
+        never arrives.
+        """
+        try:
+            while True:
+                await asyncio.sleep(_PARTNER_REVALIDATION_INTERVAL_SECONDS)
+                if not await self._is_still_authorized():
+                    await self.close(code=4404)
+                    return
+        except asyncio.CancelledError:
+            pass
+
+    @database_sync_to_async
+    def _is_still_authorized(self):
+        """Re-check owner-or-accepted-partner status fresh from the DB.
+
+        Returns:
+            True if this connection's profile is still the owner or an accepted
+            partner on this checkin; False if the checkin is gone or access was
+            revoked since connect() (or since the last periodic check).
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.models.safety.model import SafetyCheckin
+        from urbanlens.dashboard.services.safety import is_owner_or_accepted_partner
+
+        checkin = SafetyCheckin.objects.filter(pk=self.checkin.pk).first()
+        if checkin is None:
+            return False
+        profile = Profile.objects.filter(pk=self.profile_id).first()
+        if profile is None:
+            return False
+        return is_owner_or_accepted_partner(checkin, profile)
 
     async def receive(self, text_data=None, bytes_data=None):
         """Persist an incoming chat message and broadcast it to the check-in's group.

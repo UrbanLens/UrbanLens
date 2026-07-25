@@ -37,6 +37,7 @@ from urbanlens.dashboard.services.text_limits import (
 )
 from urbanlens.dashboard.services.trip_legs import activity_coords
 from urbanlens.dashboard.services.trip_visibility import viewer_hidden_activity_ids
+from urbanlens.dashboard.services.undo.handlers.trip import MODEL_LABEL as TRIP_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, get_or_create_pin_at, sync_last_visited, visit_logging_allowed
 
@@ -958,7 +959,7 @@ class TripDeleteView(LoginRequiredMixin, View):
         trip = get_object_or_404(Trip, slug=trip_slug)
         if trip.creator != profile:
             return HttpResponse("Only the trip creator can delete it.", status=403)
-        stash_for_undo("trip", [trip], profile)
+        stash_for_undo(TRIP_MODEL_LABEL, [trip], profile)
         trip.delete()
         response = HttpResponse("", status=200)
         response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Trip deleted. Undo within 7 days from Settings → Undo History."}})

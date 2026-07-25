@@ -15,6 +15,7 @@ from urbanlens.dashboard.models.safety.model import (
     EmergencyContactDefault,
     SafetyCheckin,
     SafetyCheckinContact,
+    SafetyCheckinMessage,
     SafetyCheckinStatus,
     SafetyContactOptOutScope,
 )
@@ -109,6 +110,10 @@ class SafetyCheckinLifecycleTests(TestCase):
 
         checkin.refresh_from_db()
         self.assertEqual(checkin.status, SafetyCheckinStatus.CHECKED_IN)
+        # Regression guard: a no-op resolution must not still post a "marked safe" system
+        # chat message - a stale mark-safe link hit after resolution (or after archival,
+        # which only ever happens once already-resolved) must be a true no-op.
+        self.assertEqual(SafetyCheckinMessage.objects.filter(checkin=checkin).count(), 0)
 
     def test_two_contacts_racing_to_mark_safe_only_resolve_once(self):
         """Regression guard: the resolution guard is a conditional UPDATE, not an
@@ -130,6 +135,9 @@ class SafetyCheckinLifecycleTests(TestCase):
         checkin.refresh_from_db()
         self.assertEqual(checkin.resolved_by_label, first.display_name)
         self.assertEqual(VisitSuggestion.objects.filter(safety_checkin=checkin).count(), 1)
+        # The system chat message is posted only by whichever call actually resolves the
+        # checkin - the loser of the race must not also post its own "marked safe" message.
+        self.assertEqual(SafetyCheckinMessage.objects.filter(checkin=checkin).count(), 1)
 
 
 class VisitSuggestionOriginConstraintTests(TestCase):

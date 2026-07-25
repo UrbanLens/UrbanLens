@@ -1107,11 +1107,7 @@
         color: $color-green-400;
     }
 
-    // .role-pill (subscription admin) had no dark variant, so its light pastel
-    // gradient rendered unreadably against the dark admin page. Follows the
-    // translucent-gradient-on-dark recipe used elsewhere in this file.
-    .subscription-admin-page .role-pill {
-        background: linear-gradient(135deg, rgba(196, 181, 253, .18), rgba(103, 232, 249, .18));
-        color: var(--ul-grey-1);
-    }
+    // .role-pill's dark override now lives in _admin.scss, colocated with the
+    // component - this file's copy was a dead duplicate (identical selector,
+    // _admin.scss's @use comes later in style.scss so its rule always won).
 }
