@@ -145,9 +145,8 @@ class GetArticleMediaTests(SimpleTestCase):
 
     This exists specifically because a Wikimedia Commons text search (see
     WikimediaGateway) can miss images that are only reachable through an
-    in-body gallery and aren't independently discoverable by name - see
-    docs/prompts/completed.md's "Wikipedia article images not reliably
-    reaching Media section" entry.
+    in-body gallery and aren't independently discoverable by name - 
+    "Wikipedia article images not reliably reaching Media section" entry.
     """
 
     def setUp(self) -> None:
@@ -304,7 +303,7 @@ class WikipediaMediaGatewayTests(SimpleTestCase):
 class FetchInfoboxTests(SimpleTestCase):
     """WikipediaGateway._fetch_infobox() - regression coverage for the
     "started from Wikipedia" seed missing the infobox" report
-    (docs/prompts/completed.md).
+    (docs/notes/ai/completed.md).
 
     _fetch_summary/_fetch_extended_extract are both backed by the
     TextExtracts extension, which strips infoboxes before returning "extract"

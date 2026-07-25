@@ -3,7 +3,7 @@
 Covers PinController.location_data_overview() (the aggregation endpoint) and
 _location_data_overview_fields() (the per-source adapter that turns each
 source's cached data into generic {label, value, href} facts, merged across
-sources into one unattributed summary - see docs/prompts/completed.md).
+sources into one unattributed summary -.
 """
 
 from __future__ import annotations

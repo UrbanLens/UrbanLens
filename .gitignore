@@ -7,6 +7,10 @@ __pycache__/
 *.pyc
 **/frontend/static/admin/
 **/frontend/static/**/*.css
+src/urbanlens/frontend/static/dashboard/images/
+src/urbanlens/frontend/static/icons/unused/
+src/urbanlens/media/
+docs/screenshots/
 
 # Libraries (npm, etc)
 node_modules
@@ -19,7 +23,8 @@ package-lock.json
 *.tmp
 *.swp
 .*cache
-docs/prompts.txt
+sample_data/*.jpg
+src/urbanlens/logs/*
 
 # VSCode stuff per user (keep shared workspace config)
 .vscode/*
@@ -28,8 +33,12 @@ docs/prompts.txt
 !.vscode/tasks.json
 !.vscode/launch.json
 .favorites.json
-notes/
 .coverage
+CLAUDE.md
+.claude/*.json
+.vscode/settings.json
+.cursor/
+docs/notes/
 
 # Secrets, authentication, etc
 .env
@@ -41,15 +50,3 @@ bin/settings.py
 *.sqlite3-journal
 *db.sqlite3
 pgsql
-src/urbanlens/frontend/static/dashboard/images/
-.claude/settings.local.json
-.vscode/settings.json
-.cursor/
-src/urbanlens/frontend/static/icons/unused/
-.claude/*.json
-sample_data/*.jpg
-src/urbanlens/media/
-docs/prompts/
-docs/screenshots/
-src/urbanlens/logs/*
-CLAUDE.md

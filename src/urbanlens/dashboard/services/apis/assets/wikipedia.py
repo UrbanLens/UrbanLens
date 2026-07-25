@@ -32,7 +32,7 @@ _USER_AGENT = "UrbanLens/1.0 (https://github.com/urbanlens/urbanlens; jess.a.man
 # section, which is frequently a couple hundred words even for articles with
 # several more sections of real body content. The pin details page's
 # Wikipedia sub-tab renders this as a standalone full page (not a
-# space-constrained card - see docs/prompts/completed.md for the history of
+# space-constrained card - for the history of
 # removing the CSS height clamp that used to apply here), so the full article
 # body is always pulled instead of just the lead.
 # Server-side cap on the extended extract - generous, but bounded so a single

@@ -2,7 +2,7 @@
 item into a persisted Image row.
 
 Covers the two things changed to support "mark relevant -> save locally"
-(see docs/prompts/completed.md's "persist relevant media locally" entry):
+("persist relevant media locally" entry):
 - materialize_media_item's new `pin` parameter, and the dedup scoping that
   comes with it (a personal "save this for me" action must never reuse -
   or be reused by - another profile's already-materialized copy of the same

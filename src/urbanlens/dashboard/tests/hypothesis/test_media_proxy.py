@@ -1,8 +1,7 @@
 """Tests for GoogleMapsPhotoProxyView - proxying (and caching) Google Places photo bytes.
 
 An expired photo reference (Google Places photo references aren't valid
-forever) must surface as a plain 404 to the client, not a 502 - see
-docs/prompts/completed.md's "Handle 502 errors gracefully" entry for the
+forever) must surface as a plain 404 to the client, not a 502 - "Handle 502 errors gracefully" entry for the
 original report (staging logs showing 404s from Google logged and re-surfaced
 as noisy 502s on every view of the same stale reference).
 """

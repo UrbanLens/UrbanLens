@@ -1,6 +1,6 @@
 """Trivia models - Glicko-2 ratings, question bank, sessions, rounds, answers, and votes.
 
-See ``docs/prompts/todo.md``'s Trivia entry for the full spec this schema encodes:
+See "Trivia entry for the full spec this schema encodes:
 locations drawn only from a pool every session participant can access (mirrors
 SpotGuessr's eligibility rule), questions from three sources (user-submitted,
 AI-generated from wiki articles, deterministic from structured location data),

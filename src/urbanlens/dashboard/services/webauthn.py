@@ -132,7 +132,7 @@ def verify_and_save_registration(request: HttpRequest, user: User, credential_js
         user: The account enrolling the passkey.
         credential_json: The raw JSON produced by ``navigator.credentials.create()``'s response.
         name: A user-supplied label for the new passkey (e.g. "Bitwarden"). Registration no
-            longer prompts for one up front (see docs/prompts/completed.md), so this is normally
+            longer prompts for one up front, so this is normally
             empty - in that case, an auto-generated "Passkey N" name is used instead, numbered
             after the user's current passkey count. The user can still rename it afterward via
             the existing inline rename field.

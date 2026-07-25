@@ -2,7 +2,7 @@
 
 A strategic planning document for agents (and humans) doing implementation, bug-hunting, and
 feature work on UrbanLens. Generated 2026-07-18 from a full review of `TODO.md`,
-`docs/FEATURES.md`, `docs/NOTES.md`, `docs/api-expansion-candidates.md`, `docs/prompts/todo.md`,
+`docs/FEATURES.md`, `docs/NOTES.md`, `docs/api-expansion-candidates.md`, `docs/notes/ai/todo.md`,
 recent git history, and the codebase structure.
 
 **How to use this document:** You are probably a capable agent who can plan your own task. What
@@ -282,7 +282,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
   (see `markup-engine.test.ts`, `pin-cache.test.ts` precedents).
 - **Template partial reorganization** (UL-292) and duplicate template detection (UL-288).
 - **The queryset/manager epic is DONE** (every concrete model has a queryset or a documented
-  exception — see `docs/prompts/todo.md` final notes). Maintain it: new models ship with
+  exception — see `docs/notes/ai/todo.md` final notes). Maintain it: new models ship with
   `queryset.py`; new repeated `.filter(...)` shapes get named queryset methods.
 - **Legacy service → plugin conversion** (UL-294): weather, geocoding, search providers,
   routexl, wayback, overpass, datagov, digital commonwealth, apple maps, google earth,
@@ -681,7 +681,7 @@ non-map pages that mutate pins; drag-select on Leaflet needs explicit toggle dis
 assertions; TDD for reported bugs; mock external services.
 
 **Process**: out-of-scope discoveries → `docs/PROBLEMS.md` with repro detail; completed
-prompts → `docs/prompts/completed.md`; feature inventory changes → `docs/FEATURES.md`;
+prompts → `docs/notes/ai/completed.md`; feature inventory changes → `docs/FEATURES.md`;
 non-obvious behavior → `docs/NOTES.md`; TODO strikes with evidence.
 
 ---

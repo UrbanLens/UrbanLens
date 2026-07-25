@@ -253,7 +253,7 @@ class PinOverviewEditableDescriptionTests(TestCase):
     not in this bare partial. See PinDescriptionEditableTests below for that
     - this class covers only what PinOverviewView's own partial response
     actually contains (matches the correction applied to the equivalent,
-    now-deleted PinOverviewEditableTitleTests class - see docs/prompts/completed.md).
+    now-deleted PinOverviewEditableTitleTests class -.
     """
 
     def setUp(self) -> None:

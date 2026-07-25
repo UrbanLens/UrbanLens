@@ -6,7 +6,7 @@ to pick up without re-discovering the problem from scratch.
 
 **Status as of 2026-07-23 (cleanup)**: all fully-resolved entries have been removed from this
 file - resolution details live in git history (this file's prior revisions) and
-`docs/prompts/completed.md`. Recently closed, for orientation: the whole PR #111 cluster
+`docs/notes/ai/completed.md`. Recently closed, for orientation: the whole PR #111 cluster
 (CodeQL triage, both SSRFs, E2EE password-policy endpoint, opaque rotation member IDs,
 per-recipient WebSocket payloads, media-proxy URL signing), the WhatsApp/SMS delivery wiring
 for every notification toggle, trip-comment `comment_visibility` gating, campus-aware
@@ -108,7 +108,7 @@ match current behavior. The pod is left running on chiron for it.
 ## Full-codebase audit (2026-07-25): curated high-severity findings
 
 A systematic full-codebase audit (every model/controller/service/template/TS/SCSS file, all
-migrations, the full test suite) ran 2026-07-25, tracked in `docs/prompts/codebase-audit.md` (35
+migrations, the full test suite) ran 2026-07-25, tracked in `docs/notes/ai/codebase-audit.md` (35
 units, full findings with file:line references for every bug/inefficiency/improvement found — see
 that doc for anything not listed here, including all "improvement"-grade and maintainability
 findings). This section curates only the highest-severity/highest-impact items into this file's

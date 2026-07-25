@@ -48,8 +48,8 @@ _WEB_SEARCH_CLIENT_PAGE_SIZE = 5
 # section's default "All" view - matches image_gallery.PinGalleryView's own
 # per-page size, so the preview shows the same "at a glance" amount as the
 # old standalone Photos section did. Browsing beyond this many is still
-# fully supported (unlimited, paginated) via the section's "Mine" tab - see
-# docs/prompts/completed.md's Photos+Media merge entry for why the preview
+# fully supported (unlimited, paginated) via the section's "Mine" tab -
+# Photos+Media merge entry for why the preview
 # is capped instead of listing every photo into the client-side gallery.
 _MEDIA_PHOTOS_PREVIEW_LIMIT = 12
 _ADAPTIVE_PAGE_BATCH_MULTIPLIER = 2

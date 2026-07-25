@@ -1281,7 +1281,7 @@
     // that this panel is its own standalone Article sub-tab rather than one
     // card in a `.pin-aux-grid` row of unrelated cards (which used to force a
     // client-side height clamp here so a long article couldn't stretch its
-    // shorter siblings - see docs/prompts/completed.md for that history).
+    // shorter siblings - for that history).
     .wikipedia-extract {
         > :first-child { margin-top: 0; }
         > :last-child { margin-bottom: 0; }

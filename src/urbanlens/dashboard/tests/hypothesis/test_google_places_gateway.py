@@ -2,7 +2,7 @@
 
 Places API (New) bills fields by SKU tier - rating/userRatingCount are
 "Enterprise + Atmosphere" tier, billed extra whether or not a caller actually
-uses them (see docs/prompts/completed.md's "Stop retrieving Google Places
+uses them ("Stop retrieving Google Places
 atmosphere data" entry for the original billing report this addresses).
 These tests guard the fix: find_nearest_place_id must request a minimal
 field_mask, and get_place_details must never be callable without explicit

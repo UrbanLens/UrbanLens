@@ -94,7 +94,7 @@ Phase	Goal	Key modules	Verification
 5	Data move: LocationRef + FK repoints; wiki UI → remote fetch; PinRegistry live; quotas; remote mode default	dashboard/models/location_ref/, migrations, urbanlens_server/registry/	knowledge-audit test; wiki 404-parity + scoping tests; quota tests
 6	Relay + cross-agent: envelopes, key directory, consents, poller; shares/DMs/friendships/trip-invites	urbanlens_server/relay/*, urbanlens_core/relay/transport.py	two-agent e2e: share→accept→wiki-visible; DM round trip
 7	Migration tooling + packaging: ETL + manifest, runbook, gated drop, two ghcr images, self-host guide	management commands, docs/migration-0.6.md, workflows	staged rehearsal on prod-copy dump; timed rollback drill
-8	Hardening: authenticated media (X-Accel-Redirect), quota tuning, remove docs/prompts/ committed secrets and rotate them, threat-model doc update	config/nginx/django.conf, docs	security checklist; enumeration-attempt abuse test
+8	Hardening: authenticated media (X-Accel-Redirect), quota tuning, remove docs/notes/ai/ committed secrets and rotate them, threat-model doc update	config/nginx/django.conf, docs	security checklist; enumeration-attempt abuse test
 Verification strategy
 Hypothesis suite (~200 files) survives: agent-side tests keep passing against LocalServerClient (retained permanently as the test double); ported logic's tests move to urbanlens_server/tests/ largely verbatim; agent tests needing a server use urbanlens_core.contract.testing.FakeServer.
 Contract equivalence corpus: property-based suite asserting FakeServer ≡ LocalServerClient ≡ real server (test client) — same-behavior-across-the-wire as a CI invariant.

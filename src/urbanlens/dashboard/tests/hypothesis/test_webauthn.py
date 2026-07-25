@@ -138,7 +138,7 @@ class VerifyAndSaveRegistrationTests(TestCase):
         self.assertTrue(credential.backup_eligible)
 
     def test_blank_name_gets_an_auto_generated_default(self) -> None:
-        """No naming prompt anymore (see docs/prompts/completed.md) - the server names it instead."""
+        """No naming prompt anymore - the server names it instead."""
         user: User = baker.make(User)
         request = _request_with_session()
         webauthn_service.build_registration_options(request, user)

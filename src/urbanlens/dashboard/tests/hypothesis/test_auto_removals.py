@@ -1,6 +1,6 @@
 """Tests for case-insensitive alias uniqueness and the auto-removal tombstone system.
 
-Covers docs/prompts/todo.md's two related asks: (1) alias uniqueness must be
+Covers (1) alias uniqueness must be
 case-insensitive for both manual and automatic creation, and (2) a user
 deleting an auto-added alias/link/label/owner must stick - automatic creation
 code (external name-provider syncs, AI extraction, keyword/AI auto-tagging)

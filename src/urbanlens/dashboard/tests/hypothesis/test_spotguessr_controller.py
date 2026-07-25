@@ -90,7 +90,7 @@ class SpotGuessrStartViewTests(TestCase):
     def test_no_eligible_locations_reports_error_code_without_creating_a_session(self) -> None:
         """A profile with no pins used to get a fake 'finished' summary (0 rounds
         played, GameSession created and immediately COMPLETED) indistinguishable
-        from a real completed game - see docs/prompts and the SpotGuessr UX
+        from a real completed game - see the SpotGuessr UX
         rewrite notes. It must now get a distinct error_code and no session at all."""
         other_profile = _make_profile()
         self.client.force_login(other_profile.user)
