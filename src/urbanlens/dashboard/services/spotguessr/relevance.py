@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind, SpotGuessrMode
+from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind
+from urbanlens.dashboard.services.spotguessr import modes
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -22,13 +23,6 @@ if TYPE_CHECKING:
 #: Kinds a player may explicitly report, as opposed to NO_REACTION, which is
 #: only ever backfilled server-side (see backfill_no_reaction()).
 EXPLICIT_KINDS = (GamePhotoFeedbackKind.THUMBS_UP, GamePhotoFeedbackKind.THUMBS_DOWN, GamePhotoFeedbackKind.REPORTED)
-
-#: Modes that actually show the player visual content worth reacting to.
-#: Street View shows a real photographic image just like Photos mode, even
-#: though it has no `Image` row (the imagery is fetched live, never stored -
-#: see GameRound.image's docstring) - gating on "does this round have an
-#: image_id" instead of this would wrongly 400 a Street View reaction.
-_VISUAL_MODES = frozenset({SpotGuessrMode.PHOTOS, SpotGuessrMode.STREET_VIEW})
 
 
 def record_feedback(round_: GameRound, profile: Profile, kind: str) -> GamePhotoFeedback | None:
@@ -48,7 +42,7 @@ def record_feedback(round_: GameRound, profile: Profile, kind: str) -> GamePhoto
         profile: The reacting participant.
         kind: One of ``EXPLICIT_KINDS``.
     """
-    if round_.session.mode not in _VISUAL_MODES:
+    if not modes.shows_imagery(round_.session.mode):
         return None
     feedback, _ = GamePhotoFeedback.objects.update_or_create(round=round_, profile=profile, defaults={"kind": kind})
     return feedback
@@ -63,7 +57,7 @@ def backfill_no_reaction(round_: GameRound, profiles: Iterable[Profile]) -> None
     before the round finished for everyone else - only fills the gap for
     profiles with no feedback row at all yet.
     """
-    if round_.session.mode not in _VISUAL_MODES:
+    if not modes.shows_imagery(round_.session.mode):
         return
     for profile in profiles:
         GamePhotoFeedback.objects.get_or_create(round=round_, profile=profile, defaults={"kind": GamePhotoFeedbackKind.NO_REACTION})

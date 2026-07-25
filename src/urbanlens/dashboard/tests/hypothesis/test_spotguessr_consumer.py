@@ -23,7 +23,8 @@ from urbanlens.dashboard.consumers import GameSessionConsumer
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.spotguessr.session import GameConfig, SpotGuessrMode, start_multiplayer_session
+from urbanlens.dashboard.models.spotguessr.model import SpotGuessrMode
+from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_multiplayer_session
 
 _IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 _coordinate_counter = count()

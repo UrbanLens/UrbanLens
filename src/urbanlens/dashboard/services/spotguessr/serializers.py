@@ -8,13 +8,14 @@ A round's answer is never included until it's actually revealed.
 
 from __future__ import annotations
 
+from datetime import timedelta
 import json
 from typing import TYPE_CHECKING, Any
 
 from django.contrib.gis.geos import GEOSGeometry
 
-from urbanlens.dashboard.models.spotguessr.model import Guess, SpotGuessrMode
-from urbanlens.dashboard.services.spotguessr import street_view
+from urbanlens.dashboard.models.spotguessr.model import Guess
+from urbanlens.dashboard.services.spotguessr import modes
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -25,6 +26,7 @@ if TYPE_CHECKING:
         GameSessionChatMessage,
         GameSessionParticipant,
     )
+    from urbanlens.dashboard.services.spotguessr.ratings import RatingChange
 
 
 def _geo_bounds_bbox(session: GameSession) -> list[list[float]] | None:
@@ -44,30 +46,46 @@ def _geo_bounds_bbox(session: GameSession) -> list[list[float]] | None:
 def serialize_round(round_: GameRound) -> dict[str, Any]:
     """Round data safe to send before it's guessed - never the answer.
 
-    Mode-dependent payload: Photos includes ``image_url``; Named Place
-    includes the snapshotted ``display_text``; Street View re-fetches its
-    (cache-backed) imagery from the location's coordinates each call.
+    Mode-dependent payload (``ModeStrategy.serialize_round`` per
+    ``services.spotguessr.modes``): Photos includes ``image_url``; Named
+    Place includes the snapshotted ``display_text``; Street View re-fetches
+    its (cache-backed) imagery from the location's coordinates each call.
+    ``shows_imagery`` tells the frontend whether this round has real visual
+    content worth reacting to (see ``services.spotguessr.relevance``) - one
+    server-computed field instead of the frontend hardcoding its own copy of
+    "which modes show a photo".
     """
+    session = round_.session
     data: dict[str, Any] = {
         "round_id": round_.pk,
         "session_id": round_.session_id,
-        "mode": round_.session.mode,
+        "mode": session.mode,
         "sequence_index": round_.sequence_index,
         "revealed": round_.revealed_at is not None,
-        "geo_bounds": _geo_bounds_bbox(round_.session),
+        "geo_bounds": _geo_bounds_bbox(session),
+        "shows_imagery": modes.shows_imagery(session.mode),
+        "expires_at": _round_expires_at(round_),
     }
-    if round_.session.mode == SpotGuessrMode.PHOTOS:
-        if round_.image_id and round_.image is not None and round_.image.image:
-            data["image_url"] = round_.image.image.url
-            data["image_caption"] = round_.image.caption
-    elif round_.session.mode == SpotGuessrMode.NAMED_PLACE:
-        data["display_text"] = round_.display_text
-    elif round_.session.mode == SpotGuessrMode.STREET_VIEW:
-        data["street_view_image"] = street_view.candidate_street_view_for_location(round_.location)
+    strategy = modes.get_strategy(session.mode)
+    if strategy is not None:
+        strategy.serialize_round(round_, data)
     return data
 
 
-def serialize_reveal(round_: GameRound, guess: Guess, bonus_tiers: Sequence[str] = ()) -> dict[str, Any]:
+def _round_expires_at(round_: GameRound) -> str | None:
+    """When this round's configured timer runs out, ISO-formatted - None for untimed play.
+
+    Computed from ``round_.created`` (no dedicated column needed) - see
+    ``GameConfig.round_time_limit_seconds`` and
+    ``controllers.spotguessr.SpotGuessrRoundTimeoutView`` for who reads this.
+    """
+    time_limit = (round_.session.config or {}).get("round_time_limit_seconds")
+    if not time_limit:
+        return None
+    return (round_.created + timedelta(seconds=time_limit)).isoformat()
+
+
+def serialize_reveal(round_: GameRound, guess: Guess, bonus_tiers: Sequence[str] = (), rating_change: RatingChange | None = None) -> dict[str, Any]:
     """One guess's own score - the HTTP response to whoever just guessed.
 
     The answer is only included once ``round_`` is actually revealed
@@ -85,6 +103,11 @@ def serialize_reveal(round_: GameRound, guess: Guess, bonus_tiers: Sequence[str]
         bonus_tiers: Which country/state/city tiers this guess matched (see
             ``services.spotguessr.session.submit_guess``'s return value) -
             not persisted on ``Guess``, so only available right here.
+        rating_change: This guesser's own Glicko-2 rating change, if the
+            round completed on this very guess (see
+            ``services.spotguessr.session.submit_guess``'s return value) -
+            None when the reveal is still withheld, or a rating couldn't be
+            computed for some other reason.
     """
     data: dict[str, Any] = {
         "round_id": round_.pk,
@@ -94,6 +117,7 @@ def serialize_reveal(round_: GameRound, guess: Guess, bonus_tiers: Sequence[str]
         "bonus_points": guess.bonus_points,
         "bonus_tiers": list(bonus_tiers),
         "revealed": round_.revealed_at is not None,
+        "rating_delta": round(rating_change.delta, 1) if rating_change is not None else None,
     }
     if round_.revealed_at is not None:
         location = round_.location
@@ -103,10 +127,20 @@ def serialize_reveal(round_: GameRound, guess: Guess, bonus_tiers: Sequence[str]
     return data
 
 
-def serialize_round_reveal(round_: GameRound) -> dict[str, Any]:
-    """The answer + every participant's result - broadcast to the whole session once a round completes."""
+def serialize_round_reveal(round_: GameRound, rating_changes: dict[int, RatingChange] | None = None) -> dict[str, Any]:
+    """The answer + every participant's result - broadcast to the whole session once a round completes.
+
+    Args:
+        round_: The just-completed round.
+        rating_changes: Each guesser's own Glicko-2 rating change from this
+            round (``services.spotguessr.ratings.apply_round_ratings``'s
+            return value), keyed by profile id - None (or a missing key, for
+            a force-revealed round's non-guessing participants) renders as no
+            ``rating_delta`` for that result.
+    """
     location = round_.location
     guesses = Guess.objects.for_round(round_).select_related("profile__user")
+    rating_changes = rating_changes or {}
     return {
         "round_id": round_.pk,
         "actual_latitude": float(location.latitude),
@@ -121,6 +155,7 @@ def serialize_round_reveal(round_: GameRound) -> dict[str, Any]:
                 "points": guess.points,
                 "date_points": guess.date_points,
                 "bonus_points": guess.bonus_points,
+                "rating_delta": round(change.delta, 1) if (change := rating_changes.get(guess.profile_id)) is not None else None,
             }
             for guess in guesses
         ],

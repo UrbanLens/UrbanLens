@@ -9,8 +9,8 @@ from typing import Protocol
 
 import requests
 
-from urbanlens.dashboard.services.apis.locations.google.geocoding import LOCALITY_PLACE_TYPES, GoogleGeocodingGateway
-from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
+from urbanlens.dashboard.services.apis.locations import places_resolution
+from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
 from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.redact import redact_coordinate
@@ -32,28 +32,10 @@ class GooglePlacesNameResolver:
     radius: int = 50
 
     def resolve(self, latitude: float, longitude: float) -> str | None:
-        if not settings.google_unrestricted_api_key:
+        redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
+        if not settings.google_unrestricted_api_key and not redata_configured:
             return None
-        try:
-            results = GooglePlacesGateway(api_key=settings.google_unrestricted_api_key).get_data(
-                latitude,
-                longitude,
-                radius=self.radius,
-            )
-        except (OSError, ValueError, requests.RequestException, RequestCancelledError) as exc:
-            logger.debug("Google Places name lookup failed for %s,%s: %s", redact_coordinate(latitude), redact_coordinate(longitude), exc)
-            return None
-        for result in results:
-            types = set(result.get("types") or [])
-            if types and not (types - LOCALITY_PLACE_TYPES):
-                # Every type on this result is an administrative/regional one
-                # (e.g. a bare "locality" hit for a rural pin with no closer
-                # POI) - skip it rather than naming the pin after its city.
-                continue
-            name = (result.get("name") or "").strip()
-            if name:
-                return name
-        return None
+        return places_resolution.resolve_name_from_nearby(latitude, longitude, self.radius, api_key=settings.google_unrestricted_api_key or "")
 
 
 @dataclass(frozen=True, slots=True)

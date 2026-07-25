@@ -41,21 +41,20 @@ class GoogleMapsPhotosPanelSource(GalleryMediaSource):
     title = "Google Maps"
 
     def gate(self, pin: Pin) -> bool:
-        """Requires a configured API key and coordinates."""
+        """Requires a configured API key (Google or REData) and coordinates."""
         from urbanlens.UrbanLens.settings.app import settings
 
-        return bool(settings.google_unrestricted_api_key) and bool(pin.effective_latitude and pin.effective_longitude)
+        has_provider = bool(settings.google_unrestricted_api_key) or bool(settings.redata_api_url and settings.redata_api_key)
+        return has_provider and bool(pin.effective_latitude and pin.effective_longitude)
 
     def fetch(self, pin: Pin) -> None:
-        """Find the nearest place by coordinates and cache its photo names."""
+        """Find the nearest place by coordinates and cache its photo identifiers."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
+        from urbanlens.dashboard.services.apis.locations import places_resolution
         from urbanlens.UrbanLens.settings.app import settings
 
-        gateway = GooglePlacesGateway(api_key=settings.google_unrestricted_api_key or "")
         lat, lng = pin.effective_latitude, pin.effective_longitude
-        place_id = gateway.find_nearest_place_id(lat, lng)
-        photo_names = gateway.get_place_photo_names(place_id, max_photos=10) if place_id else []
+        place_id, photo_names = places_resolution.find_nearest_place_photos(lat, lng, api_key=settings.google_unrestricted_api_key or "")
         LocationCache.set(
             pin.location,
             self.cache_source,

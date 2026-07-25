@@ -338,6 +338,85 @@ class SafetyCheckinChatConsumerPartnerTests(TransactionTestCase):
         self.assertEqual(close_message["type"], "websocket.close")
         self.assertEqual(close_message.get("code"), 4404)
 
+    def test_removed_partner_is_closed_on_every_simultaneous_connection(self):
+        """Regression guard: a removed partner logged in from two tabs/devices at once
+        must have BOTH connections closed - the group_send that drives revocation
+        reaches every channel_name registered for the group, not just one of them.
+        """
+        _run(self._removed_partner_is_closed_on_every_simultaneous_connection())
+
+    async def _removed_partner_is_closed_on_every_simultaneous_connection(self):
+        from channels.db import database_sync_to_async
+
+        @database_sync_to_async
+        def _make_accepted_partner():
+            partner_user = baker.make("auth.User")
+            partner = SafetyCheckinPartner.objects.create(
+                checkin=self.checkin,
+                profile=partner_user.profile,
+                invited_by=self.owner_profile,
+                status=SafetyCheckinPartnerStatus.ACCEPTED,
+            )
+            return partner_user, partner
+
+        partner_user, partner = await _make_accepted_partner()
+        tab_one = self._session_communicator(partner_user)
+        tab_two = self._session_communicator(partner_user)
+        connected_one, _ = await tab_one.connect()
+        connected_two, _ = await tab_two.connect()
+        self.assertTrue(connected_one)
+        self.assertTrue(connected_two)
+
+        await database_sync_to_async(remove_checkin_partner)(partner)
+
+        close_one = await tab_one.receive_output()
+        close_two = await tab_two.receive_output()
+        self.assertEqual(close_one["type"], "websocket.close")
+        self.assertEqual(close_one.get("code"), 4404)
+        self.assertEqual(close_two["type"], "websocket.close")
+        self.assertEqual(close_two.get("code"), 4404)
+
+    def test_write_access_is_revoked_immediately_even_before_the_close_arrives(self):
+        """Regression guard for _create_message's in-band recheck: a removed partner's
+        connection may not have processed its close frame yet (or the revocation
+        broadcast may never arrive at all, see the periodic-revalidation test below) -
+        either way, an attempted send in that window must be rejected, not accepted.
+        """
+        _run(self._write_access_is_revoked_immediately_even_before_the_close_arrives())
+
+    async def _write_access_is_revoked_immediately_even_before_the_close_arrives(self):
+        from channels.db import database_sync_to_async
+
+        @database_sync_to_async
+        def _make_accepted_partner():
+            partner_user = baker.make("auth.User")
+            partner = SafetyCheckinPartner.objects.create(
+                checkin=self.checkin,
+                profile=partner_user.profile,
+                invited_by=self.owner_profile,
+                status=SafetyCheckinPartnerStatus.ACCEPTED,
+            )
+            return partner_user, partner
+
+        partner_user, partner = await _make_accepted_partner()
+        partner_comm = self._session_communicator(partner_user)
+        connected, _ = await partner_comm.connect()
+        self.assertTrue(connected)
+
+        # Remove the row directly via the ORM - no partner_access_revoked broadcast at
+        # all, so the connection is still open and would otherwise still look authorized.
+        await database_sync_to_async(SafetyCheckinPartner.objects.filter(pk=partner.pk).delete)()
+
+        await partner_comm.send_to(text_data=json.dumps({"body": "Still here?"}))
+        response = json.loads(await partner_comm.receive_from())
+        self.assertEqual(response["type"], "error")
+
+        @database_sync_to_async
+        def _message_count():
+            return SafetyCheckin.objects.get(pk=self.checkin.pk).messages.count()
+
+        self.assertEqual(await _message_count(), 0)
+
     def test_dropped_revocation_broadcast_is_caught_by_periodic_revalidation(self):
         """Regression guard: partner_access_revoked (the group_send remove_checkin_partner
         fires) is best-effort, like every other broadcast in this module - if it's ever

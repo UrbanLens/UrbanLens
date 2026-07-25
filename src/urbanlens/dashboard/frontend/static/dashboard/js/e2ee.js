@@ -21851,6 +21851,28 @@ https://github.com/browserify/crypto-browserify`);
     await removeByPrefix(`group:${selfSlug}:`);
   }
 
+  // src/urbanlens/dashboard/frontend/ts/shared/dialogs.ts
+  async function confirmAction(options) {
+    if (window.confirmDialog) {
+      return window.confirmDialog(options);
+    }
+    return window.confirm(options.message ?? "Are you sure?");
+  }
+  var toast = {
+    success(message) {
+      window.toastr.success(message);
+    },
+    error(message) {
+      window.toastr.error(message);
+    },
+    warning(message) {
+      window.toastr.warning(message);
+    },
+    info(message) {
+      window.toastr.info(message);
+    }
+  };
+
   // src/urbanlens/dashboard/frontend/ts/shared/e2ee-client.ts
   var config = null;
   function init(cfg) {
@@ -22132,8 +22154,7 @@ https://github.com/browserify/crypto-browserify`);
     return true;
   }
   function notifyEnrolled() {
-    const toastr = window.toastr;
-    toastr?.info?.("Your direct messages are now end-to-end encrypted. Save your recovery key from Settings → Direct Messages.", "Encryption enabled");
+    window.toastr.info("Your direct messages are now end-to-end encrypted. Save your recovery key from Settings → Direct Messages.", "Encryption enabled");
   }
   async function getUnlockState() {
     const selfSlug = cfg().selfSlug;
@@ -22496,11 +22517,10 @@ https://github.com/browserify/crypto-browserify`);
           errorEl.hidden = false;
           return;
         }
-        const toastr = window.toastr;
         if (result.rewrapped > 0) {
-          toastr?.success?.("Your keys were reset and your message history was re-encrypted - everything stays readable.");
+          toast.success("Your keys were reset and your message history was re-encrypted - everything stays readable.");
         } else if (!result.preserved) {
-          toastr?.warning?.("Your keys were reset. Previously encrypted messages are no longer readable on this account.");
+          toast.warning("Your keys were reset. Previously encrypted messages are no longer readable on this account.");
         }
         close(result.recoveryDisplay);
       } catch {
@@ -22714,6 +22734,33 @@ https://github.com/browserify/crypto-browserify`);
     }
     return decryptMessage(ciphertext, nonce, key);
   }
+  async function decryptSafetyArchive(sealedKeyB64, ciphertextB64, nonceB64) {
+    await cryptoReady();
+    let identity = await requireIdentity();
+    if (identity === null) {
+      const unlocked = await showUnlockDialog();
+      if (!unlocked) {
+        return null;
+      }
+      identity = await requireIdentity();
+    }
+    if (identity === null) {
+      return null;
+    }
+    const symmetricKey = unseal(sealedKeyB64, identity.publicKey, identity.privateKey);
+    if (symmetricKey === null) {
+      return null;
+    }
+    const json = decryptMessage(ciphertextB64, nonceB64, symmetricKey);
+    if (json === null) {
+      return null;
+    }
+    try {
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
+  }
   async function decryptDom(root, partnerSlug) {
     const nodes = Array.from(root.querySelectorAll("[data-e2ee-ct]"));
     for (const node of nodes) {
@@ -22813,6 +22860,7 @@ Keep this somewhere safe - it can unlock your encrypted message history on any d
     encryptForGroup,
     decryptFromGroup,
     decryptDom,
+    decryptSafetyArchive,
     showRecoveryDialog,
     showResetDialog
   };

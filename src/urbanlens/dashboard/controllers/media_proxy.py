@@ -74,7 +74,8 @@ class GoogleMapsPhotoProxyView(LoginRequiredMixin, View):
         # depth this deployment's URL stack landed on.
         from urllib.parse import unquote
 
-        from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
+        from urbanlens.dashboard.services.apis.locations import places_resolution
+        from urbanlens.dashboard.services.gateway import GatewayRequestError
 
         sig = request.GET.get("sig", "")
         if not (hmac.compare_digest(sig, sign_photo_name(photo_name)) or hmac.compare_digest(sig, sign_photo_name(unquote(photo_name)))):
@@ -88,7 +89,8 @@ class GoogleMapsPhotoProxyView(LoginRequiredMixin, View):
             content, content_type = cached
             return HttpResponse(content, content_type=content_type)
 
-        if not settings.google_unrestricted_api_key:
+        redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
+        if not settings.google_unrestricted_api_key and not redata_configured:
             return HttpResponse(status=404)
         # Serving from cache above is free, but an upstream fetch consumes the
         # site's Places quota on this requester's behalf - honor their own
@@ -99,7 +101,13 @@ class GoogleMapsPhotoProxyView(LoginRequiredMixin, View):
         if not profile.external_apis_enabled:
             return HttpResponse(status=404)
         try:
-            content, content_type = GooglePlacesGateway(api_key=settings.google_unrestricted_api_key).get_photo_media(photo_name)
+            content, content_type = places_resolution.download_photo(photo_name, api_key=settings.google_unrestricted_api_key or "")
+        except places_resolution.PhotoNotFoundError:
+            # Confirmed gone (either provider) - same treatment as a Google
+            # 404 below: an ordinary, expected condition, not a server error.
+            logger.info("Photo reference expired for %r", photo_name)
+            cache.set(cache_key, _EXPIRED_SENTINEL, _EXPIRED_CACHE_TTL)
+            return HttpResponse(status=404)
         except requests.exceptions.HTTPError as e:
             if e.response is not None and e.response.status_code == 404:
                 # Google Places photo references expire over time (not
@@ -115,8 +123,8 @@ class GoogleMapsPhotoProxyView(LoginRequiredMixin, View):
                 return HttpResponse(status=404)
             logger.exception("Google Places photo media request failed for %r -> Status Code: %s, Body: %s", photo_name, e.response.status_code if e.response is not None else "?", e.response.text if e.response is not None else "")
             return HttpResponse(status=502)
-        except requests.exceptions.RequestException:
-            logger.exception("Google Places photo media request failed for %r", photo_name)
+        except (requests.exceptions.RequestException, GatewayRequestError, ValueError):
+            logger.exception("Places photo media request failed for %r", photo_name)
             return HttpResponse(status=502)
         cache.set(cache_key, (content, content_type), _PHOTO_CACHE_TTL)
         return HttpResponse(content, content_type=content_type)

@@ -104,7 +104,9 @@ class PlaceNameResolverChainTests(SimpleTestCase):
 
         with (
             mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),
-            mock.patch("urbanlens.dashboard.services.locations.google.GooglePlacesGateway") as gateway,
+            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_url", None),
+            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_key", None),
+            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.GooglePlacesGateway") as gateway,
         ):
             gateway.return_value.get_data.side_effect = ValueError("bad response")
             self.assertIsNone(GooglePlacesNameResolver().resolve(40.0, -74.0))
@@ -116,7 +118,9 @@ class PlaceNameResolverChainTests(SimpleTestCase):
 
         with (
             mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),
-            mock.patch("urbanlens.dashboard.services.locations.google.GooglePlacesGateway") as gateway,
+            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_url", None),
+            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_key", None),
+            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.GooglePlacesGateway") as gateway,
         ):
             gateway.return_value.get_data.side_effect = RateLimitExceededError("google_places")
             self.assertIsNone(GooglePlacesNameResolver().resolve(40.0, -74.0))
@@ -144,7 +148,9 @@ class PlaceNameResolverChainTests(SimpleTestCase):
 
         with (
             mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),
-            mock.patch("urbanlens.dashboard.services.locations.google.GooglePlacesGateway") as gateway,
+            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_url", None),
+            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_key", None),
+            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.GooglePlacesGateway") as gateway,
         ):
             gateway.return_value.get_data.return_value = [
                 {"name": "Poughkeepsie", "types": ["locality", "political"]},
@@ -157,7 +163,9 @@ class PlaceNameResolverChainTests(SimpleTestCase):
 
         with (
             mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),
-            mock.patch("urbanlens.dashboard.services.locations.google.GooglePlacesGateway") as gateway,
+            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_url", None),
+            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.settings.redata_api_key", None),
+            mock.patch("urbanlens.dashboard.services.apis.locations.places_resolution.GooglePlacesGateway") as gateway,
         ):
             gateway.return_value.get_data.return_value = [{"name": "Poughkeepsie", "types": ["locality", "political"]}]
             self.assertIsNone(GooglePlacesNameResolver().resolve(40.0, -74.0))

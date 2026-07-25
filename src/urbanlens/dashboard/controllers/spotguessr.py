@@ -10,7 +10,7 @@ it; real-time fan-out to other participants happens over
 
 from __future__ import annotations
 
-from datetime import date as date_cls
+from datetime import date as date_cls, timedelta
 import json
 import logging
 from typing import TYPE_CHECKING, Any
@@ -21,6 +21,7 @@ from django.contrib.gis.geos import GEOSException, Point
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views import View
 
 if TYPE_CHECKING:
@@ -115,6 +116,16 @@ def _config_from_request(request: HttpRequest) -> tuple[spotguessr_session.GameC
     except (TypeError, ValueError):
         return None, JsonResponse({"error": "difficulty must be a number between 0 and 1."}, status=400)
 
+    round_time_limit_seconds = None
+    raw_time_limit = request.POST.get("round_time_limit_seconds")
+    if raw_time_limit:
+        try:
+            round_time_limit_seconds = int(raw_time_limit)
+        except (TypeError, ValueError):
+            return None, JsonResponse({"error": "round_time_limit_seconds must be a whole number of seconds."}, status=400)
+        if round_time_limit_seconds not in spotguessr_session.ROUND_TIME_LIMIT_CHOICES:
+            return None, JsonResponse({"error": f"round_time_limit_seconds must be one of {spotguessr_session.ROUND_TIME_LIMIT_CHOICES} or omitted."}, status=400)
+
     config = spotguessr_session.GameConfig(
         difficulty=difficulty,
         allow_arbitrary_external_photos=request.POST.get("allow_arbitrary_external_photos") == "on",
@@ -122,6 +133,7 @@ def _config_from_request(request: HttpRequest) -> tuple[spotguessr_session.GameC
         date_guessing_enabled=request.POST.get("date_guessing_enabled") == "on",
         use_aliases=request.POST.get("use_aliases", "on") == "on",
         geo_bounds_geojson=geo_bounds_geojson,
+        round_time_limit_seconds=round_time_limit_seconds,
     )
     return config, None
 
@@ -155,8 +167,10 @@ def _url_templates() -> dict[str, str]:
         "invite": reverse("spotguessr.invite", kwargs=session_kwargs),
         "join": reverse("spotguessr.join", kwargs=session_kwargs),
         "begin": reverse("spotguessr.begin", kwargs=session_kwargs),
+        "end": reverse("spotguessr.end", kwargs=session_kwargs),
         "round": reverse("spotguessr.round", kwargs=session_kwargs),
         "guess": reverse("spotguessr.guess", kwargs={"session_id": _SESSION_ID_SENTINEL, "round_id": _ROUND_ID_SENTINEL}),
+        "round_timeout": reverse("spotguessr.round_timeout", kwargs={"session_id": _SESSION_ID_SENTINEL, "round_id": _ROUND_ID_SENTINEL}),
         "photo_feedback": reverse("spotguessr.photo_feedback", kwargs={"session_id": _SESSION_ID_SENTINEL, "round_id": _ROUND_ID_SENTINEL}),
         "chat_history": reverse("spotguessr.chat_history", kwargs=session_kwargs),
         "summary": reverse("spotguessr.summary", kwargs=session_kwargs),
@@ -216,6 +230,7 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
                 "min_rounds": spotguessr_session.MIN_ROUNDS_PER_SESSION,
                 "max_rounds": spotguessr_session.MAX_ROUNDS_PER_SESSION,
                 "default_rounds": spotguessr_session.DEFAULT_ROUNDS_PER_SESSION,
+                "round_time_limit_choices": spotguessr_session.ROUND_TIME_LIMIT_CHOICES,
                 "modes": SpotGuessrMode.choices,
                 "mode_cards": _mode_cards(),
                 "urls": _url_templates(),
@@ -406,6 +421,29 @@ class SpotGuessrBeginView(LoginRequiredMixin, View):
         return JsonResponse({"finished": False, "round": serializers.serialize_round(round_)})
 
 
+class SpotGuessrEndSessionView(LoginRequiredMixin, View):
+    """Host ends the game immediately - the manual escape hatch for a stalled or AFK multiplayer session.
+
+    POST /spotguessr/session/<session_id>/end/
+
+    Unlike waiting out the stall-sweep Celery task (``tasks.sweep_stalled_spotguessr_sessions``),
+    this lets the host end the game the moment they decide it's not going
+    anywhere - see the SpotGuessr audit's "no host ability to end the game"
+    finding. Any in-flight round is revealed first with whatever guesses
+    already exist (see ``services.spotguessr.session.end_session_now``).
+    """
+
+    def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
+        profile = _current_profile(request)
+        game_session = _participant_session(profile, session_id)
+
+        try:
+            spotguessr_session.end_session_now(game_session, profile)
+        except spotguessr_session.SpotGuessrError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        return JsonResponse({"finished": True, "summary": spotguessr_session.session_summary(game_session)})
+
+
 class SpotGuessrRoundView(LoginRequiredMixin, View):
     """The session's current round (for reloads/reconnects).
 
@@ -460,12 +498,43 @@ class SpotGuessrGuessView(LoginRequiredMixin, View):
 
         guess_point = Point(longitude, latitude, srid=4326)
         try:
-            guess, bonus_tiers = spotguessr_session.submit_guess(round_, profile, guess_point, guessed_date)
+            guess, bonus_tiers, rating_change = spotguessr_session.submit_guess(round_, profile, guess_point, guessed_date)
         except spotguessr_session.SpotGuessrError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
 
         round_.refresh_from_db()
-        return JsonResponse(serializers.serialize_reveal(round_, guess, bonus_tiers))
+        return JsonResponse(serializers.serialize_reveal(round_, guess, bonus_tiers, rating_change))
+
+
+class SpotGuessrRoundTimeoutView(LoginRequiredMixin, View):
+    """Force-reveal the current round because its configured round timer expired.
+
+    POST /spotguessr/session/<session_id>/round/<round_id>/timeout/
+
+    The authoritative check is server-side (``round_.created`` + the
+    session's own ``round_time_limit_seconds``, never trusting the client's
+    clock) - this just gives a client that's still connected a fast path to
+    ``expire_round_timer``, which treats "time's up" as an ordinary round
+    outcome rather than a stall (unlike the stall-sweep Celery task's
+    ``force_reveal_round``, which is the much slower safety net for a client
+    that's disappeared entirely - see both functions' docstrings). A no-op
+    (200, not an error) if the round is already revealed or the timer
+    genuinely hasn't expired yet - a late/duplicate/clock-skewed call is
+    harmless either way.
+    """
+
+    def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
+        profile = _current_profile(request)
+        game_session = _participant_session(profile, session_id)
+        _joined_participant(profile, game_session)
+
+        round_ = get_object_or_404(GameRound, pk=round_id, session=game_session)
+        time_limit = (game_session.config or {}).get("round_time_limit_seconds")
+        if round_.revealed_at is None and time_limit and timezone.now() >= round_.created + timedelta(seconds=time_limit):
+            spotguessr_session.expire_round_timer(round_)
+            round_.refresh_from_db()
+
+        return JsonResponse({"revealed": round_.revealed_at is not None})
 
 
 class SpotGuessrPhotoFeedbackView(LoginRequiredMixin, View):

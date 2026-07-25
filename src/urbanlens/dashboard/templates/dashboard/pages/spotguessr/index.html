@@ -63,6 +63,7 @@
                 <span class="spotguessr-score-card-subtitle"></span>
             </span>
             <span class="spotguessr-score-card-points"></span>
+            <span class="spotguessr-score-card-rating-delta"></span>
         </li>
     </template>
 
@@ -80,7 +81,9 @@
     <section id="sg-game-panel" class="spotguessr-panel card" hidden>
         <div class="spotguessr-game-status">
             <span id="sg-round-status"></span>
+            <span id="sg-round-timer" class="spotguessr-round-timer" hidden></span>
             <span id="sg-score-status"></span>
+            <button type="button" id="sg-end-game-btn" class="btn btn--secondary btn--sm" hidden>End game</button>
             <button type="button" id="sg-game-settings-btn" class="btn--card spotguessr-game-settings-btn" aria-label="Game settings" hidden>
                 <i class="material-symbols-outlined">settings</i>
             </button>
@@ -110,7 +113,12 @@
         </div>
         <div id="sg-reveal-panel" class="spotguessr-reveal-panel" hidden>
             <h3 id="sg-reveal-title"></h3>
+            <div id="sg-reveal-points" class="spotguessr-reveal-points">
+                <span id="sg-reveal-points-value">0</span>
+                <span class="spotguessr-reveal-points-label">points</span>
+            </div>
             <p id="sg-reveal-detail"></p>
+            <p id="sg-reveal-rating-delta" class="spotguessr-rating-delta" hidden></p>
             <div id="sg-photo-feedback" class="spotguessr-photo-feedback" hidden>
                 <span class="spotguessr-panel-hint">Was this a good photo for the game?</span>
                 <button type="button" id="sg-photo-thumbs-up-btn" class="btn btn--secondary" title="Good photo">
@@ -137,8 +145,10 @@
         </div>
     </section>
 
-    <section id="sg-summary-panel" class="spotguessr-panel card" hidden>
-        <h2>Game over!</h2>
+    <section id="sg-summary-panel" class="spotguessr-panel spotguessr-summary-panel card" hidden>
+        <i id="sg-summary-icon" class="material-symbols-outlined spotguessr-summary-icon">emoji_events</i>
+        <h2 id="sg-summary-heading">Game over!</h2>
+        <p id="sg-summary-subheading" class="spotguessr-panel-hint"></p>
         <ul id="sg-summary-scores" class="spotguessr-scoreboard"></ul>
         <button type="button" id="sg-play-again-btn" class="btn btn--primary btn--lg">Play again</button>
     </section>

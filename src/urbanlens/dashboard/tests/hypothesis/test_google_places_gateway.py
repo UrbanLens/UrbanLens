@@ -1,9 +1,9 @@
 """Tests for GooglePlacesGateway's field-mask/fields handling.
 
 Places API (New) bills fields by SKU tier - rating/userRatingCount are
-"Enterprise + Atmosphere" tier, billed extra whether or not a caller actually
-uses them ("Stop retrieving Google Places
-atmosphere data" entry for the original billing report this addresses).
+Enterprise tier, billed extra whether or not a caller actually uses them
+("Stop retrieving Google Places atmosphere data" entry for the original
+billing report this addresses).
 These tests guard the fix: find_nearest_place_id must request a minimal
 field_mask, and get_place_details must never be callable without explicit
 fields (which would make the legacy endpoint return - and bill for -
@@ -52,7 +52,7 @@ def test_search_nearby_uses_the_given_field_mask_instead() -> None:
 
 def test_find_nearest_place_id_requests_only_the_place_id_field() -> None:
     """The only field this lookup ever reads is `id` - it must never pay for
-    the default mask's Atmosphere-tier rating/userRatingCount."""
+    the default mask's Enterprise-tier rating/userRatingCount."""
     response = Mock()
     response.json.return_value = {"places": [{"id": "place123"}]}
     session = Mock()

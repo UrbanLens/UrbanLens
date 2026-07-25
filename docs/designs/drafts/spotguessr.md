@@ -140,15 +140,37 @@ game. Both rating rows expose the standard Glicko-2 outputs on the *display* sca
 (`rating = 1500 + 173.7178 × μ`, `rating_deviation = 173.7178 × φ`) so the UI never has to
 know the internal-scale constants.
 
+**Surfacing the delta.** `apply_round_ratings` (`services.spotguessr.ratings`) returns each
+guessing profile's own `RatingChange` (display-scale rating before/after this one round) - it
+used to just apply the update and discard the before/after values, so a round's own rating
+movement was invisible in the UI even though the numbers existed for an instant in memory. The
+per-round delta is threaded onto `serialize_reveal`/`serialize_round_reveal`
+(`rating_delta`, rounded to 1 decimal place) for the immediate "▲ +14 rating" reveal treatment,
+and a running per-session total is accumulated on `GameSessionParticipant.rating_delta` (bumped
+by `services.spotguessr.session._finish_round` as each round completes) so the summary screen
+can show net movement for the whole game, not just the last round.
+
 ## Difficulty slider
 
 `config.difficulty` is a 0.0 (easiest) – 1.0 (hardest) float. It maps to a target display
 rating via `MIN_LOCATION_RATING + difficulty × (MAX_LOCATION_RATING − MIN_LOCATION_RATING)`,
 then candidate locations are weighted by a Gaussian kernel on
-`|location_rating.rating − target_rating|` (bandwidth `DIFFICULTY_BANDWIDTH`). Locations with
-fewer than `MIN_GAMES_FOR_DIFFICULTY_WEIGHTING` rounds played keep the neutral default rating
-(1500) rather than being penalized for lacking history — a brand-new location is never
-excluded just because nobody has rated it yet.
+`|location_rating.rating − target_rating|` (bandwidth `DIFFICULTY_BANDWIDTH`).
+
+**Proxy-seeded prior for unplayed/under-played locations.** Under per-user pin pools, most
+locations never accumulate `MIN_GAMES_FOR_DIFFICULTY_WEIGHTING` played rounds — flatly
+treating every one of them as the neutral default rating (1500) made the slider a near-placebo
+in practice (easy/medium/hard all weighted an unplayed location about the same). Instead,
+`services.spotguessr.selection._proxy_difficulty_rating()` estimates a rating from proxies the
+database already has *before* anyone's ever played there: how many profiles have pinned the
+location, and how many photos exist for it, both proxying "well-documented and recognizable"
+(→ easier). A location with zero games played uses this proxy rating outright; a location
+between 0 and `MIN_GAMES_FOR_DIFFICULTY_WEIGHTING` plays blends the proxy estimate with its
+partial earned rating (weighted by how close it is to the threshold, so there's no
+discontinuous jump the instant real history exists); at or past the threshold, the proxy is
+ignored entirely in favor of the earned rating. Documentation-richness is never read as
+*harder* than neutral for lack of data — only ever easier as the signal strengthens, mirroring
+the kernel's own "never excluded for lack of data" contract.
 
 ## "Feels random" selection (anti-clustering)
 
@@ -300,12 +322,22 @@ still creates an `ACTIVE` session with one `JOINED` participant, unchanged from 
 
 ```
 (created) → LOBBY ──host starts──▶ ACTIVE ──all rounds played──▶ COMPLETED
-                                       │
-                                       └──no eligible locations remain──▶ COMPLETED (early)
+                │                     │  │
+                │                     │  └──no eligible locations remain──▶ COMPLETED (early)
+                │                     │
+                │                     └──host ends early, or a round times out with 0 guesses──▶ COMPLETED / ABANDONED
+                │
+                └──host ends the lobby before starting──▶ COMPLETED
 ```
 
-No `ABANDONED` transition is added by this phase — an inactive lobby just sits in `LOBBY`
-forever, harmlessly (see "not built" below).
+**Stall handling and `ABANDONED` (added post-launch — see "Multiplayer stall handling"
+below).** UL-392 originally shipped with no way out of a round nobody finishes: a stuck round
+just waited forever, and the host had no skip/force-reveal control (this was called out
+explicitly as a non-goal at the time, tracked as a follow-up). It's built now:
+`GameSessionStatus.ABANDONED` is set when the stall-sweep Celery task force-reveals a round
+that got precisely zero guesses (the whole table walked away); any host-initiated early end
+(`end_session_now`) always lands on `COMPLETED` instead, since a deliberate stop isn't the same
+as nobody showing up. See "Multiplayer stall handling" for the full design.
 
 ### Participants: invited vs. joined
 
@@ -337,16 +369,28 @@ separate `GameSessionInvite` model. The host's own row is created as `JOINED` im
 ### Real-time sync: `GameSessionConsumer`
 
 One `AsyncWebsocketConsumer`, one channel-layer group per session
-(`f"spotguessr_session_{session_id}"`) — modeled directly on `SafetyCheckinChatConsumer`
-(`dashboard/consumers.py`), **not** `DirectMessageConsumer`'s per-profile-group shape, since
-every participant genuinely needs the same broadcast (unlike a DM/group-chat's per-viewer
-identity-masked payloads, which don't apply here — session participants already see each
-other by name on the scoreboard). Route: `ws/spotguessr/session/<int:session_id>/`.
+(`services.spotguessr.realtime.session_group_name(session_id)`) — modeled directly on
+`SafetyCheckinChatConsumer` (`dashboard/consumers.py`), **not** `DirectMessageConsumer`'s
+per-profile-group shape, since every participant genuinely needs the same broadcast (unlike a
+DM/group-chat's per-viewer identity-masked payloads, which don't apply here — session
+participants already see each other by name on the scoreboard). Route:
+`ws/spotguessr/session/<int:session_id>/`.
 
 `connect()` requires the connecting profile to already be a `GameSessionParticipant` (any
 status — an invitee should see the live lobby fill up before accepting) — 404-equivalent
 close code `4404` otherwise, `4500` for unexpected errors, matching every other consumer's
 convention.
+
+**Shared base class (added post-launch).** `GameSessionConsumer` and Trivia's own
+`TriviaSessionConsumer` originally duplicated this entire connect/disconnect/receive/relay
+skeleton verbatim (Trivia's own docstring literally called itself an "exact mirror") - every
+one of the above rules had to be kept in sync by hand across two files with no code sharing
+between them, and the group name above was a hardcoded literal (`f"spotguessr_session_{...}"`)
+rather than a call to `session_group_name()`, so it and the broadcast side of
+`services.spotguessr.realtime` could silently drift. Collapsed into a shared
+`_ParticipantSessionConsumer` base (`dashboard/consumers.py`) that owns everything above;
+`GameSessionConsumer`/`TriviaSessionConsumer` now only supply their own `_group_name()`,
+`_is_participant()`, and `_send_chat_message()`.
 
 Broadcast event types (channel-layer `type`, dot-notation dispatched to `snake_case` handler
 methods per Channels convention):
@@ -356,9 +400,9 @@ methods per Channels convention):
 | `participant.joined` | An invitee accepts | profile id/username |
 | `session.started` | Host begins the game | round 1 (safe-serialized, no answer) |
 | `guess.submitted` | Any participant guesses | which profile, so others see "waiting on 2 more" — **not** their guess coordinates or score, which stay hidden until reveal |
-| `round.revealed` | The **last** joined participant guesses that round | the answer, every participant's distance/points, updated scoreboard totals |
+| `round.revealed` | Every joined participant has guessed, **or** the round is force-revealed early (stall-sweep timeout, round-timer expiry, or the host ending the session - see "Multiplayer stall handling") | the answer, every participant's distance/points/rating-delta, updated scoreboard totals |
 | `round.started` | The next round is generated (server-driven, right after a reveal broadcast) | round N (safe-serialized) |
-| `session.completed` | Final round revealed | full summary (same shape as `session_summary()`) |
+| `session.completed` | Final round revealed, or the session is force-ended/abandoned | full summary (same shape as `session_summary()`, including `status`) |
 | `chat.message` | Any participant sends chat | sender, body, timestamp |
 
 The HTTP endpoints from Phase 1 (`start`/`round`/`guess`/`summary`) are unchanged and still
@@ -380,17 +424,48 @@ Sent and broadcast over the WebSocket only (`chat.message` incoming → save →
 HTTP fallback send path in this phase (see "not built" below); read history is served over
 HTTP (`GET` the last N messages) so reconnecting/late-opening the page shows recent context.
 
-### Explicitly not built in UL-392 (tracked as follow-up, not silently dropped)
+### Multiplayer stall handling (added post-launch)
+
+UL-392 shipped with a real correctness gap: a round only completes when every joined
+participant has guessed (`submit_guess`'s "everyone answered" gate), and closing a tab is
+completely invisible to that check — there was no timeout, no AFK-skip, and no host control to
+force a reveal, so a stuck round (and the whole session behind it) simply waited forever. Fixed
+via two complementary primitives in `services.spotguessr.session`, both funneling through the
+same `_finish_round` helper `submit_guess` already used:
+
+- **`force_reveal_round(round_)`** — the stall-sweep's primitive. Reveals a round using
+  whatever guesses exist; a participant who never guessed just scores 0 and isn't rated for
+  that round. If the round got *zero* guesses at all, the session is marked `ABANDONED` instead
+  of manufacturing an empty next round forever — a long stall really does mean the whole table
+  left. Driven by `tasks.sweep_stalled_spotguessr_sessions`, a Celery beat task (every 2
+  minutes) that force-reveals any session whose current round has sat unrevealed past
+  `STALL_ROUND_TIMEOUT_MINUTES` (10) — see `GameSessionQuerySet.stalled()`.
+- **`expire_round_timer(round_)`** — the gentler cousin behind the optional **round timer**
+  (`GameConfig.round_time_limit_seconds`, one of `ROUND_TIME_LIMIT_CHOICES` seconds, or
+  untimed). "Time's up" on a single round is a normal gameplay outcome, not evidence of
+  abandonment (even a solo player who didn't answer in time shouldn't have their whole session
+  abandoned over one missed round) — this reveals and advances exactly like a stall-sweep would,
+  but never sets `ABANDONED`. The client's own countdown calls
+  `SpotGuessrRoundTimeoutView` the instant it hits zero (server-side-verified against
+  `round.created + round_time_limit_seconds`, never trusting the client clock) as the fast
+  path; the stall-sweep above is the backstop if no client is around to report it.
+- **`end_session_now(session, host)`** — the host's manual escape hatch
+  (`SpotGuessrEndSessionView`), usable from `LOBBY` (cancel before it even starts) or `ACTIVE`.
+  Reveals any in-flight round first (using whichever guesses exist) so progress isn't dropped,
+  then always lands on `COMPLETED` — a deliberate host action is never treated as abandonment,
+  even if literally nobody had guessed yet.
+
+`get_or_create_round`'s "is the current round done" check reads `revealed_at IS NOT NULL`
+directly (not "everyone's guessed count"), since revealed_at is now the single authoritative
+completion marker regardless of which of the above set it.
+
+### Explicitly not built (tracked as follow-up, not silently dropped)
 
 - **Join-by-link** (inviting someone who isn't yet a friend). Friends-only matches this
   app's existing invite model everywhere else and avoids a new "who can see this session
   exists" exposure surface; revisit only if user feedback specifically asks for it.
 - **Mid-game joining / reconnecting after a dropped roster.** A session's roster is fixed at
   `session.started`.
-- **Session abandonment/cleanup** for lobbies nobody ever starts, or active sessions where a
-  participant goes AFK forever (no timeout, no host-skip-round control). A stuck round simply
-  waits; the host can't currently force a reveal. Worth a follow-up if this proves annoying
-  in practice.
 - **HTTP fallback for sending chat** (mirroring `ws/messages/`'s pattern) — WebSocket-only
   for now, consistent with keeping this phase's scope to what multiplayer actually needs.
 - **Voice chat** — still UL-395, unchanged.
@@ -459,6 +534,16 @@ same location within the cache window don't re-bill — no additional caching ad
 `_MAX_LOCATION_ATTEMPTS`. `start_solo_session`'s Phase 1 restriction to `SpotGuessrMode.PHOTOS`
 is lifted; all three modes are now startable, solo or multiplayer.
 
+**Mode registry (added post-launch).** That per-mode branch originally lived as an if/elif
+repeated independently in three places that all had to agree on the same mode list: round
+generation above, `serializers.serialize_round`, and the photo-feedback "does this round even
+have visual content" gate (`services.spotguessr.relevance`) — a fourth mode would have meant
+editing all three (plus a fourth hardcoded copy of the same mode list on the TS side). Collapsed
+into `services.spotguessr.modes`: one `ModeStrategy` per mode (`build_round`, `serialize_round`,
+`shows_imagery`), registered once in `_STRATEGIES`. `shows_imagery` is now serialized directly
+onto every round payload (`RoundPayload.shows_imagery`), so the frontend reads it off the round
+instead of keeping its own hardcoded `["photos", "street_view"]` list.
+
 ## Config defaults (tunable — one dataclass, `SpotGuessrConfig`)
 
 | Constant | Default | Note |
@@ -478,6 +563,9 @@ is lifted; all three modes are now startable, solo or multiplayer.
 | `DIFFICULTY_BANDWIDTH` | 200 | Gaussian kernel width, in rating points |
 | `MIN_GAMES_FOR_DIFFICULTY_WEIGHTING` | 5 | below this, treat as neutral (1500) |
 | `MIN_SEPARATION_KM` | 0.5 | anti-clustering exclusion radius from the previous round |
+| `_PROXY_PIN_SATURATION` / `_PROXY_PHOTO_SATURATION` | 20 / 10 | pins/photos at or above this read as "as well-documented as it gets" for the unplayed-location difficulty proxy |
+| `ROUND_TIME_LIMIT_CHOICES` | 30 / 60 / 90 / 120 (seconds) | optional per-session round timer; default untimed (`None`) |
+| `STALL_ROUND_TIMEOUT_MINUTES` | 10 | stall-sweep cutoff — see "Multiplayer stall handling" |
 | Glicko-2: rating / RD / volatility / scale / τ | 1500 / 350 / 0.06 / 173.7178 / 0.5 | Glickman's published defaults |
 | `use_aliases` | True | Named Place mode; per-session config, not a site-wide constant |
 | `allow_arbitrary_external_photos` | False | Photos mode; skips the relevance filter entirely when true - see "Photo relevance feedback" |
@@ -541,6 +629,20 @@ is lifted; all three modes are now startable, solo or multiplayer.
 - **UL-395 (follow-up)** — voice chat: peer-to-peer WebRTC mesh, signaling relayed over a new
   Channels consumer (no SFU/new infra — chosen because sessions are small, and it avoids a
   new paid dependency). Suits 2-6 participants; would need revisiting if session sizes grow.
-- **UL-396 (follow-up)** — engagement polish: reveal animations (guess vs. actual pin +
-  connecting line, score-count-up), competitive leaderboards/streaks, non-competitive
-  "just play" mode framing, and any other GeoGuessr-parity features not covered above.
+- **Audit fix pass (this pass, 2026-07-25)** — implemented every finding in
+  `docs/reports/spotguessr-audit.md`: the multiplayer stall fix and `ABANDONED` status
+  (`force_reveal_round`/`expire_round_timer`/`end_session_now`, the stall-sweep Celery task -
+  see "Multiplayer stall handling"), the per-round rating-delta reward loop plus a richer
+  summary screen, the `services.spotguessr.modes` strategy registry and the shared
+  `_ParticipantSessionConsumer` base (see "Shared plumbing change" and "Real-time sync" above),
+  proxy-seeded difficulty for unplayed locations (see "Difficulty slider"), and — pulled forward
+  from UL-396's planned scope, since the audit asked for it directly — the reveal-screen
+  "feel" pass: an animated point count-up, the guess-to-answer distance line drawing itself in,
+  and an optional per-round timer. This also refactored `frontend/ts/entries/spotguessr.ts`
+  around a single `showPanel()` state-machine chokepoint and pulled its pure logic (formatting,
+  panel visibility, animation math) into a new testable `frontend/ts/shared/spotguessr-format.ts`
+  module, which had the feature's first frontend unit tests.
+- **UL-396 (remaining follow-up)** — competitive leaderboards/streaks, non-competitive "just
+  play" mode framing, and any other GeoGuessr-parity features not covered above (the reveal
+  animations/score-count-up portion of this phase's original scope is now built - see the
+  audit fix pass entry above).

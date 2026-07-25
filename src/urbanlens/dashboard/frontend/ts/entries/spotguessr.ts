@@ -9,8 +9,20 @@
  * open one at all.
  */
 import { getCsrfToken } from "../shared/csrf";
-import { toast } from "../shared/dialogs";
+import { confirmAction, toast } from "../shared/dialogs";
 import { createMapLayers } from "../shared/map-layers";
+import {
+    avatarInitial,
+    bonusSuffix,
+    countUpValue,
+    formatCountdown,
+    formatRatingDelta,
+    interpolateLatLng,
+    panelVisibility,
+    summaryBestRoundSubtitle,
+    summaryHeadline,
+    type PanelName,
+} from "../shared/spotguessr-format";
 
 declare const L: typeof import("leaflet");
 import type {} from "leaflet-draw";
@@ -27,8 +39,10 @@ declare global {
             invite: string;
             join: string;
             begin: string;
+            end: string;
             round: string;
             guess: string;
+            round_timeout: string;
             photo_feedback: string;
             chat_history: string;
             summary: string;
@@ -50,6 +64,7 @@ interface LastConfig {
     date_guessing_enabled: boolean;
     use_aliases: boolean;
     geo_bounds_geojson: GeoJSON.Geometry | null;
+    round_time_limit_seconds: number | null;
 }
 
 // [[south, west], [north, east]] - matches Leaflet's LatLngBoundsExpression shape directly.
@@ -62,6 +77,12 @@ interface RoundPayload {
     sequence_index: number;
     revealed: boolean;
     geo_bounds?: GeoBoundsBox | null;
+    // Server-computed (services.spotguessr.modes.shows_imagery) - which modes
+    // show real photographic content worth reacting to, so the frontend never
+    // hardcodes its own copy of that mode list.
+    shows_imagery: boolean;
+    // ISO timestamp the round's configured timer runs out, or null/absent for untimed play.
+    expires_at?: string | null;
     image_url?: string;
     display_text?: string | null;
     street_view_image?: string | null;
@@ -75,6 +96,8 @@ interface RevealPayload {
     date_points: number;
     bonus_points: number;
     bonus_tiers: string[];
+    // This guesser's own Glicko-2 rating change from this round, once revealed.
+    rating_delta?: number | null;
     // Only present when `revealed` is true - see showReveal().
     actual_latitude?: number;
     actual_longitude?: number;
@@ -90,6 +113,7 @@ interface RoundRevealResult {
     points: number;
     date_points: number;
     bonus_points: number;
+    rating_delta?: number | null;
 }
 
 interface RoundRevealBroadcast {
@@ -124,6 +148,9 @@ interface SummaryParticipant {
     username: string;
     avatar_url: string | null;
     total_points: number;
+    rating_delta?: number;
+    best_round_points?: number | null;
+    best_round_distance_meters?: number | null;
 }
 
 interface SummaryPayload {
@@ -163,33 +190,100 @@ const pageEl = document.querySelector<HTMLElement>(".spotguessr-page");
 const myProfileId = Number(pageEl?.dataset.myProfileId ?? "0");
 const regionSearchUrl = pageEl?.dataset.regionSearchUrl ?? "";
 
-let sessionId: number | null = null;
-let currentRoundId: number | null = null;
-let currentMode = "photos";
-let totalRounds = 0;
-let sessionScore = 0;
-let dateGuessingEnabled = false;
-let isMultiplayer = false;
-let hostProfileId: number | null = null;
-let lastRevealedRoundId: number | null = null;
-let ws: WebSocket | null = null;
+// ---------------------------------------------------------------------------
+// Session/UI state - every mutable cross-function value lives on this one
+// object rather than as ~24 independent module-level `let`s. One source of
+// truth that's trivial to inspect as a whole (e.g. `console.log(state)`) and
+// impossible to half-reset by forgetting one of many scattered bindings -
+// see _resetSessionState() below, which used to have to enumerate them all.
+// ---------------------------------------------------------------------------
 
-let guessMap: L.Map | null = null;
-let guessMarker: L.Marker | null = null;
-let actualMarker: L.Marker | null = null;
-let resultLine: L.Polyline | null = null;
+interface SpotGuessrState {
+    sessionId: number | null;
+    currentRoundId: number | null;
+    currentMode: string;
+    currentRoundShowsImagery: boolean;
+    totalRounds: number;
+    sessionScore: number;
+    // What #sg-score-status currently shows, mid-count-up or not - the
+    // animation target for the *next* count-up needs to start from here, not
+    // from `sessionScore` itself (which is already the new total by the time
+    // showReveal() updates it).
+    displayedSessionScore: number;
+    dateGuessingEnabled: boolean;
+    isMultiplayer: boolean;
+    hostProfileId: number | null;
+    lastRevealedRoundId: number | null;
+    ws: WebSocket | null;
+    guessMap: L.Map | null;
+    guessMarker: L.Marker | null;
+    actualMarker: L.Marker | null;
+    resultLine: L.Polyline | null;
+    areaMap: L.Map | null;
+    areaDrawnItems: L.FeatureGroup | null;
+    // Set by applyLastConfig() when a saved geo_bounds exists - drawn once
+    // ensureAreaMap() actually builds the map (deferred until the dialog is
+    // visible, since a <dialog> without `open` has zero size before showModal()).
+    restoredGeoBounds: GeoJSON.Geometry | null;
+    pinOptions: PinOption[];
+    friendOptions: FriendOption[];
+    selectedInviteIds: Set<number>;
+    scoreboard: SummaryParticipant[];
+    // A round's configured timer (GameConfig.round_time_limit_seconds), if
+    // any - see startRoundTimer()/clearRoundTimer().
+    roundExpiresAtMs: number | null;
+    roundTimerHandle: ReturnType<typeof setInterval> | null;
+}
 
-let areaMap: L.Map | null = null;
-let areaDrawnItems: L.FeatureGroup | null = null;
-// Set by applyLastConfig() when a saved geo_bounds exists - drawn once
-// ensureAreaMap() actually builds the map (deferred until the dialog is
-// visible, since a <dialog> without `open` has zero size before showModal()).
-let restoredGeoBounds: GeoJSON.Geometry | null = null;
+const state: SpotGuessrState = {
+    sessionId: null,
+    currentRoundId: null,
+    currentMode: "photos",
+    currentRoundShowsImagery: false,
+    totalRounds: 0,
+    sessionScore: 0,
+    displayedSessionScore: 0,
+    dateGuessingEnabled: false,
+    isMultiplayer: false,
+    hostProfileId: null,
+    lastRevealedRoundId: null,
+    ws: null,
+    guessMap: null,
+    guessMarker: null,
+    actualMarker: null,
+    resultLine: null,
+    areaMap: null,
+    areaDrawnItems: null,
+    restoredGeoBounds: null,
+    pinOptions: [],
+    friendOptions: [],
+    selectedInviteIds: new Set<number>(),
+    scoreboard: [],
+    roundExpiresAtMs: null,
+    roundTimerHandle: null,
+};
 
-let pinOptions: PinOption[] = [];
-let friendOptions: FriendOption[] = [];
-const selectedInviteIds = new Set<number>();
-let scoreboard: SummaryParticipant[] = [];
+// ---------------------------------------------------------------------------
+// Top-level panel state machine - showPanel() is the single chokepoint every
+// screen transition goes through, so no render path can forget to hide the
+// others (the old code toggled all 5 `.hidden` flags by hand in every
+// function that showed one of them).
+// ---------------------------------------------------------------------------
+
+const PANEL_IDS: Record<PanelName, string> = {
+    settings: "sg-settings-panel",
+    lobby: "sg-lobby-panel",
+    game: "sg-game-panel",
+    summary: "sg-summary-panel",
+    empty: "sg-empty-state-panel",
+};
+
+function showPanel(name: PanelName): void {
+    const visibility = panelVisibility(name);
+    for (const [key, id] of Object.entries(PANEL_IDS) as [PanelName, string][]) {
+        el(id).hidden = !visibility[key];
+    }
+}
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
     const found = document.getElementById(id);
@@ -265,15 +359,15 @@ function openSettingsDialog(mode: string): void {
     // toggle) - build it the first time the dialog is opened, since a
     // <dialog> without `open` has zero size before showModal() and Leaflet
     // needs real size to lay out tiles correctly.
-    if (areaMap) {
+    if (state.areaMap) {
         // Already built while the dialog was previously closed (0-size) -
         // nudge Leaflet now that it's actually visible.
-        areaMap.invalidateSize();
+        state.areaMap.invalidateSize();
     } else {
         ensureAreaMap();
-        if (restoredGeoBounds) {
-            setAreaGeometry(restoredGeoBounds);
-            restoredGeoBounds = null;
+        if (state.restoredGeoBounds) {
+            setAreaGeometry(state.restoredGeoBounds);
+            state.restoredGeoBounds = null;
         }
     }
 }
@@ -308,21 +402,21 @@ interface RegionSearchResult {
 }
 
 function ensureAreaMap(): L.Map {
-    if (areaMap) return areaMap;
-    areaMap = L.map("sg-area-map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(areaMap);
-    areaDrawnItems = new L.FeatureGroup();
-    areaMap.addLayer(areaDrawnItems);
+    if (state.areaMap) return state.areaMap;
+    state.areaMap = L.map("sg-area-map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(state.areaMap);
+    state.areaDrawnItems = new L.FeatureGroup();
+    state.areaMap.addLayer(state.areaDrawnItems);
     const drawControl = new L.Control.Draw({
         draw: { polygon: {}, rectangle: false, circle: false, marker: false, polyline: false, circlemarker: false },
-        edit: { featureGroup: areaDrawnItems },
+        edit: { featureGroup: state.areaDrawnItems },
     });
-    areaMap.addControl(drawControl);
-    areaMap.on(L.Draw.Event.CREATED, (event: L.LeafletEvent) => {
+    state.areaMap.addControl(drawControl);
+    state.areaMap.on(L.Draw.Event.CREATED, (event: L.LeafletEvent) => {
         const { layer } = event as unknown as { layer: L.Polygon };
         setAreaGeometry(layer.toGeoJSON().geometry);
     });
-    return areaMap;
+    return state.areaMap;
 }
 
 // Exactly one region is ever active - a new search selection or hand-drawn
@@ -334,24 +428,24 @@ function ensureAreaMap(): L.Map {
 // use "Clear area" to drop it entirely.
 function setAreaGeometry(geometry: GeoJSON.Geometry): void {
     const map = ensureAreaMap();
-    areaDrawnItems?.clearLayers();
+    state.areaDrawnItems?.clearLayers();
     const layer = L.geoJSON(geometry as GeoJSON.GeoJsonObject);
-    layer.eachLayer((shapeLayer) => areaDrawnItems?.addLayer(shapeLayer));
+    layer.eachLayer((shapeLayer) => state.areaDrawnItems?.addLayer(shapeLayer));
     el<HTMLInputElement>("sg-area-geo-bounds").value = JSON.stringify(geometry);
     el<HTMLInputElement>("sg-restrict-area").checked = true;
     el<HTMLButtonElement>("sg-area-clear-btn").hidden = false;
-    const bounds = areaDrawnItems?.getBounds();
+    const bounds = state.areaDrawnItems?.getBounds();
     if (bounds?.isValid()) map.fitBounds(bounds, { padding: [40, 40] });
     void updateAreaPinCount();
 }
 
 function clearAreaGeometry(): void {
-    areaDrawnItems?.clearLayers();
+    state.areaDrawnItems?.clearLayers();
     el<HTMLInputElement>("sg-area-geo-bounds").value = "";
     el<HTMLInputElement>("sg-restrict-area").checked = false;
     el<HTMLButtonElement>("sg-area-clear-btn").hidden = true;
     el("sg-area-pin-count").hidden = true;
-    areaMap?.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    state.areaMap?.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 }
 
 async function updateAreaPinCount(): Promise<void> {
@@ -445,10 +539,10 @@ function currentGeoBoundsGeoJson(): string | null {
 
 async function loadPinOptions(): Promise<void> {
     const data = await getJson(urls.pins);
-    pinOptions = data.pins ?? [];
+    state.pinOptions = data.pins ?? [];
     const datalist = el<HTMLDataListElement>("sg-pin-options");
     datalist.innerHTML = "";
-    for (const pin of pinOptions) {
+    for (const pin of state.pinOptions) {
         const option = document.createElement("option");
         option.value = pin.label;
         datalist.appendChild(option);
@@ -458,7 +552,7 @@ async function loadPinOptions(): Promise<void> {
 function initPinSearch(): void {
     const input = el<HTMLInputElement>("sg-pin-search");
     input.addEventListener("change", () => {
-        const match = pinOptions.find((pin) => pin.label === input.value);
+        const match = state.pinOptions.find((pin) => pin.label === input.value);
         if (match) placeGuessMarker(L.latLng(match.latitude, match.longitude));
     });
 }
@@ -468,10 +562,10 @@ function initPinSearch(): void {
 // ---------------------------------------------------------------------------
 
 async function loadFriendOptions(): Promise<FriendOption[]> {
-    if (friendOptions.length) return friendOptions;
+    if (state.friendOptions.length) return state.friendOptions;
     const data = await getJson(urls.friends);
-    friendOptions = data.friends ?? [];
-    return friendOptions;
+    state.friendOptions = data.friends ?? [];
+    return state.friendOptions;
 }
 
 // Fetched unconditionally at page load so the friend list is ready the
@@ -492,20 +586,20 @@ async function fetchFriendsEagerly(): Promise<void> {
         return;
     }
     loadingEl.hidden = true;
-    renderFriendCheckboxes(el("sg-friend-list"), friendOptions, new Set());
+    renderFriendCheckboxes(el("sg-friend-list"), state.friendOptions, new Set());
 }
 
 function initFriendListRetry(): void {
     el("sg-friend-list-retry").addEventListener("click", () => void fetchFriendsEagerly());
 }
 
-// `targetSet` defaults to the module-level selectedInviteIds (the initial
-// invite flow's source of truth, read at game-start submit time) but can be
-// swapped for a scoped-local Set - see pickFriendsToInvite() below, which
-// reuses this same rendering logic for the "invite more" dialog without
-// polluting selectedInviteIds (that set must only ever reflect the pending
+// `targetSet` defaults to state.selectedInviteIds (the initial invite flow's
+// source of truth, read at game-start submit time) but can be swapped for a
+// scoped-local Set - see pickFriendsToInvite() below, which reuses this same
+// rendering logic for the "invite more" dialog without polluting
+// state.selectedInviteIds (that set must only ever reflect the pending
 // game-start invite list, not a completed, already-invited mid-game pick).
-function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[], excludeIds: Set<number>, targetSet: Set<number> = selectedInviteIds): void {
+function renderFriendCheckboxes(container: HTMLElement, friends: FriendOption[], excludeIds: Set<number>, targetSet: Set<number> = state.selectedInviteIds): void {
     container.innerHTML = "";
     const available = friends.filter((friend) => !excludeIds.has(friend.profile_id));
     if (!available.length) {
@@ -589,9 +683,9 @@ function pickFriendsToInvite(available: FriendOption[]): Promise<Set<number>> {
 }
 
 async function handleInviteMore(): Promise<void> {
-    if (sessionId === null) return;
+    if (state.sessionId === null) return;
     const friends = await loadFriendOptions();
-    const lobby: SessionPayload = await getJson(urlFor(urls.lobby, sessionId));
+    const lobby: SessionPayload = await getJson(urlFor(urls.lobby, state.sessionId));
     const alreadyInvited = new Set(lobby.participants.map((participant) => participant.profile_id));
     const available = friends.filter((friend) => !alreadyInvited.has(friend.profile_id));
     if (!available.length) {
@@ -603,10 +697,10 @@ async function handleInviteMore(): Promise<void> {
     if (!chosenIds.size) return;
 
     for (const profileId of chosenIds) {
-        const response = await postForm(urlFor(urls.invite, sessionId), { profile_id: String(profileId) });
+        const response = await postForm(urlFor(urls.invite, state.sessionId), { profile_id: String(profileId) });
         if (response.error) toast.error(response.error);
     }
-    const refreshed: SessionPayload = await getJson(urlFor(urls.lobby, sessionId));
+    const refreshed: SessionPayload = await getJson(urlFor(urls.lobby, state.sessionId));
     renderLobbyParticipants(refreshed.participants);
 }
 
@@ -615,25 +709,25 @@ async function handleInviteMore(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function ensureGuessMap(): L.Map {
-    if (guessMap) return guessMap;
-    guessMap = L.map("sg-guess-map", { attributionControl: false }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-    createMapLayers(guessMap, {
+    if (state.guessMap) return state.guessMap;
+    state.guessMap = L.map("sg-guess-map", { attributionControl: false }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    createMapLayers(state.guessMap, {
         root: document.getElementById("sg-guess-map-layers"),
         onAttribution: (text) => {
             const attributionEl = document.getElementById("sg-guess-map-attribution");
             if (attributionEl) attributionEl.textContent = text;
         },
     });
-    guessMap.on("click", (event) => placeGuessMarker(event.latlng));
-    return guessMap;
+    state.guessMap.on("click", (event) => placeGuessMarker(event.latlng));
+    return state.guessMap;
 }
 
 function placeGuessMarker(latlng: L.LatLng): void {
     const map = ensureGuessMap();
-    if (guessMarker) {
-        guessMarker.setLatLng(latlng);
+    if (state.guessMarker) {
+        state.guessMarker.setLatLng(latlng);
     } else {
-        guessMarker = L.marker(latlng, { draggable: true }).addTo(map);
+        state.guessMarker = L.marker(latlng, { draggable: true }).addTo(map);
     }
     el<HTMLButtonElement>("sg-submit-guess-btn").disabled = false;
 }
@@ -643,23 +737,80 @@ function placeGuessMarker(latlng: L.LatLng): void {
 // docs/designs/spotguessr.md's eligibility rule 3.
 function resetGuessMap(bounds?: GeoBoundsBox | null): void {
     const map = ensureGuessMap();
-    if (guessMarker) {
-        map.removeLayer(guessMarker);
-        guessMarker = null;
+    if (state.guessMarker) {
+        map.removeLayer(state.guessMarker);
+        state.guessMarker = null;
     }
-    if (actualMarker) {
-        map.removeLayer(actualMarker);
-        actualMarker = null;
+    if (state.actualMarker) {
+        map.removeLayer(state.actualMarker);
+        state.actualMarker = null;
     }
-    if (resultLine) {
-        map.removeLayer(resultLine);
-        resultLine = null;
+    if (state.resultLine) {
+        map.removeLayer(state.resultLine);
+        state.resultLine = null;
     }
     el<HTMLButtonElement>("sg-submit-guess-btn").disabled = true;
     if (bounds) {
         map.fitBounds(bounds, { padding: [20, 20] });
     } else {
         map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Round timer (GameConfig.round_time_limit_seconds) - a purely local countdown
+// display; the actual reveal is always server-authoritative (SpotGuessrRoundTimeoutView
+// / the stall-sweep Celery task), never decided client-side.
+// ---------------------------------------------------------------------------
+
+function clearRoundTimer(): void {
+    if (state.roundTimerHandle !== null) {
+        clearInterval(state.roundTimerHandle);
+        state.roundTimerHandle = null;
+    }
+    state.roundExpiresAtMs = null;
+    el("sg-round-timer").hidden = true;
+}
+
+function startRoundTimer(expiresAtIso: string | null | undefined): void {
+    clearRoundTimer();
+    if (!expiresAtIso) return;
+
+    state.roundExpiresAtMs = new Date(expiresAtIso).getTime();
+    el("sg-round-timer").hidden = false;
+    updateRoundTimerDisplay();
+    state.roundTimerHandle = setInterval(updateRoundTimerDisplay, 1000);
+}
+
+function updateRoundTimerDisplay(): void {
+    if (state.roundExpiresAtMs === null) return;
+    const remainingSeconds = Math.ceil((state.roundExpiresAtMs - Date.now()) / 1000);
+    const timerEl = el("sg-round-timer");
+    timerEl.textContent = formatCountdown(remainingSeconds);
+    timerEl.classList.toggle("spotguessr-round-timer--urgent", remainingSeconds <= 10);
+    if (remainingSeconds <= 0) {
+        clearRoundTimer();
+        void reportRoundTimeout();
+    }
+}
+
+// Tells the server this round's timer ran out - a fast path to the same
+// force-reveal the stall-sweep Celery task would eventually apply anyway
+// (see services.spotguessr.session.expire_round_timer). Multiplayer learns
+// the outcome via the usual round.revealed/round.started broadcast; solo has
+// no listener for those, so it re-fetches the (now-revealed) round directly.
+async function reportRoundTimeout(): Promise<void> {
+    if (state.sessionId === null || state.currentRoundId === null) return;
+    await postForm(urlFor(urls.round_timeout, state.sessionId, state.currentRoundId), {});
+    if (state.isMultiplayer) return;
+
+    const data = await getJson(urlFor(urls.round, state.sessionId));
+    if (data.no_eligible_locations) {
+        showNoEligibleLocations();
+    } else if (data.finished) {
+        showSummary(data.summary);
+    } else if (data.round) {
+        renderRound(data.round, data.round.sequence_index + 1);
     }
 }
 
@@ -682,27 +833,24 @@ function renderLobbyParticipants(participants: ParticipantPayload[]): void {
     }
 
     const me = participants.find((participant) => participant.profile_id === myProfileId);
-    const isHost = hostProfileId === myProfileId;
+    const isHost = state.hostProfileId === myProfileId;
     el<HTMLButtonElement>("sg-invite-more-btn").hidden = !isHost;
     el<HTMLButtonElement>("sg-join-lobby-btn").hidden = !(me && me.status === "invited");
     el<HTMLButtonElement>("sg-begin-btn").hidden = !isHost;
 }
 
 function renderLobby(session: SessionPayload): void {
-    hostProfileId = session.host_profile_id;
-    currentMode = session.mode;
-    totalRounds = session.total_rounds;
-    el("sg-settings-panel").hidden = true;
-    el("sg-lobby-panel").hidden = false;
-    el("sg-game-panel").hidden = true;
-    el("sg-summary-panel").hidden = true;
+    state.hostProfileId = session.host_profile_id;
+    state.currentMode = session.mode;
+    state.totalRounds = session.total_rounds;
+    showPanel("lobby");
     renderLobbyParticipants(session.participants);
     connectSessionSocket();
 }
 
 async function refreshLobby(): Promise<void> {
-    if (sessionId === null) return;
-    const lobby: SessionPayload = await getJson(urlFor(urls.lobby, sessionId));
+    if (state.sessionId === null) return;
+    const lobby: SessionPayload = await getJson(urlFor(urls.lobby, state.sessionId));
     renderLobbyParticipants(lobby.participants);
 }
 
@@ -711,20 +859,23 @@ async function refreshLobby(): Promise<void> {
 // ---------------------------------------------------------------------------
 
 function renderRound(round: RoundPayload, roundNumber: number): void {
-    currentRoundId = round.round_id;
-    currentMode = round.mode;
-    el("sg-settings-panel").hidden = true;
-    el("sg-lobby-panel").hidden = true;
-    el("sg-summary-panel").hidden = true;
-    el("sg-game-panel").hidden = false;
+    state.currentRoundId = round.round_id;
+    state.currentMode = round.mode;
+    state.currentRoundShowsImagery = round.shows_imagery;
+    showPanel("game");
     el("sg-reveal-panel").hidden = true;
-    el("sg-round-status").textContent = `Round ${roundNumber} of ${totalRounds}`;
-    el("sg-score-status").textContent = isMultiplayer ? "" : `Score: ${sessionScore}`;
+    el("sg-round-status").textContent = `Round ${roundNumber} of ${state.totalRounds}`;
+    // Baseline for the new round - not a "reward" moment, so no count-up here.
+    state.displayedSessionScore = state.sessionScore;
+    el("sg-score-status").textContent = state.isMultiplayer ? "" : `Score: ${state.sessionScore}`;
     // Changing settings mid-game starts an entirely new session (see
     // sg-game-settings-btn's click handler) - safe to abandon a solo game in
     // progress, but would desync a shared multiplayer session's other
     // participants, so this is solo-only.
-    el<HTMLButtonElement>("sg-game-settings-btn").hidden = isMultiplayer;
+    el<HTMLButtonElement>("sg-game-settings-btn").hidden = state.isMultiplayer;
+    // Ending early only makes sense for the host of a shared game - solo play
+    // has "reload"/"play again" for the same purpose already.
+    el<HTMLButtonElement>("sg-end-game-btn").hidden = !(state.isMultiplayer && state.hostProfileId === myProfileId);
 
     const photo = el<HTMLImageElement>("sg-round-photo");
     const nameHeading = el("sg-round-name");
@@ -742,13 +893,70 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
         photo.src = (round.mode === "street_view" ? round.street_view_image : round.image_url) ?? "";
     }
 
-    el("sg-date-field").hidden = !dateGuessingEnabled;
+    el("sg-date-field").hidden = !state.dateGuessingEnabled;
     el("sg-photo-feedback").hidden = true;
     el("sg-photo-feedback-thanks").hidden = true;
     resetGuessMap(round.geo_bounds);
+    startRoundTimer(round.expires_at);
     // The map container was hidden (display:none) while another panel was
     // showing, so Leaflet needs a nudge once it's visible again.
-    setTimeout(() => guessMap?.invalidateSize(), 0);
+    setTimeout(() => state.guessMap?.invalidateSize(), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Animation helpers - thin requestAnimationFrame wrappers around the pure
+// easing/interpolation math in shared/spotguessr-format.ts (kept there, not
+// here, so that math is unit-testable without a DOM/rAF environment).
+// ---------------------------------------------------------------------------
+
+// Keyed per-element so re-triggering an animation on the same element (e.g.
+// a fast player who guesses again before the previous reveal's count-up
+// finished) cancels the stale one instead of both fighting over the text.
+const activeCountUps = new WeakMap<HTMLElement, number>();
+
+// Counts `el`'s text content from `from` to `to` over `durationMs`, easing
+// out. `formatter` renders the current (possibly fractional, mid-animation)
+// numeric value - defaults to a rounded integer, since points/ratings never
+// show fractional digits mid-flight.
+function animateCountUp(el: HTMLElement, from: number, to: number, durationMs = 700, formatter: (value: number) => string = (value) => String(Math.round(value))): void {
+    const pending = activeCountUps.get(el);
+    if (pending !== undefined) cancelAnimationFrame(pending);
+
+    if (from === to || durationMs <= 0) {
+        el.textContent = formatter(to);
+        activeCountUps.delete(el);
+        return;
+    }
+
+    const start = performance.now();
+    const tick = (now: number): void => {
+        const progress = Math.min(1, (now - start) / durationMs);
+        el.textContent = formatter(progress >= 1 ? to : countUpValue(from, to, progress));
+        if (progress < 1) {
+            activeCountUps.set(el, requestAnimationFrame(tick));
+        } else {
+            activeCountUps.delete(el);
+        }
+    };
+    activeCountUps.set(el, requestAnimationFrame(tick));
+}
+
+// Draws `line` growing from `from` toward `to` over `durationMs`, rather
+// than snapping into place instantly - the reveal's "here's how far off you
+// were" line drawing itself in, GeoGuessr-style. Uses Leaflet's public
+// setLatLngs() API (not internal SVG path plumbing), so it doesn't depend on
+// Leaflet's rendering internals.
+function animateLineDrawIn(map: L.Map, from: L.LatLng, to: L.LatLng, durationMs = 600): L.Polyline {
+    const line = L.polyline([from, from], { color: "#e74c3c" }).addTo(map);
+    const start = performance.now();
+    const tick = (now: number): void => {
+        const progress = Math.min(1, (now - start) / durationMs);
+        const [lat, lng] = interpolateLatLng([from.lat, from.lng], [to.lat, to.lng], progress);
+        line.setLatLngs([from, progress >= 1 ? to : L.latLng(lat, lng)]);
+        if (progress < 1) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+    return line;
 }
 
 // ---------------------------------------------------------------------------
@@ -762,13 +970,10 @@ interface ScoreCardData {
     avatarUrl: string | null;
     points: number;
     subtitle?: string;
+    ratingDelta?: number | null;
 }
 
-function avatarInitial(username: string): string {
-    return username.charAt(0).toUpperCase() || "?";
-}
-
-function renderScoreCard(data: ScoreCardData, rank?: number): HTMLElement {
+function renderScoreCard(data: ScoreCardData, rank?: number, animatePoints = false): HTMLElement {
     const template = el<HTMLTemplateElement>("sg-score-card-template");
     const node = template.content.firstElementChild?.cloneNode(true);
     if (!node) throw new Error("SpotGuessr: score card template is empty");
@@ -800,30 +1005,67 @@ function renderScoreCard(data: ScoreCardData, rank?: number): HTMLElement {
     const subtitleEl = card.querySelector<HTMLElement>(".spotguessr-score-card-subtitle");
     if (subtitleEl) subtitleEl.textContent = data.subtitle ?? "";
     const pointsEl = card.querySelector<HTMLElement>(".spotguessr-score-card-points");
-    if (pointsEl) pointsEl.textContent = `${data.points} pts`;
+    if (pointsEl) {
+        if (animatePoints) {
+            animateCountUp(pointsEl, 0, data.points, 700, (value) => `${Math.round(value)} pts`);
+        } else {
+            pointsEl.textContent = `${data.points} pts`;
+        }
+    }
+
+    const ratingDeltaEl = card.querySelector<HTMLElement>(".spotguessr-score-card-rating-delta");
+    if (ratingDeltaEl) {
+        const formatted = formatRatingDelta(data.ratingDelta);
+        ratingDeltaEl.textContent = formatted?.text ?? "";
+        ratingDeltaEl.className = `spotguessr-score-card-rating-delta${formatted ? ` spotguessr-score-card-rating-delta--${formatted.direction}` : ""}`;
+    }
 
     return card;
 }
 
 // Solo sessions show "Your score: X" instead of a username-labeled card -
-// there's only ever one participant, and naming them is just noise.
-function renderScoreCardList(container: HTMLElement, entries: ScoreCardData[], options: { solo: boolean }): void {
+// there's only ever one participant, and naming them is just noise. Still
+// surfaces the same rating-delta/subtitle recap a multiplayer card would,
+// when the entry carries them (see showSummary()).
+function renderScoreCardList(container: HTMLElement, entries: ScoreCardData[], options: { solo: boolean; animatePoints?: boolean }): void {
     container.innerHTML = "";
     const sorted = [...entries].sort((a, b) => b.points - a.points);
     const [only] = sorted;
     if (options.solo && sorted.length === 1 && only) {
         const item = document.createElement("li");
         item.className = "spotguessr-score-card spotguessr-score-card--solo";
-        item.textContent = `Your score: ${only.points} pts`;
+        const scoreLine = document.createElement("span");
+        const scoreValue = document.createElement("span");
+        scoreValue.className = "spotguessr-score-card-solo-value";
+        scoreLine.append("Your score: ", scoreValue, " pts");
+        item.appendChild(scoreLine);
+        if (options.animatePoints) {
+            animateCountUp(scoreValue, 0, only.points, 700);
+        } else {
+            scoreValue.textContent = String(only.points);
+        }
+        const formatted = formatRatingDelta(only.ratingDelta);
+        if (formatted) {
+            const ratingLine = document.createElement("span");
+            ratingLine.className = `spotguessr-rating-delta spotguessr-rating-delta--${formatted.direction}`;
+            ratingLine.textContent = formatted.text;
+            item.appendChild(ratingLine);
+        }
+        if (only.subtitle) {
+            const subtitleLine = document.createElement("span");
+            subtitleLine.className = "spotguessr-score-card-subtitle";
+            subtitleLine.textContent = only.subtitle;
+            item.appendChild(subtitleLine);
+        }
         container.appendChild(item);
         return;
     }
-    sorted.forEach((entry, index) => container.appendChild(renderScoreCard(entry, index + 1)));
+    sorted.forEach((entry, index) => container.appendChild(renderScoreCard(entry, index + 1, options.animatePoints)));
 }
 
 function renderResultsList(results: RoundRevealResult[]): void {
     const list = el("sg-reveal-results");
-    if (!isMultiplayer) {
+    if (!state.isMultiplayer) {
         list.hidden = true;
         return;
     }
@@ -836,17 +1078,18 @@ function renderResultsList(results: RoundRevealResult[]): void {
             avatarUrl: result.avatar_url,
             points: result.points + result.date_points + result.bonus_points,
             subtitle: `${(result.distance_meters / 1000).toFixed(2)} km away`,
+            ratingDelta: result.rating_delta,
         })),
-        { solo: false },
+        { solo: false, animatePoints: true },
     );
 }
 
 function updateScoreboardFromResults(results: RoundRevealResult[]): void {
     for (const result of results) {
-        let entry = scoreboard.find((participant) => participant.profile_id === result.profile_id);
+        let entry = state.scoreboard.find((participant) => participant.profile_id === result.profile_id);
         if (!entry) {
             entry = { profile_id: result.profile_id, username: result.username, avatar_url: result.avatar_url, total_points: 0 };
-            scoreboard.push(entry);
+            state.scoreboard.push(entry);
         }
         entry.total_points += result.points + result.date_points + result.bonus_points;
     }
@@ -865,14 +1108,14 @@ function updateScoreboardFromResults(results: RoundRevealResult[]): void {
 
 function renderScoreboard(): void {
     const list = el("sg-scoreboard");
-    if (!isMultiplayer || !scoreboard.length) {
+    if (!state.isMultiplayer || !state.scoreboard.length) {
         list.hidden = true;
         return;
     }
     list.hidden = false;
     renderScoreCardList(
         list,
-        scoreboard.map((entry) => ({ profileId: entry.profile_id, username: entry.username, avatarUrl: entry.avatar_url, points: entry.total_points })),
+        state.scoreboard.map((entry) => ({ profileId: entry.profile_id, username: entry.username, avatarUrl: entry.avatar_url, points: entry.total_points })),
         { solo: false },
     );
 }
@@ -881,9 +1124,9 @@ function showPhotoFeedbackIfApplicable(): void {
     // The photo itself (unlike the answer) has been visible since the round
     // started, whether or not everyone's guessed yet - so feedback on it is
     // always fair game once there's a reveal panel to put the buttons in.
-    // Photos and Street View both show real imagery worth reacting to;
-    // Named Place shows only text.
-    el("sg-photo-feedback").hidden = !["photos", "street_view"].includes(currentMode);
+    // shows_imagery comes straight from the round payload (services.spotguessr.modes) -
+    // no separate hardcoded mode list to keep in sync here.
+    el("sg-photo-feedback").hidden = !state.currentRoundShowsImagery;
     el("sg-photo-feedback-thanks").hidden = true;
 }
 
@@ -891,18 +1134,51 @@ function dropInMarker(marker: L.Marker): void {
     marker.getElement()?.classList.add("spotguessr-marker-drop");
 }
 
-// e.g. "+750 bonus (country, state, city)" - the exact per-tier point
-// values live server-side (services.spotguessr.geo_bonus) to avoid drift;
-// the client just reports the total and which tiers matched.
-function bonusSuffix(bonusPoints: number, bonusTiers: string[]): string {
-    return bonusPoints ? ` (+${bonusPoints} bonus: ${bonusTiers.join(", ")})` : "";
+// Shared by showReveal() and showBroadcastReveal() - both draw the actual-
+// location marker, and (if a guess was placed) the line from that guess to
+// it, identically. Used to be ~15 duplicated lines in each function.
+function drawRevealMarkers(actualLatLng: L.LatLng): void {
+    const map = ensureGuessMap();
+    state.actualMarker = L.marker(actualLatLng).addTo(map);
+    dropInMarker(state.actualMarker);
+
+    if (state.guessMarker) {
+        const guessLatLng = state.guessMarker.getLatLng();
+        map.fitBounds(L.latLngBounds([guessLatLng, actualLatLng]), { padding: [40, 40] });
+        state.resultLine = animateLineDrawIn(map, guessLatLng, actualLatLng);
+    } else {
+        map.setView(actualLatLng, 14);
+    }
+}
+
+function updateRatingDeltaDisplay(delta: number | null | undefined): void {
+    const badge = el("sg-reveal-rating-delta");
+    const formatted = formatRatingDelta(delta);
+    if (!formatted) {
+        badge.hidden = true;
+        badge.textContent = "";
+        badge.className = "spotguessr-rating-delta";
+        return;
+    }
+    badge.hidden = false;
+    badge.textContent = formatted.text;
+    badge.className = `spotguessr-rating-delta spotguessr-rating-delta--${formatted.direction}`;
 }
 
 function showReveal(reveal: RevealPayload): void {
+    clearRoundTimer();
     el<HTMLButtonElement>("sg-submit-guess-btn").disabled = true;
-    sessionScore += reveal.points + reveal.date_points + reveal.bonus_points;
-    el("sg-score-status").textContent = isMultiplayer ? "" : `Score: ${sessionScore}`;
+    const roundTotal = reveal.points + reveal.date_points + reveal.bonus_points;
+    state.sessionScore += roundTotal;
+    if (state.isMultiplayer) {
+        el("sg-score-status").textContent = "";
+    } else {
+        animateCountUp(el("sg-score-status"), state.displayedSessionScore, state.sessionScore, 700, (value) => `Score: ${Math.round(value)}`);
+    }
+    state.displayedSessionScore = state.sessionScore;
     showPhotoFeedbackIfApplicable();
+    updateRatingDeltaDisplay(reveal.rating_delta);
+    animateCountUp(el("sg-reveal-points-value"), 0, roundTotal);
 
     const distanceKm = (reveal.distance_meters / 1000).toFixed(2);
     if (!reveal.revealed) {
@@ -913,8 +1189,10 @@ function showReveal(reveal: RevealPayload): void {
         // knows it still needs to draw the actual marker/line itself).
         el("sg-reveal-panel").hidden = false;
         el("sg-reveal-title").textContent = "Guess submitted!";
-        let detail = `${reveal.points} points – ${distanceKm} km away. Waiting for other players…`;
-        if (reveal.date_points) detail = `${reveal.points} points (+${reveal.date_points} for the date guess) – ${distanceKm} km away. Waiting for other players…`;
+        // The big animated counter above already shows the point total - this
+        // line is just the distance/bonus breakdown, not a repeat of it.
+        let detail = `${distanceKm} km away. Waiting for other players…`;
+        if (reveal.date_points) detail = `${distanceKm} km away (+${reveal.date_points} for the date guess). Waiting for other players…`;
         detail += bonusSuffix(reveal.bonus_points, reveal.bonus_tiers);
         el("sg-reveal-detail").textContent = detail;
         el("sg-reveal-results").hidden = true;
@@ -922,58 +1200,46 @@ function showReveal(reveal: RevealPayload): void {
         return;
     }
 
-    lastRevealedRoundId = reveal.round_id;
-    const map = ensureGuessMap();
-    const actualLatLng = L.latLng(reveal.actual_latitude as number, reveal.actual_longitude as number);
-    actualMarker = L.marker(actualLatLng).addTo(map);
-    dropInMarker(actualMarker);
-
-    if (guessMarker) {
-        const guessLatLng = guessMarker.getLatLng();
-        resultLine = L.polyline([guessLatLng, actualLatLng], { color: "#e74c3c" }).addTo(map);
-        map.fitBounds(L.latLngBounds([guessLatLng, actualLatLng]), { padding: [40, 40] });
-    } else {
-        map.setView(actualLatLng, 14);
-    }
+    state.lastRevealedRoundId = reveal.round_id;
+    drawRevealMarkers(L.latLng(reveal.actual_latitude as number, reveal.actual_longitude as number));
 
     el("sg-reveal-panel").hidden = false;
     el("sg-reveal-title").textContent = reveal.location_name || "Revealed!";
-    let detail = `${reveal.points} points – ${distanceKm} km away`;
+    let detail = `${distanceKm} km away`;
     if (reveal.date_points) detail += ` (+${reveal.date_points} for the date guess)`;
     detail += bonusSuffix(reveal.bonus_points, reveal.bonus_tiers);
     el("sg-reveal-detail").textContent = detail;
     el("sg-reveal-results").hidden = true; // filled in by the round.revealed broadcast, for multiplayer
-    el<HTMLButtonElement>("sg-next-round-btn").hidden = isMultiplayer; // multiplayer advances automatically
+    el<HTMLButtonElement>("sg-next-round-btn").hidden = state.isMultiplayer; // multiplayer advances automatically
 }
 
 function showBroadcastReveal(data: RoundRevealBroadcast): void {
-    if (lastRevealedRoundId !== data.round_id) {
-        lastRevealedRoundId = data.round_id;
-        const map = ensureGuessMap();
-        const actualLatLng = L.latLng(data.actual_latitude, data.actual_longitude);
-        actualMarker = L.marker(actualLatLng).addTo(map);
-        dropInMarker(actualMarker);
-        if (guessMarker) {
-            const guessLatLng = guessMarker.getLatLng();
-            resultLine = L.polyline([guessLatLng, actualLatLng], { color: "#e74c3c" }).addTo(map);
-            map.fitBounds(L.latLngBounds([guessLatLng, actualLatLng]), { padding: [40, 40] });
-        } else {
-            map.setView(actualLatLng, 14);
-        }
+    clearRoundTimer();
+    if (state.lastRevealedRoundId !== data.round_id) {
+        state.lastRevealedRoundId = data.round_id;
+        drawRevealMarkers(L.latLng(data.actual_latitude, data.actual_longitude));
         el("sg-reveal-panel").hidden = false;
         el("sg-reveal-title").textContent = data.location_name || "Revealed!";
         el("sg-reveal-detail").textContent = "";
         el<HTMLButtonElement>("sg-submit-guess-btn").disabled = true;
         el<HTMLButtonElement>("sg-next-round-btn").hidden = true;
+        const myResult = data.results.find((result) => result.profile_id === myProfileId);
+        updateRatingDeltaDisplay(myResult?.rating_delta);
     }
     updateScoreboardFromResults(data.results);
     renderResultsList(data.results);
 }
 
 function showSummary(summary: SummaryPayload): void {
-    el("sg-game-panel").hidden = true;
-    el("sg-lobby-panel").hidden = true;
-    el("sg-summary-panel").hidden = false;
+    showPanel("summary");
+    clearRoundTimer();
+
+    const { heading, icon } = summaryHeadline(summary.participants, state.isMultiplayer, myProfileId);
+    el("sg-summary-heading").textContent = heading;
+    el("sg-summary-icon").textContent = icon;
+    const roundWord = summary.total_rounds === 1 ? "round" : "rounds";
+    el("sg-summary-subheading").textContent = `${summary.rounds_played} of ${summary.total_rounds} ${roundWord} played.`;
+
     renderScoreCardList(
         el("sg-summary-scores"),
         summary.participants.map((participant) => ({
@@ -981,12 +1247,14 @@ function showSummary(summary: SummaryPayload): void {
             username: participant.username,
             avatarUrl: participant.avatar_url,
             points: participant.total_points,
+            ratingDelta: participant.rating_delta,
+            subtitle: summaryBestRoundSubtitle(participant),
         })),
-        { solo: !isMultiplayer },
+        { solo: !state.isMultiplayer, animatePoints: true },
     );
-    if (ws) {
-        ws.close();
-        ws = null;
+    if (state.ws) {
+        state.ws.close();
+        state.ws = null;
     }
 }
 
@@ -995,24 +1263,27 @@ function showSummary(summary: SummaryPayload): void {
 // ---------------------------------------------------------------------------
 
 async function startGame(mode: string): Promise<void> {
-    currentMode = mode;
-    dateGuessingEnabled = currentMode === "photos" && el<HTMLInputElement>("sg-date-guessing").checked;
-    sessionScore = 0;
-    scoreboard = [];
-    lastRevealedRoundId = null;
+    state.currentMode = mode;
+    state.dateGuessingEnabled = state.currentMode === "photos" && el<HTMLInputElement>("sg-date-guessing").checked;
+    state.sessionScore = 0;
+    state.displayedSessionScore = 0;
+    state.scoreboard = [];
+    state.lastRevealedRoundId = null;
 
     const geoBounds = el<HTMLInputElement>("sg-restrict-area").checked ? currentGeoBoundsGeoJson() : null;
+    const roundTimeLimit = el<HTMLSelectElement>("sg-round-time-limit").value;
     const body = new URLSearchParams({
-        mode: currentMode,
+        mode: state.currentMode,
         difficulty: String(currentDifficulty()),
         total_rounds: el<HTMLInputElement>("sg-rounds").value,
         allow_arbitrary_external_photos: el<HTMLInputElement>("sg-allow-arbitrary-external-photos").checked ? "on" : "off",
         require_visited_all: el<HTMLInputElement>("sg-require-visited-all").checked ? "on" : "off",
-        date_guessing_enabled: dateGuessingEnabled ? "on" : "off",
+        date_guessing_enabled: state.dateGuessingEnabled ? "on" : "off",
         use_aliases: el<HTMLInputElement>("sg-use-aliases").checked ? "on" : "off",
     });
     if (geoBounds) body.append("geo_bounds", geoBounds);
-    for (const profileId of selectedInviteIds) body.append("invite_profile_ids", String(profileId));
+    if (roundTimeLimit) body.append("round_time_limit_seconds", roundTimeLimit);
+    for (const profileId of state.selectedInviteIds) body.append("invite_profile_ids", String(profileId));
 
     const response = await postForm(urls.start, body);
     if (response.error) {
@@ -1024,16 +1295,16 @@ async function startGame(mode: string): Promise<void> {
         return;
     }
 
-    sessionId = response.session_id;
-    totalRounds = Number(el<HTMLInputElement>("sg-rounds").value);
+    state.sessionId = response.session_id;
+    state.totalRounds = Number(el<HTMLInputElement>("sg-rounds").value);
 
     if (response.lobby) {
-        isMultiplayer = true;
+        state.isMultiplayer = true;
         renderLobby(response.session as SessionPayload);
         return;
     }
 
-    isMultiplayer = false;
+    state.isMultiplayer = false;
     if (response.finished) {
         showSummary(response.summary);
         return;
@@ -1043,15 +1314,15 @@ async function startGame(mode: string): Promise<void> {
 }
 
 async function submitGuess(): Promise<void> {
-    if (!guessMarker || sessionId === null || currentRoundId === null) return;
-    const latlng = guessMarker.getLatLng();
+    if (!state.guessMarker || state.sessionId === null || state.currentRoundId === null) return;
+    const latlng = state.guessMarker.getLatLng();
     const payload: Record<string, string> = { latitude: String(latlng.lat), longitude: String(latlng.lng) };
-    if (dateGuessingEnabled) {
+    if (state.dateGuessingEnabled) {
         const dateValue = el<HTMLInputElement>("sg-guessed-date").value;
         if (dateValue) payload.guessed_date = dateValue;
     }
 
-    const reveal: RevealPayload = await postForm(urlFor(urls.guess, sessionId, currentRoundId), payload);
+    const reveal: RevealPayload = await postForm(urlFor(urls.guess, state.sessionId, state.currentRoundId), payload);
     if (reveal.error) {
         toast.error(reveal.error);
         return;
@@ -1060,8 +1331,8 @@ async function submitGuess(): Promise<void> {
 }
 
 async function submitPhotoFeedback(kind: "thumbs_up" | "thumbs_down" | "reported"): Promise<void> {
-    if (sessionId === null || currentRoundId === null) return;
-    const response = await postForm(urlFor(urls.photo_feedback, sessionId, currentRoundId), { kind });
+    if (state.sessionId === null || state.currentRoundId === null) return;
+    const response = await postForm(urlFor(urls.photo_feedback, state.sessionId, state.currentRoundId), { kind });
     if (response.error) {
         toast.error(response.error);
         return;
@@ -1072,8 +1343,8 @@ async function submitPhotoFeedback(kind: "thumbs_up" | "thumbs_down" | "reported
 async function goToNextRound(): Promise<void> {
     // Multiplayer sessions advance automatically via the round.started
     // broadcast - this button is hidden for them (see showReveal).
-    if (sessionId === null) return;
-    const data = await getJson(urlFor(urls.round, sessionId));
+    if (state.sessionId === null) return;
+    const data = await getJson(urlFor(urls.round, state.sessionId));
     if (data.no_eligible_locations) {
         showNoEligibleLocations();
         return;
@@ -1086,8 +1357,8 @@ async function goToNextRound(): Promise<void> {
 }
 
 async function joinLobby(): Promise<void> {
-    if (sessionId === null) return;
-    const response = await postForm(urlFor(urls.join, sessionId), {});
+    if (state.sessionId === null) return;
+    const response = await postForm(urlFor(urls.join, state.sessionId), {});
     if (response.error) {
         toast.error(response.error);
         return;
@@ -1096,13 +1367,12 @@ async function joinLobby(): Promise<void> {
 }
 
 async function beginGame(): Promise<void> {
-    if (sessionId === null) return;
-    const response = await postForm(urlFor(urls.begin, sessionId), {});
+    if (state.sessionId === null) return;
+    const response = await postForm(urlFor(urls.begin, state.sessionId), {});
     if (response.error) {
         toast.error(response.error);
         return;
     }
-    el("sg-lobby-panel").hidden = true;
     if (response.no_eligible_locations) {
         showNoEligibleLocations();
         return;
@@ -1115,23 +1385,47 @@ async function beginGame(): Promise<void> {
     renderRound(response.round, 1);
 }
 
-function resetToSettings(): void {
-    sessionId = null;
-    currentRoundId = null;
-    sessionScore = 0;
-    scoreboard = [];
-    selectedInviteIds.clear();
-    isMultiplayer = false;
-    lastRevealedRoundId = null;
-    if (ws) {
-        ws.close();
-        ws = null;
+// Shared by resetToSettings() and showNoEligibleLocations() - both tear down
+// whatever session state exists before landing on a different panel.
+function _resetSessionState(): void {
+    state.sessionId = null;
+    state.currentRoundId = null;
+    state.sessionScore = 0;
+    state.displayedSessionScore = 0;
+    state.scoreboard = [];
+    state.selectedInviteIds.clear();
+    state.isMultiplayer = false;
+    state.lastRevealedRoundId = null;
+    clearRoundTimer();
+    if (state.ws) {
+        state.ws.close();
+        state.ws = null;
     }
-    el("sg-summary-panel").hidden = true;
-    el("sg-lobby-panel").hidden = true;
-    el("sg-game-panel").hidden = true;
-    el("sg-empty-state-panel").hidden = true;
-    el("sg-settings-panel").hidden = false;
+}
+
+// Host-only manual escape hatch for a stalled/AFK multiplayer game - see
+// controllers.spotguessr.SpotGuessrEndSessionView. Confirmed first since it's
+// irreversible for every other participant, not just the host.
+async function endGameNow(): Promise<void> {
+    if (state.sessionId === null) return;
+    const confirmed = await confirmAction({
+        title: "End this game?",
+        message: "This ends the game immediately for everyone, using the scores so far.",
+        confirmLabel: "End game",
+    });
+    if (!confirmed) return;
+
+    const response = await postForm(urlFor(urls.end, state.sessionId), {});
+    if (response.error) {
+        toast.error(response.error);
+        return;
+    }
+    showSummary(response.summary);
+}
+
+function resetToSettings(): void {
+    _resetSessionState();
+    showPanel("settings");
 }
 
 // Which currently-checked settings could plausibly be why nothing matched -
@@ -1154,10 +1448,9 @@ function clearActiveFilters(): void {
 // matched this mode/settings combination" from a real completed game -
 // see controllers.spotguessr's error_code/no_eligible_locations shapes.
 function showNoEligibleLocations(): void {
-    const mode = currentMode;
-    resetToSettings();
-    el("sg-settings-panel").hidden = true;
-    el("sg-empty-state-panel").hidden = false;
+    const mode = state.currentMode;
+    _resetSessionState();
+    showPanel("empty");
 
     const filters = activeFilterLabels();
     const filtersList = el("sg-empty-state-active-filters");
@@ -1173,7 +1466,6 @@ function showNoEligibleLocations(): void {
         clearBtn.hidden = false;
         clearBtn.onclick = () => {
             clearActiveFilters();
-            el("sg-empty-state-panel").hidden = true;
             void startGame(mode);
         };
     } else {
@@ -1185,7 +1477,7 @@ function showNoEligibleLocations(): void {
 function initEmptyState(): void {
     el("sg-empty-state-settings-btn").addEventListener("click", () => {
         resetToSettings();
-        openSettingsDialog(currentMode);
+        openSettingsDialog(state.currentMode);
     });
 }
 
@@ -1213,6 +1505,7 @@ function applyLastConfig(): void {
     el<HTMLInputElement>("sg-date-guessing").checked = config.date_guessing_enabled;
     el<HTMLInputElement>("sg-use-aliases").checked = config.use_aliases;
     el<HTMLInputElement>("sg-require-visited-all").checked = config.require_visited_all;
+    el<HTMLSelectElement>("sg-round-time-limit").value = config.round_time_limit_seconds ? String(config.round_time_limit_seconds) : "";
 
     if (config.geo_bounds_geojson) {
         el<HTMLInputElement>("sg-restrict-area").checked = true;
@@ -1224,7 +1517,7 @@ function applyLastConfig(): void {
         // first for Leaflet to lay out correctly.
         el<HTMLInputElement>("sg-area-geo-bounds").value = JSON.stringify(config.geo_bounds_geojson);
         el<HTMLButtonElement>("sg-area-clear-btn").hidden = false;
-        restoredGeoBounds = config.geo_bounds_geojson;
+        state.restoredGeoBounds = config.geo_bounds_geojson;
     }
 }
 
@@ -1233,18 +1526,18 @@ function applyLastConfig(): void {
 // ---------------------------------------------------------------------------
 
 function connectSessionSocket(): void {
-    if (ws || sessionId === null) return;
+    if (state.ws || state.sessionId === null) return;
     const proto = location.protocol === "https:" ? "wss://" : "ws://";
-    ws = new WebSocket(`${proto}${location.host}/ws/spotguessr/session/${sessionId}/`);
-    ws.addEventListener("message", (event) => {
+    state.ws = new WebSocket(`${proto}${location.host}/ws/spotguessr/session/${state.sessionId}/`);
+    state.ws.addEventListener("message", (event) => {
         try {
             handleSocketMessage(JSON.parse(event.data));
         } catch {
             // Ignore unparseable frames - nothing actionable to do with one.
         }
     });
-    ws.addEventListener("close", () => {
-        ws = null;
+    state.ws.addEventListener("close", () => {
+        state.ws = null;
     });
     el("sg-chat-panel").hidden = false;
     void loadChatHistory();
@@ -1256,7 +1549,6 @@ function handleSocketMessage(data: any): void {
             void refreshLobby();
             break;
         case "session.started":
-            el("sg-lobby-panel").hidden = true;
             renderRound(data.round, 1);
             break;
         case "round.revealed":
@@ -1292,8 +1584,8 @@ function appendChatMessage(message: ChatMessagePayload): void {
 }
 
 async function loadChatHistory(): Promise<void> {
-    if (sessionId === null) return;
-    const data = await getJson(urlFor(urls.chat_history, sessionId));
+    if (state.sessionId === null) return;
+    const data = await getJson(urlFor(urls.chat_history, state.sessionId));
     const log = el("sg-chat-log");
     log.innerHTML = "";
     for (const message of (data.messages ?? []) as ChatMessagePayload[]) appendChatMessage(message);
@@ -1304,8 +1596,8 @@ function initChat(): void {
         event.preventDefault();
         const input = el<HTMLInputElement>("sg-chat-input");
         const body = input.value.trim();
-        if (!body || !ws) return;
-        ws.send(JSON.stringify({ body }));
+        if (!body || !state.ws) return;
+        state.ws.send(JSON.stringify({ body }));
         input.value = "";
     });
 }
@@ -1317,26 +1609,26 @@ function initChat(): void {
 async function loadInitialSession(): Promise<void> {
     const raw = pageEl?.dataset.initialSessionId;
     if (!raw) return;
-    sessionId = Number(raw);
+    state.sessionId = Number(raw);
 
-    const lobby: SessionPayload = await getJson(urlFor(urls.lobby, sessionId));
-    totalRounds = lobby.total_rounds;
-    currentMode = lobby.mode;
-    isMultiplayer = true;
+    const lobby: SessionPayload = await getJson(urlFor(urls.lobby, state.sessionId));
+    state.totalRounds = lobby.total_rounds;
+    state.currentMode = lobby.mode;
+    state.isMultiplayer = true;
 
     if (lobby.status === "lobby") {
         renderLobby(lobby);
         return;
     }
     if (lobby.status === "completed" || lobby.status === "abandoned") {
-        const summary: SummaryPayload = await getJson(urlFor(urls.summary, sessionId));
+        const summary: SummaryPayload = await getJson(urlFor(urls.summary, state.sessionId));
         showSummary(summary);
         return;
     }
     // Already active - join the game in progress at its current round.
     connectSessionSocket();
     await loadPinOptions();
-    const data = await getJson(urlFor(urls.round, sessionId));
+    const data = await getJson(urlFor(urls.round, state.sessionId));
     if (data.no_eligible_locations) {
         showNoEligibleLocations();
     } else if (data.finished) {
@@ -1363,7 +1655,7 @@ el("sg-start-form").addEventListener("submit", (event) => {
     el<HTMLDialogElement>("sg-settings-dialog").close();
     void startGame(mode);
 });
-el("sg-game-settings-btn").addEventListener("click", () => openSettingsDialog(currentMode));
+el("sg-game-settings-btn").addEventListener("click", () => openSettingsDialog(state.currentMode));
 el("sg-submit-guess-btn").addEventListener("click", () => void submitGuess());
 el("sg-photo-thumbs-up-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_up"));
 el("sg-photo-thumbs-down-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_down"));
@@ -1373,4 +1665,5 @@ el("sg-play-again-btn").addEventListener("click", resetToSettings);
 el("sg-join-lobby-btn").addEventListener("click", () => void joinLobby());
 el("sg-begin-btn").addEventListener("click", () => void beginGame());
 el("sg-invite-more-btn").addEventListener("click", () => void handleInviteMore());
+el("sg-end-game-btn").addEventListener("click", () => void endGameNow());
 void loadInitialSession();

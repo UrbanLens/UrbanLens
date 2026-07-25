@@ -114,9 +114,13 @@ class SubmitGuessTests(TestCase):
 
     def test_guessing_inside_the_boundary_scores_full_points(self) -> None:
         guess_point = Point(float(self.location.longitude), float(self.location.latitude), srid=4326)
-        guess, _bonus_tiers = submit_guess(self.round_, self.profile, guess_point)
+        guess, _bonus_tiers, rating_change = submit_guess(self.round_, self.profile, guess_point)
         self.assertEqual(guess.points, 5000)
         self.assertEqual(guess.distance_meters, 0.0)
+        # Solo play completes the round on this very guess - the rating
+        # change is available immediately, not just on a later reveal.
+        assert rating_change is not None
+        self.assertGreater(rating_change.delta, 0)
 
     def test_guessing_records_an_anonymized_coordinate_guess(self) -> None:
         from urbanlens.dashboard.models.spotguessr.model import PhotoCoordinateGuess
@@ -176,4 +180,12 @@ class SessionSummaryTests(TestCase):
 
         summary = session_summary(session)
         self.assertEqual(summary["rounds_played"], 1)
-        self.assertEqual(summary["participants"], [{"profile_id": profile.pk, "username": profile.username, "avatar_url": None, "total_points": 5000}])
+        self.assertEqual(len(summary["participants"]), 1)
+        participant_row = summary["participants"][0]
+        self.assertEqual(participant_row["profile_id"], profile.pk)
+        self.assertEqual(participant_row["username"], profile.username)
+        self.assertIsNone(participant_row["avatar_url"])
+        self.assertEqual(participant_row["total_points"], 5000)
+        self.assertGreater(participant_row["rating_delta"], 0)
+        self.assertEqual(participant_row["best_round_points"], 5000)
+        self.assertEqual(participant_row["best_round_distance_meters"], 0.0)

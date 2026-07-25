@@ -43,6 +43,15 @@ starts a multiplayer lobby instead of a solo game.
                 <label for="sg-rounds">Rounds: <span id="sg-rounds-label">{{ default_rounds }}</span></label>
                 <input type="range" id="sg-rounds" min="{{ min_rounds }}" max="{{ max_rounds }}" value="{{ default_rounds }}">
             </div>
+            <div class="spotguessr-field">
+                <label for="sg-round-time-limit">Round timer</label>
+                <select id="sg-round-time-limit">
+                    <option value="">No limit</option>
+                    {% for seconds in round_time_limit_choices %}
+                    <option value="{{ seconds }}">{{ seconds }} seconds</option>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="spotguessr-field spotguessr-field--switch" data-mode-only="photos">
                 <label>
                     <span class="ul-switch"><input type="checkbox" id="sg-allow-arbitrary-external-photos"><span class="ul-switch__track"></span></span>

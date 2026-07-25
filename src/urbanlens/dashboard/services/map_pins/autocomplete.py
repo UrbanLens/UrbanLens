@@ -218,16 +218,14 @@ def search_google_places(query: str, api_key: str) -> list[AutocompleteResult]:
     Returns:
         Up to 6 place suggestions without coordinates.
     """
-    from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
+    from urbanlens.dashboard.services.apis.locations import places_resolution
 
     results: list[AutocompleteResult] = []
     try:
-        gw = GooglePlacesGateway(api_key=api_key)
-        predictions = gw.autocomplete(query)
+        predictions = places_resolution.autocomplete_predictions(query, api_key=api_key)
         for pred in predictions[:6]:
-            fmt = pred.get("structured_formatting", {})
-            title = fmt.get("main_text") or pred.get("description", "")
-            subtitle = fmt.get("secondary_text") or ""
+            title = pred.get("main_text") or ""
+            subtitle = pred.get("secondary_text") or ""
             place_id = pred.get("place_id")
             if not place_id or not title:
                 continue
@@ -323,17 +321,10 @@ def resolve_google_place(
     Returns:
         (latitude, longitude, name) - all may be None on failure.
     """
-    from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
+    from urbanlens.dashboard.services.apis.locations import places_resolution
 
     try:
-        gw = GooglePlacesGateway(api_key=api_key)
-        details = gw.get_place_details(place_id, fields=["geometry", "name"])
-        loc = details.get("geometry", {}).get("location", {})
-        lat = loc.get("lat")
-        lng = loc.get("lng")
-        name = details.get("name")
-        if lat is not None and lng is not None:
-            return float(lat), float(lng), name
+        return places_resolution.resolve_place_coordinates(place_id, api_key=api_key)
     except Exception:
         logger.warning("Google place resolution failed for %s", place_id, exc_info=True)
 

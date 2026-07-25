@@ -98,6 +98,29 @@ class SanitizeArticlePlainTextTests(SimpleTestCase):
         self.assertIn("Bold", cleaned)
         self.assertIn("italic", cleaned)
 
+    def test_strips_strikethrough_and_inline_code(self) -> None:
+        cleaned = sanitize_article_plain_text("~~wrong~~ correct, per `the plaque`.")
+        self.assertNotIn("~~", cleaned)
+        self.assertNotIn("`", cleaned)
+        self.assertIn("wrong", cleaned)
+        self.assertIn("the plaque", cleaned)
+
+    def test_preserves_non_markdown_uses_of_emphasis_characters(self) -> None:
+        # Stray *, _, ~, ` characters that aren't paired markdown markers must
+        # survive - only genuine emphasis syntax should be stripped.
+        self.assertEqual(
+            sanitize_article_plain_text("The reactor operated at ~500 degrees."),
+            "The reactor operated at ~500 degrees.",
+        )
+        self.assertEqual(
+            sanitize_article_plain_text("Known locally as Foo_Bar Mill."),
+            "Known locally as Foo_Bar Mill.",
+        )
+        self.assertEqual(
+            sanitize_article_plain_text("Production reached 5*3=15 tons per day."),
+            "Production reached 5*3=15 tons per day.",
+        )
+
     def test_empty_and_sentinel_values(self) -> None:
         self.assertEqual(sanitize_article_plain_text(""), "")
         self.assertEqual(sanitize_article_plain_text(None), "")

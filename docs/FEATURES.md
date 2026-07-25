@@ -409,15 +409,29 @@ all three guess modes.** Everything below the line is not yet built.
 - Difficulty slider (weights location selection toward a target difficulty band), a
   geographic-boundary restriction (draw a rectangle to confine rounds to an area), and
   anti-clustering location selection (never repeats a location in a session, avoids picking
-  somewhere near the immediately preceding round)
+  somewhere near the immediately preceding round). Locations with too little (or no) play
+  history are seeded from proxies (pin count, photo count) instead of sitting at a flat neutral
+  rating, so the slider has a real effect on unplayed locations from day one, not just
+  well-worn ones
 - Optional date-guessing bonus (guess the photo's capture date for extra points, default off,
   Photos mode only)
+- Optional per-round timer (30/60/90/120 seconds, or untimed) - a live countdown auto-reveals
+  the round when it expires, for either solo or multiplayer play
 - Own Glicko-2 rating + friends' ratings on the overview page, with a per-profile opt-out
-  (`SpotGuessrPreference.show_ratings_to_friends`, default on)
+  (`SpotGuessrPreference.show_ratings_to_friends`, default on); each round's own rating change is
+  now shown at reveal time (e.g. "▲ +14 rating"), plus a net-change-for-the-session total on the
+  final summary screen alongside each player's best round
+- Reveal-screen "feel": an animated point count-up, the guess-to-answer distance line drawing
+  itself in rather than snapping into place, and a richer summary screen (winner callout for
+  multiplayer, animated score-card count-ups)
 - **Multiplayer**: a friends-only invite/join lobby (invite notification deep-links straight
   into the lobby) with a host-controlled start that locks the roster, a live scoreboard, and
   WebSocket-driven round sync (`GameSessionConsumer`, one group per session) so every
   participant sees rounds/reveals/results together in real time
+- **Multiplayer stall handling**: a round stuck because a participant went AFK is force-revealed
+  by a Celery beat sweep after 10 minutes (marking the session `ABANDONED` if literally nobody
+  guessed), and the host can end an in-progress or not-yet-started game immediately at any time
+  from an "End game" control - no more waiting out a dead lobby or stuck round
 - **Live text chat** scoped to a session (WebSocket-only, no E2EE - unlike DMs, session banter
   between people already visible to each other on the scoreboard has no privacy surface to
   protect)
@@ -425,7 +439,7 @@ all three guess modes.** Everything below the line is not yet built.
 Not yet built: the community photo submission/moderation pipeline itself - upload-to-wiki with
 a submit-to-game checkbox, a "submit this wiki photo to the game" lightbox button, and the
 nudity/person moderation classifier (UL-394; in-game thumbs/report voting is built, see above) -
-voice chat (UL-395), and engagement polish like reveal animations and leaderboards (UL-396).
-Also not built (deliberate scope cuts within UL-392, not oversights):
-join-by-link invites, mid-game joining, and automatic cleanup of stuck lobbies/AFK
-participants — see the design doc's "Multiplayer sessions" section.
+voice chat (UL-395), and a persistent site-wide leaderboard (UL-396; the live in-game scoreboard
+and reveal/summary animation polish described above are already built). Also not built
+(deliberate scope cuts, not oversights): join-by-link invites and mid-game joining - see the
+design doc's "Multiplayer sessions" and "Multiplayer stall handling" sections.

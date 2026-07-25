@@ -258,10 +258,19 @@ class GameSessionParticipant(abstract.DashboardModel):
             for INVITED rows too (it's really "created_at" - kept as
             ``joined_at`` since every Phase 1 row really was a join, and a
             rename would be a needless migration for an internal field).
+        rating_delta: Running total of this participant's net Glicko-2
+            display-rating change across every round completed so far this
+            session (see ``services.spotguessr.session._finish_round``) -
+            surfaced on the summary screen so the game's rating movement
+            isn't invisible (see the SpotGuessr audit's "the game computes
+            your rating change every round and never shows it to you"
+            finding). Meaningless outside the session it belongs to; not a
+            player's overall rating (see ``PlayerModeRating`` for that).
     """
 
     status = CharField(max_length=10, choices=GameSessionParticipantStatus.choices, default=GameSessionParticipantStatus.JOINED)
     total_points = PositiveIntegerField(default=0)
+    rating_delta = FloatField(default=0.0)
     joined_at = DateTimeField(auto_now_add=True)
 
     session = ForeignKey(

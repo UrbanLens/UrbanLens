@@ -362,10 +362,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"results": [], "source": "places", "disabled": True})
 
         api_key = settings.google_unrestricted_api_key
-        if not api_key:
+        redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
+        if not api_key and not redata_configured:
             return JsonResponse({"results": [], "source": "places", "disabled": True})
 
-        results = search_google_places(q, api_key)
+        results = search_google_places(q, api_key or "")
         return JsonResponse({"results": [r.to_dict() for r in results], "source": "places"})
 
     def autocomplete_empty(self, request, *args, **kwargs):
@@ -396,10 +397,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"error": "missing place_id"}, status=400)
 
         api_key = settings.google_unrestricted_api_key
-        if not api_key:
+        redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
+        if not api_key and not redata_configured:
             return JsonResponse({"error": "no_api_key"}, status=503)
 
-        lat, lng, name = resolve_google_place(place_id, api_key)
+        lat, lng, name = resolve_google_place(place_id, api_key or "")
         if lat is None or lng is None:
             return JsonResponse({"error": "not_found"}, status=404)
 
@@ -846,16 +848,14 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         # -- Google historical landmarks (Places API v1 - supports historical_landmark type) --
         if use_google:
             api_key = settings.google_unrestricted_api_key
-            if not api_key:
+            redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
+            if not api_key and not redata_configured:
                 logger.info("Google Places skipped: no API key configured.")
             else:
                 try:
-                    from urbanlens.dashboard.services.apis.locations.google.places import (
-                        GooglePlacesGateway,
-                    )
+                    from urbanlens.dashboard.services.apis.locations import places_resolution
 
-                    gw = GooglePlacesGateway(api_key=api_key)
-                    raw_results = gw.search_nearby(lat, lng, radius=radius, included_types=["historical_landmark"])
+                    raw_results = places_resolution.search_nearby_landmarks(lat, lng, radius, ["historical_landmark"], api_key=api_key or "")
                     logger.info("Google Places (new API): found %d results near (%.4f, %.4f)", len(raw_results), lat, lng)
                     for r in raw_results:
                         loc = r.get("location", {})
@@ -886,7 +886,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     if "403" in str(exc):
                         logger.warning(
                             "Google Places API returned 403 Forbidden - enable 'Places API (New)' in Google Cloud Console and ensure the API key is authorized for places.googleapis.com. API key: %s",
-                            redact_secret(api_key),
+                            redact_secret(api_key or ""),
                         )
                     else:
                         logger.warning("Google Places nearby search failed: %s", exc)
@@ -980,7 +980,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"error": "missing place_id"}, status=400)
 
         api_key = settings.google_unrestricted_api_key
-        if not api_key:
+        redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
+        if not api_key and not redata_configured:
             return JsonResponse({"error": "no_api_key"}, status=503)
 
         from django.core.cache import cache as django_cache
@@ -991,24 +992,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"place": cached, "cached": True})
 
         try:
-            from urbanlens.dashboard.services.apis.locations.google.places import (
-                GooglePlacesGateway,
-            )
+            from urbanlens.dashboard.services.apis.locations import places_resolution
 
-            gateway = GooglePlacesGateway(api_key=api_key)
-            detail = gateway.get_place_details(
-                place_id,
-                fields=[
-                    "name",
-                    "formatted_address",
-                    "rating",
-                    "editorial_summary",
-                    "opening_hours",
-                    "website",
-                    "url",
-                    "photos",
-                ],
-            )
+            detail = places_resolution.get_place_details_full(place_id, api_key=api_key or "")
         except Exception as exc:
             logger.warning("Google Place details fetch failed: %s", exc)
             return JsonResponse({"error": "upstream_error"}, status=502)

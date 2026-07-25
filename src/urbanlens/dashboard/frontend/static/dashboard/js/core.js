@@ -1709,7 +1709,7 @@
       }
       const seq = ++searchSeq;
       const slots = renderInstantSlots(seq, q);
-      addrBarTimer = setTimeout(() => runNetworkStage(seq, q, slots), 250);
+      addrBarTimer = setTimeout(() => runNetworkStage(seq, q, slots), 400);
     });
     input.addEventListener("keydown", function(e) {
       const items = [...suggestions.querySelectorAll(".addr-suggestion")];

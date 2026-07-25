@@ -84,6 +84,17 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_30_days=None,
         notes="Batch CID->coordinate resolution via POST /places/resolve-cids/. See docs/redata-cid-resolution.md.",
     ),
+    "redata_places": ServiceDefaults(
+        display_name="REData Places",
+        # Shares REData's single 1,000 req/hour "lookup" pool with redata_api
+        # (property records) and cultural-resources - NOT redata_cid_lookup,
+        # which has its own separate, dedicated 200/hour pool. Deliberately
+        # conservative since this rate limiter has no cross-service
+        # shared-budget concept and redata_api already draws from the same pool.
+        calls_per_minute=20,
+        calls_per_day=None,
+        notes="Places API (New) via REData - permanently cached on REData's end. See services.apis.locations.places_resolution.",
+    ),
     "google_search": ServiceDefaults(
         display_name="Google Custom Search",
         calls_per_minute=10,

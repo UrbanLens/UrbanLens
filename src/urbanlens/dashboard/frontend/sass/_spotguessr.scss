@@ -344,6 +344,37 @@ $spotguessr-mode-accents: (
     gap: .5rem;
     font-weight: 600;
     margin-bottom: .75rem;
+
+    // Fixed-width digits so #sg-score-status's animateCountUp() doesn't
+    // jitter the bar's layout as the digit count changes mid-animation.
+    #sg-score-status {
+        font-variant-numeric: tabular-nums;
+    }
+}
+
+// Countdown for a session's configured round timer (GameConfig.round_time_limit_seconds) -
+// see updateRoundTimerDisplay() in spotguessr.ts.
+.spotguessr-round-timer {
+    font-variant-numeric: tabular-nums;
+    padding: .15rem .6rem;
+    border-radius: 1rem;
+    background: var(--ul-surface-2);
+
+    &--urgent {
+        background: rgba(220, 53, 69, .18);
+        color: $color-red-500;
+        animation: spotguessr-timer-pulse 1s ease-in-out infinite;
+    }
+}
+
+@keyframes spotguessr-timer-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: .55;
+    }
 }
 
 .spotguessr-game-settings-btn {
@@ -403,6 +434,53 @@ $spotguessr-mode-accents: (
     border-top: 1px solid var(--ul-border);
     text-align: center;
     animation: spotguessr-fade-in .3s ease-out;
+}
+
+// The big animated point counter on reveal (animateCountUp() in spotguessr.ts
+// ticks #sg-reveal-points-value up from 0) - the headline number of the
+// "reward loop" moment, distance/bonus breakdown stays in #sg-reveal-detail below.
+.spotguessr-reveal-points {
+    display: flex;
+    align-items: baseline;
+    justify-content: center;
+    gap: .4rem;
+    margin: .5rem 0;
+    animation: spotguessr-fade-in .35s ease-out .05s backwards;
+}
+
+#sg-reveal-points-value {
+    font-size: 2.5rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--ul-primary-color);
+}
+
+.spotguessr-reveal-points-label {
+    font-size: .95rem;
+    opacity: .7;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+// Per-round Glicko-2 rating change, shown alongside points/distance on
+// reveal (services.spotguessr.ratings.RatingChange, serialized as
+// reveal.rating_delta) - see updateRatingDeltaDisplay() in spotguessr.ts.
+.spotguessr-rating-delta {
+    display: inline-flex;
+    align-items: center;
+    gap: .3rem;
+    margin: .35rem 0 0;
+    font-weight: 700;
+    font-size: .95rem;
+    animation: spotguessr-fade-in .35s ease-out .1s backwards;
+
+    &--up {
+        color: $color-green-600;
+    }
+
+    &--down {
+        color: $color-red-500;
+    }
 }
 
 .spotguessr-photo-feedback {
@@ -503,6 +581,43 @@ $spotguessr-mode-accents: (
     gap: .5rem;
 }
 
+// -- Summary/recap panel --------------------------------------------------------
+
+.spotguessr-summary-panel {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .25rem;
+
+    .spotguessr-scoreboard {
+        justify-content: center;
+        margin-top: .75rem;
+    }
+
+    .btn {
+        margin-top: 1rem;
+    }
+}
+
+.spotguessr-summary-icon {
+    font-size: 2.75rem;
+    color: $color-indigo-500;
+    animation: spotguessr-summary-icon-pop .5s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@keyframes spotguessr-summary-icon-pop {
+    0% {
+        opacity: 0;
+        transform: scale(.4) rotate(-15deg);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1) rotate(0);
+    }
+}
+
 .spotguessr-chat-panel {
     margin-top: 1.25rem;
     padding-top: 1rem;
@@ -561,6 +676,7 @@ $spotguessr-mode-accents: (
     }
 
     &--solo {
+        flex-direction: column;
         justify-content: center;
         font-weight: 600;
         font-size: 1rem;
@@ -610,6 +726,34 @@ $spotguessr-mode-accents: (
 .spotguessr-score-card-points {
     font-weight: 700;
     white-space: nowrap;
+    // Fixed-width digits so animateCountUp() ticking the number up doesn't
+    // jitter the card's layout as the digit count changes mid-animation.
+    font-variant-numeric: tabular-nums;
+}
+
+.spotguessr-score-card-solo-value {
+    font-variant-numeric: tabular-nums;
+}
+
+// Optional per-card rating-delta chip (reveal results and the summary
+// recap both populate it - the live scoreboard doesn't, so it stays empty
+// and collapsed via :empty there). See ScoreCardData.ratingDelta in spotguessr.ts.
+.spotguessr-score-card-rating-delta {
+    font-size: .75rem;
+    font-weight: 700;
+    white-space: nowrap;
+
+    &:empty {
+        display: none;
+    }
+
+    &--up {
+        color: $color-green-600;
+    }
+
+    &--down {
+        color: $color-red-500;
+    }
 }
 
 @keyframes spotguessr-fade-in {

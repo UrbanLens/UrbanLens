@@ -2220,3 +2220,53 @@ def dispatch_native_push(notification_id: int) -> int:
     if notification is None or not notification.profile_id:
         return 0
     return send_push_to_profile(notification.profile_id, as_push_payload(notification))
+
+
+_SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:spotguessr:stall-sweep-lock"
+_SPOTGUESSR_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_stalled_spotguessr_sessions() -> int:
+    """Force-reveal any SpotGuessr round that's been open too long.
+
+    The safety net for a multiplayer round that can otherwise stall forever:
+    a round only completes once every joined participant has guessed
+    (``services.spotguessr.session.submit_guess``), but a participant who
+    simply closes their tab is invisible to that check - there's no
+    disconnect signal wired into the game state (see the SpotGuessr audit's
+    "multiplayer stall" finding). This sweep finds any session whose current
+    round has sat unrevealed past ``STALL_ROUND_TIMEOUT_MINUTES`` and force-
+    reveals it (``force_reveal_round``), which either lets the game continue
+    with whoever did guess, or marks the session ``ABANDONED`` if literally
+    nobody did.
+    """
+    from datetime import timedelta
+
+    from django.core.cache import cache
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.spotguessr.model import GameSession
+    from urbanlens.dashboard.services.spotguessr.session import STALL_ROUND_TIMEOUT_MINUTES, force_reveal_round
+
+    if not cache.add(_SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY, value=True, timeout=_SPOTGUESSR_STALL_SWEEP_LOCK_TIMEOUT_SECONDS):
+        logger.info("sweep_stalled_spotguessr_sessions: a previous run is still in flight; skipping")
+        return 0
+    try:
+        cutoff = timezone.now() - timedelta(minutes=STALL_ROUND_TIMEOUT_MINUTES)
+        count = 0
+        for session in GameSession.objects.stalled(cutoff=cutoff):
+            current_round = session.rounds.filter(revealed_at__isnull=True).first()
+            if current_round is None:
+                continue  # raced with a normal guess completing it - nothing to do
+            try:
+                force_reveal_round(current_round)
+            except Exception:
+                logger.exception("Failed to force-reveal stalled SpotGuessr round %s", current_round.pk)
+                continue
+            count += 1
+        if count:
+            logger.info("Force-revealed %s stalled SpotGuessr round(s)", count)
+        return count
+    finally:
+        cache.delete(_SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY)

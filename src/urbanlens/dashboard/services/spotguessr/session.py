@@ -25,11 +25,10 @@ from urbanlens.dashboard.models.spotguessr.model import (
     GameSessionParticipantStatus,
     GameSessionStatus,
     Guess,
-    SpotGuessrMode,
 )
 from urbanlens.dashboard.services.connections import are_connections
-from urbanlens.dashboard.services.spotguessr import eligibility, geo_bonus, named_place, photo_coordinates, photos, realtime, relevance, scoring, selection, serializers, street_view
-from urbanlens.dashboard.services.spotguessr.ratings import apply_round_ratings
+from urbanlens.dashboard.services.spotguessr import eligibility, geo_bonus, modes, photo_coordinates, realtime, relevance, scoring, selection, serializers
+from urbanlens.dashboard.services.spotguessr.ratings import RatingChange, apply_round_ratings
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -47,6 +46,20 @@ MAX_ROUNDS_PER_SESSION = 20
 #: against looping forever when a whole eligible pool turns out to have no
 #: usable photo/name/imagery without erroring the whole session.
 _MAX_LOCATION_ATTEMPTS = 25
+
+#: Round-timer choices the settings dialog offers (seconds) - a session's
+#: config only ever stores one of these or None (untimed); see GameConfig.
+ROUND_TIME_LIMIT_CHOICES = (30, 60, 90, 120)
+
+#: How long a session's current round can sit unrevealed before the
+#: stall-sweep Celery task (``tasks.sweep_stalled_spotguessr_sessions``)
+#: force-reveals it - the safety net for a participant who simply closed
+#: their tab (see force_reveal_round's docstring). Deliberately independent
+#: of any configured round_time_limit_seconds: that timer's own expiry is
+#: normally caught fast by the client-driven timeout endpoint
+#: (SpotGuessrRoundTimeoutView) while a client is still around to report it;
+#: this is the backstop for when none is.
+STALL_ROUND_TIMEOUT_MINUTES = 10
 
 
 class SpotGuessrError(Exception):
@@ -67,6 +80,11 @@ class GameConfig:
     date_guessing_enabled: bool = False
     use_aliases: bool = True
     geo_bounds_geojson: dict | None = None
+    #: Seconds each round stays open before it's force-revealed, or None for
+    #: untimed play. One of ROUND_TIME_LIMIT_CHOICES in practice (the
+    #: settings dialog only offers those), but not validated against that
+    #: list here - any positive int is honored.
+    round_time_limit_seconds: int | None = None
 
     def to_dict(self) -> dict:
         """JSON-serializable form for ``GameSession.config``."""
@@ -255,7 +273,13 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
     existing_rounds = list(GameRound.objects.for_session(session).select_related("location", "image"))
     if existing_rounds:
         last_round = existing_rounds[-1]
-        if Guess.objects.for_round(last_round).count() < participant_count:
+        # revealed_at is the single source of truth for "is this round done" -
+        # normally set once every joined participant has guessed
+        # (submit_guess), but also by force_reveal_round/expire_round_timer
+        # on a stalled/timed-out round with a strict *subset* of guesses, in
+        # which case the guess count alone would otherwise wrongly re-serve
+        # this same "finished" round forever.
+        if last_round.revealed_at is None:
             return last_round
 
     if len(existing_rounds) >= session.total_rounds:
@@ -281,6 +305,10 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
         session.config = {**(session.config or {}), "bonus_scope": scope.to_dict()}
         session.save(update_fields=["config", "updated"])
 
+    strategy = modes.get_strategy(session.mode)
+    if strategy is None:
+        raise SpotGuessrError(f"Mode {session.mode!r} has no round-generation logic.")
+
     for _attempt in range(_MAX_LOCATION_ATTEMPTS):
         candidates = eligibility.eligible_locations(
             participants,
@@ -292,45 +320,25 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
         if location is None:
             return None  # nothing eligible left at all
 
-        image = None
-        display_text = None
-        if session.mode == SpotGuessrMode.PHOTOS:
-            image = photos.candidate_image_for_location(
-                location,
-                allow_arbitrary_external_photos=config.allow_arbitrary_external_photos,
-            )
-            if image is None:
-                excluded_ids.append(location.pk)
-                continue  # this location has no usable photo yet - try another
-            target = scoring.resolve_target(location, image)
-        elif session.mode == SpotGuessrMode.NAMED_PLACE:
-            display_text = named_place.candidate_name_for_location(location, use_aliases=config.use_aliases)
-            if display_text is None:
-                excluded_ids.append(location.pk)
-                continue  # no meaningful name/alias yet - try another
-            target = scoring.resolve_target(location, None)
-        elif session.mode == SpotGuessrMode.STREET_VIEW:
-            if street_view.candidate_street_view_for_location(location) is None:
-                excluded_ids.append(location.pk)
-                continue  # no Street View coverage nearby - try another
-            target = scoring.street_view_target(location)
-        else:
-            raise SpotGuessrError(f"Mode {session.mode!r} has no round-generation logic.")
+        content = strategy.build_round(location, config)
+        if content is None:
+            excluded_ids.append(location.pk)
+            continue  # this location has nothing usable for this mode yet - try another
 
         return GameRound.objects.create(
             session=session,
             sequence_index=len(existing_rounds),
             location=location,
-            image=image,
-            display_text=display_text,
-            target_is_point=target.is_point,
-            target_point=target.geometry if target.is_point else None,
+            image=content.image,
+            display_text=content.display_text,
+            target_is_point=content.target.is_point,
+            target_point=content.target.geometry if content.target.is_point else None,
         )
 
     return None
 
 
-def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guessed_date: date | None = None) -> tuple[Guess, list[str]]:
+def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guessed_date: date | None = None) -> tuple[Guess, list[str], RatingChange | None]:
     """Score and record ``profile``'s guess for ``round_``.
 
     Triggers the Glicko-2 rating update (``apply_round_ratings``) once
@@ -346,7 +354,10 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
         e.g. ``["country", "state"]`` - for the immediate reveal response;
         the tier breakdown itself isn't persisted (see
         ``Guess.bonus_points``'s docstring), so it can only be handed back
-        here, not recovered later from the ``Guess`` row alone.
+        here, not recovered later from the ``Guess`` row alone. The third
+        element is ``profile``'s own Glicko-2 rating change from this round,
+        if the round completed on this very guess (None otherwise - e.g.
+        multiplayer withholding the reveal until everyone's guessed).
 
     Raises:
         SpotGuessrError: if ``profile`` isn't a JOINED participant of this
@@ -414,21 +425,162 @@ def submit_guess(round_: GameRound, profile: Profile, guess_point: Point, guesse
 
     realtime.broadcast(session.pk, "guess.submitted", {"profile_id": profile.pk})
 
+    rating_change = None
     if round_completed_now:
         round_.refresh_from_db()
         completed_guesses = list(Guess.objects.for_round(round_).select_related("profile"))
-        apply_round_ratings(round_, completed_guesses)
+        rating_changes = _finish_round(round_, completed_guesses)
+        rating_change = rating_changes.get(profile.pk)
+        _advance_or_complete(session)
+
+    return guess, bonus.matched_tiers, rating_change
+
+
+def _finish_round(round_: GameRound, completed_guesses: list[Guess]) -> dict[int, RatingChange]:
+    """Rate, backfill photo-feedback signal, and broadcast the reveal for a just-completed round.
+
+    Shared by ``submit_guess`` (the normal "everyone guessed" path),
+    ``force_reveal_round`` (the stall-sweep path), ``expire_round_timer``
+    (the round-timer path), and ``end_session_now`` (the host-ended path) -
+    ``completed_guesses`` may be a strict subset of the joined roster, or
+    even empty, in every path but the first. A participant with no guess
+    this round simply isn't rated for it (see ``apply_round_ratings``, which
+    only touches profiles present in ``completed_guesses``); the reveal
+    still broadcasts even with zero guesses, so "nobody answered in time"
+    reads as a normal (if empty) round result rather than silently stalling.
+    """
+    rating_changes: dict[int, RatingChange] = {}
+    if completed_guesses:
+        rating_changes = apply_round_ratings(round_, completed_guesses)
+        for guess in completed_guesses:
+            change = rating_changes.get(guess.profile_id)
+            if change is not None:
+                GameSessionParticipant.objects.filter(session_id=round_.session_id, profile_id=guess.profile_id).update(
+                    rating_delta=F("rating_delta") + change.delta,
+                )
         relevance.backfill_no_reaction(round_, [guess.profile for guess in completed_guesses])
-        realtime.broadcast(session.pk, "round.revealed", serializers.serialize_round_reveal(round_))
+    realtime.broadcast(round_.session_id, "round.revealed", serializers.serialize_round_reveal(round_, rating_changes))
+    return rating_changes
 
-        next_round = get_or_create_round(session)
-        if next_round is not None:
-            realtime.broadcast(session.pk, "round.started", {"round": serializers.serialize_round(next_round)})
-        else:
-            complete_session(session)
-            realtime.broadcast(session.pk, "session.completed", session_summary(session))
 
-    return guess, bonus.matched_tiers
+def _advance_or_complete(session: GameSession) -> None:
+    """After a round finishes, start the next one or complete the session - whichever applies."""
+    next_round = get_or_create_round(session)
+    if next_round is not None:
+        realtime.broadcast(session.pk, "round.started", {"round": serializers.serialize_round(next_round)})
+    else:
+        complete_session(session)
+        realtime.broadcast(session.pk, "session.completed", session_summary(session))
+
+
+def force_reveal_round(round_: GameRound) -> None:
+    """Force a stalled round to completion without waiting for every participant to guess.
+
+    Called by the stall-sweep Celery task (``tasks.sweep_stalled_spotguessr_sessions``)
+    for a round that's simply been open too long - the safety net for a
+    participant who closed their tab mid-round, which ``submit_guess``'s
+    "every joined participant guessed" gate has no way to detect on its own
+    (see the SpotGuessr audit's "multiplayer stall" finding). See
+    ``expire_round_timer`` for the gentler, never-abandons cousin used by the
+    client-driven round-timer expiry endpoint - a *long* stall (this
+    function's 10-minute cutoff) really does mean the whole table walked
+    away, but a single short timed round running out doesn't.
+
+    A participant who never guessed this round simply scores 0 for it and
+    isn't rated (see ``_finish_round``). If literally nobody guessed - the
+    whole table walked away - the session is marked ``ABANDONED`` instead of
+    manufacturing an empty next round forever; a session with at least one
+    guess this round instead reveals normally and advances/completes exactly
+    like ``submit_guess`` would.
+
+    Idempotent: a round already revealed (e.g. a guess completed it in the
+    instant before the sweep/timeout fired) is a silent no-op.
+    """
+    session = round_.session
+    with transaction.atomic():
+        locked_round = GameRound.objects.select_for_update().get(pk=round_.pk)
+        if locked_round.revealed_at is not None:
+            return
+        locked_round.revealed_at = timezone.now()
+        locked_round.save(update_fields=["revealed_at", "updated"])
+
+    completed_guesses = list(Guess.objects.for_round(locked_round).select_related("profile"))
+    if not completed_guesses:
+        session.status = GameSessionStatus.ABANDONED
+        session.ended_at = timezone.now()
+        session.save(update_fields=["status", "ended_at", "updated"])
+        realtime.broadcast(session.pk, "session.completed", session_summary(session))
+        return
+
+    _finish_round(locked_round, completed_guesses)
+    _advance_or_complete(session)
+
+
+def expire_round_timer(round_: GameRound) -> None:
+    """Reveal a round because its configured round-timer ran out - "time's up," not a stall.
+
+    Called by the client-driven round-timer expiry endpoint
+    (``controllers.spotguessr.SpotGuessrRoundTimeoutView``) whenever a
+    session was configured with ``GameConfig.round_time_limit_seconds``.
+    Deliberately gentler than ``force_reveal_round``: a single round's timer
+    running out - even with zero guesses, e.g. a solo player who didn't
+    answer in time - is a normal gameplay outcome, not evidence the whole
+    session was abandoned, so this never sets ``GameSessionStatus.ABANDONED``.
+    (A session that's genuinely dead still eventually gets caught by the
+    much longer stall-sweep cutoff via ``force_reveal_round``.)
+
+    Idempotent: a round already revealed is a silent no-op.
+    """
+    session = round_.session
+    with transaction.atomic():
+        locked_round = GameRound.objects.select_for_update().get(pk=round_.pk)
+        if locked_round.revealed_at is not None:
+            return
+        locked_round.revealed_at = timezone.now()
+        locked_round.save(update_fields=["revealed_at", "updated"])
+
+    completed_guesses = list(Guess.objects.for_round(locked_round).select_related("profile"))
+    _finish_round(locked_round, completed_guesses)
+    _advance_or_complete(session)
+
+
+def end_session_now(session: GameSession, host: Profile) -> GameSession:
+    """Host-triggered manual escape hatch: end the game immediately, wherever it currently is.
+
+    Unlike ``force_reveal_round`` (which only fires once a round's own stall
+    timeout elapses), this ends the whole session on request - the host
+    doesn't have to wait out a stalled/AFK player at all (see the SpotGuessr
+    audit's "no host ability to end the game" finding). Works from either
+    LOBBY (cancels a game that never started) or ACTIVE. If a round is still
+    open, it's revealed first using whichever guesses already exist, so
+    in-flight progress isn't silently dropped from the final scoreboard -
+    but the session always ends as COMPLETED (never ABANDONED), since ending
+    it is exactly what the host asked for.
+
+    Raises:
+        SpotGuessrError: if the caller isn't the host, or the session has
+            already ended.
+    """
+    if session.host_profile_id != host.pk:
+        raise SpotGuessrError("Only the host can end the game.")
+    if session.status not in (GameSessionStatus.LOBBY, GameSessionStatus.ACTIVE):
+        raise SpotGuessrError("This game has already ended.")
+
+    current_round = GameRound.objects.for_session(session).filter(revealed_at__isnull=True).first()
+    if current_round is not None:
+        with transaction.atomic():
+            locked_round = GameRound.objects.select_for_update().get(pk=current_round.pk)
+            if locked_round.revealed_at is None:
+                locked_round.revealed_at = timezone.now()
+                locked_round.save(update_fields=["revealed_at", "updated"])
+        completed_guesses = list(Guess.objects.for_round(current_round).select_related("profile"))
+        _finish_round(current_round, completed_guesses)
+
+    session.status = GameSessionStatus.COMPLETED
+    session.ended_at = timezone.now()
+    session.save(update_fields=["status", "ended_at", "updated"])
+    realtime.broadcast(session.pk, "session.completed", session_summary(session))
+    return session
 
 
 def rounds_played(session: GameSession) -> int:
@@ -452,21 +604,43 @@ def complete_session(session: GameSession) -> GameSession:
 
 
 def session_summary(session: GameSession) -> dict:
-    """A JSON-ready summary: rounds played and per-(joined)-participant totals."""
+    """A JSON-ready summary: rounds played, per-(joined)-participant totals, and the
+    "reward loop" recap - each participant's net Glicko-2 rating change and best round
+    this session (see the SpotGuessr audit's "the game computes your rating change
+    every round and never shows it to you" finding).
+    """
     participants = session.participants.joined().select_related("profile__user").order_by("-total_points")
+
+    guesses_by_profile: dict[int, list[Guess]] = {}
+    for guess in Guess.objects.filter(round__session=session).only("profile_id", "points", "date_points", "bonus_points", "distance_meters"):
+        guesses_by_profile.setdefault(guess.profile_id, []).append(guess)
+
+    def _best_guess(profile_id: int) -> Guess | None:
+        guesses = guesses_by_profile.get(profile_id)
+        if not guesses:
+            return None
+        return max(guesses, key=lambda guess: guess.points + guess.date_points + guess.bonus_points)
+
+    rows = []
+    for participant in participants:
+        best = _best_guess(participant.profile_id)
+        rows.append(
+            {
+                "profile_id": participant.profile_id,
+                "username": participant.profile.user.username,
+                "avatar_url": participant.profile.avatar.url if participant.profile.avatar else None,
+                "total_points": participant.total_points,
+                "rating_delta": round(participant.rating_delta, 1),
+                "best_round_points": (best.points + best.date_points + best.bonus_points) if best else None,
+                "best_round_distance_meters": best.distance_meters if best else None,
+            },
+        )
+
     return {
         "session_id": session.pk,
         "mode": session.mode,
         "status": session.status,
         "total_rounds": session.total_rounds,
         "rounds_played": rounds_played(session),
-        "participants": [
-            {
-                "profile_id": participant.profile_id,
-                "username": participant.profile.user.username,
-                "avatar_url": participant.profile.avatar.url if participant.profile.avatar else None,
-                "total_points": participant.total_points,
-            }
-            for participant in participants
-        ],
+        "participants": rows,
     }

@@ -15,7 +15,7 @@ from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import GameSession, GameSessionStatus, SpotGuessrMode, SpotGuessrPreference
+from urbanlens.dashboard.models.spotguessr.model import GameRound, GameSession, GameSessionStatus, SpotGuessrMode, SpotGuessrPreference
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, begin_session, join_session, start_multiplayer_session
 
@@ -130,6 +130,38 @@ class SpotGuessrStartViewTests(TestCase):
         response = self.client.post(self.start_url, {"geo_bounds": far_away_bounds})
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json().get("error_code"), "no_eligible_locations")
+
+    def test_a_valid_round_time_limit_is_persisted_on_the_session_config(self) -> None:
+        response = self.client.post(self.start_url, {"round_time_limit_seconds": "60"})
+        self.assertEqual(response.status_code, 200)
+        session = GameSession.objects.get(pk=response.json()["session_id"])
+        self.assertEqual(session.config["round_time_limit_seconds"], 60)
+
+    def test_no_round_time_limit_defaults_to_untimed(self) -> None:
+        response = self.client.post(self.start_url, {})
+        self.assertEqual(response.status_code, 200)
+        session = GameSession.objects.get(pk=response.json()["session_id"])
+        self.assertIsNone(session.config["round_time_limit_seconds"])
+
+    def test_an_unsupported_round_time_limit_is_rejected(self) -> None:
+        response = self.client.post(self.start_url, {"round_time_limit_seconds": "45"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_non_numeric_round_time_limit_is_rejected(self) -> None:
+        response = self.client.post(self.start_url, {"round_time_limit_seconds": "soon"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_round_payload_reports_whether_it_shows_imagery(self) -> None:
+        response = self.client.post(self.start_url, {"total_rounds": "1"})
+        self.assertTrue(response.json()["round"]["shows_imagery"])
+
+    def test_round_payload_has_no_expiry_when_untimed(self) -> None:
+        response = self.client.post(self.start_url, {"total_rounds": "1"})
+        self.assertIsNone(response.json()["round"].get("expires_at"))
+
+    def test_round_payload_reports_an_expiry_when_timed(self) -> None:
+        response = self.client.post(self.start_url, {"total_rounds": "1", "round_time_limit_seconds": "30"})
+        self.assertIsNotNone(response.json()["round"]["expires_at"])
 
 
 class SpotGuessrGuessFlowTests(TestCase):
@@ -362,3 +394,94 @@ class SpotGuessrNoEligibleLocationsMidGameTests(TestCase):
         session = GameSession.objects.get(pk=self.session_id)
         self.assertEqual(session.status, GameSessionStatus.ACTIVE)
         self.assertEqual(session.participants.get(profile=self.host).total_points, 0)
+
+
+class SpotGuessrEndSessionViewTests(TestCase):
+    def setUp(self) -> None:
+        self.host = _make_profile()
+        self.guest = _make_profile()
+        friendship = Friendship.request(self.host, self.guest)
+        assert friendship is not None
+        friendship.accept()
+        self.location = _make_location()
+        baker.make(Pin, profile=self.host, location=self.location)
+        baker.make(Pin, profile=self.guest, location=self.location)
+        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+
+        self.session = start_multiplayer_session(self.host, SpotGuessrMode.PHOTOS, GameConfig(), [self.guest])
+        join_session(self.session, self.guest)
+        begin_session(self.session, self.host)
+        self.end_url = reverse("spotguessr.end", args=[self.session.pk])
+
+    def test_the_host_can_end_the_game_early(self) -> None:
+        self.client.force_login(self.host.user)
+        response = self.client.post(self.end_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["finished"])
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.status, GameSessionStatus.COMPLETED)
+
+    def test_a_non_host_participant_cannot_end_the_game(self) -> None:
+        self.client.force_login(self.guest.user)
+        response = self.client.post(self.end_url)
+        self.assertEqual(response.status_code, 400)
+        self.session.refresh_from_db()
+        self.assertEqual(self.session.status, GameSessionStatus.ACTIVE)
+
+    def test_a_non_participant_gets_a_404(self) -> None:
+        outsider = _make_profile()
+        self.client.force_login(outsider.user)
+        response = self.client.post(self.end_url)
+        self.assertEqual(response.status_code, 404)
+
+
+class SpotGuessrRoundTimeoutViewTests(TestCase):
+    def setUp(self) -> None:
+        self.profile = _make_profile()
+        self.location = _make_location()
+        baker.make(Pin, profile=self.profile, location=self.location)
+        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        self.client.force_login(self.profile.user)
+
+    def test_a_call_before_the_timer_expires_is_a_no_op(self) -> None:
+        start = self.client.post(reverse("spotguessr.start"), {"total_rounds": "1", "round_time_limit_seconds": "120"}).json()
+        timeout_url = reverse("spotguessr.round_timeout", args=[start["session_id"], start["round"]["round_id"]])
+
+        response = self.client.post(timeout_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["revealed"])
+        round_ = GameRound.objects.get(pk=start["round"]["round_id"])
+        self.assertIsNone(round_.revealed_at)
+
+    def test_an_untimed_session_never_times_out(self) -> None:
+        start = self.client.post(reverse("spotguessr.start"), {"total_rounds": "1"}).json()
+        timeout_url = reverse("spotguessr.round_timeout", args=[start["session_id"], start["round"]["round_id"]])
+
+        response = self.client.post(timeout_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["revealed"])
+
+    def test_a_call_after_the_timer_expires_reveals_the_round(self) -> None:
+        from datetime import timedelta
+
+        from django.utils import timezone
+
+        start = self.client.post(reverse("spotguessr.start"), {"total_rounds": "1", "round_time_limit_seconds": "30"}).json()
+        round_id = start["round"]["round_id"]
+        GameRound.objects.filter(pk=round_id).update(created=timezone.now() - timedelta(seconds=45))
+        timeout_url = reverse("spotguessr.round_timeout", args=[start["session_id"], round_id])
+
+        response = self.client.post(timeout_url)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["revealed"])
+        round_ = GameRound.objects.get(pk=round_id)
+        self.assertIsNotNone(round_.revealed_at)
+
+    def test_a_non_participant_gets_a_404(self) -> None:
+        start = self.client.post(reverse("spotguessr.start"), {"total_rounds": "1", "round_time_limit_seconds": "30"}).json()
+        timeout_url = reverse("spotguessr.round_timeout", args=[start["session_id"], start["round"]["round_id"]])
+
+        outsider = _make_profile()
+        self.client.force_login(outsider.user)
+        response = self.client.post(timeout_url)
+        self.assertEqual(response.status_code, 404)

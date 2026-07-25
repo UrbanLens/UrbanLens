@@ -2,10 +2,74 @@ import {
   createMapLayers
 } from "./article-wysiwyg-f04nz5p5.js";
 import {
+  confirmAction,
   getCsrfToken,
   toast
 } from "./article-wysiwyg-5jnnp4sj.js";
 import"./article-wysiwyg-2vd5xdaq.js";
+
+// src/urbanlens/dashboard/frontend/ts/shared/spotguessr-format.ts
+var PANEL_NAMES = ["settings", "lobby", "game", "summary", "empty"];
+function panelVisibility(active) {
+  const visibility = {};
+  for (const name of PANEL_NAMES)
+    visibility[name] = name === active;
+  return visibility;
+}
+function bonusSuffix(bonusPoints, bonusTiers) {
+  return bonusPoints ? ` (+${bonusPoints} bonus: ${bonusTiers.join(", ")})` : "";
+}
+function avatarInitial(username) {
+  return username.charAt(0).toUpperCase() || "?";
+}
+function formatRatingDelta(delta) {
+  if (delta === null || delta === undefined)
+    return null;
+  const rounded = Math.round(delta * 10) / 10;
+  if (rounded === 0)
+    return { text: "±0 rating", direction: "flat" };
+  const direction = rounded > 0 ? "up" : "down";
+  const arrow = direction === "up" ? "▲" : "▼";
+  const sign = direction === "up" ? "+" : "";
+  return { text: `${arrow} ${sign}${rounded} rating`, direction };
+}
+function formatCountdown(remainingSeconds) {
+  const clamped = Math.max(0, remainingSeconds);
+  const minutes = Math.floor(clamped / 60);
+  const seconds = clamped % 60;
+  return minutes > 0 ? `${minutes}:${String(seconds).padStart(2, "0")}` : `${seconds}s`;
+}
+function easeOutQuad(progress) {
+  const clamped = Math.min(1, Math.max(0, progress));
+  return 1 - (1 - clamped) * (1 - clamped);
+}
+function countUpValue(from, to, progress) {
+  return from + (to - from) * easeOutQuad(progress);
+}
+function interpolateLatLng(from, to, progress) {
+  const eased = easeOutQuad(progress);
+  return [from[0] + (to[0] - from[0]) * eased, from[1] + (to[1] - from[1]) * eased];
+}
+function summaryBestRoundSubtitle(participant) {
+  if (participant.best_round_points === null || participant.best_round_points === undefined)
+    return;
+  const distance = participant.best_round_distance_meters;
+  const distanceSuffix = distance !== null && distance !== undefined ? ` (${(distance / 1000).toFixed(2)} km)` : "";
+  return `Best round: ${participant.best_round_points} pts${distanceSuffix}`;
+}
+function summaryHeadline(participants, multiplayer, viewerProfileId) {
+  if (!multiplayer)
+    return { heading: "Nice work!", icon: "explore" };
+  const sorted = [...participants].sort((a, b) => b.total_points - a.total_points);
+  const [leader, runnerUp] = sorted;
+  if (!leader || runnerUp && runnerUp.total_points === leader.total_points) {
+    return { heading: "It's a tie!", icon: "handshake" };
+  }
+  return {
+    heading: leader.profile_id === viewerProfileId ? "You win! \uD83C\uDF89" : `${leader.username} wins!`,
+    icon: "emoji_events"
+  };
+}
 
 // src/urbanlens/dashboard/frontend/ts/entries/spotguessr.ts
 var urls = window.SPOTGUESSR_URLS;
@@ -14,27 +78,46 @@ var DEFAULT_ZOOM = 2;
 var pageEl = document.querySelector(".spotguessr-page");
 var myProfileId = Number(pageEl?.dataset.myProfileId ?? "0");
 var regionSearchUrl = pageEl?.dataset.regionSearchUrl ?? "";
-var sessionId = null;
-var currentRoundId = null;
-var currentMode = "photos";
-var totalRounds = 0;
-var sessionScore = 0;
-var dateGuessingEnabled = false;
-var isMultiplayer = false;
-var hostProfileId = null;
-var lastRevealedRoundId = null;
-var ws = null;
-var guessMap = null;
-var guessMarker = null;
-var actualMarker = null;
-var resultLine = null;
-var areaMap = null;
-var areaDrawnItems = null;
-var restoredGeoBounds = null;
-var pinOptions = [];
-var friendOptions = [];
-var selectedInviteIds = new Set;
-var scoreboard = [];
+var state = {
+  sessionId: null,
+  currentRoundId: null,
+  currentMode: "photos",
+  currentRoundShowsImagery: false,
+  totalRounds: 0,
+  sessionScore: 0,
+  displayedSessionScore: 0,
+  dateGuessingEnabled: false,
+  isMultiplayer: false,
+  hostProfileId: null,
+  lastRevealedRoundId: null,
+  ws: null,
+  guessMap: null,
+  guessMarker: null,
+  actualMarker: null,
+  resultLine: null,
+  areaMap: null,
+  areaDrawnItems: null,
+  restoredGeoBounds: null,
+  pinOptions: [],
+  friendOptions: [],
+  selectedInviteIds: new Set,
+  scoreboard: [],
+  roundExpiresAtMs: null,
+  roundTimerHandle: null
+};
+var PANEL_IDS = {
+  settings: "sg-settings-panel",
+  lobby: "sg-lobby-panel",
+  game: "sg-game-panel",
+  summary: "sg-summary-panel",
+  empty: "sg-empty-state-panel"
+};
+function showPanel(name) {
+  const visibility = panelVisibility(name);
+  for (const [key, id] of Object.entries(PANEL_IDS)) {
+    el(id).hidden = !visibility[key];
+  }
+}
 function el(id) {
   const found = document.getElementById(id);
   if (!found)
@@ -87,13 +170,13 @@ function openSettingsDialog(mode) {
   el("sg-settings-mode").value = mode;
   updateModeVisibility();
   el("sg-settings-dialog").showModal();
-  if (areaMap) {
-    areaMap.invalidateSize();
+  if (state.areaMap) {
+    state.areaMap.invalidateSize();
   } else {
     ensureAreaMap();
-    if (restoredGeoBounds) {
-      setAreaGeometry(restoredGeoBounds);
-      restoredGeoBounds = null;
+    if (state.restoredGeoBounds) {
+      setAreaGeometry(state.restoredGeoBounds);
+      state.restoredGeoBounds = null;
     }
   }
 }
@@ -122,43 +205,43 @@ function initRatingsToggle() {
   });
 }
 function ensureAreaMap() {
-  if (areaMap)
-    return areaMap;
-  areaMap = L.map("sg-area-map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(areaMap);
-  areaDrawnItems = new L.FeatureGroup;
-  areaMap.addLayer(areaDrawnItems);
+  if (state.areaMap)
+    return state.areaMap;
+  state.areaMap = L.map("sg-area-map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(state.areaMap);
+  state.areaDrawnItems = new L.FeatureGroup;
+  state.areaMap.addLayer(state.areaDrawnItems);
   const drawControl = new L.Control.Draw({
     draw: { polygon: {}, rectangle: false, circle: false, marker: false, polyline: false, circlemarker: false },
-    edit: { featureGroup: areaDrawnItems }
+    edit: { featureGroup: state.areaDrawnItems }
   });
-  areaMap.addControl(drawControl);
-  areaMap.on(L.Draw.Event.CREATED, (event) => {
+  state.areaMap.addControl(drawControl);
+  state.areaMap.on(L.Draw.Event.CREATED, (event) => {
     const { layer } = event;
     setAreaGeometry(layer.toGeoJSON().geometry);
   });
-  return areaMap;
+  return state.areaMap;
 }
 function setAreaGeometry(geometry) {
   const map = ensureAreaMap();
-  areaDrawnItems?.clearLayers();
+  state.areaDrawnItems?.clearLayers();
   const layer = L.geoJSON(geometry);
-  layer.eachLayer((shapeLayer) => areaDrawnItems?.addLayer(shapeLayer));
+  layer.eachLayer((shapeLayer) => state.areaDrawnItems?.addLayer(shapeLayer));
   el("sg-area-geo-bounds").value = JSON.stringify(geometry);
   el("sg-restrict-area").checked = true;
   el("sg-area-clear-btn").hidden = false;
-  const bounds = areaDrawnItems?.getBounds();
+  const bounds = state.areaDrawnItems?.getBounds();
   if (bounds?.isValid())
     map.fitBounds(bounds, { padding: [40, 40] });
   updateAreaPinCount();
 }
 function clearAreaGeometry() {
-  areaDrawnItems?.clearLayers();
+  state.areaDrawnItems?.clearLayers();
   el("sg-area-geo-bounds").value = "";
   el("sg-restrict-area").checked = false;
   el("sg-area-clear-btn").hidden = true;
   el("sg-area-pin-count").hidden = true;
-  areaMap?.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+  state.areaMap?.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
 }
 async function updateAreaPinCount() {
   const geoBounds = currentGeoBoundsGeoJson();
@@ -245,10 +328,10 @@ function currentGeoBoundsGeoJson() {
 }
 async function loadPinOptions() {
   const data = await getJson(urls.pins);
-  pinOptions = data.pins ?? [];
+  state.pinOptions = data.pins ?? [];
   const datalist = el("sg-pin-options");
   datalist.innerHTML = "";
-  for (const pin of pinOptions) {
+  for (const pin of state.pinOptions) {
     const option = document.createElement("option");
     option.value = pin.label;
     datalist.appendChild(option);
@@ -257,17 +340,17 @@ async function loadPinOptions() {
 function initPinSearch() {
   const input = el("sg-pin-search");
   input.addEventListener("change", () => {
-    const match = pinOptions.find((pin) => pin.label === input.value);
+    const match = state.pinOptions.find((pin) => pin.label === input.value);
     if (match)
       placeGuessMarker(L.latLng(match.latitude, match.longitude));
   });
 }
 async function loadFriendOptions() {
-  if (friendOptions.length)
-    return friendOptions;
+  if (state.friendOptions.length)
+    return state.friendOptions;
   const data = await getJson(urls.friends);
-  friendOptions = data.friends ?? [];
-  return friendOptions;
+  state.friendOptions = data.friends ?? [];
+  return state.friendOptions;
 }
 async function fetchFriendsEagerly() {
   const loadingEl = el("sg-friend-list-loading");
@@ -283,12 +366,12 @@ async function fetchFriendsEagerly() {
     return;
   }
   loadingEl.hidden = true;
-  renderFriendCheckboxes(el("sg-friend-list"), friendOptions, new Set);
+  renderFriendCheckboxes(el("sg-friend-list"), state.friendOptions, new Set);
 }
 function initFriendListRetry() {
   el("sg-friend-list-retry").addEventListener("click", () => void fetchFriendsEagerly());
 }
-function renderFriendCheckboxes(container, friends, excludeIds) {
+function renderFriendCheckboxes(container, friends, excludeIds, targetSet = state.selectedInviteIds) {
   container.innerHTML = "";
   const available = friends.filter((friend) => !excludeIds.has(friend.profile_id));
   if (!available.length) {
@@ -302,12 +385,12 @@ function renderFriendCheckboxes(container, friends, excludeIds) {
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
     checkbox.value = String(friend.profile_id);
-    checkbox.checked = selectedInviteIds.has(friend.profile_id);
+    checkbox.checked = targetSet.has(friend.profile_id);
     checkbox.addEventListener("change", () => {
       if (checkbox.checked)
-        selectedInviteIds.add(friend.profile_id);
+        targetSet.add(friend.profile_id);
       else
-        selectedInviteIds.delete(friend.profile_id);
+        targetSet.delete(friend.profile_id);
     });
     const box = document.createElement("span");
     box.className = "ul-checkbox";
@@ -318,36 +401,67 @@ function renderFriendCheckboxes(container, friends, excludeIds) {
     container.appendChild(label);
   }
 }
+function pickFriendsToInvite(available) {
+  return new Promise((resolve) => {
+    const chosen = new Set;
+    const dialog = document.createElement("dialog");
+    dialog.className = "spotguessr-invite-more-dialog";
+    dialog.style.cssText = "max-width:22rem;width:90vw;padding:1.25rem;border-radius:0.5rem;border:1px solid rgba(0,0,0,0.15);";
+    const heading = document.createElement("h3");
+    heading.textContent = "Invite more players";
+    heading.style.marginTop = "0";
+    const list = document.createElement("div");
+    list.style.cssText = "display:flex;flex-direction:column;gap:0.5rem;max-height:16rem;overflow-y:auto;margin:0.75rem 0;";
+    renderFriendCheckboxes(list, available, new Set, chosen);
+    const actions = document.createElement("div");
+    actions.style.cssText = "display:flex;justify-content:flex-end;gap:0.5rem;";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.textContent = "Cancel";
+    const inviteBtn = document.createElement("button");
+    inviteBtn.type = "button";
+    inviteBtn.textContent = "Invite";
+    actions.append(cancelBtn, inviteBtn);
+    dialog.append(heading, list, actions);
+    document.body.appendChild(dialog);
+    const cleanup = (result) => {
+      dialog.close();
+      dialog.remove();
+      resolve(result);
+    };
+    cancelBtn.addEventListener("click", () => cleanup(new Set));
+    inviteBtn.addEventListener("click", () => cleanup(chosen));
+    dialog.addEventListener("cancel", () => cleanup(new Set));
+    dialog.showModal();
+  });
+}
 async function handleInviteMore() {
-  if (sessionId === null)
+  if (state.sessionId === null)
     return;
   const friends = await loadFriendOptions();
-  const lobby = await getJson(urlFor(urls.lobby, sessionId));
+  const lobby = await getJson(urlFor(urls.lobby, state.sessionId));
   const alreadyInvited = new Set(lobby.participants.map((participant) => participant.profile_id));
   const available = friends.filter((friend) => !alreadyInvited.has(friend.profile_id));
   if (!available.length) {
     toast.error("Everyone on your friends list is already in this game.");
     return;
   }
-  const chosenName = window.prompt(`Invite who? (${available.map((friend) => friend.username).join(", ")})`);
-  if (!chosenName)
+  const chosenIds = await pickFriendsToInvite(available);
+  if (!chosenIds.size)
     return;
-  const chosen = available.find((friend) => friend.username === chosenName);
-  if (!chosen)
-    return;
-  const response = await postForm(urlFor(urls.invite, sessionId), { profile_id: String(chosen.profile_id) });
-  if (response.error) {
-    toast.error(response.error);
-    return;
+  for (const profileId of chosenIds) {
+    const response = await postForm(urlFor(urls.invite, state.sessionId), { profile_id: String(profileId) });
+    if (response.error)
+      toast.error(response.error);
   }
-  const refreshed = await getJson(urlFor(urls.lobby, sessionId));
+  const refreshed = await getJson(urlFor(urls.lobby, state.sessionId));
   renderLobbyParticipants(refreshed.participants);
 }
 function ensureGuessMap() {
-  if (guessMap)
-    return guessMap;
-  guessMap = L.map("sg-guess-map", { attributionControl: false }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-  createMapLayers(guessMap, {
+  if (state.guessMap)
+    return state.guessMap;
+  state.guessMap = L.map("sg-guess-map", { attributionControl: false }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+  createMapLayers(state.guessMap, {
     root: document.getElementById("sg-guess-map-layers"),
     onAttribution: (text) => {
       const attributionEl = document.getElementById("sg-guess-map-attribution");
@@ -355,37 +469,81 @@ function ensureGuessMap() {
         attributionEl.textContent = text;
     }
   });
-  guessMap.on("click", (event) => placeGuessMarker(event.latlng));
-  return guessMap;
+  state.guessMap.on("click", (event) => placeGuessMarker(event.latlng));
+  return state.guessMap;
 }
 function placeGuessMarker(latlng) {
   const map = ensureGuessMap();
-  if (guessMarker) {
-    guessMarker.setLatLng(latlng);
+  if (state.guessMarker) {
+    state.guessMarker.setLatLng(latlng);
   } else {
-    guessMarker = L.marker(latlng, { draggable: true }).addTo(map);
+    state.guessMarker = L.marker(latlng, { draggable: true }).addTo(map);
   }
   el("sg-submit-guess-btn").disabled = false;
 }
 function resetGuessMap(bounds) {
   const map = ensureGuessMap();
-  if (guessMarker) {
-    map.removeLayer(guessMarker);
-    guessMarker = null;
+  if (state.guessMarker) {
+    map.removeLayer(state.guessMarker);
+    state.guessMarker = null;
   }
-  if (actualMarker) {
-    map.removeLayer(actualMarker);
-    actualMarker = null;
+  if (state.actualMarker) {
+    map.removeLayer(state.actualMarker);
+    state.actualMarker = null;
   }
-  if (resultLine) {
-    map.removeLayer(resultLine);
-    resultLine = null;
+  if (state.resultLine) {
+    map.removeLayer(state.resultLine);
+    state.resultLine = null;
   }
   el("sg-submit-guess-btn").disabled = true;
   if (bounds) {
     map.fitBounds(bounds, { padding: [20, 20] });
   } else {
     map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+  }
+}
+function clearRoundTimer() {
+  if (state.roundTimerHandle !== null) {
+    clearInterval(state.roundTimerHandle);
+    state.roundTimerHandle = null;
+  }
+  state.roundExpiresAtMs = null;
+  el("sg-round-timer").hidden = true;
+}
+function startRoundTimer(expiresAtIso) {
+  clearRoundTimer();
+  if (!expiresAtIso)
+    return;
+  state.roundExpiresAtMs = new Date(expiresAtIso).getTime();
+  el("sg-round-timer").hidden = false;
+  updateRoundTimerDisplay();
+  state.roundTimerHandle = setInterval(updateRoundTimerDisplay, 1000);
+}
+function updateRoundTimerDisplay() {
+  if (state.roundExpiresAtMs === null)
+    return;
+  const remainingSeconds = Math.ceil((state.roundExpiresAtMs - Date.now()) / 1000);
+  const timerEl = el("sg-round-timer");
+  timerEl.textContent = formatCountdown(remainingSeconds);
+  timerEl.classList.toggle("spotguessr-round-timer--urgent", remainingSeconds <= 10);
+  if (remainingSeconds <= 0) {
+    clearRoundTimer();
+    reportRoundTimeout();
+  }
+}
+async function reportRoundTimeout() {
+  if (state.sessionId === null || state.currentRoundId === null)
+    return;
+  await postForm(urlFor(urls.round_timeout, state.sessionId, state.currentRoundId), {});
+  if (state.isMultiplayer)
+    return;
+  const data = await getJson(urlFor(urls.round, state.sessionId));
+  if (data.no_eligible_locations) {
+    showNoEligibleLocations();
+  } else if (data.finished) {
+    showSummary(data.summary);
+  } else if (data.round) {
+    renderRound(data.round, data.round.sequence_index + 1);
   }
 }
 function renderLobbyParticipants(participants) {
@@ -402,39 +560,36 @@ function renderLobbyParticipants(participants) {
     list.appendChild(item);
   }
   const me = participants.find((participant) => participant.profile_id === myProfileId);
-  const isHost = hostProfileId === myProfileId;
+  const isHost = state.hostProfileId === myProfileId;
   el("sg-invite-more-btn").hidden = !isHost;
   el("sg-join-lobby-btn").hidden = !(me && me.status === "invited");
   el("sg-begin-btn").hidden = !isHost;
 }
 function renderLobby(session) {
-  hostProfileId = session.host_profile_id;
-  currentMode = session.mode;
-  totalRounds = session.total_rounds;
-  el("sg-settings-panel").hidden = true;
-  el("sg-lobby-panel").hidden = false;
-  el("sg-game-panel").hidden = true;
-  el("sg-summary-panel").hidden = true;
+  state.hostProfileId = session.host_profile_id;
+  state.currentMode = session.mode;
+  state.totalRounds = session.total_rounds;
+  showPanel("lobby");
   renderLobbyParticipants(session.participants);
   connectSessionSocket();
 }
 async function refreshLobby() {
-  if (sessionId === null)
+  if (state.sessionId === null)
     return;
-  const lobby = await getJson(urlFor(urls.lobby, sessionId));
+  const lobby = await getJson(urlFor(urls.lobby, state.sessionId));
   renderLobbyParticipants(lobby.participants);
 }
 function renderRound(round, roundNumber) {
-  currentRoundId = round.round_id;
-  currentMode = round.mode;
-  el("sg-settings-panel").hidden = true;
-  el("sg-lobby-panel").hidden = true;
-  el("sg-summary-panel").hidden = true;
-  el("sg-game-panel").hidden = false;
+  state.currentRoundId = round.round_id;
+  state.currentMode = round.mode;
+  state.currentRoundShowsImagery = round.shows_imagery;
+  showPanel("game");
   el("sg-reveal-panel").hidden = true;
-  el("sg-round-status").textContent = `Round ${roundNumber} of ${totalRounds}`;
-  el("sg-score-status").textContent = isMultiplayer ? "" : `Score: ${sessionScore}`;
-  el("sg-game-settings-btn").hidden = isMultiplayer;
+  el("sg-round-status").textContent = `Round ${roundNumber} of ${state.totalRounds}`;
+  state.displayedSessionScore = state.sessionScore;
+  el("sg-score-status").textContent = state.isMultiplayer ? "" : `Score: ${state.sessionScore}`;
+  el("sg-game-settings-btn").hidden = state.isMultiplayer;
+  el("sg-end-game-btn").hidden = !(state.isMultiplayer && state.hostProfileId === myProfileId);
   const photo = el("sg-round-photo");
   const nameHeading = el("sg-round-name");
   const pinSearchWrap = el("sg-pin-search-wrap");
@@ -449,16 +604,49 @@ function renderRound(round, roundNumber) {
     photo.hidden = false;
     photo.src = (round.mode === "street_view" ? round.street_view_image : round.image_url) ?? "";
   }
-  el("sg-date-field").hidden = !dateGuessingEnabled;
+  el("sg-date-field").hidden = !state.dateGuessingEnabled;
   el("sg-photo-feedback").hidden = true;
   el("sg-photo-feedback-thanks").hidden = true;
   resetGuessMap(round.geo_bounds);
-  setTimeout(() => guessMap?.invalidateSize(), 0);
+  startRoundTimer(round.expires_at);
+  setTimeout(() => state.guessMap?.invalidateSize(), 0);
 }
-function avatarInitial(username) {
-  return username.charAt(0).toUpperCase() || "?";
+var activeCountUps = new WeakMap;
+function animateCountUp(el2, from, to, durationMs = 700, formatter = (value) => String(Math.round(value))) {
+  const pending = activeCountUps.get(el2);
+  if (pending !== undefined)
+    cancelAnimationFrame(pending);
+  if (from === to || durationMs <= 0) {
+    el2.textContent = formatter(to);
+    activeCountUps.delete(el2);
+    return;
+  }
+  const start = performance.now();
+  const tick = (now) => {
+    const progress = Math.min(1, (now - start) / durationMs);
+    el2.textContent = formatter(progress >= 1 ? to : countUpValue(from, to, progress));
+    if (progress < 1) {
+      activeCountUps.set(el2, requestAnimationFrame(tick));
+    } else {
+      activeCountUps.delete(el2);
+    }
+  };
+  activeCountUps.set(el2, requestAnimationFrame(tick));
 }
-function renderScoreCard(data, rank) {
+function animateLineDrawIn(map, from, to, durationMs = 600) {
+  const line = L.polyline([from, from], { color: "#e74c3c" }).addTo(map);
+  const start = performance.now();
+  const tick = (now) => {
+    const progress = Math.min(1, (now - start) / durationMs);
+    const [lat, lng] = interpolateLatLng([from.lat, from.lng], [to.lat, to.lng], progress);
+    line.setLatLngs([from, progress >= 1 ? to : L.latLng(lat, lng)]);
+    if (progress < 1)
+      requestAnimationFrame(tick);
+  };
+  requestAnimationFrame(tick);
+  return line;
+}
+function renderScoreCard(data, rank, animatePoints = false) {
   const template = el("sg-score-card-template");
   const node = template.content.firstElementChild?.cloneNode(true);
   if (!node)
@@ -492,8 +680,19 @@ function renderScoreCard(data, rank) {
   if (subtitleEl)
     subtitleEl.textContent = data.subtitle ?? "";
   const pointsEl = card.querySelector(".spotguessr-score-card-points");
-  if (pointsEl)
-    pointsEl.textContent = `${data.points} pts`;
+  if (pointsEl) {
+    if (animatePoints) {
+      animateCountUp(pointsEl, 0, data.points, 700, (value) => `${Math.round(value)} pts`);
+    } else {
+      pointsEl.textContent = `${data.points} pts`;
+    }
+  }
+  const ratingDeltaEl = card.querySelector(".spotguessr-score-card-rating-delta");
+  if (ratingDeltaEl) {
+    const formatted = formatRatingDelta(data.ratingDelta);
+    ratingDeltaEl.textContent = formatted?.text ?? "";
+    ratingDeltaEl.className = `spotguessr-score-card-rating-delta${formatted ? ` spotguessr-score-card-rating-delta--${formatted.direction}` : ""}`;
+  }
   return card;
 }
 function renderScoreCardList(container, entries, options) {
@@ -503,15 +702,37 @@ function renderScoreCardList(container, entries, options) {
   if (options.solo && sorted.length === 1 && only) {
     const item = document.createElement("li");
     item.className = "spotguessr-score-card spotguessr-score-card--solo";
-    item.textContent = `Your score: ${only.points} pts`;
+    const scoreLine = document.createElement("span");
+    const scoreValue = document.createElement("span");
+    scoreValue.className = "spotguessr-score-card-solo-value";
+    scoreLine.append("Your score: ", scoreValue, " pts");
+    item.appendChild(scoreLine);
+    if (options.animatePoints) {
+      animateCountUp(scoreValue, 0, only.points, 700);
+    } else {
+      scoreValue.textContent = String(only.points);
+    }
+    const formatted = formatRatingDelta(only.ratingDelta);
+    if (formatted) {
+      const ratingLine = document.createElement("span");
+      ratingLine.className = `spotguessr-rating-delta spotguessr-rating-delta--${formatted.direction}`;
+      ratingLine.textContent = formatted.text;
+      item.appendChild(ratingLine);
+    }
+    if (only.subtitle) {
+      const subtitleLine = document.createElement("span");
+      subtitleLine.className = "spotguessr-score-card-subtitle";
+      subtitleLine.textContent = only.subtitle;
+      item.appendChild(subtitleLine);
+    }
     container.appendChild(item);
     return;
   }
-  sorted.forEach((entry, index) => container.appendChild(renderScoreCard(entry, index + 1)));
+  sorted.forEach((entry, index) => container.appendChild(renderScoreCard(entry, index + 1, options.animatePoints)));
 }
 function renderResultsList(results) {
   const list = el("sg-reveal-results");
-  if (!isMultiplayer) {
+  if (!state.isMultiplayer) {
     list.hidden = true;
     return;
   }
@@ -521,15 +742,16 @@ function renderResultsList(results) {
     username: result.username,
     avatarUrl: result.avatar_url,
     points: result.points + result.date_points + result.bonus_points,
-    subtitle: `${(result.distance_meters / 1000).toFixed(2)} km away`
-  })), { solo: false });
+    subtitle: `${(result.distance_meters / 1000).toFixed(2)} km away`,
+    ratingDelta: result.rating_delta
+  })), { solo: false, animatePoints: true });
 }
 function updateScoreboardFromResults(results) {
   for (const result of results) {
-    let entry = scoreboard.find((participant) => participant.profile_id === result.profile_id);
+    let entry = state.scoreboard.find((participant) => participant.profile_id === result.profile_id);
     if (!entry) {
       entry = { profile_id: result.profile_id, username: result.username, avatar_url: result.avatar_url, total_points: 0 };
-      scoreboard.push(entry);
+      state.scoreboard.push(entry);
     }
     entry.total_points += result.points + result.date_points + result.bonus_points;
   }
@@ -545,120 +767,144 @@ function updateScoreboardFromResults(results) {
 }
 function renderScoreboard() {
   const list = el("sg-scoreboard");
-  if (!isMultiplayer || !scoreboard.length) {
+  if (!state.isMultiplayer || !state.scoreboard.length) {
     list.hidden = true;
     return;
   }
   list.hidden = false;
-  renderScoreCardList(list, scoreboard.map((entry) => ({ profileId: entry.profile_id, username: entry.username, avatarUrl: entry.avatar_url, points: entry.total_points })), { solo: false });
+  renderScoreCardList(list, state.scoreboard.map((entry) => ({ profileId: entry.profile_id, username: entry.username, avatarUrl: entry.avatar_url, points: entry.total_points })), { solo: false });
 }
 function showPhotoFeedbackIfApplicable() {
-  el("sg-photo-feedback").hidden = !["photos", "street_view"].includes(currentMode);
+  el("sg-photo-feedback").hidden = !state.currentRoundShowsImagery;
   el("sg-photo-feedback-thanks").hidden = true;
 }
 function dropInMarker(marker) {
   marker.getElement()?.classList.add("spotguessr-marker-drop");
 }
-function bonusSuffix(bonusPoints, bonusTiers) {
-  return bonusPoints ? ` (+${bonusPoints} bonus: ${bonusTiers.join(", ")})` : "";
+function drawRevealMarkers(actualLatLng) {
+  const map = ensureGuessMap();
+  state.actualMarker = L.marker(actualLatLng).addTo(map);
+  dropInMarker(state.actualMarker);
+  if (state.guessMarker) {
+    const guessLatLng = state.guessMarker.getLatLng();
+    map.fitBounds(L.latLngBounds([guessLatLng, actualLatLng]), { padding: [40, 40] });
+    state.resultLine = animateLineDrawIn(map, guessLatLng, actualLatLng);
+  } else {
+    map.setView(actualLatLng, 14);
+  }
+}
+function updateRatingDeltaDisplay(delta) {
+  const badge = el("sg-reveal-rating-delta");
+  const formatted = formatRatingDelta(delta);
+  if (!formatted) {
+    badge.hidden = true;
+    badge.textContent = "";
+    badge.className = "spotguessr-rating-delta";
+    return;
+  }
+  badge.hidden = false;
+  badge.textContent = formatted.text;
+  badge.className = `spotguessr-rating-delta spotguessr-rating-delta--${formatted.direction}`;
 }
 function showReveal(reveal) {
+  clearRoundTimer();
   el("sg-submit-guess-btn").disabled = true;
-  sessionScore += reveal.points + reveal.date_points + reveal.bonus_points;
-  el("sg-score-status").textContent = isMultiplayer ? "" : `Score: ${sessionScore}`;
+  const roundTotal = reveal.points + reveal.date_points + reveal.bonus_points;
+  state.sessionScore += roundTotal;
+  if (state.isMultiplayer) {
+    el("sg-score-status").textContent = "";
+  } else {
+    animateCountUp(el("sg-score-status"), state.displayedSessionScore, state.sessionScore, 700, (value) => `Score: ${Math.round(value)}`);
+  }
+  state.displayedSessionScore = state.sessionScore;
   showPhotoFeedbackIfApplicable();
+  updateRatingDeltaDisplay(reveal.rating_delta);
+  animateCountUp(el("sg-reveal-points-value"), 0, roundTotal);
   const distanceKm = (reveal.distance_meters / 1000).toFixed(2);
   if (!reveal.revealed) {
     el("sg-reveal-panel").hidden = false;
     el("sg-reveal-title").textContent = "Guess submitted!";
-    let detail2 = `${reveal.points} points – ${distanceKm} km away. Waiting for other players…`;
+    let detail2 = `${distanceKm} km away. Waiting for other players…`;
     if (reveal.date_points)
-      detail2 = `${reveal.points} points (+${reveal.date_points} for the date guess) – ${distanceKm} km away. Waiting for other players…`;
+      detail2 = `${distanceKm} km away (+${reveal.date_points} for the date guess). Waiting for other players…`;
     detail2 += bonusSuffix(reveal.bonus_points, reveal.bonus_tiers);
     el("sg-reveal-detail").textContent = detail2;
     el("sg-reveal-results").hidden = true;
     el("sg-next-round-btn").hidden = true;
     return;
   }
-  lastRevealedRoundId = reveal.round_id;
-  const map = ensureGuessMap();
-  const actualLatLng = L.latLng(reveal.actual_latitude, reveal.actual_longitude);
-  actualMarker = L.marker(actualLatLng).addTo(map);
-  dropInMarker(actualMarker);
-  if (guessMarker) {
-    const guessLatLng = guessMarker.getLatLng();
-    resultLine = L.polyline([guessLatLng, actualLatLng], { color: "#e74c3c" }).addTo(map);
-    map.fitBounds(L.latLngBounds([guessLatLng, actualLatLng]), { padding: [40, 40] });
-  } else {
-    map.setView(actualLatLng, 14);
-  }
+  state.lastRevealedRoundId = reveal.round_id;
+  drawRevealMarkers(L.latLng(reveal.actual_latitude, reveal.actual_longitude));
   el("sg-reveal-panel").hidden = false;
   el("sg-reveal-title").textContent = reveal.location_name || "Revealed!";
-  let detail = `${reveal.points} points – ${distanceKm} km away`;
+  let detail = `${distanceKm} km away`;
   if (reveal.date_points)
     detail += ` (+${reveal.date_points} for the date guess)`;
   detail += bonusSuffix(reveal.bonus_points, reveal.bonus_tiers);
   el("sg-reveal-detail").textContent = detail;
   el("sg-reveal-results").hidden = true;
-  el("sg-next-round-btn").hidden = isMultiplayer;
+  el("sg-next-round-btn").hidden = state.isMultiplayer;
 }
 function showBroadcastReveal(data) {
-  if (lastRevealedRoundId !== data.round_id) {
-    lastRevealedRoundId = data.round_id;
-    const map = ensureGuessMap();
-    const actualLatLng = L.latLng(data.actual_latitude, data.actual_longitude);
-    actualMarker = L.marker(actualLatLng).addTo(map);
-    dropInMarker(actualMarker);
-    if (guessMarker) {
-      const guessLatLng = guessMarker.getLatLng();
-      resultLine = L.polyline([guessLatLng, actualLatLng], { color: "#e74c3c" }).addTo(map);
-      map.fitBounds(L.latLngBounds([guessLatLng, actualLatLng]), { padding: [40, 40] });
-    } else {
-      map.setView(actualLatLng, 14);
-    }
+  clearRoundTimer();
+  if (state.lastRevealedRoundId !== data.round_id) {
+    state.lastRevealedRoundId = data.round_id;
+    drawRevealMarkers(L.latLng(data.actual_latitude, data.actual_longitude));
     el("sg-reveal-panel").hidden = false;
     el("sg-reveal-title").textContent = data.location_name || "Revealed!";
     el("sg-reveal-detail").textContent = "";
     el("sg-submit-guess-btn").disabled = true;
     el("sg-next-round-btn").hidden = true;
+    const myResult = data.results.find((result) => result.profile_id === myProfileId);
+    updateRatingDeltaDisplay(myResult?.rating_delta);
   }
   updateScoreboardFromResults(data.results);
   renderResultsList(data.results);
 }
 function showSummary(summary) {
-  el("sg-game-panel").hidden = true;
-  el("sg-lobby-panel").hidden = true;
-  el("sg-summary-panel").hidden = false;
+  showPanel("summary");
+  clearRoundTimer();
+  const { heading, icon } = summaryHeadline(summary.participants, state.isMultiplayer, myProfileId);
+  el("sg-summary-heading").textContent = heading;
+  el("sg-summary-icon").textContent = icon;
+  const roundWord = summary.total_rounds === 1 ? "round" : "rounds";
+  el("sg-summary-subheading").textContent = `${summary.rounds_played} of ${summary.total_rounds} ${roundWord} played.`;
   renderScoreCardList(el("sg-summary-scores"), summary.participants.map((participant) => ({
     profileId: participant.profile_id,
     username: participant.username,
     avatarUrl: participant.avatar_url,
-    points: participant.total_points
-  })), { solo: !isMultiplayer });
-  if (ws) {
-    ws.close();
-    ws = null;
+    points: participant.total_points,
+    ratingDelta: participant.rating_delta,
+    subtitle: summaryBestRoundSubtitle(participant)
+  })), { solo: !state.isMultiplayer, animatePoints: true });
+  if (state.ws) {
+    state.ws.close();
+    state.ws = null;
   }
 }
 async function startGame(mode) {
-  currentMode = mode;
-  dateGuessingEnabled = currentMode === "photos" && el("sg-date-guessing").checked;
-  sessionScore = 0;
-  scoreboard = [];
-  lastRevealedRoundId = null;
+  state.currentMode = mode;
+  state.dateGuessingEnabled = state.currentMode === "photos" && el("sg-date-guessing").checked;
+  state.sessionScore = 0;
+  state.displayedSessionScore = 0;
+  state.scoreboard = [];
+  state.lastRevealedRoundId = null;
   const geoBounds = el("sg-restrict-area").checked ? currentGeoBoundsGeoJson() : null;
+  const roundTimeLimit = el("sg-round-time-limit").value;
   const body = new URLSearchParams({
-    mode: currentMode,
+    mode: state.currentMode,
     difficulty: String(currentDifficulty()),
     total_rounds: el("sg-rounds").value,
     allow_arbitrary_external_photos: el("sg-allow-arbitrary-external-photos").checked ? "on" : "off",
     require_visited_all: el("sg-require-visited-all").checked ? "on" : "off",
-    date_guessing_enabled: dateGuessingEnabled ? "on" : "off",
+    date_guessing_enabled: state.dateGuessingEnabled ? "on" : "off",
     use_aliases: el("sg-use-aliases").checked ? "on" : "off"
   });
   if (geoBounds)
     body.append("geo_bounds", geoBounds);
-  for (const profileId of selectedInviteIds)
+  if (roundTimeLimit)
+    body.append("round_time_limit_seconds", roundTimeLimit);
+  for (const profileId of state.selectedInviteIds)
     body.append("invite_profile_ids", String(profileId));
   const response = await postForm(urls.start, body);
   if (response.error) {
@@ -669,14 +915,14 @@ async function startGame(mode) {
     showNoEligibleLocations();
     return;
   }
-  sessionId = response.session_id;
-  totalRounds = Number(el("sg-rounds").value);
+  state.sessionId = response.session_id;
+  state.totalRounds = Number(el("sg-rounds").value);
   if (response.lobby) {
-    isMultiplayer = true;
+    state.isMultiplayer = true;
     renderLobby(response.session);
     return;
   }
-  isMultiplayer = false;
+  state.isMultiplayer = false;
   if (response.finished) {
     showSummary(response.summary);
     return;
@@ -685,16 +931,16 @@ async function startGame(mode) {
   renderRound(response.round, response.round.sequence_index + 1);
 }
 async function submitGuess() {
-  if (!guessMarker || sessionId === null || currentRoundId === null)
+  if (!state.guessMarker || state.sessionId === null || state.currentRoundId === null)
     return;
-  const latlng = guessMarker.getLatLng();
+  const latlng = state.guessMarker.getLatLng();
   const payload = { latitude: String(latlng.lat), longitude: String(latlng.lng) };
-  if (dateGuessingEnabled) {
+  if (state.dateGuessingEnabled) {
     const dateValue = el("sg-guessed-date").value;
     if (dateValue)
       payload.guessed_date = dateValue;
   }
-  const reveal = await postForm(urlFor(urls.guess, sessionId, currentRoundId), payload);
+  const reveal = await postForm(urlFor(urls.guess, state.sessionId, state.currentRoundId), payload);
   if (reveal.error) {
     toast.error(reveal.error);
     return;
@@ -702,9 +948,9 @@ async function submitGuess() {
   showReveal(reveal);
 }
 async function submitPhotoFeedback(kind) {
-  if (sessionId === null || currentRoundId === null)
+  if (state.sessionId === null || state.currentRoundId === null)
     return;
-  const response = await postForm(urlFor(urls.photo_feedback, sessionId, currentRoundId), { kind });
+  const response = await postForm(urlFor(urls.photo_feedback, state.sessionId, state.currentRoundId), { kind });
   if (response.error) {
     toast.error(response.error);
     return;
@@ -712,9 +958,9 @@ async function submitPhotoFeedback(kind) {
   el("sg-photo-feedback-thanks").hidden = false;
 }
 async function goToNextRound() {
-  if (sessionId === null)
+  if (state.sessionId === null)
     return;
-  const data = await getJson(urlFor(urls.round, sessionId));
+  const data = await getJson(urlFor(urls.round, state.sessionId));
   if (data.no_eligible_locations) {
     showNoEligibleLocations();
     return;
@@ -726,9 +972,9 @@ async function goToNextRound() {
   renderRound(data.round, data.round.sequence_index + 1);
 }
 async function joinLobby() {
-  if (sessionId === null)
+  if (state.sessionId === null)
     return;
-  const response = await postForm(urlFor(urls.join, sessionId), {});
+  const response = await postForm(urlFor(urls.join, state.sessionId), {});
   if (response.error) {
     toast.error(response.error);
     return;
@@ -736,14 +982,13 @@ async function joinLobby() {
   await refreshLobby();
 }
 async function beginGame() {
-  if (sessionId === null)
+  if (state.sessionId === null)
     return;
-  const response = await postForm(urlFor(urls.begin, sessionId), {});
+  const response = await postForm(urlFor(urls.begin, state.sessionId), {});
   if (response.error) {
     toast.error(response.error);
     return;
   }
-  el("sg-lobby-panel").hidden = true;
   if (response.no_eligible_locations) {
     showNoEligibleLocations();
     return;
@@ -755,23 +1000,41 @@ async function beginGame() {
   await loadPinOptions();
   renderRound(response.round, 1);
 }
-function resetToSettings() {
-  sessionId = null;
-  currentRoundId = null;
-  sessionScore = 0;
-  scoreboard = [];
-  selectedInviteIds.clear();
-  isMultiplayer = false;
-  lastRevealedRoundId = null;
-  if (ws) {
-    ws.close();
-    ws = null;
+function _resetSessionState() {
+  state.sessionId = null;
+  state.currentRoundId = null;
+  state.sessionScore = 0;
+  state.displayedSessionScore = 0;
+  state.scoreboard = [];
+  state.selectedInviteIds.clear();
+  state.isMultiplayer = false;
+  state.lastRevealedRoundId = null;
+  clearRoundTimer();
+  if (state.ws) {
+    state.ws.close();
+    state.ws = null;
   }
-  el("sg-summary-panel").hidden = true;
-  el("sg-lobby-panel").hidden = true;
-  el("sg-game-panel").hidden = true;
-  el("sg-empty-state-panel").hidden = true;
-  el("sg-settings-panel").hidden = false;
+}
+async function endGameNow() {
+  if (state.sessionId === null)
+    return;
+  const confirmed = await confirmAction({
+    title: "End this game?",
+    message: "This ends the game immediately for everyone, using the scores so far.",
+    confirmLabel: "End game"
+  });
+  if (!confirmed)
+    return;
+  const response = await postForm(urlFor(urls.end, state.sessionId), {});
+  if (response.error) {
+    toast.error(response.error);
+    return;
+  }
+  showSummary(response.summary);
+}
+function resetToSettings() {
+  _resetSessionState();
+  showPanel("settings");
 }
 function activeFilterLabels() {
   const labels = [];
@@ -786,10 +1049,9 @@ function clearActiveFilters() {
   clearAreaGeometry();
 }
 function showNoEligibleLocations() {
-  const mode = currentMode;
-  resetToSettings();
-  el("sg-settings-panel").hidden = true;
-  el("sg-empty-state-panel").hidden = false;
+  const mode = state.currentMode;
+  _resetSessionState();
+  showPanel("empty");
   const filters = activeFilterLabels();
   const filtersList = el("sg-empty-state-active-filters");
   const clearBtn = el("sg-empty-state-clear-filters-btn");
@@ -804,7 +1066,6 @@ function showNoEligibleLocations() {
     clearBtn.hidden = false;
     clearBtn.onclick = () => {
       clearActiveFilters();
-      el("sg-empty-state-panel").hidden = true;
       startGame(mode);
     };
   } else {
@@ -815,7 +1076,7 @@ function showNoEligibleLocations() {
 function initEmptyState() {
   el("sg-empty-state-settings-btn").addEventListener("click", () => {
     resetToSettings();
-    openSettingsDialog(currentMode);
+    openSettingsDialog(state.currentMode);
   });
 }
 function applyLastConfig() {
@@ -836,25 +1097,26 @@ function applyLastConfig() {
   el("sg-date-guessing").checked = config.date_guessing_enabled;
   el("sg-use-aliases").checked = config.use_aliases;
   el("sg-require-visited-all").checked = config.require_visited_all;
+  el("sg-round-time-limit").value = config.round_time_limit_seconds ? String(config.round_time_limit_seconds) : "";
   if (config.geo_bounds_geojson) {
     el("sg-restrict-area").checked = true;
     el("sg-area-geo-bounds").value = JSON.stringify(config.geo_bounds_geojson);
     el("sg-area-clear-btn").hidden = false;
-    restoredGeoBounds = config.geo_bounds_geojson;
+    state.restoredGeoBounds = config.geo_bounds_geojson;
   }
 }
 function connectSessionSocket() {
-  if (ws || sessionId === null)
+  if (state.ws || state.sessionId === null)
     return;
   const proto = location.protocol === "https:" ? "wss://" : "ws://";
-  ws = new WebSocket(`${proto}${location.host}/ws/spotguessr/session/${sessionId}/`);
-  ws.addEventListener("message", (event) => {
+  state.ws = new WebSocket(`${proto}${location.host}/ws/spotguessr/session/${state.sessionId}/`);
+  state.ws.addEventListener("message", (event) => {
     try {
       handleSocketMessage(JSON.parse(event.data));
     } catch {}
   });
-  ws.addEventListener("close", () => {
-    ws = null;
+  state.ws.addEventListener("close", () => {
+    state.ws = null;
   });
   el("sg-chat-panel").hidden = false;
   loadChatHistory();
@@ -865,7 +1127,6 @@ function handleSocketMessage(data) {
       refreshLobby();
       break;
     case "session.started":
-      el("sg-lobby-panel").hidden = true;
       renderRound(data.round, 1);
       break;
     case "round.revealed":
@@ -895,9 +1156,9 @@ function appendChatMessage(message) {
   log.scrollTop = log.scrollHeight;
 }
 async function loadChatHistory() {
-  if (sessionId === null)
+  if (state.sessionId === null)
     return;
-  const data = await getJson(urlFor(urls.chat_history, sessionId));
+  const data = await getJson(urlFor(urls.chat_history, state.sessionId));
   const log = el("sg-chat-log");
   log.innerHTML = "";
   for (const message of data.messages ?? [])
@@ -908,9 +1169,9 @@ function initChat() {
     event.preventDefault();
     const input = el("sg-chat-input");
     const body = input.value.trim();
-    if (!body || !ws)
+    if (!body || !state.ws)
       return;
-    ws.send(JSON.stringify({ body }));
+    state.ws.send(JSON.stringify({ body }));
     input.value = "";
   });
 }
@@ -918,23 +1179,23 @@ async function loadInitialSession() {
   const raw = pageEl?.dataset.initialSessionId;
   if (!raw)
     return;
-  sessionId = Number(raw);
-  const lobby = await getJson(urlFor(urls.lobby, sessionId));
-  totalRounds = lobby.total_rounds;
-  currentMode = lobby.mode;
-  isMultiplayer = true;
+  state.sessionId = Number(raw);
+  const lobby = await getJson(urlFor(urls.lobby, state.sessionId));
+  state.totalRounds = lobby.total_rounds;
+  state.currentMode = lobby.mode;
+  state.isMultiplayer = true;
   if (lobby.status === "lobby") {
     renderLobby(lobby);
     return;
   }
   if (lobby.status === "completed" || lobby.status === "abandoned") {
-    const summary = await getJson(urlFor(urls.summary, sessionId));
+    const summary = await getJson(urlFor(urls.summary, state.sessionId));
     showSummary(summary);
     return;
   }
   connectSessionSocket();
   await loadPinOptions();
-  const data = await getJson(urlFor(urls.round, sessionId));
+  const data = await getJson(urlFor(urls.round, state.sessionId));
   if (data.no_eligible_locations) {
     showNoEligibleLocations();
   } else if (data.finished) {
@@ -960,7 +1221,7 @@ el("sg-start-form").addEventListener("submit", (event) => {
   el("sg-settings-dialog").close();
   startGame(mode);
 });
-el("sg-game-settings-btn").addEventListener("click", () => openSettingsDialog(currentMode));
+el("sg-game-settings-btn").addEventListener("click", () => openSettingsDialog(state.currentMode));
 el("sg-submit-guess-btn").addEventListener("click", () => void submitGuess());
 el("sg-photo-thumbs-up-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_up"));
 el("sg-photo-thumbs-down-btn").addEventListener("click", () => void submitPhotoFeedback("thumbs_down"));
@@ -970,4 +1231,5 @@ el("sg-play-again-btn").addEventListener("click", resetToSettings);
 el("sg-join-lobby-btn").addEventListener("click", () => void joinLobby());
 el("sg-begin-btn").addEventListener("click", () => void beginGame());
 el("sg-invite-more-btn").addEventListener("click", () => void handleInviteMore());
+el("sg-end-game-btn").addEventListener("click", () => void endGameNow());
 loadInitialSession();

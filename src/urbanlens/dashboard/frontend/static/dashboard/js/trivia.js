@@ -81,6 +81,42 @@ async function initFriendPicker() {
       renderFriendCheckboxes(el("trivia-friend-list"), friends, new Set);
   });
 }
+function pickFriendsToInvite(available) {
+  return new Promise((resolve) => {
+    const dialog = document.createElement("dialog");
+    dialog.className = "trivia-invite-more-dialog";
+    dialog.style.cssText = "max-width:22rem;width:90vw;padding:1.25rem;border-radius:0.5rem;border:1px solid rgba(0,0,0,0.15);";
+    const heading = document.createElement("h3");
+    heading.textContent = "Invite more players";
+    heading.style.marginTop = "0";
+    const list = document.createElement("div");
+    list.style.cssText = "display:flex;flex-direction:column;gap:0.5rem;max-height:16rem;overflow-y:auto;margin:0.75rem 0;";
+    renderFriendCheckboxes(list, available, new Set);
+    const actions = document.createElement("div");
+    actions.style.cssText = "display:flex;justify-content:flex-end;gap:0.5rem;";
+    const cancelBtn = document.createElement("button");
+    cancelBtn.type = "button";
+    cancelBtn.textContent = "Cancel";
+    const inviteBtn = document.createElement("button");
+    inviteBtn.type = "button";
+    inviteBtn.textContent = "Invite";
+    actions.append(cancelBtn, inviteBtn);
+    dialog.append(heading, list, actions);
+    document.body.appendChild(dialog);
+    const cleanup = (result) => {
+      dialog.close();
+      dialog.remove();
+      resolve(result);
+    };
+    cancelBtn.addEventListener("click", () => cleanup([]));
+    inviteBtn.addEventListener("click", () => {
+      const checked = Array.from(list.querySelectorAll("input:checked")).map((input) => Number(input.value));
+      cleanup(checked);
+    });
+    dialog.addEventListener("cancel", () => cleanup([]));
+    dialog.showModal();
+  });
+}
 async function handleInviteMore() {
   if (sessionId === null)
     return;
@@ -92,16 +128,13 @@ async function handleInviteMore() {
     toast.error("Everyone on your friends list is already in this game.");
     return;
   }
-  const chosenName = window.prompt(`Invite who? (${available.map((friend) => friend.username).join(", ")})`);
-  if (!chosenName)
+  const chosenIds = await pickFriendsToInvite(available);
+  if (!chosenIds.length)
     return;
-  const chosen = available.find((friend) => friend.username === chosenName);
-  if (!chosen)
-    return;
-  const response = await postForm(urlFor(urls.invite, sessionId), { profile_id: String(chosen.profile_id) });
-  if (response.error) {
-    toast.error(response.error);
-    return;
+  for (const profileId of chosenIds) {
+    const response = await postForm(urlFor(urls.invite, sessionId), { profile_id: String(profileId) });
+    if (response.error)
+      toast.error(response.error);
   }
   await refreshLobby();
 }
