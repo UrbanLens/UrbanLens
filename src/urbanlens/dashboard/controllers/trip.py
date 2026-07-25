@@ -434,12 +434,16 @@ def _suggest_connections_for_new_member(new_member: Profile, existing_members) -
 
 
 def _addable_friends(trip: Trip, profile: Profile) -> list[Profile]:
-    """The creator's friends not already on this trip, for the add-member dialog's picker.
+    """The viewer's friends not already on this trip, for the add-member dialog's picker.
 
-    Empty for anyone but the creator - only they can add members (see
-    trip_members_panel.html's own gate on the dialog's trigger button).
+    Empty unless the viewer currently has permission to add members - mirrors
+    the exact check `TripMembersView.post` enforces server-side
+    (`_can_perform(profile, trip, trip.allow_add_members)`), so the picker
+    (and the dialog/button gated on `can_add_members` in
+    trip_members_panel.html) actually reflects the "Allow members to add
+    people" setting instead of only ever working for the creator.
     """
-    if profile.id != trip.creator_id:
+    if not _can_perform(profile, trip, trip.allow_add_members):
         return []
     from urbanlens.dashboard.services.connections import get_connections
 
@@ -460,7 +464,13 @@ def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) ->
     return render(
         request,
         "dashboard/partials/trips/trip_members_panel.html",
-        {"trip": trip, "members": members, "profile": profile, "addable_friends": _addable_friends(trip, profile)},
+        {
+            "trip": trip,
+            "members": members,
+            "profile": profile,
+            "addable_friends": _addable_friends(trip, profile),
+            "can_add_members": _can_perform(profile, trip, trip.allow_add_members),
+        },
     )
 
 
@@ -648,6 +658,14 @@ class TripOverviewView(LoginRequiredMixin, View):
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         all_trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user"))
+        recently_updated_trips = list(Trip.objects.recently_updated(profile, limit=self.RECENT_TRIPS_LIMIT))
+        recently_viewed_trips = list(Trip.objects.recently_viewed(profile, limit=self.RECENT_TRIPS_LIMIT))
+        # Matches TripListView/CalendarImportView - every list of other members'
+        # trips must mask identities the viewer isn't allowed to see (see
+        # _apply_trip_list_identity_masking's docstring for the gap this closes).
+        _apply_trip_list_identity_masking(profile, all_trips)
+        _apply_trip_list_identity_masking(profile, recently_updated_trips)
+        _apply_trip_list_identity_masking(profile, recently_viewed_trips)
         return render(
             request,
             "dashboard/pages/trips/overview.html",
@@ -656,8 +674,8 @@ class TripOverviewView(LoginRequiredMixin, View):
                 "page_name": "trips",
                 "stats": _trip_overview_stats(all_trips),
                 "trips_calendar_data": _trips_calendar_data(all_trips),
-                "recently_updated_trips": Trip.objects.recently_updated(profile, limit=self.RECENT_TRIPS_LIMIT),
-                "recently_viewed_trips": Trip.objects.recently_viewed(profile, limit=self.RECENT_TRIPS_LIMIT),
+                "recently_updated_trips": recently_updated_trips,
+                "recently_viewed_trips": recently_viewed_trips,
                 "calendar_account": GoogleCalendarAccount.objects.get_for_profile(profile),
                 "friends": get_connections(profile),
             },

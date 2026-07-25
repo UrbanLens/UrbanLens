@@ -1626,49 +1626,84 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
     return len(results)
 
 
+# These three safety check-in beat tasks share the RUN_LOCK_CACHE_KEY-style guard already
+# used by run_scheduled_enrichment: they run every 5 minutes (see CELERY_BEAT_SCHEDULE), and
+# without a lock, an overrunning execution (many due checkins, slow SMTP) racing the next
+# scheduled tick could process the same rows twice - most seriously for escalation, which
+# would otherwise re-email emergency contacts.
+_CHECKIN_REMINDER_LOCK_CACHE_KEY = "urbanlens:safety:reminder-lock"
+_CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY = "urbanlens:safety:final-warning-lock"
+_CHECKIN_ESCALATION_LOCK_CACHE_KEY = "urbanlens:safety:escalation-lock"
+_CHECKIN_LOCK_TIMEOUT_SECONDS = 270  # just under the 5-minute beat interval
+
+
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_due_checkin_reminders() -> int:
     """Send the check-in-due reminder for every safety check-in whose time has arrived."""
+    from django.core.cache import cache
+
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.safety import send_checkin_reminder
 
-    count = 0
-    for checkin in SafetyCheckin.objects.due_for_reminder():
-        send_checkin_reminder(checkin)
-        count += 1
-    if count:
-        logger.info("Sent %s safety check-in reminder(s)", count)
-    return count
+    if not cache.add(_CHECKIN_REMINDER_LOCK_CACHE_KEY, value=True, timeout=_CHECKIN_LOCK_TIMEOUT_SECONDS):
+        logger.info("send_due_checkin_reminders: a previous run is still in flight; skipping")
+        return 0
+    try:
+        count = 0
+        for checkin in SafetyCheckin.objects.due_for_reminder():
+            send_checkin_reminder(checkin)
+            count += 1
+        if count:
+            logger.info("Sent %s safety check-in reminder(s)", count)
+        return count
+    finally:
+        cache.delete(_CHECKIN_REMINDER_LOCK_CACHE_KEY)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_final_checkin_warnings() -> int:
     """Send a final "check in now" warning for every safety check-in about to escalate."""
+    from django.core.cache import cache
+
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.safety import send_final_warning
 
-    count = 0
-    for checkin in SafetyCheckin.objects.due_for_final_warning():
-        send_final_warning(checkin)
-        count += 1
-    if count:
-        logger.info("Sent %s safety check-in final warning(s)", count)
-    return count
+    if not cache.add(_CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY, value=True, timeout=_CHECKIN_LOCK_TIMEOUT_SECONDS):
+        logger.info("send_final_checkin_warnings: a previous run is still in flight; skipping")
+        return 0
+    try:
+        count = 0
+        for checkin in SafetyCheckin.objects.due_for_final_warning():
+            send_final_warning(checkin)
+            count += 1
+        if count:
+            logger.info("Sent %s safety check-in final warning(s)", count)
+        return count
+    finally:
+        cache.delete(_CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def escalate_overdue_checkins() -> int:
     """Notify emergency contacts for every safety check-in whose grace period has elapsed."""
+    from django.core.cache import cache
+
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.safety import escalate_checkin
 
-    count = 0
-    for checkin in SafetyCheckin.objects.overdue():
-        escalate_checkin(checkin)
-        count += 1
-    if count:
-        logger.info("Escalated %s overdue safety check-in(s)", count)
-    return count
+    if not cache.add(_CHECKIN_ESCALATION_LOCK_CACHE_KEY, value=True, timeout=_CHECKIN_LOCK_TIMEOUT_SECONDS):
+        logger.info("escalate_overdue_checkins: a previous run is still in flight; skipping")
+        return 0
+    try:
+        count = 0
+        for checkin in SafetyCheckin.objects.overdue():
+            escalate_checkin(checkin)
+            count += 1
+        if count:
+            logger.info("Escalated %s overdue safety check-in(s)", count)
+        return count
+    finally:
+        cache.delete(_CHECKIN_ESCALATION_LOCK_CACHE_KEY)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})

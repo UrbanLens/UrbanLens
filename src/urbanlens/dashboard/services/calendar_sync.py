@@ -570,17 +570,44 @@ def import_events_as_trips(account: GoogleCalendarAccount, selections: list[str 
 
         trip = Trip.objects.create(creator=profile, **kwargs)
         TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": TripMembership.RSVP_YES})
+
+        activity = _create_activity_from_event(trip, event, profile) if selection.get("create_activity", True) else None
+
+        # A *timed* imported event whose location became an activity keeps its
+        # own event-shaped link (see _sync_activity_events/activity_to_event_body),
+        # rather than the trip-level link reusing the same google_event_id.
+        # The trip-level link always maps to an *all-day* body
+        # (export_trip_to_calendar/trip_to_event_body), so if it kept this
+        # event's id, the next manual export or auto-sync push would both
+        # convert the original timed appointment into an all-day event *and*
+        # create a brand-new duplicate timed event for the activity (which
+        # would otherwise have no link of its own) - the opposite of this
+        # module's dedup guarantee. Leaving the trip-level link's
+        # google_event_id blank means the first export/push creates a fresh
+        # all-day "trip" event instead of clobbering the original one (see
+        # _upsert_event_link, which only attempts to update an existing event
+        # when the link already carries an id); already_linked() still finds
+        # this event via the activity-level link created below.
+        timed_import = activity is not None and activity.scheduled_at is not None
         TripCalendarLink.objects.create(
             trip=trip,
             profile=profile,
             google_calendar_id=account.calendar_id,
-            google_event_id=event_id,
+            google_event_id="" if timed_import else event_id,
             direction=CalendarSyncDirection.IMPORTED,
             last_synced=timezone.now(),
             auto_sync=bool(selection.get("auto_sync")),
         )
-        if selection.get("create_activity", True):
-            _create_activity_from_event(trip, event, profile)
+        if timed_import:
+            TripCalendarLink.objects.create(
+                trip=trip,
+                activity=activity,
+                profile=profile,
+                google_calendar_id=account.calendar_id,
+                google_event_id=event_id,
+                direction=CalendarSyncDirection.IMPORTED,
+                last_synced=timezone.now(),
+            )
         invited_total += _invite_participants(trip, profile, list(selection.get("invite_profile_ids") or []), skipped)
         created.append(trip)
 
@@ -735,7 +762,12 @@ def remove_trip_from_calendar(account: GoogleCalendarAccount, trip: Trip) -> boo
         return False
     gateway = GoogleCalendarGateway(account=account)
     for link in links:
-        gateway.delete_event(link.google_event_id)
+        # A trip-level link created for a timed import starts with a blank
+        # google_event_id (see import_events_as_trips) until the first
+        # export/auto-sync push actually creates its all-day mirror - there's
+        # nothing on Google's side to delete yet.
+        if link.google_event_id:
+            gateway.delete_event(link.google_event_id)
         link.delete()
     return True
 
@@ -767,6 +799,11 @@ def disconnect_member_calendar_sync(trip: Trip, profile: Profile) -> None:
     if account is not None:
         gateway = GoogleCalendarGateway(account=account)
         for link in links:
+            # See remove_trip_from_calendar: a trip-level link from a timed
+            # import can still be carrying a blank google_event_id if no
+            # export/auto-sync push has happened yet.
+            if not link.google_event_id:
+                continue
             try:
                 gateway.delete_event(link.google_event_id)
             except GatewayRequestError:

@@ -267,6 +267,15 @@ class ImmichSettingsViewTests(TestCase):
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.client.force_login(self.user)
+        # "photos.example.com" is RFC 2606 non-resolving (unlike bare
+        # example.com, arbitrary subdomains don't resolve), and
+        # ImmichAccountForm.clean_server_url now runs it through the SSRF
+        # guard in services.url_safety, which resolves the hostname for
+        # real. Mock DNS to a fixed public IP, matching the convention used
+        # elsewhere for this same guard (see test_pin_suggestions.py).
+        self._dns_patch = mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))])
+        self._dns_patch.start()
+        self.addCleanup(self._dns_patch.stop)
 
     def test_valid_credentials_are_saved(self) -> None:
         with mock.patch.object(ImmichGateway, "ping", return_value=True):

@@ -29,6 +29,7 @@ from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.safety import (
     ContactInput,
     accept_checkin_partner_invite,
+    broadcast_chat_message,
     check_in,
     create_chat_message,
     create_checkin,
@@ -202,6 +203,14 @@ def _get_checkin_as_partner(profile: Profile, checkin_slug: str) -> SafetyChecki
             return SafetyCheckin.objects.get(accepted, uuid=checkin_slug)
         except (SafetyCheckin.DoesNotExist, ValidationError):
             return None
+        except SafetyCheckin.MultipleObjectsReturned:
+            return None
+    except SafetyCheckin.MultipleObjectsReturned:
+        # slug is only unique per-owner - a partner accepted on two different owners'
+        # check-ins whose titles happen to slugify to the same text can't be disambiguated
+        # from the slug alone. Treat as unresolved rather than raising a 500; the caller
+        # falls back to the community view / 404, same as any other not-found check-in.
+        return None
 
 
 def _contact_display_label(contact_profile: Profile | None, email: str | None, label: str) -> str:
@@ -1074,6 +1083,11 @@ class SafetyCheckinLocationUpdateView(LoginRequiredMixin, View):
     POST /safety/<slug:checkin_slug>/location/
     """
 
+    #: The client throttles itself to one update per this many seconds, but that's
+    #: trivially bypassed - this is the cheap server-side floor, scoped per-checkin so
+    #: legitimate updates from one check-in never block another.
+    _MIN_UPDATE_INTERVAL_SECONDS = 10
+
     def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
         """Update the check-in's live position.
 
@@ -1082,8 +1096,10 @@ class SafetyCheckinLocationUpdateView(LoginRequiredMixin, View):
             checkin_slug: Slug (or, for older links, UUID) of the check-in.
 
         Returns:
-            204 on success, or a 400 if sharing is disabled/the check-in already
-            concluded, or the coordinates couldn't be parsed.
+            204 on success (including when a too-frequent update is silently
+            dropped, so a throttled client doesn't treat it as an error), or a
+            400 if sharing is disabled/the check-in already concluded, or the
+            coordinates couldn't be parsed.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         checkin = _get_checkin_by_slug(profile, checkin_slug)
@@ -1093,6 +1109,13 @@ class SafetyCheckinLocationUpdateView(LoginRequiredMixin, View):
             accuracy = float(request.POST["accuracy"]) if request.POST.get("accuracy") else None
         except (KeyError, ValueError):
             return HttpResponseBadRequest("Invalid coordinates.")
+
+        from django.core.cache import cache
+
+        throttle_key = f"urbanlens:safety:location-update-throttle:{checkin.pk}"
+        if not cache.add(throttle_key, value=True, timeout=self._MIN_UPDATE_INTERVAL_SECONDS):
+            return HttpResponse(status=204)
+
         try:
             update_live_location(checkin, latitude=latitude, longitude=longitude, accuracy=accuracy)
         except ValueError as exc:
@@ -1542,7 +1565,12 @@ class SafetyCheckinMessageView(View):
         body = request.POST.get("body", "").strip()
         if body:
             try:
-                create_chat_message(checkin, user=request.user, contact=contact, body=body)
+                message = create_chat_message(checkin, user=request.user, contact=contact, body=body)
+                # The WebSocket path (SafetyCheckinChatConsumer.receive) broadcasts after
+                # creating a message; this no-JS/socket-down fallback must too, or a message
+                # sent this way is invisible in real time to every other participant with an
+                # open socket (they'd only see it on their next manual reload).
+                _broadcast_chat_message(checkin, message)
             except ValueError as exc:
                 # create_chat_message only raises ValueError with a fixed, developer-authored
                 # message (blank/too-long body) - never a stack trace or sensitive data.

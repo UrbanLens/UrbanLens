@@ -136,13 +136,20 @@ def _send_email(*, to: str, subject: str, template: str, context: dict) -> None:
     """
     if not to:
         return
-    html_body = render_to_string(template, context)
     try:
+        html_body = render_to_string(template, context)
         msg = EmailMultiAlternatives(subject=subject, body=subject, from_email=None, to=[to])
         msg.attach_alternative(html_body, "text/html")
         msg.send()
     except (smtplib.SMTPException, OSError):
         logger.exception("Failed to send safety check-in email to %s", to)
+    except Exception:
+        # A template-context bug (missing var, bad filter) must be logged like every other
+        # delivery failure here, not raised uncaught - especially since escalate_checkin()
+        # would otherwise abort mid-contact-loop on a template bug, which (before the
+        # notified_at idempotency fix above) used to mean re-notifying already-notified
+        # contacts on the next retry.
+        logger.exception("Failed to render/send safety check-in email to %s", to)
 
 
 def _absolute_url(path: str) -> str:
@@ -456,7 +463,7 @@ def accept_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
         sender_profile=partner.profile,
         body=f"{partner.profile.username} is now a partner on this check-in.",
     )
-    _broadcast_chat_message(checkin, system_message)
+    broadcast_chat_message(checkin, system_message)
     _notify_checkin_partner_accepted(partner)
 
 
@@ -618,7 +625,7 @@ def update_live_location(checkin: SafetyCheckin, *, latitude: float, longitude: 
 def _broadcast_live_location(checkin: SafetyCheckin) -> None:
     """Push the check-in's current live-location state to its connected location group.
 
-    Best-effort, same as ``_broadcast_chat_message``/``_broadcast_status_update`` -
+    Best-effort, same as ``broadcast_chat_message``/``_broadcast_status_update`` -
     the position is already durably saved regardless of whether anyone is
     connected right now.
 
@@ -1032,7 +1039,7 @@ def mark_found_safe(contact: SafetyCheckinContact) -> None:
         sender_contact=contact,
         body=f"Marked {checkin.profile.username} as safe.",
     )
-    _broadcast_chat_message(checkin, system_message)
+    broadcast_chat_message(checkin, system_message)
     _resolve_as_found_safe(checkin, resolved_by_label=contact.display_name, exclude_contact=contact)
 
 
@@ -1052,7 +1059,7 @@ def mark_found_safe_by_partner(checkin: SafetyCheckin, partner: Profile) -> None
         sender_profile=partner,
         body=f"Marked {checkin.profile.username} as safe.",
     )
-    _broadcast_chat_message(checkin, system_message)
+    broadcast_chat_message(checkin, system_message)
     _resolve_as_found_safe(checkin, resolved_by_label=partner.username)
 
 
@@ -1218,7 +1225,7 @@ def create_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, c
     return message
 
 
-def _broadcast_chat_message(checkin: SafetyCheckin, message: SafetyCheckinMessage) -> None:
+def broadcast_chat_message(checkin: SafetyCheckin, message: SafetyCheckinMessage) -> None:
     """Push a chat message to any live-connected chat clients for this check-in.
 
     Mirrors the payload shape ``SafetyCheckinChatConsumer._create_message`` builds,
@@ -1265,7 +1272,7 @@ def _broadcast_status_update(checkin: SafetyCheckin) -> None:
     the detail page or contact portal already open only saw the change via the system
     chat message, not in the label/button state, until they reloaded.
 
-    Best-effort, same as ``_broadcast_chat_message`` - the status is already durably
+    Best-effort, same as ``broadcast_chat_message`` - the status is already durably
     saved regardless of whether anyone is connected right now.
 
     Args:

@@ -478,6 +478,18 @@
             statusEl.textContent = 'Live location updated ' + (isNaN(updated.getTime()) ? 'just now' : updated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })) + '.';
         }
     });
+
+    // Hydrate from the server-rendered last-known position on initial page load, rather
+    // than waiting for a live WebSocket event that may never arrive again (e.g. the
+    // owner's phone died mid-trip - the exact scenario live location exists to help
+    // with). Reuses the same handler above, so rendering stays in one place.
+    document.body.dispatchEvent(new CustomEvent('safetyLocationUpdate', {
+        detail: {
+            latitude: {{ checkin.live_latitude|default:"null" }},
+            longitude: {{ checkin.live_longitude|default:"null" }},
+            updated_at: {% if checkin.live_location_updated_at %}"{{ checkin.live_location_updated_at.isoformat }}"{% else %}null{% endif %}
+        }
+    }));
 }());
 </script>
 {% endblock %}

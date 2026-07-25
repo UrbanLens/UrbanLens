@@ -91,18 +91,29 @@ class GlobalSearchEngine:
 
         response = self._run(profile, parsed)
         if response.total == 0 and parsed.has_structure and parsed.raw.strip():
-            fallback = ParsedQuery(raw=parsed.raw)
             # Strip the same type-keyword/stopword/date noise the primary
             # parse stripped, so e.g. "photos from last summer" retries on
             # "summer" alone instead of requiring "photos" verbatim in the
             # target's own text (which defeats the point of the fallback).
-            fallback.terms = extract_fallback_terms(parsed.raw)
-            fallback.text = " ".join(fallback.terms)
-            fallback_response = self._run(profile, fallback)
-            if fallback_response.total > 0:
-                fallback_response.parsed = parsed
-                fallback_response.used_fallback = True
-                return fallback_response
+            fallback_terms = extract_fallback_terms(parsed.raw)
+            # Nothing meaningful survived the stripping (e.g. the whole query
+            # was consumed as a type keyword plus a date phrase, like "photos
+            # from last summer"). The fallback intentionally clears
+            # `types`/`date_start` so a wrongly-inferred place/type doesn't
+            # block the retry, but with *also* no free-text terms,
+            # `apply_text` would leave every provider's queryset unfiltered -
+            # turning the retry into an unrelated recency dump across every
+            # result type instead of a useful rescue. Skip it rather than
+            # show that.
+            if fallback_terms:
+                fallback = ParsedQuery(raw=parsed.raw)
+                fallback.terms = fallback_terms
+                fallback.text = " ".join(fallback.terms)
+                fallback_response = self._run(profile, fallback)
+                if fallback_response.total > 0:
+                    fallback_response.parsed = parsed
+                    fallback_response.used_fallback = True
+                    return fallback_response
         return response
 
     def _run(self, profile: Profile, parsed: ParsedQuery) -> SearchResponse:
