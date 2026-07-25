@@ -317,7 +317,10 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
 - **AI link extraction** — a per-link sparkle button (on the pin's Links card and inside
   external-data panels such as web search, Wikipedia, LoopNet, and news results) has AI read the
   linked page and extract allowlisted structured fields (date built, date abandoned, owner
-  name/company, sale date/price, aliases) into the pin; admin-settable per-user daily limit, a
+  name/company, sale date/price, aliases) into the pin; the same run also asks a writing assistant
+  for new plain-text paragraphs to append to the pin article and (when one exists) the location
+  wiki article, after stripping all markup and a fail-closed safety AI review (no operational
+  access/trespass guidance or inappropriate content); admin-settable per-user daily limit, a
   review page (`/ai/extractions/`) for results that couldn't be applied automatically, and a
   completion notification
 - **Local keyword tagging** — entirely local (no AI or network call), keyword-match auto-categorize / auto-tag / auto-status on pin save; master toggle + per-type sub-toggles in Settings → Connections

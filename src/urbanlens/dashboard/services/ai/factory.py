@@ -17,6 +17,8 @@ _FEATURE_FIELDS: dict[str, str] = {
     "label_style_suggestions": "ai_category_suggestions_enabled",
     "document_pin_import": "ai_document_import_enabled",
     "link_extraction": "ai_link_extraction_enabled",
+    "article_expansion": "ai_article_expansion_enabled",
+    "article_safety": "ai_article_safety_enabled",
     "trip_suggestions": "ai_trip_suggestions_enabled",
     "trivia_moderation": "ai_trivia_moderation_enabled",
     "trivia_generation": "ai_trivia_generation_enabled",

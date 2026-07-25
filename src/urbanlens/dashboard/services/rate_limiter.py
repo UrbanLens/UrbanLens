@@ -173,6 +173,18 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=200,
         notes="Billed per message sent - keep this conservative.",
     ),
+    "article_expansion": ServiceDefaults(
+        display_name="Article Expansion Writing (AI)",
+        calls_per_minute=10,
+        calls_per_day=500,
+        notes="Drafts plain-text paragraphs for pin/wiki articles from a linked page during AI link extraction. Cost varies by provider/model - see ApiCallLog.cost_estimate for actuals.",
+    ),
+    "article_safety": ServiceDefaults(
+        display_name="Article Expansion Safety (AI)",
+        calls_per_minute=20,
+        calls_per_day=1000,
+        notes="Judges AI-drafted article text for appropriateness and safety-related implications before it is appended. Fail-closed when unavailable.",
+    ),
     "trivia_moderation": ServiceDefaults(
         display_name="Trivia Question Moderation (AI)",
         calls_per_minute=20,

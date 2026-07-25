@@ -25,6 +25,11 @@ and review-page visibility.
 Extending the feature to a new pin field means adding one
 :class:`ExtractableField` entry - prompt wording, parsing, applying, and the
 review page all derive from the registry.
+
+After structured fields are applied, the same run optionally expands the pin
+article (and the location wiki article when one exists) via
+:mod:`urbanlens.dashboard.services.ai.article_expansion` — plain-text only,
+with a fail-closed safety review before any article save.
 """
 
 from __future__ import annotations
@@ -735,9 +740,20 @@ def run_extraction(extraction: LinkExtraction) -> None:
         return
 
     payload = parse_ai_response(answer)
-    results = apply_extracted_fields(extraction.pin, payload)
+    field_results = apply_extracted_fields(extraction.pin, payload)
+
+    from urbanlens.dashboard.services.ai.article_expansion import expand_articles_from_page
+
+    article_results = expand_articles_from_page(extraction, page_text)
+    results = [*field_results, *article_results]
     extraction.results = results
-    extraction.status = LinkExtractionStatus.SUCCESS if results else LinkExtractionStatus.EMPTY
+    # Field proposals (even skipped) still count as a non-empty run; article
+    # skip/reject rows alone must not flip EMPTY → SUCCESS.
+    extraction.status = (
+        LinkExtractionStatus.SUCCESS
+        if field_results or any(row.get("applied") for row in article_results)
+        else LinkExtractionStatus.EMPTY
+    )
     extraction.save(update_fields=["results", "status", "updated"])
     _notify_extraction_complete(extraction)
 
@@ -758,7 +774,14 @@ def _notify_extraction_complete(extraction: LinkExtraction) -> None:
     elif extraction.status == LinkExtractionStatus.EMPTY:
         message = f"The link for {extraction.pin.effective_name} was read, but nothing usable was found on the page."
     else:
-        message = f"AI finished reading a link for {extraction.pin.effective_name}: {extraction.applied_count} field(s) updated."
+        field_applied = sum(
+            1 for row in extraction.results_rows if row.get("applied") and not str(row.get("key", "")).startswith("article_")
+        )
+        article_applied = sum(1 for row in extraction.results_rows if row.get("applied") and str(row.get("key", "")).startswith("article_"))
+        parts = [f"{field_applied} field(s) updated"]
+        if article_applied:
+            parts.append(f"{article_applied} article(s) expanded")
+        message = f"AI finished reading a link for {extraction.pin.effective_name}: {', '.join(parts)}."
 
     NotificationLog.objects.create(
         profile=extraction.profile,

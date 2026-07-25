@@ -171,6 +171,25 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Link extraction daily limit (per user)",
         validators=[MinValueValidator(0), MaxValueValidator(1000)],
     )
+    ai_article_expansion_enabled = BooleanField(
+        default=True,
+        help_text=(
+            "Allow the link-extraction pipeline to ask a writing assistant for new plain-text "
+            "paragraphs to append to the pin article (and the location wiki article when one "
+            "exists). Every draft still passes through article safety moderation before it is saved; "
+            "when this toggle is off, field extraction still runs and article expansion is skipped."
+        ),
+        verbose_name="Article expansion from links",
+    )
+    ai_article_safety_enabled = BooleanField(
+        default=True,
+        help_text=(
+            "Allow AI to judge article text drafted from a linked page for appropriateness and "
+            "safety-related implications (entry methods, trespass how-tos, harassment, etc.) before "
+            "it is appended. When off, article expansion is skipped entirely — moderation is never bypassed."
+        ),
+        verbose_name="Article expansion safety review",
+    )
     ai_trip_suggestions_enabled = BooleanField(
         default=True,
         help_text="Allow AI to suggest pins worth adding to a trip and a drive/weather/vote-aware activity order. Only ever sees pins every trip member already has and members' external-sharing preferences are honored.",
