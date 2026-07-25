@@ -7,7 +7,7 @@ spotguessr.ts's initModeCards()/openSettingsDialog().
 <div class="spotguessr-mode-cards">
     {% for card in mode_cards %}
     <div class="spotguessr-mode-card spotguessr-mode-card--{{ card.accent }}">
-        <button type="button" class="spotguessr-card-gear" data-mode="{{ card.value }}" aria-label="Customize {{ card.label }} settings">
+        <button type="button" class="spotguessr-card-gear btn--card" data-mode="{{ card.value }}" aria-label="Customize {{ card.label }} settings">
             <i class="material-symbols-outlined">settings</i>
         </button>
         <button type="button" class="spotguessr-mode-card-body" data-mode="{{ card.value }}">

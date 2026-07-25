@@ -192,7 +192,7 @@ $spotguessr-mode-accents: (
 @each $name, $accent in $spotguessr-mode-accents {
     $accent-dark: color.adjust($accent, $lightness: -15%);
 
-    .spotguessr-mode-card--#{$name} {
+    .spotguessr-mode-card--#{$name} .btn--card {
         background: linear-gradient(135deg, $accent, $accent-dark);
     }
 }
