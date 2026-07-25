@@ -8,9 +8,10 @@ a Glicko-2 player-skill/question-difficulty pairing (mirrors
 ``models.spotguessr``'s player/location pairing), and upvote/downvote/report
 voting with a small passive "shown, no reaction" default.
 
-Phase 1 (this migration) builds the full multiplayer-capable schema, but only
-ever creates solo sessions - see ``services.trivia.session`` for what's
-actually wired up yet.
+Phase 1 built the full multiplayer-capable schema (sessions/participants
+support LOBBY/INVITED from day one) but only ever created solo sessions;
+Phase 2 adds ``TriviaSessionChatMessage`` and wires up the multiplayer
+lifecycle in ``services.trivia.session``.
 """
 
 from __future__ import annotations
@@ -25,6 +26,7 @@ from django.db.models import (
     DateTimeField,
     FloatField,
     ForeignKey,
+    Index,
     JSONField,
     OneToOneField,
     PositiveIntegerField,
@@ -43,6 +45,7 @@ from urbanlens.dashboard.models.trivia.queryset import (
     TriviaQuestionRatingManager,
     TriviaQuestionVoteManager,
     TriviaRoundManager,
+    TriviaSessionChatMessageManager,
     TriviaSessionManager,
     TriviaSessionParticipantManager,
 )
@@ -468,6 +471,48 @@ class TriviaAnswer(abstract.DashboardModel):
         db_table = "dashboard_trivia_answers"
         constraints = [
             UniqueConstraint(fields=["round", "profile"], name="db_trivia_answer_unique"),
+        ]
+
+
+class TriviaSessionChatMessage(abstract.DashboardModel):
+    """One chat message in a multiplayer session's live text chat. Mirrors ``GameSessionChatMessage``.
+
+    Plain text, no E2EE - ephemeral match banter between participants
+    already visible to each other on the scoreboard, not a private
+    conversation. Sent and broadcast over ``TriviaSessionConsumer`` only;
+    read history is served over HTTP for reconnects/late page-opens.
+    """
+
+    body = CharField(max_length=1000)
+
+    session = ForeignKey(
+        "dashboard.TriviaSession",
+        on_delete=CASCADE,
+        related_name="chat_messages",
+    )
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=CASCADE,
+        related_name="trivia_chat_messages",
+    )
+
+    if TYPE_CHECKING:
+        session_id: int
+        profile_id: int
+
+    objects = TriviaSessionChatMessageManager()
+
+    def __str__(self) -> str:
+        return f"TriviaSessionChatMessage(session={self.session_id}, profile={self.profile_id})"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_trivia_chat_messages"
+        indexes = [
+            # Index names are capped at 30 characters (Oracle's historical
+            # limit, which Django enforces universally regardless of the
+            # active backend) - "trivia" is abbreviated to fit, mirroring
+            # models.spotguessr's own "sg" abbreviation for the same reason.
+            Index(fields=["session", "created"], name="idxdb_trivia_chat_created"),
         ]
 
 

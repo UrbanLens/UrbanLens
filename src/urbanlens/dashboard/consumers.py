@@ -640,3 +640,137 @@ class GameSessionConsumer(AsyncWebsocketConsumer):
         profile = Profile.objects.get(user=self.scope["user"])
         session = GameSession.objects.get(pk=self.session_id)
         send_chat_message(session, profile, body)
+
+
+class TriviaSessionConsumer(AsyncWebsocketConsumer):
+    """Real-time sync for one Trivia session, shared by every participant.
+
+    Mounted at ``ws/trivia/session/<int:session_id>/``. Exact mirror of
+    ``GameSessionConsumer`` - one channel-layer group per session
+    (``services.trivia.realtime.session_group_name``), every participant
+    (JOINED or still just INVITED) joins the same group, and the only
+    incoming frame type is a chat message; every state-changing action
+    (join, start, answer) is still a durable HTTP POST via
+    ``controllers.trivia`` - the socket exists purely to fan out what those
+    POSTs already did to everyone else.
+
+    Close codes on ``connect()`` failure (same convention as every other
+    consumer here): ``4404`` permanent (unauthenticated, or not a
+    participant of this session - never distinguished), ``4500``
+    transient/retryable.
+    """
+
+    async def connect(self):
+        """Verify the connecting profile is a participant (any status) of this session, then join its group."""
+        session_id = self.scope["url_route"]["kwargs"].get("session_id")
+        user = self.scope.get("user")
+        if user is None or not user.is_authenticated:
+            await self.close(code=4404)
+            return
+
+        try:
+            is_participant = await self._is_participant(session_id, user)
+        except Exception:
+            logger.exception("Trivia socket connect failed unexpectedly for session %s", session_id)
+            await self.close(code=4500)
+            return
+
+        if not is_participant:
+            await self.close(code=4404)
+            return
+
+        self.session_id = session_id
+        self.group_name = f"trivia_session_{session_id}"
+        try:
+            await self.channel_layer.group_add(self.group_name, self.channel_name)
+            await self.accept()
+        except Exception:
+            logger.exception("Trivia socket failed to join group for session %s", session_id)
+            await self.close(code=4500)
+
+    async def disconnect(self, close_code):
+        """Leave the session's group, if we ever joined one."""
+        if hasattr(self, "group_name"):
+            try:
+                await self.channel_layer.group_discard(self.group_name, self.channel_name)
+            except Exception:
+                logger.exception("Trivia socket failed to leave group %s cleanly", self.group_name)
+
+    async def receive(self, text_data):
+        """Persist an incoming chat message and broadcast it - the only client-to-server frame this socket accepts.
+
+        Args:
+            text_data: JSON string with a ``body`` field. Unparseable or
+                blank frames are silently ignored - there's no message to
+                report failure for.
+        """
+        try:
+            data = json.loads(text_data)
+        except (json.JSONDecodeError, TypeError):
+            logger.warning("Trivia socket received an unparseable frame on session %s", self.session_id)
+            return
+        body = str(data.get("body") or "").strip()
+        if not body:
+            return
+
+        try:
+            await self._send_chat_message(body)
+        except Exception:
+            logger.exception("Trivia chat message failed on session %s", self.session_id)
+            await self.send(text_data=json.dumps({"type": "error", "detail": "Your message couldn't be sent. Please try again."}))
+
+    async def _relay(self, event):
+        """Forward a broadcasted event straight to this connection, verbatim."""
+        await self.send(text_data=json.dumps(event))
+
+    async def participant_joined(self, event):
+        await self._relay(event)
+
+    async def session_started(self, event):
+        await self._relay(event)
+
+    async def answer_submitted(self, event):
+        await self._relay(event)
+
+    async def round_revealed(self, event):
+        await self._relay(event)
+
+    async def round_started(self, event):
+        await self._relay(event)
+
+    async def session_completed(self, event):
+        await self._relay(event)
+
+    async def chat_message(self, event):
+        await self._relay(event)
+
+    @database_sync_to_async
+    def _is_participant(self, session_id, user):
+        """Whether ``user``'s profile is a participant (any status) of ``session_id``.
+
+        Returns:
+            False for a nonexistent session or a real session the profile
+            just isn't part of - deliberately not distinguished, matching
+            the 404-not-403 convention used everywhere else in this feature.
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.models.trivia.model import TriviaSessionParticipant
+
+        profile, _ = Profile.objects.get_or_create(user=user)
+        return TriviaSessionParticipant.objects.filter(session_id=session_id, profile=profile).exists()
+
+    @database_sync_to_async
+    def _send_chat_message(self, body):
+        """Save and broadcast one chat message from this connection's profile.
+
+        Broadcasting happens inside ``services.trivia.chat.send_chat_message``
+        itself (not here) since the save-then-broadcast choke point is
+        shared with any future non-WebSocket sender.
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.models.trivia.model import TriviaSession
+        from urbanlens.dashboard.services.trivia.chat import send_chat_message
+
+        profile = Profile.objects.get(user=self.scope["user"])
+        session = TriviaSession.objects.get(pk=self.session_id)
+        send_chat_message(session, profile, body)

@@ -23,6 +23,7 @@ if TYPE_CHECKING:
         TriviaQuestionVote,
         TriviaRound,
         TriviaSession,
+        TriviaSessionChatMessage,
         TriviaSessionParticipant,
     )
 
@@ -145,3 +146,15 @@ class TriviaAnswerQuerySet(abstract.DashboardQuerySet["TriviaAnswer"]):
 
 class TriviaAnswerManager(abstract.DashboardManager.from_queryset(TriviaAnswerQuerySet)):
     """Manager for TriviaAnswer."""
+
+
+class TriviaSessionChatMessageQuerySet(abstract.DashboardQuerySet["TriviaSessionChatMessage"]):
+    """QuerySet for TriviaSessionChatMessage."""
+
+    def for_session(self, session: TriviaSession) -> TriviaSessionChatMessageQuerySet:
+        """Every chat message in ``session``, oldest first."""
+        return self.filter(session=session).order_by("created")
+
+
+class TriviaSessionChatMessageManager(abstract.DashboardManager.from_queryset(TriviaSessionChatMessageQuerySet)):
+    """Manager for TriviaSessionChatMessage."""

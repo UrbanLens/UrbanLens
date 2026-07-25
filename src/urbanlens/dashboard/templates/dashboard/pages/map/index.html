@@ -369,7 +369,7 @@
     </div>
 
     {# -- Filter panel handle (right-docked mirror of #pin-list-handle, always-visible shortcut, desktop only) -- #}
-    <button id="filter-panel-handle" class="filter-panel-handle" onclick="toggleFilterPanel()"
+    <button id="filter-panel-handle" class="panel-handle filter-panel-handle" onclick="toggleFilterPanel()"
             aria-label="Toggle filters" aria-expanded="false"
             data-tooltip="Filters" data-tooltip-pos="left">
         <i class="material-symbols-outlined">chevron_left</i>
@@ -401,7 +401,7 @@
     </div>
 
     {# -- Pin list handle (always-visible shortcut, desktop only) ------------ #}
-    <button id="pin-list-handle" class="pin-list-handle" onclick="_togglePinListPanel()"
+    <button id="pin-list-handle" class="panel-handle pin-list-handle" onclick="_togglePinListPanel()"
             aria-label="Toggle pin list" aria-expanded="false"
             data-tooltip="Pin list" data-tooltip-pos="right">
         <i class="material-symbols-outlined">chevron_right</i>

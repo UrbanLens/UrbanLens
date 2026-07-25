@@ -28,6 +28,7 @@ class NotificationType(TextChoices):
     AI_EXTRACTION = "ai_extraction", "AI Link Analysis Complete"
     FRIEND_SUGGESTION = "friend_suggestion", "Friend Suggestion"
     SPOTGUESSR_INVITE = "spotguessr_invite", "SpotGuessr Invitation"
+    TRIVIA_INVITE = "trivia_invite", "Trivia Invitation"
     PIN_IMPORT_COMPLETE = "pin_import_complete", "Pin Import Complete"
     ERROR = "error", "Error"
     WARNING = "warning", "Warning"

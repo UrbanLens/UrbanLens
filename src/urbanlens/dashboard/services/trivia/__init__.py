@@ -10,21 +10,37 @@ from urbanlens.dashboard.services.trivia.deterministic import generate_determini
 from urbanlens.dashboard.services.trivia.eligibility import eligible_questions, has_eligible_questions
 from urbanlens.dashboard.services.trivia.selection import pick_next_question, target_rating_for_difficulty
 from urbanlens.dashboard.services.trivia.ratings import apply_round_ratings
+from urbanlens.dashboard.services.trivia.realtime import broadcast, session_group_name
+from urbanlens.dashboard.services.trivia.serializers import (
+    serialize_chat_message,
+    serialize_participant,
+    serialize_reveal,
+    serialize_round,
+    serialize_round_reveal,
+    serialize_session,
+)
+from urbanlens.dashboard.services.trivia.chat import recent_messages, send_chat_message
+from urbanlens.dashboard.services.trivia.social import visible_friend_ratings
 
 # session must be imported last - it imports several of its own sibling
-# submodules (eligibility, selection, voting) from this very package at
-# module scope. Every name session.py needs has to already be fully
-# imported (and so already cached/set as an attribute above) before this
-# import runs - importing session any earlier can intermittently raise
-# ImportError ("partially initialized module") depending on which process
-# happens to trigger this package's import first - see
-# services/spotguessr/__init__.py's identical precedent and docs/PROBLEMS.md.
+# submodules (eligibility, selection, voting, realtime, serializers) from
+# this very package at module scope. Every name session.py needs has to
+# already be fully imported (and so already cached/set as an attribute
+# above) before this import runs - importing session any earlier can
+# intermittently raise ImportError ("partially initialized module")
+# depending on which process happens to trigger this package's import
+# first - see services/spotguessr/__init__.py's identical precedent and
+# docs/PROBLEMS.md.
 from urbanlens.dashboard.services.trivia.session import (
     TriviaConfig,
     TriviaError,
+    begin_session,
     complete_session,
     get_or_create_round,
+    invite_to_session,
+    join_session,
     session_summary,
+    start_multiplayer_session,
     start_solo_session,
     submit_answer,
 )

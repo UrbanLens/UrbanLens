@@ -102,6 +102,7 @@ from urbanlens.dashboard.models.trivia import (
     TriviaQuestionVoteKind,
     TriviaRound,
     TriviaSession,
+    TriviaSessionChatMessage,
     TriviaSessionParticipant,
     TriviaSessionParticipantStatus,
     TriviaSessionStatus,
