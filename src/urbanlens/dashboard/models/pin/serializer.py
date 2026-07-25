@@ -26,6 +26,7 @@ class PinSerializer(serializers.ModelSerializer):
     """
 
     effective_name = serializers.ReadOnlyField()
+    name_is_user_provided = serializers.ReadOnlyField()
     effective_official_name = serializers.ReadOnlyField()
     official_name = serializers.ReadOnlyField()
     effective_icon = serializers.ReadOnlyField()
@@ -74,8 +75,9 @@ class PinSerializer(serializers.ModelSerializer):
         ]
 
     def create(self, validated_data):
-        if "name_is_user_provided" not in validated_data:
-            validated_data["name_is_user_provided"] = bool((validated_data.get("name") or "").strip())
+        # A create (including an import through this serializer) is not an
+        # explicit rename.  Only the pin-name editing flows set this guard.
+        validated_data["name_is_user_provided"] = False
         pin = Pin.objects.create(**validated_data)
         try:
             from urbanlens.dashboard.services.auto_tag import AutoTagService
@@ -84,3 +86,9 @@ class PinSerializer(serializers.ModelSerializer):
         except (RuntimeError, OSError, ValueError):
             logger.warning("Auto-tagging failed for pin %s", pin.pk, exc_info=True)
         return pin
+
+    def update(self, instance, validated_data):
+        """Mark the guard only when this edit actually changes the name."""
+        if "name" in validated_data and (validated_data.get("name") or "").strip() != (instance.name or "").strip():
+            validated_data["name_is_user_provided"] = bool((validated_data.get("name") or "").strip())
+        return super().update(instance, validated_data)

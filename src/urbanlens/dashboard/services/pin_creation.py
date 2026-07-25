@@ -166,7 +166,13 @@ def create_pin_for_profile(
 
     create_kwargs: dict = {
         "name": name,
-        "name_is_user_provided": bool((name or "").strip()),
+        # Creation/import is not an explicit rename.  In particular, file and
+        # offline-client imports commonly put a coordinate or another parser
+        # fallback in ``name``.  Marking every non-empty value as user-provided
+        # made that placeholder permanently outrank names discovered later.
+        # The flag is set by the rename endpoints when the owner deliberately
+        # changes the name.
+        "name_is_user_provided": False,
         "location": location,
         # Link to the place's community wiki when one already exists; wikis
         # are only ever created explicitly from the pin page.

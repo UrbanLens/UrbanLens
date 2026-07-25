@@ -83,8 +83,10 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     priority, and the marker coordinates.
     """
 
-    # True when ``name`` was explicitly typed by the user. External API naming
-    # refreshes may replace placeholder/auto-generated labels only while this is False.
+    # True when the owner explicitly renamed the pin after creation. Names
+    # supplied by creation/import pipelines are not protected: they may be
+    # parser fallbacks such as raw coordinates. External naming refreshes may
+    # replace placeholder/auto-generated labels only while this is False.
     name_is_user_provided = BooleanField(
         default=False,
         help_text="Prevents external API name refreshes from overwriting a user-entered pin name.",

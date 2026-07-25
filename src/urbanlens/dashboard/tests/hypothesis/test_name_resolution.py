@@ -471,6 +471,7 @@ class PinNameAliasInvariantTests(TestCase):
         PinSerializer().update(pin, {"name": "Renamed Depot"})
         pin.refresh_from_db()
         self.assertEqual(pin.name, "Renamed Depot")
+        self.assertTrue(pin.name_is_user_provided)
         self.assertIn("Renamed Depot", list(pin.aliases.values_list("name", flat=True)))
 
     def test_meaningless_names_do_not_create_aliases(self) -> None:

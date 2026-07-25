@@ -94,7 +94,20 @@ class PinCreateViewTests(TestCase):
         pin = Pin.objects.get(uuid=response.json()["uuid"])
         self.assertEqual(pin.profile_id, self.profile.pk)
         self.assertEqual(pin.name, "Old Mill")
-        self.assertTrue(pin.name_is_user_provided)
+        # Creation (including API/import clients) is not an explicit rename.
+        self.assertFalse(pin.name_is_user_provided)
+
+    def test_coordinate_name_is_not_locked_as_user_provided(self) -> None:
+        response = self._post(
+            {
+                "name": "4216'35.6\"N 7528'45.8\"W",
+                "latitude": 42.276556,
+                "longitude": -75.479389,
+            }
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        pin = Pin.objects.get(uuid=response.json()["uuid"])
+        self.assertFalse(pin.name_is_user_provided)
 
     def test_missing_coordinates_and_address_is_rejected(self) -> None:
         response = self._post({"name": "Nowhere"})

@@ -92,8 +92,13 @@ def sanitize_article_plain_text(raw: str | None) -> str:
         return ""
 
     text = _CODE_FENCE.sub(" ", text)
-    text = nh3.clean(text, tags=set())
+    # Decode first, then sanitize HTML.  Doing this in the opposite order lets
+    # entity-encoded markup (``&lt;script&gt;``) turn back into live markup
+    # after the HTML sanitizer has already run.  A second pass is cheap
+    # defense-in-depth for nested/double-encoded model output.
+    text = nh3.clean(unescape(text), tags=set())
     text = unescape(text)
+    text = nh3.clean(text, tags=set())
     text = _MD_IMAGE.sub(" ", text)
     text = _MD_LINK.sub(r"\1", text)
     text = _MD_HEADING.sub("", text)
@@ -147,7 +152,14 @@ def _append_to_article(
     Returns:
         ``(applied, note)`` describing the outcome.
     """
-    if new_text and new_text in existing:
+    # Treat every boundary as untrusted.  The caller already sanitized before
+    # moderation, but sanitizing again immediately before persistence prevents
+    # a future caller from accidentally bypassing the plain-text guarantee.
+    new_text = sanitize_article_plain_text(new_text)
+    if not new_text:
+        return False, "Nothing usable remained after sanitizing"
+
+    if new_text in existing:
         return False, "Already present in the article"
 
     if existing.strip():
