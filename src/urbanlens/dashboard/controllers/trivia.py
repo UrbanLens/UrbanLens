@@ -29,7 +29,7 @@ from urbanlens.dashboard.models.trivia.model import (
     TriviaSessionParticipant,
 )
 from urbanlens.dashboard.services.connections import get_connections
-from urbanlens.dashboard.services.trivia import chat as trivia_chat, eligibility, serializers, session as trivia_session, social, voting
+from urbanlens.dashboard.services.trivia import chat as trivia_chat, eligibility, serializers, session as trivia_session, social, submission, voting
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -363,3 +363,36 @@ class TriviaQuestionVoteView(LoginRequiredMixin, View):
 
         vote = voting.record_vote(question, profile, kind)
         return JsonResponse({"kind": vote.kind})
+
+
+class TriviaQuestionSubmitView(LoginRequiredMixin, View):
+    """Submit a user-written trivia question about a location the profile has pinned.
+
+    POST /games/trivia/questions/submit/   body: ``location_id``, ``prompt``, ``answer``
+
+    The question is created PENDING_REVIEW and classified asynchronously -
+    the response never indicates whether it will ultimately be
+    approved or rejected (see services.trivia.classifier's module docstring
+    for why the submitter is deliberately never told).
+    """
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        profile = _current_profile(request)
+
+        try:
+            location = Location.objects.get(pk=request.POST.get("location_id"))
+        except (Location.DoesNotExist, ValueError, TypeError):
+            return JsonResponse({"error": "location_id is required."}, status=400)
+        if not Pin.objects.filter(profile=profile, location=location).exists():
+            return JsonResponse({"error": "You can only submit questions about places you've pinned."}, status=403)
+
+        prompt = request.POST.get("prompt", "").strip()
+        answer = request.POST.get("answer", "").strip()
+        if not prompt or not answer:
+            return JsonResponse({"error": "prompt and answer are required."}, status=400)
+
+        submission.submit_user_question(profile, location, prompt, answer)
+        return JsonResponse({"submitted": True})

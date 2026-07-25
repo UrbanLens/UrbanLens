@@ -169,6 +169,21 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Allow AI to suggest pins worth adding to a trip and a drive/weather/vote-aware activity order. Only ever sees pins every trip member already has and members' external-sharing preferences are honored.",
         verbose_name="Trip suggestions",
     )
+    ai_trivia_moderation_enabled = BooleanField(
+        default=True,
+        help_text="Allow AI to classify user-submitted and AI-generated Trivia questions for person/bullying/in-group content before they enter rotation. When off, user submissions are held in pending review indefinitely and AI question generation is skipped entirely (moderation is never bypassed).",
+        verbose_name="Trivia question moderation",
+    )
+    ai_trivia_generation_enabled = BooleanField(
+        default=True,
+        help_text="Allow AI to generate candidate Trivia questions from wiki articles with substantial content. Every generated question still passes through the same moderation classifier before entering rotation.",
+        verbose_name="Trivia question generation",
+    )
+    ai_trivia_answer_check_enabled = BooleanField(
+        default=True,
+        help_text="Allow AI to judge a Trivia answer that doesn't exact-match as possibly correct but differently phrased. Only ever consulted on a normalized-string mismatch; users without the AI subscription feature always fall back to exact match only.",
+        verbose_name="Trivia AI answer checking",
+    )
 
     # --- Storage quotas & upload processing ---
 

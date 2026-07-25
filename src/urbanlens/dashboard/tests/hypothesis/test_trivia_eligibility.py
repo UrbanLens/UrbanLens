@@ -11,7 +11,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource, TriviaQuestionStatus, TriviaQuestionVote, TriviaQuestionVoteKind
-from urbanlens.dashboard.services.trivia.eligibility import eligible_questions, has_eligible_questions
+from urbanlens.dashboard.services.trivia.eligibility import eligible_questions, has_eligible_questions, solo_own_pending_questions
 
 _coordinate_counter = count()
 
@@ -105,3 +105,46 @@ class HasEligibleQuestionsTests(TestCase):
         baker.make(Pin, profile=profile, location=location)
         _make_question(location)
         self.assertTrue(has_eligible_questions([profile]))
+
+
+class SoloOwnPendingQuestionsTests(TestCase):
+    """A solo player's own not-yet-approved question - see the Trivia spec's
+    "no feedback loop for the submitter" requirement."""
+
+    def setUp(self) -> None:
+        self.alice = _make_profile()
+        self.bob = _make_profile()
+        self.location = _make_location()
+        baker.make(Pin, profile=self.alice, location=self.location)
+
+    def test_own_pending_review_question_is_included(self) -> None:
+        question = _make_question(self.location, status=TriviaQuestionStatus.PENDING_REVIEW)
+        question.submitted_by = self.alice
+        question.save(update_fields=["submitted_by"])
+        self.assertEqual(list(solo_own_pending_questions(self.alice)), [question])
+
+    def test_own_rejected_question_is_included(self) -> None:
+        question = _make_question(self.location, status=TriviaQuestionStatus.REJECTED)
+        question.submitted_by = self.alice
+        question.save(update_fields=["submitted_by"])
+        self.assertEqual(list(solo_own_pending_questions(self.alice)), [question])
+
+    def test_own_approved_question_is_excluded(self) -> None:
+        """Already-approved questions belong to the normal eligible_questions pool, not this one."""
+        question = _make_question(self.location, status=TriviaQuestionStatus.APPROVED)
+        question.submitted_by = self.alice
+        question.save(update_fields=["submitted_by"])
+        self.assertEqual(list(solo_own_pending_questions(self.alice)), [])
+
+    def test_another_profiles_pending_question_is_never_included(self) -> None:
+        question = _make_question(self.location, status=TriviaQuestionStatus.PENDING_REVIEW)
+        question.submitted_by = self.bob
+        question.save(update_fields=["submitted_by"])
+        self.assertEqual(list(solo_own_pending_questions(self.alice)), [])
+
+    def test_unpinned_location_is_excluded_even_if_authored_there(self) -> None:
+        other_location = _make_location()
+        question = _make_question(other_location, status=TriviaQuestionStatus.PENDING_REVIEW)
+        question.submitted_by = self.alice
+        question.save(update_fields=["submitted_by"])
+        self.assertEqual(list(solo_own_pending_questions(self.alice)), [])

@@ -12,7 +12,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource, TriviaSession
+from urbanlens.dashboard.models.trivia.model import TriviaQuestion, TriviaQuestionSource, TriviaQuestionStatus, TriviaSession
 
 _coordinate_counter = count()
 
@@ -160,4 +160,62 @@ class TriviaQuestionVoteViewTests(TestCase):
 
     def test_invalid_kind_is_rejected(self) -> None:
         response = self.client.post(self.vote_url, {"kind": "no_reaction"})
+        self.assertEqual(response.status_code, 400)
+
+
+class TriviaQuestionSubmitViewTests(TestCase):
+    def setUp(self) -> None:
+        self.profile = _make_profile()
+        self.location = _make_location()
+        baker.make(Pin, profile=self.profile, location=self.location)
+        self.client.force_login(self.profile.user)
+        self.submit_url = reverse("trivia.submit")
+
+    def test_requires_login(self) -> None:
+        self.client.logout()
+        response = self.client.post(self.submit_url, {})
+        self.assertEqual(response.status_code, 302)
+
+    def test_creates_a_pending_review_question(self) -> None:
+        from unittest.mock import patch
+
+        with patch("urbanlens.dashboard.services.trivia.submission._enqueue_classification"), self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                self.submit_url,
+                {"location_id": self.location.pk, "prompt": "What year was it built?", "answer": "1937"},
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"submitted": True})
+
+        question = TriviaQuestion.objects.get(location=self.location, submitted_by=self.profile)
+        self.assertEqual(question.status, TriviaQuestionStatus.PENDING_REVIEW)
+        self.assertEqual(question.source, TriviaQuestionSource.USER_SUBMITTED)
+
+    def test_response_never_reveals_the_eventual_verdict(self) -> None:
+        """Per spec: the submitter gets no signal either way, so they can't iteratively probe the filter."""
+        from unittest.mock import patch
+
+        with patch("urbanlens.dashboard.services.trivia.submission._enqueue_classification"), self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                self.submit_url,
+                {"location_id": self.location.pk, "prompt": "What year was it built?", "answer": "1937"},
+            )
+        self.assertNotIn("status", response.json())
+        self.assertNotIn("approved", response.json())
+
+    def test_cannot_submit_for_an_unpinned_location(self) -> None:
+        other_location = _make_location()
+        response = self.client.post(
+            self.submit_url,
+            {"location_id": other_location.pk, "prompt": "What year was it built?", "answer": "1937"},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertFalse(TriviaQuestion.objects.filter(location=other_location).exists())
+
+    def test_missing_prompt_is_rejected(self) -> None:
+        response = self.client.post(self.submit_url, {"location_id": self.location.pk, "answer": "1937"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_missing_location_id_is_rejected(self) -> None:
+        response = self.client.post(self.submit_url, {"prompt": "What year?", "answer": "1937"})
         self.assertEqual(response.status_code, 400)

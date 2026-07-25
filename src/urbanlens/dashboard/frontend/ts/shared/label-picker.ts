@@ -174,7 +174,7 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
         }
     }
 
-    /** Formula text reconstruction shared by the bar echo and the complex display. */
+    /** Formula text reconstruction for the editable formula bar (see groupsToFormulaHtml for the read-only pill display). */
     function groupsToFormulaParts(groups: LabelGroup[]): string[] {
         const byId = new Map([...labelByNameMap().values()].map((v) => [v.id, v]));
         const parts: string[] = [];
@@ -192,6 +192,38 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
             }
         }
         return parts;
+    }
+
+    /** Visual pill for one label in the read-only formula display (see groupsToFormulaHtml). */
+    function formulaPillHtml(entry: LabelEntry | undefined, fallback: string, mode: ChipMode): string {
+        const label = entry?.label ?? fallback;
+        const color = entry?.color;
+        const bg = color ? color + "33" : mode === "incl" ? "rgba(148,163,184,.16)" : "rgba(239,68,68,.16)";
+        const border = color ? color + "66" : mode === "incl" ? "rgba(148,163,184,.4)" : "rgba(239,68,68,.4)";
+        const txtCol = color || (mode === "incl" ? "rgba(226,232,240,.92)" : "#fca5a5");
+        const iconHtml = entry?.icon ? `<span style="font-size:.85em">${escHtml(entry.icon)}</span>` : "";
+        return `<span class="fp-formula-pill fp-formula-pill--${mode}" style="background:${bg};border-color:${border};color:${txtCol}">${iconHtml}${escHtml(label)}</span>`;
+    }
+
+    /** Visual AND/OR/NOT connector word between pills in the read-only formula display. */
+    function formulaConnectorHtml(word: "AND" | "OR" | "NOT"): string {
+        return `<span class="fp-formula-connector${word === "NOT" ? " fp-formula-connector--not" : ""}">${word}</span>`;
+    }
+
+    /** Renders parsed groups as a row of pills + AND/OR/NOT connector words (the "formula"). */
+    function groupsToFormulaHtml(groups: LabelGroup[]): string {
+        const byId = new Map([...labelByNameMap().values()].map((v) => [v.id, v]));
+        const html: string[] = [];
+        groups.forEach((g, gi) => {
+            if (gi > 0) html.push(formulaConnectorHtml("AND"));
+            if (g.op === "not") html.push(formulaConnectorHtml("NOT"));
+            const mode: ChipMode = g.op === "not" ? "excl" : "incl";
+            g.ids.forEach((id, i) => {
+                if (i > 0) html.push(formulaConnectorHtml(g.op === "or" ? "OR" : "AND"));
+                html.push(formulaPillHtml(byId.get(String(id)), String(id), mode));
+            });
+        });
+        return html.join("");
     }
 
     function updateFormulaFromState(): void {
@@ -233,7 +265,7 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
             // Complex formula: show the read-only text display instead of chips.
             els.selected.style.display = "none";
             if (els.formulaDisplay) els.formulaDisplay.style.display = "";
-            if (els.formulaDisplayText) els.formulaDisplayText.textContent = groupsToFormulaParts(formulaGroups!).join(" + ");
+            if (els.formulaDisplayText) els.formulaDisplayText.innerHTML = groupsToFormulaHtml(formulaGroups!);
             els.accordion?.classList.add("fp-acc-active");
             serialize();
             updateFormulaFromState();

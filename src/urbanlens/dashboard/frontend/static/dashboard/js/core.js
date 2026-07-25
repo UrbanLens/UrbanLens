@@ -129,6 +129,35 @@
       }
       return parts;
     }
+    function formulaPillHtml(entry, fallback, mode) {
+      const label = entry?.label ?? fallback;
+      const color = entry?.color;
+      const bg = color ? color + "33" : mode === "incl" ? "rgba(148,163,184,.16)" : "rgba(239,68,68,.16)";
+      const border = color ? color + "66" : mode === "incl" ? "rgba(148,163,184,.4)" : "rgba(239,68,68,.4)";
+      const txtCol = color || (mode === "incl" ? "rgba(226,232,240,.92)" : "#fca5a5");
+      const iconHtml = entry?.icon ? `<span style="font-size:.85em">${escHtml(entry.icon)}</span>` : "";
+      return `<span class="fp-formula-pill fp-formula-pill--${mode}" style="background:${bg};border-color:${border};color:${txtCol}">${iconHtml}${escHtml(label)}</span>`;
+    }
+    function formulaConnectorHtml(word) {
+      return `<span class="fp-formula-connector${word === "NOT" ? " fp-formula-connector--not" : ""}">${word}</span>`;
+    }
+    function groupsToFormulaHtml(groups) {
+      const byId = new Map([...labelByNameMap().values()].map((v) => [v.id, v]));
+      const html = [];
+      groups.forEach((g, gi) => {
+        if (gi > 0)
+          html.push(formulaConnectorHtml("AND"));
+        if (g.op === "not")
+          html.push(formulaConnectorHtml("NOT"));
+        const mode = g.op === "not" ? "excl" : "incl";
+        g.ids.forEach((id, i) => {
+          if (i > 0)
+            html.push(formulaConnectorHtml(g.op === "or" ? "OR" : "AND"));
+          html.push(formulaPillHtml(byId.get(String(id)), String(id), mode));
+        });
+      });
+      return html.join("");
+    }
     function updateFormulaFromState() {
       const bar = els.formulaBar;
       if (!bar || document.activeElement === bar)
@@ -168,7 +197,7 @@
         if (els.formulaDisplay)
           els.formulaDisplay.style.display = "";
         if (els.formulaDisplayText)
-          els.formulaDisplayText.textContent = groupsToFormulaParts(formulaGroups).join(" + ");
+          els.formulaDisplayText.innerHTML = groupsToFormulaHtml(formulaGroups);
         els.accordion?.classList.add("fp-acc-active");
         serialize();
         updateFormulaFromState();

@@ -137,8 +137,14 @@ class TriviaQuestion(abstract.DashboardModel):
 
     @staticmethod
     def normalize_answer(text: str) -> str:
-        """Lowercase and strip everything but letters/digits, for exact-match comparison."""
-        return "".join(char for char in text.casefold() if char.isalnum())
+        """Lowercase and strip everything but letters/digits, for exact-match comparison.
+
+        A handful of Unicode letters (e.g. mathematical alphanumeric symbols
+        like MATHEMATICAL SCRIPT CAPITAL A) have no lowercase form, so
+        ``casefold()`` leaves them unchanged and still uppercase - drop those
+        rather than let a "normalized" answer stay non-lowercase.
+        """
+        return "".join(char for char in text.casefold() if char.isalnum() and not char.isupper())
 
     def save(self, *args, **kwargs) -> None:
         """Keep ``answer_normalized`` in sync with ``answer`` on every save."""

@@ -259,6 +259,10 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.run_scheduled_enrichment",
         "schedule": 60 * 60,
     },
+    "scheduled-trivia-generation": {
+        "task": "urbanlens.dashboard.tasks.run_scheduled_trivia_generation",
+        "schedule": 60 * 60,
+    },
     "safety-checkin-due-reminders": {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
         "schedule": 5 * 60,

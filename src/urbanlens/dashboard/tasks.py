@@ -1964,6 +1964,59 @@ def run_link_extraction(extraction_id: int) -> None:
     run_extraction(extraction)
 
 
+@shared_task
+def classify_trivia_submission(question_id: int) -> None:
+    """Classify one pending user-submitted Trivia question and record its verdict.
+
+    No Celery autoretry: each attempt consumes an AI call, and this is a
+    background action with no user waiting on it - if this task never runs
+    (or the classifier can't reach AI right now), the question simply stays
+    PENDING_REVIEW (silently excluded from rotation, see
+    services.trivia.submission.classify_and_update), no different from any
+    other transient Celery outage.
+
+    Args:
+        question_id: PK of the pending TriviaQuestion row.
+    """
+    from urbanlens.dashboard.models.trivia.model import TriviaQuestion
+    from urbanlens.dashboard.services.trivia.submission import classify_and_update
+
+    question = TriviaQuestion.objects.filter(pk=question_id).select_related("location", "submitted_by").first()
+    if question is None:
+        logger.info("classify_trivia_submission: question %s no longer exists", question_id)
+        return
+    classify_and_update(question)
+
+
+@shared_task
+def run_scheduled_trivia_generation() -> dict:
+    """Generate AI trivia questions for a bounded batch of not-yet-processed wikis.
+
+    Fired hourly by Celery beat, mirroring run_scheduled_enrichment's
+    single-flight lock (a run that's still going when the next hour ticks
+    over is left alone rather than started twice). No autoretry: each
+    wiki considered spends AI tokens on generation and classification, so an
+    automatic retry would silently multiply cost; a skipped wiki is simply
+    picked up on the next scheduled run.
+
+    Returns:
+        The sweep summary dict, or a skip marker when another run holds the
+        single-flight lock.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.trivia.generation import sweep_wikis_for_generation
+
+    lock_key = "trivia_generation_sweep_lock"
+    if not cache.add(lock_key, 1, 3300):
+        logger.info("run_scheduled_trivia_generation: another sweep is still running; skipping")
+        return {"skipped": "already_running"}
+    try:
+        return sweep_wikis_for_generation()
+    finally:
+        cache.delete(lock_key)
+
+
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
     """Clear a pin's stored placeholder name once its location has a meaningful one to fall back to.

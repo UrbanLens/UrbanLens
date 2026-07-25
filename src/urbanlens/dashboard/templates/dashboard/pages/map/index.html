@@ -294,10 +294,13 @@
 
                     {# Complex formula display - shown instead of 2-column chips for mixed AND/OR expressions #}
                     <div class="fp-formula-display" id="fp-formula-display" style="display:none">
-                        <span class="fp-formula-display-text" id="fp-formula-display-text"></span>
-                        <button type="button" class="fp-formula-display-clear" id="fp-formula-display-clear" title="Clear filter">
-                            <i class="material-symbols-outlined">close</i>
-                        </button>
+                        <div class="fp-formula-display-header">
+                            <span class="fp-formula-display-label">The Formula</span>
+                            <button type="button" class="fp-formula-display-clear" id="fp-formula-display-clear" title="Clear filter">
+                                <i class="material-symbols-outlined">close</i>
+                            </button>
+                        </div>
+                        <div class="fp-formula-display-text" id="fp-formula-display-text"></div>
                     </div>
 
                     {# Formula bar - replaces old search input. Supports plain search + formula operators. #}

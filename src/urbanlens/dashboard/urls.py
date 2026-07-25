@@ -193,6 +193,7 @@ urlpatterns = [
                 path("session/<int:session_id>/chat/", trivia.TriviaChatHistoryView.as_view(), name="trivia.chat_history"),
                 path("session/<int:session_id>/summary/", trivia.TriviaSummaryView.as_view(), name="trivia.summary"),
                 path("questions/<int:question_id>/vote/", trivia.TriviaQuestionVoteView.as_view(), name="trivia.vote"),
+                path("questions/submit/", trivia.TriviaQuestionSubmitView.as_view(), name="trivia.submit"),
             ],
         ),
     ),

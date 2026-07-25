@@ -40,12 +40,22 @@ def target_rating_for_difficulty(difficulty: float) -> float:
     return MIN_QUESTION_RATING + clamped * (MAX_QUESTION_RATING - MIN_QUESTION_RATING)
 
 
-def pick_next_question(candidates: QuerySet[TriviaQuestion], *, difficulty: float) -> TriviaQuestion | None:
+def pick_next_question(
+    candidates: QuerySet[TriviaQuestion] | list[TriviaQuestion],
+    *,
+    difficulty: float,
+    weight_overrides: dict[int, float] | None = None,
+) -> TriviaQuestion | None:
     """Weighted-random pick from ``candidates`` (already eligibility-filtered, not yet asked this session).
 
     Args:
         candidates: Eligible questions for this round.
         difficulty: 0.0 (easiest) - 1.0 (hardest) slider value.
+        weight_overrides: Optional per-question-id multiplier applied on top
+            of the difficulty weight - used by services.trivia.session to
+            make a solo player's own not-yet-approved question appear only
+            very rarely (see eligibility.OWN_UNAPPROVED_WEIGHT), without
+            excluding it from the pool outright.
 
     Returns:
         The chosen TriviaQuestion, or None if ``candidates`` is empty.
@@ -54,9 +64,10 @@ def pick_next_question(candidates: QuerySet[TriviaQuestion], *, difficulty: floa
     if not pool:
         return None
 
+    overrides = weight_overrides or {}
     target_rating = target_rating_for_difficulty(difficulty)
     ratings_by_question_id = {rating.question_id: rating for rating in TriviaQuestionRating.objects.filter(question__in=pool)}
-    weights = [_difficulty_weight(ratings_by_question_id.get(question.pk), target_rating) for question in pool]
+    weights = [_difficulty_weight(ratings_by_question_id.get(question.pk), target_rating) * overrides.get(question.pk, 1.0) for question in pool]
     if sum(weights) <= 0:
         return random.choice(pool)  # noqa: S311 # nosec: B311 - game content selection, not security-sensitive
     return random.choices(pool, weights=weights, k=1)[0]  # noqa: S311 # nosec: B311 - game content selection, not security-sensitive

@@ -21,6 +21,10 @@ from urbanlens.dashboard.services.trivia.serializers import (
 )
 from urbanlens.dashboard.services.trivia.chat import recent_messages, send_chat_message
 from urbanlens.dashboard.services.trivia.social import visible_friend_ratings
+from urbanlens.dashboard.services.trivia.classifier import ClassifierVerdict, classify_trivia_question
+from urbanlens.dashboard.services.trivia.submission import classify_and_update, submit_user_question
+from urbanlens.dashboard.services.trivia.generation import generate_questions_for_wiki, sweep_wikis_for_generation
+from urbanlens.dashboard.services.trivia.answer_check import is_answer_equivalent
 
 # session must be imported last - it imports several of its own sibling
 # submodules (eligibility, selection, voting, realtime, serializers) from

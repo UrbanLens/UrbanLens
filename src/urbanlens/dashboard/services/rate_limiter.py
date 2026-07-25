@@ -163,6 +163,24 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=200,
         notes="Billed per message sent - keep this conservative.",
     ),
+    "trivia_moderation": ServiceDefaults(
+        display_name="Trivia Question Moderation (AI)",
+        calls_per_minute=20,
+        calls_per_day=1000,
+        notes="Classifies user-submitted and AI-generated Trivia questions before they enter rotation. Cost varies by provider/model - see ApiCallLog.cost_estimate for actuals.",
+    ),
+    "trivia_generation": ServiceDefaults(
+        display_name="Trivia Question Generation (AI)",
+        calls_per_minute=5,
+        calls_per_day=200,
+        notes="Generates candidate Trivia questions from wiki article content. Runs from a scheduled background sweep, not per-request.",
+    ),
+    "trivia_answer_check": ServiceDefaults(
+        display_name="Trivia Answer Checking (AI)",
+        calls_per_minute=30,
+        calls_per_day=2000,
+        notes="Judges a non-exact-match Trivia answer as possibly correct but differently phrased. Only called on a normalized-string mismatch.",
+    ),
 }
 
 

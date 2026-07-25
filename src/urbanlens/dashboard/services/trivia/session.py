@@ -30,6 +30,7 @@ from urbanlens.dashboard.models.trivia.model import (
 )
 from urbanlens.dashboard.services.connections import are_connections
 from urbanlens.dashboard.services.trivia import eligibility, realtime, selection, serializers, voting
+from urbanlens.dashboard.services.trivia.answer_check import is_answer_equivalent
 from urbanlens.dashboard.services.trivia.ratings import apply_round_ratings
 
 if TYPE_CHECKING:
@@ -256,8 +257,19 @@ def get_or_create_round(session: TriviaSession) -> TriviaRound | None:
     participants = [participant.profile for participant in joined_participants]
     excluded_question_ids = [round_.question_id for round_ in existing_rounds]
 
-    candidates = eligibility.eligible_questions(participants, geo_bounds=config.geo_bounds, exclude_question_ids=excluded_question_ids)
-    question = selection.pick_next_question(candidates, difficulty=config.difficulty)
+    candidates = list(eligibility.eligible_questions(participants, geo_bounds=config.geo_bounds, exclude_question_ids=excluded_question_ids))
+
+    # A solo player may very rarely see their own not-yet-approved question -
+    # never in multiplayer, and never any other player's. See
+    # eligibility.solo_own_pending_questions's docstring for the full spec
+    # rationale (no feedback loop for the submitter to probe the filter).
+    weight_overrides: dict[int, float] = {}
+    if participant_count == 1:
+        own_pending = list(eligibility.solo_own_pending_questions(participants[0], geo_bounds=config.geo_bounds, exclude_question_ids=excluded_question_ids))
+        candidates.extend(own_pending)
+        weight_overrides = dict.fromkeys((q.pk for q in own_pending), eligibility.OWN_UNAPPROVED_WEIGHT)
+
+    question = selection.pick_next_question(candidates, difficulty=config.difficulty, weight_overrides=weight_overrides)
     if question is None:
         return None  # nothing eligible left at all
 
@@ -274,15 +286,20 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
     the real-time broadcast sequence (``answer.submitted`` immediately, then
     ``round.revealed`` + either ``round.started`` or ``session.completed``
     once the round completes; a no-op without a channel layer listener, so
-    solo sessions work exactly the same as before). Phase 1 only ever
-    exact-matches (``matched_via=EXACT``); a follow-up phase adds an AI
-    fallback here for a normalized mismatch.
+    solo sessions work exactly the same as before). On a normalized-string
+    mismatch, falls back to ``services.trivia.answer_check`` (gated on
+    ``SiteFeature.AI`` - a profile without it simply gets exact-match-only,
+    never blocked from playing).
 
     Raises:
         TriviaError: if ``profile`` already answered this round.
     """
     question = round_.question
     is_correct = TriviaQuestion.normalize_answer(raw_answer) == question.answer_normalized
+    matched_via = TriviaAnswerMatchKind.EXACT
+    if not is_correct and is_answer_equivalent(raw_answer, question.answer, profile=profile):
+        is_correct = True
+        matched_via = TriviaAnswerMatchKind.AI
     points = POINTS_FOR_CORRECT_ANSWER if is_correct else 0
 
     session = round_.session
@@ -299,7 +316,7 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
                 profile=profile,
                 raw_answer=raw_answer,
                 is_correct=is_correct,
-                matched_via=TriviaAnswerMatchKind.EXACT,
+                matched_via=matched_via,
                 points=points,
             )
         except IntegrityError:
