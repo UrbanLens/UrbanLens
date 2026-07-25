@@ -48,9 +48,8 @@ updateModeVisibility().
             <div class="spotguessr-field spotguessr-field--switch" data-mode-only="photos">
                 <label>
                     <span class="ul-switch"><input type="checkbox" id="sg-allow-arbitrary-external-photos"><span class="ul-switch__track"></span></span>
-                    <span>Allow any external wiki photo, not just relevant ones</span>
+                    <span>Allow external wiki photos that might not be relevant to the spot</span>
                 </label>
-                <p class="spotguessr-panel-hint">Off by default - on shows more photos, including ones the community hasn't vetted (or has flagged) yet.</p>
             </div>
             <div class="spotguessr-field spotguessr-field--switch" data-mode-only="photos">
                 <label>
@@ -84,7 +83,7 @@ updateModeVisibility().
                 <div class="spotguessr-area-search-results" id="sg-area-search-results" hidden></div>
                 <p class="spotguessr-area-search-message" id="sg-area-search-message" hidden></p>
                 <div id="sg-area-map" class="spotguessr-area-map"></div>
-                <p class="spotguessr-panel-hint">Search for a place (like a state or city) or draw a polygon on the map - the newest one replaces the last.</p>
+                <p class="spotguessr-panel-hint">Search for a place, or draw an area yourself. Only pins in that area will be used in the game.</p>
                 <input type="hidden" id="sg-area-geo-bounds">
             </div>
 

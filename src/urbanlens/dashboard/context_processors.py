@@ -103,7 +103,7 @@ def add_environment_indicator(request: HttpRequest) -> dict[str, str]:
 
 #: URL-name prefixes that belong to a nav-bar section other than their own, e.g.
 #: pin detail pages (``pin.*``) are reached from the map and should keep "Map" active.
-_NAV_SECTION_ALIASES = {"pin": "map", "spotguessr": "games"}
+_NAV_SECTION_ALIASES = {"pin": "map", "spotguessr": "games", "trivia": "games"}
 
 
 def add_page_name(request: HttpRequest) -> dict[str, str]:

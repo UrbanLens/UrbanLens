@@ -65,6 +65,7 @@ from urbanlens.dashboard.controllers import (
     thanks,
     tools,
     trip,
+    trivia,
     two_factor,
     undo,
     userprofile,
@@ -168,6 +169,23 @@ urlpatterns = [
                 ),
                 path("session/<int:session_id>/chat/", spotguessr.SpotGuessrChatHistoryView.as_view(), name="spotguessr.chat_history"),
                 path("session/<int:session_id>/summary/", spotguessr.SpotGuessrSummaryView.as_view(), name="spotguessr.summary"),
+            ],
+        ),
+    ),
+    path(
+        "games/trivia/",
+        include(
+            [
+                path("", trivia.TriviaHomeView.as_view(), name="trivia"),
+                path("start/", trivia.TriviaStartView.as_view(), name="trivia.start"),
+                path("session/<int:session_id>/round/", trivia.TriviaRoundView.as_view(), name="trivia.round"),
+                path(
+                    "session/<int:session_id>/round/<int:round_id>/answer/",
+                    trivia.TriviaAnswerView.as_view(),
+                    name="trivia.answer",
+                ),
+                path("session/<int:session_id>/summary/", trivia.TriviaSummaryView.as_view(), name="trivia.summary"),
+                path("questions/<int:question_id>/vote/", trivia.TriviaQuestionVoteView.as_view(), name="trivia.vote"),
             ],
         ),
     ),

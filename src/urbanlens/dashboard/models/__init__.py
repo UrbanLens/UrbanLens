@@ -89,6 +89,23 @@ from urbanlens.dashboard.models.spotguessr import (
 )
 from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant, SiteFeature, SubscriptionRole, UserSubscription
 from urbanlens.dashboard.models.trips import Trip, TripActivity, TripComment
+from urbanlens.dashboard.models.trivia import (
+    PlayerTriviaRating,
+    TriviaAnswer,
+    TriviaAnswerMatchKind,
+    TriviaPreference,
+    TriviaQuestion,
+    TriviaQuestionRating,
+    TriviaQuestionSource,
+    TriviaQuestionStatus,
+    TriviaQuestionVote,
+    TriviaQuestionVoteKind,
+    TriviaRound,
+    TriviaSession,
+    TriviaSessionParticipant,
+    TriviaSessionParticipantStatus,
+    TriviaSessionStatus,
+)
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.models.visit_suggestions import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits import ExternalVisitParticipant, PinVisit, VisitSource

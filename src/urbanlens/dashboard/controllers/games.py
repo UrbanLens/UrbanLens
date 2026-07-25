@@ -46,6 +46,12 @@ GAMES = [
         icon="travel_explore",
         url_name="spotguessr",
     ),
+    GameEntry(
+        name="Trivia",
+        description="Answer questions about the places you've pinned - solo or with friends.",
+        icon="quiz",
+        url_name="trivia",
+    ),
 ]
 
 
