@@ -766,3 +766,28 @@ dependency was fine, the dev box just didn't have it yet. Fixed for this session
 commit, e.g. `CELERY_BEAT_SCHEDULE` dict entries landing near each other) - worth checking `git log
 origin/<branch> -1` vs. local `HEAD` up front, not just `git status`, when picking a "free" dev
 environment for migration-touching work.
+
+## Residues left by the TEMPORARY legacy-CID coordinate repair (found 2026-07-25)
+
+`services/apis/locations/legacy_cid_coordinate_fix.py` lets a re-import move a user's
+pre-2026-07-25 pins off the coordinates the old S2-decode guess put them on. Two known gaps
+that it deliberately does *not* close - both should disappear when that module is deleted,
+but re-check them then rather than assuming:
+
+1. **The CID stays on the bad `Location`.** `GooglePlace.cid` is `unique=True`, so the repaired
+   pin's new (correct) Location can't claim the CID while the old, wrongly-placed Location still
+   holds it - the backfill in `_create_pin_from_confirmed` is skipped for exactly this case.
+   Consequence: `Location.objects.by_cid()` keeps resolving that CID to the wrong Location for
+   *every* user, and each re-import pays a fresh REData/Places resolution instead of a cache hit.
+   Repointing the CID would fix it globally, but it mutates shared cross-user data off the back of
+   one user's import, which is why it wasn't done here. Deliberate call, not an oversight.
+
+2. **`GoogleMapsGateway.import_pins_streaming` was left un-repaired.** It's the older one-shot
+   `pin.upload.takeout` path, and it still places CID pins from `extract_coordinates_from_url`'s
+   S2 decode - i.e. it can still create wrongly-placed pins today. Nothing in
+   `templates/dashboard/pages/location/import/csv.html` (or anywhere else) references that URL;
+   the UI goes through `pin.import.preview` -> `pin.import.confirmed`, which defers CID pins
+   properly. The repair was not wired into it because doing so safely means giving it the same
+   deferral machinery, not because it's correct as-is. Either give it the deferral path or delete
+   the route and `import_pins_streaming` with it - a live URL that silently mis-places pins is
+   worse than no URL.

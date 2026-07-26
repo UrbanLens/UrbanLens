@@ -28,6 +28,11 @@ from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+
+# TEMPORARY: legacy CID coordinate repair - remove this import together with the
+# blocks it feeds (each marked with a matching TEMPORARY comment below) once
+# every user has re-imported. See legacy_cid_coordinate_fix's module docstring.
+from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import is_legacy_location, repair_legacy_pin_coordinates
 from urbanlens.dashboard.services.import_formats.heuristics import (
     DEFAULT_LATITUDE_KEYS,
     DEFAULT_LONGITUDE_KEYS,
@@ -125,6 +130,12 @@ def _create_pin_from_confirmed(
         category_label: the list's category label, if ``create_category`` was set.
         auto_tag: whether to enqueue AI category suggestion for a newly-created pin.
 
+    TEMPORARY: before creating anything, this also tries to repair one of the
+    user's own pre-2026-07-25 pins that the old CID lookup mis-placed - see
+    ``services.apis.locations.legacy_cid_coordinate_fix``. When that matches, the
+    existing pin is moved onto the corrected coordinates and returned as
+    ``created=False`` instead of a second pin being created nearby.
+
     Returns:
         ``(pin, created)`` - ``pin`` is None if creation failed or was skipped.
     """
@@ -137,6 +148,17 @@ def _create_pin_from_confirmed(
     link_urls = extract_link_urls(raw_description)
     description = strip_html(raw_description)[:MAX_PIN_DESCRIPTION_LENGTH]
 
+    # --- TEMPORARY (legacy CID coordinate repair) -------------------------
+    # A Location created before the CID->coordinate fix may itself be sitting on
+    # an S2-decoded guess, so it can't be trusted to place this pin when the
+    # caller has already resolved the real coordinates. Drop the match and let
+    # `latitude`/`longitude` below find (or create) the right Location instead.
+    # Remove with services.apis.locations.legacy_cid_coordinate_fix.
+    legacy_cid_location = location if (location is not None and latitude is not None and longitude is not None and is_legacy_location(location)) else None
+    if legacy_cid_location is not None:
+        location = None
+    # --- end TEMPORARY ----------------------------------------------------
+
     pin_defaults: dict[str, Any] = {"name": pin_name, "description": description}
     lookup_lat: float | Decimal | None
     lookup_lon: float | Decimal | None
@@ -148,16 +170,37 @@ def _create_pin_from_confirmed(
         pin_defaults["longitude"] = longitude
         lookup_lat, lookup_lon = latitude, longitude
 
-    try:
-        pin, created = Pin.objects.get_nearby_or_create(
-            latitude=lookup_lat,
-            longitude=lookup_lon,
-            profile=user_profile,
-            defaults=pin_defaults,
-        )
-    except (DatabaseError, ValueError, OSError) as exc:
-        logger.warning("Failed to import pin '%s': %s", redact_text(pin_name), exc)
-        return None, False
+    # --- TEMPORARY (legacy CID coordinate repair) -------------------------
+    # Before creating anything, see whether this record is a re-import of one of
+    # this user's own pre-2026-07-25 pins that the old CID lookup mis-placed. If
+    # so, move that pin onto its corrected coordinates rather than leaving it
+    # stranded and creating a second pin nearby. `lookup_lat`/`lookup_lon` are
+    # safe to pass: every caller reaching here has real coordinates (a resolved
+    # or cached CID lookup, or literal coordinates from the import file), and the
+    # one source of S2 guesses - a legacy CID-matched Location - was just dropped
+    # above. Remove with services.apis.locations.legacy_cid_coordinate_fix.
+    repaired = repair_legacy_pin_coordinates(
+        profile=user_profile,
+        cid=cid,
+        name=pin_name,
+        latitude=lookup_lat,
+        longitude=lookup_lon,
+    )
+    # --- end TEMPORARY ----------------------------------------------------
+
+    if repaired is not None:
+        pin, created = repaired, False
+    else:
+        try:
+            pin, created = Pin.objects.get_nearby_or_create(
+                latitude=lookup_lat,
+                longitude=lookup_lon,
+                profile=user_profile,
+                defaults=pin_defaults,
+            )
+        except (DatabaseError, ValueError, OSError) as exc:
+            logger.warning("Failed to import pin '%s': %s", redact_text(pin_name), exc)
+            return None, False
 
     if not pin:
         return None, False
@@ -186,7 +229,12 @@ def _create_pin_from_confirmed(
         if extra:
             pin.labels.add(*extra)
 
-    if cid and not location and pin.location_id and not pin.location.cid:
+    # TEMPORARY: `legacy_cid_location is None` - when a legacy Location was
+    # dropped above it still holds this cid, and GooglePlace.cid is unique, so
+    # re-claiming it here for the corrected Location would raise. The cid stays
+    # with the old row; a later re-import re-resolves it and lands on the
+    # corrected Location anyway. Drop this clause with the rest of the repair.
+    if cid and not location and legacy_cid_location is None and pin.location_id and not pin.location.cid:
         # fetch_if_missing=False: never block the import loop on a live
         # Places call per pin.
         GooglePlaceService().set_cid_for_entity(pin.location, cid, fetch_if_missing=False)
@@ -997,6 +1045,18 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     cid = pin_dict.get("cid")
 
                     location = Location.objects.by_cid(cid).first() if cid else None
+
+                    # --- TEMPORARY (legacy CID coordinate repair) ---------
+                    # A Location created before the 2026-07-25 fix may be on an
+                    # S2-decoded guess. Drop the match so this pin takes the
+                    # cached-lookup/deferred path below and gets placed from a
+                    # real resolution - which then also repairs whichever legacy
+                    # pin of this user's is sitting on the bad Location. Remove
+                    # with services.apis.locations.legacy_cid_coordinate_fix.
+                    if location is not None and is_legacy_location(location):
+                        location = None
+                    # --- end TEMPORARY ------------------------------------
+
                     cached_coords = GoogleGeocodingGateway.get_cached_coordinates_by_cid(cid) if cid and not location else None
 
                     if cid and not location and cached_coords is None:
