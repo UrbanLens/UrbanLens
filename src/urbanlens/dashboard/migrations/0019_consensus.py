@@ -522,7 +522,7 @@ class Migration(migrations.Migration):
             model_name="consensussessionchatmessage",
             index=models.Index(
                 fields=["session", "created"],
-                name="idxdb_consensus_chat_session_created",
+                name="idxdb_cons_chat_sesh_creat",
             ),
         ),
         migrations.AddConstraint(

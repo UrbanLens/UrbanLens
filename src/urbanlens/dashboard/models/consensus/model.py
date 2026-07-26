@@ -593,5 +593,5 @@ class ConsensusSessionChatMessage(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_consensus_chat_messages"
         indexes = [
-            Index(fields=["session", "created"], name="idxdb_consensus_chat_session_created"),
+            Index(fields=["session", "created"], name="idxdb_cons_chat_sesh_creat"),
         ]
