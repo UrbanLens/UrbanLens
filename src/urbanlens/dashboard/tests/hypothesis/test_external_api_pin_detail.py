@@ -117,9 +117,11 @@ class PinDetailGetTests(TestCase):
         self.assertEqual(body["links"][0]["url"], "https://example.com/article")
         self.assertEqual(body["link_count"], 1)
 
-    def test_no_boundary_is_null(self) -> None:
+    def test_no_drawn_boundary_falls_back_to_a_circle_around_the_pin(self) -> None:
+        """Matches the website's own map/pin display: no polygon still yields a circle, never null."""
         body = self._get(self.pin).json()
-        self.assertIsNone(body["boundary"])
+        self.assertIsNotNone(body["boundary"])
+        self.assertIn(body["boundary"]["type"], {"Polygon", "MultiPolygon"})
 
     def test_no_wiki_is_null_slug(self) -> None:
         body = self._get(self.pin).json()
@@ -215,10 +217,9 @@ class PinDetailPatchTests(TestCase):
         self.assertIsNone(self.pin.parent_pin_id)
 
     def test_detach_conflict_when_a_root_pin_already_occupies_the_location(self) -> None:
+        """self.pin shares its parent's own Location - detaching would collide with the parent itself."""
         parent = create_pin_for_profile(self.profile, name="Campus", latitude=50.0, longitude=50.0).pin
         Pin.objects.filter(pk=self.pin.pk).update(parent_pin=parent, location_id=parent.location_id)
-        other_root = create_pin_for_profile(self.profile, name="Other Root", latitude=60.0, longitude=60.0).pin
-        Pin.objects.filter(pk=other_root.pk).update(location_id=parent.location_id)
         response = self._patch(self.pin, {"parent_id": None})
         self.assertEqual(response.status_code, 400)
         self.assertIn("already have a top-level pin", response.json()["error"])

@@ -258,8 +258,8 @@ class PinDetailSerializer(SyncPinSerializer):
 
     A superset of :class:`SyncPinSerializer` - see
     ``services.pin_detail.build_pin_detail``, the function that actually
-    builds this payload. ``test_pin_detail_contract`` asserts these fields
-    exactly match what that function really emits.
+    builds this payload. ``test_external_api_schema.PinDetailContractTests``
+    asserts these fields exactly match what that function really emits.
     """
 
     official_name = serializers.CharField(read_only=True, allow_null=True)

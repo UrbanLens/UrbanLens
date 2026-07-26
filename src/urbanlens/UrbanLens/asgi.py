@@ -20,15 +20,19 @@ os.environ.setdefault("DJANGO_SETTINGS_MODULE", "urbanlens.UrbanLens.settings")
 # it's what populates Django's app registry.
 django_asgi_app = get_asgi_application()
 
-from channels.auth import AuthMiddlewareStack  # noqa: E402
 from channels.routing import ProtocolTypeRouter, URLRouter  # noqa: E402
 from channels.security.websocket import AllowedHostsOriginValidator  # noqa: E402
 
 from urbanlens.dashboard.routing import websocket_urlpatterns  # noqa: E402
+from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddlewareStack  # noqa: E402
 
 application = ProtocolTypeRouter(
     {
         "http": django_asgi_app,
-        "websocket": AllowedHostsOriginValidator(AuthMiddlewareStack(URLRouter(websocket_urlpatterns))),
+        # ApiKeyAuthMiddlewareStack wraps channels.auth.AuthMiddlewareStack: a
+        # session always wins, with a ``?key=<PAT or OAuth2 token>`` query-string
+        # credential as the fallback for native clients that have no session
+        # cookie (see websocket_auth.py).
+        "websocket": AllowedHostsOriginValidator(ApiKeyAuthMiddlewareStack(URLRouter(websocket_urlpatterns))),
     },
 )
