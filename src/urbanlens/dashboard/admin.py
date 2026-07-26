@@ -4,6 +4,7 @@ from django.urls import reverse
 
 from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
+from urbanlens.dashboard.models.facts import Fact, FactEvidence
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.wiki import Wiki
@@ -180,3 +181,54 @@ class WikiEditAdmin(admin.ModelAdmin):
     search_fields = ["wiki__name"]
     readonly_fields = ["created", "updated"]
     ordering = ["-created"]
+
+
+class FactEvidenceInline(admin.TabularInline):
+    """Read-only inline showing a Fact's recent evidence trail."""
+
+    model = FactEvidence
+    extra = 0
+    fields = ["source_kind", "source_name", "get_value", "submitter", "submitter_trust_snapshot", "source_reliability", "superseded", "created"]
+    readonly_fields = fields
+    ordering = ["-created"]
+
+    def has_add_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+
+@admin.register(Fact)
+class FactAdmin(admin.ModelAdmin):
+    """Admin for Fact - read-only ops visibility into confidence-tracked facts and their evidence."""
+
+    list_display = ["__str__", "subject_type", "key", "status", "confidence", "evidence_count", "updated"]
+    list_filter = ["subject_type", "status", "data_type", "key"]
+    search_fields = ["key", "wiki__name", "location__official_name"]
+    readonly_fields = [field.name for field in Fact._meta.fields]  # noqa: SLF001
+    ordering = ["-updated"]
+    inlines = [FactEvidenceInline]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+
+@admin.register(FactEvidence)
+class FactEvidenceAdmin(admin.ModelAdmin):
+    """Admin for FactEvidence - searchable by source across every fact, for debugging a specific source's contributions."""
+
+    list_display = ["__str__", "source_kind", "source_name", "submitter", "superseded", "created"]
+    list_filter = ["source_kind", "superseded"]
+    search_fields = ["source_name", "fact__key"]
+    readonly_fields = [field.name for field in FactEvidence._meta.fields]  # noqa: SLF001
+    ordering = ["-created"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False

@@ -441,6 +441,12 @@ def _finish_round(round_: ConsensusRound, answers: list[ConsensusAnswer]) -> Non
     participant_count = session.participants.joined().count()
     real_answers = [answer for answer in answers if _has_value(answer)]
 
+    if not round_.is_check_round and round_.field_kind != ConsensusFieldKind.WIKI_ALIAS:
+        from urbanlens.dashboard.services.facts.evidence import record_consensus_answer_evidence
+
+        for answer in real_answers:
+            record_consensus_answer_evidence(round_, answer)
+
     if round_.is_check_round:
         _resolve_check_round(round_, real_answers, strategy, participant_count)
     elif round_.field_kind == ConsensusFieldKind.WIKI_ALIAS:

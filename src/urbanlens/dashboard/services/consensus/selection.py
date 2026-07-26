@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import random
 from typing import TYPE_CHECKING, Any
 
+from urbanlens.dashboard.models.consensus.model import ConsensusFieldKind
 from urbanlens.dashboard.services.consensus import eligibility, fields, trust
 
 if TYPE_CHECKING:
@@ -21,6 +22,22 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.services.consensus.fields import RoundContent
+
+#: Probability of attempting a "recheck" round - reasking about a
+#: Facts-tracked wiki field that's TENTATIVE/CONTESTED - instead of an
+#: ordinary missing-field round. See ``services.facts.consumption.
+#: get_facts_needing_confirmation``.
+RECHECK_INJECT_PROBABILITY = 0.2
+
+#: The four plain wiki-attribute field kinds Facts tracks confidence for -
+#: mirrors ``services.facts.evidence.CONSENSUS_FIELD_KIND_TO_FACT_KEY`` minus
+#: ``PHOTO_COORDINATES`` (Image-scoped, not part of this wiki-pool shim).
+_RECHECK_FIELD_KINDS = (
+    ConsensusFieldKind.WIKI_NAME,
+    ConsensusFieldKind.WIKI_DESCRIPTION,
+    ConsensusFieldKind.WIKI_INDOOR_OUTDOOR,
+    ConsensusFieldKind.WIKI_PIN_TYPE,
+)
 
 
 @dataclass(frozen=True)
@@ -67,6 +84,11 @@ def pick_next_round_content(profiles: Iterable[Profile], *, exclude_wiki_ids: It
         # No wiki in the pool has any confirmed data to check against yet -
         # fall through to an ordinary round rather than skip this round entirely.
 
+    if random.random() < RECHECK_INJECT_PROBABILITY:  # noqa: S311 - not a cryptographic/security use
+        selection = _pick_recheck_round(pool)
+        if selection is not None:
+            return selection
+
     return _pick_normal_round(pool)
 
 
@@ -90,6 +112,47 @@ def _pick_normal_round(pool: list[Wiki]) -> RoundSelection | None:
         content = strategy.build_round(wiki)
         if content is not None:
             return RoundSelection(wiki=wiki, field_kind=kind, content=content, is_check_round=False, known_value=None)
+    return None
+
+
+def _pick_recheck_round(pool: list[Wiki]) -> RoundSelection | None:
+    """Pick a round re-asking about a wiki field Facts has flagged as TENTATIVE/CONTESTED.
+
+    Additive to ordinary round selection - reuses the same
+    ``ConsensusFieldStrategy.build_round``/``apply_answer`` machinery as a
+    normal round for these four kinds, so a recheck round is
+    indistinguishable from an ordinary one to the client (unlike a
+    trust-check round, it's never disguised - it's a genuine round whose
+    answer really does get applied).
+    """
+    from urbanlens.dashboard.models.facts.model import Fact, FactStatus
+
+    wiki_ids = [wiki.pk for wiki in pool]
+    if not wiki_ids:
+        return None
+
+    candidates = list(
+        Fact.objects.filter(
+            wiki_id__in=wiki_ids,
+            key__in=_RECHECK_FIELD_KINDS,
+            status__in=[FactStatus.TENTATIVE, FactStatus.CONTESTED],
+        ).order_by("confidence"),
+    )
+    if not candidates:
+        return None
+
+    by_wiki = {wiki.pk: wiki for wiki in pool}
+    random.shuffle(candidates)
+    for fact in candidates:
+        wiki = by_wiki.get(fact.wiki_id)
+        if wiki is None:
+            continue
+        strategy = fields.get_strategy(fact.key)
+        if strategy is None:
+            continue
+        content = strategy.build_round(wiki)
+        if content is not None:
+            return RoundSelection(wiki=wiki, field_kind=fact.key, content=content, is_check_round=False, known_value=None)
     return None
 
 

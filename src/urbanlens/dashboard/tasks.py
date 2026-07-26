@@ -2377,3 +2377,18 @@ def sweep_stalled_consensus_sessions() -> int:
         return count
     finally:
         cache.delete(_CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def recompute_fact_confidence(fact_id: int) -> None:
+    """Recompute one Fact's confidence/status/value from its accumulated evidence.
+
+    Queued (never called inline) from every Facts evidence write site - see
+    ``services.facts.evidence.record_evidence``. Per-fact evidence volume is
+    small by construction, mirroring the same reasoning behind SpotGuessr's
+    synchronous-but-cheap ``recompute_estimated_coordinates``, so no
+    debounce/locking is needed here.
+    """
+    from urbanlens.dashboard.services.facts.confidence import recompute
+
+    recompute(fact_id)

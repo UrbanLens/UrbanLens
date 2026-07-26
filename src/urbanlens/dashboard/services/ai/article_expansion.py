@@ -205,12 +205,36 @@ def append_to_article(
     return True, "Appended to article"
 
 
+def _known_facts_block(wiki: Wiki) -> str:
+    """Render this wiki's trusted Facts as a short bullet list for the writing prompt.
+
+    Handing the model our already-confirmed data (rather than only the raw
+    page text) lets it defer to what we're confident about instead of
+    re-guessing or restating a conflicting value from the linked source. See
+    ``services.facts.consumption.get_trusted_facts``.
+    """
+    from urbanlens.dashboard.models.facts import registry
+    from urbanlens.dashboard.services.facts.consumption import get_trusted_facts
+
+    facts = get_trusted_facts(wiki=wiki)
+    if not facts:
+        return ""
+
+    lines = []
+    for fact in facts:
+        definition = registry.get_definition(fact.key)
+        label = definition.display_name if definition else fact.key
+        lines.append(f"- {label}: {fact.get_value()}")
+    return "\n".join(lines)
+
+
 def _draft_new_paragraphs(
     *,
     place_name: str,
     page_text: str,
     pin_article: str,
     wiki_article: str | None,
+    wiki: Wiki | None,
     profile,
 ) -> str | None:
     """Call the writing gateway; return raw answer text or None on failure."""
@@ -239,6 +263,16 @@ def _draft_new_paragraphs(
                 "",
             ]
         )
+    if wiki is not None:
+        facts_block = _known_facts_block(wiki)
+        if facts_block:
+            parts.extend(
+                [
+                    "Known facts (trust these over conflicting page content):",
+                    wrap_user_data(facts_block),
+                    "",
+                ]
+            )
     parts.extend(
         [
             "Page content:",
@@ -313,6 +347,7 @@ def expand_articles_from_page(extraction: LinkExtraction, page_text: str) -> lis
             page_text=page_text or "",
             pin_article=pin_existing,
             wiki_article=wiki_existing,
+            wiki=wiki,
             profile=extraction.profile,
         )
         if raw is None:

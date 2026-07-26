@@ -54,5 +54,9 @@ def record_guess(round_: GameRound, guess_point: Point, distance: float) -> None
 
     is_correct = distance <= 0.0
     PhotoCoordinateGuess.objects.create(image_id=round_.image_id, guess_point=guess_point, is_correct=is_correct)
+    if is_correct:
+        from urbanlens.dashboard.services.facts.evidence import record_photo_coordinate_evidence
+
+        record_photo_coordinate_evidence(round_.image_id, guess_point)
     if is_correct and not round_.target_is_point:
         recompute_estimated_coordinates(round_.image_id)
