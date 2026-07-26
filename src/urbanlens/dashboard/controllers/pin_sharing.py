@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.connections import are_connections, get_connections
+from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.map_sharing import share_markup_map_with_profile
 from urbanlens.dashboard.services.share_provenance import find_profile_pin_near_location, record_share_exposure, resolve_and_stamp_origin_share
 from urbanlens.dashboard.services.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH, text_length_error
@@ -265,7 +266,8 @@ class PinShareCreateView(LoginRequiredMixin, View):
         else:
             bundled_count = 0
 
-        base_message = f"{sender.username} shared {pin.display_label} with you."
+        sender_name = resolve_visible_identity(recipient, sender)["display_name"]
+        base_message = f"{sender_name} shared {pin.display_label} with you."
         if bundled_count:
             base_message += f" It comes with {bundled_count} sub pin{'s' if bundled_count != 1 else ''}."
         if already_pinned:

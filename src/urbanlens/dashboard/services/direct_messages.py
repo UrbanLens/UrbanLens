@@ -174,11 +174,23 @@ def can_direct_message(sender: Profile, recipient: Profile) -> bool:
     return recipient.accepts_direct_messages_from(sender)
 
 
-def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
+def _payload_display_name(viewer: Profile | None, subject: Profile) -> str:
+    """Return the name a live DM payload may show to `viewer`."""
+    if viewer is not None and subject.pk == viewer.pk:
+        return "You"
+    if viewer is None:
+        return subject.username
+    return display_identity_for(viewer, subject)["display_name"]
+
+
+def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None = None) -> dict[str, Any]:
     """Serialize a message into the JSON payload pushed over the WebSocket.
 
     Args:
         message: The message to serialize.
+        viewer: Optional profile whose browser will receive the payload.
+            Human-visible identity fields are scoped to this viewer, while
+            routing fields (slugs/ids) stay stable for the live client.
 
     Returns:
         A JSON-serializable dict; ``sender_slug``/``recipient_slug`` let the
@@ -197,7 +209,7 @@ def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
             quoted_preview = "📷 Photo" if quoted.images.exists() else ("🗺️ Map" if quoted.markup_map_id else "Message")
         reply_to = {
             "id": quoted.pk,
-            "sender_name": quoted.sender.username,
+            "sender_name": _payload_display_name(viewer, quoted.sender),
             "preview": quoted_preview,
             "ciphertext": quoted.ciphertext,
             "nonce": quoted.nonce,
@@ -213,7 +225,7 @@ def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
         "key_version": message.key_version,
         "created": message.created.isoformat(),
         "sender_slug": message.sender.slug or "",
-        "sender_name": message.sender.username,
+        "sender_name": _payload_display_name(viewer, message.sender),
         "recipient_slug": message.recipient.slug or "",
         "images": [{"id": image.pk, "url": image.image.url} for image in message.images.all()],
         "images_revealed": message.images_revealed,
@@ -243,14 +255,16 @@ def _broadcast_direct_message(message: DirectMessage) -> None:
     Args:
         message: The freshly created message.
     """
-    payload = serialize_direct_message(message)
-    groups = {direct_message_group_name(message.sender_id), direct_message_group_name(message.recipient_id)}
+    payloads = {
+        direct_message_group_name(message.sender_id): serialize_direct_message(message, viewer=message.sender),
+        direct_message_group_name(message.recipient_id): serialize_direct_message(message, viewer=message.recipient),
+    }
 
     def _send() -> None:
         layer = get_channel_layer()
         if layer is None:
             return
-        for group in groups:
+        for group, payload in payloads.items():
             try:
                 async_to_sync(layer.group_send)(group, {"type": "dm.message", "message": payload})
             except Exception:
