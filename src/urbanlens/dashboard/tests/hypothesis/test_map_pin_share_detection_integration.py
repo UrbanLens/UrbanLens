@@ -315,6 +315,8 @@ class MarkupMapShareCreateViewTests(_MapShareTestCase):
 
     def test_notification_masks_hidden_sender(self) -> None:
         _befriend(self.profiles["a"], self.profiles["b"])
+        self.users["a"].username = "hidden-sender"
+        self.users["a"].save(update_fields=["username"])
         self.profiles["a"].profile_visibility = VisibilityChoice.NO_ONE
         self.profiles["a"].save(update_fields=["profile_visibility"])
         source = self._map(zoom=16)
@@ -356,6 +358,8 @@ class PinShareCreateViewMapAttachmentTests(_MapShareTestCase):
 
     def test_notification_masks_hidden_sender(self) -> None:
         _befriend(self.profiles["a"], self.profiles["b"])
+        self.users["a"].username = "hidden-sender"
+        self.users["a"].save(update_fields=["username"])
         self.profiles["a"].profile_visibility = VisibilityChoice.NO_ONE
         self.profiles["a"].save(update_fields=["profile_visibility"])
         self.client.force_login(self.users["a"])
