@@ -12,6 +12,8 @@ regardless of caller.
 
 from __future__ import annotations
 
+import math
+
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
 from rest_framework import serializers
@@ -155,7 +157,7 @@ class SyncPinSerializer(serializers.Serializer):
     """Documents the pin payload shape served by the delta-sync endpoint.
 
     Schema-only: the actual payload is built by
-    ``services.pin_sync._serialize_sync_pin`` (the map payload plus sync-only
+    ``services.pin_sync.serialize_sync_pin`` (the map payload plus sync-only
     fields), never by this class - but the OpenAPI contract (and the Dart
     client generated from it) needs the shape spelled out.
     ``test_external_api_schema`` asserts these fields exactly match what the
@@ -197,6 +199,117 @@ class PinSyncResponseSerializer(serializers.Serializer):
     next_cursor = serializers.CharField(read_only=True, allow_null=True)
     sync_watermark = serializers.DateTimeField(read_only=True)
     total = serializers.IntegerField(read_only=True, allow_null=True)
+
+
+class PinNoteDetailSerializer(serializers.Serializer):
+    """One personal note, as nested in a pin-detail response (schema-only)."""
+
+    id = serializers.IntegerField(read_only=True)
+    text = serializers.CharField(read_only=True)
+    created = serializers.DateTimeField(read_only=True)
+
+
+class PinAliasDetailSerializer(serializers.Serializer):
+    """One alternate name, as nested in a pin-detail response (schema-only)."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    kind = serializers.CharField(read_only=True)
+
+
+class PinLinkDetailSerializer(serializers.Serializer):
+    """One external link, as nested in a pin-detail response (schema-only)."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    url = serializers.CharField(read_only=True)
+    wayback_url = serializers.CharField(read_only=True, allow_null=True)
+
+
+class PinCustomFieldDetailSerializer(serializers.Serializer):
+    """One custom field's value on this pin (schema-only).
+
+    ``value`` is deliberately untyped: its shape follows ``type`` (text,
+    number, date, time, a boolean checkbox, or a reference object) exactly
+    as ``CustomFieldValue.export_value()`` returns it.
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    type = serializers.CharField(read_only=True)
+    value = serializers.JSONField(read_only=True, allow_null=True)
+
+
+class PinSecurityDetailSerializer(serializers.Serializer):
+    """The 8 security-indicator fields shared by Pin and Wiki (schema-only)."""
+
+    fences = serializers.CharField(read_only=True)
+    alarms = serializers.CharField(read_only=True)
+    cameras = serializers.CharField(read_only=True)
+    security = serializers.CharField(read_only=True)
+    signs = serializers.CharField(read_only=True)
+    vps = serializers.CharField(read_only=True)
+    plywood = serializers.CharField(read_only=True)
+    locked = serializers.CharField(read_only=True)
+
+
+class PinDetailSerializer(SyncPinSerializer):
+    """Documents the full pin-detail response (schema-only).
+
+    A superset of :class:`SyncPinSerializer` - see
+    ``services.pin_detail.build_pin_detail``, the function that actually
+    builds this payload. ``test_pin_detail_contract`` asserts these fields
+    exactly match what that function really emits.
+    """
+
+    official_name = serializers.CharField(read_only=True, allow_null=True)
+    date_built = serializers.DateField(read_only=True, allow_null=True)
+    date_abandoned = serializers.DateField(read_only=True, allow_null=True)
+    date_last_active = serializers.DateField(read_only=True, allow_null=True)
+    security = PinSecurityDetailSerializer(read_only=True)
+    wiki_slug = serializers.CharField(read_only=True, allow_null=True)
+    cover_photo_url = serializers.CharField(read_only=True, allow_null=True)
+    boundary = serializers.JSONField(read_only=True, allow_null=True)
+    notes = PinNoteDetailSerializer(many=True, read_only=True)
+    aliases = PinAliasDetailSerializer(many=True, read_only=True)
+    links = PinLinkDetailSerializer(many=True, read_only=True)
+    custom_fields = PinCustomFieldDetailSerializer(many=True, read_only=True)
+    note_count = serializers.IntegerField(read_only=True)
+    alias_count = serializers.IntegerField(read_only=True)
+    link_count = serializers.IntegerField(read_only=True)
+
+
+class PinUpdateSerializer(serializers.Serializer):
+    """Validates an untrusted pin-update payload.
+
+    Mirrors what the internal ``PinViewSet``/map-drag flow can already do
+    (rename, re-icon, move, log a visit date) plus one addition the mobile
+    app needs that the internal surface has no single endpoint for:
+    ``parent_id``, to detach a pin (``null``) or re-parent it under another
+    of the caller's own pins (its uuid). Coordinates, when present, must
+    both be present and non-null - a pin can't be moved to "half a point".
+    """
+
+    name = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
+    icon = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
+    last_visited = serializers.DateTimeField(required=False, allow_null=True)
+    latitude = serializers.FloatField(required=False, allow_null=True, min_value=-90, max_value=90)
+    longitude = serializers.FloatField(required=False, allow_null=True, min_value=-180, max_value=180)
+    #: A pin uuid to become this pin's new parent, or null to detach it to a
+    #: top-level pin of its own. Omit entirely to leave the parent untouched.
+    parent_id = serializers.UUIDField(required=False, allow_null=True)
+
+    def validate(self, attrs: dict) -> dict:
+        """Coordinates move together or not at all, and must be finite."""
+        has_lat = "latitude" in attrs
+        has_lng = "longitude" in attrs
+        if has_lat != has_lng:
+            raise serializers.ValidationError("Provide both latitude and longitude together.")
+        if has_lat and (attrs["latitude"] is None or attrs["longitude"] is None):
+            raise serializers.ValidationError("latitude and longitude cannot be null.")
+        if has_lat and not (math.isfinite(attrs["latitude"]) and math.isfinite(attrs["longitude"])):
+            raise serializers.ValidationError("latitude and longitude must be finite numbers.")
+        return attrs
 
 
 class TombstoneSerializer(serializers.Serializer):

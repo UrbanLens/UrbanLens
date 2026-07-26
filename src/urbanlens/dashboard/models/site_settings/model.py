@@ -422,6 +422,20 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(1), MaxValueValidator(365)],
     )
 
+    # --- Boundary layer ---
+
+    boundary_cache_days = IntegerField(
+        default=60,
+        help_text=(
+            "How many days to cache a location's generated property/building boundary before refreshing it in the "
+            "background (REData, Overpass, Overture, Microsoft, Google). Parcel geometry rarely changes, and REData "
+            "already caches upstream, so a long cache avoids unnecessary provider calls. A stale boundary is still "
+            "served immediately while the refresh runs in the background."
+        ),
+        verbose_name="Boundary cache (days)",
+        validators=[MinValueValidator(1), MaxValueValidator(365)],
+    )
+
     # --- Database backups ---
 
     backup_enabled = BooleanField(
@@ -623,6 +637,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(backup_retention__gte=1), name="backup_retention_gte_1"),
             CheckConstraint(condition=Q(google_places_cache_days__gte=1), name="google_places_cache_days_gte_1"),
             CheckConstraint(condition=Q(external_data_cache_days__gte=1), name="external_data_cache_days_gte_1"),
+            CheckConstraint(condition=Q(boundary_cache_days__gte=1), name="boundary_cache_days_gte_1"),
             CheckConstraint(condition=Q(storage_quota_gb__gte=0), name="storage_quota_gb_gte_0"),
             CheckConstraint(condition=Q(email_limit_per_hour__gte=0), name="email_limit_per_hour_gte_0"),
             CheckConstraint(condition=Q(email_limit_per_day__gte=0), name="email_limit_per_day_gte_0"),

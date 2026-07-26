@@ -316,12 +316,18 @@ def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = N
 
     Returns:
         A JSON-serializable dict; ``group_uuid`` lets the frontend route the
-        payload to the right open conversation.
+        payload to the right open conversation. ``sender_slug`` is blanked
+        whenever the sender's name is masked - the raw slug would otherwise
+        let the recipient look the "masked" sender up directly, defeating
+        the point of masking the name in the first place.
     """
     if viewer is None or viewer.pk == message.sender_id:
         sender_name = message.sender.username
+        sender_slug = message.sender.slug or ""
     else:
-        sender_name = resolve_visible_identity(viewer, message.sender)["display_name"]
+        identity = resolve_visible_identity(viewer, message.sender)
+        sender_name = identity["display_name"]
+        sender_slug = "" if identity["is_masked"] else (message.sender.slug or "")
     return {
         "type": "group_message",
         "id": message.pk,
@@ -332,7 +338,7 @@ def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = N
         "nonce": message.nonce,
         "key_version": message.key_version,
         "created": message.created.isoformat(),
-        "sender_slug": message.sender.slug or "",
+        "sender_slug": sender_slug,
         "sender_name": sender_name,
         # Shares need the full server-rendered card - the client re-fetches
         # the thread partial when this is set (same contract as 1:1 has_share).

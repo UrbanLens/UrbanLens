@@ -1,0 +1,18 @@
+{% comment %}
+The pin-merge suggestion queue - proposals that two of the profile's own pins
+are the same place and should become one. Re-fetched via the `refreshQueue`
+event after any accept/reject action, on this page or the pin_suggestions
+queue above it, so either action keeps both sections in sync.
+
+Context:
+  merge_suggestion_cards - list of {"suggestion": PinMergeSuggestion, "conflicts": [MergeFieldConflict, ...]}
+{% endcomment %}
+{% if merge_suggestion_cards %}
+<div class="pin-merge-suggestions-grid" id="pin-merge-suggestions-grid">
+    {% for card in merge_suggestion_cards %}
+    {% with suggestion=card.suggestion conflicts=card.conflicts %}
+    {% include "dashboard/partials/memories/_pin_merge_suggestion_card.html" %}
+    {% endwith %}
+    {% endfor %}
+</div>
+{% endif %}

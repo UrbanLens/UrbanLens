@@ -29,6 +29,8 @@ from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
 from urbanlens.dashboard.models.markup.share import MarkupMapShare
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinShareStatus
+from urbanlens.dashboard.models.profile.meta import VisibilityChoice
+from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.map_pin_share_detection import detect_shared_pins, sync_pin_inferences
 from urbanlens.dashboard.services.map_sharing import clone_markup_map, share_markup_map_with_profile
 
@@ -311,6 +313,24 @@ class MarkupMapShareCreateViewTests(_MapShareTestCase):
         # record a detected PinShare via the same central hook.
         self.assertTrue(PinShare.objects.filter(pin=self.pin, to_profile=self.profiles["b"], origin=PinShareOrigin.MAP_DETECTED).exists())
 
+    def test_notification_masks_hidden_sender(self) -> None:
+        """Regression: the notification text interpolated ``sender.username``
+        directly, bypassing the recipient-scoped masking every other identity
+        surface (thread renders, DM/group live payloads) already applies."""
+        _befriend(self.profiles["a"], self.profiles["b"])
+        self.users["a"].username = "hidden-sender"
+        self.users["a"].save(update_fields=["username"])
+        self.profiles["a"].profile_visibility = VisibilityChoice.NO_ONE
+        self.profiles["a"].save(update_fields=["profile_visibility"])
+        source = self._map(zoom=16)
+        self.client.force_login(self.users["a"])
+        response = self.client.post(reverse("markup_map.share.send", kwargs={"map_uuid": source.uuid}), {"profile_id": self.profiles["b"].pk})
+        self.assertEqual(response.status_code, 200)
+        notification = MarkupMapShare.objects.get(markup_map=source).notification
+        expected_name = resolve_visible_identity(self.profiles["b"], self.profiles["a"])["display_name"]
+        self.assertIn(expected_name, notification.message)
+        self.assertNotIn(self.profiles["a"].username, notification.message)
+
 
 # -- PinShareCreateView map attachment ------------------------------------------------
 
@@ -338,3 +358,17 @@ class PinShareCreateViewMapAttachmentTests(_MapShareTestCase):
         self.assertEqual(response.status_code, 200)
         share = PinShare.objects.get(pin=self.pin, to_profile=self.profiles["b"])
         self.assertEqual(share.markup_map_id, own_map.pk)
+
+    def test_notification_masks_hidden_sender(self) -> None:
+        _befriend(self.profiles["a"], self.profiles["b"])
+        self.users["a"].username = "hidden-sender"
+        self.users["a"].save(update_fields=["username"])
+        self.profiles["a"].profile_visibility = VisibilityChoice.NO_ONE
+        self.profiles["a"].save(update_fields=["profile_visibility"])
+        self.client.force_login(self.users["a"])
+        response = self.client.post(reverse("pin.share.send", kwargs={"pin_slug": self.pin.slug}), {"profile_id": self.profiles["b"].pk})
+        self.assertEqual(response.status_code, 200)
+        notification = PinShare.objects.get(pin=self.pin, to_profile=self.profiles["b"]).notification
+        expected_name = resolve_visible_identity(self.profiles["b"], self.profiles["a"])["display_name"]
+        self.assertIn(expected_name, notification.message)
+        self.assertNotIn(self.profiles["a"].username, notification.message)

@@ -89,33 +89,36 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def generate_boundaries_for_location(location_id: int) -> bool:
-    """Generate the default property/building boundaries for a Location.
+    """Generate (or, if stale, refresh) the default property/building boundaries for a Location.
 
     Scheduled single-flight by ``schedule_location_boundary_generation`` (wiki
-    page) - the pin detail page uses the "boundary" panel source instead, which
-    calls the same ``generate_location_boundaries`` function.
+    page, and the pin detail page's stale-refresh path) - the pin detail
+    page's first-ever generation uses the "boundary" panel source instead,
+    which calls the same ``generate_location_boundaries`` function.
 
     Args:
         location_id: PK of the Location.
 
     Returns:
-        True when the location existed and generation ran (or had already run).
+        True when the location existed and generation ran (or was already
+        fresh).
     """
     from django.core.cache import cache
 
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, generate_location_boundaries
+    from urbanlens.dashboard.services.locations.boundaries import generate_location_boundaries, generation_lock_key, generation_status
 
     try:
         location = Location.objects.filter(pk=location_id).first()
         if location is None:
             logger.info("generate_boundaries_for_location: location %s no longer exists", location_id)
             return False
-        if not boundary_generation_ran(location):
+        ran, stale = generation_status(location)
+        if not ran or stale:
             generate_location_boundaries(location)
         return True
     finally:
-        cache.delete(f"ul_boundary_generation_{location_id}")
+        cache.delete(generation_lock_key(location_id))
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})

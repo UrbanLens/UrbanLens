@@ -24,11 +24,13 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.direct_message_shares import recommend_friend_in_message, share_pin_in_message
 from urbanlens.dashboard.services.direct_messages import create_direct_message, serialize_direct_message
+from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
 
 
 def _profile() -> Profile:
@@ -98,6 +100,18 @@ class SharePinBroadcastOrderingTests(TestCase):
     def test_message_without_share_has_no_has_share_flag(self) -> None:
         message = create_direct_message(self.sender, self.recipient, "hi")
         self.assertFalse(serialize_direct_message(message)["has_share"])
+
+    def test_pin_share_notification_masks_hidden_sender(self) -> None:
+        """Regression: create_pin_share's notification interpolated
+        ``sender.username`` directly instead of the recipient-scoped masked
+        name every other identity surface already uses."""
+        Profile.objects.filter(pk=self.sender.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
+        self.sender.refresh_from_db()
+        share_pin_in_message(self.sender, self.recipient, self.pin, "check this out")
+        notification = NotificationLog.objects.get(pin_share__to_profile=self.recipient)
+        expected_name = resolve_visible_identity(self.recipient, self.sender)["display_name"]
+        self.assertIn(expected_name, notification.message)
+        self.assertNotIn(self.sender.username, notification.message)
 
 
 class RecommendFriendBroadcastOrderingTests(TestCase):

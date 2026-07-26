@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 _RESTORABLE_FIELDS = ("name", "icon", "criteria", "order")
 
@@ -23,7 +26,7 @@ class SavedFilterUndoHandler(UndoHandler):
     model_label = MODEL_LABEL
 
     @classmethod
-    def serialize(cls, instances: list[SavedFilter]) -> list[dict[str, Any]]:
+    def serialize(cls, instances: Sequence[SavedFilter]) -> list[dict[str, Any]]:
         return [cls._serialize_one(saved_filter) for saved_filter in instances]
 
     @classmethod
@@ -32,7 +35,7 @@ class SavedFilterUndoHandler(UndoHandler):
         return {"fields": fields, "profile_id": saved_filter.profile_id}
 
     @classmethod
-    def describe(cls, instances: list[SavedFilter]) -> str:
+    def describe(cls, instances: Sequence[SavedFilter]) -> str:
         return describe_batch("Saved filter", "saved filters", [f.name for f in instances])
 
     @classmethod

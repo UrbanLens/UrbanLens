@@ -44,6 +44,7 @@ from urbanlens.dashboard.services.group_chats import (
     group_thread_page,
     remove_group_member,
     rename_group_chat,
+    serialize_group_message,
     share_pin_in_group_message,
     unread_group_conversation_count,
 )
@@ -263,6 +264,42 @@ class CreateGroupMessageTests(TestCase):
         self.assertIsNotNone(message.deleted_at)
         self.assertEqual(message.tombstone_text_for(self.member.pk), "Message deleted")
         self.assertIsNone(message.tombstone_text_for(self.creator.pk))
+
+
+class GroupMessageLiveIdentityPrivacyTests(TestCase):
+    """serialize_group_message must not leak a masked sender's real identity.
+
+    Regression: the name was already resolved through resolve_visible_identity,
+    but ``sender_slug`` was still copied from the raw sender unconditionally -
+    so a viewer who couldn't see the masked sender's profile could still read
+    their real slug directly off the live WebSocket payload.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.viewer = _profile()
+        self.hidden_sender = _profile()
+        Profile.objects.filter(pk=self.hidden_sender.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
+        self.hidden_sender.refresh_from_db()
+        self.group = create_group_chat(self.viewer, "Crew", [self.hidden_sender])
+
+    def test_serializer_masks_hidden_sender_name_and_slug_for_viewer(self) -> None:
+        message = create_group_message(self.hidden_sender, self.group, "Found something")
+
+        payload = serialize_group_message(message, viewer=self.viewer)
+
+        self.assertEqual(payload["sender_name"], "Member")
+        self.assertEqual(payload["sender_slug"], "")
+        self.assertNotEqual(payload["sender_name"], self.hidden_sender.username)
+        self.assertNotEqual(payload["sender_slug"], self.hidden_sender.slug)
+
+    def test_serializer_keeps_real_identity_for_the_senders_own_view(self) -> None:
+        message = create_group_message(self.hidden_sender, self.group, "Found something")
+
+        payload = serialize_group_message(message, viewer=self.hidden_sender)
+
+        self.assertEqual(payload["sender_name"], self.hidden_sender.username)
+        self.assertEqual(payload["sender_slug"], self.hidden_sender.slug)
 
 
 class GroupPinShareTests(TestCase):

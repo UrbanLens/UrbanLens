@@ -589,10 +589,6 @@
 </script>
 
 {# -- New-user pin-suggestions intro dialog ------------------------------- #}
-{# Shown at most once per profile - see Profile.map_pin_suggestions_intro_seen
-   and controllers.maps.MapController.view_map, which marks it seen the
-   moment show_pin_suggestions_intro is computed True (whichever button the
-   user clicks below). #}
 <dialog id="pin-suggestions-intro-dialog" class="ul-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Suggested pins near you" %}
     <div class="ul-dialog-body">

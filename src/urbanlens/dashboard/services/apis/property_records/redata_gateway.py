@@ -170,6 +170,11 @@ class RedataGateway(Gateway):
         for key in ("parcel_geometry", "building_geometry"):
             if key in body:
                 payload[key] = body[key]
+        # Also a top-level field (see lookup_parcel_uuid) - surfaced here too so
+        # callers who already called lookup_parcel don't need a second,
+        # identically-parametered request just to get the uuid.
+        if "uuid" in body:
+            payload["uuid"] = body["uuid"]
         return payload
 
     def lookup_parcel_uuid(self, latitude: float, longitude: float, *, situs_address: str = "", apn: str = "") -> str | None:

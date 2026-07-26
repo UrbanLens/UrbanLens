@@ -7,11 +7,24 @@ ambiguity always resolves to property. There is no static-bbox fallback any
 more: when nothing is found, the effective property boundary is the default
 circle around the location's coordinates (see ``Boundary.effective_polygon``),
 and a missing building boundary simply means "no known building".
+
+A location's generated boundary isn't cached forever - it's refreshed lazily
+after ``SiteSettings.boundary_cache_days`` (see ``boundary_generation_stale``),
+the same stale-while-revalidate shape every other page-view-triggered refresh
+in this codebase already uses (``LocationCache.is_stale``/``get_fresh``):
+the previously-generated geometry is served immediately, a background refresh
+is single-flight-scheduled, and the next request (or a client-side poll of an
+already-open page) picks up the new geometry once it lands. Unlike
+``LocationCache``, background enrichment (``BoundaryEnrichmentSource``) never
+proactively revisits a stale row - the same "refreshing stale rows stays the
+job of the lazy, request-triggered machinery" rule that source documents for
+every other cache.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from datetime import timedelta
 import logging
 from typing import TYPE_CHECKING
 
@@ -164,8 +177,42 @@ class BoundaryProviderChain:
         return resolved.property_polygon or resolved.building_polygon
 
 
+def generation_lock_key(location_id: int) -> str:
+    """Cache key for the single-flight lock guarding one Location's generation run.
+
+    Shared between :func:`schedule_location_boundary_generation` (which
+    claims it) and ``tasks.generate_boundaries_for_location`` (which releases
+    it in a ``finally``), so the two can never drift out of sync on the exact
+    key string.
+    """
+    return f"ul_boundary_generation_{location_id}"
+
+
+def generation_status(location: Location) -> tuple[bool, bool]:
+    """Fetch the location-default property row once; return (ran, stale).
+
+    ``boundary_generation_ran`` and ``boundary_generation_stale`` answer
+    related questions off the exact same row, so every caller that needs both
+    (``schedule_location_boundary_generation``, the refresh gate in
+    ``tasks.generate_boundaries_for_location``) goes through here instead of
+    calling both public functions and fetching the row twice.
+    """
+    from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+    from urbanlens.dashboard.models.site_settings import SiteSettings
+
+    row = Boundary.objects.row_for_location(location, BoundaryType.PROPERTY)
+    if row is None or row.generated_at is None:
+        return False, False
+    max_age_days = SiteSettings.get_current().boundary_cache_days
+    stale = timezone.now() - row.generated_at > timedelta(days=max_age_days)
+    return True, stale
+
+
 def boundary_generation_ran(location: Location) -> bool:
-    """True when the provider chain has already run for a Location.
+    """True when the provider chain has already run for a Location at least once.
+
+    Says nothing about freshness - a location whose generation is years old
+    still returns True here. See :func:`boundary_generation_stale` for that.
 
     Args:
         location: The Location to check.
@@ -173,18 +220,39 @@ def boundary_generation_ran(location: Location) -> bool:
     Returns:
         True when the location-default property row exists with ``generated_at`` set.
     """
-    from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+    return generation_status(location)[0]
 
-    row = Boundary.objects.row_for_location(location, BoundaryType.PROPERTY)
-    return row is not None and row.generated_at is not None
+
+def boundary_generation_stale(location: Location) -> bool:
+    """True when a Location's generated boundary is older than the site's cache window.
+
+    A never-generated location is not "stale" - it's "pending" (see
+    :func:`boundary_generation_ran`); callers check that first. This only
+    answers the separate question of whether an *existing* generation is due
+    for a background refresh.
+
+    Args:
+        location: The Location to check.
+
+    Returns:
+        True when the location-default property row's ``generated_at`` is
+        older than ``SiteSettings.boundary_cache_days``. False when never
+        generated, or still fresh.
+    """
+    return generation_status(location)[1]
 
 
 def schedule_location_boundary_generation(location: Location, profile=None) -> bool:
     """Ensure default-boundary generation is in flight for a Location, single-flight.
 
-    Used by pages that aren't pin-scoped (the wiki page); pin detail pages go
-    through the "boundary" panel source, which shares the same generation
-    function and idempotence marker.
+    Covers both a never-generated location (nothing to show yet - callers
+    surface this as "pending") and a stale one due for a background refresh
+    (callers already have a - possibly stale - boundary to show, and should
+    surface this as "refreshing" instead, never as "pending"). Used by pages
+    that aren't pin-scoped (the wiki page); pin detail pages go through the
+    "boundary" panel source for the never-generated case, and this function
+    directly for the stale-refresh case, since the panel source's own
+    single-flight/readiness plumbing has no stale-but-serve concept.
 
     Args:
         location: The Location to generate boundaries for.
@@ -193,7 +261,8 @@ def schedule_location_boundary_generation(location: Location, profile=None) -> b
 
     Returns:
         True when generation is in flight (newly scheduled or already
-        running), False when it already ran or is not allowed.
+        running), False when it's already fresh, not allowed, or the Celery
+        broker was unreachable.
     """
     from django.core.cache import cache
 
@@ -201,13 +270,20 @@ def schedule_location_boundary_generation(location: Location, profile=None) -> b
         return False
     if profile is not None and not profile.external_apis_enabled:
         return False
-    if boundary_generation_ran(location):
+    ran, stale = generation_status(location)
+    if ran and not stale:
         return False
-    if cache.add(f"ul_boundary_generation_{location.pk}", 1, 600):
+    lock_key = generation_lock_key(location.pk)
+    if cache.add(lock_key, 1, 600):
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import generate_boundaries_for_location
 
-        safely_enqueue_task(generate_boundaries_for_location, location.pk)
+        if safely_enqueue_task(generate_boundaries_for_location, location.pk) is None:
+            # Broker down: release the lock we just claimed so the next poll
+            # retries the enqueue instead of waiting out the 600s lock behind
+            # a task that was never actually queued (mirrors schedule_panel_fetch).
+            cache.delete(lock_key)
+            return False
     return True
 
 
@@ -216,9 +292,17 @@ def generate_location_boundaries(location: Location, *, name: str | None = None)
 
     Writes both location-default Boundary rows (property and building),
     stamping ``generated_at`` even when nothing was found so the chain is not
-    re-run on every page view. ``generated_polygon`` is only ever written when
-    currently empty, via a queryset ``update()``, so this can never clobber
-    geometry landed concurrently. The one deliberate exception is boundary
+    re-run on every page view (until it goes stale - see
+    ``boundary_generation_stale``). ``generated_polygon`` is overwritten
+    whenever this run's chain actually found a polygon - both on first
+    generation and on every later refresh, so a refresh can replace a stale
+    circle-fallback or an earlier provider's answer with better data. A run
+    that finds nothing leaves a previously-generated polygon alone rather than
+    erasing good data over a transient provider hiccup. This is still safe
+    against concurrent generation for the same Location: nothing here reads
+    the row's prior geometry before deciding what to write, and the caller-side
+    single-flight lock (``schedule_location_boundary_generation``) keeps
+    concurrent runs rare regardless. The one deliberate exception is boundary
     voting: when votes exist, ``apply_winning_boundary`` overwrites the
     canonical property polygon with the winning candidate's - both are
     externally-sourced geometry, so the "never let user drawings into
@@ -245,7 +329,7 @@ def generate_location_boundaries(location: Location, *, name: str | None = None)
         row, _created = Boundary.objects.get_or_create_location_default(location, boundary_type)
         updates: dict = {"generated_at": now, "updated": now}
         polygon = resolved.polygon_for(boundary_type)
-        if polygon is not None and row.generated_polygon is None:
+        if polygon is not None:
             updates["generated_polygon"] = polygon
         Boundary.objects.filter(pk=row.pk).update(**updates)
 

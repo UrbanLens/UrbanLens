@@ -56,6 +56,16 @@
         {% endif %}
         {% endif %}
 
+        {% if merge_suggestions_count %}
+        <h2 class="pin-merge-suggestions-section-title">Possible duplicate pins</h2>
+        <div id="pin-merge-suggestions-wrap"
+             hx-get="{% url 'memories.locations.merge.queue' %}"
+             hx-trigger="refreshQueue from:body"
+             hx-swap="innerHTML">
+            {% include "dashboard/partials/memories/_pin_merge_suggestions_queue.html" %}
+        </div>
+        {% endif %}
+
         <div id="pin-suggestions-wrap"
              hx-get="{% url 'memories.locations.queue' %}"
              hx-trigger="refreshQueue from:body"

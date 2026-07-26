@@ -19,6 +19,8 @@ from urbanlens.dashboard.services.undo import handlers as _handlers
 from urbanlens.dashboard.services.undo.base import get_handler
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from django.db.models import Model, QuerySet
 
     from urbanlens.dashboard.models.profile.model import Profile
@@ -30,7 +32,7 @@ class UndoExpiredError(Exception):
     """Raised when an UndoAction is past its retention window."""
 
 
-def stash_for_undo(model_label: str, instances: list[Model], profile: Profile) -> UndoAction:
+def stash_for_undo(model_label: str, instances: Sequence[Model], profile: Profile) -> UndoAction:
     """Serialize ``instances`` and index them for a profile's undo history.
 
     Must be called before the instances are deleted.

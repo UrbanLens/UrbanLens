@@ -8,7 +8,10 @@ serialize/restore logic. Importing ``services.undo.handlers`` (done once by
 from __future__ import annotations
 
 import abc
-from typing import Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 
 class UndoHandler(abc.ABC):
@@ -27,12 +30,12 @@ class UndoHandler(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def serialize(cls, instances: list[Any]) -> list[dict[str, Any]]:
+    def serialize(cls, instances: Sequence[Any]) -> list[dict[str, Any]]:
         """Capture a JSON-safe snapshot of ``instances``. Call before deleting them."""
 
     @classmethod
     @abc.abstractmethod
-    def describe(cls, instances: list[Any]) -> str:
+    def describe(cls, instances: Sequence[Any]) -> str:
         """Return a short human-readable label for the undo history list."""
 
     @classmethod

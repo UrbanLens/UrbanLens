@@ -35,6 +35,14 @@ strictly before :data:`LEGACY_COORDINATE_CUTOFF` are ever moved; a pin created o
 or after the cutoff was placed by the corrected code and is left alone, as are
 other users' pins and the shared ``GooglePlace``/CID rows.
 
+When the corrected coordinates land on a Location the profile already has a
+*different* pin for (moving the legacy pin there would collide with
+``db_pin_unique_location_per_profile``), this raises a
+:class:`~urbanlens.dashboard.models.pin_merge_suggestions.model.PinMergeSuggestion`
+instead of moving anything - see :mod:`services.pin_merge_suggestions` -
+proposing the user merge the legacy pin into the one that's already correctly
+placed, with that correct pin always preselected as the survivor.
+
 **Remove this module together with its call sites in
 ``services.apis.locations.google.maps`` (each marked with a matching TEMPORARY
 comment) once every user has had the chance to re-import their pins.**
@@ -169,9 +177,10 @@ def repair_legacy_pin_coordinates(
 
     Returns:
         The pin that was moved, or None when nothing matched, the match was
-        already in the right place, or the move could not be made safely - in
-        every one of which cases the caller should fall back to its normal
-        create-or-merge path.
+        already in the right place, the move could not be made safely, or a
+        merge suggestion was raised instead (a collision with an existing pin
+        at the corrected location) - in every one of which cases the caller
+        should fall back to its normal create-or-merge path.
     """
     correct = _as_valid_coordinates(latitude, longitude)
     if correct is None:
@@ -194,10 +203,29 @@ def repair_legacy_pin_coordinates(
 
     # Moving onto a Location this profile already has a pin for would violate
     # db_pin_unique_location_per_profile. Leave the legacy pin where it is and
-    # let the caller merge into the pin that's already correctly placed; merging
-    # the two is a user decision, not something an import should do silently.
-    if Pin.objects.filter(profile=profile, location=correct_location).exclude(pk=candidate.pk).exists():
-        logger.info("Legacy coordinate repair skipped pin %s - profile already has a pin at the corrected location.", candidate.pk)
+    # suggest merging it into the pin that's already correctly placed instead -
+    # merging the two is a user decision, not something an import should do
+    # silently. See services.pin_merge_suggestions/services.pin_merge.
+    existing_pin = Pin.objects.filter(profile=profile, location=correct_location).exclude(pk=candidate.pk).first()
+    if existing_pin is not None:
+        from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion, PinMergeSuggestionOrigin
+
+        PinMergeSuggestion.objects.upsert(
+            profile=profile,
+            pin_a=candidate,
+            pin_b=existing_pin,
+            origin=PinMergeSuggestionOrigin.LEGACY_CID_COLLISION,
+            reason="A legacy pin's coordinates were corrected onto a location you already have a pin for.",
+            # Always the correctly-placed pin for this origin, never the
+            # general heuristic - the whole point of this repair is fixing
+            # coordinates, and the correct-location pin is definitionally right.
+            suggested_survivor=existing_pin,
+        )
+        logger.info(
+            "Legacy coordinate repair suggested merging pin %s into pin %s - profile already has a pin at the corrected location.",
+            candidate.pk,
+            existing_pin.pk,
+        )
         return None
 
     candidate.location = correct_location

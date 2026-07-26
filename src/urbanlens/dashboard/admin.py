@@ -90,6 +90,17 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             },
         ),
         (
+            "Boundary Layer",
+            {
+                "fields": ["boundary_cache_days"],
+                "description": (
+                    "How long a location's generated property/building boundary is cached before a background refresh. Parcel geometry "
+                    "rarely changes, so a long cache avoids unnecessary provider calls; a stale boundary is still shown immediately while "
+                    "it refreshes."
+                ),
+            },
+        ),
+        (
             "Notifications - Channels",
             {
                 "fields": ["notify_admin_email", "notify_gotify_url", "notify_gotify_token"],

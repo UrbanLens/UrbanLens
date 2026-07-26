@@ -791,3 +791,39 @@ but re-check them then rather than assuming:
    deferral machinery, not because it's correct as-is. Either give it the deferral path or delete
    the route and `import_pins_streaming` with it - a live URL that silently mis-places pins is
    worse than no URL.
+
+## `test_spotguessr_geo_bonus.py` leaks a real Valkey cache entry across tests (found 2026-07-26)
+
+Found while running the full Consensus/SpotGuessr regression suite alongside the new Facts
+system tests (unrelated to Facts - `services/spotguessr/geo_bonus.py` was never touched).
+`BonusPointsForGuessTests::test_geocode_failure_earns_nothing_without_raising` fails with
+`AssertionError: 750 != 0` even run alone in its own file (`docker compose exec test-runner
+python -m pytest src/urbanlens/dashboard/tests/hypothesis/test_spotguessr_geo_bonus.py`, 1
+failed / 8 passed) - so it's not cross-file pollution, it's within-class.
+
+`bonus_points_for_guess` -> `_reverse_geocode_admin_cached` (`services/spotguessr/geo_bonus.py:79`)
+caches Nominatim's admin lookup in the real Valkey cache keyed by rounded coordinates, and the
+test class never clears that cache between tests. `test_matching_every_offered_tier_stacks_the_bonus`
+and `test_no_match_at_all_earns_nothing` run earlier in the same file against the same
+`guess_point = Point(-73.75, 42.65, ...)` used by the failing test, so whichever of those wrote a
+cached "match" result first is still there when the geocode-failure test runs - the mocked
+`NominatimGateway` returning `None` never gets consulted because the cache short-circuits it.
+Fix is a `self.enterContext` cache-clearing fixture (or `cache.clear()` in `setUp`) in
+`BonusPointsForGuessTests`, matching how other Valkey-cache-touching test classes in this suite
+already reset between tests.
+
+
+- **`dev.urbanlens.org` sits behind Cloudflare, which caches everything under `/static/...`
+  (compiled `style.css`, `map-annotations.js`, `article-wysiwyg.js`, etc.) for 4 hours
+  (`Cache-Control: max-age=14400`), keyed on the exact URL - these files have no cache-busting
+  hash in their filename, so a fresh rebuild+redeploy does NOT make the live site serve the new
+  CSS/JS immediately; `curl -sD -` will show `cf-cache-status: HIT` and a `last-modified` older
+  than the actual rebuild. A live browser check done shortly after deploying a CSS/JS-only change
+  can silently verify the OLD stale asset while looking like a pass (structural/HTML changes are
+  unaffected - Cloudflare doesn't cache the dynamic page response, only `/static/` files).
+  **Workaround for verification**: fetch the asset with a cache-busting query string
+  (`curl "https://dev.urbanlens.org/static/dashboard/style.css?cb=$(date +%s)"`) to force
+  `cf-cache-status: MISS` and confirm what's actually at the origin, or use Chrome DevTools
+  Protocol's `CSS.getMatchedStylesForNode` (via a Playwright CDP session) to see which rule a
+  live page actually applied if a rendered value looks unexpectedly stale. (This applies to the
+  public dev/staging/prod deployments, not the local docker-compose stack described above.)

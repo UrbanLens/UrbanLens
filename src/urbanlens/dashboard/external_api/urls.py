@@ -19,6 +19,10 @@ urlpatterns = [
     path("whoami/", views.WhoAmIView.as_view(), name="whoami"),
     path("pins/", views.PinsView.as_view(), name="pins"),
     path("pins/deleted/", views.PinTombstonesView.as_view(), name="pins.deleted"),
+    # Must stay after the two literal "pins/..." paths above - Django matches
+    # urlpatterns in order, and this generic slug segment would otherwise
+    # swallow both of them.
+    path("pins/<str:pin_slug>/", views.PinDetailView.as_view(), name="pins.detail"),
     path("pin-suggestions/", views.PinSuggestionsView.as_view(), name="pin_suggestions"),
     path("push-devices/", views.PushDevicesView.as_view(), name="push_devices"),
     path("push-devices/<uuid:device_uuid>/", views.PushDeviceDetailView.as_view(), name="push_devices.detail"),

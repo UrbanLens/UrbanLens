@@ -18,18 +18,32 @@ class GenerateBoundariesForLocationTaskTests(TestCase):
         self.assertFalse(result)
         generate.assert_not_called()
 
-    def test_skips_when_generation_already_ran(self) -> None:
+    def test_skips_when_generation_already_ran_and_still_fresh(self) -> None:
         from model_bakery import baker
 
         location = baker.make_recipe("dashboard.location")
         with (
-            mock.patch("urbanlens.dashboard.services.locations.boundaries.boundary_generation_ran", return_value=True),
+            mock.patch("urbanlens.dashboard.services.locations.boundaries.generation_status", return_value=(True, False)),
             mock.patch("urbanlens.dashboard.services.locations.boundaries.generate_location_boundaries") as generate,
         ):
             result = tasks.generate_boundaries_for_location(location.pk)
 
         self.assertTrue(result)
         generate.assert_not_called()
+
+    def test_regenerates_when_already_ran_but_stale(self) -> None:
+        """A stale row still gets refreshed - only a fresh one is skipped."""
+        from model_bakery import baker
+
+        location = baker.make_recipe("dashboard.location")
+        with (
+            mock.patch("urbanlens.dashboard.services.locations.boundaries.generation_status", return_value=(True, True)),
+            mock.patch("urbanlens.dashboard.services.locations.boundaries.generate_location_boundaries") as generate,
+        ):
+            result = tasks.generate_boundaries_for_location(location.pk)
+
+        self.assertTrue(result)
+        generate.assert_called_once_with(location)
 
 
 class PushTripToCalendarTaskTests(TestCase):

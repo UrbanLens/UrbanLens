@@ -1456,12 +1456,19 @@ function init(): void {
     // Boundary generation happens in a background task on first view (see
     // services/external_data.py) - while the server reports pending, poll
     // until the generated polygons land rather than blocking the page load.
+    // A previously-generated boundary also goes stale after a while (see
+    // SiteSettings.boundary_cache_days) - the server serves the last-known
+    // geometry immediately (already applied below) while refreshing it in
+    // the background, reporting that as "refreshing" rather than "pending"
+    // since there's already something on the map. Poll the same way in both
+    // cases so an already-open page redraws with the newer geometry once it
+    // lands, without ever blocking on it.
     function fetchBoundaries(attempt: number): void {
         fetch(boundaryApiUrl)
             .then((r) => r.json())
             .then((data) => {
                 applyBoundaryPayload(data);
-                if (data.pending && attempt < 30) {
+                if ((data.pending || data.refreshing) && attempt < 30) {
                     setTimeout(() => fetchBoundaries(attempt + 1), 2000);
                 }
             })
@@ -1595,7 +1602,7 @@ function init(): void {
                 // redraw from it outside active editing so in-progress vertex
                 // edits aren't clobbered.
                 if (exiting || !boundaryDrawControl) applyBoundaryPayload(data);
-                if (data.pending) fetchBoundaries(0);
+                if (data.pending || data.refreshing) fetchBoundaries(0);
                 if (!options.quiet) toast.success(geometry ? "Boundary saved." : "Boundary reset to the default.");
             })
             .catch((err) => toast.error(`Failed to save boundary: ${err.message}`));

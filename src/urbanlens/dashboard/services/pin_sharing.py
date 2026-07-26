@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Im
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.services.connections import are_connections
+from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.share_provenance import find_profile_pin_near_location, record_share_exposure, resolve_and_stamp_origin_share
 
 if TYPE_CHECKING:
@@ -76,7 +77,8 @@ def create_pin_share(sender: Profile, recipient: Profile, pin: Pin, *, message: 
         pref = DeliveryPreference.SITE
 
     if pref != DeliveryPreference.NONE:
-        base_message = f"{sender.username} shared {pin.display_label} with you."
+        sender_name = resolve_visible_identity(recipient, sender)["display_name"]
+        base_message = f"{sender_name} shared {pin.display_label} with you."
         if already_pinned:
             base_message += " You already have this location pinned."
         notification = NotificationLog.objects.create(

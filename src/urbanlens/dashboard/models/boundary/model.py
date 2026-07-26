@@ -50,9 +50,11 @@ class Boundary(abstract.DashboardModel):
         Shared, API-generated geometry for a physical place. One per
         (location, boundary_type). ``generated_polygon`` is filled lazily by
         the boundary provider chain; ``generated_at`` marks that the chain ran
-        (even when it found nothing). These rows are the only ones used for
-        point→location matching, and only via ``generated_polygon`` so a
-        user-drawn shape can never inflate a location's match area.
+        (even when it found nothing), and is periodically refreshed in the
+        background once it's older than ``SiteSettings.boundary_cache_days``
+        (see ``services.locations.boundaries``). These rows are the only ones
+        used for point→location matching, and only via ``generated_polygon``
+        so a user-drawn shape can never inflate a location's match area.
 
     Source candidate (location=<Location>, source="redata"|"overpass", pin=None, wiki=None, profile=None):
         A per-provider copy of a location's externally-sourced property
@@ -89,11 +91,16 @@ class Boundary(abstract.DashboardModel):
 
     # User-drawn boundary (clearable). None = fall back to generated_polygon.
     polygon = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)
-    # API-fetched boundary (cached). Written by the generation task, never cleared by users.
+    # API-fetched boundary (cached). Written by the generation task, never cleared by users -
+    # only ever replaced by a later generation run finding something new (see
+    # services.locations.boundaries.generate_location_boundaries).
     generated_polygon = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)
     # When the provider chain last ran for this row. A non-null value with a
     # null generated_polygon means "we looked and found nothing" - don't refetch
-    # on every page view.
+    # on every page view. Once older than SiteSettings.boundary_cache_days, the
+    # row is stale (see services.locations.boundaries.boundary_generation_stale)
+    # and due for a lazy, request-triggered background refresh - the existing
+    # geometry keeps being served in the meantime.
     generated_at = DateTimeField(null=True, blank=True)
     # Radius (metres) used for the property-circle fallback when no polygon exists.
     default_radius_meters = IntegerField(default=DEFAULT_RADIUS_METERS)

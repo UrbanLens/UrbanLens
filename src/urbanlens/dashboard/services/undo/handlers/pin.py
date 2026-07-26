@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
@@ -10,6 +10,9 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # Fields restored verbatim on undo. Deliberately excludes uuid/slug/created/updated
 # (regenerated fresh by Pin.save()) and the location/profile/wiki/parent_pin FKs
@@ -65,7 +68,7 @@ class PinUndoHandler(UndoHandler):
     model_label = MODEL_LABEL
 
     @classmethod
-    def serialize(cls, instances: list[Pin]) -> list[dict[str, Any]]:
+    def serialize(cls, instances: Sequence[Pin]) -> list[dict[str, Any]]:
         return [cls._serialize_one(pin) for pin in instances]
 
     @classmethod
@@ -83,7 +86,7 @@ class PinUndoHandler(UndoHandler):
         }
 
     @classmethod
-    def describe(cls, instances: list[Pin]) -> str:
+    def describe(cls, instances: Sequence[Pin]) -> str:
         return describe_batch("Pin", "pins", [p.effective_name for p in instances])
 
     @classmethod

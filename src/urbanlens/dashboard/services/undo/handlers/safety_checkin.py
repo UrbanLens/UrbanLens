@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner
 from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 _RESTORABLE_FIELDS = (
     "title",
@@ -72,7 +75,7 @@ class SafetyCheckinUndoHandler(UndoHandler):
     model_label = MODEL_LABEL
 
     @classmethod
-    def serialize(cls, instances: list[SafetyCheckin]) -> list[dict[str, Any]]:
+    def serialize(cls, instances: Sequence[SafetyCheckin]) -> list[dict[str, Any]]:
         return [cls._serialize_one(checkin) for checkin in instances]
 
     @classmethod
@@ -102,7 +105,7 @@ class SafetyCheckinUndoHandler(UndoHandler):
         }
 
     @classmethod
-    def describe(cls, instances: list[SafetyCheckin]) -> str:
+    def describe(cls, instances: Sequence[SafetyCheckin]) -> str:
         return describe_batch("Safety check-in", "safety check-ins", [c.title for c in instances])
 
     @classmethod

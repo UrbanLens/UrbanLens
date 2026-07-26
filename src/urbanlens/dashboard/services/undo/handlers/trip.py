@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 _RESTORABLE_FIELDS = (
     "name",
@@ -38,7 +41,7 @@ class TripUndoHandler(UndoHandler):
     model_label = MODEL_LABEL
 
     @classmethod
-    def serialize(cls, instances: list[Trip]) -> list[dict[str, Any]]:
+    def serialize(cls, instances: Sequence[Trip]) -> list[dict[str, Any]]:
         return [cls._serialize_one(trip) for trip in instances]
 
     @classmethod
@@ -57,7 +60,7 @@ class TripUndoHandler(UndoHandler):
         }
 
     @classmethod
-    def describe(cls, instances: list[Trip]) -> str:
+    def describe(cls, instances: Sequence[Trip]) -> str:
         return describe_batch("Trip", "trips", [t.name for t in instances])
 
     @classmethod

@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, ClassVar
 
+from django.db import transaction
 from django.urls import reverse
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
@@ -24,10 +25,12 @@ from urbanlens.dashboard.external_api.serializers import (
     ErrorSerializer,
     PinCreateResponseSerializer,
     PinCreateSerializer,
+    PinDetailSerializer,
     PinSuggestionCreateResponseSerializer,
     PinSuggestionCreateSerializer,
     PinSyncQuerySerializer,
     PinSyncResponseSerializer,
+    PinUpdateSerializer,
     PushDeviceRegisterSerializer,
     PushDeviceResponseSerializer,
     TombstoneSyncQuerySerializer,
@@ -36,9 +39,12 @@ from urbanlens.dashboard.external_api.serializers import (
 )
 from urbanlens.dashboard.external_api.throttling import ApiKeyRateThrottle
 from urbanlens.dashboard.models.account.model import ApiKeyScope
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin
 from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 from urbanlens.dashboard.services.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
+from urbanlens.dashboard.services.pin_detail import build_pin_detail
+from urbanlens.dashboard.services.pin_edit import PinHasChildrenError, PinReparentError, delete_pin, move_pin_to_coordinates, reparent_pin
 from urbanlens.dashboard.services.pin_suggestions import LocationHit, attach_suggestion_photos, ingest_location_hits
 from urbanlens.dashboard.services.pin_sync import InvalidSyncCursorError, StaleDeletedSinceError, sync_pins_page, sync_tombstones_page
 from urbanlens.dashboard.services.push import PushRegistrationError, register_device, unregister_device
@@ -191,6 +197,108 @@ class PinsView(ExternalApiView):
             },
             status=201 if result.created else 200,
         )
+
+
+class PinDetailView(ExternalApiView):
+    """GET the key owner's full pin detail; PATCH or DELETE it.
+
+    GET returns a superset of the sync feed's payload - description, dates,
+    security indicators, personal notes/aliases/links, custom fields, the
+    property boundary, the cover photo, and the discovered wiki slug (see
+    ``services.pin_detail.build_pin_detail``).
+
+    PATCH extends the same semantics as the internal ``PinViewSet``
+    (renaming, re-icon, a coordinate move that relinks the Location) plus
+    ``parent_id`` to detach (``null``) or re-parent a pin under another of
+    the caller's own pins - something no single internal endpoint exposes.
+
+    DELETE mirrors ``PinViewSet.destroy``: a pin with child pins requires an
+    explicit ``?children=delete`` or ``?children=keep``, refused with 409
+    otherwise; every deletion stages an Undo History entry and writes a
+    tombstone for sync clients.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.PINS_READ}),
+        "PATCH": frozenset({ApiKeyScope.PINS_WRITE}),
+        "DELETE": frozenset({ApiKeyScope.PINS_WRITE}),
+    }
+
+    def _get_pin(self, request: Request, pin_slug: str) -> Pin | None:
+        """The key owner's pin matching *pin_slug* (by slug or uuid), or None."""
+        return Pin.objects.slug_or_uuid(pin_slug).filter(profile__user=request.user).select_related("location", "profile", "parent_pin", "wiki", "cover_photo").first()
+
+    @extend_schema(responses={200: PinDetailSerializer, 404: ErrorSerializer})
+    def get(self, request: Request, pin_slug: str) -> Response:
+        """Return the key owner's full detail for one pin."""
+        pin = self._get_pin(request, pin_slug)
+        if pin is None:
+            return Response({"error": "No such pin."}, status=404)
+        return Response(build_pin_detail(pin, request.user.profile))
+
+    @extend_schema(request=PinUpdateSerializer, responses={200: PinDetailSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
+    def patch(self, request: Request, pin_slug: str) -> Response:
+        """Apply a partial update to one of the key owner's pins."""
+        pin = self._get_pin(request, pin_slug)
+        if pin is None:
+            return Response({"error": "No such pin."}, status=404)
+
+        serializer = PinUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        # Resolved before the transaction below so an unknown parent uuid never
+        # needs a rollback - nothing has been written yet at this point.
+        new_parent = None
+        if "parent_id" in data and data["parent_id"] is not None:
+            new_parent = Pin.objects.filter(uuid=data["parent_id"], profile=pin.profile).first()
+            if new_parent is None:
+                return Response({"error": "No such pin to set as parent."}, status=400)
+
+        try:
+            with transaction.atomic():
+                if "latitude" in data:
+                    move_pin_to_coordinates(pin, data["latitude"], data["longitude"])
+
+                update_fields: list[str] = []
+                if "name" in data:
+                    pin.name = (data["name"] or "").strip() or None
+                    pin.name_is_user_provided = bool(pin.name)
+                    update_fields += ["name", "name_is_user_provided"]
+                if "icon" in data:
+                    pin.icon = data["icon"] or None
+                    update_fields.append("icon")
+                if "last_visited" in data:
+                    pin.last_visited = data["last_visited"]
+                    update_fields.append("last_visited")
+                if update_fields:
+                    pin.save(update_fields=[*update_fields, "updated"])
+
+                if "parent_id" in data:
+                    # Raises on failure - propagating out of the atomic block rolls
+                    # back any coordinate/name/icon change already applied above.
+                    reparent_pin(pin, new_parent)
+        except PinReparentError as exc:
+            return Response({"error": str(exc)}, status=400)
+
+        return Response(build_pin_detail(pin, request.user.profile))
+
+    @extend_schema(responses={204: None, 404: ErrorSerializer, 409: ErrorSerializer})
+    def delete(self, request: Request, pin_slug: str) -> Response:
+        """Delete one of the key owner's pins, per ``PinViewSet.destroy`` semantics."""
+        pin = self._get_pin(request, pin_slug)
+        if pin is None:
+            return Response({"error": "No such pin."}, status=404)
+
+        children_mode = (request.query_params.get("children") or "").strip().lower()
+        try:
+            delete_pin(pin, children_mode=children_mode)
+        except PinHasChildrenError as exc:
+            return Response(
+                {"error": "This pin has child pins - resend with ?children=delete or ?children=keep.", "requires_children_decision": True, "children": exc.descendant_count},
+                status=409,
+            )
+        return Response(status=204)
 
 
 class PinSuggestionsView(ExternalApiView):

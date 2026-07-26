@@ -1,0 +1,90 @@
+{% comment %}
+A single pending PinMergeSuggestion card. Unlike a plain PinSuggestion card,
+this compares two of the profile's own EXISTING pins and asks which should
+survive - accept/reject post to memories.locations.merge.action and target
+this card by id, swapping outerHTML: a success response is empty (the card
+vanishes and a toast fires with a "View pin" link to the merged result), an
+error response (an unresolved conflict, or something going wrong) re-renders
+this same card with its form state intact plus an error toast.
+
+Context:
+  suggestion - the pending PinMergeSuggestion
+  conflicts  - list of MergeFieldConflict for this suggestion's two pins,
+               computed fresh at render time (services.pin_merge.plan_merge_conflicts)
+{% endcomment %}
+<article class="pin-merge-suggestion-card" id="pin-merge-suggestion-card-{{ suggestion.pk }}">
+    <p class="pin-merge-suggestion-card-reason">{{ suggestion.reason }}</p>
+
+    <form hx-post="{% url 'memories.locations.merge.action' suggestion.pk 'accept' %}"
+          hx-target="#pin-merge-suggestion-card-{{ suggestion.pk }}" hx-swap="outerHTML">
+        {% csrf_token %}
+        <div class="pin-merge-suggestion-choices">
+            <label class="pin-merge-suggestion-choice{% if suggestion.suggested_survivor_id == suggestion.pin_a_id %} is-recommended{% endif %}">
+                <input type="radio" name="survivor_pk" value="{{ suggestion.pin_a.pk }}"
+                       {% if suggestion.suggested_survivor_id == suggestion.pin_a_id %}checked{% endif %}>
+                <span class="pin-merge-suggestion-choice-body">
+                    <strong>{{ suggestion.pin_a.effective_name }}</strong>
+                    <span class="pin-merge-suggestion-choice-meta">
+                        {{ suggestion.pin_a.visit_history.count }} visit{{ suggestion.pin_a.visit_history.count|pluralize }}
+                        · {{ suggestion.pin_a.images.count }} photo{{ suggestion.pin_a.images.count|pluralize }}
+                    </span>
+                    {% if suggestion.suggested_survivor_id == suggestion.pin_a_id %}
+                    <span class="badge badge--muted">Recommended</span>
+                    {% endif %}
+                </span>
+            </label>
+            <span class="pin-merge-suggestion-vs">or</span>
+            <label class="pin-merge-suggestion-choice{% if suggestion.suggested_survivor_id == suggestion.pin_b_id %} is-recommended{% endif %}">
+                <input type="radio" name="survivor_pk" value="{{ suggestion.pin_b.pk }}"
+                       {% if suggestion.suggested_survivor_id == suggestion.pin_b_id %}checked{% endif %}>
+                <span class="pin-merge-suggestion-choice-body">
+                    <strong>{{ suggestion.pin_b.effective_name }}</strong>
+                    <span class="pin-merge-suggestion-choice-meta">
+                        {{ suggestion.pin_b.visit_history.count }} visit{{ suggestion.pin_b.visit_history.count|pluralize }}
+                        · {{ suggestion.pin_b.images.count }} photo{{ suggestion.pin_b.images.count|pluralize }}
+                    </span>
+                    {% if suggestion.suggested_survivor_id == suggestion.pin_b_id %}
+                    <span class="badge badge--muted">Recommended</span>
+                    {% endif %}
+                </span>
+            </label>
+        </div>
+        <p class="pin-merge-suggestion-card-caption">The pin you don't pick will be deleted; its visits, photos, and other data move onto the one you keep.</p>
+
+        {% if conflicts %}
+        <div class="pin-merge-suggestion-conflicts">
+            {% for conflict in conflicts %}
+            <div class="pin-merge-suggestion-conflict">
+                <p class="pin-merge-suggestion-conflict-label">{{ conflict.label }} - keep which one?</p>
+                <label class="pin-merge-suggestion-conflict-option">
+                    <input type="radio" name="resolution__{{ conflict.key }}" value="{{ suggestion.pin_a.pk }}" required>
+                    {{ suggestion.pin_a.effective_name }}'s ({{ conflict.pin_a_summary }})
+                </label>
+                <label class="pin-merge-suggestion-conflict-option">
+                    <input type="radio" name="resolution__{{ conflict.key }}" value="{{ suggestion.pin_b.pk }}" required>
+                    {{ suggestion.pin_b.effective_name }}'s ({{ conflict.pin_b_summary }})
+                </label>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <p class="pin-merge-suggestion-card-warning">
+            <i class="material-symbols-outlined" aria-hidden="true">warning</i>
+            Merging is final and can't be undone.
+        </p>
+
+        <div class="pin-merge-suggestion-card-actions">
+            <button type="submit" class="btn btn--sm btn--primary">
+                <i class="material-symbols-outlined">merge</i>
+                Merge pins
+            </button>
+            <button type="button" class="btn btn--sm btn--ghost"
+                    hx-post="{% url 'memories.locations.merge.action' suggestion.pk 'reject' %}"
+                    hx-target="#pin-merge-suggestion-card-{{ suggestion.pk }}" hx-swap="outerHTML">
+                <i class="material-symbols-outlined">cancel</i>
+                Not a match
+            </button>
+        </div>
+    </form>
+</article>

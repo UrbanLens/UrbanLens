@@ -4,13 +4,16 @@ root wiki by its creator before anyone else has viewed it; see Wiki.can_be_delet
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 _RESTORABLE_FIELDS = (
     "name",
@@ -77,7 +80,7 @@ class WikiUndoHandler(UndoHandler):
     model_label = MODEL_LABEL
 
     @classmethod
-    def serialize(cls, instances: list[Wiki]) -> list[dict[str, Any]]:
+    def serialize(cls, instances: Sequence[Wiki]) -> list[dict[str, Any]]:
         return [cls._serialize_one(wiki) for wiki in instances]
 
     @classmethod
@@ -93,7 +96,7 @@ class WikiUndoHandler(UndoHandler):
         }
 
     @classmethod
-    def describe(cls, instances: list[Wiki]) -> str:
+    def describe(cls, instances: Sequence[Wiki]) -> str:
         return describe_batch("Wiki", "wiki pages", [w.name for w in instances])
 
     @classmethod

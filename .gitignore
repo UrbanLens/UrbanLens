@@ -34,7 +34,7 @@ src/urbanlens/logs/*
 !.vscode/launch.json
 .favorites.json
 .coverage
-CLAUDE.md
+CLAUDE.local.md
 .claude/*.json
 .vscode/settings.json
 .cursor/

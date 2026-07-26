@@ -19,9 +19,10 @@ from model_bakery import baker
 from oauth2_provider.models import get_access_token_model, get_application_model
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.external_api.serializers import SyncPinSerializer
+from urbanlens.dashboard.external_api.serializers import PinDetailSerializer, SyncPinSerializer
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.pin_detail import build_pin_detail
 from urbanlens.dashboard.services.pin_sync import sync_pins_page
 
 Application = get_application_model()
@@ -54,7 +55,19 @@ class SyncPayloadContractTests(TestCase):
         create_pin_for_profile(profile, name="Contract", latitude=42.5, longitude=-73.5)
         page = sync_pins_page(profile)
         (payload,) = page.pins
-        self.assertEqual(set(payload), set(SyncPinSerializer().fields), "SyncPinSerializer and services.pin_sync._serialize_sync_pin have drifted apart - update both together.")
+        self.assertEqual(set(payload), set(SyncPinSerializer().fields), "SyncPinSerializer and services.pin_sync.serialize_sync_pin have drifted apart - update both together.")
+
+
+class PinDetailContractTests(TestCase):
+    """PinDetailSerializer (schema-only) must exactly match the real detail payload."""
+
+    def test_schema_serializer_fields_match_the_served_payload(self) -> None:
+        baker.make(User)  # first user auto-promoted to bootstrap site admin
+        user = baker.make(User)
+        profile = Profile.objects.get(user=user)
+        pin = create_pin_for_profile(profile, name="Contract", latitude=42.5, longitude=-73.5).pin
+        payload = build_pin_detail(pin, profile)
+        self.assertEqual(set(payload), set(PinDetailSerializer().fields), "PinDetailSerializer and services.pin_detail.build_pin_detail have drifted apart - update both together.")
 
 
 class OAuth2TokenAuthTests(TestCase):

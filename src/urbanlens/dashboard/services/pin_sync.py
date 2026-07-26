@@ -184,18 +184,21 @@ def sync_pins_page(
     has_more = len(rows) > limit
     rows = rows[:limit]
 
-    pins = [_serialize_sync_pin(service, pin) for pin in rows]
+    pins = [serialize_sync_pin(service, pin) for pin in rows]
     next_cursor = _encode_cursor(rows[-1].updated, rows[-1].pk) if has_more and rows else None
     return PinSyncPage(pins=pins, next_cursor=next_cursor, sync_watermark=watermark, total=total)
 
 
-def _serialize_sync_pin(service: MapPinPayloadService, pin: Pin) -> dict[str, Any]:
+def serialize_sync_pin(service: MapPinPayloadService, pin: Pin) -> dict[str, Any]:
     """The map payload shape plus the sync-only fields layered on top.
 
     Wraps rather than changes ``MapPinPayloadService.serialize`` - the map
     payload's shape is version-pinned by the web client's localStorage cache
     (``pin-cache.ts`` ``CACHE_VERSION``), so growing it here would force a
     frontend cache bump for fields only sync clients read.
+
+    Public (not ``pin_sync``-private) because ``services.pin_detail`` also
+    uses it as the base of the richer external-API pin-detail payload.
     """
     payload = service.serialize(pin)
     payload["pin_type"] = pin.pin_type
