@@ -24,6 +24,7 @@ from urbanlens.dashboard.models.notifications.meta import Importance, Notificati
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.connections import are_connections, get_connections
+from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.map_sharing import share_markup_map_with_profile
 from urbanlens.dashboard.services.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH, text_length_error
 
@@ -78,6 +79,7 @@ class MarkupMapShareCreateView(LoginRequiredMixin, View):
             return HttpResponse(length_error, status=400)
 
         share = MarkupMapShare.objects.create(markup_map=markup_map, from_profile=sender, to_profile=recipient, message=message)
+        sender_name = resolve_visible_identity(recipient, sender)["display_name"]
         notification = NotificationLog.objects.create(
             profile=recipient,
             source_profile=sender,
@@ -85,7 +87,7 @@ class MarkupMapShareCreateView(LoginRequiredMixin, View):
             importance=Importance.MEDIUM,
             notification_type=NotificationType.MAP_SHARED,
             title="Map shared with you",
-            message=f"{sender.username} shared a map with you.",
+            message=f"{sender_name} shared a map with you.",
             url=reverse("markup_map.share.detail", kwargs={"share_id": share.pk}),
         )
         share.notification = notification

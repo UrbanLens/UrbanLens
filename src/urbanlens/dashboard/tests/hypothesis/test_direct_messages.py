@@ -743,6 +743,54 @@ class NotificationChannelPreferenceTests(TestCase):
         self.assertIn(expected_name, notification.title)
 
 
+class LiveDirectMessageIdentityPayloadTests(TestCase):
+    """Live payloads must use the same identity masking as rendered threads."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.recipient = _profile()
+        _set_dm_visibility(self.recipient, VisibilityChoice.ANYONE)
+
+    def test_recipient_scoped_broadcast_masks_hidden_sender_and_quote_author(self) -> None:
+        """Regression: the DB-rendered thread masked a hidden sender, but the
+        WebSocket fan-out reused one raw payload for both participants. A live
+        reply could therefore expose the sender's username in the quote header
+        before refresh."""
+        from types import SimpleNamespace
+
+        from urbanlens.dashboard.services.direct_messages import direct_message_group_name, display_identity_for
+
+        Profile.objects.filter(pk=self.sender.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
+        self.sender.refresh_from_db()
+        original = create_direct_message(self.sender, self.recipient, "first", defer_broadcast=True)
+        sent_payloads = {}
+
+        def fake_async_to_sync(_func):
+            def send(group, event):
+                sent_payloads[group] = event["message"]
+
+            return send
+
+        with (
+            patch("urbanlens.dashboard.services.direct_messages.get_channel_layer", return_value=SimpleNamespace(group_send=lambda *args: None)),
+            patch("urbanlens.dashboard.services.direct_messages.async_to_sync", side_effect=fake_async_to_sync),
+            self.captureOnCommitCallbacks(execute=True),
+        ):
+            create_direct_message(self.sender, self.recipient, "reply", reply_to_id=original.pk)
+
+        recipient_payload = sent_payloads[direct_message_group_name(self.recipient.pk)]
+        expected_name = display_identity_for(self.recipient, self.sender)["display_name"]
+        self.assertEqual(recipient_payload["sender_name"], expected_name)
+        self.assertEqual(recipient_payload["reply_to"]["sender_name"], expected_name)
+        self.assertNotIn(self.sender.username, recipient_payload["sender_name"])
+        self.assertNotIn(self.sender.username, recipient_payload["reply_to"]["sender_name"])
+
+        sender_payload = sent_payloads[direct_message_group_name(self.sender.pk)]
+        self.assertEqual(sender_payload["sender_name"], "You")
+        self.assertEqual(sender_payload["reply_to"]["sender_name"], "You")
+
+
 class MessageTextAlertTests(TestCase):
     """The message_whatsapp/message_sms toggles actually deliver.
 
