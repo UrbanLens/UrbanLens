@@ -14,8 +14,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from urbanlens.dashboard.models.facts import registry
 from urbanlens.dashboard.models.facts.model import Fact, FactEvidence, FactSourceKind, FactSubjectType
+from urbanlens.dashboard.services.facts import registry
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import Point
@@ -79,6 +79,7 @@ def _get_or_create_fact(
         logger.warning("Ignoring evidence for unregistered fact key %r", key)
         return None
 
+    lookup: dict[str, Any]
     if location is not None:
         subject_type, lookup = FactSubjectType.LOCATION, {"location": location}
     elif wiki is not None:

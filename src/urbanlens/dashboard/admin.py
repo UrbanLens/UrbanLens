@@ -189,7 +189,7 @@ class FactEvidenceInline(admin.TabularInline):
     model = FactEvidence
     extra = 0
     fields = ["source_kind", "source_name", "get_value", "submitter", "submitter_trust_snapshot", "source_reliability", "superseded", "created"]
-    readonly_fields = fields
+    readonly_fields = ["source_kind", "source_name", "get_value", "submitter", "submitter_trust_snapshot", "source_reliability", "superseded", "created"]
     ordering = ["-created"]
 
     def has_add_permission(self, request: HttpRequest, obj=None) -> bool:

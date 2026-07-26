@@ -213,7 +213,7 @@ def _known_facts_block(wiki: Wiki) -> str:
     re-guessing or restating a conflicting value from the linked source. See
     ``services.facts.consumption.get_trusted_facts``.
     """
-    from urbanlens.dashboard.models.facts import registry
+    from urbanlens.dashboard.services.facts import registry
     from urbanlens.dashboard.services.facts.consumption import get_trusted_facts
 
     facts = get_trusted_facts(wiki=wiki)
