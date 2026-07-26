@@ -1,0 +1,484 @@
+// Consensus - wiki-data-completion game: gameplay, competitive lobby, and chat.
+// Mirrors _spotguessr.scss/_trivia.scss's structure and reuses the sitewide
+// card/button/panel base classes - only Consensus-specific layout lives here.
+@use 'variables' as *;
+
+.consensus-page {
+    max-width: 900px;
+    margin: 1.25rem auto;
+    padding: 0 1rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+
+    // Author CSS always beats the UA stylesheet's [hidden] { display: none },
+    // regardless of specificity - several elements below set an explicit
+    // display (flex/grid) with no [hidden] override, so this guarantees
+    // `hidden` always wins on this page (see _spotguessr.scss for the same
+    // note).
+    [hidden] {
+        display: none !important;
+    }
+}
+
+.consensus-header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.25rem;
+}
+
+.consensus-header-title {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.consensus-points-chip {
+    display: flex;
+    align-items: baseline;
+    gap: .5rem;
+    margin-left: auto;
+    padding: .35rem .75rem;
+    border-radius: .5rem;
+    background: var(--ul-surface-2);
+    font-size: .85rem;
+}
+
+.consensus-points-label {
+    font-weight: 700;
+}
+
+.consensus-points-value {
+    font-weight: 600;
+}
+
+.consensus-points-next {
+    opacity: .7;
+    font-size: .75rem;
+}
+
+.consensus-panel {
+    padding: 1.25rem;
+    animation: consensus-fade-in .3s ease-out;
+}
+
+.consensus-panel-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+
+    h2 {
+        margin: 0;
+    }
+}
+
+.consensus-panel-hint {
+    opacity: .75;
+    font-size: .9rem;
+}
+
+// -- Settings/start form ---------------------------------------------------
+
+#cs-start-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-top: .75rem;
+}
+
+.consensus-field {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    max-width: 12rem;
+}
+
+.consensus-invite-wrap {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    padding: .75rem;
+    border-radius: .5rem;
+    background: var(--ul-surface-2);
+}
+
+.consensus-friend-list {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    max-height: 200px;
+    overflow-y: auto;
+
+    label {
+        display: flex;
+        align-items: center;
+        gap: .5rem;
+    }
+}
+
+// -- Empty state ------------------------------------------------------------
+
+.consensus-empty-state-icon {
+    font-size: 2.5rem;
+    opacity: .5;
+    display: block;
+    margin: 0 auto .5rem;
+}
+
+#cs-empty-state-panel {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .75rem;
+}
+
+// -- Lobby --------------------------------------------------------------------
+
+.consensus-lobby-list {
+    list-style: none;
+    margin: .75rem 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+
+    li {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: .5rem .75rem;
+        border-radius: .4rem;
+        background: var(--ul-surface-2);
+    }
+}
+
+.consensus-lobby-status {
+    font-size: .75rem;
+    padding: .15rem .5rem;
+    border-radius: 1rem;
+    background: var(--ul-surface-3);
+
+    &--joined {
+        background: rgba(46, 160, 67, .2);
+    }
+}
+
+.consensus-lobby-actions {
+    display: flex;
+    gap: .75rem;
+    flex-wrap: wrap;
+}
+
+// -- Gameplay ---------------------------------------------------------------
+
+.consensus-game-status {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    font-weight: 600;
+    margin-bottom: .75rem;
+}
+
+.consensus-round-live-indicator {
+    font-size: .75rem;
+    font-weight: 500;
+    opacity: .7;
+}
+
+.consensus-round-field-label {
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    font-size: .75rem;
+    opacity: .65;
+    margin: 0 0 .15rem;
+}
+
+.consensus-round-wiki-name {
+    margin: 0 0 .75rem;
+    font-size: 1.4rem;
+}
+
+.consensus-round-photo {
+    width: 100%;
+    max-height: 360px;
+    object-fit: contain;
+    border-radius: .5rem;
+    background: var(--ul-surface-2);
+    margin-bottom: .75rem;
+    animation: consensus-fade-in .3s ease-out;
+}
+
+.consensus-round-map {
+    height: 260px;
+    border-radius: .5rem;
+    overflow: hidden;
+    margin-bottom: 1rem;
+}
+
+.consensus-answer-area {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    margin-bottom: 1rem;
+}
+
+.consensus-answer-group {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+
+    input[type='text'],
+    textarea,
+    select {
+        width: 100%;
+    }
+}
+
+.consensus-round-actions {
+    display: flex;
+    gap: .75rem;
+    flex-wrap: wrap;
+    margin-bottom: .5rem;
+}
+
+.consensus-photo-upload {
+    margin-top: 1rem;
+    padding-top: .75rem;
+    border-top: 1px solid var(--ul-border);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: .5rem;
+
+    p {
+        flex-basis: 100%;
+        margin: 0 0 .25rem;
+    }
+}
+
+// -- Reveal / vote ------------------------------------------------------------
+
+.consensus-reveal-panel {
+    margin-top: 1.25rem;
+    padding-top: 1.25rem;
+    border-top: 1px solid var(--ul-border);
+    animation: consensus-fade-in .3s ease-out;
+
+    h3 {
+        text-align: center;
+    }
+}
+
+.consensus-reveal-results {
+    list-style: none;
+    margin: .75rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.consensus-vote-panel {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px dashed var(--ul-border);
+}
+
+.consensus-vote-options {
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+    margin-top: .5rem;
+}
+
+.consensus-vote-option {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .15rem;
+    padding: .6rem .85rem;
+    border-radius: .5rem;
+    border: 1px solid var(--ul-surface-2-border);
+    background: var(--ul-surface-2);
+    text-align: left;
+    cursor: pointer;
+    width: 100%;
+
+    &:hover:not(:disabled) {
+        border-color: var(--ul-primary-color);
+    }
+
+    &:disabled {
+        opacity: .6;
+        cursor: default;
+    }
+}
+
+.consensus-vote-option-value {
+    font-weight: 700;
+}
+
+.consensus-vote-option-submitted-by {
+    font-size: .75rem;
+    opacity: .7;
+}
+
+// -- Score card -----------------------------------------------------------------
+// Shared row used by the reveal results list, the live scoreboard, and the
+// summary panel.
+
+.consensus-score-card {
+    display: flex;
+    align-items: center;
+    gap: .5rem;
+    padding: .35rem .6rem;
+    border-radius: .5rem;
+    background: var(--ul-surface-2);
+    font-size: .85rem;
+
+    &--solo {
+        justify-content: center;
+        font-weight: 600;
+        font-size: 1rem;
+        background: none;
+    }
+}
+
+.consensus-score-card-rank {
+    font-weight: 700;
+    min-width: 1.5rem;
+    text-align: center;
+    opacity: .7;
+}
+
+.consensus-score-card-avatar-wrap {
+    display: flex;
+    flex-shrink: 0;
+}
+
+.consensus-score-card-info {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-width: 0;
+}
+
+.consensus-score-card-name {
+    font-weight: 600;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.consensus-score-card-subtitle {
+    font-size: .75rem;
+    opacity: .7;
+
+    &:empty {
+        display: none;
+    }
+}
+
+.consensus-score-card-points {
+    font-weight: 700;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+    margin-left: auto;
+}
+
+.consensus-scoreboard {
+    list-style: none;
+    margin: 0 0 1rem;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+// -- Summary/recap panel --------------------------------------------------------
+
+.consensus-summary-panel {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: .25rem;
+
+    .consensus-scoreboard {
+        justify-content: center;
+        margin-top: .75rem;
+    }
+
+    .btn {
+        margin-top: 1rem;
+    }
+}
+
+.consensus-summary-icon {
+    font-size: 2.75rem;
+    color: $color-indigo-500;
+    animation: consensus-summary-icon-pop .5s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+@keyframes consensus-summary-icon-pop {
+    0% {
+        opacity: 0;
+        transform: scale(.4) rotate(-15deg);
+    }
+
+    100% {
+        opacity: 1;
+        transform: scale(1) rotate(0);
+    }
+}
+
+// -- Chat ---------------------------------------------------------------------
+
+.consensus-chat-panel {
+    margin-top: 1.25rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--ul-border);
+    display: flex;
+    flex-direction: column;
+    gap: .5rem;
+}
+
+.consensus-chat-log {
+    max-height: 160px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .25rem;
+    font-size: .85rem;
+
+    .consensus-chat-username {
+        font-weight: 600;
+        margin-right: .35rem;
+    }
+}
+
+.consensus-chat-form {
+    display: flex;
+    gap: .5rem;
+
+    input {
+        flex: 1;
+    }
+}
+
+@keyframes consensus-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

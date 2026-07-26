@@ -1,7 +1,7 @@
 """Games hub - the site's directory of built-in games.
 
-Currently just SpotGuessr; a future game only needs an entry in ``GAMES``
-below - the landing page itself has no per-game logic.
+Currently SpotGuessr and Trivia; a future game only needs an entry in
+``GAMES`` below - the landing page itself has no per-game logic.
 """
 
 from __future__ import annotations
@@ -51,6 +51,12 @@ GAMES = [
         description="Answer questions about the places you've pinned - solo or with friends.",
         icon="quiz",
         url_name="trivia",
+    ),
+    GameEntry(
+        name="Consensus",
+        description="Fill in missing wiki data for places you've visited - solo, or race friends to agree on the answer.",
+        icon="fact_check",
+        url_name="consensus",
     ),
 ]
 

@@ -53,11 +53,25 @@ class WikiEdit(abstract.DashboardModel):
         blank=True,
         related_name="reverts",
     )
+    # Set only when this edit was produced by the Consensus game
+    # (services.consensus.session), never by a manual edit. Doubles as the
+    # double-award guard for models.wiki_edit.signals's points hook - a
+    # Consensus-sourced edit already got its (larger, in-game) points at
+    # resolution time, so the generic "any wiki edit earns baseline points"
+    # signal must skip it - and as attribution for the wiki-history UI.
+    consensus_round = ForeignKey(
+        "dashboard.ConsensusRound",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="wiki_edits",
+    )
 
     if TYPE_CHECKING:
         wiki_id: int
         editor_id: int | None
         reverted_by_id: int | None
+        consensus_round_id: int | None
 
     objects = WikiEditManager()
 

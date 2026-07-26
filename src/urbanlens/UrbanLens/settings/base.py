@@ -271,6 +271,14 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.sweep_stalled_spotguessr_sessions",
         "schedule": 2 * 60,
     },
+    "trivia-stall-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_stalled_trivia_sessions",
+        "schedule": 2 * 60,
+    },
+    "consensus-stall-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_stalled_consensus_sessions",
+        "schedule": 2 * 60,
+    },
     "safety-checkin-due-reminders": {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
         "schedule": 5 * 60,

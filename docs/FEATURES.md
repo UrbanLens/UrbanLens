@@ -378,8 +378,8 @@ for the boundary rationale:
 ## Games: SpotGuessr
 
 A GeoGuessr-style game built on the user's own pin/wiki/photo data. Full design and phase
-mapping: `docs/designs/spotguessr.md`. **Built (UL-391..UL-393): solo and multiplayer play,
-all three guess modes.** Everything below the line is not yet built.
+mapping: `docs/designs/drafts/spotguessr.md`. **Built (UL-391..UL-393): solo and multiplayer
+play, all three guess modes.** Everything below the line is not yet built.
 
 - Three modes: **Photos** (a photo shared to a pinned location's wiki - never a private,
   un-shared pin photo; guess by clicking a Leaflet map or searching your own pins), **Named
@@ -443,3 +443,63 @@ voice chat (UL-395), and a persistent site-wide leaderboard (UL-396; the live in
 and reveal/summary animation polish described above are already built). Also not built
 (deliberate scope cuts, not oversights): join-by-link invites and mid-game joining - see the
 design doc's "Multiplayer sessions" and "Multiplayer stall handling" sections.
+
+## Games: Trivia
+
+A quiz game built on the same pin/wiki/location data as SpotGuessr: answer questions about
+places you've pinned, solo or with friends. Full design and phase mapping:
+`docs/designs/drafts/trivia.md`. **Built (Phases 1-4): solo and multiplayer play, all three
+question sources, AI content moderation, AI answer checking, and AI wiki incorporation.**
+Everything below the line is not yet built.
+
+- Three question sources, all gated by the same content classifier before reaching a player:
+  **deterministic** templates from cached property-records data (year built, building number,
+  and building count once a parcel has more than a few buildings - all only for named
+  buildings), **AI-generated** from wiki articles with substantial content (up to 3 per wiki),
+  and **user-submitted** questions about a location the submitter has pinned
+- Content classifier (`services.trivia.classifier`): rejects a question about a specific
+  individual - even one only referenced indirectly and never named (e.g. "the year *someone*
+  did X" still centers a person), rejects bullying language, rejects references to a specific
+  exploring group/crew/party rather than the location itself, and rejects anything not actually
+  about the place. Fails closed on any AI unavailability. Used identically for user submissions
+  and AI-generated candidates - same rules, same code path
+- **No feedback loop for submitters**: a submitted question's approval/rejection is never
+  disclosed to its author, so a rejected question can't be iteratively tweaked past the filter -
+  except that a solo player's own not-yet-approved question may still surface to them, very
+  rarely, in solo play only (never to anyone else, never in multiplayer)
+- Answers are checked case-insensitively and stripped to alphanumeric first; on a mismatch, an
+  optional AI fallback judges whether the answer means the same thing just phrased differently
+  (gated on the AI subscription feature - without it, exact-match-only, never blocked from
+  playing)
+- Upvote/downvote/report voting on questions, with a small passive +0.05 "shown, no reaction"
+  default per play - a question whose blended score goes negative (downvotes and reports carry
+  real weight, unlike SpotGuessr's near-token photo-thumbs-down) drops out of rotation until its
+  score recovers
+- Glicko-2 ratings: player skill (`PlayerTriviaRating`, one per profile - no per-mode split,
+  unlike SpotGuessr) and question difficulty (`TriviaQuestionRating`), updated after every round
+  from a binary correct/incorrect outcome
+- Difficulty slider, applied per-question (a location can host both an easy and a hard
+  question) rather than per-location
+- **AI wiki incorporation**: once a user-submitted question's community vote score crosses a
+  threshold well above the bare rotation gate, an AI writing agent drafts a short paragraph
+  folding the fact into the location's wiki article - reusing the same sanitize/safety-classify/
+  append pipeline as link-based article expansion, not a separate one
+- **Multiplayer**: a friends-only invite/join lobby with a host-controlled start, live scoreboard,
+  and WebSocket-driven round sync (`TriviaSessionConsumer`, sharing its connect/relay skeleton
+  with SpotGuessr's `GameSessionConsumer` via a common base class) plus live text chat
+  (WebSocket-only, no E2EE, same rationale as SpotGuessr's session chat)
+- Own Glicko-2 rating + friends' ratings on the overview page, with a per-profile opt-out
+  (`TriviaPreference.show_ratings_to_friends`, default on)
+- Four independent `SiteSettings` toggles gate content moderation, AI generation, AI answer
+  checking, and AI wiki incorporation separately - turning any one off never bypasses moderation
+  for the others, it just holds the gated content back until AI is available again
+- **Multiplayer stall handling and leave/kick**: a round stuck because a participant went AFK
+  is force-revealed by a Celery beat sweep after 10 minutes (marking the session `ABANDONED` if
+  literally nobody answered), the host can end an in-progress or not-yet-started game
+  immediately at any time, and any participant can voluntarily leave (or decline an invite) -
+  or be removed by the host from the pre-game lobby roster - at which point the host role
+  transfers automatically if the host themselves leaves
+
+Not yet built: a moderation review UI for AI-rejected questions (the only way to inspect why a
+question was rejected today is direct DB access) - explicitly decided against, not just
+unbuilt - see the design doc's "Known gaps" section.

@@ -2270,3 +2270,110 @@ def sweep_stalled_spotguessr_sessions() -> int:
         return count
     finally:
         cache.delete(_SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY)
+
+
+_TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:trivia:stall-sweep-lock"
+_TRIVIA_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_stalled_trivia_sessions() -> int:
+    """Force-reveal any Trivia round that's been open too long.
+
+    The safety net for a multiplayer round that can otherwise stall forever:
+    a round only completes once every joined participant has answered
+    (``services.trivia.session.submit_answer``), but a participant who
+    simply closes their tab is invisible to that check - there's no
+    disconnect signal wired into the game state. Mirrors
+    ``sweep_stalled_spotguessr_sessions`` exactly. This sweep finds any
+    session whose current round has sat unrevealed past
+    ``STALL_ROUND_TIMEOUT_MINUTES`` and force-reveals it
+    (``force_reveal_round``), which either lets the game continue with
+    whoever did answer, or marks the session ``ABANDONED`` if literally
+    nobody did.
+    """
+    from datetime import timedelta
+
+    from django.core.cache import cache
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.trivia.model import TriviaSession
+    from urbanlens.dashboard.services.trivia.session import STALL_ROUND_TIMEOUT_MINUTES, force_reveal_round
+
+    if not cache.add(_TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY, value=True, timeout=_TRIVIA_STALL_SWEEP_LOCK_TIMEOUT_SECONDS):
+        logger.info("sweep_stalled_trivia_sessions: a previous run is still in flight; skipping")
+        return 0
+    try:
+        cutoff = timezone.now() - timedelta(minutes=STALL_ROUND_TIMEOUT_MINUTES)
+        count = 0
+        for session in TriviaSession.objects.stalled(cutoff=cutoff):
+            current_round = session.rounds.filter(revealed_at__isnull=True).first()
+            if current_round is None:
+                continue  # raced with a normal answer completing it - nothing to do
+            try:
+                force_reveal_round(current_round)
+            except Exception:
+                logger.exception("Failed to force-reveal stalled Trivia round %s", current_round.pk)
+                continue
+            count += 1
+        if count:
+            logger.info("Force-revealed %s stalled Trivia round(s)", count)
+        return count
+    finally:
+        cache.delete(_TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY)
+
+
+_CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:consensus:stall-sweep-lock"
+_CONSENSUS_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_stalled_consensus_sessions() -> int:
+    """Force-resolve any Consensus round that's been open too long.
+
+    Unlike SpotGuessr/Trivia, a Consensus round has *two* sub-phases that
+    can each stall independently: answer-collection (mirrors
+    ``sweep_stalled_spotguessr_sessions`` - force-reveals via
+    ``force_reveal_round``) and, for a competitive round whose answers
+    disagreed, the follow-on vote (force-tallies via
+    ``force_resolve_vote``). Both are swept in the same task run.
+    """
+    from datetime import timedelta
+
+    from django.core.cache import cache
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.consensus.model import ConsensusRoundResolution, ConsensusSession
+    from urbanlens.dashboard.services.consensus.session import STALL_ROUND_TIMEOUT_MINUTES, force_resolve_vote, force_reveal_round
+
+    if not cache.add(_CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY, value=True, timeout=_CONSENSUS_STALL_SWEEP_LOCK_TIMEOUT_SECONDS):
+        logger.info("sweep_stalled_consensus_sessions: a previous run is still in flight; skipping")
+        return 0
+    try:
+        cutoff = timezone.now() - timedelta(minutes=STALL_ROUND_TIMEOUT_MINUTES)
+        count = 0
+        for session in ConsensusSession.objects.answer_stalled(cutoff=cutoff):
+            current_round = session.rounds.filter(resolution=ConsensusRoundResolution.PENDING).first()
+            if current_round is None:
+                continue  # raced with a normal answer completing it - nothing to do
+            try:
+                force_reveal_round(current_round)
+            except Exception:
+                logger.exception("Failed to force-reveal stalled Consensus round %s", current_round.pk)
+                continue
+            count += 1
+        for session in ConsensusSession.objects.vote_stalled(cutoff=cutoff):
+            current_round = session.rounds.filter(resolution=ConsensusRoundResolution.VOTE_OPEN).first()
+            if current_round is None:
+                continue  # raced with a normal vote completing it - nothing to do
+            try:
+                force_resolve_vote(current_round)
+            except Exception:
+                logger.exception("Failed to force-resolve stalled Consensus vote for round %s", current_round.pk)
+                continue
+            count += 1
+        if count:
+            logger.info("Force-resolved %s stalled Consensus round(s)", count)
+        return count
+    finally:
+        cache.delete(_CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY)

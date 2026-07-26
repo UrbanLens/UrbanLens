@@ -42,6 +42,11 @@ DEFAULT_ROUNDS_PER_SESSION = 5
 MIN_ROUNDS_PER_SESSION = 3
 MAX_ROUNDS_PER_SESSION = 20
 
+#: How long a round may sit unrevealed before the stall-sweep Celery task
+#: (``tasks.sweep_stalled_trivia_sessions``) force-reveals it. Mirrors
+#: ``services.spotguessr.session.STALL_ROUND_TIMEOUT_MINUTES``.
+STALL_ROUND_TIMEOUT_MINUTES = 10
+
 #: Flat points for a correct answer - unlike SpotGuessr's distance-decay
 #: curve, a Trivia answer is a binary right/wrong, so there's no continuous
 #: closeness to curve (Phase 3's AI-judged "close enough" match is still
@@ -144,6 +149,13 @@ def invite_to_session(session: TriviaSession, host: Profile, invitee: Profile) -
         defaults={"status": TriviaSessionParticipantStatus.INVITED},
     )
     if created:
+        _notify_invite(host, invitee, session)
+    elif participant.status == TriviaSessionParticipantStatus.LEFT:
+        # A departed participant's row already exists (LEFT is terminal, see
+        # the model docstring) - get_or_create would otherwise silently
+        # return it unchanged instead of actually re-inviting them.
+        participant.status = TriviaSessionParticipantStatus.INVITED
+        participant.save(update_fields=["status", "updated"])
         _notify_invite(host, invitee, session)
     return participant
 
@@ -344,18 +356,241 @@ def submit_answer(round_: TriviaRound, profile: Profile, raw_answer: str) -> Tri
     if round_completed_now:
         round_.refresh_from_db()
         completed_answers = list(TriviaAnswer.objects.for_round(round_).select_related("profile"))
-        apply_round_ratings(round_, completed_answers)
-        voting.backfill_no_reaction(round_.question, [answer.profile for answer in completed_answers])
-        realtime.broadcast(session.pk, "round.revealed", serializers.serialize_round_reveal(round_))
-
-        next_round = get_or_create_round(session)
-        if next_round is not None:
-            realtime.broadcast(session.pk, "round.started", {"round": serializers.serialize_round(next_round)})
-        else:
-            complete_session(session)
-            realtime.broadcast(session.pk, "session.completed", session_summary(session))
+        _finish_round(round_, completed_answers)
+        _advance_or_complete(session)
 
     return answer
+
+
+def _finish_round(round_: TriviaRound, completed_answers: list[TriviaAnswer]) -> None:
+    """Rate, backfill vote signal, and broadcast the reveal for a just-completed round.
+
+    Shared by ``submit_answer`` (the normal "everyone answered" path),
+    ``force_reveal_round`` (the stall-sweep path), ``end_session_now``
+    (the host-ended path), and the participant-removal path
+    (``leave_session``/``kick_participant``, via ``_remove_participant``) -
+    ``completed_answers`` may be a strict subset of the joined roster, or
+    empty, in every path but the first. A participant with no answer this
+    round simply isn't rated for it (see ``apply_round_ratings``, which only
+    touches profiles present in ``completed_answers``); the reveal still
+    broadcasts even with zero answers, so "nobody answered in time" reads as
+    a normal (if empty) round result rather than silently stalling. Mirrors
+    ``services.spotguessr.session._finish_round``.
+    """
+    if completed_answers:
+        apply_round_ratings(round_, completed_answers)
+        voting.backfill_no_reaction(round_.question, [answer.profile for answer in completed_answers])
+    realtime.broadcast(round_.session_id, "round.revealed", serializers.serialize_round_reveal(round_))
+
+
+def _advance_or_complete(session: TriviaSession) -> None:
+    """After a round finishes, start the next one or complete the session - whichever applies."""
+    next_round = get_or_create_round(session)
+    if next_round is not None:
+        realtime.broadcast(session.pk, "round.started", {"round": serializers.serialize_round(next_round)})
+    else:
+        complete_session(session)
+        realtime.broadcast(session.pk, "session.completed", session_summary(session))
+
+
+def force_reveal_round(round_: TriviaRound) -> None:
+    """Force a stalled round to completion without waiting for every participant to answer.
+
+    Called by the stall-sweep Celery task (``tasks.sweep_stalled_trivia_sessions``)
+    for a round that's simply been open too long - the safety net for a
+    participant who closed their tab mid-round, which ``submit_answer``'s
+    "every joined participant answered" gate has no way to detect on its
+    own. Mirrors ``services.spotguessr.session.force_reveal_round``.
+
+    A participant who never answered this round simply scores 0 for it and
+    isn't rated (see ``_finish_round``). If literally nobody answered - the
+    whole table walked away - the session is marked ``ABANDONED`` instead of
+    manufacturing an empty next round forever; a round with at least one
+    answer instead reveals normally and advances/completes exactly like
+    ``submit_answer`` would.
+
+    Idempotent: a round already revealed (e.g. an answer completed it in the
+    instant before the sweep fired) is a silent no-op.
+    """
+    session = round_.session
+    with transaction.atomic():
+        locked_round = TriviaRound.objects.select_for_update().get(pk=round_.pk)
+        if locked_round.revealed_at is not None:
+            return
+        locked_round.revealed_at = timezone.now()
+        locked_round.save(update_fields=["revealed_at", "updated"])
+
+    completed_answers = list(TriviaAnswer.objects.for_round(locked_round).select_related("profile"))
+    if not completed_answers:
+        session.status = TriviaSessionStatus.ABANDONED
+        session.ended_at = timezone.now()
+        session.save(update_fields=["status", "ended_at", "updated"])
+        realtime.broadcast(session.pk, "session.completed", session_summary(session))
+        return
+
+    _finish_round(locked_round, completed_answers)
+    _advance_or_complete(session)
+
+
+def end_session_now(session: TriviaSession, host: Profile) -> TriviaSession:
+    """Host-triggered manual escape hatch: end the game immediately, wherever it currently is.
+
+    Unlike ``force_reveal_round`` (which only fires once a round's own stall
+    timeout elapses), this ends the whole session on request - the host
+    doesn't have to wait out a stalled/AFK player at all. Works from either
+    LOBBY (cancels a game that never started) or ACTIVE. If a round is still
+    open, it's revealed first using whichever answers already exist, so
+    in-flight progress isn't silently dropped from the final scoreboard -
+    but the session always ends as COMPLETED (never ABANDONED), since ending
+    it is exactly what the host asked for. Mirrors
+    ``services.spotguessr.session.end_session_now``.
+
+    Raises:
+        TriviaError: if the caller isn't the host, or the session has
+            already ended.
+    """
+    if session.host_profile_id != host.pk:
+        raise TriviaError("Only the host can end the game.")
+    if session.status not in (TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE):
+        raise TriviaError("This game has already ended.")
+
+    current_round = TriviaRound.objects.for_session(session).filter(revealed_at__isnull=True).first()
+    if current_round is not None:
+        with transaction.atomic():
+            locked_round = TriviaRound.objects.select_for_update().get(pk=current_round.pk)
+            if locked_round.revealed_at is None:
+                locked_round.revealed_at = timezone.now()
+                locked_round.save(update_fields=["revealed_at", "updated"])
+        completed_answers = list(TriviaAnswer.objects.for_round(current_round).select_related("profile"))
+        _finish_round(current_round, completed_answers)
+
+    session.status = TriviaSessionStatus.COMPLETED
+    session.ended_at = timezone.now()
+    session.save(update_fields=["status", "ended_at", "updated"])
+    realtime.broadcast(session.pk, "session.completed", session_summary(session))
+    return session
+
+
+def _remove_participant(session: TriviaSession, participant: TriviaSessionParticipant, *, reason: str) -> None:
+    """Mark ``participant`` LEFT, transfer host / abandon the session if needed, and finish an in-flight round if the removal just completed it.
+
+    Shared by ``leave_session`` and ``kick_participant`` - the two only
+    differ in who's allowed to call this and the broadcast ``reason``
+    ("left" vs. "kicked"). No SpotGuessr equivalent exists yet - this is
+    new ground, not a port.
+
+    - If the departing participant was the host, host is transferred to the
+      earliest-joined remaining JOINED participant (an INVITED profile can
+      never become host - they haven't actually joined). If nobody JOINED
+      remains, the session is marked ``ABANDONED`` - the whole table left,
+      the same terminal state a zero-answer stall reaches.
+    - If the departure was a currently-JOINED participant and the session is
+      ACTIVE, whatever round is still open is re-checked: removing the last
+      holdout can complete a round exactly the way their own answer would
+      have, so that path reuses ``_finish_round``/``_advance_or_complete``
+      rather than leaving the round stalled until the next stall-sweep.
+    """
+    was_host = session.host_profile_id == participant.profile_id
+    was_joined = participant.status == TriviaSessionParticipantStatus.JOINED
+
+    participant.status = TriviaSessionParticipantStatus.LEFT
+    participant.save(update_fields=["status", "updated"])
+
+    new_host_profile_id = None
+    if was_host:
+        successor = session.participants.joined().exclude(pk=participant.pk).order_by("joined_at").first()
+        if successor is not None:
+            session.host_profile_id = successor.profile_id
+            session.save(update_fields=["host_profile", "updated"])
+            new_host_profile_id = successor.profile_id
+
+    realtime.broadcast(
+        session.pk,
+        "participant.left",
+        {"profile_id": participant.profile_id, "reason": reason, "new_host_profile_id": new_host_profile_id},
+    )
+
+    if session.status not in (TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE):
+        return
+
+    remaining = session.participants.joined().count()
+    if remaining == 0:
+        session.status = TriviaSessionStatus.ABANDONED
+        session.ended_at = timezone.now()
+        session.save(update_fields=["status", "ended_at", "updated"])
+        realtime.broadcast(session.pk, "session.completed", session_summary(session))
+        return
+
+    if not was_joined or session.status != TriviaSessionStatus.ACTIVE:
+        return
+
+    current_round = TriviaRound.objects.for_session(session).filter(revealed_at__isnull=True).first()
+    if current_round is None:
+        return
+    completed_answers = list(TriviaAnswer.objects.for_round(current_round).select_related("profile"))
+    if len(completed_answers) < remaining:
+        return  # still waiting on someone who's actually still here
+
+    with transaction.atomic():
+        locked_round = TriviaRound.objects.select_for_update().get(pk=current_round.pk)
+        if locked_round.revealed_at is not None:
+            return
+        locked_round.revealed_at = timezone.now()
+        locked_round.save(update_fields=["revealed_at", "updated"])
+    _finish_round(locked_round, completed_answers)
+    _advance_or_complete(session)
+
+
+def leave_session(session: TriviaSession, profile: Profile) -> None:
+    """``profile`` voluntarily leaves the session - or declines an invitation to it.
+
+    Works from either ``INVITED`` or ``JOINED``: "leave" covers both a
+    joined player backing out mid-game and an invitee simply declining.
+    A no-op if ``profile`` already left. See ``_remove_participant`` for
+    what happens next (host transfer, session abandonment, round
+    completion).
+
+    Raises:
+        TriviaError: if ``profile`` isn't a participant of this session, or
+            the session has already ended.
+    """
+    if session.status not in (TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE):
+        raise TriviaError("This game has already ended.")
+    try:
+        participant = TriviaSessionParticipant.objects.get(session=session, profile=profile)
+    except TriviaSessionParticipant.DoesNotExist:
+        raise TriviaError("You are not part of this session.") from None
+    if participant.status == TriviaSessionParticipantStatus.LEFT:
+        return
+    _remove_participant(session, participant, reason="left")
+
+
+def kick_participant(session: TriviaSession, host: Profile, target_profile: Profile) -> None:
+    """Host-only: remove another participant from the session.
+
+    The host can't remove themselves this way (use ``end_session_now``
+    instead - kicking the host would just trigger a host transfer, which
+    isn't what "the host wants to end this" means). A no-op if
+    ``target_profile`` already left.
+
+    Raises:
+        TriviaError: if the caller isn't the host, the target is the host
+            themselves, the target isn't a participant, or the session has
+            already ended.
+    """
+    if session.host_profile_id != host.pk:
+        raise TriviaError("Only the host can remove a player.")
+    if target_profile.pk == host.pk:
+        raise TriviaError("The host can't remove themselves - use End game instead.")
+    if session.status not in (TriviaSessionStatus.LOBBY, TriviaSessionStatus.ACTIVE):
+        raise TriviaError("This game has already ended.")
+    try:
+        participant = TriviaSessionParticipant.objects.get(session=session, profile=target_profile)
+    except TriviaSessionParticipant.DoesNotExist:
+        raise TriviaError("That profile is not part of this session.") from None
+    if participant.status == TriviaSessionParticipantStatus.LEFT:
+        return
+    _remove_participant(session, participant, reason="kicked")
 
 
 def rounds_played(session: TriviaSession) -> int:

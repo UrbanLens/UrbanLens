@@ -221,14 +221,6 @@ safety incident. Compare `_resolve_as_found_safe` (line 1038-1044), which correc
 tasks (`tasks.py:1629-1671`) run every 5 minutes with no locking, unlike the `RUN_LOCK_CACHE_KEY`
 pattern already established elsewhere in the same file for this exact problem.
 
-**SpotGuessr/Trivia: an invited-but-never-joined participant can still submit a scoring answer.**
-`services/trivia/session.py:279-349` + `controllers/trivia.py:43-52` (`submit_answer`) never
-verifies `TriviaSessionParticipant.status == JOINED` before accepting an answer — an
-INVITED-but-not-joined participant can score points and inflate the answer count used to decide
-round completion, potentially closing a round before all actually-joined players have answered.
-**The identical gap exists in `services/spotguessr/session.py:submit_guess`** (no status check
-there either) — a shared architectural hole across both game features, not specific to either one.
-
 **Undefined CSS custom-property references silently disable dark-mode theming in ~10 SCSS files.**
 `var(--text, …)`, `var(--text-muted, …)`, `var(--ul-surface-alt, …)`, `var(--ul-accent, …)`, and
 several others are used throughout `_e2ee.scss` (13x), `_setup.scss` (12x), `_markup.scss`,
@@ -704,8 +696,11 @@ full per-unit detail):
   near-duplicate classes with no shared base, no per-connection rate limiting on any WS `receive()`.
 - **Unit 24/25**: the SpotGuessr/Trivia `eligible_locations()`/`eligible_questions()` retry loops
   still re-run the full query on every attempt instead of computing the eligible set once; no
-  moderation UI exists for AI-flagged trivia questions; neither game has a leave/cancel/kick path
-  once a lobby exists.
+  moderation UI exists for AI-flagged trivia questions (decided against, not just unbuilt - see
+  `docs/designs/drafts/trivia.md`'s "Known gaps"); Trivia gained a leave/kick path plus
+  stall-handling parity with SpotGuessr on 2026-07-25 (`services.trivia.session.leave_session`/
+  `kick_participant`/`force_reveal_round`/`end_session_now`) - SpotGuessr itself still has no
+  leave/cancel/kick path once a lobby exists.
 - **Unit 31**: `_dark.scss` is still ~1100 lines of per-selector overrides (the role-pill fix above
   removed one duplicate, not the pattern); `_pin_lists.scss` still has 3 sibling raw-hex danger-red
   controls without dark overrides (`.pin-list-more-menu-danger`, `.saved-filter-delete-btn`, and its
@@ -722,3 +717,52 @@ full per-unit detail):
 All of the above are maintainability/completeness gaps, not active security or correctness bugs
 (those categories were the ones fixed directly, above) - reasonable to pick up as a dedicated
 follow-up rather than blocking this pass.
+
+## `docker compose up`'s app container fails `manage.py migrate`'s implicit check with a PinViewSet `AssertionError` on `s2` (found 2026-07-25, not root-caused)
+
+While standing up the Consensus game feature (new models/services/consumer/URLs), tried to verify
+against a live stack on the `s2` dev environment (`~/dev/s2/UrbanLens` on chiron). The full
+`docker compose up -d --build` failed - the `app` container's entrypoint init script runs
+`manage.py migrate`, which runs Django's implicit system checks first, and that failed with:
+
+```
+File ".../dashboard/urls.py", line 93, in <module>
+    router.register("pins", PinViewSet, basename=PinViewSet.basename)
+File ".../rest_framework/routers.py", line 170, in get_default_basename
+    assert queryset is not None, '`basename` argument not specified, and could ...'
+AssertionError: `basename` argument not specified, and could not automatically determine the name...
+```
+
+`PinViewSet.basename = "pins"` is a plain class attribute and `dashboard/urls.py:93` passes it
+explicitly (`basename=PinViewSet.basename`) - by inspection this should never reach
+`get_default_basename` at all, since DRF's `SimpleRouter.register()` only calls that when
+`basename` is `None`. Confirmed installed `djangorestframework==3.17.1` is identical on both `s2`'s
+container and the local Windows venv, where the equivalent `manage.py check` (run directly, not via
+`migrate`) passes cleanly every time. Root cause not found - ran out of scope budget chasing it
+while `s2` was also independently blocked on an unrelated stale-migration-graph issue (below), which
+was the one actually relevant to this session's work.
+
+Worked around entirely by bypassing the custom entrypoint (`docker compose run --rm --entrypoint ''
+app .venv/bin/python -m pytest ...`), which never imports the full URLconf (pytest doesn't eagerly
+resolve URLs unless a test actually calls `reverse()`/hits a view) - this is how the Consensus
+DB-backed test suite ended up getting verified despite this. Not confirmed whether this also affects
+a genuinely fresh checkout with no other changes (an `s3` attempt at the same thing got stuck at
+container state `Created` with zero log output before this could be isolated) - worth a fresh,
+focused repro next time someone needs `docker compose up`'s full stack (not just `docker compose
+run`) on one of these dev boxes.
+
+## Dev environments (`s1`/`s2`/`s3` on chiron) can silently drift behind `origin` (found 2026-07-25)
+
+`~/dev/s2/UrbanLens` was one full commit behind `origin/@release/v0.6.0` (missing
+`0017_spotguessr_participant_rating_delta.py` and everything else in the "Implement multiplayer
+enhancements... for SpotGuessr" commit) despite `git status` reporting clean - a `git fetch`/`log`
+comparison is needed to actually notice this, since "clean working tree" says nothing about how
+current the checked-out commit is. This produced a confusing
+`NodeNotFoundError: ... dependencies reference nonexistent parent node ('dashboard',
+'0017_spotguessr_participant_rating_delta')` when testing a new migration that (correctly, per this
+same file's `makemigrations`-dependency gotcha) depended on the latest *committed* migration - the
+dependency was fine, the dev box just didn't have it yet. Fixed for this session by `git fetch` +
+`git pull --ff-only` (stashing/resolving trivial conflicts in files also touched by the missed
+commit, e.g. `CELERY_BEAT_SCHEDULE` dict entries landing near each other) - worth checking `git log
+origin/<branch> -1` vs. local `HEAD` up front, not just `git status`, when picking a "free" dev
+environment for migration-touching work.

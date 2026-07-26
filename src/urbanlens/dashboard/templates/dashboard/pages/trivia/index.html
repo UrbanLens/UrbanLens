@@ -77,10 +77,16 @@
             <button type="button" class="btn btn--ghost" id="trivia-invite-more-btn" hidden>Invite more</button>
             <button type="button" class="btn btn--ghost" id="trivia-join-lobby-btn" hidden>Join</button>
             <button type="button" class="btn btn--primary" id="trivia-begin-btn" hidden>Start game</button>
+            <button type="button" class="btn btn--ghost" id="trivia-leave-lobby-btn" hidden>Leave</button>
+            <button type="button" class="btn btn--secondary btn--sm" id="trivia-end-game-lobby-btn" hidden>End game</button>
         </div>
     </section>
 
     <section id="trivia-round-panel" class="trivia-panel card" hidden>
+        <div class="trivia-round-actions">
+            <button type="button" class="btn btn--ghost" id="trivia-leave-round-btn" hidden>Leave</button>
+            <button type="button" class="btn btn--secondary btn--sm" id="trivia-end-game-round-btn" hidden>End game</button>
+        </div>
         <p class="trivia-round-index"></p>
         <h2 id="trivia-prompt"></h2>
         <form id="trivia-answer-form">

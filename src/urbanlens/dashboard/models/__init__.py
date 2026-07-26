@@ -12,6 +12,22 @@ from urbanlens.dashboard.models.boundary_vote import BoundaryVote
 from urbanlens.dashboard.models.cache import GeocodedLocation
 from urbanlens.dashboard.models.calendar_sync import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.comments import Comment
+from urbanlens.dashboard.models.consensus import (
+    ConsensusAnswer,
+    ConsensusFieldKind,
+    ConsensusProfile,
+    ConsensusRound,
+    ConsensusRoundPhoto,
+    ConsensusRoundResolution,
+    ConsensusSession,
+    ConsensusSessionChatMessage,
+    ConsensusSessionParticipant,
+    ConsensusSessionParticipantStatus,
+    ConsensusSessionStatus,
+    ConsensusTentativeAnswer,
+    ConsensusTentativeStatus,
+    ConsensusVote,
+)
 from urbanlens.dashboard.models.custom_fields import CustomField, CustomFieldEntity, CustomFieldType, CustomFieldValue
 from urbanlens.dashboard.models.direct_messages import (
     DirectMessage,

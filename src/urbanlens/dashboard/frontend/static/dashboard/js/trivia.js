@@ -1,4 +1,5 @@
 import {
+  confirmAction,
   getCsrfToken,
   toast
 } from "./article-wysiwyg-5jnnp4sj.js";
@@ -141,6 +142,7 @@ async function handleInviteMore() {
 function renderLobbyParticipants(participants) {
   const list = el("trivia-lobby-participants");
   list.innerHTML = "";
+  const isHost = hostProfileId === myProfileId;
   for (const participant of participants) {
     const item = document.createElement("li");
     const name = document.createElement("span");
@@ -149,13 +151,24 @@ function renderLobbyParticipants(participants) {
     status.className = participant.status === "joined" ? "trivia-lobby-status trivia-lobby-status--joined" : "trivia-lobby-status";
     status.textContent = participant.status === "joined" ? "Joined" : "Invited";
     item.append(name, status);
+    if (isHost && participant.profile_id !== myProfileId) {
+      const kickBtn = document.createElement("button");
+      kickBtn.type = "button";
+      kickBtn.className = "trivia-kick-btn";
+      kickBtn.title = `Remove ${participant.username}`;
+      kickBtn.setAttribute("aria-label", `Remove ${participant.username}`);
+      kickBtn.textContent = "×";
+      kickBtn.addEventListener("click", () => void kickParticipant(participant.profile_id, participant.username));
+      item.appendChild(kickBtn);
+    }
     list.appendChild(item);
   }
   const me = participants.find((participant) => participant.profile_id === myProfileId);
-  const isHost = hostProfileId === myProfileId;
   el("trivia-invite-more-btn").hidden = !isHost;
   el("trivia-join-lobby-btn").hidden = !(me && me.status === "invited");
   el("trivia-begin-btn").hidden = !isHost;
+  el("trivia-leave-lobby-btn").hidden = !me;
+  el("trivia-end-game-lobby-btn").hidden = !isHost;
 }
 function renderLobby(session) {
   sessionId = session.session_id;
@@ -208,6 +221,19 @@ function handleSocketMessage(data) {
     case "participant.joined":
       refreshLobby();
       break;
+    case "participant.left":
+      if (data.new_host_profile_id) {
+        hostProfileId = data.new_host_profile_id;
+        updateRoundActionVisibility();
+      }
+      if (data.profile_id === myProfileId) {
+        toast.warning(data.reason === "kicked" ? "You were removed from the game by the host." : "You left the game.");
+        resetToSettings();
+      } else {
+        toast.info(data.reason === "kicked" ? "A player was removed from the game." : "A player left the game.");
+        refreshLobby();
+      }
+      break;
     case "session.started":
       showPanel("trivia-round-panel");
       renderRound(data.round);
@@ -258,6 +284,10 @@ function initChat() {
     input.value = "";
   });
 }
+function updateRoundActionVisibility() {
+  el("trivia-leave-round-btn").hidden = !isMultiplayer;
+  el("trivia-end-game-round-btn").hidden = !(isMultiplayer && hostProfileId === myProfileId);
+}
 function renderRound(round) {
   currentRound = round;
   sessionId = round.session_id;
@@ -268,17 +298,84 @@ function renderRound(round) {
   el("trivia-answer-form").hidden = false;
   el("trivia-reveal").hidden = true;
   el("trivia-answer-input").focus();
+  updateRoundActionVisibility();
 }
 function renderSummary(summary) {
   const mine = summary.participants.find((participant) => participant.profile_id === myProfileId);
   const lines = isMultiplayer ? summary.participants.slice().sort((a, b) => b.total_points - a.total_points).map((participant, index) => `${index + 1}. ${participant.username} - ${participant.total_points} pts`).join(`
 `) : mine ? `You scored ${mine.total_points} points across ${summary.rounds_played} rounds.` : `Finished - ${summary.rounds_played} rounds played.`;
-  el("trivia-summary-score").textContent = lines;
+  const prefix = summary.status === "abandoned" ? `Game ended early - not enough players remained.
+
+` : "";
+  el("trivia-summary-score").textContent = prefix + lines;
   showPanel("trivia-summary-panel");
   if (ws) {
     ws.close();
     ws = null;
   }
+}
+function resetToSettings() {
+  sessionId = null;
+  currentRound = null;
+  isMultiplayer = false;
+  hostProfileId = null;
+  if (ws) {
+    ws.close();
+    ws = null;
+  }
+  el("trivia-chat-panel").hidden = true;
+  showPanel("trivia-settings-panel");
+}
+async function leaveGame() {
+  if (sessionId === null)
+    return;
+  const confirmed = await confirmAction({
+    title: "Leave this game?",
+    message: "You'll stop playing, but the rest of the group can continue without you.",
+    confirmLabel: "Leave"
+  });
+  if (!confirmed)
+    return;
+  const response = await postForm(urlFor(urls.leave, sessionId), {});
+  if (response.error) {
+    toast.error(response.error);
+    return;
+  }
+  resetToSettings();
+}
+async function endGameNow() {
+  if (sessionId === null)
+    return;
+  const confirmed = await confirmAction({
+    title: "End this game?",
+    message: "This ends the game immediately for everyone, using the scores so far.",
+    confirmLabel: "End game"
+  });
+  if (!confirmed)
+    return;
+  const response = await postForm(urlFor(urls.end, sessionId), {});
+  if (response.error) {
+    toast.error(response.error);
+    return;
+  }
+  renderSummary(response.summary);
+}
+async function kickParticipant(profileId, username) {
+  if (sessionId === null)
+    return;
+  const confirmed = await confirmAction({
+    title: `Remove ${username}?`,
+    message: `${username} will be removed from this game.`,
+    confirmLabel: "Remove"
+  });
+  if (!confirmed)
+    return;
+  const response = await postForm(urlFor(urls.kick, sessionId), { profile_id: String(profileId) });
+  if (response.error) {
+    toast.error(response.error);
+    return;
+  }
+  await refreshLobby();
 }
 async function handleStartOrRoundResponse(payload) {
   if (payload.error) {
@@ -369,6 +466,7 @@ async function loadInitialSession() {
   sessionId = Number(raw);
   isMultiplayer = true;
   const lobby = await getJson(urlFor(urls.lobby, sessionId));
+  hostProfileId = lobby.host_profile_id;
   if (lobby.status === "lobby") {
     renderLobby(lobby);
     return;
@@ -396,6 +494,10 @@ function init() {
   el("trivia-join-lobby-btn").addEventListener("click", () => void joinLobby());
   el("trivia-begin-btn").addEventListener("click", () => void beginGame());
   el("trivia-invite-more-btn").addEventListener("click", () => void handleInviteMore());
+  el("trivia-leave-lobby-btn").addEventListener("click", () => void leaveGame());
+  el("trivia-end-game-lobby-btn").addEventListener("click", () => void endGameNow());
+  el("trivia-leave-round-btn").addEventListener("click", () => void leaveGame());
+  el("trivia-end-game-round-btn").addEventListener("click", () => void endGameNow());
   document.querySelectorAll("[data-vote]").forEach((button) => {
     button.addEventListener("click", () => void voteOnCurrentQuestion(button.dataset.vote));
   });

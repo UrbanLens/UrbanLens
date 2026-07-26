@@ -817,6 +817,14 @@ class _ParticipantSessionConsumer(AsyncWebsocketConsumer):
     async def participant_joined(self, event):
         await self._relay(event)
 
+    #: Fired when a participant voluntarily leaves or is kicked by the host
+    #: (``event["reason"]`` distinguishes the two) - currently Trivia-only
+    #: (``services.trivia.session.leave_session``/``kick_participant``),
+    #: but lives on the shared base since it's generic relay logic, not
+    #: game-specific.
+    async def participant_left(self, event):
+        await self._relay(event)
+
     async def session_started(self, event):
         await self._relay(event)
 
@@ -824,11 +832,23 @@ class _ParticipantSessionConsumer(AsyncWebsocketConsumer):
     async def guess_submitted(self, event):
         await self._relay(event)
 
-    #: Trivia's own round-completing action.
+    #: Trivia's own round-completing action - also reused verbatim by
+    #: Consensus for its own answer-submission event (both games broadcast
+    #: the same "someone answered" shape, and each session is already
+    #: scoped to its own channel-layer group).
     async def answer_submitted(self, event):
         await self._relay(event)
 
     async def round_revealed(self, event):
+        await self._relay(event)
+
+    #: Consensus-only: a participant cast their vote during a competitive
+    #: round's disagreement sub-phase - the vote-open state itself (and its
+    #: candidate values) rides on the same ``round_revealed`` broadcast
+    #: every round resolution already sends (see
+    #: ``services.consensus.serializers.serialize_round_reveal``'s
+    #: ``vote_options``), so no separate "vote opened" event is needed.
+    async def vote_submitted(self, event):
         await self._relay(event)
 
     async def round_started(self, event):
@@ -933,4 +953,51 @@ class TriviaSessionConsumer(_ParticipantSessionConsumer):
 
         profile = Profile.objects.get(user=self.scope["user"])
         session = TriviaSession.objects.get(pk=self.session_id)
+        send_chat_message(session, profile, body)
+
+
+class ConsensusSessionConsumer(_ParticipantSessionConsumer):
+    """Real-time sync for one competitive Consensus session, shared by every participant.
+
+    Mounted at ``ws/consensus/session/<int:session_id>/``. See
+    ``_ParticipantSessionConsumer`` for everything about this socket that
+    isn't Consensus-specific. Solo sessions never open a socket at all.
+    """
+
+    game_label = "Consensus"
+
+    def _group_name(self, session_id) -> str:
+        from urbanlens.dashboard.services.consensus.realtime import session_group_name
+
+        return session_group_name(session_id)
+
+    @database_sync_to_async
+    def _is_participant(self, session_id, user):
+        """Whether ``user``'s profile is a participant (any status) of ``session_id``.
+
+        Returns:
+            False for a nonexistent session or a real session the profile
+            just isn't part of - deliberately not distinguished, matching
+            the 404-not-403 convention used everywhere else in this feature.
+        """
+        from urbanlens.dashboard.models.consensus.model import ConsensusSessionParticipant
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        profile, _ = Profile.objects.get_or_create(user=user)
+        return ConsensusSessionParticipant.objects.filter(session_id=session_id, profile=profile).exists()
+
+    @database_sync_to_async
+    def _send_chat_message(self, body):
+        """Save and broadcast one chat message from this connection's profile.
+
+        Broadcasting happens inside ``services.consensus.chat.send_chat_message``
+        itself (not here) since the save-then-broadcast choke point is
+        shared with any future non-WebSocket sender.
+        """
+        from urbanlens.dashboard.models.consensus.model import ConsensusSession
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.consensus.chat import send_chat_message
+
+        profile = Profile.objects.get(user=self.scope["user"])
+        session = ConsensusSession.objects.get(pk=self.session_id)
         send_chat_message(session, profile, body)

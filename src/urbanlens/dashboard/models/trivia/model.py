@@ -292,10 +292,20 @@ class TriviaSessionStatus(abstract.TextChoices):
 
 
 class TriviaSessionParticipantStatus(abstract.TextChoices):
-    """Whether a participant has accepted their invitation yet. Mirrors ``GameSessionParticipantStatus``."""
+    """Whether a participant has accepted their invitation yet. Mirrors ``GameSessionParticipantStatus``.
+
+    ``LEFT`` has no SpotGuessr equivalent yet - set once a participant
+    voluntarily leaves (``services.trivia.session.leave_session``) or is
+    removed by the host (``kick_participant``), from either ``INVITED`` or
+    ``JOINED``. A terminal state - a departed participant never rejoins the
+    same session (they'd need a fresh invite, which creates a new row
+    anyway, since ``invite_to_session``'s ``get_or_create`` only fires for a
+    profile with no existing row at all).
+    """
 
     INVITED = "invited", "Invited"
     JOINED = "joined", "Joined"
+    LEFT = "left", "Left"
 
 
 class TriviaSession(abstract.DashboardModel):

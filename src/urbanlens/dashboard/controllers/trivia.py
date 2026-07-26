@@ -71,6 +71,9 @@ def _url_templates() -> dict[str, str]:
         "invite": reverse("trivia.invite", kwargs=session_kwargs),
         "join": reverse("trivia.join", kwargs=session_kwargs),
         "begin": reverse("trivia.begin", kwargs=session_kwargs),
+        "end": reverse("trivia.end", kwargs=session_kwargs),
+        "leave": reverse("trivia.leave", kwargs=session_kwargs),
+        "kick": reverse("trivia.kick", kwargs=session_kwargs),
         "round": reverse("trivia.round", kwargs=session_kwargs),
         "answer": reverse("trivia.answer", kwargs={"session_id": _SESSION_ID_SENTINEL, "round_id": _ROUND_ID_SENTINEL}),
         "chat_history": reverse("trivia.chat_history", kwargs=session_kwargs),
@@ -270,6 +273,68 @@ class TriviaBeginView(LoginRequiredMixin, View):
             trivia_session.complete_session(game_session)
             return JsonResponse({"finished": True, "summary": trivia_session.session_summary(game_session)})
         return JsonResponse({"finished": False, "round": serializers.serialize_round(round_)})
+
+
+class TriviaEndSessionView(LoginRequiredMixin, View):
+    """Host ends the game immediately - the manual escape hatch for a stalled or AFK multiplayer session.
+
+    POST /games/trivia/session/<session_id>/end/
+
+    Unlike waiting out the stall-sweep Celery task
+    (``tasks.sweep_stalled_trivia_sessions``), this lets the host end the
+    game the moment they decide it's not going anywhere. Any in-flight round
+    is revealed first with whatever answers already exist (see
+    ``services.trivia.session.end_session_now``).
+    """
+
+    def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
+        profile = _current_profile(request)
+        game_session = _participant_session(profile, session_id)
+
+        try:
+            trivia_session.end_session_now(game_session, profile)
+        except trivia_session.TriviaError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        return JsonResponse({"finished": True, "summary": trivia_session.session_summary(game_session)})
+
+
+class TriviaLeaveSessionView(LoginRequiredMixin, View):
+    """The calling profile leaves this session - or declines an invitation to it.
+
+    POST /games/trivia/session/<session_id>/leave/
+    """
+
+    def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
+        profile = _current_profile(request)
+        game_session = _participant_session(profile, session_id)
+
+        try:
+            trivia_session.leave_session(game_session, profile)
+        except trivia_session.TriviaError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        return JsonResponse({"left": True})
+
+
+class TriviaKickParticipantView(LoginRequiredMixin, View):
+    """Host removes another participant from the session. Host-only.
+
+    POST /games/trivia/session/<session_id>/kick/   body: ``profile_id``
+    """
+
+    def post(self, request: HttpRequest, session_id: int) -> HttpResponse:
+        profile = _current_profile(request)
+        game_session = _participant_session(profile, session_id)
+
+        try:
+            target = Profile.objects.get(pk=request.POST.get("profile_id"))
+        except (Profile.DoesNotExist, ValueError, TypeError):
+            return JsonResponse({"error": "profile_id is required."}, status=400)
+
+        try:
+            trivia_session.kick_participant(game_session, profile, target)
+        except trivia_session.TriviaError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+        return JsonResponse({"kicked": True})
 
 
 class TriviaChatHistoryView(LoginRequiredMixin, View):

@@ -13,6 +13,8 @@ from typing import TYPE_CHECKING
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trivia.model import (
@@ -104,6 +106,22 @@ class TriviaSessionQuerySet(abstract.DashboardQuerySet["TriviaSession"]):
     def for_profile(self, profile: Profile) -> TriviaSessionQuerySet:
         """Restrict to sessions ``profile`` is (or was) a participant in, any status."""
         return self.filter(participants__profile=profile).distinct()
+
+    def stalled(self, *, cutoff: datetime) -> TriviaSessionQuerySet:
+        """ACTIVE sessions whose current round was created before ``cutoff`` and still isn't revealed.
+
+        ``get_or_create_round`` never creates a session's next round until
+        its prior one is fully revealed, so at most one round per session
+        can ever match "unrevealed" at a time - this is always that
+        session's current round. Used by the stall-sweep Celery task
+        (``tasks.sweep_stalled_trivia_sessions``) to find sessions a
+        participant walked away from mid-round (see
+        ``services.trivia.session.force_reveal_round``). Mirrors
+        ``GameSessionQuerySet.stalled()``.
+        """
+        from urbanlens.dashboard.models.trivia.model import TriviaSessionStatus
+
+        return self.filter(status=TriviaSessionStatus.ACTIVE, rounds__revealed_at__isnull=True, rounds__created__lte=cutoff).distinct()
 
 
 class TriviaSessionManager(abstract.DashboardManager.from_queryset(TriviaSessionQuerySet)):

@@ -91,13 +91,16 @@ def serialize_participant(participant: TriviaSessionParticipant) -> dict[str, An
 
 
 def serialize_session(session: TriviaSession) -> dict[str, Any]:
-    """Lobby state: status, and every participant (invited or joined)."""
+    """Lobby state: status, and every current participant (invited or joined - never a departed one)."""
+    from urbanlens.dashboard.models.trivia.model import TriviaSessionParticipantStatus
+
+    participants = session.participants.exclude(status=TriviaSessionParticipantStatus.LEFT).select_related("profile__user")
     return {
         "session_id": session.pk,
         "status": session.status,
         "total_rounds": session.total_rounds,
         "host_profile_id": session.host_profile_id,
-        "participants": [serialize_participant(participant) for participant in session.participants.select_related("profile__user")],
+        "participants": [serialize_participant(participant) for participant in participants],
     }
 
 

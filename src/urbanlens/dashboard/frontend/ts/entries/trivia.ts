@@ -10,7 +10,7 @@
  * Trivia doesn't need.
  */
 import { getCsrfToken } from "../shared/csrf";
-import { toast } from "../shared/dialogs";
+import { confirmAction, toast } from "../shared/dialogs";
 
 declare global {
     interface Window {
@@ -22,6 +22,9 @@ declare global {
             invite: string;
             join: string;
             begin: string;
+            end: string;
+            leave: string;
+            kick: string;
             round: string;
             answer: string;
             chat_history: string;
@@ -263,6 +266,7 @@ async function handleInviteMore(): Promise<void> {
 function renderLobbyParticipants(participants: ParticipantPayload[]): void {
     const list = el("trivia-lobby-participants");
     list.innerHTML = "";
+    const isHost = hostProfileId === myProfileId;
     for (const participant of participants) {
         const item = document.createElement("li");
         const name = document.createElement("span");
@@ -271,14 +275,27 @@ function renderLobbyParticipants(participants: ParticipantPayload[]): void {
         status.className = participant.status === "joined" ? "trivia-lobby-status trivia-lobby-status--joined" : "trivia-lobby-status";
         status.textContent = participant.status === "joined" ? "Joined" : "Invited";
         item.append(name, status);
+        // Host can remove anyone but themselves - ending the whole game
+        // instead is "End game", not a self-kick.
+        if (isHost && participant.profile_id !== myProfileId) {
+            const kickBtn = document.createElement("button");
+            kickBtn.type = "button";
+            kickBtn.className = "trivia-kick-btn";
+            kickBtn.title = `Remove ${participant.username}`;
+            kickBtn.setAttribute("aria-label", `Remove ${participant.username}`);
+            kickBtn.textContent = "×";
+            kickBtn.addEventListener("click", () => void kickParticipant(participant.profile_id, participant.username));
+            item.appendChild(kickBtn);
+        }
         list.appendChild(item);
     }
 
     const me = participants.find((participant) => participant.profile_id === myProfileId);
-    const isHost = hostProfileId === myProfileId;
     el<HTMLButtonElement>("trivia-invite-more-btn").hidden = !isHost;
     el<HTMLButtonElement>("trivia-join-lobby-btn").hidden = !(me && me.status === "invited");
     el<HTMLButtonElement>("trivia-begin-btn").hidden = !isHost;
+    el<HTMLButtonElement>("trivia-leave-lobby-btn").hidden = !me;
+    el<HTMLButtonElement>("trivia-end-game-lobby-btn").hidden = !isHost;
 }
 
 function renderLobby(session: SessionPayload): void {
@@ -339,6 +356,19 @@ function handleSocketMessage(data: any): void {
         case "participant.joined":
             void refreshLobby();
             break;
+        case "participant.left":
+            if (data.new_host_profile_id) {
+                hostProfileId = data.new_host_profile_id;
+                updateRoundActionVisibility();
+            }
+            if (data.profile_id === myProfileId) {
+                toast.warning(data.reason === "kicked" ? "You were removed from the game by the host." : "You left the game.");
+                resetToSettings();
+            } else {
+                toast.info(data.reason === "kicked" ? "A player was removed from the game." : "A player left the game.");
+                void refreshLobby();
+            }
+            break;
         case "session.started":
             showPanel("trivia-round-panel");
             renderRound(data.round);
@@ -398,6 +428,16 @@ function initChat(): void {
 // Gameplay
 // ---------------------------------------------------------------------------
 
+// Whether the current viewer can end the whole game (host, multiplayer
+// only - solo play has "play again" for the same purpose). Recomputed on
+// every round render and whenever a host transfer happens mid-game
+// (see the "participant.left" socket handler), since hostProfileId can
+// change without a new round starting.
+function updateRoundActionVisibility(): void {
+    el<HTMLButtonElement>("trivia-leave-round-btn").hidden = !isMultiplayer;
+    el<HTMLButtonElement>("trivia-end-game-round-btn").hidden = !(isMultiplayer && hostProfileId === myProfileId);
+}
+
 function renderRound(round: RoundPayload): void {
     currentRound = round;
     sessionId = round.session_id;
@@ -408,6 +448,7 @@ function renderRound(round: RoundPayload): void {
     el<HTMLFormElement>("trivia-answer-form").hidden = false;
     el("trivia-reveal").hidden = true;
     el<HTMLInputElement>("trivia-answer-input").focus();
+    updateRoundActionVisibility();
 }
 
 function renderSummary(summary: SummaryPayload): void {
@@ -421,12 +462,87 @@ function renderSummary(summary: SummaryPayload): void {
         : mine
           ? `You scored ${mine.total_points} points across ${summary.rounds_played} rounds.`
           : `Finished - ${summary.rounds_played} rounds played.`;
-    el<HTMLParagraphElement>("trivia-summary-score").textContent = lines;
+    const prefix = summary.status === "abandoned" ? "Game ended early - not enough players remained.\n\n" : "";
+    el<HTMLParagraphElement>("trivia-summary-score").textContent = prefix + lines;
     showPanel("trivia-summary-panel");
     if (ws) {
         ws.close();
         ws = null;
     }
+}
+
+// Bails out of whatever game/lobby state we were in, back to the settings
+// panel - used both for "Leave" succeeding and for being told (over the
+// socket) that we were removed by the host.
+function resetToSettings(): void {
+    sessionId = null;
+    currentRound = null;
+    isMultiplayer = false;
+    hostProfileId = null;
+    if (ws) {
+        ws.close();
+        ws = null;
+    }
+    el("trivia-chat-panel").hidden = true;
+    showPanel("trivia-settings-panel");
+}
+
+// Voluntarily leave a lobby or in-progress game - the rest of the group
+// (if any remain) keeps playing without us.
+async function leaveGame(): Promise<void> {
+    if (sessionId === null) return;
+    const confirmed = await confirmAction({
+        title: "Leave this game?",
+        message: "You'll stop playing, but the rest of the group can continue without you.",
+        confirmLabel: "Leave",
+    });
+    if (!confirmed) return;
+
+    const response = await postForm(urlFor(urls.leave, sessionId), {});
+    if (response.error) {
+        toast.error(response.error);
+        return;
+    }
+    resetToSettings();
+}
+
+// Host-only manual escape hatch for a stalled/AFK multiplayer game - see
+// controllers.trivia.TriviaEndSessionView. Confirmed first since it's
+// irreversible for every other participant, not just the host.
+async function endGameNow(): Promise<void> {
+    if (sessionId === null) return;
+    const confirmed = await confirmAction({
+        title: "End this game?",
+        message: "This ends the game immediately for everyone, using the scores so far.",
+        confirmLabel: "End game",
+    });
+    if (!confirmed) return;
+
+    const response = await postForm(urlFor(urls.end, sessionId), {});
+    if (response.error) {
+        toast.error(response.error);
+        return;
+    }
+    renderSummary(response.summary as SummaryPayload);
+}
+
+// Host-only: remove another participant (still-invited or already-joined)
+// from the lobby/game.
+async function kickParticipant(profileId: number, username: string): Promise<void> {
+    if (sessionId === null) return;
+    const confirmed = await confirmAction({
+        title: `Remove ${username}?`,
+        message: `${username} will be removed from this game.`,
+        confirmLabel: "Remove",
+    });
+    if (!confirmed) return;
+
+    const response = await postForm(urlFor(urls.kick, sessionId), { profile_id: String(profileId) });
+    if (response.error) {
+        toast.error(response.error);
+        return;
+    }
+    await refreshLobby();
 }
 
 async function handleStartOrRoundResponse(payload: any): Promise<void> {
@@ -531,6 +647,7 @@ async function loadInitialSession(): Promise<void> {
     isMultiplayer = true;
 
     const lobby: SessionPayload = await getJson(urlFor(urls.lobby, sessionId));
+    hostProfileId = lobby.host_profile_id;
     if (lobby.status === "lobby") {
         renderLobby(lobby);
         return;
@@ -559,6 +676,10 @@ function init(): void {
     el<HTMLButtonElement>("trivia-join-lobby-btn").addEventListener("click", () => void joinLobby());
     el<HTMLButtonElement>("trivia-begin-btn").addEventListener("click", () => void beginGame());
     el<HTMLButtonElement>("trivia-invite-more-btn").addEventListener("click", () => void handleInviteMore());
+    el<HTMLButtonElement>("trivia-leave-lobby-btn").addEventListener("click", () => void leaveGame());
+    el<HTMLButtonElement>("trivia-end-game-lobby-btn").addEventListener("click", () => void endGameNow());
+    el<HTMLButtonElement>("trivia-leave-round-btn").addEventListener("click", () => void leaveGame());
+    el<HTMLButtonElement>("trivia-end-game-round-btn").addEventListener("click", () => void endGameNow());
 
     document.querySelectorAll<HTMLButtonElement>("[data-vote]").forEach((button) => {
         button.addEventListener("click", () => void voteOnCurrentQuestion(button.dataset.vote as string));
