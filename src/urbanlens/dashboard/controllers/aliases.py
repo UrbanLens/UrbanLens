@@ -19,10 +19,11 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias, WikiAlias
-from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
+from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, WikiAutoRemoval
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison, persist_official_aliases_for_location
+from urbanlens.dashboard.services.pin_subresources import AliasExistsError, AliasIsCurrentNameError, create_pin_alias, delete_pin_alias, promote_alias_to_name
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -145,17 +146,9 @@ class PinAliasView(LoginRequiredMixin, View):
             return HttpResponse("Name is required.", status=400)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
-            # atomic() gives IntegrityError its own savepoint to roll back to -
-            # without it, catching the error still leaves the DB connection's
-            # surrounding transaction (if any) unusable for further queries
-            # (this view's own re-render right below included) until an
-            # explicit rollback. Case-insensitive alias matching (the whole
-            # point of this constraint) makes this collision far more common
-            # than the old exact-name-only version ever was.
-            with transaction.atomic():
-                PinAlias.objects.create(pin=pin, name=name, kind=kind)
-        except IntegrityError:
-            return HttpResponse("That alias already exists.", status=409)
+            create_pin_alias(pin, name=name, kind=kind)
+        except AliasExistsError as exc:
+            return HttpResponse(str(exc), status=409)
         return _render_pin_panel(request, pin)
 
 
@@ -163,13 +156,10 @@ class PinAliasDeleteView(LoginRequiredMixin, View):
     def delete(self, request, pin_slug, alias_id):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         alias = get_object_or_404(PinAlias, id=alias_id, pin=pin)
-        if normalize_name_for_comparison(alias.name) == normalize_name_for_comparison(pin.effective_name):
-            return HttpResponse("This alias is the current name - pick another name first.", status=400)
-        # Tombstone first: an external-source sync or the pin<->wiki alias-mirror
-        # signal could otherwise recreate this exact name the moment either one
-        # next runs, silently undoing the deletion.
-        PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.ALIAS, value=alias.name)
-        alias.delete()
+        try:
+            delete_pin_alias(pin, alias)
+        except AliasIsCurrentNameError as exc:
+            return HttpResponse(str(exc), status=400)
         return _render_pin_panel(request, pin)
 
 
@@ -179,9 +169,7 @@ class PinAliasUseView(LoginRequiredMixin, View):
     def post(self, request, pin_slug, alias_id):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         alias = get_object_or_404(PinAlias, id=alias_id, pin=pin)
-        pin.name = alias.name
-        pin.name_is_user_provided = True
-        pin.save(update_fields=["name", "name_is_user_provided", "updated"])
+        promote_alias_to_name(pin, alias)
 
         from urbanlens.dashboard.controllers.pin_edit import _overview_context
 

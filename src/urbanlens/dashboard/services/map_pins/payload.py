@@ -14,6 +14,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin import Pin
     from urbanlens.dashboard.models.profile.model import Profile
 
+#: Label kinds shown as chips on a pin. Excludes ``user`` (people labels) and
+#: ``media`` (photo-only labels), neither of which describes the place itself.
+DISPLAY_LABEL_KINDS = frozenset({"tag", "category", "status"})
+
 
 @dataclass(frozen=True)
 class MapPinPage:
@@ -60,13 +64,31 @@ class MapPinPayloadService:
     def all(self, query: QuerySet[Pin]) -> list[dict[str, Any]]:
         return [self.serialize(pin) for pin in self.prepare_queryset(query).iterator(chunk_size=1000)]
 
+    def display_labels(self, pin: Pin) -> list[Label]:
+        """The pin's labels that display as chips, in prefetch order.
+
+        Reads ``pin.labels.all()``, which ``prepare_queryset`` prefetches with
+        the profile's per-label customizations applied - so calling this on a
+        prepared pin costs no additional query. Shared with
+        ``services.pin_sync.serialize_sync_pin``, which needs the same set to
+        emit each chip's ``kind``.
+
+        Args:
+            pin: The pin whose labels to filter. Should come from a queryset
+                prepared by :meth:`prepare_queryset`, or this triggers a query.
+
+        Returns:
+            The pin's tag, category, and status labels.
+        """
+        return [label for label in pin.labels.all() if label.kind in DISPLAY_LABEL_KINDS]
+
     def serialize(self, pin: Pin) -> dict[str, Any]:
         labels = list(pin.labels.all())
         statuses = [b for b in labels if b.kind == "status"]
         categories = [b.name for b in labels if b.kind == "category"]
         # Include all display-relevant label kinds as chips so every label shows in the popup.
         # Status and category labels were previously omitted, causing them to be invisible.
-        display_labels = [b for b in labels if b.kind in {"tag", "category", "status"}]
+        display_labels = self.display_labels(pin)
         return {
             "id": pin.pk,
             "uuid": str(pin.uuid),

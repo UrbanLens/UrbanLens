@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+from urbanlens.dashboard.external_api.serializers import PinAliasSerializer, PinLinkSerializer, PinNoteSerializer
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.custom_fields.model import CustomFieldValue
@@ -78,9 +79,14 @@ def build_pin_detail(pin: Pin, profile: Profile) -> dict[str, Any]:
     notes = list(pin.notes.order_by("-created"))
     aliases = list(pin.aliases.all())
     links = list(pin.links.all())
-    payload["notes"] = [{"id": note.id, "text": note.text, "created": note.created.isoformat()} for note in notes]
-    payload["aliases"] = [{"id": alias.id, "name": alias.name, "kind": alias.kind} for alias in aliases]
-    payload["links"] = [{"id": link.id, "name": link.display_name, "url": link.url, "wayback_url": link.wayback_url or None} for link in links]
+    # The same serializers the dedicated sub-resource endpoints use, so a pin's
+    # nested notes/aliases/links and the ones served by
+    # ``pins/{slug}/notes/`` et al. cannot describe the same row differently.
+    # ``pin`` goes into the alias context so is_current is resolved without a
+    # query per row.
+    payload["notes"] = PinNoteSerializer(notes, many=True).data
+    payload["aliases"] = PinAliasSerializer(aliases, many=True, context={"pin": pin}).data
+    payload["links"] = PinLinkSerializer(links, many=True).data
     payload["custom_fields"] = _custom_fields(pin)
 
     payload["note_count"] = len(notes)

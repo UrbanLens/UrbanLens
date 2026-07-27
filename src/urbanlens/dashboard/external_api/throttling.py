@@ -147,3 +147,20 @@ class ExternalApiBurstThrottle(ExternalApiRateThrottle):
     """The short-window cap applied to every external API request, both tiers."""
 
     scope = "external_api_burst"
+
+
+class LocationSearchThrottle(ExternalApiReadThrottle):
+    """A separate budget for autocomplete, which is charged per keystroke.
+
+    Views using this replace :class:`ExternalApiReadThrottle` with it rather
+    than stacking the two. Autocomplete is the one read endpoint whose request
+    count tracks typing rather than data volume, so counting it against the
+    shared hourly read cap would let a few minutes of searching exhaust the
+    budget the client needs for actually syncing. Its own (larger) ceiling
+    keeps that traffic bounded without coupling the two.
+
+    :class:`ExternalApiBurstThrottle` still applies on top, so a client that
+    forgets to debounce its input is still smoothed out.
+    """
+
+    scope = "external_api_location_search"

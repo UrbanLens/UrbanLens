@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
+from urbanlens.dashboard.services.pin_subresources import create_pin_note, delete_pin_note
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 
 logger = logging.getLogger(__name__)
@@ -445,11 +446,10 @@ class PinNotesView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
 
-        text = (body.get("text") or "").strip()
-        if not text:
-            return HttpResponse("Note text is required.", status=400)
-
-        PinNote.objects.create(pin=pin, text=text)
+        try:
+            create_pin_note(pin, text=(body.get("text") or ""))
+        except ValueError as exc:
+            return HttpResponse(str(exc), status=400)
         notes = pin.notes.order_by("-created")
         return render(request, "dashboard/partials/pins/pin_notes_panel.html", {"pin": pin, "notes": notes})
 
@@ -466,7 +466,7 @@ class PinNoteDeleteView(LoginRequiredMixin, View):
             return result
         pin = result
         note = get_object_or_404(PinNote, id=note_id, pin=pin)
-        note.delete()
+        delete_pin_note(note)
         return HttpResponse("", status=200)
 
 

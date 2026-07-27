@@ -827,3 +827,39 @@ already reset between tests.
   Protocol's `CSS.getMatchedStylesForNode` (via a Playwright CDP session) to see which rule a
   live page actually applied if a rendered value looks unexpectedly stale. (This applies to the
   public dev/staging/prod deployments, not the local docker-compose stack described above.)
+
+- **`MapController.resolve_place` does not honor the `external_apis_enabled` profile toggle**
+  (`src/urbanlens/dashboard/controllers/maps.py:384-408`). Its sibling
+  `autocomplete_places` (same file, line ~361) *does* check
+  `request.user.profile.external_apis_enabled` and returns `{"disabled": true}` when the user
+  has turned external lookups off - but `resolve_place`, which is called the moment the user
+  *selects* one of those suggestions, checks only whether an API key/REData is configured. So a
+  user who has opted out of external API calls still triggers a Google Places **Details** call
+  (billable, and a privacy leak of what they searched for) on selection. Repro: set
+  `Profile.external_apis_enabled = False`, GET
+  `/dashboard/map/resolve-place/?place_id=<any>` -> still hits the provider. Fix: add the same
+  `if not request.user.profile.external_apis_enabled: return ... 403` guard the external API's
+  `PlaceResolveView` now applies
+  (`src/urbanlens/dashboard/external_api/views.py`, `PlaceResolveView.get`). Noted while
+  building the external `locations/resolve/` endpoint, which deliberately does *not* reproduce
+  the omission; the internal path was left alone to keep that change out of an already large
+  API-surface commit.
+
+- **Three pre-existing mypy errors, unrelated to any current feature work** (surfaced while
+  type-checking the external-API sub-resource work; all three files are byte-identical to
+  `f529b0f4`, so these are long-standing, not regressions). Left unfixed deliberately - each
+  needs a real decision about the underlying type, and CLAUDE.md forbids silencing them with
+  `cast`:
+  1. `src/urbanlens/dashboard/models/boundary/queryset.py:87` - `"GEOSGeometry" has no
+     attribute "exterior_ring"`. `buffer_point_by_meters` calls `circle.exterior_ring`, but
+     `.buffer()` is typed as returning the `GEOSGeometry` base rather than `Polygon`. The call
+     is correct at runtime (a buffer always yields a polygon); the fix is to narrow the type
+     (e.g. assert/annotate the buffer result as `Polygon`), not to cast at the use site.
+  2. `src/urbanlens/dashboard/forms/search.py:176` - `resolve_reference(cf.reference_kind, raw,
+     self.profile)` passes `Profile | None` where `Profile` is required. Either `SearchForm`
+     should refuse to clean reference fields when it has no profile, or `resolve_reference`
+     should accept `None` - needs a decision about which is the real invariant.
+  3. `src/urbanlens/dashboard/controllers/trip.py:481` - `existing_ids.add(trip.creator_id)`
+     adds `int | None` to a `set[int]`. A trip with no creator would insert `None`; either
+     `creator` is genuinely non-nullable (then the FK/type should say so) or the `None` case
+     needs handling.
