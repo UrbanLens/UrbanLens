@@ -1,0 +1,774 @@
+"""External API endpoints for direct messages and group chats.
+
+Every view here is credential-only (``ExternalApiView``), and every one
+requires a ``messages:read``/``messages:write`` scope - which
+``permissions.OAUTH2_ONLY_SCOPES`` restricts to user-consented OAuth2 tokens,
+so a PAT-style ``ApiKey`` can never reach any of this even if its ``scopes``
+list somehow names them. A bearer key that ends up in a CI config or a
+screenshot must not be a way into someone's conversations.
+
+Two design points worth stating up front, because both are easy to "simplify"
+into a bug:
+
+**Nothing here decrypts anything.** Encrypted messages are relayed as
+``ciphertext``/``nonce``/``key_version`` exactly as stored. The server holds no
+key material (see ``controllers.e2ee``), and no endpoint here should ever
+acquire any.
+
+**Nothing here constructs a share row directly.** Sends that carry a pin go
+through ``services.direct_message_shares.send_message_with_share``, which
+routes to the same ``create_pin_share`` the web composer uses and therefore
+keeps the ``LocationExposure`` provenance chain intact. Building a ``PinShare``
+or ``DirectMessageShare`` inline would appear to work while silently recording
+no exposure.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import TYPE_CHECKING, Any, ClassVar
+
+from drf_spectacular.utils import extend_schema
+from rest_framework.response import Response
+
+from urbanlens.dashboard.external_api.pagination import ExternalApiPagination
+from urbanlens.dashboard.external_api.serializers import ErrorSerializer
+from urbanlens.dashboard.external_api.serializers_messaging import (
+    ConversationSerializer,
+    GroupChatSerializer,
+    GroupCreateSerializer,
+    GroupMemberSerializer,
+    GroupMembersSerializer,
+    GroupRenameSerializer,
+    MessageSendSerializer,
+    PageSerializer,
+    ReactionSerializer,
+    RetentionSettingsSerializer,
+    build_conversation_payload,
+    build_direct_message_payload,
+    build_group_message_payload,
+)
+from urbanlens.dashboard.external_api.views import ExternalApiView
+from urbanlens.dashboard.models.account.model import ApiKeyScope
+from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+from urbanlens.dashboard.models.group_chats.model import GroupChat
+from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.direct_message_shares import ShareTargetNotFoundError, send_message_with_share
+from urbanlens.dashboard.services.direct_messages import (
+    THREAD_PAGE_SIZE,
+    clear_email_debounce,
+    delete_message_for_everyone,
+    delete_message_for_self,
+    is_safe_reaction_emoji,
+    thread_page,
+    toggle_reaction,
+)
+from urbanlens.dashboard.services.group_chats import (
+    GROUP_THREAD_PAGE_SIZE,
+    add_group_members,
+    create_group_chat,
+    create_group_message,
+    group_conversations_for,
+    group_thread_page,
+    remove_group_member,
+    rename_group_chat,
+    share_pin_in_group_message,
+)
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from uuid import UUID
+
+    from rest_framework.request import Request
+    from rest_framework.serializers import BaseSerializer
+
+logger = logging.getLogger(__name__)
+
+#: Literal first path segments under ``messages/`` that can never be a peer
+#: slug. Django resolves urlpatterns in order and the literal routes are
+#: registered first, so this is a second line of defense rather than the
+#: primary one - but a peer lookup that silently matched a profile actually
+#: named "settings" would be a confusing, hard-to-trace bug, so the peer
+#: resolver refuses these outright instead of depending on route ordering
+#: staying correct forever.
+RESERVED_PEER_SLUGS = frozenset({"conversations", "settings", "groups"})
+
+#: Upper bound a client may request for one page of a message thread.
+MAX_THREAD_LIMIT = 100
+
+
+def _paginate_built(
+    request: Request,
+    rows: list[Any],
+    builder: Callable[[Any], dict[str, Any]],
+    serializer_class: type[BaseSerializer],
+    view: Any,
+) -> Response:
+    """Page a list of raw rows, then build payloads for *only* that page.
+
+    ``PaginatedListMixin`` serializes the page directly, which assumes the row
+    shape already matches the serializer. These lists don't: conversation rows
+    need normalizing (and that normalization issues per-row identity-masking
+    queries), so paging first and building second keeps the cost proportional
+    to the page rather than to the whole inbox.
+
+    Args:
+        request: The request whose ``page``/``page_size`` drive pagination.
+        rows: The full, ordered row list.
+        builder: Converts one raw row into a serializer-shaped dict.
+        serializer_class: Serializer applied to the built page.
+        view: The view, for the paginator's context.
+
+    Returns:
+        A ``{count, next, previous, results}`` response.
+    """
+    paginator = ExternalApiPagination()
+    page = paginator.paginate_queryset(rows, request, view=view)
+    built = [builder(row) for row in (page or [])]
+    return paginator.get_paginated_response(serializer_class(built, many=True).data)
+
+
+def _resolve_peer(peer_slug: str) -> Profile | None:
+    """Resolve a conversation partner's slug to a profile.
+
+    Args:
+        peer_slug: The slug from the URL.
+
+    Returns:
+        The matching profile, or None when the slug is reserved or unknown.
+    """
+    if peer_slug in RESERVED_PEER_SLUGS:
+        return None
+    return Profile.objects.select_related("user").filter(slug=peer_slug).first()
+
+
+def _thread_response(request: Request, messages: list[Any], has_more_older: bool, builder: Callable[[Any], dict[str, Any]]) -> Response:
+    """Build the cursor-paginated envelope for one page of a message thread.
+
+    Deliberately *not* page-number pagination, unlike the browse lists in this
+    package. A thread appends at one end continuously: with numbered pages,
+    every message that arrives while a user scrolls back shifts the window, so
+    page 2 re-serves rows the client already rendered from page 1 and can also
+    skip rows entirely. Keying off ``before=<id>`` - the same ``before_id``
+    cursor ``thread_page`` already takes - makes each request name an absolute
+    position in the thread that new arrivals cannot move.
+
+    Args:
+        request: The current request, used to build the ``next`` URL.
+        messages: The page's messages, oldest first.
+        has_more_older: Whether older messages remain beyond this page.
+        builder: Renders one message for the viewer.
+
+    Returns:
+        ``{results, next, previous, count}`` with ``previous``/``count`` null -
+        a cursor walk has no page count and only goes one direction.
+    """
+    results = [builder(message) for message in messages]
+    next_url = None
+    if has_more_older and messages:
+        # Oldest row in this page: the next page is everything strictly older.
+        next_url = request.build_absolute_uri(f"?before={messages[0].pk}&limit={len(messages)}")
+    return Response({"results": results, "next": next_url, "previous": None, "count": None})
+
+
+def _thread_limit(request: Request, default: int) -> int:
+    """Read and clamp the caller's requested page size.
+
+    Args:
+        request: The request carrying an optional ``limit`` query param.
+        default: The page size to use when none was requested.
+
+    Returns:
+        A limit between 1 and :data:`MAX_THREAD_LIMIT`.
+    """
+    try:
+        limit = int(request.query_params.get("limit") or default)
+    except (TypeError, ValueError):
+        return default
+    return max(1, min(limit, MAX_THREAD_LIMIT))
+
+
+def _before_id(request: Request) -> int | None:
+    """Read the ``before`` cursor from the query string.
+
+    Args:
+        request: The request.
+
+    Returns:
+        The message id to page back from, or None for the most recent page.
+    """
+    try:
+        return int(request.query_params["before"])
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
+class ConversationsView(ExternalApiView):
+    """GET: the caller's unified inbox - one-to-one threads and group chats merged.
+
+    Backed by ``all_conversations_for``, the same function the web sidebar
+    uses, so ordering and unread counts can't drift between surfaces.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
+    }
+
+    @extend_schema(responses={200: PageSerializer})
+    def get(self, request: Request) -> Response:
+        """Return one page of the caller's conversations, most recent first."""
+        from urbanlens.dashboard.services.direct_messages import all_conversations_for
+
+        profile = request.user.profile
+        rows = all_conversations_for(profile)
+        return _paginate_built(request, rows, lambda row: build_conversation_payload(row, profile), ConversationSerializer, self)
+
+
+class MessageThreadView(ExternalApiView):
+    """GET one page of a one-to-one thread; POST a new message into it."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(
+        description=(
+            "Returns one page of the conversation, oldest first, using cursor pagination. Pass "
+            "`?before=<id>` (the `next` link does this for you) to walk further back. `previous` and `count` "
+            "are always null: a live thread has no stable page count."
+        ),
+        responses={200: PageSerializer, 404: ErrorSerializer},
+    )
+    def get(self, request: Request, peer_slug: str) -> Response:
+        """Return one page of the caller's conversation with ``peer_slug``."""
+        profile = request.user.profile
+        partner = _resolve_peer(peer_slug)
+        if partner is None:
+            return Response({"error": "No such conversation."}, status=404)
+
+        messages, has_more_older = thread_page(profile, partner, before_id=_before_id(request), limit=_thread_limit(request, THREAD_PAGE_SIZE))
+        return _thread_response(request, messages, has_more_older, lambda message: build_direct_message_payload(message, profile))
+
+    @extend_schema(
+        request=MessageSendSerializer,
+        description=(
+            "Sends a message, optionally carrying one `@pin`/`@trip`/`@friend` share. Pin shares are "
+            "resolved and recorded through the same pipeline the web composer uses, so the location's "
+            "share-provenance chain stays intact. Supply `client_uuid` to make retries idempotent: a repeat "
+            "returns the already-created message with HTTP 200 instead of sending it twice."
+        ),
+        responses={201: None, 200: None, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer},
+    )
+    def post(self, request: Request, peer_slug: str) -> Response:
+        """Send one message to ``peer_slug``, optionally carrying a share."""
+        profile = request.user.profile
+        partner = _resolve_peer(peer_slug)
+        if partner is None:
+            return Response({"error": "No such conversation."}, status=404)
+
+        serializer = MessageSendSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        client_uuid = data.get("client_uuid")
+
+        # Distinguishes "created" from "idempotent replay" for the status code,
+        # without needing the service to report which happened.
+        existed = bool(client_uuid) and DirectMessage.objects.filter(sender=profile, client_uuid=client_uuid).exists()
+
+        markup_map_id = data.get("markup_map_id")
+        try:
+            message = send_message_with_share(
+                profile,
+                partner,
+                data.get("body") or "",
+                shared_pin_slug=data.get("shared_pin_id") or None,
+                shared_trip_slug=data.get("shared_trip_slug") or None,
+                shared_profile_slug=data.get("shared_profile_slug") or None,
+                markup_map_uuid=str(markup_map_id) if markup_map_id else None,
+                ciphertext=data.get("ciphertext") or "",
+                nonce=data.get("nonce") or "",
+                key_version=data.get("key_version") or 0,
+                reply_to_id=data.get("reply_to_id"),
+                image_ids=list(data.get("image_ids") or []),
+                client_uuid=client_uuid,
+            )
+        except ShareTargetNotFoundError as exc:
+            return Response({"error": str(exc)}, status=404)
+        except PermissionError as exc:
+            return Response({"error": str(exc)}, status=403)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=400)
+
+        return Response(build_direct_message_payload(message, profile), status=200 if existed else 201)
+
+
+class MessageThreadReadView(ExternalApiView):
+    """POST: mark every message the caller has received in this thread as read."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(request=None, responses={200: None, 404: ErrorSerializer})
+    def post(self, request: Request, peer_slug: str) -> Response:
+        """Mark the conversation with ``peer_slug`` read."""
+        profile = request.user.profile
+        partner = _resolve_peer(peer_slug)
+        if partner is None:
+            return Response({"error": "No such conversation."}, status=404)
+
+        updated = DirectMessage.objects.between(profile, partner).filter(recipient=profile).mark_read()
+        # Ends the current unread streak so a later message can alert again -
+        # without this, reading on mobile would leave the streak "already
+        # emailed" and suppress the next notification.
+        clear_email_debounce(partner.pk, profile.pk)
+        return Response({"marked_read": updated})
+
+
+class MessageReactionView(ExternalApiView):
+    """POST: toggle one of the caller's emoji reactions on a message."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(request=ReactionSerializer, responses={200: None, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
+    def post(self, request: Request, peer_slug: str, message_id: int) -> Response:
+        """Add or remove the caller's reaction on one message in this thread."""
+        profile = request.user.profile
+        partner = _resolve_peer(peer_slug)
+        if partner is None:
+            return Response({"error": "No such conversation."}, status=404)
+
+        serializer = ReactionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        emoji = serializer.validated_data["emoji"]
+        # Reactions are relayed verbatim into the other participant's client,
+        # so the same render-safety rule the web path applies holds here.
+        if not is_safe_reaction_emoji(emoji):
+            return Response({"error": "That isn't a usable reaction."}, status=400)
+
+        message = DirectMessage.objects.between(profile, partner).filter(pk=message_id).first()
+        if message is None:
+            return Response({"error": "No such message."}, status=404)
+
+        try:
+            action = toggle_reaction(profile, message, emoji)
+        except PermissionError as exc:
+            return Response({"error": str(exc)}, status=403)
+        return Response({"action": action, "reactions": build_direct_message_payload(message, profile)["reactions"]})
+
+
+class MessageDetailView(ExternalApiView):
+    """DELETE one message, either for everyone (sender) or just for the caller."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "DELETE": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(
+        description=(
+            "Deletes a message. `?scope=everyone` (sender only) tombstones it for the recipient and revokes "
+            "any share it carried; `?scope=self` (recipient only) hides it from the caller's own view and "
+            "leaves the sender's copy untouched. Defaults to `self`."
+        ),
+        responses={204: None, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer},
+    )
+    def delete(self, request: Request, peer_slug: str, message_id: int) -> Response:
+        """Delete one message in this thread."""
+        profile = request.user.profile
+        partner = _resolve_peer(peer_slug)
+        if partner is None:
+            return Response({"error": "No such conversation."}, status=404)
+
+        message = DirectMessage.objects.between(profile, partner).filter(pk=message_id).first()
+        if message is None:
+            return Response({"error": "No such message."}, status=404)
+
+        scope = (request.query_params.get("scope") or "self").strip().lower()
+        if scope not in ("everyone", "self"):
+            return Response({"error": "scope must be 'everyone' or 'self'."}, status=400)
+
+        try:
+            if scope == "everyone":
+                delete_message_for_everyone(message, profile)
+            else:
+                delete_message_for_self(message, profile)
+        except PermissionError as exc:
+            return Response({"error": str(exc)}, status=403)
+        return Response(status=204)
+
+
+class MessageSettingsView(ExternalApiView):
+    """GET/PATCH the caller's message-retention preference."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
+        "PATCH": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(responses={200: RetentionSettingsSerializer})
+    def get(self, request: Request) -> Response:
+        """Return how long the caller's sent messages survive after being read."""
+        profile = request.user.profile
+        return Response({"direct_message_delete_after": profile.direct_message_delete_after})
+
+    @extend_schema(
+        request=RetentionSettingsSerializer,
+        description="Changes retention for messages sent *from now on*; each message snapshots the setting at send time, so existing messages keep the window they were sent under.",
+        responses={200: RetentionSettingsSerializer},
+    )
+    def patch(self, request: Request) -> Response:
+        """Update the caller's retention preference."""
+        serializer = RetentionSettingsSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = request.user.profile
+        profile.direct_message_delete_after = serializer.validated_data["direct_message_delete_after"]
+        profile.save(update_fields=["direct_message_delete_after", "updated"])
+        return Response({"direct_message_delete_after": profile.direct_message_delete_after})
+
+
+def _group_payload(group: GroupChat, *, member_count: int, is_muted: bool) -> dict[str, Any]:
+    """Build the ``GroupChatSerializer`` shape for one group.
+
+    Args:
+        group: The group chat.
+        member_count: Active member count.
+        is_muted: Whether the caller muted this group.
+
+    Returns:
+        A serializer-shaped dict.
+    """
+    creator = group.creator
+    return {
+        "uuid": str(group.uuid),
+        "name": group.name,
+        "creator_slug": (creator.slug or None) if creator is not None else None,
+        "member_count": member_count,
+        "is_muted": is_muted,
+        "created": group.created,
+    }
+
+
+class GroupsView(ExternalApiView):
+    """GET the caller's group chats; POST to start a new one."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(responses={200: PageSerializer})
+    def get(self, request: Request) -> Response:
+        """Return one page of the caller's group chats, most recently active first."""
+        profile = request.user.profile
+        rows = group_conversations_for(profile)
+        return _paginate_built(
+            request,
+            rows,
+            lambda row: _group_payload(row["group"], member_count=row["member_count"], is_muted=row["is_muted"]),
+            GroupChatSerializer,
+            self,
+        )
+
+    @extend_schema(request=GroupCreateSerializer, responses={201: GroupChatSerializer, 400: ErrorSerializer, 403: ErrorSerializer})
+    def post(self, request: Request) -> Response:
+        """Create a group chat with the caller as its creator."""
+        serializer = GroupCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = request.user.profile
+
+        slugs = serializer.validated_data["member_slugs"]
+        members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
+        missing = set(slugs) - {member.slug for member in members}
+        if missing:
+            return Response({"error": f"Unknown profile slug(s): {', '.join(sorted(missing))}."}, status=400)
+
+        try:
+            group = create_group_chat(profile, serializer.validated_data["name"], members)
+        except PermissionError as exc:
+            return Response({"error": str(exc)}, status=403)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=400)
+
+        return Response(_group_payload(group, member_count=group.active_memberships().count(), is_muted=False), status=201)
+
+
+class GroupDetailView(ExternalApiView):
+    """GET one page of a group thread; PATCH to rename the group."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
+        "PATCH": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(
+        description="Returns one page of the group thread, cursor-paginated on `?before=<id>` exactly like a one-to-one thread.",
+        responses={200: PageSerializer, 404: ErrorSerializer},
+    )
+    def get(self, request: Request, group_uuid: UUID) -> Response:
+        """Return one page of this group's messages, oldest first."""
+        profile = request.user.profile
+        group = GroupChat.objects.filter(uuid=group_uuid).first()
+        # A non-member gets the same answer as a nonexistent group, so this
+        # can't be used to probe which group uuids exist.
+        membership = group.membership_for(profile) if group is not None else None
+        if membership is None:
+            return Response({"error": "No such group."}, status=404)
+
+        messages, has_more_older = group_thread_page(membership, before_id=_before_id(request), limit=_thread_limit(request, GROUP_THREAD_PAGE_SIZE))
+        return _thread_response(request, messages, has_more_older, lambda message: build_group_message_payload(message, profile))
+
+    @extend_schema(request=GroupRenameSerializer, responses={200: GroupChatSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
+    def patch(self, request: Request, group_uuid: UUID) -> Response:
+        """Rename this group - any active member may do so."""
+        profile = request.user.profile
+        group = GroupChat.objects.filter(uuid=group_uuid).first()
+        if group is None or group.membership_for(profile) is None:
+            return Response({"error": "No such group."}, status=404)
+
+        serializer = GroupRenameSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            group = rename_group_chat(group, profile, serializer.validated_data["name"])
+        except PermissionError as exc:
+            return Response({"error": str(exc)}, status=403)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=400)
+
+        membership = group.membership_for(profile)
+        return Response(_group_payload(group, member_count=group.active_memberships().count(), is_muted=bool(membership and membership.muted)))
+
+
+class GroupMessagesView(ExternalApiView):
+    """POST a message into a group chat."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(
+        request=MessageSendSerializer,
+        description="Sends a message to the group. Supply `client_uuid` for idempotent retries; a repeat returns the existing message with HTTP 200.",
+        responses={201: None, 200: None, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer},
+    )
+    def post(self, request: Request, group_uuid: UUID) -> Response:
+        """Send one message into this group."""
+        from urbanlens.dashboard.models.group_chats.model import GroupMessage
+
+        profile = request.user.profile
+        group = GroupChat.objects.filter(uuid=group_uuid).first()
+        if group is None or group.membership_for(profile) is None:
+            return Response({"error": "No such group."}, status=404)
+
+        serializer = MessageSendSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        client_uuid = data.get("client_uuid")
+        existed = bool(client_uuid) and GroupMessage.objects.filter(sender=profile, client_uuid=client_uuid).exists()
+
+        try:
+            message = create_group_message(
+                profile,
+                group,
+                data.get("body") or "",
+                ciphertext=data.get("ciphertext") or "",
+                nonce=data.get("nonce") or "",
+                key_version=data.get("key_version") or 0,
+                client_uuid=client_uuid,
+            )
+        except PermissionError as exc:
+            return Response({"error": str(exc)}, status=403)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=400)
+
+        return Response(build_group_message_payload(message, profile), status=200 if existed else 201)
+
+
+class GroupReadView(ExternalApiView):
+    """POST: advance the caller's read mark in this group to now."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(request=None, responses={200: None, 404: ErrorSerializer})
+    def post(self, request: Request, group_uuid: UUID) -> Response:
+        """Mark this group's thread read for the caller."""
+        from urbanlens.dashboard.models.group_chats.model import GroupMessage
+
+        profile = request.user.profile
+        group = GroupChat.objects.filter(uuid=group_uuid).first()
+        membership = group.membership_for(profile) if group is not None else None
+        if membership is None:
+            return Response({"error": "No such group."}, status=404)
+
+        GroupMessage.objects.mark_read(membership)
+        return Response({"ok": True})
+
+
+class GroupMembersView(ExternalApiView):
+    """GET this group's members; POST to add; DELETE to remove (or leave)."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+        "DELETE": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    def _membership_or_none(self, request: Request, group_uuid: UUID) -> tuple[Profile, GroupChat] | None:
+        """Resolve the caller and group when the caller is an active member.
+
+        Args:
+            request: The authenticated request.
+            group_uuid: The group's uuid.
+
+        Returns:
+            ``(profile, group)``, or None when the group is unknown or the
+            caller isn't an active member.
+        """
+        profile = request.user.profile
+        group = GroupChat.objects.filter(uuid=group_uuid).first()
+        if group is None or group.membership_for(profile) is None:
+            return None
+        return profile, group
+
+    @extend_schema(responses={200: GroupMemberSerializer(many=True), 404: ErrorSerializer})
+    def get(self, request: Request, group_uuid: UUID) -> Response:
+        """List this group's active members, masked per the caller's visibility."""
+        from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+
+        resolved = self._membership_or_none(request, group_uuid)
+        if resolved is None:
+            return Response({"error": "No such group."}, status=404)
+        profile, group = resolved
+
+        members = []
+        for membership in group.active_memberships().select_related("profile", "profile__user"):
+            member = membership.profile
+            if member.pk == profile.pk:
+                identity = {"display_name": member.username, "is_masked": False}
+            else:
+                identity = resolve_visible_identity(profile, member)
+            members.append(
+                {
+                    # Blanked when masked: handing back the real slug would let
+                    # the caller look up a member whose name is masked exactly
+                    # to prevent that.
+                    "slug": "" if identity["is_masked"] else (member.slug or ""),
+                    "display_name": identity["display_name"],
+                    "is_anonymized": identity["is_masked"],
+                    "is_creator": group.creator_id == member.pk,
+                },
+            )
+        return Response(GroupMemberSerializer(members, many=True).data)
+
+    @extend_schema(request=GroupMembersSerializer, responses={200: None, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
+    def post(self, request: Request, group_uuid: UUID) -> Response:
+        """Add members - only the group's creator may do this."""
+        resolved = self._membership_or_none(request, group_uuid)
+        if resolved is None:
+            return Response({"error": "No such group."}, status=404)
+        profile, group = resolved
+
+        serializer = GroupMembersSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        slugs = serializer.validated_data["member_slugs"]
+        members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
+        missing = set(slugs) - {member.slug for member in members}
+        if missing:
+            return Response({"error": f"Unknown profile slug(s): {', '.join(sorted(missing))}."}, status=400)
+
+        try:
+            created = add_group_members(group, profile, members)
+        except PermissionError as exc:
+            # "Only the group's creator can add members." - server-side and
+            # authoritative, regardless of what a client believed it could do.
+            return Response({"error": str(exc)}, status=403)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=400)
+        return Response({"added": len(created)})
+
+    @extend_schema(
+        request=GroupMembersSerializer,
+        description="Removes members. Anyone may remove themselves (leaving the group); only the creator may remove anyone else.",
+        responses={200: None, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer},
+    )
+    def delete(self, request: Request, group_uuid: UUID) -> Response:
+        """Remove members from this group, or leave it."""
+        resolved = self._membership_or_none(request, group_uuid)
+        if resolved is None:
+            return Response({"error": "No such group."}, status=404)
+        profile, group = resolved
+
+        serializer = GroupMembersSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        slugs = serializer.validated_data["member_slugs"]
+        targets = list(Profile.objects.select_related("user").filter(slug__in=slugs))
+        missing = set(slugs) - {member.slug for member in targets}
+        if missing:
+            return Response({"error": f"Unknown profile slug(s): {', '.join(sorted(missing))}."}, status=400)
+
+        removed = 0
+        for target in targets:
+            try:
+                remove_group_member(group, profile, target)
+            except PermissionError as exc:
+                return Response({"error": str(exc)}, status=403)
+            except ValueError as exc:
+                return Response({"error": str(exc)}, status=400)
+            removed += 1
+        return Response({"removed": removed})
+
+
+class GroupPinShareView(ExternalApiView):
+    """POST: share one of the caller's pins into a group chat.
+
+    Fans out one ``PinShare`` (and therefore one ``LocationExposure``) per
+    connected member through ``share_pin_in_group_message`` - the same path the
+    web group composer uses. Without this endpoint the mobile group composer
+    would silently be unable to share pins at all.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(
+        request=MessageSendSerializer,
+        description=(
+            "Shares the pin named by `shared_pin_id` (a pin slug or uuid, owned by the caller) into the "
+            "group, with `body` as the accompanying text. One PinShare is created per member the caller is "
+            "connected to; members they aren't connected to see the card without an accept action."
+        ),
+        responses={201: None, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer},
+    )
+    def post(self, request: Request, group_uuid: UUID) -> Response:
+        """Share a pin into this group as a message."""
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        profile = request.user.profile
+        group = GroupChat.objects.filter(uuid=group_uuid).first()
+        if group is None or group.membership_for(profile) is None:
+            return Response({"error": "No such group."}, status=404)
+
+        serializer = MessageSendSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        pin_slug = data.get("shared_pin_id")
+        if not pin_slug:
+            return Response({"error": "shared_pin_id is required."}, status=400)
+
+        pin = Pin.objects.slug_or_uuid(pin_slug).filter(profile=profile).first()
+        if pin is None:
+            return Response({"error": "No such pin."}, status=404)
+
+        try:
+            message = share_pin_in_group_message(profile, group, pin, data.get("body") or "")
+        except PermissionError as exc:
+            return Response({"error": str(exc)}, status=403)
+        except ValueError as exc:
+            return Response({"error": str(exc)}, status=400)
+
+        return Response(build_group_message_payload(message, profile), status=201)

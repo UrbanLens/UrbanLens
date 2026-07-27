@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.core.cache import cache
-from django.db import DatabaseError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -23,6 +23,8 @@ from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.profile.model import Profile
@@ -595,6 +597,7 @@ def create_direct_message(
     image_ids: list[int] | None = None,
     markup_map_uuid: str | None = None,
     reply_to_id: int | None = None,
+    client_uuid: UUID | None = None,
     defer_broadcast: bool = False,
 ) -> DirectMessage:
     """Validate, persist, broadcast, and notify for one new direct message.
@@ -612,6 +615,11 @@ def create_direct_message(
             (uploaded separately beforehand) to attach to this message.
         markup_map_uuid: UUID of a ``MarkupMap`` owned by the sender to attach.
         reply_to_id: PK of an earlier message in this conversation to quote.
+        client_uuid: Caller-generated idempotency key. When a message from this
+            sender already carries it, that message is returned untouched
+            instead of a duplicate being created - so an offline outbox can
+            retry a send until it is acknowledged without the recipient seeing
+            the same message twice.
         defer_broadcast: When True, skip the live WebSocket push - the caller
             is attaching a ``DirectMessageShare`` to this message right after
             and must call ``broadcast_direct_message`` once that's done, so
@@ -628,6 +636,16 @@ def create_direct_message(
             sender. Callers surface this as a 403 / socket error message.
     """
     from urbanlens.dashboard.services.e2ee import MAX_CIPHERTEXT_LENGTH, MAX_NONCE_LENGTH, valid_blob
+
+    # Idempotent replay, checked before validation and before the permission
+    # gate: the message this uuid names was already accepted and delivered, so
+    # re-answering with it is correct even if the sender's standing to send a
+    # *new* message has since changed (a later block must not turn a retry of
+    # an already-delivered message into an error the client retries forever).
+    if client_uuid is not None:
+        replayed = DirectMessage.objects.filter(sender=sender, client_uuid=client_uuid).first()
+        if replayed is not None:
+            return replayed
 
     body = body.strip()
     if len(body) > MAX_DIRECT_MESSAGE_LENGTH:
@@ -654,17 +672,31 @@ def create_direct_message(
     if reply_to_id:
         reply_to = DirectMessage.objects.between(sender, recipient).filter(pk=reply_to_id).first()
 
-    message = DirectMessage.objects.create(
-        sender=sender,
-        recipient=recipient,
-        body=body,
-        ciphertext=ciphertext,
-        nonce=nonce,
-        key_version=key_version,
-        markup_map=markup_map,
-        reply_to=reply_to,
-        sender_delete_after=sender.direct_message_delete_after,
-    )
+    try:
+        # Nested atomic so a lost idempotency race raises inside its own
+        # savepoint - an IntegrityError would otherwise poison an outer
+        # transaction (share sends wrap this call in one) and take the
+        # caller's whole unit of work down with it.
+        with transaction.atomic():
+            message = DirectMessage.objects.create(
+                sender=sender,
+                recipient=recipient,
+                body=body,
+                ciphertext=ciphertext,
+                nonce=nonce,
+                key_version=key_version,
+                markup_map=markup_map,
+                reply_to=reply_to,
+                client_uuid=client_uuid,
+                sender_delete_after=sender.direct_message_delete_after,
+            )
+    except IntegrityError:
+        # Two retries of the same send landed concurrently and the other one
+        # committed first; its row is the canonical message.
+        replayed = DirectMessage.objects.filter(sender=sender, client_uuid=client_uuid).first() if client_uuid is not None else None
+        if replayed is None:
+            raise
+        return replayed
 
     if image_ids:
         from urbanlens.dashboard.models.images.model import Image
