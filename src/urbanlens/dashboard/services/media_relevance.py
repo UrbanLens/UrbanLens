@@ -23,6 +23,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.profile.model import Profile
 
 #: In-game thumbs up counts toward the wiki's "relevant" signal at half the
 #: weight of an explicit wiki vote - a deliberate positive reaction, but a
@@ -84,6 +85,55 @@ def effective_relevance(image: Image) -> float:
     game_score = sum(_GAME_WEIGHTS.get(row["kind"], 0.0) * row["n"] for row in game_counts)
 
     return wiki_score + game_score
+
+
+def toggle_media_vote(image: Image, profile: Profile, *, value: int) -> int:
+    """Cast, flip, or clear one profile's community vote on a materialized media row.
+
+    The same three-state write ``controllers.wiki_media.WikiMediaVoteView``
+    performs, addressed by an ``Image`` row instead of by a raw
+    ``(source, item_key)`` pair from a gallery tile. Both end up in the same
+    Location-scoped :class:`MediaRelevance` table, so a vote cast through the
+    API and one cast on the wiki are the same vote - reusing this rather than
+    reimplementing it is what keeps that true.
+
+    Args:
+        image: The materialized media row being voted on. Must carry the
+            ``location``/``media_source_key``/``media_item_key`` identity that
+            ``MediaRelevance`` is keyed by (see ``Image.media_source_key``).
+        profile: The voting profile. One vote per profile per item; re-voting
+            replaces the previous mark.
+        value: ``1`` for relevant, ``-1`` for not relevant, ``0`` to withdraw
+            an existing vote.
+
+    Returns:
+        The item's new net community score (up-votes minus down-votes across
+        every contributing profile).
+
+    Raises:
+        ValueError: *value* isn't one of -1/0/1, or *image* has no relevance
+            identity to vote on.
+    """
+    if value not in (-1, 0, 1):
+        raise ValueError("Vote value must be -1, 0, or 1.")
+    if image.location_id is None or not image.media_source_key or not image.media_item_key:
+        raise ValueError("This photo has no gallery identity to vote on.")
+
+    source = image.media_source_key
+    item_key = image.media_item_key
+
+    if value == 0:
+        MediaRelevance.objects.for_gallery(profile, image.location, source).filter(item_key=item_key).delete()
+    else:
+        MediaRelevance.objects.update_or_create(
+            profile=profile,
+            location=image.location,
+            source=source,
+            item_key=item_key,
+            defaults={"is_relevant": value == 1},
+        )
+
+    return MediaRelevance.objects.vote_scores(image.location, source).get(item_key, 0)
 
 
 def local_images_for_gallery_items(location: Location, source: str, urls: Iterable[str]) -> dict[str, Image]:

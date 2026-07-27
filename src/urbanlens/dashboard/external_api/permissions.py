@@ -21,6 +21,8 @@ from rest_framework.permissions import BasePermission
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from rest_framework.request import Request
     from rest_framework.views import APIView
 
@@ -38,6 +40,45 @@ if TYPE_CHECKING:
 OAUTH2_ONLY_SCOPES = frozenset({ApiKeyScope.MESSAGES_READ, ApiKeyScope.MESSAGES_WRITE})
 
 
+def credential_grants(credential: object | None, scopes: Iterable[str]) -> bool:
+    """Check whether one resolved credential grants every scope in *scopes*.
+
+    The single implementation of the "does this credential allow that?"
+    question, shared by :class:`HasApiKeyScope` (the DRF permission every
+    external endpoint runs) and by non-DRF callers that resolve a credential
+    by hand - notably ``controllers.media.MediaGateView``, a plain Django
+    ``View`` that cannot use a DRF permission class but must apply the exact
+    same rule. Duplicating the branch there would let the two drift, which for
+    a scope check means one of them silently getting more permissive.
+
+    Args:
+        credential: The authenticated credential - a PAT-style ``ApiKey``, a
+            django-oauth-toolkit ``AccessToken``, or None for an
+            unauthenticated request.
+        scopes: The scopes the caller must hold. An empty collection is
+            refused rather than treated as "nothing required", so a caller
+            that computes its requirement dynamically and comes up empty
+            fails closed.
+
+    Returns:
+        True when *credential* grants every requested scope.
+    """
+    required = frozenset(scopes)
+    if credential is None or not required:
+        return False
+    # django-oauth-toolkit AccessToken - validity (expiry/revocation) was
+    # already established by OAuth2Authentication; only scopes remain.
+    if hasattr(credential, "allow_scopes"):
+        return bool(credential.allow_scopes(list(required)))
+    # PAT-style ApiKey. Refuse the OAuth2-only scopes even if one somehow
+    # carries them (hand-edited row, a future scope picker with a bug):
+    # the restriction is about the credential *kind*, so it is enforced
+    # here rather than left to whatever wrote the grant.
+    if OAUTH2_ONLY_SCOPES & set(required):
+        return False
+    return required.issubset(set(getattr(credential, "scopes", ())))
+
+
 class HasApiKeyScope(BasePermission):
     """Requires the authenticating credential to grant every scope in ``view.required_scopes``.
 
@@ -51,18 +92,4 @@ class HasApiKeyScope(BasePermission):
 
     def has_permission(self, request: Request, view: APIView) -> bool:
         """Check that ``request.auth`` (ApiKey or OAuth2 AccessToken) grants the view's required scopes."""
-        credential = request.auth
-        required_scopes: frozenset[str] = getattr(view, "required_scopes", frozenset())
-        if credential is None or not required_scopes:
-            return False
-        # django-oauth-toolkit AccessToken - validity (expiry/revocation) was
-        # already established by OAuth2Authentication; only scopes remain.
-        if hasattr(credential, "allow_scopes"):
-            return credential.allow_scopes(list(required_scopes))
-        # PAT-style ApiKey. Refuse the OAuth2-only scopes even if one somehow
-        # carries them (hand-edited row, a future scope picker with a bug):
-        # the restriction is about the credential *kind*, so it is enforced
-        # here rather than left to whatever wrote the grant.
-        if OAUTH2_ONLY_SCOPES & set(required_scopes):
-            return False
-        return set(required_scopes).issubset(set(getattr(credential, "scopes", ())))
+        return credential_grants(request.auth, getattr(view, "required_scopes", frozenset()))
