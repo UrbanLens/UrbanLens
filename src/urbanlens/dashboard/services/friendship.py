@@ -1,0 +1,583 @@
+"""Friendship state transitions, extracted from ``controllers.friendship``.
+
+Every mutation a user can make to a friend relationship lives here as a plain
+``(actor, target)`` function so the HTMX controller and the external API can
+share one implementation. Before this split the transitions only existed as
+``FriendController`` methods that read ``request.POST`` and returned rendered
+HTML, which an API-key caller cannot use.
+
+The functions raise :class:`FriendshipActionError` subclasses rather than
+returning status codes, so each caller maps failures onto its own protocol
+(``HttpResponse`` for the web controller, ``{"error": ...}`` + status for the
+external API). The distinction between :class:`FriendshipNotFoundError`,
+:class:`FriendLimitExceededError` and the plain base matters: they become 404,
+403 and 400 respectively, and collapsing them would tell a caller "bad
+request" when the real answer is "you are at the friend limit".
+
+``invite_by_email`` is the security-sensitive one - see its docstring for the
+anti-enumeration guarantee it must preserve.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import logging
+from typing import TYPE_CHECKING, Any
+
+from django.db.models import Q
+from django.template.loader import render_to_string
+from django.urls import reverse
+
+from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
+from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
+from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
+from urbanlens.dashboard.services.keyset_cursor import InvalidCursorError, decode_cursor, encode_cursor
+from urbanlens.dashboard.services.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+logger = logging.getLogger(__name__)
+
+
+class FriendshipActionError(ValueError):
+    """A friendship transition could not be applied.
+
+    The message is written for the end user and is safe to surface directly.
+    Callers map this to HTTP 400 unless a more specific subclass applies.
+    """
+
+
+class FriendshipNotFoundError(FriendshipActionError):
+    """No friendship row exists between the two profiles.
+
+    Deliberately also raised when a row exists but the actor has no standing
+    to act on it, so "not yours" and "not there" are indistinguishable.
+    Callers map this to HTTP 404.
+    """
+
+    def __init__(self, message: str = "Friend request not found.") -> None:
+        """Initialize with a caller-safe default message.
+
+        Args:
+            message: Human-readable detail to surface.
+        """
+        super().__init__(message)
+
+
+class FriendLimitExceededError(FriendshipActionError):
+    """Accepting would push one of the two profiles past ``max_friends_per_user``.
+
+    Kept distinct from the base error so the caller can answer 403 (the
+    request was understood and refused) rather than 400 (malformed).
+    """
+
+    def __init__(self, message: str = "This would exceed the maximum number of friends allowed.") -> None:
+        """Initialize with a caller-safe default message.
+
+        Args:
+            message: Human-readable detail to surface.
+        """
+        super().__init__(message)
+
+
+class InviteValidationError(FriendshipActionError):
+    """The invite payload itself was rejected - bad address, own address, or over-long message.
+
+    This is the *only* class of invite failure a caller may distinguish, since
+    it depends solely on what the caller submitted and reveals nothing about
+    who is registered. Callers map this to HTTP 400.
+    """
+
+
+class InviteRateLimitedError(FriendshipActionError):
+    """The inviter has exhausted their outbound-email budget.
+
+    Raised before the registered/unregistered branch is ever taken, so a
+    capped caller cannot use the 429-vs-200 difference to probe membership.
+    Callers map this to HTTP 429.
+    """
+
+
+#: Default page size for :func:`list_friendships`.
+DEFAULT_FRIEND_PAGE_SIZE = 50
+
+#: Hard ceiling on a caller-supplied friend-list page size.
+MAX_FRIEND_PAGE_SIZE = 100
+
+
+@dataclass(frozen=True, slots=True)
+class FriendshipPage:
+    """One page of a profile's friend relationships plus its continuation token."""
+
+    friendships: list[Friendship]
+    next_cursor: str | None
+
+
+def list_friendships(
+    profile: Profile,
+    *,
+    status: str = FriendshipStatus.ACCEPTED,
+    cursor: str | None = None,
+    limit: int = DEFAULT_FRIEND_PAGE_SIZE,
+) -> FriendshipPage:
+    """Return one page of the relationships ``profile`` is part of.
+
+    Only rows naming ``profile`` on one side or the other are ever considered.
+    Defaults to accepted friendships; pass ``FriendshipStatus.REQUESTED`` for
+    the pending queue. Both sides' profiles (and their users) are selected
+    eagerly, because the caller resolves display identity per row and would
+    otherwise issue two queries per friend.
+
+    Args:
+        profile: The profile whose relationships to list.
+        status: The ``FriendshipStatus`` to filter to.
+        cursor: Opaque continuation token from a previous page.
+        limit: Page size, clamped to :data:`MAX_FRIEND_PAGE_SIZE`.
+
+    Returns:
+        The page of relationships, newest first, and the next page's cursor.
+
+    Raises:
+        FriendshipActionError: ``cursor`` is malformed or was never ours.
+    """
+    limit = min(max(int(limit or DEFAULT_FRIEND_PAGE_SIZE), 1), MAX_FRIEND_PAGE_SIZE)
+
+    query = Friendship.objects.all().profile(profile).filter(status=status).select_related("from_profile__user", "to_profile__user")
+    if cursor:
+        try:
+            stamp, pk = decode_cursor(cursor)
+        except InvalidCursorError as exc:
+            raise FriendshipActionError("Invalid cursor.") from exc
+        query = query.filter(Q(created__lt=stamp) | Q(created=stamp, pk__lt=pk))
+
+    rows = list(query.order_by("-created", "-pk")[: limit + 1])
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+
+    next_cursor = encode_cursor(rows[-1].created, rows[-1].pk) if has_more and rows else None
+    return FriendshipPage(friendships=rows, next_cursor=next_cursor)
+
+
+def notify_friend_request(from_profile: Profile, to_profile: Profile, message: str | None = None) -> None:
+    """Create an in-app notification when a friend request is sent.
+
+    Args:
+        from_profile: Profile sending the request.
+        to_profile: Profile receiving the request.
+        message: Optional note the requester attached, appended to the notification.
+    """
+    try:
+        pref = to_profile.notification_preferences.friend_request
+    except AttributeError:
+        pref = DeliveryPreference.SITE
+
+    if pref == DeliveryPreference.NONE:
+        return
+
+    body = f"{from_profile.username} wants to be your friend."
+    if message:
+        body += f' "{message}"'
+
+    NotificationLog.objects.create(
+        profile=to_profile,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.FRIEND_REQUEST,
+        title="New friend request",
+        message=body,
+        url=reverse("profile.view_user", kwargs={"profile_slug": from_profile.slug or str(from_profile.uuid)}),
+        source_profile=from_profile,
+    )
+
+
+def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, message: str | None = None) -> Friendship | None:
+    """Send a friend request, auto-accepting instead if one is already pending in reverse.
+
+    If `to_profile` already sent `from_profile` a pending request, the two profiles
+    clearly want to be friends - accept that request instead of creating a redundant
+    crossed request and a duplicate "new friend request" notification.
+
+    Args:
+        from_profile: Profile initiating this request.
+        to_profile: Profile being requested.
+        message: Optional note from the requester. Ignored when this call
+            resolves to an auto-accept (both profiles already wanted to be
+            friends, so there's no pending request left to attach a note to).
+
+    Returns:
+        The resulting Friendship (pending or newly accepted), or None if the request
+        could not be created.
+    """
+    existing = Friendship.objects.all().between(from_profile, to_profile)
+    if existing and existing.status == FriendshipStatus.REQUESTED and existing.from_profile_id == to_profile.pk:
+        if not existing.accept():
+            return None
+        NotificationLog.objects.create(
+            profile=to_profile,
+            status=Status.UNREAD,
+            importance=Importance.MEDIUM,
+            notification_type=NotificationType.FRIEND_ACCEPTED,
+            title="Friend request accepted",
+            message=f"{from_profile.username} accepted your friend request.",
+            url=reverse("profile.view_user", kwargs={"profile_slug": from_profile.slug or str(from_profile.uuid)}),
+            source_profile=from_profile,
+        )
+        # Mark from_profile's own pending friend_request notification (from to_profile) as read
+        NotificationLog.objects.filter(
+            profile=from_profile,
+            notification_type=NotificationType.FRIEND_REQUEST,
+            source_profile_id=to_profile.pk,
+        ).update(status=Status.READ)
+        return existing
+
+    friendship = Friendship.request(from_profile=from_profile, to_profile=to_profile.pk, message=message)
+    if friendship:
+        notify_friend_request(from_profile, to_profile, message)
+    return friendship
+
+
+def _mark_friend_request_notifications_read(viewer_profile: Profile, source_profile_id: int) -> None:
+    """Mark the viewer's pending "new friend request" notification(s) from a source as read.
+
+    Accepting/declining/ignoring a request on the profile page (rather than via the
+    notification dropdown's own accept/decline buttons) previously left the originating
+    notification unread indefinitely, inflating the bell label count forever.
+
+    Args:
+        viewer_profile: Profile who just acted on the request.
+        source_profile_id: pk of the profile that sent the request.
+    """
+    NotificationLog.objects.filter(
+        profile=viewer_profile,
+        notification_type=NotificationType.FRIEND_REQUEST,
+        source_profile_id=source_profile_id,
+    ).update(status=Status.READ)
+
+
+def _existing_friendship(actor: Profile, target: Profile) -> Friendship:
+    """The friendship row between the two profiles, or raise.
+
+    Args:
+        actor: The profile performing the action.
+        target: The other profile.
+
+    Returns:
+        The single Friendship row joining the pair, in either direction.
+
+    Raises:
+        FriendshipNotFoundError: No row joins the pair.
+    """
+    friendship = Friendship.objects.all().between(target, actor)
+    if not friendship:
+        raise FriendshipNotFoundError
+    return friendship
+
+
+def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
+    """Accept ``target``'s pending friend request to ``actor``.
+
+    Notifies the original requester and clears ``actor``'s own now-answered
+    "new friend request" notification, matching what the profile-page button
+    has always done.
+
+    Args:
+        actor: The profile accepting the request.
+        target: The profile that sent it.
+
+    Returns:
+        The now-accepted Friendship.
+
+    Raises:
+        FriendshipNotFoundError: No request exists between the pair.
+        FriendLimitExceededError: Either profile is already at the site's
+            ``max_friends_per_user`` limit.
+        FriendshipActionError: Either profile has Community disabled.
+    """
+    friendship = _existing_friendship(actor, target)
+
+    if not friendship.accept():
+        # Friendship.accept() returns a bare False for both refusal reasons;
+        # re-deriving which one applies is what lets the caller answer 403 with
+        # the actionable message rather than a generic failure.
+        if Friendship.profile_at_max_friends(actor) or Friendship.profile_at_max_friends(friendship.from_profile):
+            raise FriendLimitExceededError
+        raise FriendshipActionError("Enable Community in Settings to accept friend requests.")
+
+    requester = friendship.from_profile if friendship.to_profile == actor else friendship.to_profile
+    NotificationLog.objects.create(
+        profile=requester,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.FRIEND_ACCEPTED,
+        title="Friend request accepted",
+        message=f"{actor.username} accepted your friend request.",
+        url=reverse("profile.view_user", kwargs={"profile_slug": actor.slug or str(actor.uuid)}),
+    )
+    _mark_friend_request_notifications_read(actor, target.pk)
+    return friendship
+
+
+def reject_friend_request(actor: Profile, target: Profile) -> Friendship:
+    """Decline ``target``'s friend request, leaving them free to re-send later.
+
+    Args:
+        actor: The profile declining the request.
+        target: The profile that sent it.
+
+    Returns:
+        The declined Friendship.
+
+    Raises:
+        FriendshipNotFoundError: No request exists between the pair.
+    """
+    friendship = _existing_friendship(actor, target)
+    friendship.decline()
+    _mark_friend_request_notifications_read(actor, target.pk)
+    return friendship
+
+
+def ignore_friend_request(actor: Profile, target: Profile) -> Friendship:
+    """Ignore ``target``'s friend request - silently, and permanently.
+
+    Distinct from :func:`reject_friend_request` in both directions: no
+    notification is sent, and ``FriendshipStatus.can_request`` excludes
+    ``Ignored``, so the requester can never re-send. Without this function the
+    ``Ignored`` state would be unreachable for any API caller.
+
+    Args:
+        actor: The profile ignoring the request.
+        target: The profile that sent it.
+
+    Returns:
+        The ignored Friendship.
+
+    Raises:
+        FriendshipNotFoundError: No request exists between the pair.
+    """
+    friendship = _existing_friendship(actor, target)
+    friendship.ignore()
+    _mark_friend_request_notifications_read(actor, target.pk)
+    return friendship
+
+
+def remove_friend(actor: Profile, target: Profile) -> Friendship:
+    """End an existing friendship.
+
+    The row is retained at ``Removed`` rather than deleted, which is what lets
+    ``FriendshipStatus.can_request`` allow a later re-request and what
+    ``QuerySet.ever_friends`` reads.
+
+    Args:
+        actor: The profile removing the friend.
+        target: The profile being removed.
+
+    Returns:
+        The removed Friendship.
+
+    Raises:
+        FriendshipNotFoundError: No friendship exists between the pair.
+    """
+    friendship = _existing_friendship(actor, target)
+    friendship.remove()
+    return friendship
+
+
+def block_profile(actor: Profile, target: Profile) -> Friendship:
+    """Block ``target``, creating the relationship row if none exists yet.
+
+    Unlike every other transition here, blocking must work against a complete
+    stranger - that is the case it exists for - so a missing row is created
+    rather than raising.
+
+    Args:
+        actor: The profile doing the blocking.
+        target: The profile being blocked.
+
+    Returns:
+        The blocked Friendship.
+    """
+    friendship = Friendship.objects.all().between(target, actor)
+    if friendship:
+        friendship.status = FriendshipStatus.BLOCKED
+        friendship.save()
+        return friendship
+    return Friendship.objects.create(
+        from_profile=actor,
+        to_profile=target,
+        status=FriendshipStatus.BLOCKED,
+    )
+
+
+def mute_profile(actor: Profile, target: Profile) -> Friendship:
+    """Mute an existing relationship with ``target``.
+
+    Requires an existing row, matching the profile-page button: muting is a
+    volume control on someone you already have a relationship with, whereas
+    blocking (above) is a veto that must work on strangers.
+
+    Args:
+        actor: The profile doing the muting.
+        target: The profile being muted.
+
+    Returns:
+        The muted Friendship.
+
+    Raises:
+        FriendshipNotFoundError: No relationship exists between the pair.
+    """
+    friendship = _existing_friendship(actor, target)
+    friendship.status = FriendshipStatus.MUTED
+    friendship.save()
+    return friendship
+
+
+def invite_by_email(
+    inviter: Profile,
+    email: str,
+    message: str | None = None,
+    *,
+    signup_url_builder: Callable[[str], str],
+    subscription_role: Any = None,
+    subscription_duration: str = "",
+) -> None:
+    """Invite someone to connect by email address, revealing nothing about them.
+
+    If the address belongs to an existing account (primary or verified
+    secondary), that account gets a friend request. Otherwise a
+    ``FriendInvitation`` is created and the address is emailed a join link;
+    signing up through it auto-accepts the pending request.
+
+    **Anti-enumeration guarantee.** This function returns ``None`` on every
+    non-validation path - registered, unregistered, visibility-rejected, and
+    send-failed alike - and raises only for failures that depend purely on
+    what the caller submitted (:class:`InviteValidationError`) or on the
+    caller's own quota (:class:`InviteRateLimitedError`). Neither depends on
+    whether the address is registered. The rate-limit check therefore runs
+    *before* the registered/unregistered branch: doing it only on the path
+    that actually sends mail would let a capped caller distinguish members
+    from non-members by which error came back. Callers must preserve this by
+    emitting one identical success response for the ``None`` return.
+
+    Args:
+        inviter: The profile sending the invitation.
+        email: The raw address submitted by the caller.
+        message: Optional note to include, bounded by
+            ``MAX_FRIEND_REQUEST_MESSAGE_LENGTH``.
+        signup_url_builder: Builds the absolute signup URL from an invitation
+            token. Injected because the service has no request to call
+            ``build_absolute_uri`` on.
+        subscription_role: Optional ``SubscriptionRole`` to grant on
+            acceptance. Site-admin-only; callers on untrusted surfaces must
+            not accept this from user input.
+        subscription_duration: Raw duration string paired with
+            ``subscription_role``; ignored without one.
+
+    Raises:
+        InviteValidationError: The address is malformed, is the inviter's own,
+            or the message is over-long.
+        InviteRateLimitedError: The inviter is over their email budget.
+    """
+    # Imported inside the function, exactly as the controller version did.
+    # Not a style quirk: the mail classes must be looked up on their own module
+    # at call time so that ``mock.patch("django.core.mail.EmailMultiAlternatives")``
+    # - which several existing tests rely on - actually intercepts the send. A
+    # module-level ``from django.core.mail import ...`` binds the original class
+    # at import time and silently defeats those patches.
+    import smtplib
+
+    from django.core.exceptions import ValidationError
+    from django.core.mail import EmailMultiAlternatives
+    from django.core.validators import validate_email
+
+    from urbanlens.dashboard.models.email_log import EmailType
+    from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
+    from urbanlens.dashboard.services.email_normalization import find_user_by_email, normalize_email
+    from urbanlens.dashboard.services.email_safety import email_rate_limit_error, has_sent_join_email, record_email_sent
+
+    email = (email or "").strip().lower()
+    try:
+        validate_email(email)
+    except ValidationError as exc:
+        raise InviteValidationError("Please enter a valid email address.") from exc
+
+    if normalize_email(email) == normalize_email(inviter.email):
+        raise InviteValidationError("That's your own email address.")
+
+    message = (message or "").strip()
+    length_error = text_length_error(message, MAX_FRIEND_REQUEST_MESSAGE_LENGTH, "Message")
+    if length_error:
+        raise InviteValidationError(length_error)
+
+    # Must precede the registered/unregistered branch - see the anti-enumeration
+    # note in this function's docstring.
+    rate_limit_error = email_rate_limit_error(inviter)
+    if rate_limit_error:
+        raise InviteRateLimitedError(rate_limit_error)
+
+    existing_user = find_user_by_email(email)
+    if existing_user:
+        to_profile = existing_user.profile
+        # Respect visibility settings silently - no error, no distinguishable response.
+        # Same evaluator request_friend uses (Profile.visibility_permits already
+        # rejects NO_ONE) - a bare "!= NO_ONE" check here previously let any
+        # stranger who knew the email bypass a restricted FRIENDS/COMMON_PIN/
+        # COMMON_FRIEND/COMMON_TRIP/ANYTHING_IN_COMMON visibility setting entirely.
+        if to_profile != inviter and Profile.visibility_permits(to_profile.friend_request_visibility, to_profile, inviter):
+            friendship = request_or_accept_friendship(inviter, to_profile, message or None)
+            if friendship and subscription_role is not None:
+                from urbanlens.dashboard.controllers.site_admin import _parse_duration_months
+                from urbanlens.dashboard.models.subscriptions import grant_subscription
+
+                grant_subscription(existing_user, subscription_role, inviter.user, _parse_duration_months(subscription_duration))
+        return
+
+    # No registered account - create an invitation token and send email.
+    # Avoid duplicate pending invitations from the same inviter.
+    FriendInvitation.objects.filter(
+        inviter=inviter,
+        email=email,
+        accepted_at__isnull=True,
+    ).delete()
+
+    invitation = FriendInvitation(inviter=inviter, email=email, message=message or None)
+    invitation.save()
+    if subscription_role is not None:
+        from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant
+
+        PendingSubscriptionGrant.objects.create(
+            invitation=invitation,
+            role=subscription_role,
+            granted_by=inviter.user,
+            duration_months="" if subscription_duration == "indefinite" else subscription_duration,
+        )
+
+    # A given user only ever sends one join-the-site email to a given address -
+    # the invitation row above still enables auto-friending on sign-up, but the
+    # mailbox is not contacted again.
+    if not has_sent_join_email(inviter, email):
+        signup_url = signup_url_builder(str(invitation.token))
+        context = {
+            "inviter": inviter,
+            "signup_url": signup_url,
+            "message": message or None,
+        }
+        subject = f"{inviter.username} invited you to join UrbanLens"
+        text_body = f"Hi,\n\n{inviter.username} invited you to join UrbanLens - a private mapping platform for urban explorers and photographers."
+        if message:
+            text_body += f'\n\n"{message}"'
+        text_body += f"\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
+        html_body = render_to_string("dashboard/email/friend_invite.html", context)
+
+        try:
+            msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[email])
+            msg.attach_alternative(html_body, "text/html")
+            msg.send()
+        except (smtplib.SMTPException, OSError):
+            # Swallowed on purpose: a delivery failure must look exactly like a
+            # success to the caller, or the difference becomes the oracle this
+            # whole function is built to deny.
+            logger.exception("Failed to send friend invitation to %s", email)
+        else:
+            record_email_sent(inviter, email, EmailType.JOIN_INVITE)

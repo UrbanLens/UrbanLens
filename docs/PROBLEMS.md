@@ -4,6 +4,97 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
 to pick up without re-discovering the problem from scratch.
 
+## OPEN 2026-07-26: nine pre-existing friend-invite / pin-sync test failures on `feature/external-api-mobile-v2`
+
+Found while building the external-API social domain. **Not caused by that work** - verified by
+reverting `controllers/friendship.py` and `controllers/notifications.py` to `f529b0f4` and
+re-running the identical selection: 9 failures before the change, and the same 9 after.
+
+```
+test_friend_invite_privacy.py::InviteByEmailPrivacyTests::test_existing_user_actually_receives_friend_request
+test_friend_invite_privacy.py::InviteByEmailPrivacyTests::test_gmail_variant_of_existing_email_is_matched
+test_friend_invite_privacy.py::InviteByEmailPrivacyTests::test_response_identical_regardless_of_target_friend_request_visibility
+test_friend_invite_privacy.py::OutgoingRequestWidgetPrivacyTests::test_pending_cards_are_structurally_identical_across_kinds
+test_friend_invite_privacy.py::OutgoingRequestWidgetPrivacyTests::test_pending_cards_carry_no_type_revealing_urls_or_ids
+test_friend_invite_privacy.py::OutgoingRequestWidgetPrivacyTests::test_registered_and_unregistered_pending_entries_render_identically
+test_friend_invite_privacy.py::OutgoingRequestWidgetPrivacyTests::test_registered_target_identity_is_hidden_in_the_pending_widget
+test_friend_request_message.py::EmailInviteMessageTests::test_message_is_stored_on_the_friendship_for_an_existing_user
+test_external_api.py::PinSyncViewTests::test_child_pins_are_served_with_their_parent_uuid
+```
+
+The eight friend-invite ones share a likely root cause: the invite path now gates the
+registered-account branch on `Profile.visibility_permits(to_profile.friend_request_visibility,
+to_profile, inviter)` (a deliberate security fix - a bare `!= NO_ONE` check previously let
+anyone who knew an address bypass a restricted visibility setting). `friend_request_visibility`
+defaults to `ANYTHING_IN_COMMON`, and a freshly-baked target profile has no pin/friend/trip in
+common with the inviter, so the gate now correctly refuses - but these tests still assert that a
+`Friendship` row *is* created. The tests appear to predate the gate and were never updated;
+they need to set the target's `friend_request_visibility` to `ANYONE` (or establish something in
+common) in setUp.
+
+`PinSyncViewTests::test_child_pins_are_served_with_their_parent_uuid` is unrelated and fails
+with `PinCreationError: You already have a pin at this location.` - it looks like the test
+creates two pins at coordinates that resolve to the same `Location`.
+
+Whoever picks this up should confirm the intended behaviour before editing the assertions:
+if the gate is right, the tests are stale; if the tests encode a real product requirement
+("an emailed invite should reach anyone regardless of their visibility setting"), then the
+gate needs a documented exception instead.
+
+## OPEN 2026-07-26: WhatsApp/SMS alerts never fire for safety check-in partner invites
+
+`services/notification_text_alerts.py:114-115` derives the preference column name from the
+notification's own type:
+
+```python
+prefix = notification.notification_type
+return bool(getattr(prefs, f"{prefix}_whatsapp", False)), bool(getattr(prefs, f"{prefix}_sms", False))
+```
+
+That works for 11 of the 12 preference stems, but **not** for the safety-check-in partner
+invite. `NotificationType.SAFETY_CHECKIN_PARTNER_INVITE` has the value
+`"safety_ci_partner_invite"` (`models/notifications/meta/type.py:26`), while the
+`NotificationPreference` columns are named `safety_checkin_partner_invite`,
+`safety_checkin_partner_invite_whatsapp`, `safety_checkin_partner_invite_sms`
+(`models/notifications/model.py:180-182`). The lookup therefore misses, and the
+`getattr(..., False)` default silently reports "user does not want text alerts" - so a user
+who explicitly enabled WhatsApp/SMS for partner invites never receives them, with no error
+anywhere.
+
+Note the same mismatch does *not* affect `wiki_safety_checkin`, whose type value and column
+name do agree.
+
+Fix is a rename on one side plus a migration (and a check for any other consumer deriving
+field names from type values). Deliberately not done as a drive-by during the external-API
+social/notifications build, since it changes either a stored enum value or three column names.
+
+Guarded meanwhile by
+`tests/hypothesis/test_external_api_notifications.py::NotificationPreferenceCoverageTests::test_one_preference_stem_does_not_match_its_notification_type`,
+which asserts the mismatch explicitly so that fixing it fails loudly rather than silently
+changing the external API's preference field names.
+
+## OPEN 2026-07-26: FCM push transport is registered but never dispatched
+
+`services/push.py` accepts and stores FCM device registrations, but only the UnifiedPush
+transport actually dispatches; FCM rows are skipped at send time until a Play-flavor client
+exists (see that module's docstring). This is server-side dispatch infrastructure requiring a
+Google service-account credential - it is *not* a missing external-API endpoint, and
+`push-devices/` already registers such devices correctly. Recorded here because the gap was
+previously documented only in a module docstring, so a user registering an FCM device today
+gets silence rather than an error.
+
+## OPEN 2026-07-26: notification "friend accepted" loses its source_profile on one path
+
+`services/friendship.py::accept_friend_request` (ported verbatim from the old
+`FriendController.accept_friend`) creates the `FRIEND_ACCEPTED` notification **without**
+`source_profile`, whereas `request_or_accept_friendship` and
+`FriendController.friend_request_respond` both set it. The external API's
+`NotificationSerializer` exposes `source_profile`, so a mobile client sees a null actor for
+notifications produced by that one path and cannot link back to the profile. Left as-is
+during the extraction to keep the refactor behaviour-preserving; setting
+`source_profile=actor` there is almost certainly correct but should be done with a test that
+pins the intended behaviour on all three paths.
+
 **Status as of 2026-07-23 (cleanup)**: all fully-resolved entries have been removed from this
 file - resolution details live in git history (this file's prior revisions) and
 `docs/notes/ai/completed.md`. Recently closed, for orientation: the whole PR #111 cluster

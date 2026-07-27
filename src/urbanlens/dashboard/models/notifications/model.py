@@ -21,8 +21,14 @@ from urbanlens.dashboard.models.notifications.queryset import NotificationManage
 logger = logging.getLogger(__name__)
 
 
-class NotificationLog(abstract.DashboardModel):
-    """Records a notification sent to a specific user profile."""
+class NotificationLog(abstract.FrontendDashboardModel):
+    """Records a notification sent to a specific user profile.
+
+    Extends ``FrontendDashboardModel`` (rather than ``DashboardModel``) purely
+    for its ``uuid``: the external API addresses a notification by uuid, and
+    exposing the sequential integer pk instead would leak both site-wide
+    notification volume and a trivially walkable neighbour space.
+    """
 
     status = models.CharField(max_length=17, choices=Status.choices, default=Status.UNREAD)
     importance = models.CharField(max_length=17, choices=Importance.choices, default=Importance.LOWEST)
@@ -106,7 +112,7 @@ class NotificationLog(abstract.DashboardModel):
             return "declined"
         return None
 
-    class Meta(abstract.DashboardModel.Meta):
+    class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_notifications"
         get_latest_by = "updated"
         indexes = [
