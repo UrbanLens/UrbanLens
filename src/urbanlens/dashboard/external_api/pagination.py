@@ -58,7 +58,14 @@ class PaginatedListMixin:
     #: Overridable per view, e.g. for an endpoint needing a different page size.
     pagination_class: type[PageNumberPagination] = ExternalApiPagination
 
-    def paginated_response(self, queryset: QuerySet[Any] | list[Any], serializer_class: type[BaseSerializer], request: Request) -> Response:
+    def paginated_response(
+        self,
+        queryset: QuerySet[Any] | list[Any],
+        serializer_class: type[BaseSerializer],
+        request: Request,
+        *,
+        context: dict[str, Any] | None = None,
+    ) -> Response:
         """Serialize one page of *queryset* into the standard envelope.
 
         Args:
@@ -68,6 +75,9 @@ class PaginatedListMixin:
                 with ``many=True``.
             request: The request whose ``page``/``page_size`` params drive
                 pagination.
+            context: Extra serializer context. Used to hand a serializer the
+                parent object its fields need (e.g. the pin an alias belongs
+                to), so a whole page resolves without a query per row.
 
         Returns:
             A ``{count, next, previous, results}`` response for the requested
@@ -75,5 +85,5 @@ class PaginatedListMixin:
         """
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request, view=self)
-        serializer = serializer_class(page, many=True)
+        serializer = serializer_class(page, many=True, context=context or {})
         return paginator.get_paginated_response(serializer.data)

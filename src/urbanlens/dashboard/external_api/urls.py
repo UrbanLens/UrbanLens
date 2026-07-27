@@ -32,6 +32,20 @@ urlpatterns = [
     path("pins/<str:pin_slug>/comments/<int:comment_id>/", views_wiki.PinCommentDetailView.as_view(), name="pins.comments.detail"),
     path("pins/<str:pin_slug>/review/", views_wiki.PinReviewView.as_view(), name="pins.review"),
     path("pins/<str:pin_slug>/", views.PinDetailView.as_view(), name="pins.detail"),
+    # A pin's sub-resources. These sit after the detail route above only for
+    # readability - each has a literal trailing segment, so none of them can be
+    # shadowed by it.
+    path("pins/<str:pin_slug>/notes/", views.PinNotesView.as_view(), name="pins.notes"),
+    path("pins/<str:pin_slug>/notes/<int:note_id>/", views.PinNoteDetailView.as_view(), name="pins.notes.detail"),
+    path("pins/<str:pin_slug>/aliases/", views.PinAliasesView.as_view(), name="pins.aliases"),
+    path("pins/<str:pin_slug>/aliases/<int:alias_id>/", views.PinAliasDetailView.as_view(), name="pins.aliases.detail"),
+    path("pins/<str:pin_slug>/aliases/<int:alias_id>/use/", views.PinAliasUseView.as_view(), name="pins.aliases.use"),
+    path("pins/<str:pin_slug>/links/", views.PinLinksView.as_view(), name="pins.links"),
+    path("pins/<str:pin_slug>/links/<int:link_id>/", views.PinLinkDetailView.as_view(), name="pins.links.detail"),
+    path("pins/<str:pin_slug>/visits/", views.PinVisitsView.as_view(), name="pins.visits"),
+    path("pins/<str:pin_slug>/visits/<int:visit_id>/", views.PinVisitDetailView.as_view(), name="pins.visits.detail"),
+    path("locations/search/", views.LocationSearchView.as_view(), name="locations.search"),
+    path("locations/resolve/", views.PlaceResolveView.as_view(), name="locations.resolve"),
     path("pin-suggestions/", views.PinSuggestionsView.as_view(), name="pin_suggestions"),
     path("photos/", views.PhotosView.as_view(), name="photos"),
     # The <uuid:...> converter only matches a well-formed uuid, so these can't

@@ -575,6 +575,12 @@ REST_FRAMEWORK = {
         # (currently the smart-list resync). See
         # external_api.throttling.ExternalApiResyncThrottle.
         "external_api_resync": "12/hour",
+        # Autocomplete replaces (rather than adds to) the read cap for the
+        # location-search endpoints - it is charged per keystroke, so counting
+        # it against the shared read budget would let a few minutes of typing
+        # starve the client's actual syncing. Clients are still expected to
+        # debounce; the burst cap above applies here too.
+        "external_api_location_search": "1200/hour",
     },
     # Only consulted by views whose schema is actually generated - the
     # preprocessing hook in external_api.schema limits that to the external API.

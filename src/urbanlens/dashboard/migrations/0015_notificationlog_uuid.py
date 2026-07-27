@@ -40,7 +40,7 @@ def _populate_uuids(apps, schema_editor) -> None:
 
 class Migration(migrations.Migration):
     dependencies = [
-        ("dashboard", "0013_first_party_oauth_client"),
+        ("dashboard", "0014_message_client_uuid"),
     ]
 
     operations = [

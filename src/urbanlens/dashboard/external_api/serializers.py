@@ -19,6 +19,7 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
 from rest_framework import serializers
 
+from urbanlens.dashboard.models.aliases.model import AliasType
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
 from urbanlens.dashboard.models.images.model import MediaKind
@@ -39,10 +40,17 @@ from urbanlens.dashboard.models.profile.meta import (
 )
 from urbanlens.dashboard.models.profile.model import _COMMUNITY_GATED_VISIBILITY_FIELDS
 from urbanlens.dashboard.models.push_device import PushTransport
+from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
 from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
 from urbanlens.dashboard.services.media_labels import MAX_MEDIA_LABEL_NAME_LENGTH, MAX_MEDIA_LABELS
 from urbanlens.dashboard.services.notification_center import preference_field_names
-from urbanlens.dashboard.services.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, MAX_PIN_LIST_DESCRIPTION_LENGTH, MAX_PROFILE_BIO_LENGTH
+from urbanlens.dashboard.services.text_limits import (
+    MAX_FRIEND_REQUEST_MESSAGE_LENGTH,
+    MAX_PIN_LIST_DESCRIPTION_LENGTH,
+    MAX_PIN_NOTE_LENGTH,
+    MAX_PROFILE_BIO_LENGTH,
+    MAX_VISIT_NOTES_LENGTH,
+)
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
@@ -177,6 +185,23 @@ class TombstoneSyncQuerySerializer(serializers.Serializer):
     limit = serializers.IntegerField(required=False, allow_null=True, default=None, min_value=1, max_value=MapPinPayloadService.MAX_LIMIT)
 
 
+class SyncPinTagSerializer(serializers.Serializer):
+    """One label chip on a synced pin (schema-only).
+
+    Spelled out rather than left as an untyped dict because ``kind`` is what
+    lets an offline client tell a status from a category from a tag without
+    re-deriving it, and a ``DictField`` would leave that invisible in the
+    generated client.
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    color = serializers.CharField(read_only=True, allow_null=True)
+    icon = serializers.CharField(read_only=True, allow_null=True)
+    #: One of ``tag``, ``category``, or ``status`` - the only kinds shown as chips.
+    kind = serializers.CharField(read_only=True)
+
+
 class SyncPinSerializer(serializers.Serializer):
     """Documents the pin payload shape served by the delta-sync endpoint.
 
@@ -204,7 +229,7 @@ class SyncPinSerializer(serializers.Serializer):
     profile = serializers.IntegerField(read_only=True)
     rating = serializers.IntegerField(read_only=True)
     color = serializers.CharField(read_only=True, allow_null=True)
-    tags = serializers.ListField(read_only=True, child=serializers.DictField())
+    tags = SyncPinTagSerializer(many=True, read_only=True)
     address = serializers.CharField(read_only=True, allow_blank=True, allow_null=True)
     own_icon = serializers.CharField(read_only=True, allow_null=True)
     own_custom_icon_url = serializers.CharField(read_only=True, allow_null=True)
@@ -225,29 +250,89 @@ class PinSyncResponseSerializer(serializers.Serializer):
     total = serializers.IntegerField(read_only=True, allow_null=True)
 
 
-class PinNoteDetailSerializer(serializers.Serializer):
-    """One personal note, as nested in a pin-detail response (schema-only)."""
+class PinNoteSerializer(serializers.Serializer):
+    """One personal note on a pin - both the read shape and the create payload.
+
+    Notes are append-only by design (see ``models.pin.note.PinNote``), so
+    there is no update counterpart: a client edits a note by deleting it and
+    adding another.
+    """
 
     id = serializers.IntegerField(read_only=True)
-    text = serializers.CharField(read_only=True)
+    text = serializers.CharField(max_length=MAX_PIN_NOTE_LENGTH, trim_whitespace=True, allow_blank=False)
+    created = serializers.DateTimeField(read_only=True)
+    updated = serializers.DateTimeField(read_only=True)
+
+
+class PinAliasSerializer(serializers.Serializer):
+    """One alternate name for a pin - both the read shape and the create payload."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(max_length=255)
+    kind = serializers.ChoiceField(choices=AliasType.choices, default=AliasType.ALTERNATE)
+    #: Who contributed this name (the user, or an external source that
+    #: discovered it). Read-only: a client cannot claim an alias came from
+    #: somewhere it didn't.
+    source = serializers.CharField(read_only=True)
+    created = serializers.DateTimeField(read_only=True)
+    is_current = serializers.SerializerMethodField()
+
+    def get_is_current(self, alias) -> bool:
+        """Whether this alias is the pin's current name.
+
+        The pin comes from the serializer context rather than ``alias.pin`` so
+        that serializing a whole list costs no per-row query.
+
+        Args:
+            alias: The alias being serialized.
+
+        Returns:
+            True when this alias matches the pin's current effective name,
+            comparing loosely enough to ignore case, spacing, and punctuation.
+        """
+        pin = self.context.get("pin")
+        if pin is None:
+            return False
+        current = normalize_name_for_comparison(pin.effective_name)
+        return bool(current) and normalize_name_for_comparison(alias.name) == current
+
+
+class PinLinkSerializer(serializers.Serializer):
+    """One external link on a pin (output only).
+
+    Separate from :class:`PinLinkCreateSerializer` because ``name`` means
+    different things in each direction: on the way out it is the resolved
+    ``display_name`` (which falls back to the url's host when the link was
+    saved without a label), and a read-only field cannot also accept input.
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(source="display_name", read_only=True)
+    url = serializers.CharField(read_only=True)
+    wayback_url = serializers.SerializerMethodField()
+    order = serializers.IntegerField(read_only=True)
     created = serializers.DateTimeField(read_only=True)
 
+    def get_wayback_url(self, link) -> str | None:
+        """The Wayback snapshot url, or null when none has been archived yet.
 
-class PinAliasDetailSerializer(serializers.Serializer):
-    """One alternate name, as nested in a pin-detail response (schema-only)."""
+        The model stores "not archived" as ``""``; this reports it as null to
+        match the shape ``services.pin_detail.build_pin_detail`` already ships.
 
-    id = serializers.IntegerField(read_only=True)
-    name = serializers.CharField(read_only=True)
-    kind = serializers.CharField(read_only=True)
+        Args:
+            link: The link being serialized.
+
+        Returns:
+            The snapshot url, or None.
+        """
+        return link.wayback_url or None
 
 
-class PinLinkDetailSerializer(serializers.Serializer):
-    """One external link, as nested in a pin-detail response (schema-only)."""
+class PinLinkCreateSerializer(serializers.Serializer):
+    """An external link submitted for a pin (input only)."""
 
-    id = serializers.IntegerField(read_only=True)
-    name = serializers.CharField(read_only=True)
-    url = serializers.CharField(read_only=True)
-    wayback_url = serializers.CharField(read_only=True, allow_null=True)
+    name = serializers.CharField(max_length=255, required=False, allow_blank=True, default="")
+    url = serializers.URLField(max_length=MAX_LINK_URL_LENGTH)
 
 
 class PinCustomFieldDetailSerializer(serializers.Serializer):
@@ -299,9 +384,9 @@ class PinDetailSerializer(SyncPinSerializer):
     wiki_slug = serializers.CharField(read_only=True, allow_null=True)
     cover_photo_url = serializers.CharField(read_only=True, allow_null=True)
     boundary = serializers.JSONField(read_only=True, allow_null=True)
-    notes = PinNoteDetailSerializer(many=True, read_only=True)
-    aliases = PinAliasDetailSerializer(many=True, read_only=True)
-    links = PinLinkDetailSerializer(many=True, read_only=True)
+    notes = PinNoteSerializer(many=True, read_only=True)
+    aliases = PinAliasSerializer(many=True, read_only=True)
+    links = PinLinkSerializer(many=True, read_only=True)
     custom_fields = PinCustomFieldDetailSerializer(many=True, read_only=True)
     note_count = serializers.IntegerField(read_only=True)
     alias_count = serializers.IntegerField(read_only=True)
@@ -339,6 +424,90 @@ class PinUpdateSerializer(serializers.Serializer):
         if has_lat and not (math.isfinite(attrs["latitude"]) and math.isfinite(attrs["longitude"])):
             raise serializers.ValidationError("latitude and longitude must be finite numbers.")
         return attrs
+
+
+class PinVisitSerializer(serializers.Serializer):
+    """One logged visit to a pin (output only)."""
+
+    id = serializers.IntegerField(read_only=True)
+    uuid = serializers.UUIDField(read_only=True)
+    visited_at = serializers.DateTimeField(read_only=True)
+    notes = serializers.CharField(read_only=True, allow_null=True, allow_blank=True)
+    #: How the visit was recorded (manual entry, a photo's timestamp, a trip,
+    #: geolocation, ...). Read-only in v1: this endpoint only creates manual
+    #: visits, and a client cannot claim one came from somewhere else.
+    source = serializers.CharField(read_only=True)
+    #: Set on visits inferred rather than confirmed. Read-only in v1 for the
+    #: same reason as ``source``.
+    tentative = serializers.BooleanField(read_only=True)
+    #: Photos attached to this visit. Served from a queryset annotation, not a
+    #: per-row count query.
+    photo_count = serializers.IntegerField(read_only=True)
+    created = serializers.DateTimeField(read_only=True)
+    updated = serializers.DateTimeField(read_only=True)
+
+
+class PinVisitCreateSerializer(serializers.Serializer):
+    """A manually logged visit submitted for a pin."""
+
+    visited_at = serializers.DateTimeField(required=True)
+    notes = serializers.CharField(max_length=MAX_VISIT_NOTES_LENGTH, required=False, allow_blank=True, allow_null=True, default=None)
+
+
+class LocationSearchQuerySerializer(serializers.Serializer):
+    """Validates the query params of the location autocomplete endpoint."""
+
+    q = serializers.CharField(max_length=200, required=True, trim_whitespace=True)
+    #: Comma-separated subset of ``local`` (the caller's own pins) and
+    #: ``places`` (the configured external places provider). Unknown entries
+    #: are ignored rather than rejected, so a newer client asking for a source
+    #: this server doesn't have still gets the sources it does.
+    sources = serializers.CharField(required=False, default="local,places")
+    limit = serializers.IntegerField(required=False, min_value=1, max_value=25, default=15)
+
+
+class LocationSearchResultSerializer(serializers.Serializer):
+    """One autocomplete hit (schema-only).
+
+    Mirrors ``services.map_pins.autocomplete.AutocompleteResult.to_dict()``,
+    which is what actually builds these - the same wire shape the web map's
+    own autocomplete consumes.
+    """
+
+    #: What kind of hit this is, e.g. a local pin or an external place.
+    type = serializers.CharField(read_only=True)
+    title = serializers.CharField(read_only=True)
+    subtitle = serializers.CharField(read_only=True, allow_blank=True)
+    #: Null for a place that has not been resolved to coordinates yet - call
+    #: ``locations/resolve/`` with its ``place_id`` to get them.
+    lat = serializers.FloatField(read_only=True, allow_null=True)
+    lng = serializers.FloatField(read_only=True, allow_null=True)
+    zoom = serializers.IntegerField(read_only=True)
+    icon = serializers.CharField(read_only=True, allow_null=True)
+    #: Set on local hits: the pin this result refers to.
+    pin_slug = serializers.CharField(read_only=True, allow_null=True)
+    #: Set on external hits: the provider's opaque id, for ``locations/resolve/``.
+    place_id = serializers.CharField(read_only=True, allow_null=True)
+    #: True when this local hit is a child pin rather than a top-level one.
+    is_child = serializers.BooleanField(read_only=True)
+
+
+class LocationSearchResponseSerializer(serializers.Serializer):
+    """Documents the envelope of the location autocomplete endpoint (schema-only)."""
+
+    results = LocationSearchResultSerializer(many=True, read_only=True)
+    #: True when external place results were requested but not served - either
+    #: the caller turned external lookups off, or no provider is configured.
+    #: A client shows "searching your pins only" rather than an empty state.
+    places_disabled = serializers.BooleanField(read_only=True)
+
+
+class PlaceResolveResponseSerializer(serializers.Serializer):
+    """Documents the place-resolution response (schema-only)."""
+
+    lat = serializers.FloatField(read_only=True, allow_null=True)
+    lng = serializers.FloatField(read_only=True, allow_null=True)
+    name = serializers.CharField(read_only=True, allow_blank=True)
 
 
 class TombstoneSerializer(serializers.Serializer):

@@ -1008,3 +1008,20 @@ already reset between tests.
   truncates `first_pinned` to the 1st of its month and returns `None` whenever `pin_count_low`
   is true. Both `LocationWikiView` and the external API now read that one function, and
   `wiki.html` renders the pre-truncated date rather than reaching into a Pin instance.
+
+- **`MapController.resolve_place` does not honor the `external_apis_enabled` profile toggle**
+  (`src/urbanlens/dashboard/controllers/maps.py:384-408`). Its sibling
+  `autocomplete_places` (same file, line ~361) *does* check
+  `request.user.profile.external_apis_enabled` and returns `{"disabled": true}` when the user
+  has turned external lookups off - but `resolve_place`, which is called the moment the user
+  *selects* one of those suggestions, checks only whether an API key/REData is configured. So a
+  user who has opted out of external API calls still triggers a Google Places **Details** call
+  (billable, and a privacy leak of what they searched for) on selection. Repro: set
+  `Profile.external_apis_enabled = False`, GET
+  `/dashboard/map/resolve-place/?place_id=<any>` -> still hits the provider. Fix: add the same
+  `if not request.user.profile.external_apis_enabled: return ... 403` guard the external API's
+  `PlaceResolveView` now applies
+  (`src/urbanlens/dashboard/external_api/views.py`, `PlaceResolveView.get`). Noted while
+  building the external `locations/resolve/` endpoint, which deliberately does *not* reproduce
+  the omission; the internal path was left alone to keep that change out of an already large
+  API-surface commit.
