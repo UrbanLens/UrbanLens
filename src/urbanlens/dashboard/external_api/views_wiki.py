@@ -65,7 +65,7 @@ from urbanlens.dashboard.external_api.serializers_wiki import (
     WikiStatVoteInputSerializer,
     WikiUpdateSerializer,
 )
-from urbanlens.dashboard.external_api.views import ExternalApiView, PinDetailView
+from urbanlens.dashboard.external_api.views import ExternalApiView, OwnedPinMixin
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.aliases.model import WikiAlias
 from urbanlens.dashboard.models.article.model import ArticleRevision
@@ -132,13 +132,11 @@ class WikiApiView(UniformErrorsMixin, ExternalApiView):
         return resolve_visible_wiki(request, location_slug)
 
 
-def _own_pin_or_404(view: ExternalApiView, request: Request, pin_slug: str) -> Pin:
+def _own_pin_or_404(view: OwnedPinMixin, request: Request, pin_slug: str) -> Pin:
     """Resolve one of the caller's own pins, or raise the uniform 404.
 
-    Delegates to ``PinDetailView._get_pin`` so pin lookup (slug-or-uuid,
+    Delegates to ``OwnedPinMixin.get_owned_pin`` so pin lookup (slug-or-uuid,
     ownership filter, select_related set) stays defined in exactly one place.
-    That method ignores ``self``, but is called through the view instance
-    rather than a bare class so it keeps working if it ever starts using it.
 
     Args:
         view: The calling view instance.
@@ -152,7 +150,7 @@ def _own_pin_or_404(view: ExternalApiView, request: Request, pin_slug: str) -> P
         Http404: No such pin, or it belongs to someone else - deliberately the
             same response for both.
     """
-    pin = PinDetailView._get_pin(view, request, pin_slug)  # noqa: SLF001 - single shared definition of the pin lookup
+    pin = view.get_owned_pin(request, pin_slug)
     if pin is None:
         raise Http404
     return pin
@@ -804,7 +802,7 @@ class WikiCommentReactionView(WikiApiView):
         return self._react(request, location_slug, comment_id, emoji, want_present=False)
 
 
-class PinCommentsView(_CommentListMixin, UniformErrorsMixin, ExternalApiView):
+class PinCommentsView(OwnedPinMixin, _CommentListMixin, UniformErrorsMixin, ExternalApiView):
     """GET the caller's own comments on their pin; POST to add one.
 
     Uses ``pins:*`` rather than ``wiki:*``: a pin's comment thread is the
@@ -830,7 +828,7 @@ class PinCommentsView(_CommentListMixin, UniformErrorsMixin, ExternalApiView):
         return self._create_comment(request, request.user.profile, pin=pin)
 
 
-class PinCommentDetailView(UniformErrorsMixin, ExternalApiView):
+class PinCommentDetailView(OwnedPinMixin, UniformErrorsMixin, ExternalApiView):
     """DELETE one of the caller's own comments on their pin."""
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -846,7 +844,7 @@ class PinCommentDetailView(UniformErrorsMixin, ExternalApiView):
         return Response(status=204)
 
 
-class PinReviewView(UniformErrorsMixin, ExternalApiView):
+class PinReviewView(OwnedPinMixin, UniformErrorsMixin, ExternalApiView):
     """GET the caller's own star rating for a pin; PUT to set it, DELETE to clear it."""
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {

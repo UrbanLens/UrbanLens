@@ -47,11 +47,20 @@ class GenerateApiKeyTests(TestCase):
         self.assertNotIn(secret, api_key.key_hash)
         self.assertNotEqual(api_key.key_hash, secret)
 
-    def test_default_scopes_grant_every_defined_scope(self) -> None:
-        """Every new key gets the full grant - there is still no scope picker (see _default_api_key_scopes)."""
+    def test_default_scopes_are_the_original_fixed_grant(self) -> None:
+        """Every new key gets exactly the original four-scope grant, not the full vocabulary.
+
+        See ``_default_api_key_scopes``'s docstring and
+        ``test_external_api_scopes.py::DefaultScopesTests`` - deliberately not
+        widened as ``ApiKeyScope`` grew, so an existing (or newly issued
+        PAT-style) key never silently gains reach the owner didn't consent to.
+        """
         user = baker.make(User)
         api_key, _raw_key = generate_api_key(user, "Zapier")
-        self.assertCountEqual(api_key.scopes, [scope.value for scope in ApiKeyScope])
+        self.assertCountEqual(
+            api_key.scopes,
+            [ApiKeyScope.PROFILE_READ.value, ApiKeyScope.PINS_READ.value, ApiKeyScope.PINS_WRITE.value, ApiKeyScope.PUSH_MANAGE.value],
+        )
 
     def test_blank_name_falls_back_to_default_label(self) -> None:
         user = baker.make(User)
