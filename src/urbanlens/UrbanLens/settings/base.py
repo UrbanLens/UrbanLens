@@ -565,6 +565,11 @@ REST_FRAMEWORK = {
         "external_api_read": "1000/hour",
         "external_api_write": "300/hour",
         "external_api_burst": "60/minute",
+        # Applied on top of the above, to the handful of endpoints whose cost
+        # is unbounded in the caller's own data rather than fixed per request
+        # (currently the smart-list resync). See
+        # external_api.throttling.ExternalApiResyncThrottle.
+        "external_api_resync": "12/hour",
     },
     # Only consulted by views whose schema is actually generated - the
     # preprocessing hook in external_api.schema limits that to the external API.

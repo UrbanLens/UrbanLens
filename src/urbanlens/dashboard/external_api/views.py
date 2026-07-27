@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, ClassVar
+from uuid import UUID
 
 from django.db import transaction
 from django.urls import reverse
@@ -21,13 +22,32 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from urbanlens.dashboard.external_api.authentication import ApiKeyAuthentication
+from urbanlens.dashboard.external_api.pagination import PaginatedListMixin
 from urbanlens.dashboard.external_api.permissions import HasApiKeyScope
 from urbanlens.dashboard.external_api.serializers import (
     AuthSessionSerializer,
     ErrorSerializer,
+    LabelCustomizationSerializer,
+    LabelMergeResponseSerializer,
+    LabelMergeSerializer,
+    LabelQuerySerializer,
+    LabelSerializer,
+    LabelWriteSerializer,
     PinCreateResponseSerializer,
     PinCreateSerializer,
     PinDetailSerializer,
+    PinListDetailSerializer,
+    PinListItemsAddResponseSerializer,
+    PinListItemsDeleteSerializer,
+    PinListItemSerializer,
+    PinListItemsRemoveResponseSerializer,
+    PinListItemsReorderResponseSerializer,
+    PinListItemsReorderSerializer,
+    PinListItemsWriteSerializer,
+    PinListQuerySerializer,
+    PinListResyncResponseSerializer,
+    PinListSerializer,
+    PinListWriteSerializer,
     PinSuggestionCreateResponseSerializer,
     PinSuggestionCreateSerializer,
     PinSyncQuerySerializer,
@@ -35,20 +55,43 @@ from urbanlens.dashboard.external_api.serializers import (
     PinUpdateSerializer,
     PushDeviceRegisterSerializer,
     PushDeviceResponseSerializer,
+    SavedFilterSerializer,
+    SavedFilterUpdateResponseSerializer,
+    SavedFilterWriteSerializer,
     SettingsPatchSerializer,
     SettingsSerializer,
     TombstoneSyncQuerySerializer,
     TombstoneSyncResponseSerializer,
     WhoAmISerializer,
 )
-from urbanlens.dashboard.external_api.throttling import TIER_READ, ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle
+from urbanlens.dashboard.external_api.throttling import (
+    TIER_READ,
+    ExternalApiBurstThrottle,
+    ExternalApiReadThrottle,
+    ExternalApiResyncThrottle,
+    ExternalApiWriteThrottle,
+)
 from urbanlens.dashboard.models.account.model import ApiKeyScope
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin
+from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+from urbanlens.dashboard.services.filter_criteria import CriteriaOwnershipError, validate_criteria_ownership
+from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
+from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
+from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
 from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 from urbanlens.dashboard.services.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
 from urbanlens.dashboard.services.pin_detail import build_pin_detail
 from urbanlens.dashboard.services.pin_edit import PinHasChildrenError, PinReparentError, delete_pin, move_pin_to_coordinates, reparent_pin
+from urbanlens.dashboard.services.pin_list_membership import (
+    add_pins_to_list,
+    remove_pins_from_list,
+    reorder_list_items,
+    resync_lists_for_saved_filter,
+    resync_smart_list,
+)
 from urbanlens.dashboard.services.pin_suggestions import LocationHit, attach_suggestion_photos, ingest_location_hits
 from urbanlens.dashboard.services.pin_sync import InvalidSyncCursorError, StaleDeletedSinceError, sync_pins_page, sync_tombstones_page
 from urbanlens.dashboard.services.profile_settings import SettingsValidationError, apply_settings_patch, read_settings
@@ -56,9 +99,9 @@ from urbanlens.dashboard.services.push import PushRegistrationError, register_de
 from urbanlens.dashboard.services.visits import visit_logging_allowed
 
 if TYPE_CHECKING:
-    from uuid import UUID
-
     from rest_framework.request import Request
+
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +109,126 @@ logger = logging.getLogger(__name__)
 #: endpoint is one discovered place per call (mirrors PinsView.post), so there's
 #: never more than one id to look up in IngestSummary.suggestion_ids_by_key.
 _SUGGESTION_SOURCE_KEY = "external_api_submission"
+
+
+def _get_pin_list(request: Request, list_slug: str) -> PinList | None:
+    """The caller's pin list matching *list_slug* (by slug or uuid), or None.
+
+    Another profile's list reads as "not found" rather than "forbidden" - the
+    existence of someone else's list is not the caller's business.
+
+    Args:
+        request: The authenticated request.
+        list_slug: The list's slug, or its uuid as a string.
+
+    Returns:
+        The matching list, or None.
+    """
+    queryset = PinList.objects.for_profile(request.user.profile).select_related("source_saved_filter")
+    pin_list = queryset.filter(slug=list_slug).first()
+    if pin_list is not None:
+        return pin_list
+    try:
+        parsed = UUID(list_slug)
+    except (ValueError, AttributeError, TypeError):
+        return None
+    return queryset.filter(uuid=parsed).first()
+
+
+def _get_label(request: Request, label_uuid: UUID) -> Label | None:
+    """A label visible to the caller, with their customizations prefetched.
+
+    The ``with_customizations_for`` call is required for the ``effective_*``
+    fields to be correct rather than silently wrong - see
+    :class:`LabelsView`'s docstring.
+
+    Args:
+        request: The authenticated request.
+        label_uuid: The label's uuid.
+
+    Returns:
+        The matching label, or None.
+    """
+    profile = request.user.profile
+    return Label.objects.visible_to(profile).with_customizations_for(profile).prefetch_related("parents").filter(uuid=label_uuid).first()
+
+
+def _reload_label(label: Label, profile: Profile) -> Label:
+    """Re-read *label* with customizations prefetched, for a post-write response.
+
+    A label that was just created or mutated in memory has no
+    ``_user_customizations`` attribute (or a stale one), which would make every
+    ``effective_*`` field in the response wrong. Re-reading is the only way to
+    populate it, since the prefetch is a queryset-level operation.
+
+    Args:
+        label: The label just written.
+        profile: The caller, whose customizations to load.
+
+    Returns:
+        The freshly-loaded label. Falls back to the in-memory instance if the
+        row has vanished (it was just deleted by a concurrent request).
+    """
+    reloaded = Label.objects.visible_to(profile).with_customizations_for(profile).prefetch_related("parents").filter(pk=label.pk).first()
+    return reloaded if reloaded is not None else label
+
+
+def _refuse_label_write(label: Label) -> Response | None:
+    """Refuse a write to a global or protected label.
+
+    Args:
+        label: The label being written to.
+
+    Returns:
+        A 403 response when the write must be refused, otherwise None.
+    """
+    if label.profile_id is None:
+        return Response({"error": "Global labels cannot be modified. Use the customization endpoint instead."}, status=403)
+    if label.is_protected:
+        return Response({"error": "This label is protected and cannot be modified."}, status=403)
+    return None
+
+
+def _resolve_source_saved_filter(profile: Profile, data: dict) -> tuple[SavedFilter | None, Response | None]:
+    """Resolve a submitted ``source_saved_filter_uuid`` to one of *profile*'s filters.
+
+    Args:
+        profile: The owner the filter must belong to.
+        data: Validated write-serializer data.
+
+    Returns:
+        ``(saved_filter, None)`` on success - where ``saved_filter`` is None
+        when the key was absent or explicitly null - or ``(None, response)``
+        carrying a 400 when the uuid names no filter of the caller's.
+    """
+    if not data.get("source_saved_filter_uuid"):
+        return None, None
+    saved_filter = SavedFilter.objects.filter(uuid=data["source_saved_filter_uuid"], profile=profile).first()
+    if saved_filter is None:
+        return None, Response({"error": "No such saved filter."}, status=400)
+    return saved_filter, None
+
+
+def _resolve_parent_labels(profile: Profile, data: dict) -> tuple[list[Label], Response | None]:
+    """Resolve submitted ``parent_uuids`` to labels visible to *profile*.
+
+    Args:
+        profile: The caller.
+        data: Validated write-serializer data.
+
+    Returns:
+        ``(parents, None)`` on success, or ``(([], response)`` carrying a 400
+        when any uuid names no visible label. Unknown parents are rejected
+        rather than dropped: silently building a different hierarchy than the
+        client asked for is worse than refusing.
+    """
+    if "parent_uuids" not in data:
+        return [], None
+    uuids = data["parent_uuids"]
+    parents = list(Label.objects.visible_to(profile).filter(uuid__in=uuids))
+    if len(parents) != len(set(uuids)):
+        return [], Response({"error": "One or more parent labels do not exist."}, status=400)
+    return parents, None
 
 
 class ExternalApiView(APIView):
@@ -576,6 +739,675 @@ class AuthSessionView(UnscopedExternalApiView):
             }
         payload["user_uuid"] = request.user.profile.uuid
         return Response(AuthSessionSerializer(payload).data)
+
+
+class PinListsView(PaginatedListMixin, ExternalApiView):
+    """The caller's pin lists: GET pages through them, POST creates one.
+
+    Supports ``?is_smart=true|false`` to page through only smart or only plain
+    lists.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.LISTS_READ}),
+        "POST": frozenset({ApiKeyScope.LISTS_WRITE}),
+    }
+
+    @extend_schema(parameters=[PinListQuerySerializer], responses={200: PinListSerializer(many=True)})
+    def get(self, request: Request) -> Response:
+        """Return one page of the caller's pin lists."""
+        serializer = PinListQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+
+        # prefetch_related("items") is what makes PinList.pin_count free - the
+        # property counts the prefetched rows instead of issuing a COUNT per
+        # list (see PinList.pin_count).
+        queryset = PinList.objects.for_profile(request.user.profile).select_related("source_saved_filter").prefetch_related("items").order_by("-updated", "pk")
+        if (is_smart := serializer.validated_data.get("is_smart")) is not None:
+            queryset = queryset.filter(is_smart=is_smart)
+        return self.paginated_response(queryset, PinListSerializer, request)
+
+    @extend_schema(request=PinListWriteSerializer, responses={201: PinListDetailSerializer, 400: ErrorSerializer})
+    def post(self, request: Request) -> Response:
+        """Create a pin list owned by the caller."""
+        serializer = PinListWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = request.user.profile
+
+        source_filter, error = _resolve_source_saved_filter(profile, data)
+        if error is not None:
+            return error
+
+        smart_filter = data.get("smart_filter")
+        if source_filter is not None:
+            smart_filter = source_filter.criteria
+        if smart_filter is not None:
+            try:
+                validate_criteria_ownership(smart_filter, profile)
+            except CriteriaOwnershipError as exc:
+                return Response({"error": str(exc)}, status=400)
+
+        if PinList.objects.for_profile(profile).filter(name=data["name"]).exists():
+            return Response({"error": "You already have a list with that name."}, status=400)
+
+        pin_list = PinList(
+            profile=profile,
+            name=data["name"],
+            description=data.get("description", ""),
+            is_smart=data.get("is_smart", False),
+            smart_filter=smart_filter,
+            smart_boundary=data.get("smart_boundary"),
+            source_saved_filter=source_filter,
+        )
+        pin_list.save()
+
+        # A list created with rules should show its matching pins immediately,
+        # not only after the next pin edit triggers the signal.
+        if pin_list.smart_filter or pin_list.smart_boundary:
+            resync_smart_list(pin_list)
+
+        return Response(PinListDetailSerializer(pin_list).data, status=201)
+
+
+class PinListDetailView(ExternalApiView):
+    """One of the caller's pin lists: GET it, PATCH it, or DELETE it.
+
+    PATCH recomputes membership only when the rules actually changed
+    (``is_smart``, ``smart_filter``, or ``smart_boundary``) - a resync is a
+    full re-evaluation of every pin the profile owns, far too expensive to run
+    on an unrelated rename.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.LISTS_READ}),
+        "PATCH": frozenset({ApiKeyScope.LISTS_WRITE}),
+        "DELETE": frozenset({ApiKeyScope.LISTS_WRITE}),
+    }
+
+    @extend_schema(responses={200: PinListDetailSerializer, 404: ErrorSerializer})
+    def get(self, request: Request, list_slug: str) -> Response:
+        """Return one of the caller's lists, including its boundary geometry."""
+        pin_list = _get_pin_list(request, list_slug)
+        if pin_list is None:
+            return Response({"error": "No such list."}, status=404)
+        return Response(PinListDetailSerializer(pin_list).data)
+
+    @extend_schema(request=PinListWriteSerializer, responses={200: PinListDetailSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
+    def patch(self, request: Request, list_slug: str) -> Response:
+        """Apply a partial update, resyncing membership if the smart rules changed."""
+        pin_list = _get_pin_list(request, list_slug)
+        if pin_list is None:
+            return Response({"error": "No such list."}, status=404)
+
+        serializer = PinListWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = request.user.profile
+
+        source_filter, error = _resolve_source_saved_filter(profile, data)
+        if error is not None:
+            return error
+
+        # Captured before anything is applied, so the resync decision below
+        # compares the real before/after rather than assuming a change.
+        before = (pin_list.is_smart, pin_list.smart_filter, pin_list.smart_boundary)
+
+        if "name" in data:
+            if PinList.objects.for_profile(profile).filter(name=data["name"]).exclude(pk=pin_list.pk).exists():
+                return Response({"error": "You already have a list with that name."}, status=400)
+            pin_list.name = data["name"]
+        if "description" in data:
+            pin_list.description = data["description"]
+        if "is_smart" in data:
+            pin_list.is_smart = data["is_smart"]
+        if "smart_boundary" in data:
+            pin_list.smart_boundary = data["smart_boundary"]
+        if "smart_filter" in data:
+            pin_list.smart_filter = data["smart_filter"]
+        if "source_saved_filter_uuid" in data:
+            pin_list.source_saved_filter = source_filter
+            # Pointing a list at a filter copies that filter's criteria in;
+            # detaching it (null) leaves the last snapshot in place, matching
+            # PinListEditView and the SET_NULL on the FK itself.
+            if source_filter is not None:
+                pin_list.smart_filter = source_filter.criteria
+
+        if pin_list.smart_filter is not None:
+            try:
+                validate_criteria_ownership(pin_list.smart_filter, profile)
+            except CriteriaOwnershipError as exc:
+                return Response({"error": str(exc)}, status=400)
+
+        pin_list.save()
+
+        after = (pin_list.is_smart, pin_list.smart_filter, pin_list.smart_boundary)
+        if before != after:
+            resync_smart_list(pin_list)
+
+        pin_list.refresh_from_db()
+        return Response(PinListDetailSerializer(pin_list).data)
+
+    @extend_schema(responses={204: None, 404: ErrorSerializer})
+    def delete(self, request: Request, list_slug: str) -> Response:
+        """Delete one of the caller's lists. The pins on it are untouched."""
+        pin_list = _get_pin_list(request, list_slug)
+        if pin_list is None:
+            return Response({"error": "No such list."}, status=404)
+        pin_list.delete()
+        return Response(status=204)
+
+
+class PinListItemsView(PaginatedListMixin, ExternalApiView):
+    """The pins on one of the caller's lists: GET, add (POST), or remove (DELETE).
+
+    DELETE carries a body, which is unusual but deliberate: removing a set of
+    pins in one call is what an offline client replaying a queued batch needs,
+    and encoding hundreds of uuids in a query string is not viable.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.LISTS_READ}),
+        "POST": frozenset({ApiKeyScope.LISTS_WRITE}),
+        "DELETE": frozenset({ApiKeyScope.LISTS_WRITE}),
+    }
+
+    @extend_schema(responses={200: PinListItemSerializer(many=True), 404: ErrorSerializer})
+    def get(self, request: Request, list_slug: str) -> Response:
+        """Return one page of the list's items, in display order."""
+        pin_list = _get_pin_list(request, list_slug)
+        if pin_list is None:
+            return Response({"error": "No such list."}, status=404)
+
+        queryset = PinListItem.objects.for_list(pin_list).select_related("pin").order_by("order", "created", "pk")
+        return self.paginated_response(queryset, PinListItemSerializer, request)
+
+    @extend_schema(request=PinListItemsWriteSerializer, responses={200: PinListItemsAddResponseSerializer, 404: ErrorSerializer})
+    def post(self, request: Request, list_slug: str) -> Response:
+        """Add pins to the list, skipping duplicates and honoring the per-list cap.
+
+        Uuids that name no pin of the caller's are silently dropped rather than
+        refused - an offline client replaying a queued batch should not have
+        the whole batch fail because one pin was deleted elsewhere meanwhile.
+        """
+        pin_list = _get_pin_list(request, list_slug)
+        if pin_list is None:
+            return Response({"error": "No such list."}, status=404)
+
+        serializer = PinListItemsWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        pins = list(Pin.objects.filter(profile=request.user.profile, uuid__in=serializer.validated_data["pin_uuids"]))
+        result = add_pins_to_list(pin_list, pins)
+        return Response({"added": result.added, "skipped_over_cap": result.skipped_over_cap, "max_pins": result.max_pins})
+
+    @extend_schema(request=PinListItemsDeleteSerializer, responses={200: PinListItemsRemoveResponseSerializer, 404: ErrorSerializer})
+    def delete(self, request: Request, list_slug: str) -> Response:
+        """Remove the named pins from the list, whatever their provenance."""
+        pin_list = _get_pin_list(request, list_slug)
+        if pin_list is None:
+            return Response({"error": "No such list."}, status=404)
+
+        serializer = PinListItemsDeleteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        pin_ids = list(Pin.objects.filter(profile=request.user.profile, uuid__in=serializer.validated_data["pin_uuids"]).values_list("pk", flat=True))
+        removed = remove_pins_from_list(pin_list, pin_ids) if pin_ids else 0
+        return Response({"removed": removed})
+
+
+class PinListItemsReorderView(ExternalApiView):
+    """POST: renumber a list's items into the submitted order."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.LISTS_WRITE}),
+    }
+
+    @extend_schema(request=PinListItemsReorderSerializer, responses={200: PinListItemsReorderResponseSerializer, 404: ErrorSerializer})
+    def post(self, request: Request, list_slug: str) -> Response:
+        """Set each item's order to its index in ``item_ids``.
+
+        Ids that aren't on this list are ignored rather than rejected, matching
+        the web UI's drag-and-drop behavior: a stale id from another tab should
+        not fail the whole reorder.
+        """
+        pin_list = _get_pin_list(request, list_slug)
+        if pin_list is None:
+            return Response({"error": "No such list."}, status=404)
+
+        serializer = PinListItemsReorderSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        reordered = reorder_list_items(pin_list, serializer.validated_data["item_ids"])
+        return Response({"reordered": reordered})
+
+
+class PinListResyncView(ExternalApiView):
+    """POST: recompute a smart list's membership from its current rules, right now.
+
+    Runs synchronously, matching the internal behavior - ``resync_smart_list``
+    is called inline by the list-edit view too, and there is no Celery task for
+    it. Normally unnecessary, since membership is kept current by a Pin
+    post-save signal; it exists for the case where a client has reason to
+    believe the list has drifted.
+
+    Rate-limited far more tightly than an ordinary write (see
+    :class:`ExternalApiResyncThrottle`): the work this does is unbounded in the
+    caller's own pin count, so it is the one endpoint here where a cheap
+    request can buy expensive server-side work.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.LISTS_WRITE}),
+    }
+    #: The standard three plus the resync-specific cap - a resync still counts
+    #: against the burst and write budgets as well.
+    throttle_classes = [ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle, ExternalApiResyncThrottle]
+
+    @extend_schema(request=None, responses={200: PinListResyncResponseSerializer, 404: ErrorSerializer})
+    def post(self, request: Request, list_slug: str) -> Response:
+        """Fully recompute the list's membership and return the resulting pin count."""
+        pin_list = _get_pin_list(request, list_slug)
+        if pin_list is None:
+            return Response({"error": "No such list."}, status=404)
+
+        resync_smart_list(pin_list)
+        return Response({"pin_count": pin_list.items.count()})
+
+
+class SavedFiltersView(PaginatedListMixin, ExternalApiView):
+    """The caller's saved main-map filters: GET pages through them, POST creates one."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.LISTS_READ}),
+        "POST": frozenset({ApiKeyScope.LISTS_WRITE}),
+    }
+
+    @extend_schema(responses={200: SavedFilterSerializer(many=True)})
+    def get(self, request: Request) -> Response:
+        """Return one page of the caller's saved filters."""
+        queryset = SavedFilter.objects.filter(profile=request.user.profile).order_by("order", "-created", "pk")
+        return self.paginated_response(queryset, SavedFilterSerializer, request)
+
+    @extend_schema(request=SavedFilterWriteSerializer, responses={201: SavedFilterSerializer, 400: ErrorSerializer})
+    def post(self, request: Request) -> Response:
+        """Create a saved filter owned by the caller."""
+        serializer = SavedFilterWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = request.user.profile
+
+        criteria = data.get("criteria") or {}
+        try:
+            validate_criteria_ownership(criteria, profile)
+        except CriteriaOwnershipError as exc:
+            return Response({"error": str(exc)}, status=400)
+
+        if SavedFilter.objects.name_taken_for(profile, data["name"]):
+            return Response({"error": "You already have a saved filter with that name."}, status=400)
+
+        saved_filter = SavedFilter.objects.create(
+            profile=profile,
+            name=data["name"],
+            icon=data.get("icon") or "bookmark",
+            criteria=criteria,
+            order=data.get("order", 0),
+        )
+        return Response(SavedFilterSerializer(saved_filter).data, status=201)
+
+
+class SavedFilterDetailView(ExternalApiView):
+    """One of the caller's saved filters: GET it, PATCH it, or DELETE it.
+
+    A PATCH that changes ``criteria`` also resyncs every smart list derived
+    from this filter. ``PinList.smart_filter`` is a one-time *copy*, not a live
+    reference, so skipping that would leave those lists silently stale - the
+    response reports how many were refreshed as ``lists_resynced``.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.LISTS_READ}),
+        "PATCH": frozenset({ApiKeyScope.LISTS_WRITE}),
+        "DELETE": frozenset({ApiKeyScope.LISTS_WRITE}),
+    }
+
+    def _get_filter(self, request: Request, filter_uuid: UUID) -> SavedFilter | None:
+        """The caller's saved filter with this uuid, or None."""
+        return SavedFilter.objects.filter(uuid=filter_uuid, profile=request.user.profile).first()
+
+    @extend_schema(responses={200: SavedFilterSerializer, 404: ErrorSerializer})
+    def get(self, request: Request, filter_uuid: UUID) -> Response:
+        """Return one of the caller's saved filters."""
+        saved_filter = self._get_filter(request, filter_uuid)
+        if saved_filter is None:
+            return Response({"error": "No such saved filter."}, status=404)
+        return Response(SavedFilterSerializer(saved_filter).data)
+
+    @extend_schema(request=SavedFilterWriteSerializer, responses={200: SavedFilterUpdateResponseSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
+    def patch(self, request: Request, filter_uuid: UUID) -> Response:
+        """Apply a partial update, resyncing derived smart lists when criteria change."""
+        saved_filter = self._get_filter(request, filter_uuid)
+        if saved_filter is None:
+            return Response({"error": "No such saved filter."}, status=404)
+
+        serializer = SavedFilterWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = request.user.profile
+
+        criteria_changed = "criteria" in data and data["criteria"] != saved_filter.criteria
+        if "criteria" in data:
+            try:
+                validate_criteria_ownership(data["criteria"], profile)
+            except CriteriaOwnershipError as exc:
+                return Response({"error": str(exc)}, status=400)
+
+        if "name" in data:
+            if SavedFilter.objects.name_taken_for(profile, data["name"], exclude_pk=saved_filter.pk):
+                return Response({"error": "You already have a saved filter with that name."}, status=400)
+            saved_filter.name = data["name"]
+        if "icon" in data:
+            saved_filter.icon = data["icon"] or "bookmark"
+        if "criteria" in data:
+            saved_filter.criteria = data["criteria"]
+        if "order" in data:
+            saved_filter.order = data["order"]
+        saved_filter.save()
+
+        lists_resynced = resync_lists_for_saved_filter(saved_filter) if criteria_changed else 0
+
+        payload = SavedFilterSerializer(saved_filter).data
+        payload["lists_resynced"] = lists_resynced
+        return Response(payload)
+
+    @extend_schema(responses={204: None, 404: ErrorSerializer})
+    def delete(self, request: Request, filter_uuid: UUID) -> Response:
+        """Delete one of the caller's saved filters.
+
+        Lists derived from it keep their last-copied criteria and simply stop
+        tracking further edits (the FK is SET_NULL).
+        """
+        saved_filter = self._get_filter(request, filter_uuid)
+        if saved_filter is None:
+            return Response({"error": "No such saved filter."}, status=404)
+        saved_filter.delete()
+        return Response(status=204)
+
+
+class LabelsView(PaginatedListMixin, ExternalApiView):
+    """Labels visible to the caller: GET pages through them, POST creates one.
+
+    **The ``.with_customizations_for(profile)`` call below is load-bearing and
+    must never be dropped.** ``Label._get_customization`` reads the
+    ``_user_customizations`` attribute that prefetch populates, and returns
+    "no customization" when the attribute is absent. Without the prefetch the
+    ``effective_name``/``effective_icon``/``effective_color``/``is_customized``
+    fields do not merely become an N+1 - they silently serialize the *wrong*
+    values, reporting the label's own styling for every caller who has
+    overridden it. There is no error; the data is just quietly incorrect.
+
+    Filters: ``kind``, ``is_global``, ``q`` (name contains), ``parent_uuid``.
+    ``?with_counts=true`` adds ``pin_count``/``location_count``, opt-in because
+    each is a correlated subquery per row.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.LABELS_READ}),
+        "POST": frozenset({ApiKeyScope.LABELS_WRITE}),
+    }
+
+    @extend_schema(parameters=[LabelQuerySerializer], responses={200: LabelSerializer(many=True), 400: ErrorSerializer})
+    def get(self, request: Request) -> Response:
+        """Return one page of the labels visible to the caller."""
+        serializer = LabelQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        params = serializer.validated_data
+        profile = request.user.profile
+
+        queryset = Label.objects.visible_to(profile).with_customizations_for(profile).ordered()
+        if kind := params.get("kind"):
+            queryset = queryset.filter(kind=kind)
+        if (is_global := params.get("is_global")) is not None:
+            queryset = queryset.filter(profile__isnull=True) if is_global else queryset.filter(profile=profile)
+        if q := params.get("q"):
+            queryset = queryset.filter(name__icontains=q)
+        if parent_uuid := params.get("parent_uuid"):
+            parent = Label.objects.visible_to(profile).filter(uuid=parent_uuid).first()
+            if parent is None:
+                return Response({"error": "No such parent label."}, status=400)
+            queryset = queryset.filter(parents=parent)
+        # with_pin_counts() supplies its own Prefetch("parents", ...); adding a
+        # plain prefetch_related("parents") alongside it makes Django refuse
+        # the queryset outright ("lookup was already seen with a different
+        # queryset"), so the two are deliberately mutually exclusive here.
+        queryset = queryset.with_pin_counts() if params.get("with_counts") else queryset.prefetch_related("parents")
+
+        return self.paginated_response(queryset, LabelSerializer, request)
+
+    @extend_schema(request=LabelWriteSerializer, responses={201: LabelSerializer, 400: ErrorSerializer})
+    def post(self, request: Request) -> Response:
+        """Create a label owned by the caller.
+
+        ``profile`` is always the caller's own - a client can never create a
+        global label, which is a site-wide object reserved for staff.
+        """
+        serializer = LabelWriteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = request.user.profile
+
+        if not data.get("kind"):
+            return Response({"error": "kind is required."}, status=400)
+
+        parents, error = _resolve_parent_labels(profile, data)
+        if error is not None:
+            return error
+
+        label = Label.objects.create(
+            profile=profile,
+            name=data["name"],
+            description=data.get("description") or None,
+            kind=data["kind"],
+            color=data.get("color") or None,
+            icon=data.get("icon") or None,
+            order=data.get("order", 0),
+            allow_auto_tag=data.get("allow_auto_tag", True),
+            keywords=data.get("keywords") or None,
+        )
+        if parents:
+            # A brand-new label has no descendants, so no assignment can close
+            # a loop - the guard is applied on update, where it can.
+            label.parents.set(parents)
+
+        return Response(LabelSerializer(_reload_label(label, profile)).data, status=201)
+
+
+class LabelDetailView(ExternalApiView):
+    """One label visible to the caller: GET it, PATCH it, or DELETE it.
+
+    GET works for any visible label, including global ones. Writes do not:
+    a global label is shared by every user on the site, and a protected one
+    (e.g. the built-in "Visited" status) is depended on by the application
+    itself, so both are refused with 403. Use the ``customization/``
+    sub-resource to restyle a global label for yourself.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.LABELS_READ}),
+        "PATCH": frozenset({ApiKeyScope.LABELS_WRITE}),
+        "DELETE": frozenset({ApiKeyScope.LABELS_WRITE}),
+    }
+
+    @extend_schema(responses={200: LabelSerializer, 404: ErrorSerializer})
+    def get(self, request: Request, label_uuid: UUID) -> Response:
+        """Return one label visible to the caller."""
+        label = _get_label(request, label_uuid)
+        if label is None:
+            return Response({"error": "No such label."}, status=404)
+        return Response(LabelSerializer(label).data)
+
+    @extend_schema(request=LabelWriteSerializer, responses={200: LabelSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
+    def patch(self, request: Request, label_uuid: UUID) -> Response:
+        """Apply a partial update to one of the caller's own labels."""
+        label = _get_label(request, label_uuid)
+        if label is None:
+            return Response({"error": "No such label."}, status=404)
+        if (refusal := _refuse_label_write(label)) is not None:
+            return refusal
+
+        serializer = LabelWriteSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = request.user.profile
+
+        parents, error = _resolve_parent_labels(profile, data)
+        if error is not None:
+            return error
+
+        if "name" in data:
+            label.name = data["name"]
+        if "description" in data:
+            label.description = data.get("description") or None
+        if "color" in data:
+            label.color = data.get("color") or None
+        if "icon" in data:
+            label.icon = data.get("icon") or None
+        if "order" in data:
+            label.order = data["order"]
+        if "allow_auto_tag" in data:
+            label.allow_auto_tag = data["allow_auto_tag"]
+        if "keywords" in data:
+            label.keywords = data.get("keywords") or None
+        # `kind` is deliberately ignored on update - see LabelWriteSerializer.
+        label.save()
+
+        if "parent_uuids" in data:
+            parent_ids = [parent.pk for parent in parents]
+            if would_create_cycle(label, parent_ids):
+                return Response({"error": "That parent would create a loop in the label hierarchy."}, status=400)
+            label.parents.set(parents)
+
+        return Response(LabelSerializer(_reload_label(label, profile)).data)
+
+    @extend_schema(responses={204: None, 403: ErrorSerializer, 404: ErrorSerializer})
+    def delete(self, request: Request, label_uuid: UUID) -> Response:
+        """Delete one of the caller's own labels. Pins carrying it are untouched."""
+        label = _get_label(request, label_uuid)
+        if label is None:
+            return Response({"error": "No such label."}, status=404)
+        if (refusal := _refuse_label_write(label)) is not None:
+            return refusal
+        label.delete()
+        return Response(status=204)
+
+
+class LabelCustomizationView(ExternalApiView):
+    """The caller's private display overrides for one label.
+
+    Works for *any* label the caller can see, global ones included - this is
+    the only way a client changes how a shared label appears to its user,
+    since the label itself is not theirs to edit. Overrides are per-profile and
+    invisible to everyone else.
+
+    PUT replaces the override set; an empty submission (or one whose fields are
+    all blank) deletes it, restoring the label's own styling. Both verbs return
+    the refreshed label so a client never has to re-fetch to redraw.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "PUT": frozenset({ApiKeyScope.LABELS_WRITE}),
+        "DELETE": frozenset({ApiKeyScope.LABELS_WRITE}),
+    }
+
+    @extend_schema(request=LabelCustomizationSerializer, responses={200: LabelSerializer, 404: ErrorSerializer})
+    def put(self, request: Request, label_uuid: UUID) -> Response:
+        """Set (or clear) the caller's overrides for this label."""
+        label = _get_label(request, label_uuid)
+        if label is None:
+            return Response({"error": "No such label."}, status=404)
+
+        serializer = LabelCustomizationSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = request.user.profile
+
+        upsert_label_customization(
+            profile,
+            label,
+            name=data.get("name"),
+            icon=data.get("icon"),
+            color=data.get("color"),
+        )
+        return Response(LabelSerializer(_reload_label(label, profile)).data)
+
+    @extend_schema(responses={200: LabelSerializer, 404: ErrorSerializer})
+    def delete(self, request: Request, label_uuid: UUID) -> Response:
+        """Remove the caller's overrides, restoring the label's own styling."""
+        label = _get_label(request, label_uuid)
+        if label is None:
+            return Response({"error": "No such label."}, status=404)
+
+        profile = request.user.profile
+        clear_label_customization(profile, label)
+        return Response(LabelSerializer(_reload_label(label, profile)).data)
+
+
+class LabelMergeView(ExternalApiView):
+    """POST: merge other labels into the one named in the URL.
+
+    The URL label is the **target** and survives; the ``source_uuids`` in the
+    body are consumed - their pins, wikis, images or profile assignments move
+    onto the target, their children are reparented onto it, and the sources
+    themselves are deleted.
+
+    **This is destructive and cannot be undone.** Merging is not covered by the
+    Undo History framework: once the sources are deleted there is no staged
+    entry to restore them from, and re-creating labels with the same names
+    would not restore which pins carried which. Clients should confirm with the
+    user before calling this.
+
+    Sources must be the caller's own, unprotected, and of the target's kind.
+    Global labels can never be a source - they are shared by every user, so
+    consuming one would destroy other people's data.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.LABELS_WRITE}),
+    }
+
+    @extend_schema(
+        request=LabelMergeSerializer,
+        responses={200: LabelMergeResponseSerializer, 400: ErrorSerializer, 404: ErrorSerializer},
+        description="Merge labels into this one. Destructive and NOT undoable - the source labels are deleted.",
+    )
+    def post(self, request: Request, label_uuid: UUID) -> Response:
+        """Merge the named source labels into this one."""
+        target = _get_label(request, label_uuid)
+        if target is None:
+            return Response({"error": "No such label."}, status=404)
+
+        serializer = LabelMergeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = request.user.profile
+
+        sources = list(Label.objects.filter(uuid__in=serializer.validated_data["source_uuids"], profile=profile))
+        if not sources:
+            return Response({"error": "No labels to merge."}, status=400)
+
+        # Captured before the merge - the source rows are gone afterwards.
+        merged_uuids = [str(source.uuid) for source in sources]
+        try:
+            result = merge_labels(target=target, sources=sources, profile=profile)
+        except LabelMergeError as exc:
+            return Response({"error": str(exc)}, status=400)
+
+        return Response(
+            {
+                "target": LabelSerializer(_reload_label(target, profile)).data,
+                "merged_uuids": merged_uuids,
+                "pins_moved": result.pins_moved,
+            }
+        )
 
 
 class PushDeviceDetailView(ExternalApiView):

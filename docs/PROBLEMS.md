@@ -827,3 +827,23 @@ already reset between tests.
   Protocol's `CSS.getMatchedStylesForNode` (via a Playwright CDP session) to see which rule a
   live page actually applied if a rendered value looks unexpectedly stale. (This applies to the
   public dev/staging/prod deployments, not the local docker-compose stack described above.)
+
+
+- **Three pre-existing mypy errors surface whenever anything type-checks the external API's view
+  module** (found 2026-07-26 while adding the lists/labels external endpoints; none are caused by
+  that work, and all three live in files it does not touch):
+  - `dashboard/models/boundary/queryset.py:87` - `"GEOSGeometry" has no attribute "exterior_ring"`
+    in `buffer_point_by_meters`. `Point.buffer()` is typed as returning the `GEOSGeometry` base
+    class, but the code relies on the result actually being a `Polygon`. Wants a narrowing
+    `assert isinstance(circle, Polygon)` (or a typed helper) rather than a `cast` - the runtime
+    assumption is genuinely unchecked today.
+  - `dashboard/forms/search.py:176` - `resolve_reference(...)` is handed `self.profile`, typed
+    `Profile | None`, where a non-optional `Profile` is expected. Either `SearchForm.profile`
+    should be non-optional or this branch needs an explicit None guard; as written, a form built
+    without a profile would fail here at runtime.
+  - `dashboard/controllers/trip.py:481` - `existing_ids.add(trip.creator_id)` where `creator_id`
+    is `int | None`, so a trip with no creator would insert `None` into a `set[int]`.
+
+  All three look like real latent bugs rather than annotation noise, which is why they are logged
+  here instead of silenced. They don't fail today because mypy isn't run across these paths
+  together - they only appear once `external_api/views.py` pulls them into one type-check graph.

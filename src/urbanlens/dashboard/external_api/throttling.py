@@ -147,3 +147,23 @@ class ExternalApiBurstThrottle(ExternalApiRateThrottle):
     """The short-window cap applied to every external API request, both tiers."""
 
     scope = "external_api_burst"
+
+
+class ExternalApiResyncThrottle(ExternalApiRateThrottle):
+    """A much tighter cap for endpoints whose cost is unbounded in the caller's data.
+
+    The ordinary write cap bounds *how many* writes a credential makes, which
+    is the right question when each one costs about the same. It is the wrong
+    question for a smart-list resync: one cheap POST re-evaluates every pin the
+    profile owns against the list's filter and boundary, so a caller with a
+    large map can turn a request that costs them nothing into seconds of
+    server-side geospatial work, repeatedly, while staying comfortably inside
+    the 300/hour write budget.
+
+    Applied *in addition* to the standard three by overriding
+    ``throttle_classes`` on the view (see
+    ``external_api.views.PinListResyncView``), so a resync still counts against
+    the burst and write caps as well.
+    """
+
+    scope = "external_api_resync"

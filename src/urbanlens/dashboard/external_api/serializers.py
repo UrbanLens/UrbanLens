@@ -19,8 +19,10 @@ from django.core.validators import URLValidator
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, KIND_CHOICES
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
 from urbanlens.dashboard.models.pin.model import PinType
+from urbanlens.dashboard.models.pin_list.model import PinListItem
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS
 from urbanlens.dashboard.models.profile.meta import (
     DistanceUnit,
@@ -33,6 +35,7 @@ from urbanlens.dashboard.models.profile.meta import (
 )
 from urbanlens.dashboard.models.push_device import PushTransport
 from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
+from urbanlens.dashboard.services.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH
 
 #: Same scheme restriction as controllers.links._clean_link_input - external
 #: submissions are untrusted input, so this validates before anything else does.
@@ -576,6 +579,395 @@ class SettingsPatchSerializer(serializers.Serializer):
     #: caller's plan entitlement in services.profile_settings.
     image_downscale_max_dimension = serializers.IntegerField(required=False, allow_null=True)
     video_downscale_max_height = serializers.IntegerField(required=False, allow_null=True)
+
+
+#: Upper bound on the total vertex count of a submitted smart-list boundary.
+#: A MultiPolygon is stored verbatim and re-tested against every one of the
+#: owner's pins on each resync, so an unbounded one is both a storage and a CPU
+#: amplification vector. Generous enough for any hand-drawn or imported region;
+#: tight enough that a pathological payload is refused rather than persisted.
+MAX_BOUNDARY_VERTICES = 20_000
+
+#: Human-readable description of the ``criteria``/``smart_filter`` JSON shape,
+#: reused by every field carrying it. Deliberately describes the *existing*
+#: format produced by ``services.filter_criteria.serialize_form_criteria`` -
+#: this is not a new contract, and the two must not drift.
+CRITERIA_HELP_TEXT = (
+    "Saved main-map filter criteria, in the same JSON shape "
+    "`services.filter_criteria.serialize_form_criteria` produces and "
+    "`deserialize_criteria` replays. Every key is optional; an absent key means "
+    '"no filter on that dimension". Recognized keys: `name` (substring match); '
+    "the numeric bounds `min_rating`/`max_rating`, `min_priority`/`max_priority`, "
+    "`min_danger`/`max_danger`, `min_vulnerability`/`max_vulnerability`, "
+    "`min_detail_pins`/`max_detail_pins`; the flags `has_visits`, `has_links`, "
+    "`overlapping_pins`; the eight `security_*` indicators (`security_fences`, "
+    "`security_alarms`, `security_cameras`, `security_security`, `security_signs`, "
+    "`security_vps`, `security_plywood`, `security_locked`); ISO-8601 date bounds "
+    "`visited_after`/`visited_before`, `created_after`/`created_before`, "
+    "`date_built_after`/`date_built_before`, `date_abandoned_after`/"
+    "`date_abandoned_before`, `last_viewed_after`/`last_viewed_before`; "
+    "`tags`/`exclude_tags` (arrays of label ids); `label_groups` (array of "
+    '`{"op": "and"|"or"|"not", "ids": [label id, ...]}`, which takes precedence '
+    "over `tags`/`exclude_tags` when present); `custom_fields` (array of "
+    "`{field_id, ...}` bound objects); and `include_regions`/`exclude_regions` "
+    "(GeoJSON geometries). Every label id must be visible to you and every "
+    "custom-field id must be your own, or the write is refused."
+)
+
+
+class PinSummarySerializer(serializers.Serializer):
+    """The minimal pin identity nested inside list-membership payloads.
+
+    Deliberately far smaller than :class:`SyncPinSerializer`: an items page is
+    about *which* pins are on a list and in what order, and a client that wants
+    a pin's full detail already has ``GET pins/{slug}/`` for that. Keeping this
+    small is what makes a 100-item page cheap.
+    """
+
+    uuid = serializers.UUIDField(read_only=True)
+    slug = serializers.CharField(read_only=True, allow_null=True)
+    #: The pin's display name with the owner's aliases/overrides applied.
+    name = serializers.CharField(read_only=True, source="effective_name")
+    latitude = serializers.FloatField(read_only=True, allow_null=True)
+    longitude = serializers.FloatField(read_only=True, allow_null=True)
+
+
+class PinListSerializer(serializers.Serializer):
+    """One of the caller's pin lists, as served by the list endpoint.
+
+    ``smart_boundary`` is reported only as the boolean ``has_boundary`` here.
+    The polygon itself can be megabytes, and a page of 25 lists would be
+    dominated by geometry the caller almost certainly does not need - fetch the
+    detail endpoint for one list to get it.
+    """
+
+    uuid = serializers.UUIDField(read_only=True)
+    slug = serializers.CharField(read_only=True, allow_null=True)
+    name = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True, allow_blank=True)
+    #: When true, membership is recomputed from smart_filter/smart_boundary as
+    #: pins change; when false the list only ever changes by explicit edits.
+    is_smart = serializers.BooleanField(read_only=True)
+    pin_count = serializers.IntegerField(read_only=True)
+    smart_filter = serializers.JSONField(read_only=True, allow_null=True, help_text=CRITERIA_HELP_TEXT)
+    has_boundary = serializers.SerializerMethodField()
+    source_saved_filter_uuid = serializers.SerializerMethodField()
+    created = serializers.DateTimeField(read_only=True)
+    updated = serializers.DateTimeField(read_only=True)
+
+    def get_has_boundary(self, obj) -> bool:
+        """Whether this list has a drawn boundary, without serializing it."""
+        return obj.smart_boundary is not None
+
+    def get_source_saved_filter_uuid(self, obj) -> str | None:
+        """The uuid of the SavedFilter this list's criteria were copied from, if any."""
+        return str(obj.source_saved_filter.uuid) if obj.source_saved_filter_id else None
+
+
+class PinListDetailSerializer(PinListSerializer):
+    """One pin list including its full boundary geometry."""
+
+    smart_boundary = serializers.SerializerMethodField()
+
+    def get_smart_boundary(self, obj) -> dict | None:
+        """The boundary as a GeoJSON MultiPolygon, or null when unset."""
+        from urbanlens.dashboard.services.geo import geometry_to_geojson
+
+        return geometry_to_geojson(obj.smart_boundary)
+
+
+class PinListWriteSerializer(serializers.Serializer):
+    """Validates an untrusted pin-list create/update payload.
+
+    Used for both POST and PATCH; the view passes ``partial=True`` for the
+    latter, so presence in ``validated_data`` is what distinguishes "not
+    submitted" from "set to null".
+    """
+
+    name = serializers.CharField(max_length=100)
+    description = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PIN_LIST_DESCRIPTION_LENGTH)
+    is_smart = serializers.BooleanField(required=False)
+    smart_filter = serializers.JSONField(required=False, allow_null=True, help_text=CRITERIA_HELP_TEXT)
+    #: A GeoJSON Polygon or MultiPolygon. Converted to a MultiPolygon on the
+    #: way in (see services.geo.parse_multipolygon_geojson), so a client may
+    #: submit either.
+    smart_boundary = serializers.JSONField(required=False, allow_null=True)
+    #: Point this list at one of the caller's saved filters: its criteria are
+    #: copied into smart_filter, and later edits to that filter resync this
+    #: list. Null detaches the list from its source.
+    source_saved_filter_uuid = serializers.UUIDField(required=False, allow_null=True)
+
+    def validate_smart_boundary(self, value):
+        """Parse and bound the submitted boundary geometry.
+
+        Args:
+            value: A GeoJSON Polygon/MultiPolygon dict, or None to clear it.
+
+        Returns:
+            The parsed ``MultiPolygon``, or None.
+
+        Raises:
+            serializers.ValidationError: If the payload is not polygonal
+                GeoJSON, or carries more vertices than
+                :data:`MAX_BOUNDARY_VERTICES`.
+        """
+        if value is None:
+            return None
+        from urbanlens.dashboard.services.geo import parse_multipolygon_geojson
+
+        try:
+            geom = parse_multipolygon_geojson(value)
+        except TypeError as exc:
+            raise serializers.ValidationError("Boundary must be a GeoJSON Polygon or MultiPolygon.") from exc
+        except ValueError as exc:
+            raise serializers.ValidationError("Boundary is not valid GeoJSON geometry.") from exc
+
+        if geom.num_points > MAX_BOUNDARY_VERTICES:
+            raise serializers.ValidationError(f"Boundary is too detailed - use at most {MAX_BOUNDARY_VERTICES} points.")
+        return geom
+
+
+class PinListItemSerializer(serializers.Serializer):
+    """One pin's membership in a list, with its position and provenance."""
+
+    id = serializers.IntegerField(read_only=True)
+    order = serializers.IntegerField(read_only=True)
+    #: How the pin got here. "manual" memberships are never removed by an
+    #: automatic resync, unlike "smart_filter"/"boundary" ones.
+    added_via = serializers.ChoiceField(choices=PinListItem.ADDED_VIA_CHOICES, read_only=True)
+    pin = PinSummarySerializer(read_only=True)
+
+
+class PinListItemsWriteSerializer(serializers.Serializer):
+    """Validates a request to add pins to a list.
+
+    Unknown or foreign uuids are dropped by the view rather than rejected here
+    - an offline client replaying a queued batch should not have the whole
+    batch fail because one pin was deleted on another device meanwhile.
+    """
+
+    pin_uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=500)
+
+
+class PinListItemsDeleteSerializer(serializers.Serializer):
+    """Validates a request to remove pins from a list."""
+
+    pin_uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1)
+
+
+class PinListItemsReorderSerializer(serializers.Serializer):
+    """Validates a request to renumber a list's items.
+
+    Takes ``PinListItem`` ids (from ``PinListItemSerializer.id``), not pin
+    uuids - the ordering belongs to the membership row, and one pin can sit on
+    many lists.
+    """
+
+    item_ids = serializers.ListField(child=serializers.IntegerField(), min_length=1, max_length=1000)
+
+
+class PinListQuerySerializer(serializers.Serializer):
+    """Validates the query params of the pin-lists browse endpoint."""
+
+    #: Restrict to smart lists (true) or plain ones (false). Omit for both.
+    is_smart = serializers.BooleanField(required=False, allow_null=True, default=None)
+
+
+class LabelQuerySerializer(serializers.Serializer):
+    """Validates the query params of the labels browse endpoint."""
+
+    kind = serializers.ChoiceField(choices=KIND_CHOICES, required=False)
+    #: Restrict to site-wide labels (true) or the caller's own (false).
+    is_global = serializers.BooleanField(required=False, allow_null=True, default=None)
+    #: Case-insensitive substring match against the label's own name.
+    q = serializers.CharField(required=False, allow_blank=True, max_length=255)
+    #: Restrict to the immediate children of this label.
+    parent_uuid = serializers.UUIDField(required=False, allow_null=True)
+    #: Opt in to pin_count/location_count. Off by default because each is a
+    #: correlated subquery evaluated per row.
+    with_counts = serializers.BooleanField(required=False, default=False)
+
+
+class PinListItemsRemoveResponseSerializer(serializers.Serializer):
+    """Documents the remove-pins response (schema-only)."""
+
+    removed = serializers.IntegerField(read_only=True)
+
+
+class PinListItemsReorderResponseSerializer(serializers.Serializer):
+    """Documents the reorder response (schema-only)."""
+
+    reordered = serializers.IntegerField(read_only=True)
+
+
+class PinListItemsAddResponseSerializer(serializers.Serializer):
+    """Documents the add-pins response (schema-only)."""
+
+    added = serializers.IntegerField(read_only=True)
+    #: Pins that would have been added but were dropped at the per-list cap.
+    skipped_over_cap = serializers.IntegerField(read_only=True)
+    #: The cap in force (0 = unlimited).
+    max_pins = serializers.IntegerField(read_only=True)
+
+
+class PinListResyncResponseSerializer(serializers.Serializer):
+    """Documents the smart-list resync response (schema-only)."""
+
+    pin_count = serializers.IntegerField(read_only=True)
+
+
+class SavedFilterSerializer(serializers.Serializer):
+    """One of the caller's saved main-map filters."""
+
+    uuid = serializers.UUIDField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    icon = serializers.CharField(read_only=True, allow_blank=True)
+    criteria = serializers.JSONField(read_only=True, help_text=CRITERIA_HELP_TEXT)
+    order = serializers.IntegerField(read_only=True)
+    created = serializers.DateTimeField(read_only=True)
+    updated = serializers.DateTimeField(read_only=True)
+
+
+class SavedFilterWriteSerializer(serializers.Serializer):
+    """Validates an untrusted saved-filter create/update payload."""
+
+    name = serializers.CharField(max_length=100)
+    icon = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    criteria = serializers.JSONField(required=False, help_text=CRITERIA_HELP_TEXT)
+    order = serializers.IntegerField(required=False)
+
+    def validate_criteria(self, value):
+        """Require a JSON object, since every consumer indexes it by key.
+
+        Args:
+            value: The submitted criteria.
+
+        Returns:
+            The validated criteria dict.
+
+        Raises:
+            serializers.ValidationError: If it isn't a JSON object.
+        """
+        if not isinstance(value, dict):
+            raise serializers.ValidationError("criteria must be a JSON object.")
+        return value
+
+
+class SavedFilterUpdateResponseSerializer(SavedFilterSerializer):
+    """A saved filter plus how many derived lists its edit resynced (schema-only)."""
+
+    #: Smart lists whose membership was recomputed because they were derived
+    #: from this filter and its criteria changed. See
+    #: ``services.pin_list_membership.resync_lists_for_saved_filter``.
+    lists_resynced = serializers.IntegerField(read_only=True)
+
+
+class LabelSerializer(serializers.Serializer):
+    """One label visible to the caller, with their own customizations applied.
+
+    The ``effective_*`` fields are the values that should actually be
+    displayed: a per-profile ``LabelCustomization`` override where one exists,
+    otherwise the label's own value. They are only correct when the queryset
+    was built with ``.with_customizations_for(profile)`` - see
+    ``external_api.views.LabelsView``.
+    """
+
+    uuid = serializers.UUIDField(read_only=True)
+    #: The label's own stored name, ignoring any customization.
+    name = serializers.CharField(read_only=True)
+    #: The name to display - the caller's override if they have one.
+    effective_name = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True, allow_null=True, allow_blank=True)
+    kind = serializers.ChoiceField(choices=KIND_CHOICES, read_only=True)
+    color = serializers.CharField(read_only=True, allow_null=True, allow_blank=True)
+    effective_color = serializers.CharField(read_only=True, allow_null=True, allow_blank=True)
+    icon = serializers.CharField(read_only=True, allow_null=True, allow_blank=True)
+    effective_icon = serializers.CharField(read_only=True, allow_null=True, allow_blank=True)
+    custom_icon_url = serializers.SerializerMethodField()
+    order = serializers.IntegerField(read_only=True)
+    #: Protected labels (e.g. the built-in "Visited" status) cannot be edited,
+    #: deleted, or merged away.
+    is_protected = serializers.BooleanField(read_only=True)
+    allow_auto_tag = serializers.BooleanField(read_only=True)
+    keywords = serializers.CharField(read_only=True, allow_null=True, allow_blank=True)
+    is_global = serializers.SerializerMethodField()
+    is_customized = serializers.BooleanField(read_only=True)
+    is_editable = serializers.SerializerMethodField()
+    parent_uuids = serializers.SerializerMethodField()
+    #: Present only when the caller asked for counts (``?with_counts=true``) -
+    #: they cost a correlated subquery per label.
+    pin_count = serializers.IntegerField(read_only=True, required=False)
+    location_count = serializers.IntegerField(read_only=True, required=False)
+    created = serializers.DateTimeField(read_only=True)
+    updated = serializers.DateTimeField(read_only=True)
+
+    def get_custom_icon_url(self, obj) -> str | None:
+        """The uploaded icon image's url, or null when the label uses none."""
+        return obj.custom_icon.url if obj.custom_icon else None
+
+    def get_is_global(self, obj) -> bool:
+        """Whether this label is shared by every user rather than owned by one."""
+        return obj.profile_id is None
+
+    def get_is_editable(self, obj) -> bool:
+        """Whether the caller may modify the label itself (as opposed to customizing it)."""
+        return obj.profile_id is not None and not obj.is_protected
+
+    def get_parent_uuids(self, obj) -> list[str]:
+        """The uuids of this label's immediate parents in the hierarchy."""
+        return [str(parent.uuid) for parent in obj.parents.all()]
+
+
+class LabelWriteSerializer(serializers.Serializer):
+    """Validates an untrusted label create/update payload.
+
+    ``kind`` is required on create and ignored on update: converting a label
+    between kinds moves it between entirely different attachment surfaces
+    (pins, images, profiles) and is deliberately out of scope for this API.
+    """
+
+    name = serializers.CharField(max_length=255)
+    description = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    kind = serializers.ChoiceField(choices=KIND_CHOICES, required=False)
+    color = serializers.ChoiceField(choices=COLOR_CHOICES, required=False, allow_null=True, allow_blank=True)
+    icon = serializers.CharField(max_length=50, required=False, allow_blank=True, allow_null=True)
+    order = serializers.IntegerField(required=False)
+    allow_auto_tag = serializers.BooleanField(required=False)
+    keywords = serializers.CharField(required=False, allow_blank=True, allow_null=True)
+    #: Uuids of labels to become this label's parents. Replaces the existing
+    #: set. Any that would close a hierarchy cycle are refused.
+    parent_uuids = serializers.ListField(child=serializers.UUIDField(), required=False, max_length=50)
+
+
+class LabelCustomizationSerializer(serializers.Serializer):
+    """Validates a per-profile display override for a label.
+
+    All three fields are optional and nullable. An empty string is normalized
+    to null by the service, so "" and null both mean "no override"; when all
+    three end up empty the customization row is deleted outright.
+    """
+
+    name = serializers.CharField(max_length=255, required=False, allow_null=True, allow_blank=True)
+    icon = serializers.CharField(max_length=50, required=False, allow_null=True, allow_blank=True)
+    color = serializers.CharField(max_length=50, required=False, allow_null=True, allow_blank=True)
+
+
+class LabelMergeSerializer(serializers.Serializer):
+    """Validates a label-merge request.
+
+    The target is the label named in the URL; these are the labels that will be
+    consumed and deleted.
+    """
+
+    source_uuids = serializers.ListField(child=serializers.UUIDField(), min_length=1, max_length=100)
+
+
+class LabelMergeResponseSerializer(serializers.Serializer):
+    """Documents the label-merge response (schema-only)."""
+
+    target = LabelSerializer(read_only=True)
+    merged_uuids = serializers.ListField(child=serializers.UUIDField(), read_only=True)
+    pins_moved = serializers.IntegerField(read_only=True)
 
 
 class AuthSessionSerializer(serializers.Serializer):
