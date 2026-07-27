@@ -21,6 +21,8 @@ from urbanlens.dashboard.services.connections import are_connections, get_connec
 from urbanlens.dashboard.services.direct_messages import broadcast_direct_message, create_direct_message
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
@@ -32,7 +34,187 @@ if TYPE_CHECKING:
 FRIEND_RECOMMENDATION_ACCESS_DURATION = datetime.timedelta(days=1)
 
 
-def share_pin_in_message(sender: Profile, recipient: Profile, pin: Pin, body: str, *, markup_map_uuid: str | None = None) -> DirectMessage:
+class ShareTargetNotFoundError(LookupError):
+    """A share referenced a pin/trip/profile the sender can't address.
+
+    Carried as its own type rather than a bare `LookupError` so an API layer
+    can map it to 404 without also swallowing genuine lookup bugs.
+    """
+
+
+def send_message_with_share(
+    sender: Profile,
+    recipient: Profile,
+    body: str,
+    *,
+    shared_pin_slug: str | None = None,
+    shared_trip_slug: str | None = None,
+    shared_profile_slug: str | None = None,
+    markup_map_uuid: str | None = None,
+    ciphertext: str = "",
+    nonce: str = "",
+    key_version: int = 0,
+    reply_to_id: int | None = None,
+    image_ids: list[int] | None = None,
+    client_uuid: UUID | None = None,
+) -> DirectMessage:
+    """Send one direct message, resolving and attaching an optional `@`-share.
+
+    The single entry point an API layer should use for "send a message that
+    may carry a share". Resolution of the share reference happens *here*, not
+    in the caller, and each kind is dispatched to the existing service that
+    already knows how to create it correctly.
+
+    That indirection is the whole point for pins. A pin share is not just a
+    row: `share_pin_in_message` -> `create_pin_share` ->
+    `resolve_and_stamp_origin_share` + `record_share_exposure` is what keeps
+    the `LocationExposure` provenance chain intact, so that a location's
+    re-share history stays traceable back to whoever first exposed it.
+    Constructing a `PinShare` or a `DirectMessageShare(kind=PIN)` directly
+    from a view would produce a share that *works* - the recipient sees the
+    card, can accept it - while silently recording no exposure at all. There
+    is no error to notice; the chain just quietly has a hole in it. Never do
+    it. Always come through here.
+
+    Args:
+        sender: The sending profile.
+        recipient: The conversation partner.
+        body: Plaintext message text (blank when sending `ciphertext`).
+        shared_pin_slug: Slug (or uuid) of one of the *sender's own* pins to
+            share. Resolved against the sender's pins only.
+        shared_trip_slug: Slug of a trip to invite `recipient` to.
+        shared_profile_slug: Slug of one of the sender's connections to
+            recommend.
+        markup_map_uuid: UUID of a `MarkupMap` to attach. Combined with
+            `shared_pin_slug` this is a customized pin share; on its own it is
+            a plain map attachment.
+        ciphertext: End-to-end encrypted note, in place of `body`.
+        nonce: Base64 nonce for `ciphertext`.
+        key_version: `ConversationKey.version` that encrypted `ciphertext`.
+        reply_to_id: PK of an earlier message in this conversation to quote.
+        image_ids: PKs of the sender's own images to attach.
+        client_uuid: Caller-generated idempotency key. Checked *before* any
+            share is resolved or created, so a retried share send cannot
+            create a second `PinShare` (and a second `LocationExposure`) for a
+            message that already exists.
+
+    Returns:
+        The created (or, on an idempotent replay, the pre-existing) DirectMessage.
+
+    Raises:
+        ShareTargetNotFoundError: The referenced pin/trip/profile doesn't
+            exist or isn't one the sender may share.
+        ValueError: More than one share field was given, or `create_direct_message`
+            rejected the content.
+        PermissionError: Propagated from the underlying share service (not
+            connected, trip non-membership, recommendations disabled, ...).
+    """
+    from urbanlens.dashboard.models.direct_messages.model import DirectMessage as DirectMessageModel
+
+    provided = [field for field in (shared_pin_slug, shared_trip_slug, shared_profile_slug) if field]
+    if len(provided) > 1:
+        raise ValueError("A message can carry only one share.")
+
+    # Before anything is resolved or created: a replay must not re-run the
+    # share side effects, which are not themselves idempotent.
+    if client_uuid is not None:
+        replayed = DirectMessageModel.objects.filter(sender=sender, client_uuid=client_uuid).first()
+        if replayed is not None:
+            return replayed
+
+    if shared_pin_slug:
+        from urbanlens.dashboard.models.pin.model import Pin as PinModel
+
+        pin = PinModel.objects.slug_or_uuid(shared_pin_slug).filter(profile=sender).first()
+        if pin is None:
+            raise ShareTargetNotFoundError("No such pin.")
+        return share_pin_in_message(
+            sender,
+            recipient,
+            pin,
+            body,
+            markup_map_uuid=markup_map_uuid,
+            ciphertext=ciphertext,
+            nonce=nonce,
+            key_version=key_version,
+            reply_to_id=reply_to_id,
+            image_ids=image_ids,
+            client_uuid=client_uuid,
+        )
+
+    if shared_trip_slug:
+        from urbanlens.dashboard.models.trips.model import Trip as TripModel
+
+        # Membership is enforced by invite_to_trip_in_message; this lookup is
+        # deliberately not scoped to the sender's trips, so "you aren't a
+        # member of that trip" stays a PermissionError rather than being
+        # flattened into a 404.
+        trip = TripModel.objects.filter(slug=shared_trip_slug).first()
+        if trip is None:
+            raise ShareTargetNotFoundError("No such trip.")
+        return invite_to_trip_in_message(
+            sender,
+            recipient,
+            trip,
+            body,
+            ciphertext=ciphertext,
+            nonce=nonce,
+            key_version=key_version,
+            reply_to_id=reply_to_id,
+            client_uuid=client_uuid,
+        )
+
+    if shared_profile_slug:
+        from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
+
+        recommended = ProfileModel.objects.filter(slug=shared_profile_slug).first()
+        if recommended is None:
+            raise ShareTargetNotFoundError("No such profile.")
+        return recommend_friend_in_message(
+            sender,
+            recipient,
+            recommended,
+            body,
+            ciphertext=ciphertext,
+            nonce=nonce,
+            key_version=key_version,
+            reply_to_id=reply_to_id,
+            client_uuid=client_uuid,
+        )
+
+    # No share - a plain message, possibly with a map attached. Note that a
+    # MarkupMap attached without a pin records no LocationExposure even though
+    # it can depict pin locations; that gap predates this function and exists
+    # in the web composer too (docs/PROBLEMS.md: "markup-map attachments
+    # bypass share provenance").
+    return create_direct_message(
+        sender,
+        recipient,
+        body,
+        ciphertext=ciphertext,
+        nonce=nonce,
+        key_version=key_version,
+        image_ids=image_ids,
+        markup_map_uuid=markup_map_uuid,
+        reply_to_id=reply_to_id,
+        client_uuid=client_uuid,
+    )
+
+
+def share_pin_in_message(
+    sender: Profile,
+    recipient: Profile,
+    pin: Pin,
+    body: str,
+    *,
+    markup_map_uuid: str | None = None,
+    ciphertext: str = "",
+    nonce: str = "",
+    key_version: int = 0,
+    reply_to_id: int | None = None,
+    image_ids: list[int] | None = None,
+    client_uuid: UUID | None = None,
+) -> DirectMessage:
     """Share `pin` with `recipient` as a chat message carrying a PinShare.
 
     Args:
@@ -41,6 +223,16 @@ def share_pin_in_message(sender: Profile, recipient: Profile, pin: Pin, body: st
         pin: The pin being shared.
         body: Message text accompanying the share.
         markup_map_uuid: Optional customized map to attach (see `create_direct_message`).
+        ciphertext: Optional end-to-end encrypted note accompanying the share,
+            in place of `body`. Only the *note* is encrypted - the
+            `DirectMessageShare` row itself is server-visible metadata by
+            design, because the server has to resolve and revoke the offer it
+            represents. Do not attempt to encrypt it.
+        nonce: Base64 nonce for `ciphertext`.
+        key_version: `ConversationKey.version` that encrypted `ciphertext`.
+        reply_to_id: PK of an earlier message in this conversation to quote.
+        image_ids: PKs of the sender's own images to attach.
+        client_uuid: Caller-generated idempotency key (see `create_direct_message`).
 
     Returns:
         The newly created DirectMessage.
@@ -60,13 +252,36 @@ def share_pin_in_message(sender: Profile, recipient: Profile, pin: Pin, body: st
     # never exist without the message that carries it.
     with transaction.atomic():
         pin_share = create_pin_share(sender, recipient, pin)
-        message = create_direct_message(sender, recipient, body, markup_map_uuid=markup_map_uuid, defer_broadcast=True)
+        message = create_direct_message(
+            sender,
+            recipient,
+            body,
+            ciphertext=ciphertext,
+            nonce=nonce,
+            key_version=key_version,
+            markup_map_uuid=markup_map_uuid,
+            reply_to_id=reply_to_id,
+            image_ids=image_ids,
+            client_uuid=client_uuid,
+            defer_broadcast=True,
+        )
         DirectMessageShare.objects.create(message=message, kind=DirectMessageShareKind.PIN, pin_share=pin_share)
     broadcast_direct_message(message)
     return message
 
 
-def invite_to_trip_in_message(sender: Profile, recipient: Profile, trip: Trip, body: str) -> DirectMessage:
+def invite_to_trip_in_message(
+    sender: Profile,
+    recipient: Profile,
+    trip: Trip,
+    body: str,
+    *,
+    ciphertext: str = "",
+    nonce: str = "",
+    key_version: int = 0,
+    reply_to_id: int | None = None,
+    client_uuid: UUID | None = None,
+) -> DirectMessage:
     """Invite `recipient` to `trip` as a chat message carrying the invite.
 
     Args:
@@ -75,6 +290,13 @@ def invite_to_trip_in_message(sender: Profile, recipient: Profile, trip: Trip, b
         recipient: The conversation partner being invited.
         trip: The trip to invite them to.
         body: Message text accompanying the invite.
+        ciphertext: Optional end-to-end encrypted note in place of `body`; the
+            `DirectMessageShare` row stays server-visible (see
+            `share_pin_in_message`).
+        nonce: Base64 nonce for `ciphertext`.
+        key_version: `ConversationKey.version` that encrypted `ciphertext`.
+        reply_to_id: PK of an earlier message in this conversation to quote.
+        client_uuid: Caller-generated idempotency key.
 
     Returns:
         The newly created DirectMessage.
@@ -101,7 +323,17 @@ def invite_to_trip_in_message(sender: Profile, recipient: Profile, trip: Trip, b
     # created without the recipient ever receiving the invitation.
     with transaction.atomic():
         membership, _created = TripMembership.objects.get_or_create(trip=trip, profile=recipient, defaults={"status": TripMembership.STATUS_INVITED})
-        message = create_direct_message(sender, recipient, body, defer_broadcast=True)
+        message = create_direct_message(
+            sender,
+            recipient,
+            body,
+            ciphertext=ciphertext,
+            nonce=nonce,
+            key_version=key_version,
+            reply_to_id=reply_to_id,
+            client_uuid=client_uuid,
+            defer_broadcast=True,
+        )
         DirectMessageShare.objects.create(message=message, kind=DirectMessageShareKind.TRIP, trip=trip, trip_membership=membership)
     broadcast_direct_message(message)
 
@@ -132,7 +364,18 @@ def invite_to_trip_in_message(sender: Profile, recipient: Profile, trip: Trip, b
     return message
 
 
-def recommend_friend_in_message(sender: Profile, recipient: Profile, recommended: Profile, body: str) -> DirectMessage:
+def recommend_friend_in_message(
+    sender: Profile,
+    recipient: Profile,
+    recommended: Profile,
+    body: str,
+    *,
+    ciphertext: str = "",
+    nonce: str = "",
+    key_version: int = 0,
+    reply_to_id: int | None = None,
+    client_uuid: UUID | None = None,
+) -> DirectMessage:
     """Recommend `recommended` (one of sender's own friends) to `recipient` as a chat message.
 
     Grants `recipient` temporary access to view `recommended`'s profile (as if
@@ -145,6 +388,13 @@ def recommend_friend_in_message(sender: Profile, recipient: Profile, recommended
         recommended: The profile being recommended - must be one of sender's
             own connections and must allow friend recommendations.
         body: Message text accompanying the recommendation.
+        ciphertext: Optional end-to-end encrypted note in place of `body`; the
+            `DirectMessageShare` row stays server-visible (see
+            `share_pin_in_message`).
+        nonce: Base64 nonce for `ciphertext`.
+        key_version: `ConversationKey.version` that encrypted `ciphertext`.
+        reply_to_id: PK of an earlier message in this conversation to quote.
+        client_uuid: Caller-generated idempotency key.
 
     Returns:
         The newly created DirectMessage.
@@ -173,7 +423,17 @@ def recommend_friend_in_message(sender: Profile, recipient: Profile, recommended
     from django.db import transaction
 
     with transaction.atomic():
-        message = create_direct_message(sender, recipient, body, defer_broadcast=True)
+        message = create_direct_message(
+            sender,
+            recipient,
+            body,
+            ciphertext=ciphertext,
+            nonce=nonce,
+            key_version=key_version,
+            reply_to_id=reply_to_id,
+            client_uuid=client_uuid,
+            defer_broadcast=True,
+        )
         DirectMessageShare.objects.create(message=message, kind=DirectMessageShareKind.FRIEND, recommended_profile=recommended)
         DirectMessageTemporaryAccess.objects.create(
             profile=recommended,

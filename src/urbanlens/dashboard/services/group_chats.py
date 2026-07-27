@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.core.cache import cache
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
@@ -33,6 +33,8 @@ from urbanlens.dashboard.services.identity_visibility import resolve_visible_ide
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -505,6 +507,7 @@ def create_group_message(
     ciphertext: str = "",
     nonce: str = "",
     key_version: int = 0,
+    client_uuid: UUID | None = None,
     defer_broadcast: bool = False,
 ) -> GroupMessage:
     """Validate, persist, broadcast, and notify for one new group message.
@@ -517,6 +520,10 @@ def create_group_message(
             under the group key. Mutually exclusive with ``body``.
         nonce: Base64 nonce for ``ciphertext`` (required with it).
         key_version: ``GroupKey.version`` that encrypted this message.
+        client_uuid: Caller-generated idempotency key. When a message from this
+            sender already carries it, that message is returned untouched
+            instead of a duplicate being created (see
+            ``services.direct_messages.create_direct_message``).
         defer_broadcast: When True, skip the live push - the caller attaches
             shares first and then calls ``broadcast_group_message``.
 
@@ -528,6 +535,13 @@ def create_group_message(
         PermissionError: When `sender` isn't an active member.
     """
     from urbanlens.dashboard.services.e2ee import MAX_CIPHERTEXT_LENGTH, MAX_NONCE_LENGTH, valid_blob
+
+    # Idempotent replay - see create_direct_message for why this precedes both
+    # validation and the membership check.
+    if client_uuid is not None:
+        replayed = GroupMessage.objects.filter(sender=sender, client_uuid=client_uuid).first()
+        if replayed is not None:
+            return replayed
 
     membership = group.membership_for(sender)
     if membership is None:
@@ -546,14 +560,24 @@ def create_group_message(
     if not body and not ciphertext:
         raise ValueError("Message cannot be empty.")
 
-    message = GroupMessage.objects.create(
-        group=group,
-        sender=sender,
-        body=body,
-        ciphertext=ciphertext,
-        nonce=nonce,
-        key_version=key_version,
-    )
+    try:
+        # Nested atomic: see create_direct_message for why the idempotency
+        # race must not escape into an enclosing transaction.
+        with transaction.atomic():
+            message = GroupMessage.objects.create(
+                group=group,
+                sender=sender,
+                body=body,
+                ciphertext=ciphertext,
+                nonce=nonce,
+                key_version=key_version,
+                client_uuid=client_uuid,
+            )
+    except IntegrityError:
+        replayed = GroupMessage.objects.filter(sender=sender, client_uuid=client_uuid).first() if client_uuid is not None else None
+        if replayed is None:
+            raise
+        return replayed
     # Sending is reading: the sender's own read mark advances with their message.
     GroupMessage.objects.mark_read(membership)
 

@@ -918,3 +918,39 @@ already reset between tests.
   Protocol's `CSS.getMatchedStylesForNode` (via a Playwright CDP session) to see which rule a
   live page actually applied if a rendered value looks unexpectedly stale. (This applies to the
   public dev/staging/prod deployments, not the local docker-compose stack described above.)
+
+
+## Messaging / external API (noted 2026-07-26, during the mobile v2 messaging API build)
+
+- **WebSocket credential auth does no per-scope check.** `ApiKeyAuthMiddleware` (see
+  `src/urbanlens/dashboard/websocket_auth.py` and its use in `UrbanLens/asgi.py`) authenticates
+  a WebSocket connection from any valid, unrevoked credential and then grants blanket access -
+  it never consults the connection's scopes. So a token issued with, say, only `pins:read`
+  can still open `ws/messages/` and `ws/notifications/` and receive live direct-message and
+  notification payloads, which is precisely the data `OAUTH2_ONLY_SCOPES` restricts to
+  user-consented OAuth2 tokens on the HTTP side. The HTTP messaging endpoints added in
+  `external_api/views_messaging.py` enforce `messages:read`/`messages:write` correctly; the
+  socket path is the remaining hole, and it currently undercuts that enforcement because the
+  same data is reachable over the socket without the scope.
+  **Deliberately not fixed in that pass** (scope control - it touches three consumers and
+  their tests, and a mistake there disconnects working *web* clients, whose session auth flows
+  through the same middleware). **Fix shape**: give each consumer a required-scope declaration
+  and have the middleware/consumer `close()` with a 4403-style code when a credential-authed
+  connection lacks it, leaving session-authed connections (`request.auth is None`) untouched -
+  the same session-or-credential split `external_api/mixins.py:IsSessionAuthenticated` already
+  draws for HTTP. Needs tests for: scoped token accepted, under-scoped token rejected, session
+  unaffected, PAT rejected outright on messaging sockets.
+
+- **Markup-map attachments bypass share provenance.** Attaching a `MarkupMap` to a direct
+  message (`create_direct_message(markup_map_uuid=...)`, and the `send_message_with_share`
+  path in `services/direct_message_shares.py` when no `shared_pin_id` accompanies it) records
+  **no `LocationExposure`**, even though a markup map can depict pin locations and therefore
+  can disclose them to the recipient. Sharing the *pin* correctly stamps the chain via
+  `create_pin_share` -> `resolve_and_stamp_origin_share` + `record_share_exposure`; attaching a
+  map that draws the same place does not, so the location's re-share history silently has a
+  hole in it. **Not a regression** - the web composer has always behaved this way and the new
+  API endpoint merely matches it, which is why it was documented rather than changed
+  mid-build. **Fix shape**: on attach, resolve the `MarkupMap`'s items to the pins/locations
+  they reference and record an exposure per distinct location, reusing `record_share_exposure`
+  rather than inventing a second provenance path. Decide first whether a hand-drawn annotation
+  with no linked pin should count (probably yes if it carries coordinates).
