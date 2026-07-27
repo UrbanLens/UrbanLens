@@ -632,6 +632,7 @@ class PinsView(ExternalApiView):
                 description=data.get("description"),
                 pin_type=data.get("pin_type"),
                 client_uuid=data.get("uuid"),
+                parent_id=data.get("parent_id"),
             )
         except PinCreationForbiddenError as exc:
             return Response({"error": str(exc)}, status=403)
@@ -639,6 +640,7 @@ class PinsView(ExternalApiView):
             return Response({"error": str(exc)}, status=400)
 
         pin = result.pin
+        parent_pin = pin.parent_pin
         return Response(
             {
                 "uuid": str(pin.uuid),
@@ -651,6 +653,7 @@ class PinsView(ExternalApiView):
                 # False when this was an idempotent replay of an earlier create
                 # (same client-generated uuid) - the pin already existed.
                 "created": result.created,
+                "parent_uuid": str(parent_pin.uuid) if parent_pin else None,
             },
             status=201 if result.created else 200,
         )

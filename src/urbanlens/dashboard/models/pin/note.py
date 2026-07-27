@@ -37,7 +37,11 @@ class PinNote(abstract.DashboardModel):
 
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_pin_notes"
-        ordering = ["-created"]
+        # -pk breaks ties deterministically when two notes land in the same
+        # `created` tick (real on fast successive writes - timestamp precision
+        # isn't fine enough to guarantee distinct values) - without it, equal
+        # timestamps leave "newest first" order up to the database.
+        ordering = ["-created", "-pk"]
         indexes = [
             Index(fields=["pin"], name="idxdb_pn_pin"),
         ]

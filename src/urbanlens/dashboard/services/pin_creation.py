@@ -81,6 +81,7 @@ def create_pin_for_profile(
     google_place_id: str | None = None,
     place_canonical_name: str | None = None,
     client_uuid: UUID | None = None,
+    parent_id: UUID | None = None,
 ) -> PinCreationResult:
     """Create a Pin for a profile from raw, untrusted-shaped input.
 
@@ -116,6 +117,16 @@ def create_pin_for_profile(
             returned (``result.created`` False) instead of creating a duplicate.
             The external API's offline-outbox clients retry creates until
             acknowledged, so the same submission may legitimately arrive twice.
+        parent_id: An existing pin of this profile's to create this one as a
+            child (detail pin) of. When given, Location resolution uses an
+            exact-coordinate match instead of the default fuzzy dedup radius -
+            a detail pin's whole point is to sit at its own precise coordinates
+            near its parent, which the fuzzy radius would otherwise collapse
+            onto the parent's own Location (mirrors
+            ``controllers.detail_pins._location_for_coords``). A child pin is
+            exempt from the one-root-pin-per-location rule, so this never
+            raises the "already have a pin here" error the plain top-level
+            path would.
 
     Returns:
         The created (or, for an idempotent replay, existing) pin plus every
@@ -124,8 +135,9 @@ def create_pin_for_profile(
     Raises:
         PinCreationError: Neither coordinates nor a usable address were given,
             the address couldn't be geocoded, ``client_uuid`` is already used
-            by a pin that isn't this profile's, or the profile already has a
-            pin at this exact location.
+            by a pin that isn't this profile's, ``parent_id`` doesn't match
+            one of this profile's own pins, or the profile already has a
+            top-level pin at this exact location.
         PinCreationForbiddenError: An address needed geocoding but external lookups
             are turned off for this profile.
     """
@@ -133,6 +145,12 @@ def create_pin_for_profile(
         existing = Pin.objects.filter(profile=profile, uuid=client_uuid).select_related("location").first()
         if existing is not None:
             return PinCreationResult(pin=existing, all_locations=[existing.location], created=False)
+
+    new_parent: Pin | None = None
+    if parent_id is not None:
+        new_parent = Pin.objects.filter(uuid=parent_id, profile=profile).first()
+        if new_parent is None:
+            raise PinCreationError("No such pin to set as parent.")
     # An unset coordinate arrives as None or "" (e.g. the map's blank hidden
     # input) - normalize both to None so the checks below can use `is None`
     # without treating a valid 0/0.0 coordinate (equator, prime meridian) as missing.
@@ -155,8 +173,11 @@ def create_pin_for_profile(
 
     # Fuzzy 50m-radius dedup (not exact-coordinate get_or_create): GPS jitter between two
     # drops at the same real place must consolidate onto the same Location, matching every
-    # other Location-resolution path in the app (viewset.py, detail_pins.py, import_data.py).
-    location, _ = Location.objects.get_nearby_or_create(lat_f, lon_f, defaults={"official_name": place_canonical_name})
+    # other top-level Location-resolution path in the app (viewset.py, import_data.py). A
+    # child (parent_id given) skips the fuzzy radius instead - see the parent_id arg's
+    # docstring - exactly like detail_pins.py does for the map UI's own detail pins.
+    threshold_meters = 0 if new_parent is not None else 50
+    location, _ = Location.objects.get_nearby_or_create(lat_f, lon_f, threshold_meters=threshold_meters, defaults={"official_name": place_canonical_name})
 
     # Locations whose bounding box also covers this point - when more than one
     # matches, the caller offers the user a choice (see below).
@@ -181,6 +202,7 @@ def create_pin_for_profile(
         "custom_icon": custom_icon,
         "color": color,
         "profile": profile,
+        "parent_pin": new_parent,
     }
     if description is not None and description.strip():
         create_kwargs["description"] = description

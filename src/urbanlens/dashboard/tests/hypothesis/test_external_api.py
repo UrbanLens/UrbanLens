@@ -175,6 +175,31 @@ class PinCreateViewTests(TestCase):
         pin = Pin.objects.get(uuid=response.json()["uuid"])
         self.assertFalse(pin.labels.exists())
 
+    def test_parent_id_creates_a_child_pin_within_the_fuzzy_dedup_radius(self) -> None:
+        """A detail pin a few meters from its parent must not be swallowed by the 50m fuzzy Location dedup."""
+        parent = Pin.objects.get(uuid=self._post({"name": "Campus", "latitude": 42.5, "longitude": -73.5}).json()["uuid"])
+        response = self._post({"name": "Entrance", "latitude": 42.5001, "longitude": -73.5001, "parent_id": str(parent.uuid)})
+        self.assertEqual(response.status_code, 201, response.content)
+        body = response.json()
+        self.assertEqual(body["parent_uuid"], str(parent.uuid))
+        child = Pin.objects.get(uuid=body["uuid"])
+        self.assertEqual(child.parent_pin_id, parent.pk)
+        self.assertNotEqual(child.location_id, parent.location_id)
+
+    def test_parent_id_for_another_profiles_pin_is_rejected(self) -> None:
+        other = baker.make(User)
+        other_pin = Pin.objects.get(
+            uuid=self.client.post(
+                reverse("external_api:pins"),
+                data={"name": "Theirs", "latitude": 1.0, "longitude": 1.0},
+                content_type="application/json",
+                **_bearer(generate_api_key(other, "Other client")[1]),
+            ).json()["uuid"]
+        )
+        response = self._post({"name": "Sneaky", "latitude": 1.0001, "longitude": 1.0001, "parent_id": str(other_pin.uuid)})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Pin.objects.filter(name="Sneaky").exists())
+
 
 class ApiKeyUsageLoggingTests(TestCase):
     """A successfully authenticated request logs activity; a rejected one never does."""

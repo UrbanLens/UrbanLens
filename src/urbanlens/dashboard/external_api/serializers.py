@@ -113,6 +113,13 @@ class PinCreateSerializer(serializers.Serializer):
     #: capture time and retries the same submission until acknowledged; a
     #: repeat is answered with the already-created pin instead of a duplicate.
     uuid = serializers.UUIDField(required=False, allow_null=True, default=None)
+    #: uuid of one of the caller's own pins to create this one as a child
+    #: (detail pin) of - e.g. a building entrance a few meters from its main
+    #: pin. See ``services.pin_creation.create_pin_for_profile``'s parent_id
+    #: docstring for why this matters: without it, coordinates this close
+    #: would be swallowed by the default fuzzy-location dedup instead of
+    #: creating the distinct child.
+    parent_id = serializers.UUIDField(required=False, allow_null=True, default=None)
 
     def validate(self, attrs: dict) -> dict:
         """Require either coordinates or an address - mirrors the map form's own client-side check."""
@@ -553,6 +560,7 @@ class PinCreateResponseSerializer(serializers.Serializer):
     name = serializers.CharField(read_only=True)
     ambiguous_location = serializers.BooleanField(read_only=True)
     created = serializers.BooleanField(read_only=True)
+    parent_uuid = serializers.UUIDField(read_only=True, allow_null=True)
 
 
 class ErrorSerializer(serializers.Serializer):
