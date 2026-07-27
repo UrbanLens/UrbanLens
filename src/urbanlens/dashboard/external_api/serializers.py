@@ -19,7 +19,9 @@ from django.core.validators import URLValidator
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
+from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
+from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status as NotificationStatus
 from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS
 from urbanlens.dashboard.models.profile.meta import (
@@ -31,8 +33,11 @@ from urbanlens.dashboard.models.profile.meta import (
     ThemeChoice,
     VisibilityChoice,
 )
+from urbanlens.dashboard.models.profile.model import _COMMUNITY_GATED_VISIBILITY_FIELDS
 from urbanlens.dashboard.models.push_device import PushTransport
 from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
+from urbanlens.dashboard.services.notification_center import preference_field_names
+from urbanlens.dashboard.services.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, MAX_PROFILE_BIO_LENGTH
 
 #: Same scheme restriction as controllers.links._clean_link_input - external
 #: submissions are untrusted input, so this validates before anything else does.
@@ -597,3 +602,279 @@ class AuthSessionSerializer(serializers.Serializer):
     #: The key's user-facing label, or the OAuth2 application's display name.
     name = serializers.CharField(read_only=True, allow_null=True)
     user_uuid = serializers.UUIDField(read_only=True)
+
+
+class FriendProfileSerializer(serializers.Serializer):
+    """A person as they may be shown to the caller, masking included.
+
+    Never populated straight off a ``Profile``. Callers must build the dict
+    through ``services.identity_visibility.resolve_visible_identity`` so a
+    profile whose privacy settings don't permit the caller is masked here
+    exactly as it is in the web UI - the API surface must not become the way
+    to read a name the site itself would hide.
+    """
+
+    uuid = serializers.UUIDField(read_only=True)
+    username = serializers.CharField(read_only=True)
+    slug = serializers.CharField(read_only=True, allow_null=True)
+    avatar_url = serializers.CharField(read_only=True, allow_null=True)
+    #: True when the fields above are placeholders rather than real identity.
+    is_masked = serializers.BooleanField(read_only=True)
+
+
+class FriendshipSerializer(serializers.Serializer):
+    """One friend relationship from the calling profile's point of view.
+
+    ``status`` and ``relationship_type`` are sourced from
+    ``FriendshipStatus``/``FriendshipType`` directly, so the wire values are
+    the model's own capitalized strings ("Accepted", "Requested", ...). They
+    are deliberately *not* normalized to lowercase: every other enum on this
+    surface happens to be lowercase snake_case, and assuming this one matched
+    has already caused one real bug.
+    """
+
+    profile = FriendProfileSerializer(read_only=True)
+    status = serializers.ChoiceField(choices=FriendshipStatus.choices, read_only=True)
+    relationship_type = serializers.ChoiceField(choices=FriendshipType.choices, read_only=True)
+    #: Which way the original request ran, relative to the caller.
+    direction = serializers.ChoiceField(choices=[("incoming", "Incoming"), ("outgoing", "Outgoing")], read_only=True)
+    message = serializers.CharField(read_only=True, allow_null=True)
+    created = serializers.DateTimeField(read_only=True)
+    updated = serializers.DateTimeField(read_only=True)
+
+
+class FriendListQuerySerializer(serializers.Serializer):
+    """Validates the friends-list query string."""
+
+    status = serializers.ChoiceField(choices=FriendshipStatus.choices, required=False)
+    cursor = serializers.CharField(required=False, allow_blank=True)
+    limit = serializers.IntegerField(required=False, min_value=1, max_value=100)
+
+
+class FriendListResponseSerializer(serializers.Serializer):
+    """One page of the caller's friend relationships (schema-only)."""
+
+    results = FriendshipSerializer(many=True, read_only=True)
+    next_cursor = serializers.CharField(read_only=True, allow_null=True)
+
+
+class FriendRequestCreateSerializer(serializers.Serializer):
+    """Validates a friend request aimed at a profile the caller names by uuid."""
+
+    profile_uuid = serializers.UUIDField()
+    message = serializers.CharField(max_length=MAX_FRIEND_REQUEST_MESSAGE_LENGTH, required=False, allow_blank=True)
+
+
+class FriendInviteSerializer(serializers.Serializer):
+    """Validates an invite-by-email submission.
+
+    Deliberately has no ``subscription_role`` field. The web form accepts one
+    (site admins can attach a subscription grant to an invitation), but that
+    is a privilege-escalation path with no business on an API-key surface -
+    omitting it here means a key can never reach it, regardless of what the
+    key owner's account could do while logged in.
+    """
+
+    email = serializers.EmailField()
+    message = serializers.CharField(max_length=MAX_FRIEND_REQUEST_MESSAGE_LENGTH, required=False, allow_blank=True)
+
+
+class FriendInviteResponseSerializer(serializers.Serializer):
+    """The invite endpoint's single, invariant response (schema-only).
+
+    ``result`` is always the literal ``"sent"``. It does not vary by whether
+    the address was registered, whether the target's privacy settings
+    accepted the request, or whether the mail actually went out - see
+    ``services.friendship.invite_by_email``. Anything that made this field (or
+    the status code, or the headers) branch would hand a caller an
+    account-enumeration oracle.
+    """
+
+    result = serializers.CharField(read_only=True)
+
+
+def _visibility_fields() -> dict[str, serializers.Field]:
+    """Build one ``ChoiceField`` per community-gated visibility setting.
+
+    Generated from ``_COMMUNITY_GATED_VISIBILITY_FIELDS`` rather than typed
+    out, so a thirteenth visibility setting added to ``Profile`` appears on
+    this surface automatically instead of being silently omitted.
+
+    Returns:
+        Mapping of field name to an optional ``VisibilityChoice`` field.
+    """
+    return {name: serializers.ChoiceField(choices=VisibilityChoice.choices, required=False) for name in _COMMUNITY_GATED_VISIBILITY_FIELDS}
+
+
+ProfileVisibilitySerializer = type(
+    "ProfileVisibilitySerializer",
+    (serializers.Serializer,),
+    {
+        "__doc__": (
+            "The caller's own per-field visibility settings.\n\n"
+            "    Served only when viewing your own profile - another user's privacy\n"
+            "    configuration is itself private. Fields are generated from\n"
+            "    ``Profile._COMMUNITY_GATED_VISIBILITY_FIELDS`` (12 of them at the time\n"
+            "    of writing) so the two cannot drift.\n    "
+        ),
+        **_visibility_fields(),
+    },
+)
+
+
+class ProfileContactSerializer(serializers.Serializer):
+    """A profile's contact methods, served only when contact visibility permits.
+
+    Gated by ``Profile.can_view_contact_info``, which (unlike most visibility
+    settings) does not treat a merely-pending friend request as sufficient.
+    """
+
+    phone_number = serializers.CharField(read_only=True, allow_blank=True)
+    signal_username = serializers.CharField(read_only=True, allow_blank=True)
+    discord_username = serializers.CharField(read_only=True, allow_blank=True)
+    whatsapp_number = serializers.CharField(read_only=True, allow_blank=True)
+    telegram_username = serializers.CharField(read_only=True, allow_blank=True)
+    matrix_handle = serializers.CharField(read_only=True, allow_blank=True)
+
+
+class ProfileDetailSerializer(serializers.Serializer):
+    """A profile as the caller is permitted to see it."""
+
+    uuid = serializers.UUIDField(read_only=True)
+    username = serializers.CharField(read_only=True)
+    slug = serializers.CharField(read_only=True, allow_null=True)
+    avatar_url = serializers.CharField(read_only=True, allow_null=True)
+    bio = serializers.CharField(read_only=True, allow_null=True)
+    area = serializers.CharField(read_only=True, allow_null=True)
+    started_exploring = serializers.DateField(read_only=True, allow_null=True)
+    is_self = serializers.BooleanField(read_only=True)
+    #: Null when no relationship row exists at all.
+    friendship_status = serializers.ChoiceField(choices=FriendshipStatus.choices, read_only=True, allow_null=True)
+    #: Omitted unless contact visibility permits this caller.
+    contact = ProfileContactSerializer(read_only=True, allow_null=True)
+    #: Present only on your own profile.
+    visibility = ProfileVisibilitySerializer(read_only=True, allow_null=True)
+
+
+ProfileUpdateSerializer = type(
+    "ProfileUpdateSerializer",
+    (serializers.Serializer,),
+    {
+        "__doc__": (
+            "Validates a partial update to the caller's own profile.\n\n"
+            "    Excludes ``avatar`` on purpose: image upload is the Photos domain's\n"
+            "    problem (size limits, downscaling, quota) and wiring a second upload\n"
+            "    path through here would duplicate all of it. ``avatar_url`` stays\n"
+            "    read-only until that service is reused here.\n\n"
+            "    Community-gated visibility fields may be submitted, but\n"
+            "    ``Profile.save()`` still coerces them to NO_ONE when community is\n"
+            "    off - that enforcement is not reimplemented here.\n    "
+        ),
+        "bio": serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=MAX_PROFILE_BIO_LENGTH),
+        "area": serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=255),
+        "started_exploring": serializers.DateField(required=False, allow_null=True),
+        "distance_units": serializers.ChoiceField(choices=DistanceUnit.choices, required=False, allow_null=True),
+        "theme_mode": serializers.ChoiceField(choices=ThemeChoice.choices, required=False),
+        "community_enabled": serializers.BooleanField(required=False),
+        **_visibility_fields(),
+    },
+)
+
+
+class ProfileNoteSerializer(serializers.Serializer):
+    """A private note the caller keeps about another profile."""
+
+    uuid = serializers.UUIDField(read_only=True)
+    content = serializers.CharField(read_only=True, allow_blank=True)
+    created = serializers.DateTimeField(read_only=True)
+    updated = serializers.DateTimeField(read_only=True)
+
+
+class ProfileNoteWriteSerializer(serializers.Serializer):
+    """Validates a profile-note create or update."""
+
+    content = serializers.CharField(allow_blank=True, max_length=MAX_PROFILE_BIO_LENGTH)
+
+
+class NotificationSerializer(serializers.Serializer):
+    """One notification from the caller's own inbox.
+
+    Every enum here is lowercase snake_case, matching its model definition -
+    unlike ``FriendshipSerializer.status`` above, which is capitalized. The
+    difference is real; do not normalize either to match the other.
+    """
+
+    uuid = serializers.UUIDField(read_only=True)
+    notification_type = serializers.ChoiceField(choices=NotificationType.choices, read_only=True)
+    status = serializers.ChoiceField(choices=NotificationStatus.choices, read_only=True)
+    importance = serializers.ChoiceField(choices=Importance.choices, read_only=True)
+    title = serializers.CharField(read_only=True, allow_blank=True)
+    message = serializers.CharField(read_only=True, allow_blank=True)
+    url = serializers.CharField(read_only=True, allow_blank=True)
+    created = serializers.DateTimeField(read_only=True)
+    #: Null for notifications no person triggered (system/safety/errors).
+    source_profile = FriendProfileSerializer(read_only=True, allow_null=True)
+
+
+class NotificationListQuerySerializer(serializers.Serializer):
+    """Validates the notifications-list query string."""
+
+    unread_only = serializers.BooleanField(required=False, default=False)
+    cursor = serializers.CharField(required=False, allow_blank=True)
+    limit = serializers.IntegerField(required=False, min_value=1, max_value=100)
+
+
+class NotificationListResponseSerializer(serializers.Serializer):
+    """One page of the caller's notifications (schema-only)."""
+
+    results = NotificationSerializer(many=True, read_only=True)
+    next_cursor = serializers.CharField(read_only=True, allow_null=True)
+    unread_count = serializers.IntegerField(read_only=True)
+
+
+class UnreadCountSerializer(serializers.Serializer):
+    """The caller's unread notification count (schema-only)."""
+
+    unread_count = serializers.IntegerField(read_only=True)
+
+
+class NotificationPreferenceEntrySerializer(serializers.Serializer):
+    """Delivery settings for a single notification-preference stem.
+
+    ``whatsapp`` and ``sms`` are separate booleans rather than members of
+    ``DeliveryPreference`` because each is billed per message; both are forced
+    off server-side when the profile has no number to deliver to.
+    """
+
+    delivery = serializers.ChoiceField(choices=DeliveryPreference.choices, required=False)
+    whatsapp = serializers.BooleanField(required=False)
+    sms = serializers.BooleanField(required=False)
+
+
+def _preference_entry_fields() -> dict[str, serializers.Field]:
+    """Build one nested entry field per real notification-preference stem.
+
+    Driven by ``services.notification_center.preference_field_names``, which
+    introspects the model - so a thirteenth preference becomes readable and
+    writable here with no change to this module.
+
+    Returns:
+        Mapping of stem name to an optional nested entry serializer.
+    """
+    return {stem: NotificationPreferenceEntrySerializer(required=False) for stem in preference_field_names()}
+
+
+NotificationPreferenceSerializer = type(
+    "NotificationPreferenceSerializer",
+    (serializers.Serializer,),
+    {
+        "__doc__": (
+            "The caller's per-type notification delivery preferences.\n\n"
+            "    Exposes exactly the stems ``NotificationPreference`` actually defines -\n"
+            "    a strict subset of ``NotificationType``. Types with no preference column\n"
+            "    are absent rather than defaulted, because inventing a value here would\n"
+            "    imply a control that does not exist.\n    "
+        ),
+        **_preference_entry_fields(),
+    },
+)

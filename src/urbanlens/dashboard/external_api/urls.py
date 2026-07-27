@@ -28,6 +28,30 @@ urlpatterns = [
     path("pin-suggestions/", views.PinSuggestionsView.as_view(), name="pin_suggestions"),
     path("push-devices/", views.PushDevicesView.as_view(), name="push_devices"),
     path("push-devices/<uuid:device_uuid>/", views.PushDeviceDetailView.as_view(), name="push_devices.detail"),
+    path("friends/", views.FriendsView.as_view(), name="friends"),
+    path("friends/<uuid:profile_uuid>/", views.FriendDetailView.as_view(), name="friends.detail"),
+    path("friends/<uuid:profile_uuid>/accept/", views.FriendAcceptView.as_view(), name="friends.accept"),
+    path("friends/<uuid:profile_uuid>/reject/", views.FriendRejectView.as_view(), name="friends.reject"),
+    path("friends/<uuid:profile_uuid>/ignore/", views.FriendIgnoreView.as_view(), name="friends.ignore"),
+    path("friends/<uuid:profile_uuid>/block/", views.FriendBlockView.as_view(), name="friends.block"),
+    path("friends/<uuid:profile_uuid>/mute/", views.FriendMuteView.as_view(), name="friends.mute"),
+    path("friend-invites/", views.FriendInvitesView.as_view(), name="friend_invites"),
+    path("notifications/", views.NotificationsView.as_view(), name="notifications"),
+    # These two literal paths must stay ahead of the <uuid:notification_uuid>
+    # route below - Django matches urlpatterns in order, and although a uuid
+    # converter would not in fact match "read-all", keeping the literals first
+    # follows this file's existing convention (see the "pins/..." block) and
+    # keeps the ordering correct if the converter is ever loosened to <str:>.
+    path("notifications/read-all/", views.NotificationsReadAllView.as_view(), name="notifications.read_all"),
+    path("notifications/unread-count/", views.NotificationsUnreadCountView.as_view(), name="notifications.unread_count"),
+    path("notifications/<uuid:notification_uuid>/", views.NotificationDetailView.as_view(), name="notifications.detail"),
+    path("notification-preferences/", views.NotificationDeliveryPreferencesView.as_view(), name="notification_preferences"),
+    # Kept after the two literal "profiles/..." sub-resources would-be conflicts:
+    # the notes routes are more specific paths under the same slug segment, so
+    # they are declared before the bare profile detail route.
+    path("profiles/<str:profile_slug>/notes/", views.ProfileNotesView.as_view(), name="profiles.notes"),
+    path("profiles/<str:profile_slug>/notes/<uuid:note_uuid>/", views.ProfileNoteDetailView.as_view(), name="profiles.notes.detail"),
+    path("profiles/<str:profile_slug>/", views.ProfileDetailView.as_view(), name="profiles.detail"),
     # The machine-readable contract (and a browsable view of it) for exactly
     # this surface - internal endpoints are excluded by
     # schema.preprocess_external_api_only. Served without auth: the schema is
