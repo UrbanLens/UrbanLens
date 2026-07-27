@@ -40,17 +40,22 @@ from urbanlens.dashboard.models.profile.meta import (
 )
 from urbanlens.dashboard.models.profile.model import _COMMUNITY_GATED_VISIBILITY_FIELDS
 from urbanlens.dashboard.models.push_device import PushTransport
+from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
 from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
 from urbanlens.dashboard.services.media_labels import MAX_MEDIA_LABEL_NAME_LENGTH, MAX_MEDIA_LABELS
 from urbanlens.dashboard.services.notification_center import preference_field_names
 from urbanlens.dashboard.services.text_limits import (
+    MAX_COMMENT_TEXT_LENGTH,
     MAX_FRIEND_REQUEST_MESSAGE_LENGTH,
     MAX_PIN_LIST_DESCRIPTION_LENGTH,
     MAX_PIN_NOTE_LENGTH,
     MAX_PROFILE_BIO_LENGTH,
+    MAX_TRIP_ACTIVITY_NOTES_LENGTH,
+    MAX_TRIP_DESCRIPTION_LENGTH,
     MAX_VISIT_NOTES_LENGTH,
 )
+from urbanlens.dashboard.services.trip_comments import ALLOWED_COMMENT_EMOJIS
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
@@ -1707,3 +1712,582 @@ class JournalResponseSerializer(serializers.Serializer):
     entries = JournalEntrySerializer(many=True, read_only=True)
     #: Total entries available, for paging - the journal is materialized whole.
     total = serializers.IntegerField(read_only=True)
+# -- Trips ---------------------------------------------------------------------
+#
+# Every serializer below reads either a model instance or one of the plain dicts
+# the shared trip services already build (``build_activity_rows``,
+# ``build_comment_tree``) - DRF resolves a dotted ``source`` through Mappings and
+# objects alike, so a render row serializes without a second shaping pass. That
+# keeps the external payload derived from the exact same rows the internal panel
+# renders, rather than from a parallel re-computation that could drift.
+
+
+class TripMemberProfileSerializer(serializers.Serializer):
+    """One person as they may be shown to the requesting viewer.
+
+    Always sourced from ``services.identity_visibility.resolve_visible_identities``'
+    masked output, never from the raw model fields. That matters for ``slug``
+    in particular: a profile slug is derived from the username, so emitting it
+    for someone whose privacy settings hide them from this viewer would undo
+    the masking that ``display_name`` performs. It is null whenever the person
+    is masked, and ``uuid`` - which discloses nothing - is the handle a client
+    uses to address them on the member endpoints.
+    """
+
+    uuid = serializers.UUIDField(read_only=True)
+    slug = serializers.SerializerMethodField()
+    display_name = serializers.CharField(read_only=True)
+    avatar_url = serializers.CharField(source="display_avatar_url", read_only=True, allow_null=True)
+
+    def get_slug(self, profile) -> str | None:
+        """Return the profile slug, or None when this viewer sees a masked identity.
+
+        Args:
+            profile: A profile already resolved by ``resolve_visible_identities``.
+
+        Returns:
+            The slug, or None when masked.
+        """
+        return None if getattr(profile, "is_masked", False) else profile.slug
+
+
+class TripSummarySerializer(serializers.Serializer):
+    """One trip as it appears in a list (schema and response shape).
+
+    The count fields come from ``TripQuerySet.for_list_page``'s annotations, so
+    a list response costs the same queries the web list page already does. They
+    are absent (and serialize as 0) on an un-annotated instance.
+    """
+
+    uuid = serializers.UUIDField(read_only=True)
+    slug = serializers.CharField(read_only=True, allow_null=True)
+    name = serializers.CharField(read_only=True)
+    description = serializers.CharField(read_only=True, allow_null=True)
+    start_date = serializers.DateField(source="effective_start_date", read_only=True, allow_null=True)
+    end_date = serializers.DateField(source="effective_end_date", read_only=True, allow_null=True)
+    #: One of "planning", "upcoming", "active", "past".
+    timeline_status = serializers.CharField(read_only=True)
+    duration_days = serializers.IntegerField(read_only=True, allow_null=True)
+    activity_count = serializers.SerializerMethodField()
+    member_count = serializers.SerializerMethodField()
+    comment_count = serializers.SerializerMethodField()
+    pin_count = serializers.SerializerMethodField()
+    is_creator = serializers.SerializerMethodField()
+    #: "invited" or "joined"; null when the viewer is the creator with no row.
+    membership_status = serializers.SerializerMethodField()
+    rsvp = serializers.SerializerMethodField()
+    is_organizer = serializers.SerializerMethodField()
+    created = serializers.DateTimeField(read_only=True)
+    updated = serializers.DateTimeField(read_only=True)
+
+    def _viewer(self):
+        """The requesting profile, supplied by the view through serializer context."""
+        return self.context.get("viewer")
+
+    def _membership(self, trip):
+        """This viewer's membership row for *trip*, resolved at most once per trip."""
+        cache = self.context.setdefault("_membership_cache", {})
+        if trip.pk not in cache:
+            from urbanlens.dashboard.models.trips.model import TripMembership
+
+            viewer = self._viewer()
+            cache[trip.pk] = TripMembership.objects.for_trip_and_profile(trip, viewer).first() if viewer else None
+        return cache[trip.pk]
+
+    def get_activity_count(self, trip) -> int:
+        """Annotated activity count, or 0 on an un-annotated instance."""
+        return getattr(trip, "activity_count", 0) or 0
+
+    def get_member_count(self, trip) -> int:
+        """Annotated member count, or 0 on an un-annotated instance."""
+        return getattr(trip, "member_count", 0) or 0
+
+    def get_comment_count(self, trip) -> int:
+        """Annotated comment count, or 0 on an un-annotated instance."""
+        return getattr(trip, "comment_count", 0) or 0
+
+    def get_pin_count(self, trip) -> int:
+        """Annotated count of activities linked to a pin, or 0 when un-annotated."""
+        return getattr(trip, "pin_count", 0) or 0
+
+    def get_is_creator(self, trip) -> bool:
+        """Whether the requesting viewer created this trip."""
+        viewer = self._viewer()
+        return bool(viewer and trip.creator_id == viewer.id)
+
+    def get_membership_status(self, trip) -> str | None:
+        """The viewer's join status, or None when they have no membership row."""
+        membership = self._membership(trip)
+        return membership.status if membership else None
+
+    def get_rsvp(self, trip) -> str | None:
+        """The viewer's trip-wide RSVP, or None when unanswered."""
+        membership = self._membership(trip)
+        return membership.rsvp if membership else None
+
+    def get_is_organizer(self, trip) -> bool:
+        """Whether the viewer is the creator or a designated organizer."""
+        viewer = self._viewer()
+        if viewer is None:
+            return False
+        if trip.creator_id == viewer.id:
+            return True
+        membership = self._membership(trip)
+        return bool(membership and membership.is_organizer)
+
+
+class TripCalendarSyncStatusSerializer(serializers.Serializer):
+    """Whether this trip is mirrored to the caller's Google Calendar (schema-only).
+
+    ``connected`` and ``linked`` are separate deliberately: a client that finds
+    ``connected`` false must send the user to the web app, because establishing
+    a calendar connection needs an OAuth consent flow the external API does not
+    (and should not) reproduce.
+    """
+
+    #: A GoogleCalendarAccount exists for the caller.
+    connected = serializers.BooleanField(read_only=True)
+    #: A trip-level export link exists for this trip and caller.
+    linked = serializers.BooleanField(read_only=True)
+    #: Whether later edits keep pushing to the linked event.
+    auto_sync = serializers.BooleanField(read_only=True)
+    last_synced = serializers.DateTimeField(read_only=True, allow_null=True)
+
+
+class TripPermissionsSerializer(serializers.Serializer):
+    """The trip's four configurable permission levels (schema and response shape)."""
+
+    allow_add_members = serializers.ChoiceField(choices=Trip.PERMISSION_CHOICES, read_only=True)
+    allow_add_activities = serializers.ChoiceField(choices=Trip.PERMISSION_CHOICES, read_only=True)
+    allow_edit_activities = serializers.ChoiceField(choices=Trip.PERMISSION_CHOICES, read_only=True)
+    allow_comments = serializers.ChoiceField(choices=Trip.PERMISSION_CHOICES, read_only=True)
+
+
+class TripViewerSerializer(serializers.Serializer):
+    """What the requesting caller specifically may see and do on this trip.
+
+    The four ``can_*`` booleans are derived server-side from
+    ``services.trip_access.can_perform``, not re-derived by the client from
+    the permission levels - so a future change to how a level is evaluated
+    reaches the app without an app release, and a client can gray out an
+    action it would be refused rather than discovering that by 403.
+    """
+
+    has_joined = serializers.BooleanField(read_only=True)
+    is_organizer = serializers.BooleanField(read_only=True)
+    is_creator = serializers.BooleanField(read_only=True)
+    membership_status = serializers.CharField(read_only=True, allow_null=True)
+    rsvp = serializers.CharField(read_only=True, allow_null=True)
+    can_add_members = serializers.BooleanField(read_only=True)
+    can_add_activities = serializers.BooleanField(read_only=True)
+    can_edit_activities = serializers.BooleanField(read_only=True)
+    can_comment = serializers.BooleanField(read_only=True)
+
+
+class TripMemberSerializer(serializers.Serializer):
+    """One membership row: who, and where they stand on the trip."""
+
+    profile = TripMemberProfileSerializer(read_only=True)
+    status = serializers.ChoiceField(choices=TripMembership.STATUS_CHOICES, read_only=True)
+    rsvp = serializers.ChoiceField(choices=TripMembership.RSVP_CHOICES, read_only=True, allow_null=True)
+    is_organizer = serializers.BooleanField(read_only=True)
+    is_creator = serializers.SerializerMethodField()
+    created = serializers.DateTimeField(read_only=True)
+
+    def get_is_creator(self, membership) -> bool:
+        """Whether this member is the trip's creator."""
+        return membership.profile_id == membership.trip.creator_id
+
+
+class TripDetailSerializer(TripSummarySerializer):
+    """One trip in full, including its roster.
+
+    Members are bundled here rather than left to the paginated members
+    endpoint: a trip's roster is small and bounded by ``max_trip_members``, and
+    the app needs it to render the detail screen at all, so making it a second
+    round trip would only add latency.
+    """
+
+    creator = TripMemberProfileSerializer(read_only=True, allow_null=True)
+    permissions = TripPermissionsSerializer(source="*", read_only=True)
+    viewer = TripViewerSerializer(read_only=True)
+    calendar_sync = TripCalendarSyncStatusSerializer(read_only=True)
+    members = TripMemberSerializer(many=True, read_only=True)
+
+
+class TripActivityLegSerializer(serializers.Serializer):
+    """The driving leg from the previous stop to this one (schema-only)."""
+
+    distance_meters = serializers.FloatField(read_only=True)
+    duration_seconds = serializers.FloatField(read_only=True)
+    distance_display = serializers.CharField(read_only=True)
+    duration_display = serializers.CharField(read_only=True)
+
+
+class TripActivitySerializer(serializers.Serializer):
+    """One itinerary entry, serialized from a ``build_activity_rows`` render row.
+
+    ``latitude``/``longitude`` are **null** - not merely flagged - whenever the
+    activity's location is effectively hidden from this viewer, whether by the
+    activity's own ``location_hidden`` flag or by the adder's
+    ``trip_pin_location_visibility`` privacy setting. A flag alone would leave
+    the coordinates in the payload for any client that ignored it.
+    """
+
+    id = serializers.IntegerField(source="activity.id", read_only=True)
+    title = serializers.CharField(source="activity.title", read_only=True, allow_null=True)
+    #: The label the UI shows: the title, else the linked pin/location's name.
+    effective_title = serializers.CharField(source="activity.effective_title", read_only=True)
+    notes = serializers.CharField(source="activity.notes", read_only=True, allow_null=True)
+    status = serializers.ChoiceField(choices=TripActivity.STATUS_CHOICES, source="activity.status", read_only=True)
+    scheduled_at = serializers.DateTimeField(source="activity.scheduled_at", read_only=True, allow_null=True)
+    scheduled_end = serializers.DateTimeField(source="activity.scheduled_end", read_only=True, allow_null=True)
+    order = serializers.IntegerField(source="activity.order", read_only=True)
+    #: The activity's 1-based map marker number, or null when it has no marker.
+    index = serializers.IntegerField(read_only=True, allow_null=True)
+    latitude = serializers.SerializerMethodField()
+    longitude = serializers.SerializerMethodField()
+    #: The *effective* value - the activity's own flag OR this viewer's gate.
+    location_hidden = serializers.BooleanField(source="effective_location_hidden", read_only=True)
+    #: Present only when the linked pin belongs to the requesting caller.
+    pin_slug = serializers.CharField(read_only=True, allow_null=True)
+    child_trip_uuid = serializers.SerializerMethodField()
+    added_by = TripMemberProfileSerializer(source="activity.added_by", read_only=True, allow_null=True)
+    vote_up = serializers.IntegerField(read_only=True)
+    vote_down = serializers.IntegerField(read_only=True)
+    user_vote = serializers.CharField(read_only=True, allow_null=True)
+    #: The viewer's effective RSVP - their override if set, else the trip RSVP.
+    rsvp = serializers.CharField(read_only=True, allow_null=True)
+    rsvp_is_override = serializers.BooleanField(read_only=True)
+    can_manage = serializers.BooleanField(read_only=True)
+    has_coords = serializers.BooleanField(read_only=True)
+    leg = TripActivityLegSerializer(read_only=True, allow_null=True)
+    created = serializers.DateTimeField(source="activity.created", read_only=True)
+    updated = serializers.DateTimeField(source="activity.updated", read_only=True)
+
+    def _visible_coords(self, row) -> tuple[float, float] | None:
+        """Coordinates this viewer may see, or None when hidden or absent."""
+        from urbanlens.dashboard.services.trip_legs import activity_coords
+
+        if row["effective_location_hidden"]:
+            return None
+        return activity_coords(row["activity"])
+
+    def get_latitude(self, row) -> float | None:
+        """Latitude, or None when the location is hidden from this viewer."""
+        coords = self._visible_coords(row)
+        return coords[0] if coords else None
+
+    def get_longitude(self, row) -> float | None:
+        """Longitude, or None when the location is hidden from this viewer."""
+        coords = self._visible_coords(row)
+        return coords[1] if coords else None
+
+    def get_child_trip_uuid(self, row) -> str | None:
+        """The uuid of the trip nested under this activity, if any."""
+        child = row["activity"].child_trip
+        return str(child.uuid) if child else None
+
+
+class TripMapPointSerializer(serializers.Serializer):
+    """Documents one trip-map marker (schema-only).
+
+    The map endpoint returns ``services.trip_map.build_trip_map_points`` output
+    verbatim so it stays byte-identical to the web map's own ``map-data/``
+    payload; this class exists purely to describe that shape in the OpenAPI
+    contract and is never used to serialize.
+    """
+
+    #: 1-based marker number, or null on a child trip's ghost marker.
+    index = serializers.IntegerField(read_only=True, allow_null=True)
+    #: Null on a ghost marker - it belongs to another trip's activity.
+    activity_id = serializers.IntegerField(read_only=True, allow_null=True)
+    label = serializers.CharField(read_only=True)
+    lat = serializers.FloatField(read_only=True)
+    lng = serializers.FloatField(read_only=True)
+    status = serializers.ChoiceField(choices=TripActivity.STATUS_CHOICES, read_only=True)
+    scheduled_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    draggable = serializers.BooleanField(read_only=True)
+    #: Present (and True) only on a child trip's ghost markers.
+    child_trip = serializers.BooleanField(read_only=True, required=False)
+
+
+class TripMapResponseSerializer(serializers.Serializer):
+    """Documents the trip-map envelope (schema-only)."""
+
+    points = TripMapPointSerializer(many=True, read_only=True)
+
+
+class TripCommentReactionSerializer(serializers.Serializer):
+    """One emoji's tally on a comment, plus whether the caller is among them."""
+
+    emoji = serializers.CharField(read_only=True)
+    count = serializers.IntegerField(read_only=True)
+    reacted = serializers.BooleanField(read_only=True)
+
+
+class TripCommentSerializer(serializers.Serializer):
+    """One trip comment, serialized from a ``build_comment_tree`` row.
+
+    Only comments this viewer is allowed to see are ever in the tree, so there
+    is no visibility decision left to make here. Replies nest one level deep,
+    which is all the data model produces in practice - a reply's own replies
+    are not rendered by either surface.
+    """
+
+    id = serializers.IntegerField(source="comment.id", read_only=True)
+    text = serializers.CharField(source="comment.text", read_only=True, allow_null=True)
+    #: Mention-rendered, sanitized HTML - the same string the web panel shows.
+    rendered_html = serializers.CharField(source="rendered_text", read_only=True)
+    author = TripMemberProfileSerializer(source="comment.author", read_only=True, allow_null=True)
+    image_url = serializers.SerializerMethodField()
+    has_map = serializers.SerializerMethodField()
+    created = serializers.DateTimeField(source="comment.created", read_only=True)
+    can_delete = serializers.BooleanField(read_only=True)
+    reactions = serializers.SerializerMethodField()
+    replies = serializers.SerializerMethodField()
+
+    def get_image_url(self, row) -> str | None:
+        """The attached image's URL, or None when there isn't one."""
+        image = row["comment"].image
+        return image.url if image else None
+
+    def get_has_map(self, row) -> bool:
+        """Whether a markup map is attached to this comment."""
+        return row["comment"].markup_map_id is not None
+
+    def get_reactions(self, row) -> list[dict]:
+        """Aggregate reactions with a per-caller ``reacted`` flag."""
+        viewer = self.context.get("viewer")
+        viewer_id = viewer.id if viewer else None
+        return [
+            {"emoji": emoji, "count": data["count"], "reacted": viewer_id in data["reacted_by"]}
+            for emoji, data in sorted(row["reactions"].items())
+        ]
+
+    def get_replies(self, row) -> list[dict]:
+        """Serialize this comment's visible replies (never nested further)."""
+        return TripCommentSerializer(row.get("replies", []), many=True, context=self.context).data
+
+
+# -- Trip request payloads -----------------------------------------------------
+
+
+class TripCreateSerializer(serializers.Serializer):
+    """Validates an untrusted trip-creation payload."""
+
+    #: Optional - a blank submission gets a generated placeholder name, matching
+    #: the web app's "just start planning" flow.
+    name = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True, default=None)
+    description = serializers.CharField(max_length=MAX_TRIP_DESCRIPTION_LENGTH, required=False, allow_blank=True, allow_null=True, default=None)
+    start_date = serializers.DateField(required=False, allow_null=True, default=None)
+    end_date = serializers.DateField(required=False, allow_null=True, default=None)
+    #: Caller-generated idempotency uuid, mirroring PinCreateSerializer: an
+    #: offline client retries the same submission until acknowledged, and a
+    #: repeat is answered with the already-created trip instead of a duplicate.
+    uuid = serializers.UUIDField(required=False, allow_null=True, default=None)
+
+    def validate(self, attrs: dict) -> dict:
+        """Reject a range that ends before it starts.
+
+        Args:
+            attrs: The validated field values.
+
+        Returns:
+            The unchanged values when the range is coherent.
+
+        Raises:
+            serializers.ValidationError: ``end_date`` precedes ``start_date``.
+        """
+        start, end = attrs.get("start_date"), attrs.get("end_date")
+        if start and end and end < start:
+            raise serializers.ValidationError("end_date cannot be before start_date.")
+        return attrs
+
+
+class TripUpdateSerializer(serializers.Serializer):
+    """Validates a partial trip update.
+
+    No field carries a default, so ``"x" in validated_data`` distinguishes
+    "omitted" from "explicitly set to null" - the same presence-keyed pattern
+    :class:`PinUpdateSerializer` uses, and what ``services.trip_crud.update_trip``
+    expects.
+    """
+
+    name = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
+    description = serializers.CharField(max_length=MAX_TRIP_DESCRIPTION_LENGTH, required=False, allow_blank=True, allow_null=True)
+    start_date = serializers.DateField(required=False, allow_null=True)
+    end_date = serializers.DateField(required=False, allow_null=True)
+
+
+class TripMemberAddSerializer(serializers.Serializer):
+    """Validates an add-member submission."""
+
+    #: Matched case-insensitively against Django's User.username.
+    username = serializers.CharField(max_length=150, allow_blank=False)
+
+
+class TripMemberOrganizerSerializer(serializers.Serializer):
+    """Validates an organizer-flag change.
+
+    Explicitly the target state rather than a toggle - a client retrying a
+    request it never saw acknowledged would otherwise flip the flag back.
+    """
+
+    is_organizer = serializers.BooleanField()
+
+
+class TripRsvpSerializer(serializers.Serializer):
+    """Validates a trip-wide RSVP; null clears the answer."""
+
+    rsvp = serializers.ChoiceField(choices=TripMembership.RSVP_CHOICES, allow_null=True)
+
+
+class TripActivityCreateSerializer(serializers.Serializer):
+    """Validates an untrusted activity-creation payload.
+
+    Unlike the web form's split date and time inputs, schedule fields here are
+    whole ISO datetimes - a native client has a real datetime to send, and
+    splitting it only to recombine it server-side loses the timezone.
+    """
+
+    title = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True, default=None)
+    notes = serializers.CharField(max_length=MAX_TRIP_ACTIVITY_NOTES_LENGTH, required=False, allow_blank=True, allow_null=True, default=None)
+    scheduled_at = serializers.DateTimeField(required=False, allow_null=True, default=None)
+    scheduled_end = serializers.DateTimeField(required=False, allow_null=True, default=None)
+    #: One of the caller's own pins, by slug (or uuid) - never another user's.
+    pin_slug = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True, default=None)
+    location_uuid = serializers.CharField(max_length=64, required=False, allow_blank=True, allow_null=True, default=None)
+    latitude = serializers.FloatField(required=False, allow_null=True, default=None, min_value=-90, max_value=90)
+    longitude = serializers.FloatField(required=False, allow_null=True, default=None, min_value=-180, max_value=180)
+    #: Name to seed a Location created from raw coordinates.
+    place_name = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True, default=None)
+    #: A trip of the caller's own to nest here; its stops appear as ghost markers.
+    child_trip_uuid = serializers.UUIDField(required=False, allow_null=True, default=None)
+    status = serializers.ChoiceField(choices=["proposed", "confirmed"], required=False, default="proposed")
+    location_hidden = serializers.BooleanField(required=False, default=False)
+
+    def validate(self, attrs: dict) -> dict:
+        """Coordinates travel together, and a range must not end before it starts.
+
+        Args:
+            attrs: The validated field values.
+
+        Returns:
+            The unchanged values when coherent.
+
+        Raises:
+            serializers.ValidationError: Only one coordinate was supplied, or
+                ``scheduled_end`` precedes ``scheduled_at``.
+        """
+        lat, lng = attrs.get("latitude"), attrs.get("longitude")
+        if (lat is None) != (lng is None):
+            raise serializers.ValidationError("Provide both latitude and longitude together.")
+        start, end = attrs.get("scheduled_at"), attrs.get("scheduled_end")
+        if start and end and end < start:
+            raise serializers.ValidationError("scheduled_end cannot be before scheduled_at.")
+        return attrs
+
+
+class TripActivityUpdateSerializer(TripActivityCreateSerializer):
+    """Validates a partial activity update.
+
+    Every field drops its default so presence drives the update, exactly as in
+    :class:`TripUpdateSerializer`.
+    """
+
+    title = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
+    notes = serializers.CharField(max_length=MAX_TRIP_ACTIVITY_NOTES_LENGTH, required=False, allow_blank=True, allow_null=True)
+    scheduled_at = serializers.DateTimeField(required=False, allow_null=True)
+    scheduled_end = serializers.DateTimeField(required=False, allow_null=True)
+    pin_slug = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
+    location_uuid = serializers.CharField(max_length=64, required=False, allow_blank=True, allow_null=True)
+    latitude = serializers.FloatField(required=False, allow_null=True, min_value=-90, max_value=90)
+    longitude = serializers.FloatField(required=False, allow_null=True, min_value=-180, max_value=180)
+    place_name = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
+    child_trip_uuid = serializers.UUIDField(required=False, allow_null=True)
+    status = serializers.ChoiceField(choices=["proposed", "confirmed"], required=False)
+    location_hidden = serializers.BooleanField(required=False)
+
+
+class TripActivityPositionSerializer(serializers.Serializer):
+    """Validates a map-drag position override.
+
+    The bounds are the point of this serializer: the endpoint it replaces
+    accepted any float and persisted it, so a marker could be saved at
+    latitude 5000.
+    """
+
+    lat = serializers.FloatField(min_value=-90, max_value=90)
+    lng = serializers.FloatField(min_value=-180, max_value=180)
+
+
+class TripActivityVoteSerializer(serializers.Serializer):
+    """Validates a vote on a proposed activity; null clears it."""
+
+    vote = serializers.ChoiceField(choices=["up", "down"], allow_null=True)
+
+
+class TripActivityStatusSerializer(serializers.Serializer):
+    """Validates an activity status change.
+
+    ``completed`` is accepted here and routed to
+    ``services.trip_activities.complete_activity``, which also logs the
+    completer's visit and snaps a future date back to today - so a client never
+    has to know that completing is a different operation from confirming.
+    """
+
+    status = serializers.ChoiceField(choices=["proposed", "confirmed", "completed"])
+
+
+class TripActivityRsvpSerializer(serializers.Serializer):
+    """Validates a per-activity RSVP override; null clears it."""
+
+    rsvp = serializers.ChoiceField(choices=TripMembership.RSVP_CHOICES, allow_null=True)
+
+
+class TripCommentCreateSerializer(serializers.Serializer):
+    """Validates a trip comment submission.
+
+    Image and map attachments are web-only for now: both need multipart upload
+    and the markup-map editor's payload, neither of which this surface exposes.
+    """
+
+    text = serializers.CharField(max_length=MAX_COMMENT_TEXT_LENGTH, allow_blank=False)
+    #: A comment on this same trip to reply to.
+    parent_id = serializers.IntegerField(required=False, allow_null=True, default=None)
+
+
+class TripCommentReactionSetSerializer(serializers.Serializer):
+    """Validates a reaction change; explicitly the target state, not a toggle."""
+
+    emoji = serializers.ChoiceField(choices=sorted(ALLOWED_COMMENT_EMOJIS))
+    reacted = serializers.BooleanField()
+
+
+class TripCalendarSyncToggleSerializer(serializers.Serializer):
+    """Validates a calendar auto-sync toggle for an already-exported trip."""
+
+    enabled = serializers.BooleanField()
+
+
+class TripListQuerySerializer(serializers.Serializer):
+    """Validates the trips list's ordering query params."""
+
+    sort = serializers.ChoiceField(choices=["start_date", "updated"], required=False, default="updated")
+    dir = serializers.ChoiceField(choices=["asc", "desc"], required=False, default="desc")
+
+
+class TripMapQuerySerializer(serializers.Serializer):
+    """Validates the trip map's query params."""
+
+    #: Completed stops are dropped unless asked for.
+    include_past = serializers.BooleanField(required=False, default=False)
+
+
+class TripActivityListQuerySerializer(serializers.Serializer):
+    """Validates the activity list's query params."""
+
+    #: Off by default - driving legs cost live routing calls, and a plain list
+    #: fetch must never trigger them.
+    include_legs = serializers.BooleanField(required=False, default=False)

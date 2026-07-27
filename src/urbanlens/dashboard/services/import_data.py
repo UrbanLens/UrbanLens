@@ -1553,7 +1553,7 @@ def _import_trips(
                 continue
             _membership, invited = TripMembership.objects.get_or_create(trip=trip, profile=member_profile, defaults={"status": TripMembership.STATUS_INVITED})
             if invited:
-                from urbanlens.dashboard.controllers.trip import _notify_added_to_trip
+                from urbanlens.dashboard.services.trip_membership import notify_added_to_trip as _notify_added_to_trip
 
                 _notify_added_to_trip(profile, member_profile, trip)
         _apply_exported_created(trip, row.get("created"))

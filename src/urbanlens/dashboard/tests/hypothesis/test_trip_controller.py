@@ -221,13 +221,23 @@ class TripCreateViewTests(TestCase):
             TripMembership.objects.filter(trip=trip, profile=self.profile).exists(),
         )
 
-    def test_post_without_name_returns_400(self):
+    def test_post_without_name_generates_a_placeholder(self):
+        """A blank name is accepted and gets a generated one (UL-360).
+
+        This test previously asserted a 400, which stopped being true when the
+        name became optional so a "just start planning" flow needn't invent a
+        title up front - it had been failing ever since. The behavior itself
+        now lives in ``services.trip_crud.create_trip``.
+        """
+        before = set(Trip.objects.values_list("pk", flat=True))
         resp = self.client.post(
             reverse("trips.create"),
             data=json.dumps({"name": ""}),
             content_type="application/json",
         )
-        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.status_code, 200)
+        created = Trip.objects.exclude(pk__in=before).get()
+        self.assertTrue(created.name.strip())
 
     def test_post_with_form_data_also_works(self):
         resp = self.client.post(reverse("trips.create"), data={"name": "Form Trip"})
@@ -318,11 +328,21 @@ class TripDetailViewTests(TestCase):
         resp = client.get(self._url())
         self.assertEqual(resp.status_code, 200)
 
-    def test_outsider_gets_403(self):
+    def test_outsider_gets_404_indistinguishable_from_a_missing_trip(self):
+        """Someone else's trip must look exactly like one that doesn't exist.
+
+        This used to be a 403 while a missing slug was a 404, so the status
+        code alone let anyone enumerate valid private trip slugs - despite both
+        rendering the same "not found" page specifically to prevent that. See
+        ``services.trip_access.get_trip_for_viewer``.
+        """
         client = Client()
         client.force_login(self.outsider_user)
-        resp = client.get(self._url())
-        self.assertEqual(resp.status_code, 403)
+        forbidden = client.get(self._url())
+        missing = client.get(reverse("trips.detail", kwargs={"trip_slug": "no-such-trip-slug"}))
+        self.assertEqual(forbidden.status_code, 404)
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(forbidden.content, missing.content)
 
     def test_nonexistent_trip_returns_404(self):
         client = Client()
@@ -541,12 +561,17 @@ class TripActivitiesViewTests(TestCase):
         )
         self.assertEqual(resp.status_code, 403)
 
-    def test_outsider_gets_403(self):
+    def test_outsider_gets_404(self):
+        """A non-member is told the trip does not exist, not that it's forbidden.
+
+        See TripDetailViewTests.test_outsider_gets_404_indistinguishable_from_a_missing_trip
+        for why the old 403 was an enumeration leak.
+        """
         outsider = baker.make("auth.User")
         client = Client()
         client.force_login(outsider)
         resp = client.get(self._url())
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 404)
 
     def test_post_pin_only_uses_pin_name_in_panel(self):
         from urbanlens.dashboard.models.location.model import Location

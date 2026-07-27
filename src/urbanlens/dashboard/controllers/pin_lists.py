@@ -505,7 +505,7 @@ class PinListAddToTripView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
-        from urbanlens.dashboard.controllers.trip import _trip_or_403
+        from urbanlens.dashboard.controllers.trip import trip_or_not_found
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
@@ -514,7 +514,7 @@ class PinListAddToTripView(LoginRequiredMixin, View):
         trip_slug = body.get("trip_slug")
         if not trip_slug:
             return HttpResponse("A trip is required.", status=400)
-        result = _trip_or_403(request, trip_slug, profile)
+        result = trip_or_not_found(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result

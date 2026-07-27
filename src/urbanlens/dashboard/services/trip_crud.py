@@ -1,0 +1,247 @@
+"""Creating, editing, and deleting the trip record itself.
+
+Shared by the internal HTMX controllers and the external REST API so the
+upcoming-trip quota, the generated-name fallback, the description length
+limit, and the Undo History stash all apply identically whichever surface a
+trip was created or destroyed from.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any
+
+from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.site_settings import SiteSettings
+from urbanlens.dashboard.models.trips.model import Trip, TripMembership
+from urbanlens.dashboard.services.text_limits import MAX_TRIP_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.trip_access import require_joined
+from urbanlens.dashboard.services.trip_errors import TripPermissionError, TripQuotaError, TripValidationError
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+    import datetime
+    from uuid import UUID
+
+EDIT_TRIP_DENIED = "Join this trip to edit its details."
+DELETE_TRIP_DENIED = "Only the trip creator can delete it."
+
+#: Toast shown after a successful delete - the window matches the Undo
+#: framework's retention, so it is quoted rather than reworded per surface.
+TRIP_DELETED_MESSAGE = "Trip deleted. Undo within 7 days from Settings → Undo History."
+
+
+def create_trip(
+    creator: Profile,
+    *,
+    name: str | None = None,
+    description: str | None = None,
+    start_date: datetime.date | str | None = None,
+    end_date: datetime.date | str | None = None,
+    invite_profile_ids: Sequence[Any] = (),
+    client_uuid: UUID | None = None,
+) -> tuple[Trip, bool]:
+    """Create a trip, join its creator, and invite any chosen friends.
+
+    Args:
+        creator: The profile creating the trip, joined automatically with an
+            RSVP of yes.
+        name: Trip name. Blank or omitted gets a generated one, so a
+            "just start planning" flow needn't invent a title up front.
+        description: Optional free-text description.
+        start_date: Optional start date.
+        end_date: Optional end date.
+        invite_profile_ids: Profile ids to invite. Filtered to the creator's
+            accepted friends - arbitrary submitted ids are never trusted - and
+            truncated to whatever room ``max_trip_members`` leaves.
+        client_uuid: A caller-generated uuid making the create idempotent, in
+            the same shape ``services.pin_creation.create_pin_for_profile``
+            uses: when a trip with this uuid already exists *and the caller is
+            its creator*, that trip is returned with ``created`` False instead
+            of a duplicate being made. Offline clients retry creates until
+            acknowledged, so the same submission may legitimately arrive twice.
+
+    Returns:
+        The ``(trip, created)`` pair; ``created`` is False for an idempotent replay.
+
+    Raises:
+        TripValidationError: The description exceeds the shared text limit, or
+            ``client_uuid`` already belongs to somebody else's trip.
+        TripQuotaError: The creator is already at ``max_upcoming_trips_per_user``.
+    """
+    if client_uuid is not None:
+        existing = Trip.objects.filter(uuid=client_uuid).first()
+        if existing is not None:
+            if existing.creator_id != creator.id:
+                # uuids are caller-generated, so this is either a client bug or
+                # a guess. Either way the trip is not theirs to replay.
+                raise TripValidationError("This uuid is already in use.")
+            return existing, False
+
+    from urbanlens.dashboard.services.trip_names import random_trip_name
+
+    clean_name = (name or "").strip() or random_trip_name()
+
+    clean_description = description or None
+    length_error = text_length_error(clean_description, MAX_TRIP_DESCRIPTION_LENGTH, "Description")
+    if length_error:
+        raise TripValidationError(length_error)
+
+    max_upcoming = SiteSettings.get_current().max_upcoming_trips_per_user
+    if max_upcoming > 0 and Trip.objects.upcoming(creator).count() >= max_upcoming:
+        raise TripQuotaError(f"You already have the maximum of {max_upcoming} upcoming trips.")
+
+    create_kwargs: dict[str, Any] = {
+        "name": clean_name,
+        "description": clean_description,
+        "start_date": start_date or None,
+        "end_date": end_date or None,
+        "creator": creator,
+    }
+    if client_uuid is not None:
+        # uuid is editable=False on the abstract base, so it must be passed
+        # explicitly at the ORM layer - serializers/forms never bind it.
+        create_kwargs["uuid"] = client_uuid
+
+    trip = Trip.objects.create(**create_kwargs)
+    TripMembership.objects.get_or_create(trip=trip, profile=creator, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
+
+    invite_members(trip, creator, invite_profile_ids)
+    return trip, True
+
+
+def invite_members(trip: Trip, inviter: Profile, invite_profile_ids: Sequence[Any]) -> int:
+    """Invite a set of the inviter's own friends to a freshly created trip.
+
+    Args:
+        trip: The trip to invite to.
+        inviter: The inviting profile.
+        invite_profile_ids: Candidate profile ids - anything that isn't one of
+            the inviter's accepted friends is silently dropped rather than
+            trusted.
+
+    Returns:
+        How many new invitations were actually created.
+    """
+    if not invite_profile_ids:
+        return 0
+
+    from urbanlens.dashboard.services.connections import get_connections
+    from urbanlens.dashboard.services.trip_membership import notify_added_to_trip
+
+    friend_ids = {str(f.id) for f in get_connections(inviter)}
+    selected_ids = {pid for pid in invite_profile_ids if str(pid) in friend_ids}
+    if not selected_ids:
+        return 0
+
+    max_members = SiteSettings.get_current().max_trip_members
+    remaining = max_members - trip.profiles.count()
+    invited = 0
+    for friend_profile in Profile.objects.filter(id__in=selected_ids)[:remaining]:
+        _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=friend_profile, defaults={"status": TripMembership.STATUS_INVITED})
+        if created:
+            notify_added_to_trip(inviter, friend_profile, trip)
+            invited += 1
+    return invited
+
+
+def update_trip(trip: Trip, actor: Profile, *, changes: Mapping[str, Any]) -> Trip:
+    """Apply a presence-keyed partial update to a trip's own metadata.
+
+    Only keys present in *changes* are touched, so a client syncing one field
+    never clobbers another changed elsewhere in the meantime.
+
+    Name and description deliberately differ on blank input, preserving the
+    existing behavior of the internal edit form: a blank ``name`` is ignored
+    (a trip always has a name - clearing it would leave the header empty and
+    break the slug's basis), whereas a blank ``description`` clears the field
+    (there is a real difference between "no description" and one nobody has
+    written yet).
+
+    Args:
+        trip: The trip to update.
+        actor: The profile making the change.
+        changes: Any of ``name``, ``description``, ``start_date``, ``end_date``.
+
+    Returns:
+        The saved trip.
+
+    Raises:
+        TripPermissionError: The actor has not joined the trip.
+        TripValidationError: The description exceeds the shared text limit.
+    """
+    require_joined(actor, trip, EDIT_TRIP_DENIED)
+
+    if "name" in changes:
+        new_name = (changes["name"] or "").strip()
+        if new_name:
+            trip.name = new_name
+    if "description" in changes:
+        description = changes["description"] or None
+        length_error = text_length_error(description, MAX_TRIP_DESCRIPTION_LENGTH, "Description")
+        if length_error:
+            raise TripValidationError(length_error)
+        trip.description = description
+    if "start_date" in changes:
+        trip.start_date = changes["start_date"] or None
+    if "end_date" in changes:
+        trip.end_date = changes["end_date"] or None
+    trip.save()
+    return trip
+
+
+def delete_trip(trip: Trip, actor: Profile) -> None:
+    """Delete a trip, stashing it for Undo History first.
+
+    The stash is not optional: a trip delete cascades to its activities,
+    comments, memberships and calendar links, and Undo History is the only way
+    any of that comes back.
+
+    Args:
+        trip: The trip to delete.
+        actor: The profile deleting it - must be the creator.
+
+    Raises:
+        TripPermissionError: The actor is not the trip's creator.
+    """
+    from urbanlens.dashboard.services.undo.handlers.trip import MODEL_LABEL as TRIP_MODEL_LABEL
+    from urbanlens.dashboard.services.undo.service import stash_for_undo
+
+    if trip.creator_id != actor.id:
+        raise TripPermissionError(DELETE_TRIP_DENIED)
+    stash_for_undo(TRIP_MODEL_LABEL, [trip], actor)
+    trip.delete()
+
+
+def set_trip_permissions(trip: Trip, actor: Profile, *, changes: Mapping[str, Any]) -> Trip:
+    """Update a trip's permission levels (creator/organizer only).
+
+    Args:
+        trip: The trip to configure.
+        actor: The profile making the change.
+        changes: Any of ``allow_add_members``, ``allow_add_activities``,
+            ``allow_edit_activities``, ``allow_comments``. Unrecognized levels
+            fall back to that field's default.
+
+    Returns:
+        The saved trip.
+
+    Raises:
+        TripPermissionError: The actor is neither the creator nor an organizer.
+    """
+    from urbanlens.dashboard.services.trip_access import is_organizer
+
+    if not is_organizer(actor, trip):
+        raise TripPermissionError("Only the trip creator or an organizer can change settings.")
+
+    valid_levels = {Trip.PERM_NONE, Trip.PERM_ORGANIZERS, Trip.PERM_EVERYONE}
+    defaults = {
+        "allow_add_members": Trip.PERM_NONE,
+        "allow_add_activities": Trip.PERM_EVERYONE,
+        "allow_edit_activities": Trip.PERM_EVERYONE,
+        "allow_comments": Trip.PERM_EVERYONE,
+    }
+    for field, default in defaults.items():
+        value = str(changes.get(field) or "").strip()
+        setattr(trip, field, value if value in valid_levels else default)
+    trip.save(update_fields=[*defaults, "updated"])
+    return trip
