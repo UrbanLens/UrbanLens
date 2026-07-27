@@ -21,7 +21,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
-from urbanlens.dashboard.controllers.trip import _apply_trip_list_identity_masking, _trip_or_403, _trips_for_list
+from urbanlens.dashboard.controllers.trip import _apply_trip_list_identity_masking, _trips_for_list, trip_or_not_found
 from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.calendar.google import (
@@ -372,7 +372,7 @@ class TripCalendarExportView(LoginRequiredMixin, View):
 
     def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_slug, profile)
+        result = trip_or_not_found(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -404,7 +404,7 @@ class TripCalendarExportView(LoginRequiredMixin, View):
 
     def delete(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_slug, profile)
+        result = trip_or_not_found(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -435,7 +435,7 @@ class TripCalendarAutoSyncView(LoginRequiredMixin, View):
 
     def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_slug, profile)
+        result = trip_or_not_found(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result

@@ -21,6 +21,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from urbanlens.dashboard.external_api.authentication import ApiKeyAuthentication
+from urbanlens.dashboard.external_api.pagination import PaginatedListMixin
 from urbanlens.dashboard.external_api.permissions import HasApiKeyScope
 from urbanlens.dashboard.external_api.serializers import (
     AuthSessionSerializer,
@@ -39,12 +40,38 @@ from urbanlens.dashboard.external_api.serializers import (
     SettingsSerializer,
     TombstoneSyncQuerySerializer,
     TombstoneSyncResponseSerializer,
+    TripActivityCreateSerializer,
+    TripActivityListQuerySerializer,
+    TripActivityPositionSerializer,
+    TripActivityRsvpSerializer,
+    TripActivitySerializer,
+    TripActivityStatusSerializer,
+    TripActivityUpdateSerializer,
+    TripActivityVoteSerializer,
+    TripCalendarSyncStatusSerializer,
+    TripCalendarSyncToggleSerializer,
+    TripCommentCreateSerializer,
+    TripCommentReactionSetSerializer,
+    TripCommentSerializer,
+    TripCreateSerializer,
+    TripDetailSerializer,
+    TripListQuerySerializer,
+    TripMapQuerySerializer,
+    TripMapResponseSerializer,
+    TripMemberAddSerializer,
+    TripMemberOrganizerSerializer,
+    TripMemberSerializer,
+    TripRsvpSerializer,
+    TripSummarySerializer,
+    TripUpdateSerializer,
     WhoAmISerializer,
 )
 from urbanlens.dashboard.external_api.throttling import TIER_READ, ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin
+from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
 from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 from urbanlens.dashboard.services.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
 from urbanlens.dashboard.services.pin_detail import build_pin_detail
@@ -53,12 +80,41 @@ from urbanlens.dashboard.services.pin_suggestions import LocationHit, attach_sug
 from urbanlens.dashboard.services.pin_sync import InvalidSyncCursorError, StaleDeletedSinceError, sync_pins_page, sync_tombstones_page
 from urbanlens.dashboard.services.profile_settings import SettingsValidationError, apply_settings_patch, read_settings
 from urbanlens.dashboard.services.push import PushRegistrationError, register_device, unregister_device
+from urbanlens.dashboard.services.trip_access import can_perform, get_trip_for_viewer, has_joined, is_organizer
+from urbanlens.dashboard.services.trip_activities import (
+    build_activity_rows,
+    complete_activity,
+    create_activity,
+    delete_activity,
+    set_activity_position,
+    set_activity_rsvp,
+    set_activity_status,
+    set_activity_vote,
+    update_activity,
+)
+from urbanlens.dashboard.services.trip_comments import add_comment, build_comment_tree, delete_comment, get_comment, set_comment_reaction
+from urbanlens.dashboard.services.trip_crud import create_trip, delete_trip, update_trip
+from urbanlens.dashboard.services.trip_errors import TripError, TripNotFoundError, TripPermissionError, TripValidationError
+from urbanlens.dashboard.services.trip_map import build_trip_map_points
+from urbanlens.dashboard.services.trip_membership import (
+    add_member_by_username,
+    join_trip,
+    leave_trip,
+    list_members,
+    remove_member,
+    require_trip_creator,
+    resolve_trip_member,
+    set_member_organizer,
+    set_trip_rsvp,
+)
 from urbanlens.dashboard.services.visits import visit_logging_allowed
 
 if TYPE_CHECKING:
     from uuid import UUID
 
     from rest_framework.request import Request
+
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
@@ -591,3 +647,760 @@ class PushDeviceDetailView(ExternalApiView):
         if not unregister_device(request.user.profile, device_uuid):
             return Response({"error": "No such device."}, status=404)
         return Response(status=204)
+
+
+# -- Trips ---------------------------------------------------------------------
+#
+# Every endpoint below delegates to the shared trip services
+# (``services.trip_access``/``trip_crud``/``trip_membership``/``trip_activities``/
+# ``trip_comments``/``trip_map``) - the same functions ``controllers.trip``
+# calls. Nothing about permissions, quotas, share provenance, calendar-sync
+# revocation, identity masking or location visibility is re-implemented here;
+# a view that tried to would be a bug, because the two surfaces would then
+# enforce different rules on the same data.
+#
+# Note that ``trips:read``/``trips:write`` are deliberately absent from
+# ``account.model._default_api_key_scopes`` - trip data includes other members'
+# identities, comments and coordinates, so reaching it requires an OAuth2 grant
+# the user consented to by name, not a blanket PAT.
+
+
+class TripErrorResponseMixin:
+    """Maps the shared trip-service exceptions onto this API's error envelope.
+
+    One table instead of a per-method ``except`` ladder, so a new endpoint
+    cannot accidentally answer 500 for a condition every other endpoint already
+    reports as 403 or 404.
+    """
+
+    #: Ordered most-specific-first; the first isinstance match wins.
+    _TRIP_ERROR_STATUS: ClassVar[dict[type[TripError], int]] = {
+        TripNotFoundError: 404,
+        TripPermissionError: 403,
+        TripValidationError: 400,
+    }
+
+    def error_response(self, exc: TripError) -> Response:
+        """Answer a trip-service error with ``{"error": ...}`` and its mapped status.
+
+        The message is emitted unescaped: it is a JSON string value, and the
+        HTML escaping the internal HTMX surface applies would show up here as
+        literal entities. ``TripMemberNotFoundError`` carries the raw submitted
+        username for exactly this reason.
+
+        Args:
+            exc: The error raised by a trip service.
+
+        Returns:
+            The error response; anything unmapped falls back to 400.
+        """
+        status = next((code for cls, code in self._TRIP_ERROR_STATUS.items() if isinstance(exc, cls)), 400)
+        return Response({"error": exc.message}, status=status)
+
+
+class TripScopedApiView(TripErrorResponseMixin, ExternalApiView):
+    """Base for the trip endpoints: resolves the trip once, for this caller.
+
+    ``trips:read`` gates every read and ``trips:write`` every mutation; the
+    tiered throttles pick the write bucket automatically from those scope
+    names, so no endpoint here needs a ``throttle_tier_by_method`` override.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.TRIPS_READ}),
+        "POST": frozenset({ApiKeyScope.TRIPS_WRITE}),
+        "PATCH": frozenset({ApiKeyScope.TRIPS_WRITE}),
+        "PUT": frozenset({ApiKeyScope.TRIPS_WRITE}),
+        "DELETE": frozenset({ApiKeyScope.TRIPS_WRITE}),
+    }
+
+    def trip(self, request: Request, trip_slug: str) -> Trip:
+        """The trip identified by *trip_slug*, if the caller may see it.
+
+        Args:
+            request: The authenticated request.
+            trip_slug: The trip's URL slug.
+
+        Returns:
+            The trip.
+
+        Raises:
+            TripNotFoundError: No such trip, or it isn't the caller's. Both
+                answer 404 - see ``services.trip_access.get_trip_for_viewer``.
+        """
+        return get_trip_for_viewer(trip_slug, request.user.profile)
+
+
+def _activity_place_fields(data: dict) -> dict[str, object]:
+    """Translate the API's place fields into what ``resolve_activity_place`` reads.
+
+    The shared resolver speaks the web form's vocabulary (``pin_slug``,
+    ``location_uuid``, ``geocoded_lat``/``geocoded_lng``/``geocoded_name``).
+    Rather than teach it a second one, the API's flatter field names are mapped
+    here - so both surfaces resolve a place through identical code.
+
+    Args:
+        data: Validated activity payload.
+
+    Returns:
+        The keyword shape ``services.trip_activities.resolve_activity_place`` expects.
+    """
+    return {
+        "pin_slug": data.get("pin_slug") or "",
+        "location_uuid": data.get("location_uuid") or "",
+        "geocoded_lat": "" if data.get("latitude") is None else str(data["latitude"]),
+        "geocoded_lng": "" if data.get("longitude") is None else str(data["longitude"]),
+        "geocoded_name": data.get("place_name") or "",
+        "title": data.get("title") or "",
+    }
+
+
+def _has_place_fields(data: dict) -> bool:
+    """Whether the caller submitted anything that would re-resolve the place.
+
+    Args:
+        data: Validated activity payload (presence-keyed for PATCH).
+
+    Returns:
+        True when at least one place field was present in the submission.
+    """
+    return any(key in data for key in ("pin_slug", "location_uuid", "latitude", "longitude", "place_name"))
+
+
+def _calendar_sync_status(trip: Trip, profile: Profile) -> dict[str, object]:
+    """Describe this caller's calendar mirroring for one trip.
+
+    Args:
+        trip: The trip in question.
+        profile: The requesting profile.
+
+    Returns:
+        The dict :class:`TripCalendarSyncStatusSerializer` documents.
+    """
+    from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount, TripCalendarLink
+
+    account = GoogleCalendarAccount.objects.get_for_profile(profile)
+    link = TripCalendarLink.objects.trip_level_link(trip, profile) if account else None
+    return {
+        "connected": account is not None,
+        "linked": link is not None,
+        "auto_sync": bool(link and link.auto_sync),
+        "last_synced": link.last_synced if link else None,
+    }
+
+
+def _trip_viewer_block(trip: Trip, profile: Profile) -> dict[str, object]:
+    """Describe what this specific caller may see and do on one trip.
+
+    Args:
+        trip: The trip in question.
+        profile: The requesting profile.
+
+    Returns:
+        The dict :class:`TripViewerSerializer` documents.
+    """
+    membership = TripMembership.objects.for_trip_and_profile(trip, profile).first()
+    return {
+        "has_joined": has_joined(profile, trip),
+        "is_organizer": is_organizer(profile, trip),
+        "is_creator": trip.creator_id == profile.id,
+        "membership_status": membership.status if membership else None,
+        "rsvp": membership.rsvp if membership else None,
+        "can_add_members": can_perform(profile, trip, trip.allow_add_members),
+        "can_add_activities": can_perform(profile, trip, trip.allow_add_activities),
+        "can_edit_activities": can_perform(profile, trip, trip.allow_edit_activities),
+        "can_comment": can_perform(profile, trip, trip.allow_comments),
+    }
+
+
+def _trip_detail_payload(trip: Trip, profile: Profile) -> Trip:
+    """Assemble the bundled detail payload for one trip.
+
+    Decorates the instance in place rather than building a parallel dict, the
+    same per-request pattern ``Trip.viewer_membership`` already uses (all three
+    attributes are declared in the model's ``TYPE_CHECKING`` block).
+
+    Args:
+        trip: The trip to describe.
+        profile: The requesting profile.
+
+    Returns:
+        The trip itself carrying ``viewer``, ``calendar_sync`` and ``members``,
+        ready for :class:`TripDetailSerializer`.
+    """
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
+
+    members = list_members(trip, profile)
+    # The creator may not be one of the membership rows resolve_visible_identities
+    # just masked, so mask that reference too rather than leaking a raw username.
+    if trip.creator is not None and not any(m.profile_id == trip.creator_id for m in members):
+        resolve_visible_identities(profile, [trip.creator])
+
+    trip.viewer = _trip_viewer_block(trip, profile)
+    trip.calendar_sync = _calendar_sync_status(trip, profile)
+    trip.members = members
+    return trip
+
+
+class TripsView(TripErrorResponseMixin, PaginatedListMixin, ExternalApiView):
+    """The caller's trips: GET lists them, POST creates one.
+
+    Unlike ``pins/``, this is a browse endpoint rather than a delta-sync feed -
+    a user has tens of trips, not thousands, and the app shows them in a paged
+    list rather than reconciling them offline. See ``external_api.pagination``.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.TRIPS_READ}),
+        "POST": frozenset({ApiKeyScope.TRIPS_WRITE}),
+    }
+
+    @extend_schema(parameters=[TripListQuerySerializer], responses={200: TripSummarySerializer(many=True)})
+    def get(self, request: Request) -> Response:
+        """Return one page of the caller's trips."""
+        query = TripListQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        params = query.validated_data
+
+        profile = request.user.profile
+        # for_list_page carries the same count annotations the web list page
+        # uses, and returns a plain list for the "soonest first" ordering - so
+        # it is materialized rather than paginated as a queryset.
+        trips = list(Trip.objects.for_list_page(profile, sort=params["sort"], direction=params["dir"]))
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(trips, request, view=self)
+        return paginator.get_paginated_response(TripSummarySerializer(page, many=True, context={"viewer": profile}).data)
+
+    @extend_schema(request=TripCreateSerializer, responses={201: TripDetailSerializer, 200: TripDetailSerializer, 400: ErrorSerializer})
+    def post(self, request: Request) -> Response:
+        """Create a trip owned by the caller, or replay an earlier create."""
+        serializer = TripCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = request.user.profile
+
+        try:
+            trip, created = create_trip(
+                profile,
+                name=data.get("name"),
+                description=data.get("description"),
+                start_date=data.get("start_date"),
+                end_date=data.get("end_date"),
+                client_uuid=data.get("uuid"),
+            )
+        except TripError as exc:
+            return self.error_response(exc)
+
+        # 200 rather than 201 when `uuid` replayed an existing trip - the same
+        # signal PinsView.post gives an offline outbox that it already landed.
+        return Response(
+            TripDetailSerializer(_trip_detail_payload(trip, profile), context={"viewer": profile}).data,
+            status=201 if created else 200,
+        )
+
+
+class TripDetailView(TripScopedApiView):
+    """One trip: GET it in full, PATCH its metadata, or DELETE it.
+
+    GET bundles the roster, the caller's own standing, and calendar status, so
+    the app's trip screen renders from a single request.
+    """
+
+    @extend_schema(responses={200: TripDetailSerializer, 404: ErrorSerializer})
+    def get(self, request: Request, trip_slug: str) -> Response:
+        """Return one trip in full."""
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(TripDetailSerializer(_trip_detail_payload(trip, profile), context={"viewer": profile}).data)
+
+    @extend_schema(request=TripUpdateSerializer, responses={200: TripDetailSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
+    def patch(self, request: Request, trip_slug: str) -> Response:
+        """Apply a partial update to one of the caller's trips."""
+        serializer = TripUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = request.user.profile
+        try:
+            trip = update_trip(self.trip(request, trip_slug), profile, changes=serializer.validated_data)
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(TripDetailSerializer(_trip_detail_payload(trip, profile), context={"viewer": profile}).data)
+
+    @extend_schema(responses={204: None, 403: ErrorSerializer, 404: ErrorSerializer})
+    def delete(self, request: Request, trip_slug: str) -> Response:
+        """Delete one of the caller's trips, stashing it for Undo History."""
+        try:
+            delete_trip(self.trip(request, trip_slug), request.user.profile)
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(status=204)
+
+
+class TripMapView(TripScopedApiView):
+    """GET the trip's map markers.
+
+    Deliberately unpaginated: a map has to fit its bounds to the whole set at
+    once, and a client that only had the first page would draw the wrong
+    viewport. The point set is bounded by ``max_trip_activities`` anyway.
+
+    Returns ``services.trip_map.build_trip_map_points`` verbatim so it stays
+    byte-identical to the web map's own ``map-data/`` payload.
+    """
+
+    @extend_schema(parameters=[TripMapQuerySerializer], responses={200: TripMapResponseSerializer, 404: ErrorSerializer})
+    def get(self, request: Request, trip_slug: str) -> Response:
+        """Return the trip's map markers for this caller."""
+        query = TripMapQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        try:
+            trip = self.trip(request, trip_slug)
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response({"points": build_trip_map_points(trip, request.user.profile, include_past=query.validated_data["include_past"])})
+
+
+class TripJoinView(TripScopedApiView):
+    """POST: accept an invitation to a trip, unlocking contribution rights."""
+
+    @extend_schema(request=None, responses={200: TripDetailSerializer, 404: ErrorSerializer})
+    def post(self, request: Request, trip_slug: str) -> Response:
+        """Join the trip and return its refreshed detail."""
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+            join_trip(trip, profile)
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(TripDetailSerializer(_trip_detail_payload(trip, profile), context={"viewer": profile}).data)
+
+
+class TripLeaveView(TripScopedApiView):
+    """DELETE: leave a trip, or decline an invitation never accepted."""
+
+    @extend_schema(responses={204: None, 400: ErrorSerializer, 404: ErrorSerializer})
+    def delete(self, request: Request, trip_slug: str) -> Response:
+        """Leave the trip; the creator is refused with 400."""
+        try:
+            leave_trip(self.trip(request, trip_slug), request.user.profile)
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(status=204)
+
+
+class TripRsvpView(TripScopedApiView):
+    """PUT: set or clear the caller's trip-wide RSVP."""
+
+    @extend_schema(request=TripRsvpSerializer, responses={200: TripDetailSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
+    def put(self, request: Request, trip_slug: str) -> Response:
+        """Persist the caller's RSVP and return the refreshed trip."""
+        serializer = TripRsvpSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+            set_trip_rsvp(trip, profile, serializer.validated_data["rsvp"])
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(TripDetailSerializer(_trip_detail_payload(trip, profile), context={"viewer": profile}).data)
+
+
+class TripCalendarSyncView(TripScopedApiView):
+    """POST: turn auto-sync on or off for an already-exported trip.
+
+    Only the toggle, never the initial connection: establishing one needs
+    Google's OAuth consent flow, which this surface does not build. When the
+    response says ``connected: false``, the client should send the user to the
+    web app to connect their calendar first - a 400 with the same status object
+    tells it exactly that.
+    """
+
+    @extend_schema(
+        request=TripCalendarSyncToggleSerializer,
+        responses={200: TripCalendarSyncStatusSerializer, 400: TripCalendarSyncStatusSerializer, 404: ErrorSerializer},
+    )
+    def post(self, request: Request, trip_slug: str) -> Response:
+        """Set auto-sync for the caller's export link on this trip."""
+        from urbanlens.dashboard.models.calendar_sync.model import TripCalendarLink
+
+        serializer = TripCalendarSyncToggleSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+        except TripError as exc:
+            return self.error_response(exc)
+
+        link = TripCalendarLink.objects.trip_level_link(trip, profile)
+        if link is None:
+            # No link yet: nothing to toggle. The status object tells the client
+            # whether the blocker is "no Google account" or "trip not exported".
+            status = _calendar_sync_status(trip, profile)
+            return Response(
+                {**TripCalendarSyncStatusSerializer(status).data, "error": "Add this trip to your Google Calendar from the web app first."},
+                status=400,
+            )
+
+        TripCalendarLink.objects.set_auto_sync(link.pk, serializer.validated_data["enabled"])
+        return Response(TripCalendarSyncStatusSerializer(_calendar_sync_status(trip, profile)).data)
+
+
+class TripMembersView(TripScopedApiView, PaginatedListMixin):
+    """The trip's roster: GET lists it, POST invites someone by username."""
+
+    @extend_schema(responses={200: TripMemberSerializer(many=True), 404: ErrorSerializer})
+    def get(self, request: Request, trip_slug: str) -> Response:
+        """Return one page of the trip's members, identities masked per viewer."""
+        try:
+            trip = self.trip(request, trip_slug)
+        except TripError as exc:
+            return self.error_response(exc)
+        return self.paginated_response(list_members(trip, request.user.profile), TripMemberSerializer, request)
+
+    @extend_schema(
+        request=TripMemberAddSerializer,
+        responses={201: TripMemberSerializer, 200: TripMemberSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer},
+    )
+    def post(self, request: Request, trip_slug: str) -> Response:
+        """Invite a user to the trip by username."""
+        serializer = TripMemberAddSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+            membership, created = add_member_by_username(trip, profile, serializer.validated_data["username"])
+        except TripError as exc:
+            return self.error_response(exc)
+
+        resolve_visible_identities(profile, [membership.profile])
+        # 200 on a re-invite: the membership already existed, so nothing was
+        # created and no second notification was sent.
+        return Response(TripMemberSerializer(membership).data, status=201 if created else 200)
+
+
+class TripMemberDetailView(TripScopedApiView):
+    """One member: PATCH their organizer flag, or DELETE them from the trip.
+
+    Addressed by profile slug - or uuid, which is the only handle a caller has
+    for a member whose identity their privacy settings mask. Either way the
+    lookup never leaves this trip's roster, so it cannot be used to discover
+    whether an arbitrary profile exists.
+    """
+
+    @extend_schema(
+        request=TripMemberOrganizerSerializer,
+        responses={200: TripMemberSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer},
+    )
+    def patch(self, request: Request, trip_slug: str, member_slug: str) -> Response:
+        """Set (not toggle) a member's organizer flag; creator only."""
+        serializer = TripMemberOrganizerSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+            require_trip_creator(trip, profile)
+            target = resolve_trip_member(trip, slug=member_slug)
+            membership = set_member_organizer(trip, profile, target, is_organizer=serializer.validated_data["is_organizer"])
+        except TripError as exc:
+            return self.error_response(exc)
+
+        resolve_visible_identities(profile, [membership.profile])
+        return Response(TripMemberSerializer(membership).data)
+
+    @extend_schema(responses={204: None, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
+    def delete(self, request: Request, trip_slug: str, member_slug: str) -> Response:
+        """Remove a member; members may remove themselves, else creator only."""
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+            remove_member(trip, profile, resolve_trip_member(trip, slug=member_slug))
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(status=204)
+
+
+class TripActivitiesView(TripScopedApiView, PaginatedListMixin):
+    """The trip's itinerary: GET lists it, POST adds a stop."""
+
+    @extend_schema(parameters=[TripActivityListQuerySerializer], responses={200: TripActivitySerializer(many=True), 404: ErrorSerializer})
+    def get(self, request: Request, trip_slug: str) -> Response:
+        """Return one page of the trip's activities."""
+        query = TripActivityListQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+        except TripError as exc:
+            return self.error_response(exc)
+        # include_legs is off by default: each leg can cost a live OSRM routing
+        # call, which a plain list fetch must never trigger.
+        rows = build_activity_rows(trip, profile, include_legs=query.validated_data["include_legs"])
+        return self.paginated_response(rows, TripActivitySerializer, request)
+
+    @extend_schema(
+        request=TripActivityCreateSerializer,
+        responses={201: TripActivitySerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer},
+    )
+    def post(self, request: Request, trip_slug: str) -> Response:
+        """Add one activity to the trip's itinerary."""
+        serializer = TripActivityCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+            activity = create_activity(
+                trip,
+                profile,
+                title=data.get("title"),
+                notes=data.get("notes"),
+                scheduled_at=data.get("scheduled_at"),
+                scheduled_end=data.get("scheduled_end"),
+                place=_activity_place_fields(data),
+                child_trip_uuid=data.get("child_trip_uuid"),
+                status=data.get("status"),
+                location_hidden=data.get("location_hidden"),
+            )
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(_serialize_one_activity(trip, profile, activity.id), status=201)
+
+
+def _serialize_one_activity(trip: Trip, profile: Profile, activity_id: int) -> dict:
+    """Serialize a single activity through the shared render rows.
+
+    Rebuilding the whole row set for one activity looks wasteful, but it is
+    what guarantees the single-activity payload carries the same index, vote
+    tallies, effective RSVP, ``can_manage`` and location-visibility decisions
+    the list endpoint would give - the index in particular is only meaningful
+    relative to its siblings.
+
+    Args:
+        trip: The trip owning the activity.
+        profile: The requesting profile.
+        activity_id: The activity to pick out.
+
+    Returns:
+        The serialized activity, or an empty dict when it is no longer present.
+    """
+    rows = build_activity_rows(trip, profile, include_legs=False)
+    row = next((item for item in rows if item["activity"].id == activity_id), None)
+    return TripActivitySerializer(row).data if row is not None else {}
+
+
+class TripActivityDetailView(TripScopedApiView):
+    """One activity: PATCH its fields, or DELETE it."""
+
+    @extend_schema(
+        request=TripActivityUpdateSerializer,
+        responses={200: TripActivitySerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer},
+    )
+    def patch(self, request: Request, trip_slug: str, activity_id: int) -> Response:
+        """Apply a partial update to one activity."""
+        serializer = TripActivityUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = request.user.profile
+
+        changes: dict[str, object] = {key: data[key] for key in ("title", "notes", "scheduled_at", "scheduled_end", "status", "location_hidden", "child_trip_uuid") if key in data}
+        if _has_place_fields(data):
+            changes["place"] = _activity_place_fields(data)
+
+        try:
+            trip = self.trip(request, trip_slug)
+            update_activity(trip, profile, activity_id, changes=changes)
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(_serialize_one_activity(trip, profile, activity_id))
+
+    @extend_schema(responses={204: None, 403: ErrorSerializer, 404: ErrorSerializer})
+    def delete(self, request: Request, trip_slug: str, activity_id: int) -> Response:
+        """Delete one activity from the trip."""
+        try:
+            delete_activity(self.trip(request, trip_slug), request.user.profile, activity_id)
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(status=204)
+
+
+class TripActivityPositionView(TripScopedApiView):
+    """POST: save a map-drag position override for one activity.
+
+    Requires the trip's edit-activities permission, and bounds-checks the
+    coordinates. Both were missing from the endpoint this mirrors, which is
+    now fixed on the internal surface too - see
+    ``services.trip_activities.set_activity_position``.
+    """
+
+    @extend_schema(request=TripActivityPositionSerializer, responses={200: TripActivityPositionSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
+    def post(self, request: Request, trip_slug: str, activity_id: int) -> Response:
+        """Persist the dragged coordinates and echo them back."""
+        serializer = TripActivityPositionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        try:
+            lat, lng = set_activity_position(
+                self.trip(request, trip_slug),
+                request.user.profile,
+                activity_id,
+                lat=serializer.validated_data["lat"],
+                lng=serializer.validated_data["lng"],
+            )
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response({"lat": lat, "lng": lng})
+
+
+class TripActivityVoteView(TripScopedApiView):
+    """PUT: set or clear the caller's vote on a proposed activity."""
+
+    @extend_schema(request=TripActivityVoteSerializer, responses={200: TripActivitySerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
+    def put(self, request: Request, trip_slug: str, activity_id: int) -> Response:
+        """Persist the caller's vote and return the refreshed activity."""
+        serializer = TripActivityVoteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+            set_activity_vote(trip, profile, activity_id, vote=serializer.validated_data["vote"])
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(_serialize_one_activity(trip, profile, activity_id))
+
+
+class TripActivityStatusView(TripScopedApiView):
+    """PUT: set an activity's status.
+
+    ``completed`` routes to ``complete_activity`` rather than a plain status
+    write, so completing through the API logs the same visit entries and date
+    snapping the web app's "mark complete" does.
+    """
+
+    @extend_schema(request=TripActivityStatusSerializer, responses={200: TripActivitySerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
+    def put(self, request: Request, trip_slug: str, activity_id: int) -> Response:
+        """Persist the requested status and return the refreshed activity."""
+        serializer = TripActivityStatusSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        status = serializer.validated_data["status"]
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+            if status == TripActivity.STATUS_COMPLETED:
+                complete_activity(trip, profile, activity_id)
+            else:
+                set_activity_status(trip, profile, activity_id, status=status)
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(_serialize_one_activity(trip, profile, activity_id))
+
+
+class TripActivityRsvpView(TripScopedApiView):
+    """PUT: set or clear the caller's RSVP override for one activity."""
+
+    @extend_schema(request=TripActivityRsvpSerializer, responses={200: TripActivitySerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
+    def put(self, request: Request, trip_slug: str, activity_id: int) -> Response:
+        """Persist the override (null clears it) and return the refreshed activity."""
+        serializer = TripActivityRsvpSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+            set_activity_rsvp(trip, profile, activity_id, rsvp=serializer.validated_data["rsvp"])
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(_serialize_one_activity(trip, profile, activity_id))
+
+
+class TripCommentsView(TripScopedApiView, PaginatedListMixin):
+    """The trip's comments: GET the visible tree, POST a new comment."""
+
+    @extend_schema(responses={200: TripCommentSerializer(many=True), 404: ErrorSerializer})
+    def get(self, request: Request, trip_slug: str) -> Response:
+        """Return one page of top-level comments, replies nested inline."""
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+        except TripError as exc:
+            return self.error_response(exc)
+
+        rows = build_comment_tree(trip, profile)
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(rows, request, view=self)
+        return paginator.get_paginated_response(TripCommentSerializer(page, many=True, context={"viewer": profile}).data)
+
+    @extend_schema(request=TripCommentCreateSerializer, responses={201: TripCommentSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
+    def post(self, request: Request, trip_slug: str) -> Response:
+        """Post a comment (or a reply) on the trip."""
+        serializer = TripCommentCreateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+            comment = add_comment(trip, profile, text=data["text"], parent_id=data.get("parent_id"))
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(_serialize_one_comment(trip, profile, comment.id), status=201)
+
+
+def _serialize_one_comment(trip: Trip, profile: Profile, comment_id: int) -> dict:
+    """Serialize a single comment through the shared visible-comment tree.
+
+    Going back through ``build_comment_tree`` rather than serializing the model
+    directly is what applies the mention rendering, the author masking and the
+    visibility gates - a comment serialized outside the tree would carry raw
+    text and an unmasked author.
+
+    Args:
+        trip: The trip owning the comment.
+        profile: The requesting profile.
+        comment_id: The comment to pick out (top-level or a reply).
+
+    Returns:
+        The serialized comment, or an empty dict when it isn't visible.
+    """
+    rows = build_comment_tree(trip, profile)
+    for row in rows:
+        if row["comment"].id == comment_id:
+            return TripCommentSerializer(row, context={"viewer": profile}).data
+        for reply in row.get("replies", []):
+            if reply["comment"].id == comment_id:
+                return TripCommentSerializer(reply, context={"viewer": profile}).data
+    return {}
+
+
+class TripCommentDetailView(TripScopedApiView):
+    """DELETE: remove a comment (its author, or the trip's creator)."""
+
+    @extend_schema(responses={204: None, 403: ErrorSerializer, 404: ErrorSerializer})
+    def delete(self, request: Request, trip_slug: str, comment_id: int) -> Response:
+        """Delete one comment and any markup map attached to it."""
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+            delete_comment(trip, profile, get_comment(trip, comment_id))
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(status=204)
+
+
+class TripCommentReactionsView(TripScopedApiView):
+    """PUT: add or remove one of the caller's emoji reactions on a comment."""
+
+    @extend_schema(
+        request=TripCommentReactionSetSerializer,
+        responses={200: TripCommentSerializer, 400: ErrorSerializer, 404: ErrorSerializer},
+    )
+    def put(self, request: Request, trip_slug: str, comment_id: int) -> Response:
+        """Persist the target reaction state and return the refreshed comment."""
+        serializer = TripCommentReactionSetSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        profile = request.user.profile
+        try:
+            trip = self.trip(request, trip_slug)
+            comment = get_comment(trip, comment_id)
+            set_comment_reaction(comment, profile, data["emoji"], reacted=data["reacted"])
+        except TripError as exc:
+            return self.error_response(exc)
+        return Response(_serialize_one_comment(trip, profile, comment_id))

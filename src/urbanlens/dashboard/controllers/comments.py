@@ -29,6 +29,7 @@ from urbanlens.dashboard.services.map_snapshot import (
 from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
+from urbanlens.dashboard.services.trip_comments import ALLOWED_COMMENT_EMOJIS
 from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
 
 # Re-exported so existing imports (e.g. tests) keep resolving from this module.
@@ -36,7 +37,10 @@ __all__ = ["_parse_map_data", "_sanitize_markup_color", "_sanitize_markup_shapes
 
 logger = logging.getLogger(__name__)
 
-_ALLOWED_EMOJIS = {"👍", "👎", "❤️", "😂", "😮", "😢", "🔥", "🏚️"}
+#: Canonical in ``services.trip_comments`` so the external API's serializers can
+#: bound their ``emoji`` field without importing a controller. Aliased here
+#: because pin/wiki comments use the same set.
+_ALLOWED_EMOJIS = ALLOWED_COMMENT_EMOJIS
 _COMMENTS_PAGE_SIZE = 8
 
 
@@ -484,27 +488,23 @@ class TripCommentReactionView(LoginRequiredMixin, View):
     """POST /trips/<slug>/comments/<int>/react/  - toggle reaction on a TripComment."""
 
     def post(self, request, trip_slug, comment_id):
-        from urbanlens.dashboard.models.trips.model import Trip, TripComment
+        from urbanlens.dashboard.services.trip_access import get_trip_for_viewer
+        from urbanlens.dashboard.services.trip_comments import get_comment, set_comment_reaction
+        from urbanlens.dashboard.services.trip_errors import TripError, TripNotFoundError, TripPermissionError
 
         profile = _profile(request)
-        trip = get_object_or_404(Trip, slug=trip_slug)
-        if not (trip.creator == profile or trip.profiles.filter(pk=profile.pk).exists()):
-            return HttpResponse("Forbidden", status=403)
-        comment = get_object_or_404(TripComment, id=comment_id, trip=trip)
-        # Same gate the panel render applies (and CommentReactionView enforces
-        # for pin/wiki comments): a comment the author's comment_visibility
-        # hides from this viewer can't be discovered or reacted to by id.
-        if comment.author is not None and not profile.can_view_comments_from(comment.author):
-            raise Http404
-        emoji = request.POST.get("emoji", "")
-        if emoji not in _ALLOWED_EMOJIS:
-            return HttpResponse("Invalid emoji.", status=400)
-        reaction = Reaction.objects.existing(profile, emoji, trip_comment=comment)
-        if reaction:
-            reaction.delete()
-        else:
-            Reaction.objects.create(profile=profile, emoji=emoji, trip_comment=comment)
-            _notify_reaction(profile, comment)
+        try:
+            trip = get_trip_for_viewer(trip_slug, profile)
+            comment = get_comment(trip, comment_id)
+            emoji = request.POST.get("emoji", "")
+            # The panel keeps its toggle UX; the service takes an explicit target
+            # state so a retried API call can't silently undo itself.
+            already = Reaction.objects.existing(profile, emoji, trip_comment=comment) is not None if emoji in ALLOWED_COMMENT_EMOJIS else False
+            set_comment_reaction(comment, profile, emoji, reacted=not already)
+        except TripNotFoundError as exc:
+            raise Http404(exc.message) from exc
+        except TripError as exc:
+            return HttpResponse(exc.message, status=403 if isinstance(exc, TripPermissionError) else 400)
         return _render_trip_reaction_row(request, comment, profile)
 
 
