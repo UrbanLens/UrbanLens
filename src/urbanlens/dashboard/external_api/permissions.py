@@ -18,9 +18,24 @@ from typing import TYPE_CHECKING
 
 from rest_framework.permissions import BasePermission
 
+from urbanlens.dashboard.models.account.model import ApiKeyScope
+
 if TYPE_CHECKING:
     from rest_framework.request import Request
     from rest_framework.views import APIView
+
+#: Scopes a PAT-style ``ApiKey`` may never exercise, only a user-consented
+#: OAuth2 client.
+#:
+#: Direct messages are end-to-end encrypted: reading or sending them requires
+#: per-device key material that a long-lived, server-side credential model
+#: simply does not have, so a PAT could at best reach ciphertext envelopes it
+#: cannot open. More importantly, an API key is a bearer secret that tends to
+#: end up in CI configs, scripts and screenshots - a leaked one must not become
+#: a path into someone's DMs. OAuth2 tokens are bound to a registered client,
+#: expire in an hour, and are minted only after a consent screen that names
+#: this capability explicitly.
+OAUTH2_ONLY_SCOPES = frozenset({ApiKeyScope.MESSAGES_READ, ApiKeyScope.MESSAGES_WRITE})
 
 
 class HasApiKeyScope(BasePermission):
@@ -44,4 +59,10 @@ class HasApiKeyScope(BasePermission):
         # already established by OAuth2Authentication; only scopes remain.
         if hasattr(credential, "allow_scopes"):
             return credential.allow_scopes(list(required_scopes))
+        # PAT-style ApiKey. Refuse the OAuth2-only scopes even if one somehow
+        # carries them (hand-edited row, a future scope picker with a bug):
+        # the restriction is about the credential *kind*, so it is enforced
+        # here rather than left to whatever wrote the grant.
+        if OAUTH2_ONLY_SCOPES & set(required_scopes):
+            return False
         return set(required_scopes).issubset(set(getattr(credential, "scopes", ())))

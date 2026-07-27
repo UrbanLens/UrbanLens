@@ -17,6 +17,8 @@ app_name = "external_api"
 
 urlpatterns = [
     path("whoami/", views.WhoAmIView.as_view(), name="whoami"),
+    path("auth/session/", views.AuthSessionView.as_view(), name="auth.session"),
+    path("settings/", views.AccountSettingsView.as_view(), name="settings"),
     path("pins/", views.PinsView.as_view(), name="pins"),
     path("pins/deleted/", views.PinTombstonesView.as_view(), name="pins.deleted"),
     # Must stay after the two literal "pins/..." paths above - Django matches

@@ -16,12 +16,14 @@ from django.urls import reverse
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from urbanlens.dashboard.external_api.authentication import ApiKeyAuthentication
 from urbanlens.dashboard.external_api.permissions import HasApiKeyScope
 from urbanlens.dashboard.external_api.serializers import (
+    AuthSessionSerializer,
     ErrorSerializer,
     PinCreateResponseSerializer,
     PinCreateSerializer,
@@ -33,11 +35,13 @@ from urbanlens.dashboard.external_api.serializers import (
     PinUpdateSerializer,
     PushDeviceRegisterSerializer,
     PushDeviceResponseSerializer,
+    SettingsPatchSerializer,
+    SettingsSerializer,
     TombstoneSyncQuerySerializer,
     TombstoneSyncResponseSerializer,
     WhoAmISerializer,
 )
-from urbanlens.dashboard.external_api.throttling import ApiKeyRateThrottle
+from urbanlens.dashboard.external_api.throttling import TIER_READ, ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin
@@ -47,6 +51,7 @@ from urbanlens.dashboard.services.pin_detail import build_pin_detail
 from urbanlens.dashboard.services.pin_edit import PinHasChildrenError, PinReparentError, delete_pin, move_pin_to_coordinates, reparent_pin
 from urbanlens.dashboard.services.pin_suggestions import LocationHit, attach_suggestion_photos, ingest_location_hits
 from urbanlens.dashboard.services.pin_sync import InvalidSyncCursorError, StaleDeletedSinceError, sync_pins_page, sync_tombstones_page
+from urbanlens.dashboard.services.profile_settings import SettingsValidationError, apply_settings_patch, read_settings
 from urbanlens.dashboard.services.push import PushRegistrationError, register_device, unregister_device
 from urbanlens.dashboard.services.visits import visit_logging_allowed
 
@@ -78,13 +83,33 @@ class ExternalApiView(APIView):
 
     authentication_classes = [ApiKeyAuthentication, OAuth2Authentication]
     permission_classes = [HasApiKeyScope]
-    throttle_classes = [ApiKeyRateThrottle]
+    #: All three apply together: the burst cap counts every request, while the
+    #: read and write caps each count only their own tier (see ``throttling``).
+    throttle_classes = [ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle]
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {}
 
     @property
     def required_scopes(self) -> frozenset[ApiKeyScope]:
         """The scopes the current request's HTTP method requires."""
         return self.required_scopes_by_method.get(self.request.method or "", frozenset())
+
+
+class UnscopedExternalApiView(ExternalApiView):
+    """Base for the rare endpoint that needs authentication but no particular scope.
+
+    The one deliberate exception to ``HasApiKeyScope``'s fail-closed default,
+    and reserved for endpoints that describe *the credential itself* rather
+    than any of the user's data. Requiring a scope there would be circular: a
+    client asks what it may do precisely because it doesn't yet know, and a
+    credential can always be told its own shape without that revealing anything
+    it couldn't already discover by probing.
+
+    Do not use this as a shortcut for an endpoint that touches user data - such
+    an endpoint needs a scope, and inheriting from here would silently grant it
+    to every credential.
+    """
+
+    permission_classes = [IsAuthenticated]
 
 
 class WhoAmIView(ExternalApiView):
@@ -454,6 +479,103 @@ class PushDevicesView(ExternalApiView):
             return Response({"error": str(exc)}, status=400)
 
         return Response(PushDeviceResponseSerializer(device).data, status=201)
+
+
+class AccountSettingsView(ExternalApiView):
+    """GET the caller's account preferences; PATCH to change them.
+
+    Named for the account rather than matching ``controllers.settings.SettingsView``
+    (the site's own multi-form settings page) - the two are unrelated and share
+    only the underlying ``Profile`` fields, via
+    ``services.profile_settings``.
+
+    PATCH is partial by construction: only submitted keys are touched, so a
+    client syncing one toggle never overwrites preferences changed on the web
+    in the meantime. The response is always the full post-save document, since
+    ``Profile.save()`` may coerce community-gated fields and the client needs
+    to see what it actually ended up with.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.SETTINGS_READ}),
+        "PATCH": frozenset({ApiKeyScope.SETTINGS_WRITE}),
+    }
+
+    @extend_schema(responses={200: SettingsSerializer})
+    def get(self, request: Request) -> Response:
+        """Return the caller's full settings document."""
+        return Response(SettingsSerializer(read_settings(request.user.profile, user=request.user)).data)
+
+    @extend_schema(request=SettingsPatchSerializer, responses={200: SettingsSerializer, 400: ErrorSerializer})
+    def patch(self, request: Request) -> Response:
+        """Apply a partial settings update and return the resulting document."""
+        serializer = SettingsPatchSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        profile = request.user.profile
+
+        try:
+            touched = apply_settings_patch(profile, serializer.validated_data, user=request.user)
+        except SettingsValidationError as exc:
+            # Per-field, unlike the internal view's silent no-op: a sync client
+            # that cannot tell a rejected write from an accepted one will retry
+            # it forever.
+            return Response({"error": "Some settings could not be changed.", "fields": exc.errors}, status=400)
+
+        if touched:
+            with transaction.atomic():
+                profile.save(update_fields=[*touched, "updated"])
+
+        # Re-read from the saved instance rather than echoing the submission:
+        # Profile.save() forces the community-gated visibility and wiki-sync
+        # fields off when community_enabled is False, and the client must be
+        # told the coerced values, not the ones it asked for.
+        return Response(SettingsSerializer(read_settings(profile, user=request.user)).data)
+
+
+class AuthSessionView(UnscopedExternalApiView):
+    """GET: what the calling credential is and what it may do.
+
+    Deliberately scope-free (see :class:`UnscopedExternalApiView`) - a client
+    calls this to discover its own grant, so gating it behind a scope would be
+    circular. It reveals nothing the caller couldn't establish by probing
+    endpoints and collecting 403s; it just saves it the trouble, and lets it
+    schedule a token refresh before ``expires_at`` instead of after a failure.
+    """
+
+    #: This is a read despite declaring no scopes, which request_tier would
+    #: otherwise conservatively classify as a write.
+    throttle_tier_by_method: ClassVar[dict[str, str]] = {"GET": TIER_READ}
+
+    @extend_schema(responses={200: AuthSessionSerializer})
+    def get(self, request: Request) -> Response:
+        """Describe the credential this request authenticated with."""
+        credential = request.auth
+        # Same discriminator permissions.py uses: only an OAuth2 AccessToken
+        # carries allow_scopes. Its `scopes` attribute is a {name: description}
+        # dict, so the granted list comes from the raw `scope` string instead.
+        if hasattr(credential, "allow_scopes"):
+            application = credential.application
+            payload = {
+                "credential_type": "oauth2",
+                "scopes": sorted(credential.scope.split()),
+                "expires_at": credential.expires,
+                "issued_at": credential.created,
+                "client_id": application.client_id if application else None,
+                "name": application.name if application else None,
+            }
+        else:
+            payload = {
+                "credential_type": "api_key",
+                "scopes": sorted(credential.scopes or []),
+                # API keys do not expire - they are revoked, and a revoked one
+                # never authenticates in the first place.
+                "expires_at": None,
+                "issued_at": credential.created,
+                "client_id": None,
+                "name": credential.name,
+            }
+        payload["user_uuid"] = request.user.profile.uuid
+        return Response(AuthSessionSerializer(payload).data)
 
 
 class PushDeviceDetailView(ExternalApiView):

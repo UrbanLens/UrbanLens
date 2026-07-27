@@ -277,8 +277,20 @@ Inbound-facing, unlike everything else in "Rate limiting and cost tracking" abov
   added to one caller must go in that shared function so it automatically covers the other.
 - `external_api/` never imports from - or gets imported by - the internal viewsets under
   `models/*/viewset.py`. It has its own auth (`ApiKeyAuthentication`, bearer token, never added to
-  `DEFAULT_AUTHENTICATION_CLASSES`) and its own throttle scope (`external_api_key`, per-key rather
-  than per-user).
+  `DEFAULT_AUTHENTICATION_CLASSES`) and its own throttle scopes (`external_api_read`,
+  `external_api_write`, `external_api_burst` - per-credential rather than per-user). A request's
+  tier is derived from the view's own `required_scopes_by_method` declaration: any required scope
+  ending in `:write`/`:manage` makes it a write, and a method with no declaration is treated as a
+  write so a forgotten declaration fails into the tighter bucket. The burst cap applies to every
+  request on top of whichever hourly cap matched.
+- The external API's scope vocabulary lives in `ApiKeyScope` (`models/account/model.py`) and is
+  mirrored verbatim into `OAUTH2_PROVIDER["SCOPES"]`; settings load before the app registry, so
+  they cannot import the model, and `test_external_api_scopes` guards the mirror against drift.
+  `_default_api_key_scopes()` deliberately stays at the original four values - widening it (or
+  backfilling existing rows) would silently expand every already-issued key's grant to messages,
+  photos and safety check-ins that its owner never consented to. New scopes are opt-in, reachable
+  via OAuth2 where the consent screen enumerates them. `permissions.OAUTH2_ONLY_SCOPES` goes
+  further and refuses the `messages:*` scopes to PAT-style keys outright.
 
 ## Windows development environment quirks
 

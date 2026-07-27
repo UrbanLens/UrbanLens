@@ -21,12 +21,11 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand
 from oauth2_provider.models import get_application_model
 
-DEFAULT_CLIENT_ID = "urbanlens-mobile"
-DEFAULT_NAME = "UrbanLens Mobile"
-DEFAULT_REDIRECT_URIS = (
-    "urbanlens://oauth/callback",
-    "http://127.0.0.1/callback",
-)
+from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID, FIRST_PARTY_CLIENT_NAME, FIRST_PARTY_REDIRECT_URIS
+
+DEFAULT_CLIENT_ID = FIRST_PARTY_CLIENT_ID
+DEFAULT_NAME = FIRST_PARTY_CLIENT_NAME
+DEFAULT_REDIRECT_URIS = FIRST_PARTY_REDIRECT_URIS
 
 
 class Command(BaseCommand):
@@ -58,6 +57,14 @@ class Command(BaseCommand):
                 # A public client's secret is never used; blank it so nothing
                 # ever mistakes this registration for a confidential client.
                 "client_secret": "",
+                # Load-bearing, not cosmetic. ClientSecretField.pre_save hashes
+                # the secret whenever this is True (its default), and hashing ""
+                # means identify_hasher("") raises ValueError, the except branch
+                # runs, and make_password("") is stored - a *valid* hash of the
+                # empty string, which a confidential-client check would then
+                # accept as a correct secret. False stores "" verbatim, which no
+                # presented secret can ever match.
+                "hash_client_secret": False,
                 "user": None,
                 "skip_authorization": False,
             },

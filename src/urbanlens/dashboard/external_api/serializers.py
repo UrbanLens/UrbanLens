@@ -18,9 +18,19 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
 from rest_framework import serializers
 
+from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
 from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS
+from urbanlens.dashboard.models.profile.meta import (
+    DistanceUnit,
+    GuidanceLevel,
+    MapCenterMode,
+    MapViewChoice,
+    SyncAliasesDirection,
+    ThemeChoice,
+    VisibilityChoice,
+)
 from urbanlens.dashboard.models.push_device import PushTransport
 from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
 
@@ -362,3 +372,228 @@ class PushDeviceResponseSerializer(serializers.Serializer):
     transport = serializers.CharField(read_only=True)
     name = serializers.CharField(read_only=True)
     created = serializers.DateTimeField(read_only=True)
+
+
+class SettingsFeaturesSerializer(serializers.Serializer):
+    """Which feature-gated settings groups the caller's account can use (schema-only).
+
+    A client uses this to hide the AI and Places cards outright rather than
+    offering fields that a PATCH would reject.
+    """
+
+    ai = serializers.BooleanField(read_only=True)
+    places = serializers.BooleanField(read_only=True)
+
+
+class SettingsSerializer(serializers.Serializer):
+    """The full account-preferences document served by ``GET settings/``.
+
+    Every field is spelled out by hand rather than generated from ``Profile``
+    by a ``ModelSerializer``. That is the whole point: ``Profile`` also carries
+    location history, onboarding state, subscription linkage and other things
+    an external client has no business reading, and a model-derived serializer
+    would leak each new such field the moment someone added it. An explicit
+    list fails closed - a new preference is invisible here until deliberately
+    added to ``services.profile_settings.SETTINGS_FIELDS`` and to this class.
+
+    Fields mirror that allowlist exactly; the trailing read-only keys are
+    computed context (see ``services.profile_settings.read_settings``).
+    """
+
+    # Privacy visibilities.
+    profile_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, read_only=True)
+    comment_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, read_only=True)
+    friend_request_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, read_only=True)
+    photo_upload_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, read_only=True)
+    viewer_photo_filter = serializers.ChoiceField(choices=VisibilityChoice.choices, read_only=True)
+    trip_pin_location_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, read_only=True)
+    contact_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, read_only=True)
+    direct_message_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, read_only=True)
+    common_pins_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, read_only=True)
+    # Direct messages.
+    online_status_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, read_only=True)
+    read_receipt_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, read_only=True)
+    typing_indicator_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, read_only=True)
+    direct_message_delete_after = serializers.ChoiceField(choices=MessageRetentionChoice.choices, read_only=True)
+    allow_friend_recommendations = serializers.BooleanField(read_only=True)
+    # Style.
+    theme_mode = serializers.ChoiceField(choices=ThemeChoice.choices, read_only=True)
+    map_dark_mode = serializers.ChoiceField(choices=ThemeChoice.choices, read_only=True)
+    guidance_level = serializers.ChoiceField(choices=GuidanceLevel.choices, read_only=True)
+    distance_units = serializers.ChoiceField(choices=DistanceUnit.choices, read_only=True, allow_null=True)
+    # Map display.
+    default_map_view = serializers.ChoiceField(choices=MapViewChoice.choices, read_only=True)
+    cluster_radius = serializers.IntegerField(read_only=True, allow_null=True)
+    use_pin_cache = serializers.BooleanField(read_only=True)
+    suggest_pin_restructure = serializers.BooleanField(read_only=True)
+    # Map center.
+    map_center_mode = serializers.ChoiceField(choices=MapCenterMode.choices, read_only=True)
+    map_custom_latitude = serializers.DecimalField(max_digits=9, decimal_places=6, read_only=True, allow_null=True)
+    map_custom_longitude = serializers.DecimalField(max_digits=9, decimal_places=6, read_only=True, allow_null=True)
+    map_default_zoom = serializers.IntegerField(read_only=True)
+    # Markup defaults.
+    markup_fill_color = serializers.CharField(max_length=20, read_only=True)
+    markup_fill_opacity = serializers.IntegerField(read_only=True)
+    markup_border_color = serializers.CharField(max_length=20, read_only=True, allow_blank=True)
+    markup_border_opacity = serializers.IntegerField(read_only=True)
+    # Places layer (feature-gated).
+    places_google_enabled = serializers.BooleanField(read_only=True)
+    places_nps_enabled = serializers.BooleanField(read_only=True)
+    places_wikipedia_enabled = serializers.BooleanField(read_only=True)
+    # AI (feature-gated).
+    ai_enabled = serializers.BooleanField(read_only=True)
+    ai_label_categories = serializers.BooleanField(read_only=True)
+    ai_label_tags = serializers.BooleanField(read_only=True)
+    ai_label_statuses = serializers.BooleanField(read_only=True)
+    # Keyword tagging.
+    keyword_tagging_enabled = serializers.BooleanField(read_only=True)
+    keyword_label_categories = serializers.BooleanField(read_only=True)
+    keyword_label_tags = serializers.BooleanField(read_only=True)
+    keyword_label_statuses = serializers.BooleanField(read_only=True)
+    # History.
+    track_pin_visits = serializers.BooleanField(read_only=True)
+    track_routes = serializers.BooleanField(read_only=True)
+    track_geolocation = serializers.BooleanField(read_only=True)
+    generate_photo_keywords = serializers.BooleanField(read_only=True)
+    # Community.
+    community_enabled = serializers.BooleanField(read_only=True)
+    show_wiki_cover_photos = serializers.BooleanField(read_only=True)
+    auto_create_pin_article_from_wikipedia = serializers.BooleanField(read_only=True)
+    # Pin suggestions.
+    pin_suggestions_enabled = serializers.BooleanField(read_only=True)
+    suggest_public_pins = serializers.BooleanField(read_only=True)
+    suggest_pins_from_photos = serializers.BooleanField(read_only=True)
+    suggest_pins_from_external_apis = serializers.BooleanField(read_only=True)
+    # Wiki sync.
+    sync_rating_to_wiki = serializers.BooleanField(read_only=True)
+    sync_vulnerability_to_wiki = serializers.BooleanField(read_only=True)
+    sync_priority_to_wiki = serializers.BooleanField(read_only=True)
+    sync_danger_to_wiki = serializers.BooleanField(read_only=True)
+    sync_aliases = serializers.ChoiceField(choices=SyncAliasesDirection.choices, read_only=True)
+    # External APIs.
+    external_apis_enabled = serializers.BooleanField(read_only=True)
+    # Storage downscaling.
+    image_downscale_max_dimension = serializers.IntegerField(read_only=True, allow_null=True)
+    video_downscale_max_height = serializers.IntegerField(read_only=True, allow_null=True)
+    # Read-only computed context.
+    updated = serializers.DateTimeField(read_only=True)
+    #: The unit actually in effect, with the profile's location-inferred
+    #: fallback applied - ``distance_units`` itself may be null.
+    effective_distance_units = serializers.CharField(read_only=True)
+    features = SettingsFeaturesSerializer(read_only=True)
+    allowed_image_dimensions = serializers.ListField(child=serializers.IntegerField(), read_only=True)
+    allowed_video_heights = serializers.ListField(child=serializers.IntegerField(), read_only=True)
+
+
+class SettingsPatchSerializer(serializers.Serializer):
+    """Validates a partial account-preferences update from ``PATCH settings/``.
+
+    Every field is ``required=False`` **and carries no default**, deliberately:
+    presence in ``validated_data`` is what distinguishes "the client did not
+    submit this field" from "the client set it to null/false". A default would
+    collapse those two cases and make every PATCH a full overwrite, so a client
+    syncing one toggle would silently reset everything else.
+
+    Mirrors :class:`SettingsSerializer` field for field, minus the computed
+    read-only keys.
+    """
+
+    # Privacy visibilities.
+    profile_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, required=False)
+    comment_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, required=False)
+    friend_request_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, required=False)
+    photo_upload_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, required=False)
+    viewer_photo_filter = serializers.ChoiceField(choices=VisibilityChoice.choices, required=False)
+    trip_pin_location_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, required=False)
+    contact_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, required=False)
+    direct_message_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, required=False)
+    common_pins_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, required=False)
+    # Direct messages.
+    online_status_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, required=False)
+    read_receipt_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, required=False)
+    typing_indicator_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, required=False)
+    direct_message_delete_after = serializers.ChoiceField(choices=MessageRetentionChoice.choices, required=False)
+    allow_friend_recommendations = serializers.BooleanField(required=False)
+    # Style.
+    theme_mode = serializers.ChoiceField(choices=ThemeChoice.choices, required=False)
+    map_dark_mode = serializers.ChoiceField(choices=ThemeChoice.choices, required=False)
+    guidance_level = serializers.ChoiceField(choices=GuidanceLevel.choices, required=False)
+    #: Null resets to "infer from my location" - see Profile.effective_distance_units.
+    distance_units = serializers.ChoiceField(choices=DistanceUnit.choices, required=False, allow_null=True)
+    # Map display.
+    default_map_view = serializers.ChoiceField(choices=MapViewChoice.choices, required=False)
+    cluster_radius = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=1000)
+    use_pin_cache = serializers.BooleanField(required=False)
+    suggest_pin_restructure = serializers.BooleanField(required=False)
+    # Map center.
+    map_center_mode = serializers.ChoiceField(choices=MapCenterMode.choices, required=False)
+    map_custom_latitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True, min_value=-90, max_value=90)
+    map_custom_longitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True, min_value=-180, max_value=180)
+    map_default_zoom = serializers.IntegerField(required=False, min_value=0, max_value=22)
+    # Markup defaults.
+    markup_fill_color = serializers.CharField(max_length=20, required=False)
+    markup_fill_opacity = serializers.IntegerField(required=False, min_value=0, max_value=100)
+    markup_border_color = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    markup_border_opacity = serializers.IntegerField(required=False, min_value=0, max_value=100)
+    # Places layer (feature-gated - rejected with 400 while the feature is off).
+    places_google_enabled = serializers.BooleanField(required=False)
+    places_nps_enabled = serializers.BooleanField(required=False)
+    places_wikipedia_enabled = serializers.BooleanField(required=False)
+    # AI (feature-gated - rejected with 400 while the feature is off).
+    ai_enabled = serializers.BooleanField(required=False)
+    ai_label_categories = serializers.BooleanField(required=False)
+    ai_label_tags = serializers.BooleanField(required=False)
+    ai_label_statuses = serializers.BooleanField(required=False)
+    # Keyword tagging.
+    keyword_tagging_enabled = serializers.BooleanField(required=False)
+    keyword_label_categories = serializers.BooleanField(required=False)
+    keyword_label_tags = serializers.BooleanField(required=False)
+    keyword_label_statuses = serializers.BooleanField(required=False)
+    # History.
+    track_pin_visits = serializers.BooleanField(required=False)
+    track_routes = serializers.BooleanField(required=False)
+    track_geolocation = serializers.BooleanField(required=False)
+    generate_photo_keywords = serializers.BooleanField(required=False)
+    # Community. Turning community_enabled off coerces the visibility and
+    # wiki-sync fields in Profile.save(); the response reports the result.
+    community_enabled = serializers.BooleanField(required=False)
+    show_wiki_cover_photos = serializers.BooleanField(required=False)
+    auto_create_pin_article_from_wikipedia = serializers.BooleanField(required=False)
+    # Pin suggestions.
+    pin_suggestions_enabled = serializers.BooleanField(required=False)
+    suggest_public_pins = serializers.BooleanField(required=False)
+    suggest_pins_from_photos = serializers.BooleanField(required=False)
+    suggest_pins_from_external_apis = serializers.BooleanField(required=False)
+    # Wiki sync.
+    sync_rating_to_wiki = serializers.BooleanField(required=False)
+    sync_vulnerability_to_wiki = serializers.BooleanField(required=False)
+    sync_priority_to_wiki = serializers.BooleanField(required=False)
+    sync_danger_to_wiki = serializers.BooleanField(required=False)
+    sync_aliases = serializers.ChoiceField(choices=SyncAliasesDirection.choices, required=False)
+    # External APIs.
+    external_apis_enabled = serializers.BooleanField(required=False)
+    #: Null means "no downscaling preference"; any value is checked against the
+    #: caller's plan entitlement in services.profile_settings.
+    image_downscale_max_dimension = serializers.IntegerField(required=False, allow_null=True)
+    video_downscale_max_height = serializers.IntegerField(required=False, allow_null=True)
+
+
+class AuthSessionSerializer(serializers.Serializer):
+    """Describes the credential the request authenticated with (schema-only).
+
+    Lets a client answer "what am I actually allowed to do?" without probing
+    endpoints and collecting 403s - it can hide unreachable UI up front, and
+    schedule a refresh before ``expires_at``.
+    """
+
+    #: Either "api_key" (PAT-style) or "oauth2" (an access token).
+    credential_type = serializers.CharField(read_only=True)
+    scopes = serializers.ListField(child=serializers.CharField(), read_only=True)
+    #: Null for API keys, which do not expire - they are revoked instead.
+    expires_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    issued_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    #: Null for API keys, which belong to no registered OAuth2 client.
+    client_id = serializers.CharField(read_only=True, allow_null=True)
+    #: The key's user-facing label, or the OAuth2 application's display name.
+    name = serializers.CharField(read_only=True, allow_null=True)
+    user_uuid = serializers.UUIDField(read_only=True)

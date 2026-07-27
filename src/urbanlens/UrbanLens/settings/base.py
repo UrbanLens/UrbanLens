@@ -555,10 +555,16 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "60/minute",
         "user": "600/minute",
-        # external_api.throttling.ApiKeyRateThrottle - per API key, not per user,
-        # so one connected app's misbehavior can't burn through a budget shared
-        # with a user's other keys.
-        "external_api_key": "120/hour",
+        # external_api.throttling - per credential, not per user, so one
+        # connected app's misbehavior can't burn through a budget shared with a
+        # user's other keys. Split by tier because an interactive sync client
+        # reads far more than it writes: a flat cap generous enough for a full
+        # resync would also be generous enough for a runaway write loop.
+        # The burst cap applies on top of both tiers, bounding a stampede
+        # without lowering the hourly ceiling.
+        "external_api_read": "1000/hour",
+        "external_api_write": "300/hour",
+        "external_api_burst": "60/minute",
     },
     # Only consulted by views whose schema is actually generated - the
     # preprocessing hook in external_api.schema limits that to the external API.
@@ -587,12 +593,44 @@ OAUTH2_PROVIDER = {
     # RFC 8252 loopback (any port - django-oauth-toolkit matches loopback IPs
     # port-insensitively) on desktop. "https" stays for any future web client.
     "ALLOWED_REDIRECT_URI_SCHEMES": ["https", "http", "urbanlens"],
+    # Mirrors dashboard.models.account.model.ApiKeyScope verbatim (value ->
+    # label). The duplication is unavoidable - settings load before the app
+    # registry, so this module cannot import a model - and
+    # test_external_api_scopes asserts the two stay identical.
     "SCOPES": {
         "profile:read": "Read your profile UUID",
+        "settings:read": "Read your account preferences",
+        "settings:write": "Change your account preferences",
         "pins:read": "Read your pins (including deletions, for sync)",
-        "pins:write": "Create or suggest pins on your behalf",
+        "pins:write": "Create, edit, and delete your pins",
+        "lists:read": "Read your pin lists and saved filters",
+        "lists:write": "Create and modify your pin lists and saved filters",
+        "labels:read": "Read your labels",
+        "labels:write": "Create, modify, and merge your labels",
+        "visits:read": "Read your visit history",
+        "visits:write": "Log visits on your behalf",
+        "photos:read": "Read your photos, memories journal, and photo suggestions",
+        "photos:write": "Upload, label, file, vote on, and delete your photos",
+        "media:read": "Fetch the actual image/video/document files you may see",
+        "wiki:read": "Read community wikis you can see",
+        "wiki:write": "Edit community wikis on your behalf",
+        "trips:read": "Read your trips",
+        "trips:write": "Create and edit your trips",
+        "social:read": "Read your friends list and friend requests",
+        "social:write": "Send, accept, and manage friend relationships on your behalf",
+        "safety:read": "Read your safety check-ins and contacts",
+        "safety:write": "Start, update, and clear safety check-ins",
+        "messages:read": "Read your encrypted messages and conversation list",
+        "messages:write": "Send messages and manage your encryption keys",
+        "notifications:read": "Read your notifications and delivery preferences",
+        "notifications:write": "Mark notifications read and change delivery preferences",
+        "search:read": "Search your pins, wikis, and photos",
         "push:manage": "Register and remove this device's push notifications",
     },
+    # Deliberately NOT the full SCOPES list: a token that asked for nothing in
+    # particular gets the same minimal grant a PAT does
+    # (account.model._default_api_key_scopes). Everything else must be
+    # explicitly requested so it appears on the consent screen.
     "DEFAULT_SCOPES": ["profile:read", "pins:read", "pins:write", "push:manage"],
     "ACCESS_TOKEN_EXPIRE_SECONDS": 3600,
     "REFRESH_TOKEN_EXPIRE_SECONDS": 60 * 60 * 24 * 90,
