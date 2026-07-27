@@ -13,12 +13,21 @@ regardless of caller.
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
+from django.utils import timezone
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
+
+# Imported at runtime, not under TYPE_CHECKING, despite being used only in
+# annotations: drf-spectacular introspects every SerializerMethodField with
+# typing.get_type_hints() to derive the OpenAPI type, and that resolves the
+# *whole* signature - including the `obj` parameter. A name only visible to a
+# type checker raises NameError there and breaks schema generation outright.
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
 from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS
@@ -32,7 +41,17 @@ from urbanlens.dashboard.models.profile.meta import (
     VisibilityChoice,
 )
 from urbanlens.dashboard.models.push_device import PushTransport
+from urbanlens.dashboard.models.safety.model import (
+    SafetyCheckin,
+    SafetyCheckinContact,
+    SafetyCheckinPartner,
+    SafetyCheckinPartnerStatus,
+    SafetyCheckinStatus,
+)
 from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
+
+if TYPE_CHECKING:
+    import datetime
 
 #: Same scheme restriction as controllers.links._clean_link_input - external
 #: submissions are untrusted input, so this validates before anything else does.
@@ -576,6 +595,345 @@ class SettingsPatchSerializer(serializers.Serializer):
     #: caller's plan entitlement in services.profile_settings.
     image_downscale_max_dimension = serializers.IntegerField(required=False, allow_null=True)
     video_downscale_max_height = serializers.IntegerField(required=False, allow_null=True)
+
+
+class SafetyCheckinContactSerializer(serializers.Serializer):
+    """One emergency contact on a check-in (read-only).
+
+    **The ``token`` field is deliberately absent and must stay that way.** That
+    uuid is the sole credential for the tokenized contact portal
+    (``safety.contact.portal``), which is intentionally session-free so a
+    contact with no account can open it straight from an email. Anyone holding
+    the token can read the check-in, post to its chat, and mark the owner safe.
+    Emitting it here would let any ``safety:read`` key mint portal access for
+    every contact - and to an outside observer that access is indistinguishable
+    from the real contact acting. ``SafetyContactTokenExposureTests`` asserts it
+    never appears in any payload.
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    display_name = serializers.SerializerMethodField()
+    email = serializers.EmailField(read_only=True, allow_null=True)
+    username = serializers.SerializerMethodField()
+    notified_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    found_safe_at = serializers.DateTimeField(read_only=True, allow_null=True)
+
+    def get_display_name(self, obj: SafetyCheckinContact) -> str:
+        """Return the contact's best display label: linked username, else saved name, else email."""
+        if obj.contact_profile is not None:
+            return obj.contact_profile.username
+        return obj.name or obj.email or ""
+
+    def get_username(self, obj: SafetyCheckinContact) -> str | None:
+        """Return the linked account's username, or null for an email-only contact."""
+        return obj.contact_profile.username if obj.contact_profile is not None else None
+
+
+class SafetyCheckinPartnerSerializer(serializers.Serializer):
+    """One partner on a check-in (read-only).
+
+    ``id`` is the ``{partnerId}`` path segment of
+    ``DELETE safety/checkins/{slug}/partners/{partnerId}/``.
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    username = serializers.SerializerMethodField()
+    profile_uuid = serializers.SerializerMethodField()
+    status = serializers.ChoiceField(choices=SafetyCheckinPartnerStatus.choices, read_only=True)
+    accepted_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    invited_by_username = serializers.SerializerMethodField()
+
+    def get_username(self, obj: SafetyCheckinPartner) -> str | None:
+        """Return the partner's username."""
+        return obj.profile.username if obj.profile is not None else None
+
+    def get_profile_uuid(self, obj: SafetyCheckinPartner) -> str | None:
+        """Return the partner's profile uuid."""
+        return str(obj.profile.uuid) if obj.profile is not None else None
+
+    def get_invited_by_username(self, obj: SafetyCheckinPartner) -> str | None:
+        """Return the username of whoever sent the invite."""
+        return obj.invited_by.username if obj.invited_by is not None else None
+
+
+class SafetyCheckinSummarySerializer(serializers.Serializer):
+    """A check-in as it appears in the list endpoint.
+
+    Carries the lifecycle state a client needs to render a row and decide which
+    actions are still available, without the plan text, contact list, or any of
+    the other detail-only PII.
+    """
+
+    uuid = serializers.UUIDField(read_only=True)
+    slug = serializers.CharField(read_only=True, allow_null=True)
+    title = serializers.CharField(read_only=True, allow_blank=True)
+    status = serializers.ChoiceField(choices=SafetyCheckinStatus.choices, read_only=True)
+    checkin_by = serializers.DateTimeField(read_only=True)
+    grace_period_seconds = serializers.SerializerMethodField()
+    escalated_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    resolved_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    is_resolved = serializers.BooleanField(read_only=True)
+    contacts_locked = serializers.BooleanField(read_only=True)
+    notifications_locked = serializers.BooleanField(read_only=True)
+    is_archived = serializers.SerializerMethodField()
+    destination_latitude = serializers.SerializerMethodField()
+    destination_longitude = serializers.SerializerMethodField()
+    trip_slug = serializers.SerializerMethodField()
+    contact_count = serializers.IntegerField(read_only=True)
+    partner_count = serializers.IntegerField(read_only=True)
+
+    def get_grace_period_seconds(self, obj: SafetyCheckin) -> int | None:
+        """Return the grace period as whole seconds.
+
+        Never emit the raw ``DurationField``: DRF renders it as Django's
+        ``[DD] [HH:[MM:]]ss[.uuuuuu]`` string, which no mobile client parses
+        without bespoke code. An integer second count is unambiguous.
+        """
+        return int(obj.grace_period.total_seconds()) if obj.grace_period is not None else None
+
+    def get_is_archived(self, obj: SafetyCheckin) -> bool:
+        """Whether the check-in's PII has been sealed into its encrypted archive."""
+        return hasattr(obj, "archive")
+
+    def get_destination_latitude(self, obj: SafetyCheckin) -> float | None:
+        """Return the destination latitude as a float (the model stores a Decimal)."""
+        return float(obj.destination_latitude) if obj.destination_latitude is not None else None
+
+    def get_destination_longitude(self, obj: SafetyCheckin) -> float | None:
+        """Return the destination longitude as a float (the model stores a Decimal)."""
+        return float(obj.destination_longitude) if obj.destination_longitude is not None else None
+
+    def get_trip_slug(self, obj: SafetyCheckin) -> str | None:
+        """Return the slug of the trip this check-in is scoped to, if any."""
+        return obj.trip.slug if obj.trip is not None else None
+
+
+class SafetyCheckinDetailSerializer(SafetyCheckinSummarySerializer):
+    """The full check-in document, including the plan and contact list.
+
+    Every ``live_location_*`` field is deliberately omitted this pass. Live
+    location is a continuously-updating precise position stream; exposing it
+    read-only through a long-lived bearer credential is a materially different
+    privacy proposition from the rest of this surface and wants its own scope
+    and design, not a field quietly appended here.
+    """
+
+    plan_details = serializers.CharField(read_only=True, allow_blank=True)
+    contact_message = serializers.CharField(read_only=True, allow_blank=True)
+    notify_community_wiki = serializers.BooleanField(read_only=True)
+    wiki_notified_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    resolved_by_label = serializers.CharField(read_only=True, allow_blank=True)
+    contacts = SafetyCheckinContactSerializer(many=True, read_only=True)
+    partners = SafetyCheckinPartnerSerializer(many=True, read_only=True)
+    markup_map_uuid = serializers.SerializerMethodField()
+    attached_map_uuids = serializers.SerializerMethodField()
+    photo_count = serializers.SerializerMethodField()
+
+    def get_markup_map_uuid(self, obj: SafetyCheckin) -> str | None:
+        """Return the uuid of the check-in's primary (drawn) route map, if it has one."""
+        return str(obj.markup_map.uuid) if obj.markup_map is not None else None
+
+    def get_attached_map_uuids(self, obj: SafetyCheckin) -> list[str]:
+        """Return the uuids of every additional reference map attached to the check-in."""
+        return [str(uuid) for uuid in obj.markup_maps.values_list("uuid", flat=True)]
+
+    def get_photo_count(self, obj: SafetyCheckin) -> int:
+        """Return how many photos are attached to this check-in."""
+        return Image.objects.filter(safety_checkin=obj).count()
+
+
+class SafetyContactInputSerializer(serializers.Serializer):
+    """One submitted emergency contact: either an existing connection or a raw email.
+
+    Mirrors ``SafetyCheckinContact``'s own exactly-one-of ``CheckConstraint`` -
+    a contact is either a linked account or an email address, never both and
+    never neither.
+    """
+
+    username = serializers.CharField(max_length=150, required=False, allow_blank=False)
+    email = serializers.EmailField(required=False)
+    name = serializers.CharField(max_length=150, required=False, allow_blank=True, default="")
+
+    def validate(self, attrs: dict) -> dict:
+        """Require exactly one of username/email."""
+        has_username = bool((attrs.get("username") or "").strip())
+        has_email = bool((attrs.get("email") or "").strip())
+        if has_username == has_email:
+            raise serializers.ValidationError("Provide exactly one of username or email.")
+        return attrs
+
+
+class SafetyCheckinCreateSerializer(serializers.Serializer):
+    """Validates an untrusted safety check-in creation payload."""
+
+    title = serializers.CharField(max_length=200, required=False, allow_blank=True, default="")
+    checkin_by = serializers.DateTimeField()
+    #: Bounded to the same 15-minute floor the web form enforces
+    #: (``controllers.safety._parse_grace_period`` clamps to 0.25h), and capped
+    #: at a week so a typo can't schedule an escalation years out.
+    grace_period_seconds = serializers.IntegerField(required=False, min_value=900, max_value=604800)
+    plan_details = serializers.CharField(max_length=20000, required=False, allow_blank=True, default="")
+    contact_message = serializers.CharField(max_length=5000, required=False, allow_blank=True, default="")
+    destination_latitude = serializers.FloatField(required=False, allow_null=True, default=None, min_value=-90, max_value=90)
+    destination_longitude = serializers.FloatField(required=False, allow_null=True, default=None, min_value=-180, max_value=180)
+    #: Slug of a trip the caller has joined; scopes the active-check-in exclusivity check.
+    trip = serializers.CharField(max_length=255, required=False, allow_null=True, default=None)
+    notify_community_wiki = serializers.BooleanField(required=False, default=False)
+    #: Omitted/null means "use my saved default contacts", exactly as the
+    #: creation page prefills them. An explicit empty list means "no contacts" -
+    #: a real choice (a check-in that only nags the owner), and one that must not
+    #: silently resurrect the defaults.
+    contacts = SafetyContactInputSerializer(many=True, required=False, allow_null=True, default=None)
+    markup_map = serializers.UUIDField(required=False, allow_null=True, default=None)
+
+    def validate_checkin_by(self, value: datetime.datetime) -> datetime.datetime:
+        """Require a timezone-aware deadline strictly in the future."""
+        if timezone.is_naive(value):
+            raise serializers.ValidationError("checkin_by must include a timezone offset.")
+        if value <= timezone.now():
+            raise serializers.ValidationError("checkin_by must be in the future.")
+        return value
+
+    def validate(self, attrs: dict) -> dict:
+        """Coordinates are set together or not at all."""
+        has_lat = attrs.get("destination_latitude") is not None
+        has_lng = attrs.get("destination_longitude") is not None
+        if has_lat != has_lng:
+            raise serializers.ValidationError("Provide both destination_latitude and destination_longitude together.")
+        return attrs
+
+
+class SafetyCheckinUpdateSerializer(serializers.Serializer):
+    """Validates a partial safety check-in update - the six autosave fields.
+
+    **No field carries a ``default``, and that is load-bearing.** The view builds
+    its service kwargs purely from ``key in validated_data``, because
+    ``apply_checkin_edit`` distinguishes "not submitted, leave untouched" from
+    "explicitly set to this value". A default would make an absent field look
+    submitted, which for a *locked* field fabricates a warning the client never
+    earned, and for an unlocked one silently overwrites a value the caller never
+    mentioned - the same partial-update trap :class:`SettingsPatchSerializer`
+    documents.
+
+    Contacts are not editable here: they are frozen the moment notifications lock,
+    and replacing them wholesale is not an autosave-shaped operation.
+    """
+
+    title = serializers.CharField(max_length=200, required=False)
+    plan_details = serializers.CharField(max_length=20000, required=False, allow_blank=True)
+    contact_message = serializers.CharField(max_length=5000, required=False, allow_blank=True)
+    destination_latitude = serializers.FloatField(required=False, allow_null=True, min_value=-90, max_value=90)
+    destination_longitude = serializers.FloatField(required=False, allow_null=True, min_value=-180, max_value=180)
+    notify_community_wiki = serializers.BooleanField(required=False)
+
+    def validate(self, attrs: dict) -> dict:
+        """Coordinates move together or not at all."""
+        if ("destination_latitude" in attrs) != ("destination_longitude" in attrs):
+            raise serializers.ValidationError("Provide both destination_latitude and destination_longitude together.")
+        return attrs
+
+
+class SafetyPartnerInviteSerializer(serializers.Serializer):
+    """Validates a partner invitation by username."""
+
+    username = serializers.CharField(max_length=150)
+
+
+class SafetyContactDefaultsSerializer(serializers.Serializer):
+    """Validates a whole-list replacement of the caller's default emergency contacts."""
+
+    contacts = SafetyContactInputSerializer(many=True)
+
+
+class SafetyDefaultContactSerializer(serializers.Serializer):
+    """One saved default emergency contact (schema-only).
+
+    Thinner than :class:`SafetyCheckinContactSerializer`: a *default* is not
+    attached to any check-in, so it has no notification state - and, like every
+    contact payload here, no portal token.
+    """
+
+    display_name = serializers.CharField(read_only=True, allow_blank=True)
+    email = serializers.EmailField(read_only=True, allow_null=True)
+    username = serializers.CharField(read_only=True, allow_null=True)
+
+
+class SafetyContactDefaultsResponseSerializer(serializers.Serializer):
+    """The saved default contacts, plus anything that was refused (schema-only)."""
+
+    contacts = SafetyDefaultContactSerializer(many=True, read_only=True)
+    rejected = serializers.ListField(child=serializers.CharField(), read_only=True)
+
+
+class SafetyPreferenceSerializer(serializers.Serializer):
+    """The caller's safety defaults: message, grace period, and auto-delete window."""
+
+    default_message = serializers.CharField(max_length=5000, required=False, allow_blank=True)
+    default_grace_period_seconds = serializers.IntegerField(required=False, min_value=900, max_value=604800)
+    #: Null means "never auto-delete".
+    auto_delete_after_days = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+
+
+class SafetyCheckinListResponseSerializer(serializers.Serializer):
+    """Documents the paginated check-in list envelope (schema-only)."""
+
+    count = serializers.IntegerField(read_only=True)
+    next = serializers.CharField(read_only=True, allow_null=True)
+    previous = serializers.CharField(read_only=True, allow_null=True)
+    results = SafetyCheckinSummarySerializer(many=True, read_only=True)
+
+
+class SafetyPhotoSerializer(serializers.Serializer):
+    """One photo attached to a safety check-in (schema-only)."""
+
+    id = serializers.IntegerField(read_only=True)
+    uuid = serializers.UUIDField(read_only=True)
+    caption = serializers.CharField(read_only=True, allow_null=True, allow_blank=True)
+    url = serializers.SerializerMethodField()
+    created = serializers.DateTimeField(read_only=True)
+
+    def get_url(self, obj: Image) -> str | None:
+        """Return the stored file's url, or null if the file is missing."""
+        return obj.image.url if obj.image else None
+
+
+class SafetyPhotoListResponseSerializer(serializers.Serializer):
+    """Documents the paginated check-in photo list envelope (schema-only)."""
+
+    count = serializers.IntegerField(read_only=True)
+    next = serializers.CharField(read_only=True, allow_null=True)
+    previous = serializers.CharField(read_only=True, allow_null=True)
+    results = SafetyPhotoSerializer(many=True, read_only=True)
+
+
+class SafetyPhotoAttachSerializer(serializers.Serializer):
+    """Attaches an already-uploaded image to a check-in by uuid.
+
+    Interim shape: the multipart upload pipeline (quota accounting, checksum
+    dedup, downscaling, EXIF handling) lives in
+    ``controllers.safety.SafetyGalleryView.post`` and has not yet been extracted
+    into the shared ``services.photo_upload`` the Photos domain is landing.
+    Rebuilding it here would fork that logic and give the external surface its
+    own subtly different quota and dedup behavior, so this endpoint deliberately
+    only *references* an image the caller already uploaded.
+    """
+
+    image_uuid = serializers.UUIDField()
+
+
+class SafetyMapSerializer(serializers.Serializer):
+    """One map linked to a check-in (schema-only)."""
+
+    uuid = serializers.UUIDField(read_only=True)
+    title = serializers.CharField(read_only=True, allow_blank=True)
+    #: True for the check-in's own drawn route map, false for attached reference maps.
+    is_primary = serializers.BooleanField(read_only=True)
+
+
+class SafetyMapAttachSerializer(serializers.Serializer):
+    """Attaches one of the caller's existing maps to a check-in as a reference map."""
+
+    map_uuid = serializers.UUIDField()
 
 
 class AuthSessionSerializer(serializers.Serializer):
