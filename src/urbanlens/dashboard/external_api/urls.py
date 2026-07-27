@@ -37,6 +37,26 @@ urlpatterns = [
     path("suggestions/visits/", views.VisitSuggestionsView.as_view(), name="suggestions.visits"),
     path("suggestions/visits/<int:suggestion_id>/<str:action>/", views.VisitSuggestionActionView.as_view(), name="suggestions.visits.action"),
     path("memories/journal/", views.MemoriesJournalView.as_view(), name="memories.journal"),
+    path("lists/", views.PinListsView.as_view(), name="lists"),
+    # The three literal sub-paths below must all stay ahead of the generic
+    # "lists/<slug:list_slug>/" route: Django matches in order, and a list
+    # slug would otherwise swallow "items"/"reorder"/"resync" as if they were
+    # list identifiers. Within the items group, the literal "reorder/" segment
+    # likewise precedes nothing generic, but is kept adjacent for clarity.
+    path("lists/<slug:list_slug>/items/reorder/", views.PinListItemsReorderView.as_view(), name="lists.items.reorder"),
+    path("lists/<slug:list_slug>/items/", views.PinListItemsView.as_view(), name="lists.items"),
+    path("lists/<slug:list_slug>/resync/", views.PinListResyncView.as_view(), name="lists.resync"),
+    path("lists/<slug:list_slug>/", views.PinListDetailView.as_view(), name="lists.detail"),
+    path("saved-filters/", views.SavedFiltersView.as_view(), name="saved_filters"),
+    path("saved-filters/<uuid:filter_uuid>/", views.SavedFilterDetailView.as_view(), name="saved_filters.detail"),
+    path("labels/", views.LabelsView.as_view(), name="labels"),
+    # Same ordering rule as the lists group above - the two literal sub-paths
+    # precede the generic label-detail route. A <uuid> converter would not in
+    # fact match "customization", but the ordering is kept explicit so the
+    # convention survives a future switch to a looser converter.
+    path("labels/<uuid:label_uuid>/customization/", views.LabelCustomizationView.as_view(), name="labels.customization"),
+    path("labels/<uuid:label_uuid>/merge/", views.LabelMergeView.as_view(), name="labels.merge"),
+    path("labels/<uuid:label_uuid>/", views.LabelDetailView.as_view(), name="labels.detail"),
     path("push-devices/", views.PushDevicesView.as_view(), name="push_devices"),
     path("push-devices/<uuid:device_uuid>/", views.PushDeviceDetailView.as_view(), name="push_devices.detail"),
     path("friends/", views.FriendsView.as_view(), name="friends"),

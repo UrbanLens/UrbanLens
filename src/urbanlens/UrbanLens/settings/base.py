@@ -570,6 +570,11 @@ REST_FRAMEWORK = {
         # generous than the burst cap - but it is still a cap, so a leaked key
         # cannot be used as an unmetered CDN.
         "external_api_media": "2000/hour",
+        # Applied on top of the above, to the handful of endpoints whose cost
+        # is unbounded in the caller's own data rather than fixed per request
+        # (currently the smart-list resync). See
+        # external_api.throttling.ExternalApiResyncThrottle.
+        "external_api_resync": "12/hour",
     },
     # Only consulted by views whose schema is actually generated - the
     # preprocessing hook in external_api.schema limits that to the external API.
