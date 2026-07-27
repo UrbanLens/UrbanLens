@@ -101,6 +101,40 @@ class WikiStatVoteQuerySet(abstract.DashboardQuerySet["WikiStatVote"]):
         vote = self.for_wiki(wiki).for_field(field).filter(profile=profile).first()
         return vote.value if vote else None
 
+    def cast(self, wiki: Wiki, profile: Profile, field: str, value: int) -> WikiStatVote:
+        """Record ``profile``'s vote of ``value`` on ``field`` for ``wiki``.
+
+        One vote per ``(wiki, profile, field)``: re-voting replaces the
+        previous value rather than adding a second ballot.
+
+        Args:
+            wiki: The wiki being voted on.
+            profile: The voting profile.
+            field: One of :class:`WikiStatField`'s values.
+            value: The 1-5 rating. Callers validate the range - a value
+                outside it should clear the vote via :meth:`clear`, not be
+                stored.
+
+        Returns:
+            The created or updated vote.
+        """
+        vote, _created = self.update_or_create(wiki=wiki, profile=profile, field=field, defaults={"value": value})
+        return vote
+
+    def clear(self, wiki: Wiki, profile: Profile, field: str) -> bool:
+        """Withdraw ``profile``'s vote on ``field`` for ``wiki``.
+
+        Args:
+            wiki: The wiki whose vote to withdraw.
+            profile: The profile withdrawing their vote.
+            field: One of :class:`WikiStatField`'s values.
+
+        Returns:
+            True when a vote was actually removed, False when there was none.
+        """
+        deleted_count, _per_model = self.for_wiki(wiki).for_field(field).filter(profile=profile).delete()
+        return bool(deleted_count)
+
 
 class WikiStatVoteManager(abstract.DashboardManager.from_queryset(WikiStatVoteQuerySet)):
     """Manager for WikiStatVote."""

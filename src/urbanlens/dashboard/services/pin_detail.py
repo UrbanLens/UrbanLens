@@ -61,7 +61,7 @@ def build_pin_detail(pin: Pin, profile: Profile) -> dict[str, Any]:
         boundary, cover photo, wiki slug, counts).
     """
     service = MapPinPayloadService(profile)
-    pin = service.prepare_queryset(Pin.objects.filter(pk=pin.pk)).select_related("parent_pin", "wiki", "cover_photo").get()
+    pin = service.prepare_queryset(Pin.objects.filter(pk=pin.pk)).select_related("parent_pin", "wiki", "cover_photo", "location").get()
     payload = serialize_sync_pin(service, pin)
 
     payload["official_name"] = pin.effective_official_name or None
@@ -70,6 +70,14 @@ def build_pin_detail(pin: Pin, profile: Profile) -> dict[str, Any]:
     payload["date_last_active"] = _isoformat_or_none(pin.date_last_active)
     payload["security"] = {field: getattr(pin, field) for field, _label in SECURITY_FIELDS}
     wiki = pin.wiki
+    # The slug that actually routes to this pin's wiki. Every wiki-scoped
+    # endpoint resolves through services.wiki_access.resolve_visible_wiki,
+    # which takes a *Location* slug/uuid - so this, not wiki_slug below, is
+    # what a client feeds to /wikis/{location_slug}/.
+    payload["location_slug"] = pin.location.ensure_slug()
+    # Informational only: Wiki.slug is an independent field from the Location's
+    # slug and is NOT accepted by any wiki route. Kept for clients that already
+    # read it (and for display), but it must never be used for navigation.
     payload["wiki_slug"] = wiki.slug if wiki is not None and wiki.slug else None
     cover_photo = pin.cover_photo
     payload["cover_photo_url"] = cover_photo.image.url if cover_photo is not None and cover_photo.image else None

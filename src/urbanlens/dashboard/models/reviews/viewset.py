@@ -9,6 +9,7 @@ from rest_framework.response import Response
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.reviews.serializer import ReviewSerializer
+from urbanlens.dashboard.services.reviews import upsert_review
 
 logger = logging.getLogger(__name__)
 
@@ -50,19 +51,20 @@ class ReviewViewSet(mixins.UpdateModelMixin, mixins.DestroyModelMixin, viewsets.
             # ids cannot be enumerated by probing this endpoint.
             return Response({"detail": "Pin not found."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Validate first, then delegate the upsert to services.reviews so this
+        # and the external API share one implementation of the
+        # one-rating-per-(profile, pin) rule.
         review = Review.objects.for_pair(profile, pin).first()
-        if review is None:
-            serializer = self.get_serializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            serializer.save(profile=profile, pin=pin)
-            created = True
-        else:
-            serializer = self.get_serializer(review, data=request.data, partial=True)
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-            created = False
+        serializer = self.get_serializer(review, data=request.data, partial=True) if review is not None else self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        # `rating` is optional on a partial update, in which case the existing
+        # value stands - preserving the pre-refactor no-op behavior rather than
+        # blowing up on a missing key.
+        rating = serializer.validated_data.get("rating", review.rating if review is not None else None)
+        review, created = upsert_review(profile, pin, rating)
+
+        return Response(self.get_serializer(review).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
     def update(self, request, *args, **kwargs):
         logger.info("Update request initiated by user %s", request.user.id)

@@ -318,6 +318,115 @@ def save_article(
     return article, revision
 
 
+class ArticleConflictError(Exception):
+    """Someone else saved the article while this editor was working on it.
+
+    Attributes:
+        current_revision_id: The id of the revision that is actually current,
+            so a client can fetch it, show the other edit, and re-base.
+    """
+
+    def __init__(self, current_revision_id: int) -> None:
+        """Record which revision is current."""
+        super().__init__("This article changed while you were editing.")
+        self.current_revision_id = current_revision_id
+
+
+def latest_revision_id(article: Article | None) -> int | None:
+    """Return the id of *article*'s newest revision, or None.
+
+    Args:
+        article: The article to inspect, or None when none exists yet.
+
+    Returns:
+        The newest ``ArticleRevision`` id, or None when the article is absent
+        or has no revisions.
+    """
+    if article is None:
+        return None
+    latest = article.revisions.order_by("-created").first()
+    return latest.id if latest is not None else None
+
+
+def save_article_checked(
+    *,
+    editor: Profile | None,
+    content: str,
+    edit_summary: str = "",
+    base_revision_id: int | None,
+    pin: Pin | None = None,
+    wiki: Wiki | None = None,
+) -> tuple[Article, ArticleRevision | None]:
+    """Save an article, refusing the write if it would clobber a concurrent edit.
+
+    Wraps :func:`save_article` with the optimistic-concurrency check the
+    article editor has always performed, moved here so the internal view and
+    the external API cannot drift on it.
+
+    The rule, unchanged: if a revision exists and its id is not the one the
+    editor started from, the save is refused. A ``base_revision_id`` of None
+    therefore conflicts with *any* existing revision - which is what makes it
+    safe for the API to require the field explicitly rather than letting an
+    omitted value silently overwrite someone else's work.
+
+    Args:
+        editor: The profile making the edit (None for system saves).
+        content: The complete new Markdown source.
+        edit_summary: Optional one-line description of the change.
+        base_revision_id: The revision the editor started from, or None when
+            they believe the article has no revisions yet.
+        pin: Host pin (mutually exclusive with ``wiki``).
+        wiki: Host wiki.
+
+    Returns:
+        Tuple of (article, revision) - revision is None for a no-op save.
+
+    Raises:
+        ArticleConflictError: The article moved on since *base_revision_id*.
+            Nothing is written when this is raised.
+        ValueError: Neither or both hosts were provided.
+    """
+    article = get_article(pin=pin, wiki=wiki)
+    latest_id = latest_revision_id(article)
+    if latest_id is not None and latest_id != base_revision_id:
+        raise ArticleConflictError(latest_id)
+
+    return save_article(editor=editor, content=content, edit_summary=edit_summary, pin=pin, wiki=wiki)
+
+
+def restore_revision(*, scope_article: Article, revision: ArticleRevision, editor: Profile | None) -> tuple[Article, ArticleRevision | None]:
+    """Restore an older revision's content as a new revision.
+
+    History is append-only: restoring does not delete anything, it writes the
+    old content forward as the newest revision, tagged with ``restored_from``
+    so the lineage stays visible in the history list.
+
+    Args:
+        scope_article: The article being restored. *revision* must belong to
+            it - callers scope the lookup rather than trusting a bare id.
+        revision: The revision whose content to restore.
+        editor: The profile performing the restore.
+
+    Returns:
+        Tuple of (article, revision) - revision is None when the article
+        already held exactly that content.
+
+    Raises:
+        ValueError: *revision* does not belong to *scope_article*.
+    """
+    if revision.article_id != scope_article.pk:
+        raise ValueError("That revision belongs to a different article.")
+
+    return save_article(
+        editor=editor,
+        content=revision.content,
+        edit_summary=f"Restored version from {revision.created:%b %d, %Y %H:%M}",
+        pin=scope_article.pin,
+        wiki=scope_article.wiki,
+        restored_from=revision,
+    )
+
+
 # ----------------------------------------------------------------------
 # Revision diffs
 # ----------------------------------------------------------------------

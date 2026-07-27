@@ -19,6 +19,7 @@ from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, No
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
+from urbanlens.dashboard.services.comments import ALLOWED_EMOJIS, top_level_comment_queryset, visible_comment_tree
 from urbanlens.dashboard.services.map_snapshot import (
     _sanitize_markup_color,
     _sanitize_markup_shapes,
@@ -36,7 +37,9 @@ __all__ = ["_parse_map_data", "_sanitize_markup_color", "_sanitize_markup_shapes
 
 logger = logging.getLogger(__name__)
 
-_ALLOWED_EMOJIS = {"👍", "👎", "❤️", "😂", "😮", "😢", "🔥", "🏚️"}
+# Canonical definition now lives in services.comments, shared with the external
+# API. Aliased here so existing importers (controllers.trip) keep resolving it.
+_ALLOWED_EMOJIS = ALLOWED_EMOJIS
 _COMMENTS_PAGE_SIZE = 8
 
 
@@ -165,23 +168,12 @@ def _render_comments(request, context: dict) -> HttpResponse:
 
 
 def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra) -> dict:
-    pinned = viewer_pinned_uuids(profile)
-    top_level_qs = (
-        comments_qs.filter(parent__isnull=True)
-        .select_related("profile__user", "markup_map", "pin", "pin__location")
-        .prefetch_related(
-            "reactions__profile",
-            "replies__reactions__profile",
-            "replies__profile__user",
-            # comment.map_data derives its snapshot from the markup map's items.
-            "markup_map__items",
-            "replies__markup_map__items",
-        )
-    )
+    top_level_qs = top_level_comment_queryset(comments_qs)
     # Default to the last page so the most recent activity (comments are
     # ordered oldest-to-newest) is what a viewer sees without paging back.
     page_obj = get_page(request, top_level_qs, _COMMENTS_PAGE_SIZE, default_last=True)
     top_level = list(page_obj.object_list)
+
     # Collect all unique commenter profiles so we can check photo visibility once.
     all_commenters: set[Profile] = set()
     for c in top_level:
@@ -189,72 +181,34 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
         all_commenters.update(r.profile for r in c.replies.all())
     # Set of profile IDs whose images should be blurred for this viewer.
     blurred_profiles: set[int] = {p.pk for p in all_commenters if p != profile and not profile.can_view_photos_from(p)}
-    # Cache can_view_comments_from per unique commenter (mirrors blurred_profiles
-    # above) rather than recomputing it once per comment/reply below - each call
-    # runs up to 3 extra query pairs, redundant when the same author appears
-    # across multiple comments/replies in the same thread.
-    comment_visibility_cache: dict[int, bool] = {p.pk: profile.can_view_comments_from(p) for p in all_commenters}
 
-    # A comment's content is already all-or-nothing gated below by
-    # can_view_comments_from (comment_visibility) - but once it passes that
-    # gate, the author's own name/avatar weren't separately masked per their
-    # profile_visibility (docs/PROBLEMS.md gap). Wiki/trip comments can have
-    # many different authors a viewer might not otherwise have standing to
-    # see; pin comments are always self-authored (the pin owner is the only
-    # possible viewer), so this is a no-op there (resolve_visible_identity
-    # never masks a profile from itself).
-    from urbanlens.dashboard.services.identity_visibility import mask_profile_references
+    # Every visibility decision - comment-visibility, pending-scan, the @loc
+    # mention gate, and author-identity masking - lives in this one call, shared
+    # with the external API so the two surfaces cannot drift apart on it.
+    visible = visible_comment_tree(top_level, profile)
 
-    author_refs: list[Profile] = []
-    for c in top_level:
-        author_refs.append(c.profile)
-        author_refs.extend(r.profile for r in c.replies.all())
-    mask_profile_references(profile, author_refs)
-
-    rendered = []
-    for c in top_level:
-        if not comment_visibility_cache[c.profile_id]:
-            continue
-        # A newly-uploaded image is scanned asynchronously (tasks.scan_comment_image) -
-        # until that clears pending_scan, the comment stays visible only to
-        # its own author, never to any other viewer (see
-        # controllers.comments.start_comment_image_scan).
-        if c.pending_scan and c.profile != profile:
-            continue
-        html = render_comment_text(c.text, pinned)
-        if html is None:
-            continue
-        replies_rendered = []
-        for r in c.replies.all():
-            if not comment_visibility_cache[r.profile_id]:
-                continue
-            if r.pending_scan and r.profile != profile:
-                continue
-            r_html = render_comment_text(r.text, pinned)
-            if r_html is None:
-                continue
-            replies_rendered.append(
+    rendered = [
+        {
+            "comment": item.comment,
+            "rendered_text": item.rendered_text,
+            "reactions": _aggregate_reactions(item.comment.reactions.all()),
+            "replies": [
                 {
-                    "comment": r,
-                    "rendered_text": r_html,
-                    "reactions": _aggregate_reactions(r.reactions.all()),
-                },
-            )
-        rendered.append(
-            {
-                "comment": c,
-                "rendered_text": html,
-                "reactions": _aggregate_reactions(c.reactions.all()),
-                "replies": replies_rendered,
-                # A reply whose parent was deleted also has parent=None, so it
-                # queries identically to a genuine top-level comment (see
-                # top_level_qs above) - this distinguishes the two so the
-                # template can render a "[Original comment deleted]"
-                # placeholder above it instead of showing it as if it had
-                # always stood on its own (UL-219).
-                "parent_was_deleted": c.parent_deleted,
-            },
-        )
+                    "comment": reply.comment,
+                    "rendered_text": reply.rendered_text,
+                    "reactions": _aggregate_reactions(reply.comment.reactions.all()),
+                }
+                for reply in item.replies
+            ],
+            # A reply whose parent was deleted also has parent=None, so it
+            # queries identically to a genuine top-level comment - this
+            # distinguishes the two so the template can render an "[Original
+            # comment deleted]" placeholder above it instead of showing it as
+            # if it had always stood on its own (UL-219).
+            "parent_was_deleted": item.parent_was_deleted,
+        }
+        for item in visible
+    ]
     return {
         "rendered_comments": rendered,
         "page_obj": page_obj,

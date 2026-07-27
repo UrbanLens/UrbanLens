@@ -973,3 +973,38 @@ already reset between tests.
   All three look like real latent bugs rather than annotation noise, which is why they are logged
   here instead of silenced. They don't fail today because mypy isn't run across these paths
   together - they only appear once `external_api/views.py` pulls them into one type-check graph.
+
+- **Pin-detail's `wiki_slug` was unusable for navigating to a wiki (FIXED in this pass).**
+  `services/pin_detail.py::build_pin_detail` set `payload["wiki_slug"] = wiki.slug`, which reads
+  naturally as "the slug to fetch this pin's wiki with". It isn't. Every wiki-scoped route
+  resolves through `services.wiki_access.resolve_visible_wiki`, which takes a **Location**
+  slug/uuid - and `Wiki.slug` is an independent `SlugField` on an unrelated model with its own
+  value. A client that followed `wiki_slug` to `GET /wikis/{location_slug}/` therefore got a 404
+  for a wiki it could plainly see. Fixed by adding `location_slug` (from
+  `location.ensure_slug()`) to the payload and to `PinDetailSerializer`; `wiki_slug` is retained
+  but documented as informational-only. Regression test:
+  `tests/hypothesis/test_external_api_pin_detail_location_slug.py`.
+
+- **The internal wiki edit view silently discards invalid input (NOT fixed - deliberate).**
+  `controllers/location_wiki.py::LocationWikiEditView.post` iterates the editable fields and
+  `continue`s past (a) a security value not in `SecurityLevel.choices` and (b) a date that fails
+  `datetime.strptime(raw, "%Y-%m-%d")`. The user is told `{"ok": True}` and the field simply
+  never changes, with no error surfaced anywhere - a submitted-but-dropped edit is
+  indistinguishable from a successful one. The shared `services/wiki_edits.py::apply_wiki_edit`
+  extracted in this pass takes a `strict` flag: the external API passes `strict=True` and gets a
+  hard rejection, while the internal path keeps `strict=False` to preserve existing HTMX
+  behavior. The internal path should be migrated to strict (with proper field-level error
+  rendering in the About card) as a follow-up - it needs UI work, which is why it was left alone
+  here rather than changed blind.
+
+- **A wiki's "First pinned" date leaked past the low-pin-count privacy fuzz (FIXED).**
+  `approximate_pin_count` deliberately refuses to show a number until at least
+  `MIN_VISIBLE_PIN_COUNT` (3) distinct users have pinned a place, but the Community card showed
+  "First pinned <Mon YYYY>" *unconditionally*. With only one or two pinners, that month is
+  effectively "when this specific person pinned it" - exactly what the count fuzzing exists to
+  hide. (The template already rendered `|date:"M Y"`, so the day was never displayed; the leak
+  was the missing low-count suppression, and the fact that day-precision sat in the template
+  context at all.) Fixed by `services/community_counts.py::wiki_community_summary`, which
+  truncates `first_pinned` to the 1st of its month and returns `None` whenever `pin_count_low`
+  is true. Both `LocationWikiView` and the external API now read that one function, and
+  `wiki.html` renders the pre-truncated date rather than reaching into a Pin instance.
