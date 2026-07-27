@@ -277,6 +277,11 @@ class PinDetailSerializer(SyncPinSerializer):
     date_abandoned = serializers.DateField(read_only=True, allow_null=True)
     date_last_active = serializers.DateField(read_only=True, allow_null=True)
     security = PinSecurityDetailSerializer(read_only=True)
+    #: The slug to pass to ``/wikis/{location_slug}/``. Wiki routes resolve a
+    #: *Location*, so this - not ``wiki_slug`` - is the navigable identifier.
+    location_slug = serializers.CharField(read_only=True)
+    #: Informational only. ``Wiki.slug`` is independent of the Location slug and
+    #: is not accepted by any wiki route; use ``location_slug`` to navigate.
     wiki_slug = serializers.CharField(read_only=True, allow_null=True)
     cover_photo_url = serializers.CharField(read_only=True, allow_null=True)
     boundary = serializers.JSONField(read_only=True, allow_null=True)

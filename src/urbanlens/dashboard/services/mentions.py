@@ -52,6 +52,23 @@ def extract_location_uuids(text: str) -> list[uuid.UUID]:
     return [uuid.UUID(m.group(2)) for m in _LOC_RE.finditer(text)]
 
 
+def extract_location_mentions(text: str) -> list[tuple[str, str]]:
+    """Return every ``@[Display](loc:uuid)`` mention as a (display, uuid) pair.
+
+    The display-text counterpart to :func:`extract_location_uuids`, for callers
+    that render mentions themselves rather than taking the HTML from
+    :func:`render_comment_text` (e.g. a native client that has no webview).
+
+    Args:
+        text: Raw comment text in storage format.
+
+    Returns:
+        One ``(display_text, location_uuid_string)`` tuple per mention, in
+        order of appearance.
+    """
+    return [(match.group(1), match.group(2)) for match in _LOC_RE.finditer(text)]
+
+
 def is_visible_to(text: str, viewer_pinned_uuids: set[uuid.UUID]) -> bool:
     """Return False if any @loc mention in text is not in the viewer's pinned set."""
     return all(loc_uuid in viewer_pinned_uuids for loc_uuid in extract_location_uuids(text))
