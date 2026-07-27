@@ -38,7 +38,8 @@ CLAUDE.local.md
 .claude/*.json
 .vscode/settings.json
 .cursor/
-docs/notes/
+docs/notes/ai/
+docs/notes/geocoding-analysis/
 
 # Secrets, authentication, etc
 .env

@@ -4,6 +4,56 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
 to pick up without re-discovering the problem from scratch.
 
+## OPEN 2026-07-27: `test_websocket_auth.py::test_valid_api_key_authenticates_an_anonymous_socket` times out
+
+```
+test_websocket_auth.py::ApiKeyWebSocketAuthTests::test_valid_api_key_authenticates_an_anonymous_socket
+  asyncio.exceptions.CancelledError -> TimeoutError (asgiref/timeout.py:108)
+```
+
+**Confirmed pre-existing**, not caused by the Place-consolidation phase-0 work: `git stash`ed
+that entire change set and re-ran the file on clean `feature/external-api-mobile-v2` - identical
+`1 failed, 6 passed` both ways. Also reproduces in isolation, so it isn't CPU contention from a
+parallel pytest run.
+
+The interesting part is the asymmetry: `test_oauth2_access_token_authenticates_an_anonymous_socket`
+is structurally identical (anonymous socket, `?key=`, expects `connected is True`) and *passes*.
+So the hang is specific to the `ApiKey` branch of `websocket_auth.ApiKeyAuthMiddleware` - likely
+a `database_sync_to_async` call in the API-key lookup blocking on a connection that the
+`TransactionTestCase` thread already holds, rather than anything about the assertion itself.
+`generate_api_key`/`ApiKey` verification does more DB work than the OAuth2 path, which fits.
+
+Start by adding a timeout to `comm.connect()` and logging inside the middleware's API-key branch
+to see whether it enters the lookup and never returns, or never gets called at all.
+
+## OPEN 2026-07-27: `get_nearby_or_create(threshold_meters=0)` can 500 on sub-precision coordinate collisions
+
+`Location.latitude`/`longitude` are `DecimalField(max_digits=9, decimal_places=6)`, so the
+database rounds to 6dp on insert - but `Location.save()` builds the PostGIS `point` from the raw
+unrounded float (`models/location/model.py:426-429`). Two coordinates that differ only below 6dp
+therefore round to the *same* stored (latitude, longitude) while their stored points sit ~1cm
+apart.
+
+With `threshold_meters=0` (`models/location/queryset.py:117-161`) that combination is
+unreachable-by-lookup but blocked-on-insert: the `point__distance_lte=(point, D(m=0))` probe
+misses the existing row, the insert then trips the `(latitude, longitude)` unique constraint, and
+the `IntegrityError` handler re-runs the *same* zero-distance probe, misses again, and re-raises -
+surfacing as a 500.
+
+Repro: call it twice with e.g. `42.00000014` then `42.00000006` (same longitude).
+
+Fixed for child/detail pins by `services.pin_creation.resolve_child_pin_location`, which matches
+on quantized coordinates instead of zero-distance geometry. Two callers still pass
+`threshold_meters=0` straight through and remain exposed:
+
+- `controllers/detail_pins.py::_location_for_child_wiki` (child wiki placement)
+- `services/pin_edit.py::move_pin_to_coordinates` (every manual pin move)
+
+Both can reuse `pin_creation._quantize_coordinate`. Rare in practice (needs a client submitting
+more than 6dp of precision - the map UI sends `toFixed(6)`), but the external API accepts raw
+floats. Superseded anyway if `docs/designs/place-consolidation.md` phase 3 lands, which moves
+every path onto exact-coordinate resolution.
+
 ## OPEN 2026-07-26: nine pre-existing friend-invite / pin-sync test failures on `feature/external-api-mobile-v2`
 
 Found while building the external-API social domain. **Not caused by that work** - verified by
