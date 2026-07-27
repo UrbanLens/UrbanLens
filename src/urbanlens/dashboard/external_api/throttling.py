@@ -147,3 +147,20 @@ class ExternalApiBurstThrottle(ExternalApiRateThrottle):
     """The short-window cap applied to every external API request, both tiers."""
 
     scope = "external_api_burst"
+
+
+class ExternalApiMediaThrottle(ExternalApiRateThrottle):
+    """The cap on credential-authenticated media-file fetches.
+
+    Its own budget rather than a share of the read/burst caps, because media
+    fetches have the opposite shape to API calls: one screen of a gallery is
+    dozens of file requests in a couple of seconds, which the 60/minute burst
+    cap would refuse, while the whole point of metering here is that a leaked
+    key must not turn ``/media/`` into an unmetered CDN. Separating them lets
+    the file budget be generous without loosening the API budget.
+
+    Applied by ``controllers.media.MediaGateView`` by hand - it is a plain
+    Django ``View``, so DRF's throttle machinery never runs for it.
+    """
+
+    scope = "external_api_media"

@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
-from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json, image_upload_error
+from urbanlens.dashboard.services.images import image_to_gallery_json
 from urbanlens.dashboard.services.memories.photos import classify_photo, create_pin_and_log_visit, log_visit_on_pin
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.pagination import get_page
@@ -225,54 +225,18 @@ class PhotoUploadView(LoginRequiredMixin, View):
         Returns:
             The new image serialized for the gallery grid, or a 400 error.
         """
-        import posixpath
-
-        from urbanlens.dashboard.models.images.model import MediaKind
-        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
-        from urbanlens.dashboard.services.documents import DOCUMENT_EXTENSIONS
+        from urbanlens.dashboard.services.photo_upload import PhotoUploadError, upload_photo
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
 
-        content_type = image_file.content_type or ""
-        extension = posixpath.splitext(image_file.name or "")[1].lower()
-        if content_type.startswith("video/"):
-            media_type = MediaKind.VIDEO
-            if not user_has_feature(request.user, SiteFeature.VIDEO_UPLOADS):
-                return JsonResponse({"error": "Video uploads are not enabled for your account."}, status=403)
-        elif content_type.startswith("image/"):
-            media_type = MediaKind.PHOTO
-        elif content_type == "application/pdf" or extension in DOCUMENT_EXTENSIONS:
-            media_type = MediaKind.DOCUMENT
-            if not user_has_feature(request.user, SiteFeature.DOCUMENT_UPLOADS):
-                return JsonResponse({"error": "Document uploads are not enabled for your account."}, status=403)
-        else:
-            return JsonResponse({"error": "That file is not an image, video, or supported document type."}, status=400)
+        try:
+            img = upload_photo(profile, image_file)
+        except PhotoUploadError as exc:
+            return JsonResponse({"error": exc.message}, status=exc.status)
 
-        upload_error = image_upload_error(image_file, media_type)
-        if upload_error:
-            message, status = upload_error
-            return JsonResponse({"error": message}, status=status)
-
-        checksum = compute_checksum(image_file)
-        if Image.objects.filter(profile=profile, checksum=checksum).exists():
-            return JsonResponse({"error": "You already uploaded this file."}, status=409)
-
-        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
-
-        with per_profile_upload_lock(profile):
-            quota_error = quota_error_for_upload(profile, image_file.size)
-            if quota_error:
-                return JsonResponse({"error": quota_error}, status=413)
-
-            img = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size, media_type=media_type)
-
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
-        from urbanlens.dashboard.tasks import process_image_upload
-
-        safely_enqueue_task(process_image_upload, img.pk)
         return JsonResponse(image_to_gallery_json(img, request, profile), status=201)
 
 

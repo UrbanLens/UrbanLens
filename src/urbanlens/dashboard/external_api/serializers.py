@@ -13,6 +13,7 @@ regardless of caller.
 from __future__ import annotations
 
 import math
+from typing import TYPE_CHECKING
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
@@ -20,6 +21,7 @@ from rest_framework import serializers
 
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
+from urbanlens.dashboard.models.images.model import MediaKind
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status as NotificationStatus
 from urbanlens.dashboard.models.pin.model import PinType
@@ -36,8 +38,13 @@ from urbanlens.dashboard.models.profile.meta import (
 from urbanlens.dashboard.models.profile.model import _COMMUNITY_GATED_VISIBILITY_FIELDS
 from urbanlens.dashboard.models.push_device import PushTransport
 from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
+from urbanlens.dashboard.services.media_labels import MAX_MEDIA_LABEL_NAME_LENGTH, MAX_MEDIA_LABELS
 from urbanlens.dashboard.services.notification_center import preference_field_names
 from urbanlens.dashboard.services.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, MAX_PROFILE_BIO_LENGTH
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.models.profile.model import Profile
 
 #: Same scheme restriction as controllers.links._clean_link_input - external
 #: submissions are untrusted input, so this validates before anything else does.
@@ -878,3 +885,260 @@ NotificationPreferenceSerializer = type(
         **_preference_entry_fields(),
     },
 )
+
+
+class PhotoSerializer(serializers.Serializer):
+    """One photo/video/document as an external client sees it (schema-only).
+
+    Populated by :func:`build_photo_payload`, which resolves the
+    viewer-dependent fields (``owner_slug``, ``wiki_*``, ``dm_peer_*``) - this
+    class only declares the resulting shape.
+    """
+
+    uuid = serializers.UUIDField(read_only=True)
+    media_type = serializers.CharField(read_only=True)
+    source = serializers.CharField(read_only=True)
+    #: Path under the authenticated media gate, not a public URL - fetching it
+    #: needs the same credential plus the ``media:read`` scope.
+    url = serializers.CharField(read_only=True, allow_null=True)
+    caption = serializers.CharField(read_only=True, allow_null=True)
+    author = serializers.CharField(read_only=True, allow_null=True)
+    source_url = serializers.CharField(read_only=True, allow_null=True)
+    copyright = serializers.CharField(read_only=True, allow_null=True)
+    latitude = serializers.DecimalField(max_digits=9, decimal_places=6, read_only=True, allow_null=True)
+    longitude = serializers.DecimalField(max_digits=9, decimal_places=6, read_only=True, allow_null=True)
+    #: True when the coordinates came from the photo's shared Location rather
+    #: than its own GPS - accurate to the place, not to the capture point.
+    coordinates_are_estimated = serializers.BooleanField(read_only=True)
+    direction = serializers.DecimalField(max_digits=5, decimal_places=2, read_only=True, allow_null=True)
+    taken_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    created = serializers.DateTimeField(read_only=True)
+    file_size = serializers.IntegerField(read_only=True, allow_null=True)
+    labels = serializers.ListField(child=serializers.CharField(), read_only=True)
+    organize_dismissed = serializers.BooleanField(read_only=True)
+    #: Organize state, from ``services.memories.photos.classify_photo``.
+    state = serializers.CharField(read_only=True)
+    owner_slug = serializers.CharField(read_only=True, allow_null=True)
+    pin_slug = serializers.CharField(read_only=True, allow_null=True)
+    pin_name = serializers.CharField(read_only=True, allow_null=True)
+    visit_id = serializers.IntegerField(read_only=True, allow_null=True)
+    wiki_slug = serializers.CharField(read_only=True, allow_null=True)
+    wiki_name = serializers.CharField(read_only=True, allow_null=True)
+    dm_peer_slug = serializers.CharField(read_only=True, allow_null=True)
+    dm_peer_name = serializers.CharField(read_only=True, allow_null=True)
+
+
+def build_photo_payload(image: Image, viewer_profile: Profile) -> dict:
+    """Build one photo's external-API payload for a given viewer.
+
+    Deliberately not ``services.images.image_to_gallery_json``: that one takes
+    an ``HttpRequest``, builds absolute URLs and template-facing flags for the
+    site's own gallery, and is free to change shape whenever the frontend
+    needs it. This payload is a published contract.
+
+    Every field naming a *person* or a *space the viewer may not belong to* is
+    resolved through the same gate the site's own pages use, so a photo the
+    viewer can legitimately see never becomes a side channel for context they
+    cannot:
+
+    - ``owner_slug`` goes through ``services.identity_visibility`` and is null
+      when the uploader's privacy settings hide them from this viewer.
+    - ``wiki_slug``/``wiki_name`` go through ``services.wiki_access`` and are
+      null when the viewer has no standing to see that community page.
+    - ``dm_peer_*`` is the other participant in the photo's originating direct
+      message, and is null unless the viewer is one of the two participants -
+      a photo can be visible through a pin gallery while the fact that it was
+      also sent in someone's DM stays private.
+    - Owner-only bookkeeping (``pin_*``, ``visit_id``, ``organize_dismissed``)
+      is withheld for a photo the viewer merely has visibility on.
+
+    Args:
+        image: The photo to serialize. ``labels`` should be prefetched and
+            ``pin``/``wiki``/``visit``/``location``/``profile`` selected, or
+            this issues a query per field.
+        viewer_profile: The profile the payload is being built for.
+
+    Returns:
+        A dict matching :class:`PhotoSerializer`.
+    """
+    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+    from urbanlens.dashboard.services.memories.photos import classify_photo
+    from urbanlens.dashboard.services.wiki_access import location_visible_to
+
+    is_owner = image.profile_id == viewer_profile.pk
+
+    owner_slug = None
+    if image.profile is not None and not resolve_visible_identity(viewer_profile, image.profile)["is_masked"]:
+        owner_slug = image.profile.slug
+
+    wiki_slug = wiki_name = None
+    wiki = image.wiki
+    if wiki is not None and wiki.location is not None and location_visible_to(wiki.location, viewer_profile):
+        wiki_slug = wiki.slug
+        wiki_name = wiki.name
+
+    dm_peer_slug = dm_peer_name = None
+    if image.direct_message_id:
+        dm = image.direct_message
+        if dm is not None and viewer_profile.pk in (dm.sender_id, dm.recipient_id):
+            peer = dm.recipient if dm.sender_id == viewer_profile.pk else dm.sender
+            if peer is not None:
+                identity = resolve_visible_identity(viewer_profile, peer)
+                if not identity["is_masked"]:
+                    dm_peer_slug = peer.slug
+                    dm_peer_name = identity["display_name"]
+
+    return {
+        "uuid": image.uuid,
+        "media_type": image.media_type,
+        "source": image.source,
+        "url": image.image.url if image.image else None,
+        "caption": image.caption,
+        "author": image.author,
+        "source_url": image.source_url,
+        "copyright": image.copyright,
+        "latitude": image.effective_latitude,
+        "longitude": image.effective_longitude,
+        "coordinates_are_estimated": image.latitude is None and image.effective_latitude is not None,
+        "direction": image.direction,
+        "taken_at": image.taken_at,
+        "created": image.created,
+        "file_size": image.file_size,
+        "labels": [label.name for label in image.labels.all()],
+        "organize_dismissed": image.organize_dismissed if is_owner else False,
+        "state": classify_photo(image),
+        "owner_slug": owner_slug,
+        "pin_slug": image.pin.slug if (is_owner and image.pin is not None) else None,
+        "pin_name": image.pin.effective_name if (is_owner and image.pin is not None) else None,
+        "visit_id": image.visit_id if is_owner else None,
+        "wiki_slug": wiki_slug,
+        "wiki_name": wiki_name,
+        "dm_peer_slug": dm_peer_slug,
+        "dm_peer_name": dm_peer_name,
+    }
+
+
+class PhotoListQuerySerializer(serializers.Serializer):
+    """Validates the filters on ``GET photos/``.
+
+    Pagination itself is the standard ``page``/``page_size`` pair handled by
+    ``external_api.pagination.ExternalApiPagination`` and is not declared here.
+    """
+
+    #: A pin slug or uuid; resolved against the caller's own pins only.
+    pin = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    #: Restrict to photos filed to neither a pin nor a visit.
+    unfiled = serializers.BooleanField(required=False, default=False)
+    #: Bounds on capture time, falling back to upload time where unknown.
+    taken_from = serializers.DateTimeField(required=False)
+    taken_to = serializers.DateTimeField(required=False)
+    media_type = serializers.ChoiceField(choices=MediaKind.choices, required=False)
+
+
+class PhotoListResponseSerializer(serializers.Serializer):
+    """The paginated photo list envelope (schema-only)."""
+
+    count = serializers.IntegerField(read_only=True)
+    next = serializers.CharField(read_only=True, allow_null=True)
+    previous = serializers.CharField(read_only=True, allow_null=True)
+    results = PhotoSerializer(many=True, read_only=True)
+
+
+class PhotoUploadSerializer(serializers.Serializer):
+    """Validates a multipart photo upload from an external client."""
+
+    file = serializers.FileField()
+    caption = serializers.CharField(max_length=500, required=False, allow_blank=True)
+    #: A pin slug or uuid; must be one of the caller's own pins.
+    pin = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    #: A PinVisit id; must be on one of the caller's own pins.
+    visit = serializers.IntegerField(required=False)
+
+
+class PhotoLabelsSerializer(serializers.Serializer):
+    """Validates a full replacement of one photo's media labels."""
+
+    labels = serializers.ListField(
+        child=serializers.CharField(max_length=MAX_MEDIA_LABEL_NAME_LENGTH),
+        max_length=MAX_MEDIA_LABELS,
+        allow_empty=True,
+    )
+
+
+class PhotoVoteSerializer(serializers.Serializer):
+    """Validates a community relevance vote on a materialized media row."""
+
+    #: 1 relevant, -1 not relevant, 0 withdraws an existing vote.
+    value = serializers.ChoiceField(choices=[-1, 0, 1])
+
+
+class PhotoVoteResponseSerializer(serializers.Serializer):
+    """The item's new community score after a vote (schema-only)."""
+
+    score = serializers.IntegerField(read_only=True)
+    your_vote = serializers.IntegerField(read_only=True)
+
+
+class PhotoFileSerializer(serializers.Serializer):
+    """Validates filing an unfiled photo onto a pin, or onto a new one."""
+
+    #: An existing pin (slug or uuid) to file onto. When omitted, coordinates
+    #: are used to create a pin instead.
+    pin = serializers.CharField(max_length=255, required=False, allow_blank=True)
+    latitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, min_value=-90, max_value=90)
+    longitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, min_value=-180, max_value=180)
+    #: Name for a newly created pin; ignored when filing onto an existing one.
+    name = serializers.CharField(max_length=255, required=False, allow_blank=True)
+
+
+class VisitSuggestionSerializer(serializers.Serializer):
+    """One pending photo-derived visit suggestion (schema-only)."""
+
+    id = serializers.IntegerField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    photo = PhotoSerializer(read_only=True)
+    pin_slug = serializers.CharField(read_only=True, allow_null=True)
+    pin_name = serializers.CharField(read_only=True, allow_null=True)
+    #: When the suggestion was raised (the row's creation time).
+    suggested_at = serializers.DateTimeField(read_only=True)
+    #: When the visit is claimed to have happened.
+    visit_date = serializers.DateTimeField(read_only=True, allow_null=True)
+
+
+class VisitSuggestionListResponseSerializer(serializers.Serializer):
+    """The pending-suggestions list envelope (schema-only)."""
+
+    suggestions = VisitSuggestionSerializer(many=True, read_only=True)
+
+
+class JournalEntrySerializer(serializers.Serializer):
+    """One Memories journal entry (schema-only).
+
+    A field-for-field mirror of ``services.memories.journal.JournalEntry``.
+    ``test_external_api_photos`` asserts the two stay identical, so a new
+    dataclass field fails the suite instead of silently never reaching clients.
+    """
+
+    kind = serializers.CharField(read_only=True)
+    occurred_at = serializers.DateTimeField(read_only=True)
+    icon = serializers.CharField(read_only=True)
+    title = serializers.CharField(read_only=True)
+    subtitle = serializers.CharField(read_only=True, allow_blank=True)
+    body = serializers.CharField(read_only=True, allow_blank=True)
+    url = serializers.CharField(read_only=True)
+    rating = serializers.IntegerField(read_only=True, allow_null=True)
+
+
+class JournalQuerySerializer(serializers.Serializer):
+    """Validates the window requested from the Memories journal."""
+
+    limit = serializers.IntegerField(required=False, default=50, min_value=1, max_value=200)
+    offset = serializers.IntegerField(required=False, default=0, min_value=0)
+
+
+class JournalResponseSerializer(serializers.Serializer):
+    """One window of the Memories journal (schema-only)."""
+
+    entries = JournalEntrySerializer(many=True, read_only=True)
+    #: Total entries available, for paging - the journal is materialized whole.
+    total = serializers.IntegerField(read_only=True)

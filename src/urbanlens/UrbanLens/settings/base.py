@@ -565,6 +565,11 @@ REST_FRAMEWORK = {
         "external_api_read": "1000/hour",
         "external_api_write": "300/hour",
         "external_api_burst": "60/minute",
+        # Credential-authenticated /media/ fetches (controllers.media). One
+        # gallery screen is dozens of files, so this is deliberately far more
+        # generous than the burst cap - but it is still a cap, so a leaked key
+        # cannot be used as an unmetered CDN.
+        "external_api_media": "2000/hour",
     },
     # Only consulted by views whose schema is actually generated - the
     # preprocessing hook in external_api.schema limits that to the external API.
