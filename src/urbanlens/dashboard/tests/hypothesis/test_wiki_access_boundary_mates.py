@@ -19,7 +19,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.boundary.model import Boundary
+from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
@@ -78,6 +78,33 @@ class LocationVisibleToBoundaryMateTests(TestCase):
         baker.make(Pin, profile=other, location=nearby_location)
 
         self.assertFalse(location_visible_to(self.wiki_location, self.profile))
+
+    def test_a_user_drawn_polygon_does_not_grant_visibility(self) -> None:
+        """The anti-gaming invariant: only ``generated_polygon`` (API-derived)
+        is consulted. A user who draws their own huge boundary over the place
+        must not thereby see wikis for everywhere inside it."""
+        far_location = Location.objects.create(latitude=40.5, longitude=-74.5)
+        baker.make(Pin, profile=self.profile, location=far_location)
+        Boundary.objects.filter(location=self.wiki_location).update(polygon=_square(-74.0, 40.0, 1.0))
+
+        self.assertFalse(location_visible_to(self.wiki_location, self.profile))
+
+    def test_a_pin_owned_boundary_row_does_not_widen_visibility(self) -> None:
+        """Only location-default rows count - never a per-pin customization."""
+        far_location = Location.objects.create(latitude=40.5, longitude=-74.5)
+        far_pin = baker.make(Pin, profile=self.profile, location=far_location)
+        Boundary.objects.create(location=self.wiki_location, pin=far_pin, profile=self.profile, generated_polygon=_square(-74.0, 40.0, 1.0))
+
+        self.assertFalse(location_visible_to(self.wiki_location, self.profile))
+
+    def test_any_location_default_boundary_row_counts(self) -> None:
+        """A point inside the building footprint is on that place's grounds, so
+        every location-default row is tested, not just the property one."""
+        Boundary.objects.create(location=self.wiki_location, boundary_type=BoundaryType.BUILDING, generated_polygon=_square(-74.02, 40.02, 0.001))
+        inside_building = Location.objects.create(latitude=40.0201, longitude=-74.0201)
+        baker.make(Pin, profile=self.profile, location=inside_building)
+
+        self.assertTrue(location_visible_to(self.wiki_location, self.profile))
 
     def test_wiki_page_reachable_via_boundary_mate_pin(self) -> None:
         """End-to-end: the same boundary-mate pin unlocks the real wiki page."""

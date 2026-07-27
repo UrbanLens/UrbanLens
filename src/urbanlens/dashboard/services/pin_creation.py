@@ -12,10 +12,12 @@ untrusted data through.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from decimal import ROUND_HALF_UP, Decimal
 import logging
 from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
+from django.db.models import DecimalField
 
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
@@ -47,6 +49,98 @@ class PinCreationForbiddenError(PinCreationError):
     Distinct from plain :class:`PinCreationError` so HTTP-facing callers can
     map it to 403 rather than 400 without inspecting the message text.
     """
+
+
+def quantize_coordinate(value: float | str | Decimal, field_name: str) -> Decimal:
+    """Round a submitted coordinate to the precision ``Location`` actually stores.
+
+    ``Location.latitude``/``longitude`` are fixed-precision decimals, so the
+    database rounds on insert. Rounding here first means a lookup compares the
+    same value the row will hold, rather than the caller's raw float.
+
+    Args:
+        value: The submitted coordinate.
+        field_name: Which Location field it is - the precision comes from the
+            field itself rather than a duplicated constant.
+
+    Returns:
+        The coordinate at the field's own decimal precision.
+
+    Raises:
+        TypeError: The named field isn't a fixed-precision decimal, so there is
+            no precision to round to - the assumption this whole function rests
+            on, worth failing loudly rather than silently mis-rounding.
+    """
+    field = Location._meta.get_field(field_name)  # noqa: SLF001 - _meta is public API despite the underscore
+    if not isinstance(field, DecimalField) or field.decimal_places is None:
+        raise TypeError(f"Location.{field_name} must be a fixed-precision DecimalField.")
+    return Decimal(str(float(value))).quantize(Decimal(1).scaleb(-field.decimal_places), rounding=ROUND_HALF_UP)
+
+
+def resolve_child_pin_location(
+    profile: Profile,
+    latitude: float | str | Decimal,
+    longitude: float | str | Decimal,
+    *,
+    exclude_pin: Pin | None = None,
+    defaults: dict | None = None,
+) -> Location:
+    """Resolve the Location a child (detail) pin sits at, refusing an exact overlap.
+
+    A child pin records its own precise coordinates near its parent, so - unlike
+    a top-level pin - this never applies the fuzzy proximity radius, which would
+    collapse a door, a window, and a sign on one building onto the parent's own
+    Location. Matching is on stored coordinate identity instead: ``Location`` is
+    unique on (latitude, longitude) at the fields' own precision, so the
+    submitted values are rounded to that precision before lookup. Comparing the
+    raw floats by zero PostGIS distance instead would miss a row whose stored
+    coordinates round to the same pair, then fail that unique constraint on
+    insert.
+
+    Two of one profile's pins may never occupy the exact same point: perfectly
+    stacked markers can't be told apart or clicked through on a map, and the
+    pair is nearly always one place the user meant to record once. Top-level
+    pins get this from ``db_pin_unique_location_per_profile``; child pins are
+    deliberately exempt from that constraint - they must be able to share a
+    parcel with their parent and siblings - so the narrower exact-point rule is
+    enforced here instead.
+
+    Args:
+        profile: Owner of the child pin being placed or moved.
+        latitude: Submitted latitude.
+        longitude: Submitted longitude.
+        exclude_pin: A pin to ignore when looking for an overlap - the pin being
+            moved, so re-submitting its current point stays a no-op instead of
+            colliding with itself.
+        defaults: Field defaults used only when creating a new Location.
+
+    Returns:
+        The Location at exactly these coordinates, created if it didn't exist.
+
+    Raises:
+        PinCreationError: This profile already has another pin at that point.
+    """
+    latitude_value = quantize_coordinate(latitude, "latitude")
+    longitude_value = quantize_coordinate(longitude, "longitude")
+
+    location = Location.objects.filter(latitude=latitude_value, longitude=longitude_value).first()
+    if location is None:
+        try:
+            location = Location.objects.create(latitude=latitude_value, longitude=longitude_value, **(defaults or {}))
+        except IntegrityError:
+            # A concurrent request inserted this coordinate pair between the
+            # lookup and the insert (the (latitude, longitude) unique
+            # constraint) - use that row rather than surfacing a 500.
+            location = Location.objects.filter(latitude=latitude_value, longitude=longitude_value).first()
+            if location is None:
+                raise
+
+    overlapping = Pin.objects.filter(profile=profile, location=location)
+    if exclude_pin is not None and exclude_pin.pk is not None:
+        overlapping = overlapping.exclude(pk=exclude_pin.pk)
+    if overlapping.exists():
+        raise PinCreationError("You already have a pin at these exact coordinates. Place it slightly apart to keep both.")
+    return location
 
 
 @dataclass(slots=True)
@@ -118,15 +212,14 @@ def create_pin_for_profile(
             The external API's offline-outbox clients retry creates until
             acknowledged, so the same submission may legitimately arrive twice.
         parent_id: An existing pin of this profile's to create this one as a
-            child (detail pin) of. When given, Location resolution uses an
-            exact-coordinate match instead of the default fuzzy dedup radius -
-            a detail pin's whole point is to sit at its own precise coordinates
-            near its parent, which the fuzzy radius would otherwise collapse
-            onto the parent's own Location (mirrors
-            ``controllers.detail_pins._location_for_coords``). A child pin is
-            exempt from the one-root-pin-per-location rule, so this never
-            raises the "already have a pin here" error the plain top-level
-            path would.
+            child (detail pin) of. When given, the Location is resolved by
+            :func:`resolve_child_pin_location` - an exact-coordinate match
+            instead of the default fuzzy dedup radius, since a detail pin's
+            whole point is to sit at its own precise coordinates near its
+            parent, which the fuzzy radius would otherwise collapse onto the
+            parent's own Location. A child pin is exempt from the
+            one-root-pin-per-location rule, but not from the narrower rule that
+            no two of a profile's pins may share an exact point.
 
     Returns:
         The created (or, for an idempotent replay, existing) pin plus every
@@ -136,8 +229,9 @@ def create_pin_for_profile(
         PinCreationError: Neither coordinates nor a usable address were given,
             the address couldn't be geocoded, ``client_uuid`` is already used
             by a pin that isn't this profile's, ``parent_id`` doesn't match
-            one of this profile's own pins, or the profile already has a
-            top-level pin at this exact location.
+            one of this profile's own pins, the profile already has a
+            top-level pin at this exact location, or (for a child pin) it
+            already has any pin at this exact point.
         PinCreationForbiddenError: An address needed geocoding but external lookups
             are turned off for this profile.
     """
@@ -171,13 +265,15 @@ def create_pin_for_profile(
     lat_f = float(latitude)
     lon_f = float(longitude)
 
-    # Fuzzy 50m-radius dedup (not exact-coordinate get_or_create): GPS jitter between two
-    # drops at the same real place must consolidate onto the same Location, matching every
-    # other top-level Location-resolution path in the app (viewset.py, import_data.py). A
-    # child (parent_id given) skips the fuzzy radius instead - see the parent_id arg's
-    # docstring - exactly like detail_pins.py does for the map UI's own detail pins.
-    threshold_meters = 0 if new_parent is not None else 50
-    location, _ = Location.objects.get_nearby_or_create(lat_f, lon_f, threshold_meters=threshold_meters, defaults={"official_name": place_canonical_name})
+    if new_parent is not None:
+        # A child pin keeps its own exact point (and may not stack on another of
+        # this profile's pins) - see resolve_child_pin_location.
+        location = resolve_child_pin_location(profile, lat_f, lon_f, defaults={"official_name": place_canonical_name})
+    else:
+        # Fuzzy 50m-radius dedup (not exact-coordinate get_or_create): GPS jitter between two
+        # drops at the same real place must consolidate onto the same Location, matching every
+        # other top-level Location-resolution path in the app (viewset.py, import_data.py).
+        location, _ = Location.objects.get_nearby_or_create(lat_f, lon_f, threshold_meters=50, defaults={"official_name": place_canonical_name})
 
     # Locations whose bounding box also covers this point - when more than one
     # matches, the caller offers the user a choice (see below).

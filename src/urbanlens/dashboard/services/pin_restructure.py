@@ -321,12 +321,20 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
     Returns:
         How many child pins were created.
     """
-    from urbanlens.dashboard.controllers.detail_pins import _location_for_coords
+    from urbanlens.dashboard.services.pin_creation import PinCreationError, resolve_child_pin_location
 
     created = 0
     with transaction.atomic():
         for building in buildings[:MAX_RESTRUCTURE_ITEMS]:
             name = building_name(building)
+            try:
+                location = resolve_child_pin_location(pin.profile, building["latitude"], building["longitude"])
+            except PinCreationError:
+                # Already pinned at that exact point (commonly the parent pin
+                # itself, when the parcel coordinate is a building centroid) -
+                # skip rather than stacking a second marker on it.
+                logger.debug("create_building_pins: skipping building already pinned at its exact point")
+                continue
             Pin.objects.create(
                 name=name or None,
                 # Derived from a building record, not typed by the user, so
@@ -340,7 +348,7 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
                 pin_type_is_user_provided=False,
                 parent_pin=pin,
                 profile=pin.profile,
-                location=_location_for_coords(building["latitude"], building["longitude"]),
+                location=location,
             )
             created += 1
     return created

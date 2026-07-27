@@ -109,13 +109,18 @@ class MergeRetainsPropertiesPropertyTests(TestCase):
         location = baker.make(Location, latitude=lat, longitude=lon)
         source = baker.make(Pin, profile=profile, location=location, name=name, priority=priority)
         location_id_before = source.location_id
+        # Compare against the *stored* name, not the generated one: Pin.save()
+        # sanitizes on create, so a generated name that is entirely punctuation
+        # (e.g. ";") is legitimately stored as "". The invariant under test is
+        # that reparenting leaves the name alone, not what creation made of it.
+        name_before = source.name
 
         source.parent_pin = target
         source.save(update_fields=["parent_pin", "updated"])
         source.refresh_from_db()
 
         self.assertEqual(source.parent_pin_id, target.pk)
-        self.assertEqual(source.name, name)
+        self.assertEqual(source.name, name_before)
         self.assertEqual(source.priority, priority)
         self.assertEqual(source.location_id, location_id_before)
 
@@ -541,6 +546,10 @@ class DetailPinCoordinateDedupTests(TestCase):
     parent) onto the same Location, collapsing their marker coordinates
     together - reported after several detail pins placed around a map all
     ended up stacked on one point.
+
+    The exact-point case (as opposed to the nearby case covered here) is
+    rejected outright - see ``test_child_pin_overlap``, which also carries the
+    property-based generalization of this class.
     """
 
     def setUp(self) -> None:
@@ -582,35 +591,6 @@ class DetailPinCoordinateDedupTests(TestCase):
         self.assertEqual(response.status_code, 200)
         second.refresh_from_db()
         self.assertNotEqual(first.location_id, second.location_id)
-
-
-class DetailPinCoordinateDedupPropertyTests(TestCase):
-    """Property-based generalization of DetailPinCoordinateDedupTests above.
-
-    Exercises ``detail_pins._location_for_coords`` - the pure helper function
-    the view calls - directly, rather than through self.client, per this
-    repo's documented @given + self.client incompatibility. Verifies that any
-    two distinct coordinate pairs get distinct Location rows (the whole point
-    of passing ``threshold_meters=0``, bypassing ``get_nearby_or_create``'s
-    default 50m dedup radius), for arbitrary generated base coordinates and
-    small nearby offsets - not just the one hand-picked ~20m-apart example
-    above.
-    """
-
-    @given(
-        lat=lat_float,
-        lon=lon_float,
-        lat_offset=st.floats(min_value=0.0001, max_value=0.001, allow_nan=False, allow_infinity=False),
-        lon_offset=st.floats(min_value=0.0001, max_value=0.001, allow_nan=False, allow_infinity=False),
-    )
-    @_db_settings
-    def test_nearby_coordinates_always_get_distinct_locations(self, lat: float, lon: float, lat_offset: float, lon_offset: float) -> None:
-        from urbanlens.dashboard.controllers.detail_pins import _location_for_coords
-
-        first = _location_for_coords(lat, lon)
-        second = _location_for_coords(lat + lat_offset, lon + lon_offset)
-
-        self.assertNotEqual(first.pk, second.pk)
 
 
 class VisitHistoryChildrenTests(TestCase):

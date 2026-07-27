@@ -439,6 +439,10 @@ class PinUpdateSerializer(serializers.Serializer):
     #: A pin uuid to become this pin's new parent, or null to detach it to a
     #: top-level pin of its own. Omit entirely to leave the parent untouched.
     parent_id = serializers.UUIDField(required=False, allow_null=True)
+    #: Acknowledges that the move costs the caller access to one or more
+    #: community wikis. A move that would do so is refused with 409 (listing
+    #: them) until this is sent - see ``PinDetailView.patch``.
+    confirm_wiki_loss = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs: dict) -> dict:
         """Coordinates move together or not at all, and must be finite."""

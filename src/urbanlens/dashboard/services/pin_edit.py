@@ -46,7 +46,7 @@ def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None
     ``threshold_meters=0`` so a manual move always lands on the exact
     submitted point rather than snapping to whatever Location happens to
     already exist within the default dedup radius (mirrors
-    ``detail_pins._location_for_coords``).
+    ``pin_creation.resolve_child_pin_location``).
 
     Args:
         pin: The pin being moved.

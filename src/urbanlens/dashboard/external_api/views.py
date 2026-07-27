@@ -289,6 +289,7 @@ from urbanlens.dashboard.services.visits import (
     reject_visit_suggestion,
     visit_logging_allowed,
 )
+from urbanlens.dashboard.services.wiki_access import wikis_hidden_by_pin_move
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -692,9 +693,17 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
             return Response({"error": "No such pin."}, status=404)
         return Response(build_pin_detail(pin, request.user.profile))
 
-    @extend_schema(request=PinUpdateSerializer, responses={200: PinDetailSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
+    @extend_schema(request=PinUpdateSerializer, responses={200: PinDetailSerializer, 400: ErrorSerializer, 404: ErrorSerializer, 409: ErrorSerializer})
     def patch(self, request: Request, pin_slug: str) -> Response:
-        """Apply a partial update to one of the key owner's pins."""
+        """Apply a partial update to one of the key owner's pins.
+
+        A move that would cost the owner access to a community wiki (wiki
+        visibility follows where their pins are) is refused with 409 and a
+        ``requires_wiki_loss_confirmation`` payload naming them, matching the
+        internal ``PinViewSet``. Re-send with ``confirm_wiki_loss: true`` to go
+        ahead. Every other update is unaffected, as is a move that costs the
+        owner nothing.
+        """
         pin = self.get_owned_pin(request, pin_slug)
         if pin is None:
             return Response({"error": "No such pin."}, status=404)
@@ -710,6 +719,21 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
             new_parent = Pin.objects.filter(uuid=data["parent_id"], profile=pin.profile).first()
             if new_parent is None:
                 return Response({"error": "No such pin to set as parent."}, status=400)
+
+        # Asked only once the request is known to be otherwise valid: confirming
+        # a move and then being handed a 400 for an unrelated bad field would be
+        # a pointless prompt.
+        if "latitude" in data and not data.get("confirm_wiki_loss"):
+            lost = wikis_hidden_by_pin_move(pin, data["latitude"], data["longitude"])
+            if lost:
+                return Response(
+                    {
+                        "error": "This move would end your access to a community wiki.",
+                        "requires_wiki_loss_confirmation": True,
+                        "wikis": [{"name": wiki.name, "slug": wiki.location.slug} for wiki in lost],
+                    },
+                    status=409,
+                )
 
         try:
             with transaction.atomic():

@@ -174,26 +174,52 @@ function init(): void {
     let mainMarkerLng = mapCenterLng;
     const mainMarker = L.marker([mapCenterLat, mapCenterLng], { draggable: !!cfg.mainMarkerOwnerUuid }).addTo(map);
     if (cfg.mainMarkerOwnerUuid) {
-        mainMarker.on("dragend", () => {
-            const pos = mainMarker.getLatLng();
+        const savePosition = (lat: number, lng: number, confirmWikiLoss: boolean): Promise<Response> =>
             fetch(`/dashboard/rest/pins/${cfg.mainMarkerOwnerUuid}/`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-                body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) }),
-            })
-                .then((r) => {
-                    if (!r.ok) throw new Error();
-                    return r.json();
-                })
-                .then(() => {
+                body: JSON.stringify({
+                    latitude: lat.toFixed(6),
+                    longitude: lng.toFixed(6),
+                    ...(confirmWikiLoss ? { confirm_wiki_loss: true } : {}),
+                }),
+            });
+
+        mainMarker.on("dragend", () => {
+            const pos = mainMarker.getLatLng();
+            void (async () => {
+                try {
+                    let response = await savePosition(pos.lat, pos.lng, false);
+                    // 409: the move would drop this pin out of a place whose
+                    // community wiki the owner can currently see, and no other
+                    // pin of theirs keeps it open. Ask before letting that
+                    // happen - the access is silent to lose and easy to miss.
+                    if (response.status === 409) {
+                        const payload = (await response.json()) as { wikis?: { name: string }[] };
+                        const names = (payload.wikis ?? []).map((w) => w.name).join(", ");
+                        const confirmed = await confirmAction({
+                            title: "Move this pin?",
+                            message: names
+                                ? `You'll no longer see the community page for ${names}. Moving the pin back inside will restore it.`
+                                : "You'll no longer see this place's community page. Moving the pin back inside will restore it.",
+                            confirmLabel: "Move anyway",
+                            cancelLabel: "Cancel",
+                        });
+                        if (!confirmed) {
+                            mainMarker.setLatLng([mainMarkerLat, mainMarkerLng]);
+                            return;
+                        }
+                        response = await savePosition(pos.lat, pos.lng, true);
+                    }
+                    if (!response.ok) throw new Error();
                     mainMarkerLat = pos.lat;
                     mainMarkerLng = pos.lng;
                     toast.success("Pin moved.");
-                })
-                .catch(() => {
+                } catch {
                     toast.error("Failed to save new position.");
                     mainMarker.setLatLng([mainMarkerLat, mainMarkerLng]);
-                });
+                }
+            })();
         });
     }
 

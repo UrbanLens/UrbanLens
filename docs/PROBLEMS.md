@@ -4,6 +4,39 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
 to pick up without re-discovering the problem from scratch.
 
+## OPEN 2026-07-27: ~46 pre-existing test failures on `feature/external-api-mobile-v2` (baseline-verified)
+
+A broad sweep (`-k "pin or wiki or location or boundary or import or share or detail or merge or
+restructure or undo or map"`) over `src/urbanlens/dashboard/tests` gives **46 failed, 3484 passed**.
+None are regressions from the Place-consolidation phase-0 work: the four files whose failures
+could plausibly have been caused by it were run with that change set `git stash`ed and again with
+it applied, giving **byte-identical results both ways (12 failed, 117 passed, same test IDs)**.
+
+Distinct causes identified so far, worth splitting up when someone picks this up:
+
+1. **Unmocked external calls.** `test_legacy_cid_coordinate_fix.py::RepairLegacyPinCoordinatesTests`
+   (all 7) fail with `RuntimeError: External network access is disabled during tests. Attempted to
+   connect to '163.182.80.211'`. The repair service reaches REData and the test never mocks it.
+   Same family: `test_property_records_plugin.py`, `test_pin_redata_media_proxy.py` (both
+   "unconfigured gateway" tests), `test_flickr_album_import.py`.
+2. **Cross-test pollution, not real failures.** `test_external_api_wiki_oracle.py::
+   WikiDiscoveryOracleTests` reported 7 SUBFAILEDs in the big sweep but **passes cleanly when its
+   own file is run in isolation**. Anything in that file should be re-checked in isolation before
+   being treated as a bug - it is the wiki-existence-oracle guard, so a spurious failure there is
+   easy to misread as a security regression.
+3. **Genuine logic/rendering failures**, reproducible in isolation and unrelated to pins/wikis:
+   `test_pin_model_extra.py::PinEffectiveColorTests` (2, `None != '#0000ff'`),
+   `test_pin_edit_controller.py::PinDescriptionEditableTests` (2),
+   `test_profile_hero_meta_editable.py` (2), `test_trip_controller.py`,
+   `test_location_place_name_lazy.py`, `test_pin_media_endpoints.py`,
+   `test_direct_messages.py`, `test_export_import_completeness.py::RoundTripCommentsTests` (8),
+   `test_pin_location_conflict.py`, `test_share_provenance.py` (2),
+   `test_map_pin_share_detection_integration.py`.
+4. Plus the two already-documented clusters below (websocket auth, friend-invite privacy).
+
+Reproduce a baseline cheaply with `pytest <files> -q --reuse-db` after `git stash`, rather than
+re-running the whole 41-minute sweep.
+
 ## OPEN 2026-07-27: `test_websocket_auth.py::test_valid_api_key_authenticates_an_anonymous_socket` times out
 
 ```

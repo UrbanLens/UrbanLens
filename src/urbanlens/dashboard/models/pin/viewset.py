@@ -10,8 +10,28 @@ from rest_framework.response import Response
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.serializer import PinSerializer
 from urbanlens.dashboard.services.pin_edit import PinHasChildrenError, delete_pin, move_pin_to_coordinates
+from urbanlens.dashboard.services.wiki_access import wikis_hidden_by_pin_move
 
 logger = logging.getLogger(__name__)
+
+#: Values a client may send for ``confirm_wiki_loss`` to mean "yes, go ahead".
+#: JSON bodies send a real boolean; form-encoded ones can only send a string.
+_TRUTHY = {"1", "true", "yes", "on"}
+
+
+def _wiki_loss_confirmed(data) -> bool:
+    """Whether the client has already acknowledged losing wiki access.
+
+    Args:
+        data: The request body.
+
+    Returns:
+        Whether ``confirm_wiki_loss`` was sent as a truthy value.
+    """
+    value = data.get("confirm_wiki_loss")
+    if isinstance(value, bool):
+        return value
+    return str(value or "").strip().lower() in _TRUTHY
 
 
 class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
@@ -44,28 +64,50 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
             return Response(status=status.HTTP_403_FORBIDDEN)
 
         with transaction.atomic():
-            if "latitude" in request.data or "longitude" in request.data:
-                error = self._apply_coordinates(instance, request.data)
-                if error is not None:
-                    return Response({"detail": error}, status=status.HTTP_400_BAD_REQUEST)
-
+            # Everything is validated before anything is asked or written, so a
+            # confirmed move can't then be rejected for an unrelated bad field.
             serializer = self.get_serializer(instance, data=request.data, partial=True)
             serializer.is_valid(raise_exception=True)
+
+            if "latitude" in request.data or "longitude" in request.data:
+                parsed = self._parse_coordinates(request.data)
+                if isinstance(parsed, str):
+                    return Response({"detail": parsed}, status=status.HTTP_400_BAD_REQUEST)
+                latitude, longitude = parsed
+
+                # Moving a pin off a place's grounds silently drops the owner's
+                # access to that place's community wiki (visibility is derived
+                # from where their pins are, not stored). Refuse once with 409
+                # and say which wikis are at stake, so the UI can ask rather
+                # than let it happen invisibly; the client re-sends with
+                # confirm_wiki_loss to go ahead.
+                if not _wiki_loss_confirmed(request.data):
+                    lost = wikis_hidden_by_pin_move(instance, latitude, longitude)
+                    if lost:
+                        return Response(
+                            {
+                                "requires_wiki_loss_confirmation": True,
+                                "wikis": [{"name": wiki.name, "slug": wiki.location.slug} for wiki in lost],
+                            },
+                            status=status.HTTP_409_CONFLICT,
+                        )
+
+                move_pin_to_coordinates(instance, latitude, longitude)
+
             self.perform_update(serializer)
         logger.info("Pin with id %s updated", instance.id)
         return Response(serializer.data)
 
     @staticmethod
-    def _apply_coordinates(instance: Pin, data) -> str | None:
-        """Validate client-submitted lat/lng, then move *instance* via ``services.pin_edit``.
+    def _parse_coordinates(data) -> tuple[float, float] | str:
+        """Validate client-submitted lat/lng.
 
         Args:
-            instance: The pin being moved.
             data: The request body, expected to carry ``latitude``/``longitude``.
 
         Returns:
-            An error message if the coordinates are missing/invalid, else
-            None once the move has been applied and saved.
+            The parsed (latitude, longitude), or an error message string when
+            they are missing or invalid.
         """
         try:
             latitude = float(data["latitude"])
@@ -76,9 +118,7 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
             return "latitude and longitude must be finite numbers."
         if not (-90 <= latitude <= 90) or not (-180 <= longitude <= 180):
             return "latitude must be between -90 and 90, longitude between -180 and 180."
-
-        move_pin_to_coordinates(instance, latitude, longitude)
-        return None
+        return latitude, longitude
 
     def perform_update(self, serializer):
         serializer.save(profile=self.request.user.profile)

@@ -18,6 +18,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+from urbanlens.dashboard.services.pin_creation import PinCreationError, resolve_child_pin_location
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
@@ -58,21 +59,6 @@ def _schedule_classification(kind: str, pk: int) -> None:
     from urbanlens.dashboard.tasks import classify_detail_marker
 
     safely_enqueue_task(classify_detail_marker, kind, pk)
-
-
-def _location_for_coords(latitude, longitude) -> Location:
-    """Find-or-create the Location a detail pin sits at.
-
-    A detail pin has its own coordinates (distinct from its parent's), and a Pin
-    reads its coordinates from its Location, so each detail pin needs its own
-    Location row at its point. ``get_nearby_or_create``'s default 50m proximity
-    dedup would otherwise snap two detail pins placed within 50m of each other
-    (or of the parent pin itself) onto the same Location, collapsing their
-    coordinates together - so this skips that dedup and only reuses an existing
-    Location on an exact coordinate match, mirroring ``_location_for_child_wiki``.
-    """
-    location, _created = Location.objects.get_nearby_or_create(float(latitude), float(longitude), threshold_meters=0)
-    return location
 
 
 def _location_for_child_wiki(latitude, longitude) -> Location:
@@ -139,6 +125,11 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         if parent.would_create_cycle(parent.parent_pin):
             return JsonResponse({"ok": False, "error": "Invalid parent pin."}, status=400)
 
+        try:
+            location = resolve_child_pin_location(parent.profile, lat, lon)
+        except PinCreationError as exc:
+            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
         detail_name = body.get("name") or None
         pin_type, pin_type_chosen = _requested_pin_type(body)
         detail_pin = Pin.objects.create(
@@ -157,7 +148,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             detail_border_opacity=int(body.get("border_opacity") or 100),
             parent_pin=parent,
             profile=parent.profile,
-            location=_location_for_coords(lat, lon),
+            location=location,
         )
         if not pin_type_chosen:
             _schedule_classification("pin", detail_pin.pk)
@@ -177,6 +168,20 @@ class DetailPinEditView(LoginRequiredMixin, View):
             body = json.loads(request.body)
         except (json.JSONDecodeError, ValueError):
             body = request.POST
+
+        # A move is resolved (and rejected) before anything else is touched, so
+        # a refused move doesn't silently drop the style fields submitted with
+        # it. The pin itself is excluded from the overlap check: re-submitting
+        # its own current point (a drag that snapped back) is a no-op, not a
+        # collision.
+        new_latitude = body.get("latitude")
+        new_longitude = body.get("longitude")
+        new_location = None
+        if moved := bool(new_latitude and new_longitude):
+            try:
+                new_location = resolve_child_pin_location(detail_pin.profile, new_latitude, new_longitude, exclude_pin=detail_pin)
+            except PinCreationError as exc:
+                return JsonResponse({"ok": False, "error": str(exc)}, status=400)
 
         for field, value in {
             "name": body.get("name") or None,
@@ -201,11 +206,8 @@ class DetailPinEditView(LoginRequiredMixin, View):
             detail_pin.pin_type, detail_pin.pin_type_is_user_provided = _requested_pin_type(body)
             reclassify = not detail_pin.pin_type_is_user_provided
 
-        new_latitude = body.get("latitude")
-        new_longitude = body.get("longitude")
-        if moved := bool(new_latitude and new_longitude):
-            # A move repoints the detail pin to a Location at the new coordinates.
-            detail_pin.location = _location_for_coords(new_latitude, new_longitude)
+        if new_location is not None:
+            detail_pin.location = new_location
 
         detail_pin.save()
         # A moved auto-typed marker may have landed on (or left) a building, so
