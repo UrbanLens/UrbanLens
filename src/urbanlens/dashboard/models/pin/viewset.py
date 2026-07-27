@@ -9,7 +9,7 @@ from rest_framework.response import Response
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.serializer import PinSerializer
-from urbanlens.dashboard.services.pin_edit import PinHasChildrenError, delete_pin, move_pin_to_coordinates
+from urbanlens.dashboard.services.pin_edit import PinHasChildrenError, PinMoveError, delete_pin, move_pin_to_coordinates
 from urbanlens.dashboard.services.wiki_access import wikis_hidden_by_pin_move
 
 logger = logging.getLogger(__name__)
@@ -92,7 +92,10 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
                             status=status.HTTP_409_CONFLICT,
                         )
 
-                move_pin_to_coordinates(instance, latitude, longitude)
+                try:
+                    move_pin_to_coordinates(instance, latitude, longitude)
+                except PinMoveError as exc:
+                    return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
             self.perform_update(serializer)
         logger.info("Pin with id %s updated", instance.id)

@@ -12,52 +12,74 @@ None are regressions from the Place-consolidation phase-0 work: the four files w
 could plausibly have been caused by it were run with that change set `git stash`ed and again with
 it applied, giving **byte-identical results both ways (12 failed, 117 passed, same test IDs)**.
 
-Distinct causes identified so far, worth splitting up when someone picks this up:
+**14 of the 46 are now FIXED** (2026-07-27, same session). The pattern behind almost all of them:
+*tests that depend on ambient machine state or on an implementation shape that has since changed*.
+They pass on a bare CI box with no credentials and fail on a dev box that has them, or vice versa.
 
-1. **Unmocked external calls.** `test_legacy_cid_coordinate_fix.py::RepairLegacyPinCoordinatesTests`
-   (all 7) fail with `RuntimeError: External network access is disabled during tests. Attempted to
-   connect to '163.182.80.211'`. The repair service reaches REData and the test never mocks it.
-   Same family: `test_property_records_plugin.py`, `test_pin_redata_media_proxy.py` (both
-   "unconfigured gateway" tests), `test_flickr_album_import.py`.
-2. **Cross-test pollution, not real failures.** `test_external_api_wiki_oracle.py::
-   WikiDiscoveryOracleTests` reported 7 SUBFAILEDs in the big sweep but **passes cleanly when its
-   own file is run in isolation**. Anything in that file should be re-checked in isolation before
-   being treated as a bug - it is the wiki-existence-oracle guard, so a spurious failure there is
-   easy to misread as a security regression.
-3. **Genuine logic/rendering failures**, reproducible in isolation and unrelated to pins/wikis:
-   `test_pin_model_extra.py::PinEffectiveColorTests` (2, `None != '#0000ff'`),
-   `test_pin_edit_controller.py::PinDescriptionEditableTests` (2),
-   `test_profile_hero_meta_editable.py` (2), `test_trip_controller.py`,
-   `test_location_place_name_lazy.py`, `test_pin_media_endpoints.py`,
-   `test_direct_messages.py`, `test_export_import_completeness.py::RoundTripCommentsTests` (8),
-   `test_pin_location_conflict.py`, `test_share_provenance.py` (2),
-   `test_map_pin_share_detection_integration.py`.
-4. Plus the two already-documented clusters below (websocket auth, friend-invite privacy).
+Fixed:
+
+1. `test_legacy_cid_coordinate_fix.py::RepairLegacyPinCoordinatesTests` (7) - the helper's
+   `location.cid = ...` goes through `Location.cid`'s setter, which calls `GooglePlaceService`
+   with `fetch_if_missing=True` and hits REData's nearby-places search live. Now calls
+   `set_cid_for_entity(..., fetch_if_missing=False)`, the service's own bulk-path flag. **Note the
+   sharp edge that caused this: assigning a plain model attribute performs synchronous network
+   I/O.** Worth revisiting on its own merits.
+2. `test_websocket_auth.py` (1) - not a consumer bug at all. Tests ran Django's default PBKDF2
+   (~1.2M iterations) because nothing overrode `PASSWORD_HASHERS`; hashing inside the connection
+   handshake exceeded `WebsocketCommunicator.connect()`'s 1-second default. `settings/test.py` now
+   sets MD5, which also speeds up every test that bakes a User.
+3. `test_pin_redata_media_proxy.py` (2) - asserted "unconfigured gateway returns 404 not 500" while
+   *assuming* the machine had no REData credentials. With credentials present the gateway built
+   fine, made a real call, and died on a DB write from a `SimpleTestCase`. Now forces the
+   unconfigured state by patching `__post_init__`.
+4. `test_flickr_album_import.py` (1) - same shape: every sibling patches `flickr_is_configured`,
+   this one didn't, so it saw "not configured" and never reached the blank-URL branch.
+5. `test_property_records_plugin.py` (1) - assigned to `Location.address`, which is a read-only
+   composed property; now sets the component fields.
+6. `test_pin_model_extra.py::PinEffectiveColorTests` (2) - test/implementation drift.
+   `icon_source_label()` sorts in Python via `sorted(self.labels.exclude(kind="user"))` and no
+   longer calls `.order_by()`, but the mock still stubbed `exclude().order_by()`. The real call
+   iterated a bare MagicMock and got nothing, so the expects-a-colour cases failed and the
+   expects-None cases passed **without exercising anything**.
+
+Still open, each needing its own investigation:
+
+- **Cross-test pollution, not real failures.** `test_external_api_wiki_oracle.py::
+  WikiDiscoveryOracleTests` reported 7 SUBFAILEDs in the big sweep but **passes cleanly in
+  isolation**. Re-check anything there in isolation before treating it as a bug - it guards the
+  wiki-existence oracle, so a spurious failure reads like a security regression.
+- **Genuine failures reproducible in isolation**: `test_pin_edit_controller.py::
+  PinDescriptionEditableTests` (2), `test_profile_hero_meta_editable.py` (2),
+  `test_trip_controller.py` (1), `test_location_place_name_lazy.py` (1),
+  `test_pin_media_endpoints.py` (1), `test_direct_messages.py` (1),
+  `test_export_import_completeness.py::RoundTripCommentsTests` (8),
+  `test_pin_location_conflict.py` (1), `test_share_provenance.py` (2),
+  `test_map_pin_share_detection_integration.py` (1). Given the six causes above, check first
+  whether each depends on ambient config or on a stale mock shape before assuming a product bug.
+- Plus the friend-invite privacy cluster documented below (7).
 
 Reproduce a baseline cheaply with `pytest <files> -q --reuse-db` after `git stash`, rather than
 re-running the whole 41-minute sweep.
 
-## OPEN 2026-07-27: `test_websocket_auth.py::test_valid_api_key_authenticates_an_anonymous_socket` times out
+## RESOLVED 2026-07-27: `test_websocket_auth.py::test_valid_api_key_authenticates_an_anonymous_socket` times out
 
-```
-test_websocket_auth.py::ApiKeyWebSocketAuthTests::test_valid_api_key_authenticates_an_anonymous_socket
-  asyncio.exceptions.CancelledError -> TimeoutError (asgiref/timeout.py:108)
-```
+Was `asyncio.CancelledError -> TimeoutError` (asgiref/timeout.py:108), and was **confirmed
+pre-existing** by stashing the Place-consolidation change set (identical `1 failed, 6 passed`
+both ways).
 
-**Confirmed pre-existing**, not caused by the Place-consolidation phase-0 work: `git stash`ed
-that entire change set and re-ran the file on clean `feature/external-api-mobile-v2` - identical
-`1 failed, 6 passed` both ways. Also reproduces in isolation, so it isn't CPU contention from a
-parallel pytest run.
+The asymmetry that made it look consumer-specific - the structurally identical OAuth2 sibling
+passed - was the actual clue, just not in the direction first guessed. It was not a
+`database_sync_to_async` deadlock. Nothing in the project overrode `PASSWORD_HASHERS`, so tests
+ran Django's default PBKDF2 at ~1.2M iterations; `authenticate_api_key`'s `check_password` ran
+*inside the WebSocket handshake* and blew past `WebsocketCommunicator.connect()`'s 1-second
+default timeout. The OAuth2 path is a plain indexed token lookup with no hashing, so it never
+came close.
 
-The interesting part is the asymmetry: `test_oauth2_access_token_authenticates_an_anonymous_socket`
-is structurally identical (anonymous socket, `?key=`, expects `connected is True`) and *passes*.
-So the hang is specific to the `ApiKey` branch of `websocket_auth.ApiKeyAuthMiddleware` - likely
-a `database_sync_to_async` call in the API-key lookup blocking on a connection that the
-`TransactionTestCase` thread already holds, rather than anything about the assertion itself.
-`generate_api_key`/`ApiKey` verification does more DB work than the OAuth2 path, which fits.
+Fixed by setting `PASSWORD_HASHERS = ["...MD5PasswordHasher"]` in `settings/test.py` (test-only;
+base.py keeps the real hashers everywhere else). Speeds up every test that bakes a User as a
+side benefit.
 
-Start by adding a timeout to `comm.connect()` and logging inside the middleware's API-key branch
-to see whether it enters the lookup and never returns, or never gets called at all.
+## RESOLVED 2026-07-27: `get_nearby_or_create(threshold_meters=0)` could 500 on sub-precision coordinate collisions
 
 ## OPEN 2026-07-27: `get_nearby_or_create(threshold_meters=0)` can 500 on sub-precision coordinate collisions
 
@@ -75,17 +97,24 @@ surfacing as a 500.
 
 Repro: call it twice with e.g. `42.00000014` then `42.00000006` (same longitude).
 
-Fixed for child/detail pins by `services.pin_creation.resolve_child_pin_location`, which matches
-on quantized coordinates instead of zero-distance geometry. Two callers still pass
-`threshold_meters=0` straight through and remain exposed:
+Fixed by `Location.objects.get_exact_or_create` (`models/location/queryset.py`), which matches on
+the stored coordinates - what the unique constraint actually enforces - rather than a
+zero-distance geometry probe. Every exact-coordinate caller now goes through it:
+`pin_creation.resolve_child_pin_location`, `pin_edit.move_pin_to_coordinates`, and
+`detail_pins._location_for_child_wiki`.
 
-- `controllers/detail_pins.py::_location_for_child_wiki` (child wiki placement)
-- `services/pin_edit.py::move_pin_to_coordinates` (every manual pin move)
+Two adjacent bugs surfaced while fixing it, both also fixed:
 
-Both can reuse `pin_creation._quantize_coordinate`. Rare in practice (needs a client submitting
-more than 6dp of precision - the map UI sends `toFixed(6)`), but the external API accepts raw
-floats. Superseded anyway if `docs/designs/place-consolidation.md` phase 3 lands, which moves
-every path onto exact-coordinate resolution.
+- `_location_for_child_wiki` handled "a wiki already owns this Location" by inserting a **second
+  Location at the same coordinates**, which the `(latitude, longitude)` unique constraint refuses
+  outright - a guaranteed 500 whenever a user dropped a child wiki marker on a point that already
+  had one. It now raises `ChildWikiLocationError`, surfaced as a 400 ("place it slightly apart"),
+  matching the child-pin rule. The child-wiki *move* path excludes the wiki being moved, so a
+  stay-put drag is still a no-op.
+- `move_pin_to_coordinates` let a root pin move onto a Location where the owner already had
+  another root pin, which violates `db_pin_unique_location_per_profile` and surfaced as an
+  unhandled `IntegrityError`. It now raises `PinMoveError` (400 on both the internal and external
+  endpoints). Child pins are deliberately unaffected - sharing a parcel is their purpose.
 
 ## OPEN 2026-07-26: nine pre-existing friend-invite / pin-sync test failures on `feature/external-api-mobile-v2`
 

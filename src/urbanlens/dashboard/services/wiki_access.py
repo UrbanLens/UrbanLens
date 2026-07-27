@@ -62,7 +62,7 @@ def _point_is_at(point, location: Location) -> bool:
     Returns:
         Whether the two name the same stored coordinate pair.
     """
-    from urbanlens.dashboard.services.pin_creation import quantize_coordinate
+    from urbanlens.dashboard.models.location.queryset import quantize_coordinate
 
     if location.latitude is None or location.longitude is None:
         return False

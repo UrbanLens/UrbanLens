@@ -138,7 +138,18 @@ class RepairLegacyPinCoordinatesTests(TestCase):
         return Pin.objects.get(pk=pin.pk)
 
     def _set_cid(self, location: Location, cid: int) -> None:
-        location.cid = cid
+        """Link a CID to *location* without the live place-name lookup.
+
+        Assigning ``location.cid`` goes through ``GooglePlaceService`` with
+        ``fetch_if_missing=True``, which calls REData's nearby-places search to
+        name the coordinates - a real network call, so under the test harness's
+        network block every test in this class died on a ``RuntimeError`` before
+        reaching its own assertions. The service's own bulk-path flag skips that
+        lookup, which is all these tests ever wanted.
+        """
+        from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+
+        GooglePlaceService().set_cid_for_entity(location, cid, fetch_if_missing=False)
 
     def _repair(self, *, cid=None, name="", latitude=RIGHT_LATITUDE, longitude=RIGHT_LONGITUDE):
         return repair_legacy_pin_coordinates(profile=self.profile, cid=cid, name=name, latitude=latitude, longitude=longitude)

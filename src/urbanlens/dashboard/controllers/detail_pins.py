@@ -61,26 +61,49 @@ def _schedule_classification(kind: str, pk: int) -> None:
     safely_enqueue_task(classify_detail_marker, kind, pk)
 
 
-def _location_for_child_wiki(latitude, longitude) -> Location:
+class ChildWikiLocationError(ValueError):
+    """A child wiki can't be placed at the requested point.
+
+    The message is safe to surface directly to the caller.
+    """
+
+
+def _location_for_child_wiki(latitude, longitude, *, exclude_wiki: Wiki | None = None) -> Location:
     """Find-or-create a Location for a new child wiki's own coordinates.
 
     A Wiki's ``location`` is one-to-one, so - unlike a detail pin's plain FK -
-    a child wiki can never share a Location with any other Wiki. The usual
-    proximity-based dedup (``Location.objects.get_nearby_or_create``'s default
-    50m threshold) would otherwise merge two nearby child markers, or a
-    marker and its own parent, onto the same Location and collide. This skips
-    that dedup and only reuses an existing Location when it's an exact
-    coordinate match that has no wiki of its own yet.
+    a child wiki can never share a Location with another Wiki. Resolution is
+    exact rather than proximity-based, so two nearby child markers (or a marker
+    and its own parent) keep their own coordinates instead of being merged.
+
+    Args:
+        latitude: Submitted latitude.
+        longitude: Submitted longitude.
+        exclude_wiki: A wiki to ignore when checking whether the point is
+            already taken - the wiki being moved, so re-submitting its current
+            point stays a no-op instead of colliding with itself.
+
+    Returns:
+        The Location at exactly these coordinates, created if absent.
+
+    Raises:
+        ChildWikiLocationError: A wiki already occupies that exact point. The
+            previous code tried to dodge the one-to-one by inserting a second
+            Location at the same coordinates, which the
+            ``(latitude, longitude)`` unique constraint refuses outright - so
+            this case was an unavoidable 500 rather than the "pick another
+            spot" it should always have been.
     """
-    latitude, longitude = float(latitude), float(longitude)
-    location, created = Location.objects.get_nearby_or_create(latitude, longitude, threshold_meters=0)
+    location, created = Location.objects.get_exact_or_create(latitude, longitude)
     if created:
         return location
     try:
-        _existing_wiki = location.wiki
+        existing_wiki = location.wiki
     except ObjectDoesNotExist:
         return location
-    return Location.objects.create(latitude=latitude, longitude=longitude)
+    if exclude_wiki is not None and existing_wiki.pk == exclude_wiki.pk:
+        return location
+    raise ChildWikiLocationError("There is already a wiki marker at these exact coordinates. Place this one slightly apart.")
 
 
 class DetailPinPanelView(LoginRequiredMixin, View):
@@ -327,6 +350,11 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         if wiki.would_create_cycle(wiki.parent_wiki):
             return JsonResponse({"ok": False, "error": "Invalid parent wiki."}, status=400)
 
+        try:
+            child_location = _location_for_child_wiki(lat, lon)
+        except ChildWikiLocationError as exc:
+            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
         child_name = body.get("name") or wiki.name
         pin_type, pin_type_chosen = _requested_pin_type(body)
         child_wiki = Wiki.objects.create(
@@ -341,7 +369,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             detail_border_color=body.get("border_color") or None,
             detail_border_opacity=int(body.get("border_opacity") or 100),
             parent_wiki=wiki,
-            location=_location_for_child_wiki(lat, lon),
+            location=child_location,
         )
 
         WikiEdit.objects.create(
@@ -372,6 +400,19 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST
 
+        # A move is resolved (and rejected) before anything else is touched, so
+        # a refused move doesn't silently drop the style fields sent with it.
+        # This wiki is excluded from the occupancy check: re-submitting its own
+        # current point is a no-op, not a collision with itself.
+        new_latitude = body.get("latitude")
+        new_longitude = body.get("longitude")
+        new_location = None
+        if moved := bool(new_latitude and new_longitude):
+            try:
+                new_location = _location_for_child_wiki(new_latitude, new_longitude, exclude_wiki=child_wiki)
+            except ChildWikiLocationError as exc:
+                return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+
         # Style/content fields update silently (no WikiEdit) - same reasoning
         # as personal detail pins: these autosave on every panel change, and a
         # granular audit entry per keystroke would flood the wiki's edit history.
@@ -399,11 +440,9 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
             child_wiki.pin_type, child_wiki.pin_type_is_user_provided = _requested_pin_type(body)
             reclassify = not child_wiki.pin_type_is_user_provided
 
-        new_latitude = body.get("latitude")
-        new_longitude = body.get("longitude")
         old_lat, old_lon = child_wiki.location.latitude, child_wiki.location.longitude
-        if moved := bool(new_latitude and new_longitude):
-            child_wiki.location = _location_for_child_wiki(new_latitude, new_longitude)
+        if new_location is not None:
+            child_wiki.location = new_location
         child_wiki.save()
 
         if reclassify or (moved and not child_wiki.pin_type_is_user_provided):

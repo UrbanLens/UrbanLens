@@ -12,12 +12,10 @@ untrusted data through.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from decimal import ROUND_HALF_UP, Decimal
 import logging
 from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
-from django.db.models import DecimalField
 
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
@@ -26,6 +24,7 @@ from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from decimal import Decimal
     from uuid import UUID
 
     from django.core.files.uploadedfile import UploadedFile
@@ -51,32 +50,6 @@ class PinCreationForbiddenError(PinCreationError):
     """
 
 
-def quantize_coordinate(value: float | str | Decimal, field_name: str) -> Decimal:
-    """Round a submitted coordinate to the precision ``Location`` actually stores.
-
-    ``Location.latitude``/``longitude`` are fixed-precision decimals, so the
-    database rounds on insert. Rounding here first means a lookup compares the
-    same value the row will hold, rather than the caller's raw float.
-
-    Args:
-        value: The submitted coordinate.
-        field_name: Which Location field it is - the precision comes from the
-            field itself rather than a duplicated constant.
-
-    Returns:
-        The coordinate at the field's own decimal precision.
-
-    Raises:
-        TypeError: The named field isn't a fixed-precision decimal, so there is
-            no precision to round to - the assumption this whole function rests
-            on, worth failing loudly rather than silently mis-rounding.
-    """
-    field = Location._meta.get_field(field_name)  # noqa: SLF001 - _meta is public API despite the underscore
-    if not isinstance(field, DecimalField) or field.decimal_places is None:
-        raise TypeError(f"Location.{field_name} must be a fixed-precision DecimalField.")
-    return Decimal(str(float(value))).quantize(Decimal(1).scaleb(-field.decimal_places), rounding=ROUND_HALF_UP)
-
-
 def resolve_child_pin_location(
     profile: Profile,
     latitude: float | str | Decimal,
@@ -90,12 +63,8 @@ def resolve_child_pin_location(
     A child pin records its own precise coordinates near its parent, so - unlike
     a top-level pin - this never applies the fuzzy proximity radius, which would
     collapse a door, a window, and a sign on one building onto the parent's own
-    Location. Matching is on stored coordinate identity instead: ``Location`` is
-    unique on (latitude, longitude) at the fields' own precision, so the
-    submitted values are rounded to that precision before lookup. Comparing the
-    raw floats by zero PostGIS distance instead would miss a row whose stored
-    coordinates round to the same pair, then fail that unique constraint on
-    insert.
+    Location. It resolves through ``Location.objects.get_exact_or_create``, which
+    matches on stored coordinate identity.
 
     Two of one profile's pins may never occupy the exact same point: perfectly
     stacked markers can't be told apart or clicked through on a map, and the
@@ -120,20 +89,7 @@ def resolve_child_pin_location(
     Raises:
         PinCreationError: This profile already has another pin at that point.
     """
-    latitude_value = quantize_coordinate(latitude, "latitude")
-    longitude_value = quantize_coordinate(longitude, "longitude")
-
-    location = Location.objects.filter(latitude=latitude_value, longitude=longitude_value).first()
-    if location is None:
-        try:
-            location = Location.objects.create(latitude=latitude_value, longitude=longitude_value, **(defaults or {}))
-        except IntegrityError:
-            # A concurrent request inserted this coordinate pair between the
-            # lookup and the insert (the (latitude, longitude) unique
-            # constraint) - use that row rather than surfacing a 500.
-            location = Location.objects.filter(latitude=latitude_value, longitude=longitude_value).first()
-            if location is None:
-                raise
+    location, _created = Location.objects.get_exact_or_create(latitude, longitude, defaults=defaults)
 
     overlapping = Pin.objects.filter(profile=profile, location=location)
     if exclude_pin is not None and exclude_pin.pk is not None:

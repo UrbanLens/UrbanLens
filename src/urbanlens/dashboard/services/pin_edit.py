@@ -27,6 +27,13 @@ class PinReparentError(ValueError):
     """
 
 
+class PinMoveError(ValueError):
+    """The requested move can't be applied.
+
+    The message is safe to surface directly to the caller.
+    """
+
+
 class PinHasChildrenError(ValueError):
     """A delete was requested without saying what to do with the pin's children.
 
@@ -42,20 +49,31 @@ def move_pin_to_coordinates(pin: Pin, latitude: float, longitude: float) -> None
     """Repoint *pin* to a new/existing Location at the given coordinates.
 
     Coordinates live on ``Location`` (not ``Pin``), so this repoints
-    ``pin.location`` rather than writing through a serializer. Uses
-    ``threshold_meters=0`` so a manual move always lands on the exact
-    submitted point rather than snapping to whatever Location happens to
-    already exist within the default dedup radius (mirrors
-    ``pin_creation.resolve_child_pin_location``).
+    ``pin.location`` rather than writing through a serializer. Resolution is
+    exact (``get_exact_or_create``): a manual move lands on the point the user
+    actually submitted rather than snapping to whatever Location happens to sit
+    within the default dedup radius.
 
     Args:
         pin: The pin being moved.
         latitude: New latitude, already validated to be in range.
         longitude: New longitude, already validated to be in range.
+
+    Raises:
+        PinMoveError: The owner already has a *top-level* pin at that exact
+            point. One root pin per Location per profile is a database
+            constraint, so without this check the move surfaces as an
+            unhandled IntegrityError.
     """
     from urbanlens.dashboard.models.location.model import Location
 
-    location, _created = Location.objects.get_nearby_or_create(latitude, longitude, threshold_meters=0)
+    location, _created = Location.objects.get_exact_or_create(latitude, longitude)
+
+    # Only root pins are constrained - child pins are free to share a Location
+    # with their parent and siblings, which is the whole point of detail pins.
+    if pin.parent_pin_id is None and Pin.objects.filter(profile_id=pin.profile_id, location=location, parent_pin__isnull=True).exclude(pk=pin.pk).exists():
+        raise PinMoveError("You already have a pin at these exact coordinates.")
+
     pin.location = location
     pin.save(update_fields=["location", "updated"])
 

@@ -213,7 +213,7 @@ from urbanlens.dashboard.services.notification_center import (
 from urbanlens.dashboard.services.photo_upload import PhotoUploadError, upload_photo
 from urbanlens.dashboard.services.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
 from urbanlens.dashboard.services.pin_detail import build_pin_detail
-from urbanlens.dashboard.services.pin_edit import PinHasChildrenError, PinReparentError, delete_pin, move_pin_to_coordinates, reparent_pin
+from urbanlens.dashboard.services.pin_edit import PinHasChildrenError, PinMoveError, PinReparentError, delete_pin, move_pin_to_coordinates, reparent_pin
 from urbanlens.dashboard.services.pin_list_membership import (
     add_pins_to_list,
     remove_pins_from_list,
@@ -758,7 +758,7 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
                     # Raises on failure - propagating out of the atomic block rolls
                     # back any coordinate/name/icon change already applied above.
                     reparent_pin(pin, new_parent)
-        except PinReparentError as exc:
+        except (PinMoveError, PinReparentError) as exc:
             return Response({"error": str(exc)}, status=400)
 
         return Response(build_pin_detail(pin, request.user.profile))
