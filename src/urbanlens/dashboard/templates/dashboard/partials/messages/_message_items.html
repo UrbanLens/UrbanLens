@@ -56,7 +56,11 @@ display name, from `display_identity_for` - used by the quoted-reply header).
     {% else %}
     <div class="dm-image-consent">
       <div class="dm-image-consent__blur">
-        {% for image in images %}<img src="{{ image.image.url }}" alt="" class="dm-bubble__image dm-bubble__image--blurred">{% endfor %}
+        {% for image in images %}
+        <div class="dm-bubble__image dm-bubble__image--blurred dm-image-consent__placeholder" aria-hidden="true">
+          <i class="material-symbols-outlined">image</i>
+        </div>
+        {% endfor %}
       </div>
       <p class="dm-image-consent__prompt">{{ display_name }} wants to send you an image.</p>
       <div class="dm-image-consent__actions">

@@ -24,6 +24,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
@@ -348,6 +349,42 @@ class ThreadImagePermissionSerializationTests(TestCase):
         DirectMessage.objects.filter(pk=message.pk).update(images_revealed=True)
         message.refresh_from_db()
         self.assertTrue(serialize_direct_message(message)["images_revealed"])
+
+    def _image_message(self) -> tuple[DirectMessage, Image]:
+        image = baker.make(Image, profile=self.sender, image="pin_images/private.jpg")
+        message = create_direct_message(self.sender, self.recipient, "hi", image_ids=[image.pk])
+        image.refresh_from_db()
+        return message, image
+
+    def test_pending_recipient_live_payload_omits_image_url(self) -> None:
+        message, image = self._image_message()
+        payload = serialize_direct_message(message, viewer=self.recipient)
+
+        self.assertEqual(payload["images"], [{"id": image.pk}])
+
+    def test_sender_live_payload_keeps_own_image_url(self) -> None:
+        message, image = self._image_message()
+        payload = serialize_direct_message(message, viewer=self.sender)
+
+        self.assertEqual(payload["images"], [{"id": image.pk, "url": image.image.url}])
+
+    def test_pending_recipient_thread_omits_image_url_until_consent(self) -> None:
+        self._image_message()
+        self.client.force_login(self.recipient.user)
+
+        response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.sender.slug}))
+        content = response.content.decode()
+
+        self.assertContains(response, "wants to send you an image")
+        self.assertNotIn("/media/pin_images/private.jpg", content)
+
+    def test_sender_thread_keeps_own_image_url(self) -> None:
+        self._image_message()
+        self.client.force_login(self.sender.user)
+
+        response = self.client.get(reverse("messages.conversation", kwargs={"profile_slug": self.recipient.slug}))
+
+        self.assertContains(response, "/media/pin_images/private.jpg")
 
 
 class ShareCompositeAtomicityTests(TestCase):
