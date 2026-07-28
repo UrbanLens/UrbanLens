@@ -581,6 +581,22 @@ REST_FRAMEWORK = {
         # starve the client's actual syncing. Clients are still expected to
         # debounce; the burst cap above applies here too.
         "external_api_location_search": "1200/hour",
+        # Starting a game session runs up to 25 eligibility passes over the
+        # player's pins, an N+1 difficulty-proxy lookup across them, and a
+        # *billed* Street View call per attempt - resync-shaped cost, so it gets
+        # a resync-shaped cap rather than a share of the write budget. Generous
+        # enough for dozens of real games an hour.
+        # See external_api.throttling.GameStartThrottle.
+        "external_api_game_start": "40/hour",
+        # Global search fans one request out across every domain provider
+        # (pins, wikis, trips, photos, messages, ...), so a single call is far
+        # from a single query. Its own budget keeps a search-heavy session from
+        # starving the client's actual syncing, and vice versa.
+        "external_api_global_search": "300/hour",
+        # Calendar export talks to Google on the request path and may make one
+        # upstream call per trip activity. Tight, because the cost lands on a
+        # third party's rate limit as much as on ours.
+        "external_api_calendar": "30/hour",
     },
     # Only consulted by views whose schema is actually generated - the
     # preprocessing hook in external_api.schema limits that to the external API.
@@ -641,6 +657,8 @@ OAUTH2_PROVIDER = {
         "notifications:read": "Read your notifications and delivery preferences",
         "notifications:write": "Mark notifications read and change delivery preferences",
         "search:read": "Search your pins, wikis, and photos",
+        "games:read": "Read your game history, scores, and leaderboard standing",
+        "games:write": "Start games and submit guesses and answers on your behalf",
         "push:manage": "Register and remove this device's push notifications",
     },
     # Deliberately NOT the full SCOPES list: a token that asked for nothing in

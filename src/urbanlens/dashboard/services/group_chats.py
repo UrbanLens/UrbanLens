@@ -28,7 +28,7 @@ from django.db.models import Count, Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
-from urbanlens.dashboard.services.direct_messages import can_direct_message, direct_message_group_name
+from urbanlens.dashboard.services.direct_messages import can_direct_message, direct_message_group_name, reaction_summary
 from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
@@ -654,6 +654,96 @@ def delete_group_message(message: GroupMessage, actor: Profile) -> GroupMessage:
     return message
 
 
+def toggle_group_reaction(profile: Profile, message: GroupMessage, emoji: str) -> str:
+    """Add or remove `profile`'s reaction of `emoji` on one group message.
+
+    The group analogue of ``services.direct_messages.toggle_reaction``, and
+    deliberately the same shape: one ``Reaction`` row per (profile, emoji,
+    host), a live push so every open tab updates without a refetch, and the
+    string ``"added"``/``"removed"`` so a caller can report what it did.
+
+    The membership guard is on *active* membership specifically, not on "was
+    ever in this group". A removed member still has their membership row (it
+    records the visibility window they had - see ``GroupChatMembership``), and
+    ``GroupMessage`` rows they once saw are still in the table, so a check that
+    merely looked for a row would let somebody who was removed from a group
+    keep reacting into it. ``membership_for`` only ever returns an active
+    stint, which is why it is the thing asked here.
+
+    Args:
+        profile: The reacting profile - must be an active member of the group.
+        message: The group message being reacted to.
+        emoji: The emoji character(s) to toggle. Render-safety is the caller's
+            responsibility (``is_safe_reaction_emoji``), exactly as for 1:1
+            reactions - reactions are relayed verbatim into other members'
+            clients.
+
+    Returns:
+        ``"added"`` or ``"removed"``.
+
+    Raises:
+        PermissionError: When `profile` has no active membership in the
+            message's group.
+    """
+    from urbanlens.dashboard.models.reactions.model import Reaction
+
+    if message.group.membership_for(profile) is None:
+        raise PermissionError("You aren't a member of this group.")
+
+    existing = Reaction.objects.existing(profile, emoji, group_message=message)
+    if existing is not None:
+        existing.delete()
+        action = "removed"
+    else:
+        Reaction.objects.create(profile=profile, group_message=message, emoji=emoji)
+        action = "added"
+
+    # Fanned out through the same per-member channel groups every other group
+    # event uses, so a web client with the thread open sees the reaction land
+    # without polling. The summary carries no identity beyond profile slugs
+    # that a member of the group can already read off the member list, so -
+    # unlike a message payload - one shared payload is correct for everyone.
+    _broadcast_group_event(
+        message.group,
+        {
+            "type": "group_reaction",
+            "group_uuid": str(message.group.uuid),
+            "message_id": message.pk,
+            "reactions": reaction_summary(message),
+        },
+    )
+    return action
+
+
+def set_group_muted(membership: GroupChatMembership, *, muted: bool) -> bool:
+    """Put one member's group mute flag into the requested state, idempotently.
+
+    Declarative rather than a toggle for the same reason as
+    ``services.direct_messages.set_conversation_muted``: a retried request on a
+    flaky link must not invert the state its first, unacknowledged attempt
+    already applied.
+
+    Muting is **notification-only** (see ``_notify_group_message``, which is the
+    single place the flag is read): the group keeps appearing in the
+    conversation list, keeps accruing unread counts, and keeps delivering
+    messages.
+
+    Args:
+        membership: The caller's own active membership row.
+        muted: The desired end state.
+
+    Returns:
+        The resulting mute state, always ``muted``.
+    """
+    membership.muted = muted
+    # update_fields is load-bearing, not a micro-optimization: this same row
+    # also carries left_at/removed_by, and a full save() would write back the
+    # in-memory (stale) copies of those, resurrecting a membership that a
+    # concurrent removal had just ended.
+    membership.save(update_fields=["muted", "updated"])
+    return muted
+
+
 def _revoke_pin_share(pin_share) -> None:
     """Reject a still-pending PinShare when its group message is deleted.
 
@@ -725,7 +815,15 @@ def group_thread_page(membership: GroupChatMembership, *, before_id: int | None 
         ``(messages, has_more_older)``: messages oldest-first;
         ``has_more_older`` is True when older visible messages remain.
     """
-    queryset = GroupMessage.objects.visible_window(membership).select_related("sender", "sender__user").prefetch_related("shares__pin_share__pin", "shares__pin_share__pin__location")
+    # "reactions__profile" joins the prefetch list because every renderer of
+    # this page now summarizes reactions per message (see
+    # ``external_api.serializers_messaging.build_group_message_payload``);
+    # without it a 50-message page issues 50 extra queries.
+    queryset = (
+        GroupMessage.objects.visible_window(membership)
+        .select_related("sender", "sender__user")
+        .prefetch_related("shares__pin_share__pin", "shares__pin_share__pin__location", "reactions__profile")
+    )
     if before_id is not None:
         queryset = queryset.filter(pk__lt=before_id)
     page = list(queryset.order_by("-id")[: limit + 1])

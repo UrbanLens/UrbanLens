@@ -30,12 +30,14 @@ from urbanlens.dashboard.services.direct_messages import (
     delete_message_for_everyone,
     delete_message_for_self,
     display_identity_for,
+    is_conversation_muted,
     is_profile_online,
     is_safe_reaction_emoji,
     key_change_events_for,
     mark_thread_open,
     reaction_summary,
     search_direct_messages,
+    set_conversation_muted,
     thread_page,
     toggle_reaction,
 )
@@ -145,8 +147,6 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
     Returns:
         Context dict for ``_thread.html``.
     """
-    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
-
     clear_email_debounce(partner.pk, profile.pk)
     mark_thread_open(profile.pk, partner.pk)
     thread_messages, has_more_older = thread_page(profile, partner)
@@ -175,7 +175,7 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
         "partner_e2ee_enrolled": _e2ee_enrolled(partner),
         "has_more_older": has_more_older,
         "oldest_message_id": thread_messages[0].pk if thread_messages else None,
-        "is_muted": DirectMessageMute.objects.for_pair(profile, partner).exists(),
+        "is_muted": is_conversation_muted(profile, partner),
         **identity,
     }
 
@@ -291,13 +291,24 @@ class ConversationMuteToggleView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+        """Flip the caller's mute for this conversation and return the refreshed thread.
 
+        The flip lives here rather than in the service because it is a property
+        of *this button*: the web UI has one control whose meaning is "the
+        other state". ``set_conversation_muted`` names an end state instead, so
+        the external API's PUT/DELETE pair cannot be turned into a toggle by a
+        retry - see its docstring.
+
+        Args:
+            request: The incoming request.
+            profile_slug: Slug of the conversation partner.
+
+        Returns:
+            The re-rendered thread partial.
+        """
         profile = _get_profile(request)
         partner = _get_partner(profile, profile_slug)
-        mute, created = DirectMessageMute.objects.get_or_create(viewer=profile, sender=partner)
-        if not created:
-            mute.delete()
+        set_conversation_muted(profile, partner, muted=not is_conversation_muted(profile, partner))
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         response["HX-Trigger"] = json.dumps({"dmListRefresh": {"target": "body"}})

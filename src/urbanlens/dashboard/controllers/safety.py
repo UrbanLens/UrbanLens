@@ -33,9 +33,7 @@ from urbanlens.dashboard.services.safety import (
     accept_checkin_partner_invite,
     apply_checkin_edit,
     attach_draft_markup_map,
-    broadcast_chat_message,
     check_in,
-    create_chat_message,
     create_checkin,
     decline_checkin_partner_invite,
     default_contacts_as_input,
@@ -44,11 +42,16 @@ from urbanlens.dashboard.services.safety import (
     get_active_checkin,
     get_active_checkins,
     get_or_create_preference,
+    get_partner_role,
     invite_checkin_partner,
+    is_accepted_partner,
     is_contact_opted_out,
     is_owner_or_accepted_partner,
+    list_partnered_checkins,
+    list_pending_partner_invites,
     mark_found_safe,
     mark_found_safe_by_partner,
+    post_chat_message,
     record_contact_opt_out,
     remove_checkin_partner,
     save_contact_defaults,
@@ -417,11 +420,8 @@ class SafetyHomeView(LoginRequiredMixin, View):
                 "active_checkin": get_active_checkin(profile, trip=None),
                 "stats": _overview_stats(checkins),
                 "shared_checkins": SafetyCheckin.objects.shared_with(profile).select_related("profile"),
-                "partnered_checkins": SafetyCheckin.objects.partnered_with(profile).select_related("profile"),
-                "pending_partner_invites": SafetyCheckinPartner.objects.filter(
-                    profile=profile,
-                    status=SafetyCheckinPartnerStatus.INVITED,
-                ).select_related("checkin", "checkin__profile", "invited_by"),
+                "partnered_checkins": list_partnered_checkins(profile),
+                "pending_partner_invites": list_pending_partner_invites(profile),
             },
         )
 
@@ -1036,9 +1036,18 @@ class SafetyCheckinPartnerInviteAcceptView(LoginRequiredMixin, View):
 
         Returns:
             Redirect to the check-in detail page.
+
+        Raises:
+            Http404: If the caller holds no partner row on that check-in.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        partner = get_object_or_404(SafetyCheckinPartner, checkin__uuid=checkin_uuid, profile=profile)
+        # Same narrowly-scoped lookup the external API uses, so the two surfaces
+        # cannot drift on which invitations a caller may address - see
+        # services.safety.get_partner_role for why it is scoped to the caller
+        # and why it carries no status filter.
+        partner = get_partner_role(profile, checkin_uuid)
+        if partner is None:
+            raise Http404
         accept_checkin_partner_invite(partner)
         return redirect("safety.checkin.detail", checkin_slug=checkin_uuid)
 
@@ -1058,9 +1067,14 @@ class SafetyCheckinPartnerInviteDeclineView(LoginRequiredMixin, View):
 
         Returns:
             Redirect to the safety overview page.
+
+        Raises:
+            Http404: If the caller holds no partner row on that check-in.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        partner = get_object_or_404(SafetyCheckinPartner, checkin__uuid=checkin_uuid, profile=profile)
+        partner = get_partner_role(profile, checkin_uuid)
+        if partner is None:
+            raise Http404
         decline_checkin_partner_invite(partner)
         return redirect("safety.home")
 
@@ -1086,7 +1100,10 @@ class SafetyCheckinPartnerMarkSafeView(LoginRequiredMixin, View):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         checkin = get_object_or_404(SafetyCheckin, uuid=checkin_uuid)
-        if not checkin.partners.filter(profile=profile, status=SafetyCheckinPartnerStatus.ACCEPTED).exists():
+        # Via the service, never an inline partners.filter(): the ACCEPTED clause
+        # is the whole check, and dropping it here would let someone who was only
+        # ever *invited* conclude another person's safety check-in.
+        if not is_accepted_partner(checkin, profile):
             raise Http404
         mark_found_safe_by_partner(checkin, profile)
         return redirect("safety.checkin.detail", checkin_slug=checkin_uuid)
@@ -1614,12 +1631,13 @@ class SafetyCheckinMessageView(View):
         body = request.POST.get("body", "").strip()
         if body:
             try:
-                message = create_chat_message(checkin, user=request.user, contact=contact, body=body)
-                # The WebSocket path (SafetyCheckinChatConsumer.receive) broadcasts after
-                # creating a message; this no-JS/socket-down fallback must too, or a message
-                # sent this way is invisible in real time to every other participant with an
-                # open socket (they'd only see it on their next manual reload).
-                broadcast_chat_message(checkin, message)
+                # post_chat_message is create+broadcast as one operation. The
+                # WebSocket path (SafetyCheckinChatConsumer.receive) broadcasts
+                # after creating a message; this no-JS/socket-down fallback must
+                # too, or a message sent this way is invisible in real time to
+                # every other participant with an open socket (they'd only see it
+                # on their next manual reload).
+                post_chat_message(checkin, user=request.user, contact=contact, body=body)
             except ValueError as exc:
                 # create_chat_message only raises ValueError with a fixed, developer-authored
                 # message (blank/too-long body) - never a stack trace or sensitive data.

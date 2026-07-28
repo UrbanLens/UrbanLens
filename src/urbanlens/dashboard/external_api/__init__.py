@@ -18,4 +18,28 @@ behalf (``POST pins/``, idempotent via client-generated uuid) through the
 same ``services.pin_creation.create_pin_for_profile`` call the map UI uses.
 The OpenAPI contract for this surface - and nothing else - is served at
 ``schema/`` (browsable at ``docs/``).
+
+Errors
+------
+
+Every failure from every endpoint in this package renders in exactly one
+envelope, so a generated client can have a single error path:
+
+- ``{"error": "<message>"}`` - the general case, covering hand-written
+  refusals as well as the 401/403/404/405/429 DRF raises before a handler
+  runs.
+- ``{"error": "Invalid request.", "fields": {"<name>": ["<message>"]}}`` -
+  when the failure is per-field, so a form can still be annotated.
+
+DRF's native ``{"detail": ...}`` and bare field-keyed dicts never reach the
+wire here. That is enforced by ``errors.ErrorEnvelopeMixin``, inherited by both
+view bases (``views.ExternalApiView`` and ``mixins.DualAuthJsonView``) rather
+than opted into per endpoint, and specifically *not* by changing
+``REST_FRAMEWORK["EXCEPTION_HANDLER"]``, which the internal session API shares.
+
+One consequence is load-bearing rather than cosmetic: **every** 404 renders the
+byte-identical body ``{"error": "Not found."}``, with any upstream detail
+discarded. A resource that belongs to someone else must be indistinguishable
+from one that never existed, or the endpoint becomes an existence oracle. See
+``errors`` for the full rationale.
 """

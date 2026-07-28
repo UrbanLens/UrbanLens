@@ -100,6 +100,14 @@ class InviteRateLimitedError(FriendshipActionError):
     """
 
 
+#: The single message every :func:`unblock_profile` refusal carries. It is
+#: deliberately the *profile lookup* wording rather than anything about blocks:
+#: callers already answer 404 with this text for a uuid that names nobody, so
+#: reusing it makes "there is no such person", "there is no block", and "the
+#: block is not yours" one indistinguishable answer. A caller must not be able
+#: to confirm a block exists by the shape of the failure to lift it.
+UNBLOCK_NOT_FOUND_MESSAGE = "No such profile."
+
 #: Default page size for :func:`list_friendships`.
 DEFAULT_FRIEND_PAGE_SIZE = 50
 
@@ -362,12 +370,40 @@ def ignore_friend_request(actor: Profile, target: Profile) -> Friendship:
     return friendship
 
 
+def _placed_the_block(actor: Profile, friendship: Friendship) -> bool:
+    """Whether ``actor`` is the profile that placed this block.
+
+    ``Friendship`` carries no "blocked_by" column, so the row's *direction* is
+    the only record of who blocked whom - which is exactly why
+    :func:`block_profile` normalizes it (see that function). ``from_profile``
+    is the blocker; ``to_profile`` is the person blocked.
+
+    Args:
+        actor: The profile attempting to act on the block.
+        friendship: The relationship row, expected to be ``BLOCKED``.
+
+    Returns:
+        True when ``actor`` owns the block and may therefore lift it.
+    """
+    return friendship.from_profile_id == actor.pk
+
+
 def remove_friend(actor: Profile, target: Profile) -> Friendship:
     """End an existing friendship.
 
     The row is retained at ``Removed`` rather than deleted, which is what lets
     ``FriendshipStatus.can_request`` allow a later re-request and what
     ``QuerySet.ever_friends`` reads.
+
+    **A block is not a friendship and cannot be ended from the wrong side.**
+    ``_existing_friendship`` resolves the row direction-agnostically, so before
+    this guard existed the *blocked* party could call this function against the
+    person who blocked them, set the row to ``Removed``, and immediately
+    re-request contact - a one-request bypass of the site's only hard safety
+    control, reachable from both the API's ``DELETE /friends/{uuid}/`` and the
+    profile page's Remove button. A blocked caller now gets exactly the
+    ``FriendshipNotFoundError`` a stranger would, rather than a permission
+    error, so they cannot even confirm the block exists.
 
     Args:
         actor: The profile removing the friend.
@@ -377,9 +413,12 @@ def remove_friend(actor: Profile, target: Profile) -> Friendship:
         The removed Friendship.
 
     Raises:
-        FriendshipNotFoundError: No friendship exists between the pair.
+        FriendshipNotFoundError: No friendship exists between the pair, or the
+            pair is blocked and ``actor`` is not the one who blocked.
     """
     friendship = _existing_friendship(actor, target)
+    if friendship.status == FriendshipStatus.BLOCKED and not _placed_the_block(actor, friendship):
+        raise FriendshipNotFoundError
     friendship.remove()
     return friendship
 
@@ -391,15 +430,31 @@ def block_profile(actor: Profile, target: Profile) -> Friendship:
     stranger - that is the case it exists for - so a missing row is created
     rather than raising.
 
+    **The row is re-pointed so ``from_profile`` is always the blocker.** There
+    is one relationship row per pair and no column recording who blocked whom,
+    so direction is the only available record - and reusing the existing row
+    untouched got that record backwards half the time. A row created by an
+    inbound friend request has ``from_profile`` = the requester, so blocking
+    that requester used to leave the *blocked* party owning the row, at which
+    point they (and not the blocker) satisfied :func:`_placed_the_block` and
+    could lift their own block. Swapping the two foreign keys is safe because
+    ``QuerySet.between`` already guarantees a single row per pair in either
+    direction; nothing else reads a blocked row's direction, since every other
+    consumer of ``BLOCKED`` (``Profile.are_blocked``, the direct-message
+    temporary-access veto, the import path) deliberately matches both
+    directions.
+
     Args:
         actor: The profile doing the blocking.
         target: The profile being blocked.
 
     Returns:
-        The blocked Friendship.
+        The blocked Friendship, with ``actor`` as ``from_profile``.
     """
     friendship = Friendship.objects.all().between(target, actor)
     if friendship:
+        friendship.from_profile = actor
+        friendship.to_profile = target
         friendship.status = FriendshipStatus.BLOCKED
         friendship.save()
         return friendship
@@ -410,12 +465,64 @@ def block_profile(actor: Profile, target: Profile) -> Friendship:
     )
 
 
+def unblock_profile(actor: Profile, target: Profile) -> Friendship:
+    """Lift a block ``actor`` placed on ``target``.
+
+    The inverse :func:`block_profile` never had. Without it the only way out of
+    a block was :func:`remove_friend`, which is the path the P0 above closed -
+    so the profile page's "Unblock" button pointed at an action that (once
+    hardened) refuses, and API clients had no unblock at all.
+
+    Lands on ``REMOVED`` rather than deleting the row, matching every other
+    ending transition here: ``FriendshipStatus.can_request`` accepts
+    ``Removed``, so the two profiles can contact each other again, and
+    ``QuerySet.ever_friends`` still sees any friendship that preceded the
+    block.
+
+    Every refusal is the same :class:`FriendshipNotFoundError` - unknown pair,
+    no relationship row, a row in some other state, and a block placed by the
+    *other* person all answer identically. Distinguishing them would let the
+    blocked party confirm the block exists, which is the one fact a block is
+    meant to keep ambiguous.
+
+    Args:
+        actor: The profile lifting its own block.
+        target: The profile being unblocked.
+
+    Returns:
+        The now-``Removed`` Friendship.
+
+    Raises:
+        FriendshipNotFoundError: No row joins the pair, the row is not blocked,
+            or the block belongs to ``target`` rather than ``actor``. Carries
+            :data:`UNBLOCK_NOT_FOUND_MESSAGE` so the refusal reads identically
+            to the one an unknown profile uuid produces.
+    """
+    friendship = Friendship.objects.all().between(target, actor)
+    if friendship is None or friendship.status != FriendshipStatus.BLOCKED or not _placed_the_block(actor, friendship):
+        raise FriendshipNotFoundError(UNBLOCK_NOT_FOUND_MESSAGE)
+    friendship.remove()
+    return friendship
+
+
 def mute_profile(actor: Profile, target: Profile) -> Friendship:
-    """Mute an existing relationship with ``target``.
+    """Mute an existing relationship with ``target``, without altering it.
 
     Requires an existing row, matching the profile-page button: muting is a
     volume control on someone you already have a relationship with, whereas
     blocking (above) is a veto that must work on strangers.
+
+    Sets ``Friendship.muted`` and leaves ``status`` exactly as it was. It used
+    to write ``FriendshipStatus.MUTED`` over the status instead, which meant
+    muting an accepted friend un-friended them for every visibility gate that
+    reads ``Profile.are_friends``, and left no way back - the pre-mute status
+    was gone, and ``FriendshipStatus.can_request`` refuses ``Muted``, so the
+    site's own Unmute button answered 400. Callers that need to know whether a
+    relationship is muted must read the flag; nothing writes the status value
+    any more.
+
+    Idempotent: re-muting an already-muted relationship is a no-op, which is
+    what makes a retried mobile request safe.
 
     Args:
         actor: The profile doing the muting.
@@ -428,8 +535,36 @@ def mute_profile(actor: Profile, target: Profile) -> Friendship:
         FriendshipNotFoundError: No relationship exists between the pair.
     """
     friendship = _existing_friendship(actor, target)
-    friendship.status = FriendshipStatus.MUTED
-    friendship.save()
+    friendship.mute()
+    return friendship
+
+
+def unmute_profile(actor: Profile, target: Profile) -> Friendship:
+    """Un-mute an existing relationship with ``target``.
+
+    The inverse of :func:`mute_profile`, and previously unreachable: with mute
+    stored as a status there was no prior state to restore, so the profile
+    page's Unmute button posted to the friend-*request* endpoint and was
+    rejected (``can_request`` excludes ``Muted``). Now that mute is a flag,
+    unmuting is a single boolean write and the relationship underneath is
+    untouched throughout.
+
+    Idempotent, for the same retry-safety reason as :func:`mute_profile`.
+
+    Args:
+        actor: The profile doing the unmuting.
+        target: The profile being unmuted.
+
+    Returns:
+        The unmuted Friendship.
+
+    Raises:
+        FriendshipNotFoundError: No relationship exists between the pair -
+            deliberately the same failure as muting a stranger, so the two
+            halves of the toggle answer identically.
+    """
+    friendship = _existing_friendship(actor, target)
+    friendship.unmute()
     return friendship
 
 

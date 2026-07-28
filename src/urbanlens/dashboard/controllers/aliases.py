@@ -25,6 +25,7 @@ from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison, persist_official_aliases_for_location
 from urbanlens.dashboard.services.pin_subresources import AliasExistsError, AliasIsCurrentNameError, create_pin_alias, delete_pin_alias, promote_alias_to_name
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.wiki_aliases import promote_wiki_alias_to_name
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -245,17 +246,20 @@ class LocationAliasUseView(LoginRequiredMixin, View):
     def post(self, request, location_slug, alias_id):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
         alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
-        previous_name = wiki.name
-        wiki.name = alias.name
-        wiki.save(update_fields=["name", "updated"])
-        WikiEdit.objects.create(
-            wiki=wiki,
-            editor=profile,
-            changes={"name": {"from": previous_name, "to": alias.name}},
-        )
+        edit = promote_wiki_alias_to_name(wiki, profile, alias)
         response = _render_location_panel(request, location, wiki)
-        response["HX-Trigger"] = json.dumps({"wikiRenamed": {"name": alias.name}})
-        return _show_toast(response, f"Renamed to “{alias.name}”.")
+        if edit is None:
+            # The alias was already the wiki's name, so nothing was written.
+            # Announcing a rename anyway would push a "renamed" toast and a
+            # wikiRenamed event for an edit that does not exist in the history -
+            # which is exactly what a user retrying a request whose response
+            # they never saw would see.
+            return response
+        # wiki.name, not alias.name: Wiki.save() sanitizes the incoming name, so
+        # the alias text and what actually got stored can differ. The toast has
+        # to state what was stored or it lies about the result of the edit.
+        response["HX-Trigger"] = json.dumps({"wikiRenamed": {"name": wiki.name}})
+        return _show_toast(response, f"Renamed to “{wiki.name}”.")
 
 
 class LocationAliasToggleNicknameView(LoginRequiredMixin, View):

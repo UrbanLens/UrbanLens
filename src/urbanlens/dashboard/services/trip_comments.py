@@ -20,6 +20,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from urbanlens.dashboard.models.trips.model import Trip, TripComment
+
+# Module-level, unlike the controller helpers below: these notifications are a
+# service now, so importing them no longer drags a view layer in and no longer
+# risks the import cycle the function-local imports were working around.
+from urbanlens.dashboard.services.comment_notifications import notify_reaction, notify_reply
 from urbanlens.dashboard.services.comments import ALLOWED_EMOJIS
 from urbanlens.dashboard.services.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
 from urbanlens.dashboard.services.trip_access import require_perform
@@ -218,7 +223,7 @@ def add_comment(
             shared limit, or the image was rejected.
         TripNotFoundError: ``parent_id`` is not a comment on this trip.
     """
-    from urbanlens.dashboard.controllers.comments import _notify_reply, attach_existing_comment_image, comment_image_error, start_comment_image_scan
+    from urbanlens.dashboard.controllers.comments import attach_existing_comment_image, comment_image_error, start_comment_image_scan
     from urbanlens.dashboard.services.map_snapshot import materialize_markup_map
 
     require_perform(actor, trip, trip.allow_comments, COMMENT_DENIED)
@@ -253,7 +258,7 @@ def add_comment(
         attach_existing_comment_image(comment, existing_image_id, actor)
 
     if parent and parent.author and parent.author != actor:
-        _notify_reply(actor, parent, reply=comment)
+        notify_reply(actor, parent, reply=comment)
     return comment
 
 
@@ -297,7 +302,6 @@ def set_comment_reaction(comment: TripComment, profile: Profile, emoji: str, *, 
             "forbidden" so reacting can't be used to probe for comments the
             viewer was never shown.
     """
-    from urbanlens.dashboard.controllers.comments import _notify_reaction
     from urbanlens.dashboard.models.reactions.model import Reaction
 
     if emoji not in ALLOWED_COMMENT_EMOJIS:
@@ -311,6 +315,6 @@ def set_comment_reaction(comment: TripComment, profile: Profile, emoji: str, *, 
     existing = Reaction.objects.existing(profile, emoji, trip_comment=comment)
     if reacted and not existing:
         Reaction.objects.create(profile=profile, emoji=emoji, trip_comment=comment)
-        _notify_reaction(profile, comment)
+        notify_reaction(profile, comment)
     elif not reacted and existing:
         existing.delete()

@@ -34,6 +34,7 @@ from urbanlens.dashboard.services.text_limits import (
     MAX_COMMENT_TEXT_LENGTH,
     MAX_WIKI_DESCRIPTION_LENGTH,
 )
+from urbanlens.dashboard.services.wiki_aliases import alias_is_current_name
 
 #: Field names only, in the canonical order shared with the model layer.
 _SECURITY_FIELD_NAMES = tuple(name for name, _label in SECURITY_FIELDS)
@@ -85,12 +86,40 @@ class WikiStatSerializer(serializers.Serializer):
 
 
 class WikiAliasSerializer(serializers.Serializer):
-    """An alternate name for a wiki (schema-only)."""
+    """An alternate name for a wiki (schema-only).
+
+    The alias list is the full set of names a place is known by, *including* the
+    one it currently goes by - which is flagged rather than omitted, exactly as
+    ``PinAliasSerializer`` does it. Without ``is_current`` a client has no way to
+    tell which entry is the live name, so it can neither mark it in a list nor
+    know which entries are worth offering a "use this name" action for; it would
+    have to re-derive the answer by string-matching against the wiki detail
+    payload, using a normalization rule it has no access to.
+    """
 
     id = serializers.IntegerField(read_only=True)
     name = serializers.CharField(read_only=True)
     kind = serializers.CharField(read_only=True)
     source = serializers.CharField(read_only=True)
+    is_current = serializers.SerializerMethodField()
+
+    def get_is_current(self, alias) -> bool:
+        """Whether this alias is the wiki's current community name.
+
+        The wiki comes from the serializer context rather than ``alias.wiki`` so
+        that serializing a whole list costs no per-row query - the view already
+        has the wiki in hand from ``resolve_visible_wiki``.
+
+        Args:
+            alias: The alias being serialized.
+
+        Returns:
+            True when this alias matches the wiki's current name, compared
+            loosely enough to ignore case, spacing, and punctuation. False when
+            no wiki was supplied in the context, since nothing can be shown as
+            current without one.
+        """
+        return alias_is_current_name(alias, self.context.get("wiki"))
 
 
 class WikiAliasCreateSerializer(serializers.Serializer):

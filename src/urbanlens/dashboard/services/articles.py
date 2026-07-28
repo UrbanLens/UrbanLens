@@ -18,7 +18,7 @@ from dataclasses import dataclass, field
 import difflib
 import logging
 import re
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from markdown_it import MarkdownIt
 from mdit_py_plugins.footnote import footnote_plugin
@@ -425,6 +425,47 @@ def restore_revision(*, scope_article: Article, revision: ArticleRevision, edito
         wiki=scope_article.wiki,
         restored_from=revision,
     )
+
+
+def article_payload(article: Article, viewer: Profile) -> dict[str, Any]:
+    """Render one article as the external API's article body.
+
+    An article is host-agnostic - the same row shape backs a pin's private
+    article and a community wiki's - so the payload is built here rather than
+    in either host's view module. Two endpoints in different files rendering
+    "the same" dict by hand is how one of them ends up omitting
+    ``base_revision_id`` (silently breaking that host's conflict detection,
+    because a client with no revision to echo back always looks like a fresh
+    save) or leaking an unmasked editor name that the other correctly masks.
+
+    Args:
+        article: The article to render.
+        viewer: The requesting profile. Attribution is masked per the editor's
+            identity-visibility settings as seen by this viewer, never emitted
+            raw.
+
+    Returns:
+        A JSON-serializable dict with the article's source, rendered HTML,
+        table of contents, word count, masked last editor, update timestamp,
+        and the ``base_revision_id`` a client must echo back on save.
+    """
+    # Local import: ``services.wiki_detail`` imports this module for its own
+    # article summary, so a module-level import here would close the cycle.
+    from urbanlens.dashboard.services.wiki_detail import masked_editor_name
+
+    return {
+        "id": article.pk,
+        # Raw Markdown source, for a client that wants to edit it.
+        "content": article.content,
+        # Server-rendered and sanitized, for a client that just wants to show it.
+        "content_html": article.content_html,
+        "toc": article.toc,
+        "word_count": article.word_count(),
+        "last_edited_by": masked_editor_name(article.last_edited_by, viewer),
+        "updated": article.updated.isoformat(),
+        # Send this back as ``base_revision_id`` to save without conflicting.
+        "base_revision_id": latest_revision_id(article),
+    }
 
 
 # ----------------------------------------------------------------------

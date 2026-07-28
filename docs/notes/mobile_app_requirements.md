@@ -325,8 +325,14 @@ or add these on the external API surface with API-key auth. Multiplayer
   `grace_period_seconds` is a duration in seconds not a date); decimal lat/lng as
   numbers; GeoJSON for polygons/linestrings; enum values matching the Django
   `TextChoices` values.
-- Errors: `{"detail": "..."}` with meaningful HTTP status; field errors
-  `{"field": ["msg"]}` on 400.
+- Errors: `{"error": "..."}` with meaningful HTTP status; field errors are nested,
+  `{"error": "Invalid request.", "fields": {"field": ["msg"]}}` on 400. (This spec
+  previously described DRF's raw `{"detail": ...}` / top-level-field-keyed shapes;
+  `external_api.errors.ErrorEnvelopeMixin` is now inherited by both package view
+  bases, so `detail` never appears and field errors are never top-level. Every
+  raised 404 renders as the constant `{"error": "Not found."}` regardless of the
+  upstream message - deliberately, so a 404 body cannot be used to distinguish
+  "does not exist" from "exists but is not yours".)
 - List pagination is page-number style (`{results, next, previous, count}`) almost
   everywhere, except the pin/tombstone sync feeds (`{pins|tombstones, next_cursor,
   sync_watermark}`, cursor-based) and a few confirmed non-paginated envelopes (wiki

@@ -62,11 +62,33 @@ class WhoAmIAuthTests(TestCase):
         response = self.client.get(self.url, **_bearer(raw_key))
         self.assertEqual(response.status_code, 401)
 
-    def test_valid_key_returns_only_the_profile_uuid(self) -> None:
+    def test_valid_key_returns_exactly_the_profile_uuid_and_slug(self) -> None:
+        """whoami serves the caller's uuid and slug - and nothing else, ever.
+
+        Asserted as an exact dict rather than field-by-field on purpose. This
+        is the narrowest profile read in the API, and the failure mode worth
+        guarding is not a missing field (a client notices that immediately) but
+        a *third* field arriving unnoticed because someone widened
+        ``WhoAmISerializer`` for convenience. An exact comparison fails the
+        moment that happens, forcing the addition to be a deliberate decision.
+        """
         _api_key, raw_key = generate_api_key(self.user, "Zapier")
         response = self.client.get(self.url, **_bearer(raw_key))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"uuid": str(self.profile.uuid)})
+        self.profile.refresh_from_db()
+        self.assertEqual(response.json(), {"uuid": str(self.profile.uuid), "slug": self.profile.slug})
+
+    def test_whoami_backfills_a_slug_for_a_profile_created_before_slugs_existed(self) -> None:
+        """The promised slug must never come back empty - clients have no fallback path."""
+        Profile.objects.filter(pk=self.profile.pk).update(slug="")
+        _api_key, raw_key = generate_api_key(self.user, "Zapier")
+
+        response = self.client.get(self.url, **_bearer(raw_key))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["slug"])
+        self.profile.refresh_from_db()
+        self.assertEqual(response.json()["slug"], self.profile.slug)
 
     def test_key_missing_the_required_scope_is_forbidden(self) -> None:
         api_key, raw_key = generate_api_key(self.user, "Zapier")

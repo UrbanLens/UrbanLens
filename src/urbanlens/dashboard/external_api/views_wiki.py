@@ -40,10 +40,10 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404
-from drf_spectacular.utils import extend_schema
+from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework.response import Response
 
-from urbanlens.dashboard.external_api.errors import UniformErrorsMixin
+from urbanlens.dashboard.external_api.mixins import _ReactionMixin
 from urbanlens.dashboard.external_api.pagination import PaginatedListMixin
 from urbanlens.dashboard.external_api.serializers import ErrorSerializer
 from urbanlens.dashboard.external_api.serializers_wiki import (
@@ -84,6 +84,7 @@ from urbanlens.dashboard.services.articles import (
     save_article_checked,
 )
 from urbanlens.dashboard.services.comments import (
+    ALLOWED_EMOJIS,
     CommentValidationError,
     aggregate_reactions,
     comment_mentions,
@@ -94,6 +95,7 @@ from urbanlens.dashboard.services.comments import (
 )
 from urbanlens.dashboard.services.reviews import clear_review, upsert_review
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.wiki_aliases import promote_wiki_alias_to_name
 from urbanlens.dashboard.services.wiki_detail import build_wiki_detail, masked_editor_name
 from urbanlens.dashboard.services.wiki_edits import WikiEditValidationError, apply_wiki_edit, revert_wiki_edit
 
@@ -105,11 +107,14 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-class WikiApiView(UniformErrorsMixin, ExternalApiView):
+class WikiApiView(ExternalApiView):
     """Base for every wiki endpoint: uniform errors plus the visibility gate.
 
-    ``UniformErrorsMixin`` is listed first so its ``get_exception_handler``
-    override wins over ``APIView``'s.
+    The ``{"error": ...}`` envelope is inherited, not opted into: since
+    ``ExternalApiView`` itself mixes in ``ErrorEnvelopeMixin`` ahead of
+    ``APIView``, naming the mixin again here would only restate the MRO the base
+    already guarantees - and a second name for one behaviour is how the two
+    drift apart later.
     """
 
     def resolve(self, request: Request, location_slug: str) -> tuple[Any, Any, Profile]:
@@ -352,7 +357,13 @@ class WikiStatVoteApiView(WikiApiView):
 
 
 class WikiAliasesView(WikiApiView):
-    """GET the wiki's alternate names; POST to add one."""
+    """GET the wiki's alternate names; POST to add one.
+
+    The list includes the wiki's current name - the alias list is defined as
+    every name the place is known by - so each row carries ``is_current`` to say
+    which one that is. The wiki is handed to the serializer as context so
+    computing that flag costs no per-row query.
+    """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
         "GET": frozenset({ApiKeyScope.WIKI_READ}),
@@ -363,7 +374,7 @@ class WikiAliasesView(WikiApiView):
     def get(self, request: Request, location_slug: str) -> Response:
         """List the wiki's aliases."""
         _location, wiki, _profile = self.resolve(request, location_slug)
-        return Response(WikiAliasSerializer(wiki.aliases.order_by("pk"), many=True).data)
+        return Response(WikiAliasSerializer(wiki.aliases.order_by("pk"), many=True, context={"wiki": wiki}).data)
 
     @extend_schema(request=WikiAliasCreateSerializer, responses={201: WikiAliasSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def post(self, request: Request, location_slug: str) -> Response:
@@ -378,7 +389,68 @@ class WikiAliasesView(WikiApiView):
         if data.get("kind"):
             alias.kind = data["kind"]
         alias.save()
-        return Response(WikiAliasSerializer(alias).data, status=201)
+        # Serialized after save(), like the promote endpoint below and for the
+        # same reason: _AliasBase.save() sanitizes ``name``, so the row the
+        # client is told about must be read back rather than echoed.
+        return Response(WikiAliasSerializer(alias, context={"wiki": wiki}).data, status=201)
+
+
+class WikiAliasUseView(WikiApiView):
+    """POST: make one of the wiki's aliases its current community name.
+
+    The wiki counterpart of ``PinAliasUseView``, and shaped identically:
+    no request body, and the full wiki detail in the response rather than the
+    alias, so a client applies the rename (and everything derived from it -
+    the alias list's ``is_current`` flags, the edit history's new entry) from
+    the same payload ``GET wikis/{location_slug}/`` already hands it.
+
+    Unlike the pin version this is a *community* edit, so it goes through
+    ``services.wiki_aliases.promote_wiki_alias_to_name`` and lands in the wiki's
+    edit history alongside every other wiki edit - a rename nobody can see or
+    revert is the failure mode that matters on shared content.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.WIKI_WRITE}),
+    }
+
+    @extend_schema(request=None, responses={200: WikiDetailSerializer, 404: ErrorSerializer})
+    def post(self, request: Request, location_slug: str, alias_id: int) -> Response:
+        """Promote one alias to the wiki's name and return the updated wiki.
+
+        Promoting the alias that is already the name answers 200 with the
+        unchanged wiki, not 400: "use this name" is an idempotent statement of
+        intent, and a client retrying a request whose response it never saw
+        would otherwise get an error for successfully doing nothing.
+
+        Args:
+            request: The authenticated request. No body is read.
+            location_slug: The Location slug or uuid from the URL.
+            alias_id: The alias to promote, scoped to this wiki.
+
+        Returns:
+            The full wiki detail payload, built after the save.
+
+        Raises:
+            Http404: The wiki is not visible to this caller, or *alias_id* is
+                not an alias of it.
+        """
+        location, wiki, profile = self.resolve(request, location_slug)
+        # Scoped to this wiki: a bare id lookup would turn alias ids into an
+        # oracle for the names on wikis this caller cannot see - the same leak
+        # the module docstring describes for edit and comment ids, and worse
+        # here because an alias *is* content rather than just a handle.
+        alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
+
+        with transaction.atomic():
+            promote_wiki_alias_to_name(wiki, profile, alias)
+
+        # Built strictly after the save. Wiki.save() sanitizes ``name`` to a
+        # restricted character set, so a payload assembled from ``alias.name``
+        # beforehand can report a name the database does not actually hold -
+        # and the client would then cache and display a value that disagrees
+        # with every subsequent read.
+        return Response(build_wiki_detail(wiki, location, profile))
 
 
 class WikiAliasDetailView(WikiApiView):
@@ -752,57 +824,58 @@ class WikiCommentDetailView(WikiApiView):
         return Response(status=204)
 
 
-class WikiCommentReactionView(WikiApiView):
-    """PUT to add an emoji reaction to a wiki comment; DELETE to remove it."""
+@extend_schema_view(
+    put=extend_schema(responses={200: None, 400: ErrorSerializer, 404: ErrorSerializer}),
+    delete=extend_schema(responses={200: None, 400: ErrorSerializer, 404: ErrorSerializer}),
+)
+class WikiCommentReactionView(_ReactionMixin, WikiApiView):
+    """PUT to add an emoji reaction to a wiki comment; DELETE to remove it.
+
+    Nothing but configuration: the idempotent toggle, the emoji check, the
+    ``{"reactions": ...}`` envelope and the 400/404 discipline all live in
+    :class:`~urbanlens.dashboard.external_api.mixins._ReactionMixin`, shared
+    with the pin-comment and group-message reaction endpoints. The schema
+    annotations move to ``extend_schema_view`` because the handlers themselves
+    are inherited and there is no local ``put``/``delete`` to decorate.
+    """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
         "PUT": frozenset({ApiKeyScope.WIKI_WRITE}),
         "DELETE": frozenset({ApiKeyScope.WIKI_WRITE}),
     }
 
-    def _react(self, request: Request, location_slug: str, comment_id: int, emoji: str, *, want_present: bool) -> Response:
-        """Drive the reaction to the requested state, idempotently.
+    reaction_target_field = "comment"
+    reaction_allowed_emojis = ALLOWED_EMOJIS
+    reaction_toggle = staticmethod(toggle_reaction)
+    reaction_summarizer = staticmethod(aggregate_reactions)
 
-        ``toggle_reaction`` flips; PUT and DELETE are declarative, so this
-        calls it only when the current state differs from the requested one -
-        a repeated PUT must not silently remove the reaction it just added.
+    def resolve_reaction_target(self, request: Request, **kwargs: Any) -> tuple[CommentModel, Profile]:
+        """Resolve the wiki comment being reacted to, or 404.
+
+        Both gates are lookups rather than permission branches: ``self.resolve``
+        404s unless the caller has pinned the location (see the module
+        docstring), and ``wiki=wiki`` in the comment lookup keeps a comment id
+        from another wiki - or from a wiki this caller cannot see - from being
+        reachable by guessing integers.
 
         Args:
             request: The authenticated request.
-            location_slug: The Location slug from the URL.
-            comment_id: The comment being reacted to.
-            emoji: The reaction emoji from the URL.
-            want_present: True for PUT, False for DELETE.
+            **kwargs: URL keyword arguments; ``location_slug`` and
+                ``comment_id`` are read here.
 
         Returns:
-            The comment's updated reaction summary.
+            Tuple of (the comment, the requesting profile).
+
+        Raises:
+            Http404: Unknown location, invisible wiki, or a comment id that is
+                not on that wiki.
         """
-        _location, wiki, profile = self.resolve(request, location_slug)
-        comment = get_object_or_404(Comment, id=comment_id, wiki=wiki)
-
-        summary = aggregate_reactions(comment, profile)
-        currently_present = bool(summary.get(emoji, {}).get("reacted"))
-        if currently_present != want_present:
-            try:
-                toggle_reaction(profile, comment, emoji)
-            except CommentValidationError as exc:
-                return Response({"error": str(exc)}, status=400)
-
-        comment.refresh_from_db()
-        return Response({"reactions": aggregate_reactions(comment, profile)})
-
-    @extend_schema(responses={200: None, 400: ErrorSerializer, 404: ErrorSerializer})
-    def put(self, request: Request, location_slug: str, comment_id: int, emoji: str) -> Response:
-        """Add the caller's reaction to a comment."""
-        return self._react(request, location_slug, comment_id, emoji, want_present=True)
-
-    @extend_schema(responses={200: None, 400: ErrorSerializer, 404: ErrorSerializer})
-    def delete(self, request: Request, location_slug: str, comment_id: int, emoji: str) -> Response:
-        """Remove the caller's reaction from a comment."""
-        return self._react(request, location_slug, comment_id, emoji, want_present=False)
+        _location, wiki, profile = self.resolve(request, kwargs["location_slug"])
+        comment = get_object_or_404(Comment, id=kwargs["comment_id"], wiki=wiki)
+        return comment, profile
 
 
-class PinCommentsView(OwnedPinMixin, _CommentListMixin, UniformErrorsMixin, ExternalApiView):
+class PinCommentsView(OwnedPinMixin, _CommentListMixin, ExternalApiView):
     """GET the caller's own comments on their pin; POST to add one.
 
     Uses ``pins:*`` rather than ``wiki:*``: a pin's comment thread is the
@@ -828,7 +901,7 @@ class PinCommentsView(OwnedPinMixin, _CommentListMixin, UniformErrorsMixin, Exte
         return self._create_comment(request, request.user.profile, pin=pin)
 
 
-class PinCommentDetailView(OwnedPinMixin, UniformErrorsMixin, ExternalApiView):
+class PinCommentDetailView(OwnedPinMixin, ExternalApiView):
     """DELETE one of the caller's own comments on their pin."""
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -844,7 +917,7 @@ class PinCommentDetailView(OwnedPinMixin, UniformErrorsMixin, ExternalApiView):
         return Response(status=204)
 
 
-class PinReviewView(OwnedPinMixin, UniformErrorsMixin, ExternalApiView):
+class PinReviewView(OwnedPinMixin, ExternalApiView):
     """GET the caller's own star rating for a pin; PUT to set it, DELETE to clear it."""
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {

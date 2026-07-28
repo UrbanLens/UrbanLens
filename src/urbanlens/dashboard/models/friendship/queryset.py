@@ -96,6 +96,31 @@ class QuerySet(abstract.DashboardQuerySet["Friendship"]):
         """
         return self.filter(status__in=(FriendshipStatus.ACCEPTED, FriendshipStatus.REMOVED))
 
+    def muted(self) -> Self:
+        """Return the relationships that have been muted.
+
+        Reads the ``muted`` flag, never ``status``. Mute used to *be* a status,
+        which is why this filter has to exist at all: any caller that reaches
+        for ``status="Muted"`` is reproducing the bug where muting a friend
+        overwrote ``Accepted`` and un-friended them everywhere.
+
+        Note that the flag lives on the single shared row joining the pair, so
+        it is *not* per-viewer - see ``Friendship.muted``. Do not present this
+        as "relationships I have muted" without that caveat.
+
+        Returns:
+            The muted relationships, whatever relationship state they are in.
+        """
+        return self.filter(muted=True)
+
+    def unmuted(self) -> Self:
+        """Return the relationships that are not muted.
+
+        Returns:
+            The relationships whose notifications are still on.
+        """
+        return self.filter(muted=False)
+
     def relationship_type(self, relationship_type: str) -> Self:
         """
         Return a list of all friendships with a given type.

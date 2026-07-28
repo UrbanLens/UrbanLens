@@ -186,6 +186,58 @@ class ExternalApiResyncThrottle(ExternalApiRateThrottle):
     scope = "external_api_resync"
 
 
+class GameStartThrottle(ExternalApiRateThrottle):
+    """A resync-style cap on starting a game session.
+
+    Starting a SpotGuessr session is the most expensive single request in the
+    games domain and its cost is unbounded in the caller's own data, exactly
+    like a smart-list resync: round generation runs up to 25 eligibility passes
+    over every location the player has pinned, the difficulty-proxy lookup that
+    ranks candidates is an N+1 across them, and a Street View round additionally
+    makes a *billed* third-party imagery call per attempt. The ordinary write
+    cap bounds how many writes a credential makes, which is the wrong question
+    when one of them can cost seconds of geospatial work and real money.
+
+    Applied *in addition* to the standard three by overriding
+    ``throttle_classes`` on the view, so a start still counts against the burst
+    and write caps too. ``tier`` is the write tier so that a view serving both a
+    cheap list GET and an expensive create POST on one URL only charges the
+    POST.
+
+    Note:
+        ``DEFAULT_THROTTLE_RATES`` has no entry for this scope yet, so
+        :attr:`fallback_rate` applies. Adding ``"external_api_game_start"`` to
+        the settings dict takes precedence with no change here.
+    """
+
+    scope = "external_api_game_start"
+    tier = TIER_WRITE
+
+    #: Used when the settings dict has no rate for :attr:`scope`. Generous
+    #: enough that a genuine player never meets it (a session is 3-20 rounds, so
+    #: this is dozens of full games an hour) and tight enough that a script
+    #: cannot turn session creation into an unmetered geospatial workload.
+    fallback_rate: ClassVar[str] = "40/hour"
+
+    def get_rate(self) -> str:
+        """Return the configured rate for this scope, or :attr:`fallback_rate`.
+
+        DRF raises ``ImproperlyConfigured`` for a scope missing from
+        ``DEFAULT_THROTTLE_RATES``, which would take the whole endpoint down
+        rather than merely leaving it untuned - a bad trade for a throttle whose
+        default is deliberately conservative anyway.
+
+        Returns:
+            The rate string to enforce.
+        """
+        from django.core.exceptions import ImproperlyConfigured
+
+        try:
+            return super().get_rate()
+        except ImproperlyConfigured:
+            return self.fallback_rate
+
+
 class LocationSearchThrottle(ExternalApiReadThrottle):
     """A separate budget for autocomplete, which is charged per keystroke.
 
@@ -201,3 +253,42 @@ class LocationSearchThrottle(ExternalApiReadThrottle):
     """
 
     scope = "external_api_location_search"
+
+
+class GlobalSearchThrottle(ExternalApiRateThrottle):
+    """A separate budget for the cross-domain search endpoint.
+
+    Unlike :class:`LocationSearchThrottle`, which exists because autocomplete is
+    charged per *keystroke*, this one exists because a single global search is
+    not a single query: it fans out across every domain provider the calling
+    credential is scoped for - pins, wikis, trips, photos, visits, comments and
+    (for an OAuth2 client) direct messages - each with its own database work.
+    Counting that against the shared hourly read cap would let a handful of
+    searches starve the sync traffic the client actually depends on, and letting
+    it share the *write* cap would be worse still.
+
+    Applied *in addition* to the standard three by overriding
+    ``throttle_classes`` on the view, so a search still counts against the burst
+    and read caps as well.
+    """
+
+    scope = "external_api_global_search"
+    tier = TIER_READ
+
+
+class CalendarExportThrottle(ExternalApiRateThrottle):
+    """A tight cap on trip calendar export and unexport.
+
+    These are the only external endpoints that talk to a third party *on the
+    request path*, and a single call may fan out to one upstream request per
+    trip activity. The budget being consumed is therefore not only ours: an
+    unthrottled client could exhaust the deployment's Google Calendar quota for
+    every user at once, which is a failure mode no per-credential write cap
+    would catch in time.
+
+    Applied *in addition* to the standard three by overriding
+    ``throttle_classes`` on the view.
+    """
+
+    scope = "external_api_calendar"
+    tier = TIER_WRITE

@@ -29,6 +29,17 @@ DELETE_TRIP_DENIED = "Only the trip creator can delete it."
 #: framework's retention, so it is quoted rather than reworded per surface.
 TRIP_DELETED_MESSAGE = "Trip deleted. Undo within 7 days from Settings → Undo History."
 
+#: The trip's four configurable permission fields, in the order the settings
+#: form presents them. Exported so every writer - the HTMX settings form, the
+#: external API's serializer, and the tests - agrees on the field set rather
+#: than each repeating the four names and drifting when a fifth is added.
+TRIP_PERMISSION_FIELDS: tuple[str, ...] = (
+    "allow_add_members",
+    "allow_add_activities",
+    "allow_edit_activities",
+    "allow_comments",
+)
+
 
 def create_trip(
     creator: Profile,
@@ -213,20 +224,39 @@ def delete_trip(trip: Trip, actor: Profile) -> None:
 
 
 def set_trip_permissions(trip: Trip, actor: Profile, *, changes: Mapping[str, Any]) -> Trip:
-    """Update a trip's permission levels (creator/organizer only).
+    """Apply a presence-keyed partial update to a trip's permission levels.
+
+    Only keys present in *changes* are touched, matching :func:`update_trip`.
+    That is not a stylistic choice, it is a correctness one: this function used
+    to walk a hardcoded ``{field: default}`` table and assign *every* entry, so
+    a field the caller had simply not mentioned was reset to that default. The
+    only caller was the site's settings form, which submits all four radio
+    groups on every save, so the behaviour was invisible - but a partial writer
+    (the external API's ``PATCH /trips/{slug}/settings/``, an offline client
+    syncing one toggle) would have silently rewritten three unrelated
+    permissions on a trip other people share, with nothing in the response to
+    show it had happened.
+
+    An unrecognized level is refused rather than coerced, for the same reason:
+    quietly substituting a default tells the caller their write succeeded while
+    moving the permission somewhere they never asked for.
 
     Args:
         trip: The trip to configure.
         actor: The profile making the change.
-        changes: Any of ``allow_add_members``, ``allow_add_activities``,
-            ``allow_edit_activities``, ``allow_comments``. Unrecognized levels
-            fall back to that field's default.
+        changes: Any subset of :data:`TRIP_PERMISSION_FIELDS`, each valued with
+            one of ``Trip.PERM_NONE``/``PERM_ORGANIZERS``/``PERM_EVERYONE``.
+            Unrelated keys are ignored, so a caller may hand this the whole
+            submitted form (``request.POST.dict()``) unfiltered.
 
     Returns:
-        The saved trip.
+        The saved trip. Unchanged, and not written at all, when *changes*
+        names none of the permission fields.
 
     Raises:
         TripPermissionError: The actor is neither the creator nor an organizer.
+        TripValidationError: A submitted field carries a level that is not one
+            of the three the model defines.
     """
     from urbanlens.dashboard.services.trip_access import is_organizer
 
@@ -234,14 +264,16 @@ def set_trip_permissions(trip: Trip, actor: Profile, *, changes: Mapping[str, An
         raise TripPermissionError("Only the trip creator or an organizer can change settings.")
 
     valid_levels = {Trip.PERM_NONE, Trip.PERM_ORGANIZERS, Trip.PERM_EVERYONE}
-    defaults = {
-        "allow_add_members": Trip.PERM_NONE,
-        "allow_add_activities": Trip.PERM_EVERYONE,
-        "allow_edit_activities": Trip.PERM_EVERYONE,
-        "allow_comments": Trip.PERM_EVERYONE,
-    }
-    for field, default in defaults.items():
-        value = str(changes.get(field) or "").strip()
-        setattr(trip, field, value if value in valid_levels else default)
-    trip.save(update_fields=[*defaults, "updated"])
+    updated: list[str] = []
+    for field in TRIP_PERMISSION_FIELDS:
+        if field not in changes:
+            continue
+        value = str(changes[field] or "").strip()
+        if value not in valid_levels:
+            raise TripValidationError(f"{field.replace('_', ' ')} must be one of: {', '.join(sorted(valid_levels))}.")
+        setattr(trip, field, value)
+        updated.append(field)
+
+    if updated:
+        trip.save(update_fields=[*updated, "updated"])
     return trip

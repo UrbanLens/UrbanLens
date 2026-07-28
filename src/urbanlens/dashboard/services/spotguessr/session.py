@@ -104,7 +104,22 @@ def _config_from_session(session: GameSession) -> GameConfig:
     return GameConfig(**{key: value for key, value in (session.config or {}).items() if key in known_fields})
 
 
-def _clamp_rounds(total_rounds: int) -> int:
+def clamp_rounds(total_rounds: int) -> int:
+    """Coerce a requested round count into the range a session may actually play.
+
+    Public (rather than the private helper it started as) because every caller
+    that accepts a client-supplied round count has to apply the identical
+    clamp, and the external API is now one of them. A second copy of
+    ``max(MIN, min(MAX, n))`` in a view is exactly how the two bounds would
+    eventually disagree.
+
+    Args:
+        total_rounds: The requested number of rounds, from any source.
+
+    Returns:
+        The same number pinned into
+        ``[MIN_ROUNDS_PER_SESSION, MAX_ROUNDS_PER_SESSION]``.
+    """
     return max(MIN_ROUNDS_PER_SESSION, min(MAX_ROUNDS_PER_SESSION, total_rounds))
 
 
@@ -115,10 +130,81 @@ def start_solo_session(profile: Profile, mode: str, config: GameConfig, *, total
         mode=mode,
         status=GameSessionStatus.ACTIVE,
         config=config.to_dict(),
-        total_rounds=_clamp_rounds(total_rounds),
+        total_rounds=clamp_rounds(total_rounds),
     )
     GameSessionParticipant.objects.create(session=session, profile=profile, status=GameSessionParticipantStatus.JOINED)
     return session
+
+
+@dataclass(frozen=True)
+class SoloStartResult:
+    """The outcome of :func:`start_solo_playthrough`.
+
+    Attributes:
+        session: The created session, or None when nothing was created at all
+            because the profile had no eligible location to play.
+        round: The first round to show, or None when the session had to be
+            abandoned before it played anything.
+        no_eligible_locations: True when the profile has nothing playable
+            under this config. Distinct from "the game finished": a caller
+            must report it as its own empty state rather than as a completed
+            game with zero rounds, which reads to a player as a real (if
+            baffling) result. Both the cheap pre-check and the "every
+            candidate location turned out to have no usable photo/name/
+            imagery" case land here, because they are the same thing from the
+            player's point of view.
+    """
+
+    session: GameSession | None
+    round: GameRound | None
+    no_eligible_locations: bool
+
+
+def start_solo_playthrough(profile: Profile, mode: str, config: GameConfig, *, total_rounds: int = DEFAULT_ROUNDS_PER_SESSION) -> SoloStartResult:
+    """Start a solo session and generate its first round, in one call.
+
+    The whole "create, then check it can actually play, then clean up if it
+    can't" sequence, which previously lived only inside
+    ``controllers.spotguessr.SpotGuessrStartView`` and would otherwise have had
+    to be copied verbatim into the external API. Two copies of this in
+    particular would be unusually costly: the failure mode of getting it subtly
+    wrong is an ACTIVE session that can never produce a round, which then sits
+    in the player's history forever and is swept as a stall.
+
+    A profile with nothing eligible never gets a ``GameSession`` at all; one
+    whose candidates all fail round generation gets a session that is completed
+    immediately so it can't linger.
+
+    Args:
+        profile: The solo player.
+        mode: The ``SpotGuessrMode`` to play.
+        config: The validated settings snapshot for this playthrough.
+        total_rounds: Requested round count; clamped by :func:`clamp_rounds`.
+
+    Returns:
+        A :class:`SoloStartResult` - see its attributes for how to tell the
+        three outcomes apart.
+
+    Raises:
+        SpotGuessrError: If the mode has no round-generation strategy
+            registered (a programming error, not a player-facing condition).
+    """
+    if not eligibility.has_eligible_locations([profile], require_visited_by_all=config.require_visited_all, geo_bounds=config.geo_bounds):
+        return SoloStartResult(session=None, round=None, no_eligible_locations=True)
+
+    session = start_solo_session(profile, mode, config, total_rounds=total_rounds)
+    round_ = get_or_create_round(session)
+    if round_ is None:
+        # The pre-check above only ruled out "no location is pinned at all".
+        # Reaching None here means every eligible location was tried and none
+        # yielded a playable round (no usable photo/name/imagery) - rarer, and
+        # only observable once generation is actually attempted. Complete the
+        # session so it doesn't sit ACTIVE and unplayable forever, but report
+        # it as the empty state it is rather than as a finished game.
+        complete_session(session)
+        return SoloStartResult(session=session, round=None, no_eligible_locations=True)
+
+    return SoloStartResult(session=session, round=round_, no_eligible_locations=False)
 
 
 def start_multiplayer_session(
@@ -141,7 +227,7 @@ def start_multiplayer_session(
         mode=mode,
         status=GameSessionStatus.LOBBY,
         config=config.to_dict(),
-        total_rounds=_clamp_rounds(total_rounds),
+        total_rounds=clamp_rounds(total_rounds),
     )
     GameSessionParticipant.objects.create(session=session, profile=host, status=GameSessionParticipantStatus.JOINED)
     for invitee in invite_profiles:

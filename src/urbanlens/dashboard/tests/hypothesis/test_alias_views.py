@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import patch
 
 from django.urls import reverse
@@ -326,3 +327,68 @@ class AliasPanelHeaderTitleAlignmentTests(TestCase):
         anchor_start = content.index('id="aliases-explainer-anchor"')
         self.assertLess(title_start, anchor_start)
         self.assertLess(anchor_start, title_end)
+
+
+class LocationAliasUseGoesThroughTheServiceTests(TestCase):
+    """The wiki "use this name" view must not re-implement the rename itself.
+
+    It used to assign ``wiki.name`` and hand-write a ``WikiEdit`` row, which is
+    a second implementation of ``services.wiki_aliases.promote_wiki_alias_to_name``
+    and carried two defects the service does not have. Both are covered here so
+    a future re-inlining of the logic fails loudly rather than quietly
+    reintroducing them.
+    """
+
+    def setUp(self) -> None:
+        baker.make("auth.User")  # bootstrap site admin
+        self.user = baker.make("auth.User")
+        self.profile = Profile.objects.get(user=self.user)
+        self.location = baker.make(Location, latitude="41.410000", longitude="-73.410000")
+        self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Curated Mill")
+        baker.make(Pin, profile=self.profile, location=self.location)
+        self.client.force_login(self.user)
+
+    def test_promoting_the_name_the_wiki_already_has_writes_no_history(self) -> None:
+        """A no-op rename must leave the audit trail untouched.
+
+        The old inline version always wrote a ``WikiEdit``, so promoting the
+        alias that was already the name produced a junk
+        ``{"name": {"from": "X", "to": "X"}}`` row. Those rows are not
+        cosmetic: the history is what people read to see who changed what, and
+        a client retrying a request whose response it never saw could pad it
+        with edits that changed nothing.
+        """
+        alias = self.wiki.aliases.get(name="Curated Mill")
+        before = WikiEdit.objects.filter(wiki=self.wiki).count()
+
+        response = self.client.post(reverse("location.wiki.alias.use", args=[self.location.slug, alias.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(WikiEdit.objects.filter(wiki=self.wiki).count(), before)
+        # Nothing happened, so nothing is announced - no rename toast and no
+        # wikiRenamed event for other page components to react to.
+        self.assertNotIn("HX-Trigger", response.headers)
+
+    def test_announced_name_is_the_one_that_was_actually_stored(self) -> None:
+        """The toast and the wikiRenamed event must report the sanitized name.
+
+        ``Wiki.save()`` runs the incoming name through ``sanitize_name``, so the
+        alias text and the stored name can differ. The old inline version echoed
+        the raw alias, telling the user the place had been renamed to something
+        that is not what the database now holds. The alias row here is written
+        with ``.update()`` to bypass ``WikiAlias.save()``'s own sanitizing, which
+        is how a row predating that sanitizer would look.
+        """
+        alias = baker.make(WikiAlias, wiki=self.wiki, name="Placeholder Mill")
+        raw_name = "Restored <b>Mill</b>"
+        WikiAlias.objects.filter(pk=alias.pk).update(name=raw_name)
+
+        response = self.client.post(reverse("location.wiki.alias.use", args=[self.location.slug, alias.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.wiki.refresh_from_db()
+        self.assertNotEqual(self.wiki.name, raw_name)
+        triggers = json.loads(response.headers["HX-Trigger"])
+        self.assertEqual(triggers["wikiRenamed"]["name"], self.wiki.name)
+        self.assertIn(self.wiki.name, triggers["showToast"]["message"])
+        self.assertNotIn(raw_name, triggers["showToast"]["message"])

@@ -1,6 +1,6 @@
 """Guards on the external API's scope vocabulary and who may hold each scope.
 
-Three separate invariants, all of which are the kind that break silently:
+Four separate invariants, all of which are the kind that break silently:
 
 1. ``ApiKeyScope`` and ``OAUTH2_PROVIDER["SCOPES"]`` must stay identical.
    They are duplicated because settings load before the app registry and so
@@ -11,6 +11,12 @@ Three separate invariants, all of which are the kind that break silently:
    that the key's owner never consented to.
 3. The ``messages:*`` scopes must be unreachable by a PAT-style key even if one
    somehow carries them.
+4. Every scope name must keep its ``:read``/``:write``/``:manage`` suffix,
+   because ``external_api.throttling.request_tier`` reads the rate-limit tier
+   straight off that suffix. A scope minted without one (``games:play`` was the
+   near miss) silently lands its endpoints in the loose hourly *read* budget,
+   which is sized for a mobile client's bulk sync and is far too generous for
+   mutating work.
 
 Most of this needs no database, so it lives in ``SimpleTestCase`` classes that
 run without Postgres.
@@ -22,6 +28,7 @@ from django.conf import settings
 from django.test import SimpleTestCase
 
 from urbanlens.dashboard.external_api.permissions import OAUTH2_ONLY_SCOPES, HasApiKeyScope
+from urbanlens.dashboard.external_api.throttling import TIER_READ, TIER_WRITE, request_tier
 from urbanlens.dashboard.models.account.model import ApiKeyScope, _default_api_key_scopes
 
 #: The grant every API key has had since the feature shipped. Spelled out as
@@ -62,6 +69,20 @@ class _FakeRequest:
         self.auth = auth
 
 
+class _FakeTieredView:
+    """Stand-in for a view that declares its scopes per HTTP method.
+
+    ``request_tier`` only ever reads ``throttle_tier_by_method`` and
+    ``required_scopes_by_method`` off the view, so the real viewset machinery
+    is irrelevant here - and deliberately avoided, since instantiating one
+    would tie this assertion to whatever endpoints happen to exist today
+    rather than to the scope *vocabulary*, which is what these tests guard.
+    """
+
+    def __init__(self, required_scopes_by_method: dict[str, frozenset[str]]) -> None:
+        self.required_scopes_by_method = required_scopes_by_method
+
+
 class ScopeVocabularyTests(SimpleTestCase):
     """ApiKeyScope is the single source of truth; settings must mirror it verbatim."""
 
@@ -87,6 +108,43 @@ class ScopeVocabularyTests(SimpleTestCase):
         values = [scope.value for scope in ApiKeyScope]
         self.assertEqual(len(values), len(set(values)))
 
+    def test_games_scopes_exist_with_their_agreed_values(self) -> None:
+        """The games pair is spelled exactly as the mobile client and consent screen expect.
+
+        Literals rather than the enum members, for the same reason
+        ``ORIGINAL_DEFAULT_SCOPES`` is: repointing ``GAMES_READ`` at some other
+        string would invalidate every grant already issued against the old one,
+        and a test that read the value off the member could not notice.
+        """
+        self.assertEqual(ApiKeyScope.GAMES_READ.value, "games:read")
+        self.assertEqual(ApiKeyScope.GAMES_WRITE.value, "games:write")
+
+    def test_games_scopes_are_mirrored_into_settings(self) -> None:
+        """The games pair reached ``OAUTH2_PROVIDER["SCOPES"]``, labels included.
+
+        ``test_settings_scopes_match_enum_exactly`` already covers this in
+        aggregate, but only reports "the dicts differ"; this names the pair, so
+        a half-applied change lands on an obviously-relevant failure.
+        """
+        declared = settings.OAUTH2_PROVIDER["SCOPES"]
+        self.assertEqual(declared.get("games:read"), ApiKeyScope.GAMES_READ.label)
+        self.assertEqual(declared.get("games:write"), ApiKeyScope.GAMES_WRITE.label)
+
+    def test_every_scope_lands_in_the_tier_its_suffix_implies(self) -> None:
+        """The suffix convention is load-bearing for rate limiting, not cosmetic.
+
+        ``request_tier`` classifies a request by looking for ``:write`` or
+        ``:manage`` at the end of the scopes the method requires. A scope whose
+        name breaks the convention (a bare ``games:play``, say) therefore reads
+        as a *read* and gets charged against the deliberately generous hourly
+        read budget - so the vocabulary itself has to be checked, not just the
+        throttle code.
+        """
+        for scope in ApiKeyScope:
+            with self.subTest(scope=scope.value):
+                expected = TIER_READ if scope.value.endswith(":read") else TIER_WRITE
+                self.assertEqual(request_tier(_FakeTieredView({"POST": frozenset({scope.value})}), "POST"), expected)
+
 
 class DefaultScopeImmutabilityTests(SimpleTestCase):
     """The default PAT grant must not widen when the vocabulary grows.
@@ -106,7 +164,7 @@ class DefaultScopeImmutabilityTests(SimpleTestCase):
         self.assertEqual(settings.OAUTH2_PROVIDER["DEFAULT_SCOPES"], ORIGINAL_DEFAULT_SCOPES)
 
     def test_defaults_exclude_every_sensitive_scope(self) -> None:
-        """Messages, safety, photos and friends are never granted by default."""
+        """Messages, safety, photos, friends and games are never granted by default."""
         granted = set(_default_api_key_scopes())
         for scope in (
             ApiKeyScope.MESSAGES_READ,
@@ -118,7 +176,25 @@ class DefaultScopeImmutabilityTests(SimpleTestCase):
             ApiKeyScope.SOCIAL_READ,
             ApiKeyScope.SOCIAL_WRITE,
             ApiKeyScope.SETTINGS_WRITE,
+            ApiKeyScope.GAMES_READ,
+            ApiKeyScope.GAMES_WRITE,
         ):
+            with self.subTest(scope=scope.value):
+                self.assertNotIn(scope.value, granted)
+
+    def test_no_scope_added_after_the_original_four_leaks_into_the_default_grant(self) -> None:
+        """A blanket version of the above, so the next domain can't be forgotten.
+
+        The enumerated list is kept because a named failure is easier to act
+        on, but it only protects the scopes somebody remembered to add to it.
+        This one holds for every scope the vocabulary ever grows, which is the
+        actual invariant: the implicit grant is frozen, so *anything* outside
+        the original four appearing in it is an unconsented widening.
+        """
+        granted = set(_default_api_key_scopes())
+        for scope in ApiKeyScope:
+            if scope.value in ORIGINAL_DEFAULT_SCOPES:
+                continue
             with self.subTest(scope=scope.value):
                 self.assertNotIn(scope.value, granted)
 
@@ -156,6 +232,29 @@ class Oauth2OnlyScopeTests(SimpleTestCase):
         credential = _FakeAccessToken([ApiKeyScope.MESSAGES_READ.value])
         view = _FakeView(frozenset({ApiKeyScope.MESSAGES_READ}))
         self.assertTrue(self.permission.has_permission(_FakeRequest(credential), view))
+
+    def test_games_scopes_are_not_oauth2_only(self) -> None:
+        """A PAT may play games - the DM restriction is about E2EE key material.
+
+        Worth pinning down rather than leaving implicit: the games surface has
+        no per-device secrets and a leaked key can at worst inflate someone's
+        leaderboard score, so extending ``OAUTH2_ONLY_SCOPES`` to cover it
+        would lock server-side integrations out for no security gain.
+        """
+        self.assertNotIn(ApiKeyScope.GAMES_READ, OAUTH2_ONLY_SCOPES)
+        self.assertNotIn(ApiKeyScope.GAMES_WRITE, OAUTH2_ONLY_SCOPES)
+
+    def test_api_key_holding_games_write_is_permitted(self) -> None:
+        """The end-to-end consequence of the above: a PAT granted games:write may use it."""
+        credential = _FakeApiKey([ApiKeyScope.GAMES_WRITE.value])
+        view = _FakeView(frozenset({ApiKeyScope.GAMES_WRITE}))
+        self.assertTrue(self.permission.has_permission(_FakeRequest(credential), view))
+
+    def test_games_read_does_not_imply_games_write(self) -> None:
+        """The pair is two grants, not one - a read-only consent can't start rounds."""
+        credential = _FakeApiKey([ApiKeyScope.GAMES_READ.value])
+        view = _FakeView(frozenset({ApiKeyScope.GAMES_WRITE}))
+        self.assertFalse(self.permission.has_permission(_FakeRequest(credential), view))
 
     def test_api_key_still_works_for_ordinary_scopes(self) -> None:
         """The new gate doesn't break the non-messages case."""

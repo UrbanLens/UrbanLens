@@ -9,7 +9,17 @@ Expects:
                        Profile" (used by profile/edit.html; omit/False on
                        profile/index.html)
   friendship_status, friendship, friends_since - only used when viewing
-                       another user's profile (see userprofile.py)
+                       another user's profile (see userprofile.py).
+                       friendship.muted is a separate flag from
+                       friendship_status, deliberately: muting must never
+                       change the relationship, so there is no 'muted' status
+                       to branch on and the Mute/Unmute toggle lives inside
+                       the 'accepted' branch instead.
+  viewer_placed_block - True only when the viewer is the one who placed the
+                       block. Both parties see the 'blocked' branch (the
+                       relationship row is matched in either direction), but
+                       only the blocker may lift it, so the Unblock button is
+                       gated on this rather than on friendship_status.
   preview_modes     - "View as" options; only rendered when present
   can_view_contact  - gates the email meta item
 {% endcomment %}
@@ -68,6 +78,11 @@ Expects:
                     <span class="friendship-since">since {{ friends_since|date:"M Y" }}</span>
                     {% endif %}
                 </div>
+                {% if friendship.muted %}
+                <div class="friendship-chip friendship-chip--muted">
+                    <i class="material-symbols-outlined">volume_off</i> Muted
+                </div>
+                {% endif %}
                 <div class="friendship-btn-group">
                     <form method="post" action="{% url 'friend.remove' profile.id %}">
                         {% csrf_token %}
@@ -75,12 +90,21 @@ Expects:
                             <i class="material-symbols-outlined">person_remove</i> Remove
                         </button>
                     </form>
+                    {% if friendship.muted %}
+                    <form method="post" action="{% url 'friend.unmute' profile.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn friendship-btn btn--secondary" title="Turn notifications from this user back on">
+                            <i class="material-symbols-outlined">volume_up</i> Unmute
+                        </button>
+                    </form>
+                    {% else %}
                     <form method="post" action="{% url 'friend.mute' profile.id %}">
                         {% csrf_token %}
                         <button type="submit" class="btn friendship-btn btn--secondary" title="Mute this user">
                             <i class="material-symbols-outlined">volume_off</i> Mute
                         </button>
                     </form>
+                    {% endif %}
                     <form method="post" action="{% url 'friend.block' profile.id %}">
                         {% csrf_token %}
                         <button type="submit" class="btn friendship-btn btn--danger" title="Block this user"
@@ -123,26 +147,18 @@ Expects:
                         </button>
                     </form>
                 </div>
-            {% elif friendship_status == 'muted' %}
-                <div class="friendship-chip friendship-chip--muted">
-                    <i class="material-symbols-outlined">volume_off</i> Muted
-                </div>
-                <form method="post" action="{% url 'friend.request' profile.id %}">
-                    {% csrf_token %}
-                    <button type="submit" class="btn friendship-btn btn--ghost">
-                        <i class="material-symbols-outlined">volume_up</i> Unmute
-                    </button>
-                </form>
             {% elif friendship_status == 'blocked' %}
                 <div class="friendship-chip friendship-chip--blocked">
                     <i class="material-symbols-outlined">block</i> Blocked
                 </div>
-                <form method="post" action="{% url 'friend.remove' profile.id %}">
+                {% if viewer_placed_block %}
+                <form method="post" action="{% url 'friend.unblock' profile.id %}">
                     {% csrf_token %}
                     <button type="submit" class="btn friendship-btn btn--ghost">
                         <i class="material-symbols-outlined">lock_open</i> Unblock
                     </button>
                 </form>
+                {% endif %}
             {% else %}
                 {% include "dashboard/partials/profile/_add_friend_button.html" with button_class="btn friendship-btn btn--primary" dialog_id="add-friend-dialog-hero" %}
                 {% include "dashboard/partials/profile/_add_friend_dialog.html" with target_profile_id=profile.id dialog_id="add-friend-dialog-hero" %}

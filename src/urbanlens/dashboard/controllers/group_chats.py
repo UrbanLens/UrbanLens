@@ -32,6 +32,7 @@ from urbanlens.dashboard.services.group_chats import (
     mark_group_thread_open,
     remove_group_member,
     rename_group_chat,
+    set_group_muted,
     share_pin_in_group_message,
 )
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
@@ -331,13 +332,18 @@ class GroupMuteToggleView(LoginRequiredMixin, View):
             request: The incoming request.
             group_uuid: UUID of the group chat.
 
+        The flip lives here rather than in the service because it is a property
+        of *this button*: the web UI has one control whose meaning is "the
+        other state". ``set_group_muted`` names an end state instead, so the
+        external API's PUT/DELETE pair cannot be turned into a toggle by a
+        retry - see its docstring.
+
         Returns:
             The re-rendered thread partial.
         """
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
-        membership.muted = not membership.muted
-        membership.save(update_fields=["muted", "updated"])
+        set_group_muted(membership, muted=not membership.muted)
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         response["HX-Trigger"] = json.dumps({"dmListRefresh": {"target": "body"}})
         return response

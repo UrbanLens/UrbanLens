@@ -4,6 +4,187 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
 to pick up without re-discovering the problem from scratch.
 
+## 2026-07-28: `Friendship.muted` is shared by both profiles, not per-viewer
+
+There is exactly one `Friendship` row per pair - `QuerySet.between()` matches either direction
+and `Friendship.request()` reuses whatever row already exists - so the `muted` boolean added in
+migration `0020_friendship_muted_flag` is a property of the *relationship*, not of one side of
+it. If A mutes B, B's own view of that relationship also reads `muted=True`.
+
+This is inherited unchanged from the `status='Muted'` encoding it replaces (a status column is
+just as shared), so nothing regressed - but the new flag makes it much easier to surface the
+value in a UI or API as "people I have muted", which would be wrong. The correctly shaped
+precedent is `DirectMessageMute`, keyed on `(viewer, sender)`.
+
+Fix is either two columns (`from_profile_muted` / `to_profile_muted`, set according to which
+side of the row the actor is on) or a small `FriendshipMute(viewer, target)` model alongside
+`DirectMessageMute`. Two columns is the cheaper change and keeps the single-row invariant that
+`between()`/`request()`/`unique_together` all depend on. Deliberately not done in the schema
+pass that introduced the flag: the brief was one boolean plus the data repair, and widening it
+to a directional pair would have changed the shape the API batch was told to expect.
+
+## 2026-07-28: `Friendship.muted` is stored but nothing reads it - muting a friend silences nothing
+
+Noted while splitting mute off `Friendship.status` (migration
+`0020_friendship_muted_flag`). The bug that split fixed was that muting **un-friended** people;
+what it did *not* fix is that friendship-mute has never actually suppressed anything. Grep for
+`muted` across `services/notifications.py`, `services/notification_delivery.py`,
+`services/notification_text_alerts.py` and `services/notification_center.py`: no hit. The two
+mute features that do work are unrelated models - `DirectMessageMute` (per-sender DM mute) and
+`GroupChatMembership.muted` (per-group mute) - and neither consults `Friendship`.
+
+So the profile page's Mute button, and the external API's `POST /friends/{uuid}/mute/`, both
+record a preference that no delivery path honours: the muter still receives friend-request,
+friend-accepted, pin-share, trip-invite and safety notifications from that profile. Repro: mute
+an accepted friend from their profile page, have them share a pin with you -> the notification
+still arrives, and `NotificationLog` still has an unread row.
+
+Fix is to make `Friendship.muted` an input to notification delivery in the same place
+`NotificationLog` rows are created from a `source_profile` - most cleanly a single
+`is_muted_by(recipient, source)` helper in `services/friendship.py` that
+`services/notifications.py` consults, so the check cannot be forgotten per notification type.
+Deliberately left out of the schema change: wiring a new suppression rule into every
+notification producer is a behaviour change of its own size, and the external API's `is_muted`
+surface (Batch S) needs the flag to exist first.
+
+## RESOLVED 2026-07-28 (documented judgement call): restoring legacy `status='Muted'` friendships
+
+Migration `0020_friendship_muted_flag` has to guess what a `status='Muted'` row was *before* it
+was muted, because the old encoding overwrote the previous status and stored it nowhere. It
+restores those rows to `Accepted` with `muted=True`. That is a judgement call and is recorded
+here so a future audit does not have to re-derive it:
+
+- The only user-reachable mute path is `FriendController.mute_friend` ->
+  `services.friendship.mute_profile`, and the only template rendering that URL
+  (`partials/profile/_profile_hero_body.html`) emits the Mute button **exclusively** inside its
+  `friendship_status == 'accepted'` branch. So every mute a real user performed started from
+  `Accepted`, which makes the restore faithful rather than a widening of access.
+- `Friendship.mute()` (a classmethod that created a `Muted` row for two strangers) could have
+  produced non-accepted rows, but `git log -S "Friendship.mute"` over
+  `controllers/`, `services/` and `external_api/` returns nothing across the whole history - it
+  was only ever called by its own unit test. It is deleted in this change.
+- The external API's `FriendMuteView` *can* mute a non-accepted row, but it exists only on the
+  unreleased `feature/external-api-mobile-v2` branch that introduces this migration, so no
+  deployed database can hold a row it wrote.
+
+If any of those three assumptions turns out to be false for a given deployment, the affected
+rows are ones where two profiles are now treated as accepted friends when they previously were
+not. Auditing that is a single query: `Friendship.objects.filter(muted=True, status='Accepted')`
+with `created`/`updated` predating the deploy of `0020`.
+
+## FIXED 2026-07-28: Google Calendar export leaked trip-mates' hidden coordinates
+
+**Severity: privacy, cross-user, and irreversible once it fired** - the data went to a third
+party (Google), where no later UrbanLens privacy change can reach it.
+
+`services/calendar_sync.py::_activity_location_string` honoured only `TripActivity.location_hidden`
+and ignored the adder's `Profile.trip_pin_location_visibility` gate that every other trip surface
+applies via `services/trip_visibility.py::viewer_hidden_activity_ids` (the activities panel, the
+trip map, AI trip suggestions). A trip is a shared space, so exporting one wrote **other members'**
+coordinates - precisely the ones the trip screen deliberately withholds from the exporter - into
+the exporter's Google Calendar, as the `location` field of both the all-day trip event
+(`trip_to_event_body` -> `_trip_location_string`) and the per-activity timed events
+(`activity_to_event_body`).
+
+Repro (pre-fix): two profiles on one trip; the adder sets `trip_pin_location_visibility = no_one`
+and adds an activity with a `Location`; the other member exports the trip
+(`POST /dashboard/trips/<slug>/calendar/export/`, or the external API's
+`POST /trips/<slug>/calendar/`, or any auto-sync push via `push_auto_synced_trip_changes`) ->
+the event body carries the address. The trip screen shows that same member no coordinates at all.
+
+Fixed by making `export_trip_to_calendar` compute the viewer's hidden-activity set once
+(`_hidden_activity_ids_for`, which runs the shared `viewer_hidden_activity_ids` for
+`account.profile`) and thread it through `trip_to_event_body`, `_trip_location_string`,
+`_sync_activity_events` and `activity_to_event_body`. A hidden activity still gets its event -
+the exporter is committed to be somewhere and a gap in their calendar would be its own bug -
+just without a `location`. Regression coverage:
+`tests/hypothesis/test_external_api_trip_calendar.py::ExportRespectsAdderVisibilityTests`.
+
+Left open deliberately: the pure-mapping helpers still accept `hidden_activity_ids=None`
+("no viewer gate"), which is correct for the property tests that call them with unsaved trips
+but means a *new* caller that forgets to pass it reintroduces the leak. Worth revisiting as a
+required argument once no caller needs the viewerless form.
+
+## OPEN 2026-07-28: 16 pre-existing failures outside every prior sweep's `-k` filter
+
+Every sweep so far this session used a `-k` keyword filter scoped to pin/wiki/location/friend/
+external-API territory. A full unfiltered run (`pytest src/urbanlens/dashboard/tests`, no `-k`,
+~70 minutes) surfaces a different, previously-unswept **16 failed, 7990 passed, 2 xfailed**. None
+of the 16 files were touched by anything in this session (last-commit dates 2026-07-22 through
+2026-07-25, `git log -1` per file) or relate to pins/wikis/locations/friends/the external API -
+this is a fresh, disjoint backlog, not a regression from today's work. **Only triaged, not fixed.**
+
+Two entries from the raw 18-failure sweep output are not real and should be discarded outright if
+re-seen: `test_zzz_client_probe_tmp.py` was a throwaway file created and deleted mid-session for an
+unrelated probe (see the `@given`+`self.client` CLAUDE.md entry) - the long-running sweep's
+collection phase had already imported it before the delete, so it ran from memory once, near the
+end of the ~70-minute run, off a module that no longer exists on disk. And
+`test_spotguessr_geo_bonus.py::BonusPointsForGuessTests::test_geocode_failure_earns_nothing_without_raising`
+is order-dependent pollution from the full run - it **passes standalone**, unlike the 16 below,
+which were re-verified to fail in isolation too (`16 failed, 1 passed` re-running just this set).
+
+Root-caused from a `--tb=short` capture, not yet fixed:
+
+1. **Not a bug - a run that crossed midnight.** `test_global_search_parser.py::
+   ParseQueryStructureTests::test_this_year_ends_today` failed with
+   `datetime.date(2026, 7, 28) != datetime.date(2026, 7, 27)` - the assertion computed "today" at
+   two different points ~70 minutes apart in a suite run that happened to straddle midnight. Not
+   reproducible on demand; would pass on any run that doesn't cross a day boundary mid-execution.
+2. **Unmocked live network calls** (the same class of bug fixed repeatedly earlier in this file):
+   `test_loopnet.py::FetchTests::test_unconfigured_gateway_gracefully_persists_empty` and
+   `test_trip_ai_suggestions.py::ApplySuggestedOrderViewTests::test_valid_permutation_applies` both
+   raised `RuntimeError: External network access is disabled during tests` against real IPs
+   (`10.2.0.214`, `5.148.170.168`). Check whether each is "test forgot to patch, sibling tests
+   show the pattern" (most likely, per every prior instance of this bug this session) or a
+   genuine missing gate in the view/service.
+3. **Test-only bug.** `test_redata_cid_gateway.py::RedataCidGatewayResolveCidsTests::
+   test_non_200_raises_gateway_request_error` - `TypeError: 'Mock' object is not subscriptable`.
+   The mock response object isn't shaped to support whatever subscript the code under test uses;
+   compare against a sibling test in the same file that mocks correctly.
+4. **Possibly Windows-specific.** `test_backup_services.py::BackupFilesTests::
+   test_returns_only_files_sorted_by_mtime_descending` (`[] != [WindowsPath(...new.sql),
+   WindowsPath(...old.sql)]`) and `CollectBackupStatsTests::test_collects_count_latest_size_and_settings`
+   (`0 != 2`) both show the service finding zero files where the test created two - the service's
+   discovery glob/pattern likely doesn't match on Windows path separators, or looks in a path this
+   test's temp dir isn't under. Worth checking whether this fails in Docker/CI too before assuming
+   Windows-only.
+5. **Possibly a real permission bug, worth prioritizing.** `test_trip_ai_suggestions.py::
+   TripAiSuggestionsViewTests::test_non_member_is_rejected` got `404` where it expected `403` - on
+   its face this reads like the uniform-404 privacy pattern used elsewhere in this codebase
+   (wiki discovery, trip detail - see the resolved trip-controller entry above), in which case the
+   test is stale and the code is behaving correctly. But it could also be a plain "wrong pin/trip
+   ownership lookup" bug that happens to 404 for the wrong reason. Read `TripAiSuggestionsView`
+   before assuming either way.
+6. **Hypothesis-found edge case, may be a real off-by-one.**
+   `test_searxng_image_query.py::AssembleImageQueryTests::test_group_count_matches_present_components`
+   failed on `aliases=['0'], area=['(']` with `4 != 3` - a generated alias/area combination made
+   the query-group count disagree with the number of query components actually present. Worth a
+   look at `assemble_image_query`'s group-counting logic directly rather than reverse-engineering
+   it from the failing example.
+7. **Assertion mismatches not yet read in detail** - each needs its own traceback before triage:
+   `test_avatar_colors.py::GroupMemberSearchAvatarColorTests::test_results_get_distinct_colors`
+   (`0 != 4`), `test_dm_search.py::SearchDirectMessagesTests::
+   test_date_range_phrase_filters_by_created` (`[] != [1]`),
+   `test_global_search_engine.py::PhotoSearchTests::test_finds_photo_by_generated_keyword`
+   (expected string not found in an empty result list),
+   `test_media_own_photos_preview.py::PhotosMediaPreviewTests::` both
+   `test_own_photo_tile_carries_image_id_and_coordinates` and
+   `test_own_photo_tile_without_coordinates_renders_empty_lat_lng` (`204 != 200` - both in the
+   same class, worth checking whether one shared fixture broke both),
+   `test_settings_tos_accepted_display.py::SettingsTosAcceptedDisplayTests::
+   test_shows_the_acceptance_date_when_recorded` ("Mar 4, 2025" not found in the rendered page -
+   possibly the same CSRF-token/date-formatting class of stale-assertion bug fixed elsewhere in
+   this file), and `test_trivia_stall.py::ForceRevealRoundTests::` both
+   `test_a_partial_answer_is_revealed_and_only_the_answerer_is_rated` (`'active' !=
+   TriviaSessionStatus.COMPLETED`) and `test_advances_to_the_next_round_when_more_remain`
+   (`1 != 2`) - both in the same class, likely one shared root cause in the force-reveal flow.
+
+Reproduce with (no `-k` filter, so the full ~70-minute runtime applies):
+```
+pytest src/urbanlens/dashboard/tests -q --reuse-db --tb=short
+```
+Re-running just the 16 test IDs above in one invocation reproduces all of them in ~5 minutes.
+
 ## OPEN 2026-07-27: ~46 pre-existing test failures on `feature/external-api-mobile-v2` (baseline-verified)
 
 A broad sweep (`-k "pin or wiki or location or boundary or import or share or detail or merge or
@@ -1267,3 +1448,63 @@ already reset between tests.
   building the external `locations/resolve/` endpoint, which deliberately does *not* reproduce
   the omission; the internal path was left alone to keep that change out of an already large
   API-surface commit.
+
+- **`test_spotguessr_geo_bonus.BonusPointsForGuessTests::test_geocode_failure_earns_nothing_without_raising`
+  fails on a polluted cache, not on the code under test**
+  (`src/urbanlens/dashboard/tests/hypothesis/test_spotguessr_geo_bonus.py:102-108`). The test
+  patches `NominatimGateway` to return `None` and expects a 0-point bonus, but gets 750 (all
+  three tiers). `services/spotguessr/geo_bonus.py::_reverse_geocode_admin_cached` memoizes the
+  reverse-geocode result in the Django cache keyed by *rounded* coordinates, and the earlier
+  tests in the same class populate that key with a matching admin dict - so the patched gateway
+  is never called and the failure branch is never exercised. Reproduces with the file run
+  alone (`pytest src/urbanlens/dashboard/tests/hypothesis/test_spotguessr_geo_bonus.py`), so it
+  is not a cross-file interaction. Pre-existing: neither `geo_bonus.py` nor its test has been
+  touched. Fix is a `cache.clear()` in that class's `setUp` (and arguably a project-wide
+  `LocMemCache` reset between tests, since any cache-backed service has this hazard). Noted
+  while building the external SpotGuessr API; left alone because the file belongs to another
+  work stream.
+
+- **The inbox list serializes each conversation's last message with no reaction/share
+  prefetch** (`src/urbanlens/dashboard/services/direct_messages.py::conversations_for`,
+  `src/urbanlens/dashboard/services/group_chats.py::group_conversations_for`). Each row's
+  `last_message` is rendered through `build_direct_message_payload` /
+  `build_group_message_payload`, which read `message.reactions.all()` (and, for groups,
+  `message.share_for(viewer)`), so a page of N conversations issues ~2N extra queries. Both
+  builders are correct; the missing piece is a prefetch on the *selected* last messages.
+  It cannot simply be added to the existing queries: `group_conversations_for` scans every
+  visible message across every group in order to pick the newest per group, so prefetching
+  there would pull reactions for the whole history rather than for the N rows actually
+  rendered. The fix is a second, id-bounded `prefetch_related_objects()` call over the
+  already-selected `last_message` instances. Pre-existing on the 1:1 side; noted while adding
+  reactions/`pin_share_id` to the group payload (`external_api/serializers_messaging.py`),
+  which gave the group side the same shape. The thread endpoints - where a page is 50 messages
+  rather than 1 - already prefetch, so this is an inbox-only cost.
+
+- **`test_avatar_colors.GroupMemberSearchAvatarColorTests::test_results_get_distinct_colors`
+  returns 0 results where it expects 4**
+  (`src/urbanlens/dashboard/tests/hypothesis/test_avatar_colors.py:105-111`). The test creates
+  four ANYONE-visible profiles named `searchable-user-<n>` and expects
+  `GET messages.group.member_search?q=searchable-user` to return all four;
+  `response.context["results"]` is empty. The candidate filter in
+  `controllers/group_chats.GroupMemberSearchView` (and the `can_direct_message` gate it leans
+  on in `services/direct_messages.py`) is the place to look - the test sets
+  `user.username` directly with `save(update_fields=["username"])`, so a search that reads a
+  denormalized/`Profile`-side name would match nothing. Both of those modules carry
+  uncommitted edits from another work stream, and nothing in the social/avatar/annotation
+  change this was found under touches conversation membership or direct-message gating.
+  Noted while running `test_avatar_colors.py` as a regression check for the avatar-write
+  extraction (`services/avatar.py::set_profile_avatar`); left alone as it belongs to the
+  messaging work stream.
+
+- **Blocked `Friendship` rows created before `block_profile` started normalizing direction may
+  record the wrong blocker** (`src/urbanlens/dashboard/services/friendship.py::block_profile`).
+  `Friendship` has no "blocked_by" column, so `from_profile` is the only record of who blocked
+  whom, and `block_profile` used to reuse whichever row already joined the pair - a block
+  placed on an inbound friend request therefore left the *blocked* party as `from_profile`.
+  It now re-points the row so `from_profile` is always the blocker, which fixes every block
+  placed from here on, but existing rows carry no signal that could be used to repair them:
+  a data migration would have to guess. Impact on a legacy row is bounded and inverted from
+  the original P0 - the true blocker gets a 404 from `unblock_profile`/`remove_friend` and
+  must re-block to normalize the row, and the blocked party can lift it. Worth a one-off
+  audit query (`Friendship.objects.filter(status="Blocked", created__lt=<deploy>)`) rather
+  than an automated migration.

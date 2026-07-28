@@ -214,6 +214,18 @@ class ApiKeyScope(TextChoices):
     NOTIFICATIONS_READ = "notifications:read", "Read your notifications and delivery preferences"
     NOTIFICATIONS_WRITE = "notifications:write", "Mark notifications read and change delivery preferences"
     SEARCH_READ = "search:read", "Search your pins, wikis, and photos"
+    # Covers every built-in game (SpotGuessr today, Trivia and Consensus next):
+    # one domain, because a player who consented to "play games as you" should
+    # not have to re-consent when a second game ships. Split into the usual
+    # read/write pair rather than a single "games:play" specifically because
+    # ``external_api.throttling.request_tier`` derives the rate-limit tier from
+    # the ``:read``/``:write``/``:manage`` suffix - a lone "games:play" would
+    # end in neither, so round-starting and guess-submitting POSTs (which run
+    # photo selection, scoring, and leaderboard updates) would be classified as
+    # reads and charged against the deliberately loose hourly read budget sized
+    # for a mobile client's bulk sync.
+    GAMES_READ = "games:read", "Read your game history, scores, and leaderboard standing"
+    GAMES_WRITE = "games:write", "Start games and submit guesses and answers on your behalf"
     PUSH_MANAGE = "push:manage", "Register and remove this device's push notifications"
 
 

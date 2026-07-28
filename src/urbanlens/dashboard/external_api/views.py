@@ -27,6 +27,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from urbanlens.dashboard.external_api.authentication import ApiKeyAuthentication
+from urbanlens.dashboard.external_api.errors import ErrorEnvelopeMixin
 from urbanlens.dashboard.external_api.pagination import PaginatedListMixin
 from urbanlens.dashboard.external_api.permissions import HasApiKeyScope
 from urbanlens.dashboard.external_api.serializers import (
@@ -36,6 +37,7 @@ from urbanlens.dashboard.external_api.serializers import (
     FriendInviteSerializer,
     FriendListQuerySerializer,
     FriendListResponseSerializer,
+    FriendMuteSerializer,
     FriendRequestCreateSerializer,
     FriendshipSerializer,
     JournalEntrySerializer,
@@ -188,6 +190,7 @@ from urbanlens.dashboard.services.friendship import (
     reject_friend_request,
     remove_friend,
     request_or_accept_friendship,
+    unmute_profile,
 )
 from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities, resolve_visible_identity
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
@@ -213,7 +216,17 @@ from urbanlens.dashboard.services.notification_center import (
 from urbanlens.dashboard.services.photo_upload import PhotoUploadError, upload_photo
 from urbanlens.dashboard.services.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
 from urbanlens.dashboard.services.pin_detail import build_pin_detail
-from urbanlens.dashboard.services.pin_edit import PinHasChildrenError, PinMoveError, PinReparentError, delete_pin, move_pin_to_coordinates, reparent_pin
+from urbanlens.dashboard.services.pin_edit import (
+    ORGANIZE_LABEL_KINDS,
+    PinEditError,
+    PinHasChildrenError,
+    PinMoveError,
+    PinReparentError,
+    apply_pin_edits,
+    delete_pin,
+    move_pin_to_coordinates,
+    reparent_pin,
+)
 from urbanlens.dashboard.services.pin_list_membership import (
     add_pins_to_list,
     remove_pins_from_list,
@@ -451,7 +464,7 @@ def _resolve_parent_labels(profile: Profile, data: dict) -> tuple[list[Label], R
     return parents, None
 
 
-class ExternalApiView(APIView):
+class ExternalApiView(ErrorEnvelopeMixin, APIView):
     """Base for every external endpoint: credential auth, scope gate, per-credential throttle.
 
     Two credential kinds are accepted - PAT-style ``ApiKey`` bearer keys and
@@ -462,6 +475,14 @@ class ExternalApiView(APIView):
     ``HasApiKeyScope`` reads the ``required_scopes`` property and fails closed
     when the current method has no entry, so an endpoint can never gain a new
     method without also declaring what that method requires.
+
+    ``ErrorEnvelopeMixin`` is listed first so its ``get_exception_handler``
+    beats ``APIView``'s in the MRO. Inheriting it here rather than per-endpoint
+    is what makes ``{"error": ...}`` the package's *only* error shape: without
+    it, a handler's hand-written returns use that envelope while the 400 from
+    ``is_valid(raise_exception=True)`` and every 401/403/404/405/429 DRF raises
+    on the way in use ``detail``/field-keyed shapes instead, and no generated
+    client can parse all three. See ``external_api.errors``.
     """
 
     authentication_classes = [ApiKeyAuthentication, OAuth2Authentication]
@@ -546,11 +567,13 @@ class OwnedPinMixin:
 
 
 class WhoAmIView(ExternalApiView):
-    """GET: the calling API key's owner - just their uuid, nothing else.
+    """GET: the calling API key's owner - their profile uuid and slug, nothing else.
 
-    The only *profile* data an external application can read: no settings,
-    friends, or any other private data, per the ``profile:read`` scope's
-    definition.
+    Still the narrowest *profile* read in the API: no settings, friends, or any
+    other private data, per the ``profile:read`` scope's definition. The slug is
+    served alongside the uuid because it is the identifier every other endpoint
+    in this API actually speaks - see :class:`WhoAmISerializer` for why a client
+    cannot recognize itself in other endpoints' payloads without it.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -559,8 +582,14 @@ class WhoAmIView(ExternalApiView):
 
     @extend_schema(responses=WhoAmISerializer)
     def get(self, request: Request) -> Response:
-        """Return the authenticated key owner's profile uuid."""
+        """Return the authenticated key owner's profile uuid and slug."""
         profile = request.user.profile
+        # Backfilled rather than read straight off the row: profiles created
+        # before slugs existed still have an empty one, and this endpoint
+        # promising a slug that is sometimes "" would make every client write
+        # a fallback path for it. ensure_slug() persists what it generates, so
+        # the slug handed out here is the same one the profile routes answer to.
+        profile.ensure_slug()
         return Response(WhoAmISerializer(profile).data)
 
 
@@ -694,9 +723,31 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
             return Response({"error": "No such pin."}, status=404)
         return Response(build_pin_detail(pin, request.user.profile))
 
-    @extend_schema(request=PinUpdateSerializer, responses={200: PinDetailSerializer, 400: ErrorSerializer, 404: ErrorSerializer, 409: ErrorSerializer})
+    @extend_schema(
+        request=PinUpdateSerializer,
+        responses={200: PinDetailSerializer, 400: ErrorSerializer, 404: ErrorSerializer, 409: ErrorSerializer},
+        description=(
+            "Partially update one of your own pins. Every field is optional: an absent field is left untouched, "
+            "an explicit null clears it. `label_uuids` is a full replacement of the pin's tag/category/status "
+            "labels, not a delta.\n\n"
+            "**Side effect worth surfacing to your users:** writing `priority`, `danger` or `vulnerability` is not "
+            "purely a private edit. When the pin is attached to a community wiki and the owner has the matching "
+            "wiki-sync setting on, the new value is published as their community WikiStatVote on that wiki, where it "
+            "feeds the composite score everyone with access to that wiki sees. Setting the value back to 0 withdraws "
+            "the vote.\n\n"
+            "`rating` is not accepted here - a pin's rating is a Review, written through PUT/DELETE "
+            "/pins/{pin_slug}/review/. `address`, `city`, `state` and `country` are derived from the shared Location "
+            "the pin points at and are read-only; move a pin by sending latitude/longitude instead."
+        ),
+    )
     def patch(self, request: Request, pin_slug: str) -> Response:
         """Apply a partial update to one of the key owner's pins.
+
+        Field writes go through ``services.pin_edit.apply_pin_edits``, the same
+        function behind the website's own pin-edit dialog, so the two surfaces
+        cannot drift on which companion flags a write implies (a submitted
+        ``pin_type`` marking the type user-provided, for instance) or on the
+        tombstones a label removal has to leave behind.
 
         A move that would cost the owner access to a community wiki (wiki
         visibility follows where their pins are) is refused with 409 and a
@@ -704,6 +755,16 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
         internal ``PinViewSet``. Re-send with ``confirm_wiki_loss: true`` to go
         ahead. Every other update is unaffected, as is a move that costs the
         owner nothing.
+
+        Args:
+            request: The authenticated request carrying the partial update.
+            pin_slug: The pin's slug, or its uuid.
+
+        Returns:
+            The pin's full detail payload, or an error envelope: 404 when the
+            pin isn't the caller's (never 403 - that would confirm it exists),
+            400 for an unresolvable parent/label or an impossible move, 409 for
+            the unconfirmed wiki-loss handshake.
         """
         pin = self.get_owned_pin(request, pin_slug)
         if pin is None:
@@ -721,6 +782,18 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
             if new_parent is None:
                 return Response({"error": "No such pin to set as parent."}, status=400)
 
+        # Same reasoning for labels: an unknown uuid is refused before anything
+        # is written. Scoped to labels this profile may actually use, so another
+        # user's private label is "no such label" rather than a usable id - and
+        # a partial resolution is a 400, never a silently smaller set than the
+        # client asked for.
+        labels: list[Label] | None = None
+        if "label_uuids" in data:
+            wanted = list(dict.fromkeys(data["label_uuids"]))
+            labels = list(Label.objects.visible_to(pin.profile).filter(uuid__in=wanted, kind__in=ORGANIZE_LABEL_KINDS))
+            if len(labels) != len(wanted):
+                return Response({"error": "One or more label_uuids do not name a label you can use."}, status=400)
+
         # Asked only once the request is known to be otherwise valid: confirming
         # a move and then being handed a 400 for an unrelated bad field would be
         # a pointless prompt.
@@ -736,30 +809,25 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
                     status=409,
                 )
 
+        # The nested `security` object is flattened into the flat Pin-column
+        # mapping by the serializer itself - parsing the wire format is its job,
+        # and the `security` wire key collides with a Pin column of the same
+        # name, which is exactly the kind of trap that must be solved in one
+        # place. See PinUpdateSerializer.pin_field_edits.
+        edits = serializer.pin_field_edits()
+
         try:
             with transaction.atomic():
                 if "latitude" in data:
                     move_pin_to_coordinates(pin, data["latitude"], data["longitude"])
 
-                update_fields: list[str] = []
-                if "name" in data:
-                    pin.name = (data["name"] or "").strip() or None
-                    pin.name_is_user_provided = bool(pin.name)
-                    update_fields += ["name", "name_is_user_provided"]
-                if "icon" in data:
-                    pin.icon = data["icon"] or None
-                    update_fields.append("icon")
-                if "last_visited" in data:
-                    pin.last_visited = data["last_visited"]
-                    update_fields.append("last_visited")
-                if update_fields:
-                    pin.save(update_fields=[*update_fields, "updated"])
+                apply_pin_edits(pin, edits, labels=labels, visited=data.get("visited"))
 
                 if "parent_id" in data:
                     # Raises on failure - propagating out of the atomic block rolls
-                    # back any coordinate/name/icon change already applied above.
+                    # back every change already applied above.
                     reparent_pin(pin, new_parent)
-        except (PinMoveError, PinReparentError) as exc:
+        except (PinEditError, PinMoveError, PinReparentError) as exc:
             return Response({"error": str(exc)}, status=400)
 
         return Response(build_pin_detail(pin, request.user.profile))
@@ -3135,6 +3203,7 @@ def _serialize_friendship(viewer: Profile, friendship: Friendship) -> dict[str, 
         "relationship_type": friendship.relationship_type,
         "direction": "outgoing" if outgoing else "incoming",
         "message": friendship.request_message,
+        "is_muted": friendship.muted,
         "created": friendship.created,
         "updated": friendship.updated,
     }
@@ -3339,11 +3408,60 @@ class FriendBlockView(FriendActionView):
 
 
 class FriendMuteView(FriendActionView):
-    """POST: mute an existing relationship with the target."""
+    """PATCH the mute state of an existing relationship; POST is a deprecated alias.
+
+    ``PATCH {"is_muted": true|false}`` is the real endpoint: it names the state
+    it wants rather than flipping whatever is there. That matters on a mobile
+    link, where a request can succeed server-side while its response is lost -
+    the client retries, and a toggle would silently undo the change the first
+    attempt already made. With an explicit target the retry is a no-op.
+
+    ``POST`` with no body is retained as a deprecated alias for
+    ``{"is_muted": true}``, because it is what shipped first and one integration
+    already calls it. It cannot unmute; there was never a working unmute on this
+    surface (mute used to overwrite ``status``, leaving nothing to restore).
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.SOCIAL_WRITE}),
+        "PATCH": frozenset({ApiKeyScope.SOCIAL_WRITE}),
+    }
 
     def service_action(self, actor: Profile, target: Profile) -> Friendship:
-        """Mute the relationship with the target."""
+        """Mute the relationship with the target - the deprecated POST path."""
         return mute_profile(actor, target)
+
+    @extend_schema(request=FriendMuteSerializer, responses={200: FriendshipSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
+    def patch(self, request: Request, profile_uuid: UUID) -> Response:
+        """Set the relationship's mute state to exactly what the body asks for.
+
+        Args:
+            request: The authenticated request, carrying ``{"is_muted": bool}``.
+            profile_uuid: The other profile's public uuid.
+
+        Returns:
+            The updated relationship, or an error body. 404 covers both an
+            unknown uuid and a pair with no relationship row - muting is only
+            offered on someone you already have a relationship with, and the
+            two cases must stay indistinguishable.
+        """
+        target = self._resolve_target(profile_uuid)
+        if target is None:
+            return Response({"error": "No such profile."}, status=404)
+
+        serializer = FriendMuteSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        actor = request.user.profile
+        action = mute_profile if serializer.validated_data["is_muted"] else unmute_profile
+        try:
+            friendship = action(actor, target)
+        except FriendshipNotFoundError as exc:
+            return Response({"error": str(exc)}, status=404)
+        except FriendshipActionError as exc:
+            return Response({"error": str(exc)}, status=400)
+
+        return Response(_serialize_friendship(actor, friendship))
 
 
 class FriendInvitesView(ExternalApiView):
@@ -4098,7 +4216,7 @@ class TripCalendarSyncView(TripScopedApiView):
             # whether the blocker is "no Google account" or "trip not exported".
             status = _calendar_sync_status(trip, profile)
             return Response(
-                {**TripCalendarSyncStatusSerializer(status).data, "error": "Add this trip to your Google Calendar from the web app first."},
+                {**TripCalendarSyncStatusSerializer(status).data, "error": "Export this trip to your calendar first with POST /trips/{trip_slug}/calendar/."},
                 status=400,
             )
 

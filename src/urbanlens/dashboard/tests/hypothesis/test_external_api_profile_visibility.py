@@ -15,7 +15,7 @@ from django.urls import reverse
 from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import _COMMUNITY_GATED_VISIBILITY_FIELDS, Profile
@@ -194,25 +194,98 @@ class ProfileDetailVisibilityTests(TestCase):
         self.assertEqual(self.profile.area, "Rust Belt")
 
     def test_community_off_coerces_visibility_via_profile_save(self) -> None:
-        """The model's own gating must apply, not be reimplemented in the view."""
+        """The model's own gating must apply, not be reimplemented in the view.
+
+        Exercised through ``PATCH /settings/``, which is where the visibility
+        fields live. It used to run through ``PATCH /profiles/{slug}/``, and
+        moving it is the point rather than an inconvenience: that endpoint is
+        gated on ``social:write`` - the scope an app asks for to send friend
+        requests - so while it accepted ``profile_visibility`` a credential
+        that could only message people could also switch the account's privacy
+        settings to ``everyone``. The coercion behaviour this test was written
+        for is unchanged; only the door it comes through is.
+        """
+        settings_key, settings_raw = generate_api_key(self.user, "Settings client")
+        settings_key.scopes = [ApiKeyScope.SETTINGS_WRITE.value]
+        settings_key.save(update_fields=["scopes"])
+
         response = self.client.patch(
-            reverse("external_api:profiles.detail", kwargs={"profile_slug": "caller"}),
+            reverse("external_api:settings"),
             {"community_enabled": False, "profile_visibility": VisibilityChoice.ANYONE},
             content_type="application/json",
-            **_bearer(self.raw_key),
+            **_bearer(settings_raw),
         )
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 200, response.content)
         self.profile.refresh_from_db()
         for name in _COMMUNITY_GATED_VISIBILITY_FIELDS:
             with self.subTest(field=name):
                 self.assertEqual(getattr(self.profile, name), VisibilityChoice.NO_ONE)
+
+    def test_visibility_fields_are_not_writable_through_the_profile_endpoint(self) -> None:
+        """A ``social:write`` credential must not be able to rewrite privacy settings.
+
+        The complement of the test above: the fields moved to ``/settings/``
+        (behind ``settings:write``) must not still be honoured here. DRF
+        ignores unknown keys, so the failure this guards against is silent - a
+        200 whose body looks fine while the write did land.
+        """
+        from urbanlens.dashboard.external_api.serializers import ProfileUpdateSerializer
+
+        self.profile.profile_visibility = VisibilityChoice.NO_ONE
+        self.profile.save()
+
+        response = self.client.patch(
+            reverse("external_api:profiles.detail", kwargs={"profile_slug": "caller"}),
+            {"profile_visibility": VisibilityChoice.ANYONE, "community_enabled": False},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.profile_visibility, VisibilityChoice.NO_ONE)
+        self.assertTrue(self.profile.community_enabled)
+        self.assertEqual(set(ProfileUpdateSerializer().fields), {"bio", "area", "started_exploring"})
 
     def test_avatar_is_not_writable(self) -> None:
         """Avatar upload is deliberately out of scope for this surface."""
         from urbanlens.dashboard.external_api.serializers import ProfileUpdateSerializer
 
         self.assertNotIn("avatar", ProfileUpdateSerializer().fields)
+
+
+class ProfileSettingsOverlapTests(SimpleTestCase):
+    """The profile-write and settings-write surfaces must stay disjoint.
+
+    Named by ``ProfileUpdateSerializer``'s own docstring, which points here for
+    the guarantee. A field writable through both endpoints would have two write
+    paths to keep in agreement forever *and* two different scopes guarding it -
+    and since ``PATCH /profiles/{slug}/`` is the weaker of the two
+    (``social:write``), any overlap silently downgrades the protection on
+    whatever it covers.
+    """
+
+    def test_no_field_is_writable_through_both_endpoints(self) -> None:
+        from urbanlens.dashboard.external_api.serializers import ProfileUpdateSerializer, SettingsPatchSerializer
+
+        overlap = set(ProfileUpdateSerializer().fields) & set(SettingsPatchSerializer().fields)
+        self.assertEqual(overlap, set())
+
+    def test_the_profile_surface_is_exactly_the_three_presentation_fields(self) -> None:
+        """Pins the narrowed set, so a fourth field cannot creep back unnoticed."""
+        from urbanlens.dashboard.external_api.serializers import ProfileUpdateSerializer
+
+        self.assertEqual(set(ProfileUpdateSerializer().fields), {"bio", "area", "started_exploring"})
+
+    def test_every_gated_visibility_field_is_writable_only_through_settings(self) -> None:
+        """The privacy fields the narrowing moved must still have a home."""
+        from urbanlens.dashboard.external_api.serializers import SettingsPatchSerializer
+
+        settings_fields = set(SettingsPatchSerializer().fields)
+        for name in _COMMUNITY_GATED_VISIBILITY_FIELDS:
+            with self.subTest(field=name):
+                self.assertIn(name, settings_fields)
 
 
 class ProfileNotesTests(TestCase):

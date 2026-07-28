@@ -111,6 +111,15 @@ class DirectMessageSerializer(MessageBodySerializer):
     )
     reactions = serializers.ListField(read_only=True, child=serializers.DictField())
     share = DirectMessageShareSerializer(read_only=True, allow_null=True)
+    pin_share_id = serializers.IntegerField(
+        read_only=True,
+        allow_null=True,
+        help_text=(
+            "Id of the PinShare this viewer may answer via POST /pin-shares/{share_id}/respond/, or null. Flat rather than "
+            "only nested under `share` because a group message has no single share object - a pin shared into a group "
+            "creates one row per recipient - so this is the one field a client can read for either conversation kind."
+        ),
+    )
     markup_map_uuid = serializers.CharField(read_only=True, allow_null=True)
     map_removed = serializers.BooleanField(read_only=True)
     image_ids = serializers.ListField(read_only=True, child=serializers.IntegerField())
@@ -263,6 +272,35 @@ class ReactionSerializer(serializers.Serializer):
     emoji = serializers.CharField(max_length=32)
 
 
+class ReactionResultSerializer(serializers.Serializer):
+    """What a reaction toggle did, plus the target's resulting summary.
+
+    ``action`` reports the transition rather than the state, matching the
+    1:1 reaction endpoint it mirrors; ``reactions`` is the authoritative
+    post-write summary, so a client that ignores ``action`` still renders the
+    right thing.
+    """
+
+    action = serializers.ChoiceField(read_only=True, choices=["added", "removed"])
+    reactions = serializers.ListField(read_only=True, child=serializers.DictField())
+
+
+class MuteStateSerializer(serializers.Serializer):
+    """One conversation's notification-mute state.
+
+    The response body for the mute endpoints, which are PUT/DELETE rather than
+    a toggling POST: a retried request over a flaky link must land on the state
+    the caller asked for, not the opposite of it. The body therefore reports
+    the persisted state rather than "ok", so a client that lost the first
+    response can reconcile without a second round trip.
+
+    Muting suppresses notifications only. The conversation stays in the
+    conversation list, keeps its unread count, and keeps receiving messages.
+    """
+
+    is_muted = serializers.BooleanField(read_only=True)
+
+
 class RetentionSettingsSerializer(serializers.Serializer):
     """The caller's message-retention preference."""
 
@@ -326,6 +364,7 @@ def build_direct_message_payload(message: DirectMessage, viewer: Profile) -> dic
     """
     base = serialize_direct_message(message, viewer=viewer)
     tombstone = message.tombstone_text_for(viewer.pk)
+    share = _share_payload(message)
 
     payload: dict[str, Any] = {
         "id": message.pk,
@@ -339,7 +378,8 @@ def build_direct_message_payload(message: DirectMessage, viewer: Profile) -> dic
         "expires_for_recipient": message.is_expired_for_recipient,
         "tombstone": tombstone,
         "reactions": reaction_summary(message),
-        "share": _share_payload(message),
+        "share": share,
+        "pin_share_id": share["pin_share_id"] if share is not None else None,
         "markup_map_uuid": base["markup_map_uuid"],
         "map_removed": message.map_removed,
         "image_ids": [image["id"] for image in base["images"]],
@@ -372,16 +412,33 @@ def build_group_message_payload(message: GroupMessage, viewer: Profile) -> dict[
     One message shape across both conversation kinds keeps clients from
     needing two renderers for what a user experiences as the same thing. The
     fields a group message has no analogue for are reported as the empty/None
-    value rather than omitted, so the shape stays stable:
-    ``recipient_slug`` (a group message has no single recipient),
-    ``reactions``/``share``/``markup_map_uuid`` (group messages carry none of
-    these today - group *shares* exist but are per-recipient rows surfaced
-    through the thread's own share cards).
+    value rather than omitted, so the shape stays stable: ``recipient_slug``
+    (a group message has no single recipient), ``read_at``/``reply_to_id``/
+    ``sender_delete_after``/``markup_map_uuid`` (group messages carry none of
+    these today).
+
+    Two fields that *are* populated, and were not when this function was
+    written:
+
+    - ``reactions`` - group messages became reactable when ``Reaction`` grew
+      its ``group_message`` foreign key, and the summary is the identical
+      shape a direct message reports, from the identical function.
+    - ``pin_share_id`` - a pin shared into a group creates one ``PinShare`` per
+      recipient (see ``services.group_chats.share_pin_in_group_message``), so
+      unlike a direct message there is no single share object to nest under
+      ``share``; the viewer's *own* row is resolved here. Without it a group
+      recipient can see the share card but has no id to POST to
+      ``/pin-shares/{share_id}/respond/``, which is to say the share is
+      undismissable and unacceptable from a mobile client.
+
+    ``share`` itself stays null: its ``kind``/``revoked`` fields describe a
+    ``DirectMessageShare``, which a group message does not have, and inventing
+    plausible-looking values for them would be worse than reporting nothing.
 
     Args:
         message: The group message to render.
-        viewer: The member the payload is for; drives identity masking and the
-            tombstone decision.
+        viewer: The member the payload is for; drives identity masking, the
+            tombstone decision, and which recipient's share row is reported.
 
     Returns:
         A ``DirectMessageSerializer``-shaped dict.
@@ -390,6 +447,9 @@ def build_group_message_payload(message: GroupMessage, viewer: Profile) -> dict[
 
     base = serialize_group_message(message, viewer=viewer)
     tombstone = message.tombstone_text_for(viewer.pk)
+    # Iterates the (usually prefetched) shares relation rather than filtering,
+    # so rendering a whole thread page stays N+1-free.
+    viewer_share = message.share_for(viewer.pk)
 
     payload: dict[str, Any] = {
         "id": message.pk,
@@ -402,8 +462,9 @@ def build_group_message_payload(message: GroupMessage, viewer: Profile) -> dict[
         "sender_delete_after": "",
         "expires_for_recipient": False,
         "tombstone": tombstone,
-        "reactions": [],
+        "reactions": reaction_summary(message),
         "share": None,
+        "pin_share_id": viewer_share.pin_share_id if viewer_share is not None else None,
         "markup_map_uuid": None,
         "map_removed": False,
         "image_ids": [],

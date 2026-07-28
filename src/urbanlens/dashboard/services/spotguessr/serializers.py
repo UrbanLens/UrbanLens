@@ -124,7 +124,26 @@ def serialize_reveal(round_: GameRound, guess: Guess, bonus_tiers: Sequence[str]
         data["actual_latitude"] = float(location.latitude)
         data["actual_longitude"] = float(location.longitude)
         data["location_name"] = location.official_name
+        # Deliberately here rather than on the pre-reveal round payload: a
+        # photo's caption is EXIF/IPTC-derived and frequently names the place,
+        # which is a free answer before the guess and merely context after it.
+        data["image_caption"] = _image_caption(round_)
     return data
+
+
+def _image_caption(round_: GameRound) -> str | None:
+    """The caption of the photo this round showed, or None when there wasn't one.
+
+    Args:
+        round_: The round whose photo to describe.
+
+    Returns:
+        The stored caption, or None for a round with no image (Named Place,
+        Street View) or an image that never had one.
+    """
+    if round_.image_id and round_.image is not None:
+        return round_.image.caption or None
+    return None
 
 
 def serialize_round_reveal(round_: GameRound, rating_changes: dict[int, RatingChange] | None = None) -> dict[str, Any]:
@@ -146,6 +165,9 @@ def serialize_round_reveal(round_: GameRound, rating_changes: dict[int, RatingCh
         "actual_latitude": float(location.latitude),
         "actual_longitude": float(location.longitude),
         "location_name": location.official_name,
+        # See serialize_reveal: post-reveal only, because the caption tends to
+        # name the place and would otherwise be a pre-guess giveaway.
+        "image_caption": _image_caption(round_),
         "results": [
             {
                 "profile_id": guess.profile_id,

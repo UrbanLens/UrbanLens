@@ -41,7 +41,9 @@ from urbanlens.dashboard.external_api.serializers_messaging import (
     GroupMembersSerializer,
     GroupRenameSerializer,
     MessageSendSerializer,
+    MuteStateSerializer,
     PageSerializer,
+    ReactionResultSerializer,
     ReactionSerializer,
     RetentionSettingsSerializer,
     build_conversation_payload,
@@ -51,7 +53,7 @@ from urbanlens.dashboard.external_api.serializers_messaging import (
 from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
-from urbanlens.dashboard.models.group_chats.model import GroupChat
+from urbanlens.dashboard.models.group_chats.model import GroupChat, GroupMessage
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.direct_message_shares import ShareTargetNotFoundError, send_message_with_share
 from urbanlens.dashboard.services.direct_messages import (
@@ -59,7 +61,9 @@ from urbanlens.dashboard.services.direct_messages import (
     clear_email_debounce,
     delete_message_for_everyone,
     delete_message_for_self,
+    is_conversation_muted,
     is_safe_reaction_emoji,
+    set_conversation_muted,
     thread_page,
     toggle_reaction,
 )
@@ -68,11 +72,14 @@ from urbanlens.dashboard.services.group_chats import (
     add_group_members,
     create_group_chat,
     create_group_message,
+    delete_group_message,
     group_conversations_for,
     group_thread_page,
     remove_group_member,
     rename_group_chat,
+    set_group_muted,
     share_pin_in_group_message,
+    toggle_group_reaction,
 )
 
 if TYPE_CHECKING:
@@ -81,6 +88,8 @@ if TYPE_CHECKING:
 
     from rest_framework.request import Request
     from rest_framework.serializers import BaseSerializer
+
+    from urbanlens.dashboard.models.group_chats.model import GroupChatMembership
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +149,33 @@ def _resolve_peer(peer_slug: str) -> Profile | None:
     if peer_slug in RESERVED_PEER_SLUGS:
         return None
     return Profile.objects.select_related("user").filter(slug=peer_slug).first()
+
+
+def _resolve_membership(request: Request, group_uuid: UUID) -> tuple[Profile, GroupChat, GroupChatMembership] | None:
+    """Resolve the caller, the group, and the caller's active membership in it.
+
+    Collapses "no such group", "left the group" and "never was in the group"
+    into one indistinguishable None, which every caller answers with a 404.
+    Group uuids are unguessable, but a distinguishable answer would still turn
+    a leaked uuid into a membership oracle - and a *removed* member must not be
+    able to confirm the group still exists either.
+
+    Args:
+        request: The authenticated request.
+        group_uuid: The group's uuid from the URL.
+
+    Returns:
+        ``(profile, group, membership)``, or None when the caller has no active
+        membership in a group with that uuid.
+    """
+    profile = request.user.profile
+    group = GroupChat.objects.filter(uuid=group_uuid).first()
+    if group is None:
+        return None
+    membership = group.membership_for(profile)
+    if membership is None:
+        return None
+    return profile, group, membership
 
 
 def _thread_response(request: Request, messages: list[Any], has_more_older: bool, builder: Callable[[Any], dict[str, Any]]) -> Response:
@@ -772,3 +808,341 @@ class GroupPinShareView(ExternalApiView):
             return Response({"error": str(exc)}, status=400)
 
         return Response(build_group_message_payload(message, profile), status=201)
+
+
+class GroupMessageReactionView(ExternalApiView):
+    """POST: toggle one of the caller's emoji reactions on a group message."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(
+        request=ReactionSerializer,
+        description=(
+            "Adds the caller's reaction if absent, removes it if present, and returns the message's resulting "
+            "reaction summary. The same emoji vocabulary rule as one-to-one reactions applies: the glyph is "
+            "relayed verbatim into other members' clients, so anything that isn't render-safe is refused."
+        ),
+        responses={200: ReactionResultSerializer, 400: ErrorSerializer, 404: ErrorSerializer},
+    )
+    def post(self, request: Request, group_uuid: UUID, message_id: int) -> Response:
+        """Add or remove the caller's reaction on one message in this group.
+
+        Args:
+            request: The authenticated request carrying ``emoji``.
+            group_uuid: The group the message belongs to.
+            message_id: The message being reacted to.
+
+        Returns:
+            200 with ``{"action", "reactions"}``; 400 for an unusable emoji;
+            404 when the group, the caller's membership, or the message id
+            doesn't resolve.
+        """
+        resolved = _resolve_membership(request, group_uuid)
+        if resolved is None:
+            return Response({"error": "No such group."}, status=404)
+        profile, group, _membership = resolved
+
+        serializer = ReactionSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        emoji = serializer.validated_data["emoji"]
+        # Checked before the message is looked up, so an unusable emoji answers
+        # 400 for every id - otherwise the pair of statuses (400 for a real id,
+        # 404 for a fake one) would turn a junk emoji into a probe for which
+        # message ids exist in this group.
+        if not is_safe_reaction_emoji(emoji):
+            return Response({"error": "That isn't a usable reaction."}, status=400)
+
+        # group= in the lookup, not a follow-up check: message ids are
+        # sequential across every group in the table, so pk-only would let a
+        # member of any one group react into every other group's messages.
+        message = GroupMessage.objects.filter(group=group, pk=message_id).first()
+        if message is None:
+            return Response({"error": "No such message."}, status=404)
+
+        action = toggle_group_reaction(profile, message, emoji)
+        return Response({"action": action, "reactions": build_group_message_payload(message, profile)["reactions"]})
+
+
+class GroupMessageDetailView(ExternalApiView):
+    """DELETE one group message, for everyone. Only the sender may."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "DELETE": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(
+        description=(
+            "Deletes a group message for every member and revokes any pin shares it carried. There is no "
+            "`?scope=self` counterpart: a group message has no per-member copy to hide, and inventing one here "
+            "would diverge from the one-to-one delete semantics clients already implement. Idempotent - "
+            "deleting an already-deleted message answers 204."
+        ),
+        responses={204: None, 403: ErrorSerializer, 404: ErrorSerializer},
+    )
+    def delete(self, request: Request, group_uuid: UUID, message_id: int) -> Response:
+        """Delete one message in this group for everyone.
+
+        Args:
+            request: The authenticated request.
+            group_uuid: The group the message belongs to.
+            message_id: The message being deleted.
+
+        Returns:
+            204 on success and on a repeat; 403 when the caller isn't the
+            sender; 404 when the group, the caller's membership, or the message
+            id doesn't resolve.
+        """
+        resolved = _resolve_membership(request, group_uuid)
+        if resolved is None:
+            return Response({"error": "No such group."}, status=404)
+        profile, group, _membership = resolved
+
+        # Scoped to the group for the same reason the reaction lookup is:
+        # message ids are sequential across the whole table.
+        message = GroupMessage.objects.filter(group=group, pk=message_id).first()
+        if message is None:
+            return Response({"error": "No such message."}, status=404)
+
+        try:
+            delete_group_message(message, profile)
+        except PermissionError as exc:
+            # A deliberate 403 where the rest of this package answers 404. The
+            # 404-everywhere rule exists to stop a caller learning whether a
+            # row exists; here they were provably already shown it - the lookup
+            # above proved they are an active member of the group it is in, and
+            # the thread endpoint serves them its full content - so the status
+            # leaks nothing they don't have. Answering 404 instead would tell a
+            # client "that message is gone" for a message still sitting in
+            # their thread, which reads as a sync bug.
+            return Response({"error": str(exc)}, status=403)
+        return Response(status=204)
+
+
+class GroupLeaveView(ExternalApiView):
+    """POST: leave a group chat."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(
+        request=None,
+        description=(
+            "Ends the caller's membership. They stop receiving messages immediately and cannot read anything "
+            "sent afterwards; rejoining later starts a fresh visibility window rather than restoring the old "
+            "one. Idempotent - a repeat answers 204."
+        ),
+        responses={204: None, 404: ErrorSerializer},
+    )
+    def post(self, request: Request, group_uuid: UUID) -> Response:
+        """Leave this group.
+
+        POST rather than DELETE, matching the existing ``trips/<slug>/leave/``
+        route: "leave" is an action on a membership the caller cannot address
+        by URL, not the deletion of the group named in the path. A DELETE here
+        would read as "delete this group", which no member can do.
+
+        The membership gate is deliberately *ever* a member rather than
+        *currently* an active member, and this is the one place in this module
+        where those differ. Both properties are required at once: a caller who
+        was never in the group must not be able to confirm it exists (404, like
+        every other group route), while a caller retrying a leave whose first
+        response was lost must get the same answer as the first attempt. Gating
+        on active membership alone would answer the retry with 404 - which a
+        client cannot distinguish from "that group never existed" - and gating
+        on nothing would let a leaked uuid be probed for existence. An ended
+        membership row proves the caller was shown the group, so answering them
+        204 leaks nothing.
+
+        Args:
+            request: The authenticated request.
+            group_uuid: The group to leave.
+
+        Returns:
+            204 on success and on a repeat; 404 when the group is unknown or
+            the caller has never been a member.
+        """
+        from urbanlens.dashboard.models.group_chats.model import GroupChatMembership
+
+        profile = request.user.profile
+        group = GroupChat.objects.filter(uuid=group_uuid).first()
+        if group is None or not GroupChatMembership.objects.filter(group=group, profile=profile).exists():
+            return Response({"error": "No such group."}, status=404)
+
+        try:
+            remove_group_member(group, profile, profile)
+        except ValueError:
+            # "They aren't a member of this group" - the stint was already over
+            # (a repeat, or a concurrent removal between the check above and
+            # this call). The caller's desired end state holds either way, so
+            # this is a 204, not an error.
+            return Response(status=204)
+        return Response(status=204)
+
+
+class ConversationMuteView(ExternalApiView):
+    """GET/PUT/DELETE the caller's notification mute for one 1:1 conversation."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
+        "PUT": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+        "DELETE": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(responses={200: MuteStateSerializer, 404: ErrorSerializer})
+    def get(self, request: Request, peer_slug: str) -> Response:
+        """Report whether the caller has muted this conversation.
+
+        Args:
+            request: The authenticated request.
+            peer_slug: The conversation partner's slug.
+
+        Returns:
+            200 with ``{"is_muted": bool}``, or 404 for an unknown or reserved
+            slug.
+        """
+        profile = request.user.profile
+        partner = _resolve_peer(peer_slug)
+        if partner is None:
+            return Response({"error": "No such conversation."}, status=404)
+        return Response({"is_muted": is_conversation_muted(profile, partner)})
+
+    @extend_schema(
+        request=None,
+        description=(
+            "Mutes notifications for this conversation. PUT/DELETE rather than a toggling POST on purpose: a "
+            "retried request over a flaky mobile link must land on the state the caller asked for instead of "
+            "inverting the state the first, unacknowledged attempt already applied. Muting is "
+            "notification-only - the thread keeps its place in the conversation list, keeps its unread count, "
+            "and keeps receiving messages."
+        ),
+        responses={200: MuteStateSerializer, 404: ErrorSerializer},
+    )
+    def put(self, request: Request, peer_slug: str) -> Response:
+        """Mute this conversation, idempotently.
+
+        Args:
+            request: The authenticated request.
+            peer_slug: The conversation partner's slug.
+
+        Returns:
+            200 with ``{"is_muted": true}``, or 404 for an unknown or reserved
+            slug.
+        """
+        return self._set(request, peer_slug, muted=True)
+
+    @extend_schema(request=None, responses={200: MuteStateSerializer, 404: ErrorSerializer})
+    def delete(self, request: Request, peer_slug: str) -> Response:
+        """Unmute this conversation, idempotently.
+
+        Args:
+            request: The authenticated request.
+            peer_slug: The conversation partner's slug.
+
+        Returns:
+            200 with ``{"is_muted": false}``, or 404 for an unknown or reserved
+            slug.
+        """
+        return self._set(request, peer_slug, muted=False)
+
+    def _set(self, request: Request, peer_slug: str, *, muted: bool) -> Response:
+        """Drive this conversation's mute flag to `muted`.
+
+        Args:
+            request: The authenticated request.
+            peer_slug: The conversation partner's slug.
+            muted: The desired end state.
+
+        Returns:
+            200 with the persisted state, or 404 for an unknown or reserved
+            slug.
+        """
+        profile = request.user.profile
+        partner = _resolve_peer(peer_slug)
+        if partner is None:
+            return Response({"error": "No such conversation."}, status=404)
+        return Response({"is_muted": set_conversation_muted(profile, partner, muted=muted)})
+
+
+class GroupMuteView(ExternalApiView):
+    """GET/PUT/DELETE the caller's notification mute for one group chat."""
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
+        "PUT": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+        "DELETE": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(responses={200: MuteStateSerializer, 404: ErrorSerializer})
+    def get(self, request: Request, group_uuid: UUID) -> Response:
+        """Report whether the caller has muted this group.
+
+        Args:
+            request: The authenticated request.
+            group_uuid: The group's uuid.
+
+        Returns:
+            200 with ``{"is_muted": bool}``, or 404 when the group is unknown
+            or the caller is not an active member.
+        """
+        resolved = _resolve_membership(request, group_uuid)
+        if resolved is None:
+            return Response({"error": "No such group."}, status=404)
+        _profile, _group, membership = resolved
+        return Response({"is_muted": membership.muted})
+
+    @extend_schema(
+        request=None,
+        description=(
+            "Mutes notifications for this group. PUT/DELETE rather than a toggling POST for the same reason as "
+            "the one-to-one mute endpoint. Muting is notification-only - the group keeps its place in the "
+            "conversation list and keeps accruing unread counts."
+        ),
+        responses={200: MuteStateSerializer, 404: ErrorSerializer},
+    )
+    def put(self, request: Request, group_uuid: UUID) -> Response:
+        """Mute this group, idempotently.
+
+        Args:
+            request: The authenticated request.
+            group_uuid: The group's uuid.
+
+        Returns:
+            200 with ``{"is_muted": true}``, or 404 when the group is unknown
+            or the caller is not an active member.
+        """
+        return self._set(request, group_uuid, muted=True)
+
+    @extend_schema(request=None, responses={200: MuteStateSerializer, 404: ErrorSerializer})
+    def delete(self, request: Request, group_uuid: UUID) -> Response:
+        """Unmute this group, idempotently.
+
+        Args:
+            request: The authenticated request.
+            group_uuid: The group's uuid.
+
+        Returns:
+            200 with ``{"is_muted": false}``, or 404 when the group is unknown
+            or the caller is not an active member.
+        """
+        return self._set(request, group_uuid, muted=False)
+
+    def _set(self, request: Request, group_uuid: UUID, *, muted: bool) -> Response:
+        """Drive this membership's mute flag to `muted`.
+
+        Args:
+            request: The authenticated request.
+            group_uuid: The group's uuid.
+            muted: The desired end state.
+
+        Returns:
+            200 with the persisted state, or 404 when the group is unknown or
+            the caller is not an active member.
+        """
+        resolved = _resolve_membership(request, group_uuid)
+        if resolved is None:
+            return Response({"error": "No such group."}, status=404)
+        _profile, _group, membership = resolved
+        return Response({"is_muted": set_group_muted(membership, muted=muted)})

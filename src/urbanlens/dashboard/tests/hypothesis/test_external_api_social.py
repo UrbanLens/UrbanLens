@@ -169,7 +169,14 @@ class FriendshipTransitionMatrixTests(TestCase):
         self.assertIsNotNone(friendship)
         self.assertEqual(friendship.status, "Blocked")
 
-    def test_mute_sets_literal_muted(self) -> None:
+    def test_mute_sets_the_flag_and_keeps_the_friendship(self) -> None:
+        """Mute is the one action here that is NOT a status transition.
+
+        It used to write ``status="Muted"``, which un-friended the pair for
+        every gate that reads ``Profile.are_friends`` - so an API client that
+        muted a friend silently revoked their own access. The endpoint now
+        moves ``Friendship.muted`` and leaves the relationship intact.
+        """
         friendship = self._pending_request()
         friendship.status = FriendshipStatus.ACCEPTED
         friendship.save()
@@ -179,7 +186,9 @@ class FriendshipTransitionMatrixTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         friendship.refresh_from_db()
-        self.assertEqual(friendship.status, "Muted")
+        self.assertTrue(friendship.muted)
+        self.assertEqual(friendship.status, "Accepted")
+        self.assertEqual(response.json()["status"], "Accepted")
 
     def test_remove_sets_literal_removed(self) -> None:
         friendship = self._pending_request()

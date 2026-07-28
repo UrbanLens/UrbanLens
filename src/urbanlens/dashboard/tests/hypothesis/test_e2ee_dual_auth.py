@@ -263,14 +263,19 @@ class ErrorBodyShapeTests(TestCase):
         self.assertEqual(response.json()["error"], "Malformed JSON body")
 
     def test_malformed_json_from_a_credential_is_still_a_json_400(self) -> None:
-        """Credential callers get DRF's ``{"detail": ...}`` for this one case.
+        """Credential callers get the package's ``{"error": ...}`` here too.
 
         django-oauth-toolkit's authenticator reads the request body while
         verifying the token, so a malformed body raises DRF's ParseError
         during authentication - before any handler in this module runs and
-        can substitute its own error shape. The status is still 400 and the
-        body is still JSON, so a client's error path is unaffected; only the
-        key differs, and only for a request that was malformed anyway.
+        could substitute its own error shape. This used to be the one path
+        that escaped as DRF's ``{"detail": ...}``; now that
+        ``DualAuthJsonView`` inherits ``errors.ErrorEnvelopeMixin``, the
+        view-level exception handler catches it on the way out and the caller
+        sees the same envelope as every other failure. Worth asserting rather
+        than assuming: authentication-time exceptions are raised outside the
+        handler methods, which is exactly where a per-view override is easiest
+        to get wrong.
         """
         response = self.client.post(
             reverse("e2ee.enroll"),
@@ -280,6 +285,9 @@ class ErrorBodyShapeTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response["Content-Type"].split(";")[0], "application/json")
+        payload = response.json()
+        self.assertIn("error", payload)
+        self.assertNotIn("detail", payload)
 
 
 class GroupKeyTokenContractTests(TestCase):

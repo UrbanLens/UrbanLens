@@ -9,8 +9,10 @@ import smtplib
 from typing import TYPE_CHECKING
 
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.db import IntegrityError, transaction
+from django.db.models import Count
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -45,7 +47,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.markup.model import MarkupMap
-    from urbanlens.dashboard.models.safety.queryset import SafetyCheckinQuerySet
+    from urbanlens.dashboard.models.safety.queryset import SafetyCheckinPartnerQuerySet, SafetyCheckinQuerySet
     from urbanlens.dashboard.models.trips.model import Trip
     from urbanlens.dashboard.models.wiki.model import Wiki
 
@@ -467,6 +469,29 @@ def _optout_urls(contact: SafetyCheckinContact) -> dict[str, str]:
     return {f"optout_{scope.value}_url": _absolute_url(reverse("safety.contact.optout", kwargs={"token": contact.token, "scope": scope.value})) for scope in SafetyContactOptOutScope}
 
 
+def is_accepted_partner(checkin: SafetyCheckin, profile: Profile) -> bool:
+    """Whether ``profile`` is a partner on ``checkin`` who has actually accepted.
+
+    The one place the ``status == ACCEPTED`` clause is written. Every caller that
+    needs "is this person a watcher on this check-in" goes through here rather
+    than writing ``checkin.partners.filter(profile=...)`` inline, because the
+    inline version is wrong in a way that reads as correct: a
+    ``SafetyCheckinPartner`` row exists from the moment the invite is *sent*, so
+    a status-less membership test admits someone who was merely offered the role
+    and never took it - or who may never even have seen the offer - to the plan,
+    the chat, and the live position of where another person physically is right
+    now. Declining deletes the row, so only the INVITED case needs excluding.
+
+    Args:
+        checkin: The check-in being accessed.
+        profile: The requesting profile.
+
+    Returns:
+        True if ``profile`` holds an ACCEPTED SafetyCheckinPartner row on ``checkin``.
+    """
+    return checkin.partners.filter(profile=profile, status=SafetyCheckinPartnerStatus.ACCEPTED).exists()
+
+
 def is_owner_or_accepted_partner(checkin: SafetyCheckin, profile: Profile) -> bool:
     """Whether ``profile`` may view the full check-in and act as its owner would.
 
@@ -479,7 +504,120 @@ def is_owner_or_accepted_partner(checkin: SafetyCheckin, profile: Profile) -> bo
     """
     if checkin.profile_id == profile.pk:
         return True
-    return checkin.partners.filter(profile=profile, status=SafetyCheckinPartnerStatus.ACCEPTED).exists()
+    return is_accepted_partner(checkin, profile)
+
+
+def get_partner_role(profile: Profile, checkin_uuid: str) -> SafetyCheckinPartner | None:
+    """Return ``profile``'s own partner row on the check-in with this uuid, if any.
+
+    The queryset is deliberately ``(checkin__uuid=..., profile=profile)`` and
+    nothing else. Both halves are load-bearing:
+
+    * ``profile=profile`` is what stops this being an enumeration oracle. A
+      caller may only ever address *their own* invitation, so a check-in
+      someone else was invited to is indistinguishable from one that does not
+      exist. Widening this to "the invite with this id" would let any caller
+      walk other people's partner invitations, and an invitation names both a
+      check-in and the person out on it.
+    * **No status filter.** An accept must be repeatable (a retried mobile
+      request must not 404 after the first one succeeded), and a decline on an
+      already-ACCEPTED row is a legitimate *resignation*, not an error. Filtering
+      to INVITED here would turn both into 404s that mean something entirely
+      different from "no such invitation" - and callers cannot tell the two
+      apart from the outside.
+
+    Args:
+        profile: The caller - only their own partner row is reachable.
+        checkin_uuid: The check-in's uuid, as captured from a URL.
+
+    Returns:
+        The caller's partner row, or None when there is no such row, the uuid
+        names no check-in, or the value is not a well-formed uuid at all.
+        Callers answer None with a 404, never a 403.
+    """
+    try:
+        return SafetyCheckinPartner.objects.filter(checkin__uuid=checkin_uuid, profile=profile).select_related("checkin", "checkin__profile", "invited_by").first()
+    except (DjangoValidationError, ValueError):
+        # Comparing a non-uuid string against a UUIDField raises rather than
+        # simply not matching, so a client typo would otherwise be a 500.
+        return None
+
+
+def list_pending_partner_invites(profile: Profile) -> SafetyCheckinPartnerQuerySet:
+    """Return the invitations awaiting ``profile``'s answer.
+
+    Shared by the safety overview page and the external API's invite listing so
+    the two cannot disagree about what counts as "pending" - an ACCEPTED row is
+    a standing role, not an invitation, and must not reappear in a list whose
+    only actions are accept and decline.
+
+    Args:
+        profile: The invitee.
+
+    Returns:
+        Queryset of the profile's INVITED partner rows, newest invitation first.
+        The ordering is total (``-created`` then ``-pk``) because these are
+        paged over: ``created`` alone ties whenever an owner invites the same
+        person to two check-ins in the same instant, and an unstable sort drops
+        or repeats rows across page boundaries.
+    """
+    return SafetyCheckinPartner.objects.filter(profile=profile, status=SafetyCheckinPartnerStatus.INVITED).select_related("checkin", "checkin__profile", "invited_by").order_by("-created", "-pk")
+
+
+def list_partnered_checkins(profile: Profile) -> SafetyCheckinQuerySet:
+    """Return the check-ins ``profile`` watches as an accepted partner.
+
+    Args:
+        profile: The watching profile.
+
+    Returns:
+        Queryset of other profiles' check-ins where ``profile`` has an ACCEPTED
+        partner row, newest deadline first, annotated with ``contact_count`` and
+        ``partner_count``. ``partnered_with`` itself is deliberately left
+        unordered (it is composed into several different surfaces); the total
+        ``-checkin_by``/``-pk`` ordering is applied here because every consumer
+        of this helper pages over the result, and ``checkin_by`` alone ties
+        whenever one person schedules two check-ins for the same moment.
+    """
+    return (
+        # The annotations MUST come before partnered_with's filter, not after.
+        # partnered_with filters on the multi-valued `partners` relation, and
+        # Django reuses a single join when a filter follows an annotation over
+        # the same relation - which would constrain the aggregate to the rows
+        # the filter matched and make partner_count permanently 1 (the caller's
+        # own row) on every result. Annotating first forces a second, unfiltered
+        # join, so the counts describe the check-in rather than the query.
+        SafetyCheckin.objects.annotate(contact_count=Count("contacts", distinct=True), partner_count=Count("partners", distinct=True))
+        .partnered_with(profile)
+        .select_related("profile", "trip", "archive")
+        .order_by("-checkin_by", "-pk")
+    )
+
+
+def get_partnered_checkin(profile: Profile, checkin_uuid: str) -> SafetyCheckin | None:
+    """Return the check-in with this uuid, if ``profile`` is an accepted partner on it.
+
+    Addressed by uuid rather than slug on purpose: a check-in's slug is only
+    unique *per owner* (see ``controllers.safety._get_checkin_as_partner``, which
+    has to swallow ``MultipleObjectsReturned`` for exactly this reason), so a
+    slug cannot safely identify another person's check-in. The partner-facing
+    surface therefore never accepts one.
+
+    Args:
+        profile: The requesting partner.
+        checkin_uuid: The check-in's uuid, as captured from a URL.
+
+    Returns:
+        The check-in, or None when it does not exist, the caller is not an
+        ACCEPTED partner on it, or the caller owns it - the owner-scoped
+        endpoints are where an owner addresses their own check-in, and letting
+        the partner surface answer for them would mean an owner could reach a
+        partner-only write (mark-safe-as-partner) on their own check-in.
+    """
+    try:
+        return list_partnered_checkins(profile).filter(uuid=checkin_uuid).first()
+    except (DjangoValidationError, ValueError):
+        return None
 
 
 def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username: str) -> SafetyCheckinPartner:
@@ -572,12 +710,31 @@ def accept_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
 
 
 def decline_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
-    """Decline a pending partner invite.
+    """Decline a partner invite, or resign a partnership already accepted.
+
+    Both cases delete the same row, but only the second one has any live access
+    to take away, so the revocation broadcast is conditional on the row having
+    been ACCEPTED.
+
+    Why it is needed at all: ``SafetyCheckinChatConsumer`` checks "may this
+    profile watch this check-in?" once, at ``connect()`` time, and then holds
+    the socket open - which is why the owner-initiated
+    :func:`remove_checkin_partner` broadcasts. Declining used to be reachable
+    only from the web overview page, which renders a Decline button solely for
+    INVITED rows, and an invitee has no socket to revoke; the external API's
+    decline endpoint deliberately applies no status filter (see
+    :func:`get_partner_role`), so an ACCEPTED partner can now reach this as a
+    resignation. Without the broadcast that partner keeps streaming chat,
+    status and live-position frames for as long as their tab stays open - a
+    partner who resigned still watching where someone physically is.
 
     Args:
-        partner: The invite being declined.
+        partner: The invite (or accepted partnership) being given up.
     """
+    checkin, profile_id, was_accepted = partner.checkin, partner.profile_id, partner.status == SafetyCheckinPartnerStatus.ACCEPTED
     partner.delete()
+    if was_accepted:
+        _broadcast_partner_access_revoked(checkin, profile_id)
 
 
 def remove_checkin_partner(partner: SafetyCheckinPartner) -> None:
@@ -1161,11 +1318,21 @@ class CheckinEditOutcome:
 
 
 class CheckinArchivedError(ValueError):
-    """Raised when an edit targets a check-in already scheduled for encrypted archival.
+    """Raised when a write targets a check-in that archival has closed to writes.
+
+    Covers both halves of the archival boundary, which are deliberately at
+    slightly different points: :func:`apply_checkin_edit` refuses as soon as
+    archival is *scheduled* (the grace window is exactly when a retrying client
+    is most likely to autosave plaintext back onto a row about to be scrubbed),
+    while :func:`create_chat_message` refuses once the encrypted archive
+    actually exists (the window itself is there so participants can post a final
+    message).
 
     Distinct from the plain ``ValueError`` other lifecycle helpers raise so a
     caller can map it to a 409 Conflict rather than a generic 400 - the request
-    was well-formed, the check-in's state is simply past the point of editing.
+    was well-formed, the check-in's state is simply past the point of writing.
+    Subclasses ``ValueError`` so existing callers that only catch that keep
+    behaving exactly as they did.
     """
 
 
@@ -1929,14 +2096,19 @@ def create_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, c
         The newly created SafetyCheckinMessage.
 
     Raises:
-        ValueError: If ``body`` is blank or exceeds ``MAX_CHAT_MESSAGE_LENGTH``,
-            or the check-in has already been archived. Both callers (the
-            WebSocket consumer and the no-JS HTTP fallback) catch this and
-            surface it to the sender - a safety check-in chat failing
-            silently is worse than most other features failing silently.
+        CheckinArchivedError: If the check-in has already been archived. A
+            ``ValueError`` subclass, so the WebSocket consumer and the no-JS
+            HTTP fallback keep catching it exactly as before; it is raised
+            distinctly so a REST caller can answer 409 Conflict (the request was
+            well-formed, the check-in is simply past the point of writing)
+            rather than folding it into the 400 a blank body earns.
+        ValueError: If ``body`` is blank or exceeds ``MAX_CHAT_MESSAGE_LENGTH``.
+            Callers catch this and surface it to the sender - a safety check-in
+            chat failing silently is worse than most other features failing
+            silently.
     """
     if hasattr(checkin, "archive"):
-        raise ValueError("This check-in has concluded and can no longer receive messages.")
+        raise CheckinArchivedError("This check-in has concluded and can no longer receive messages.")
     body = body.strip()
     if not body:
         raise ValueError("Message cannot be empty.")
@@ -1991,6 +2163,43 @@ def broadcast_chat_message(checkin: SafetyCheckin, message: SafetyCheckinMessage
         )
     except Exception:
         logger.exception("Failed to broadcast chat message for checkin %s", checkin.pk)
+
+
+def post_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, contact: SafetyCheckinContact | None, body: str) -> SafetyCheckinMessage:
+    """Send a chat message on a check-in: persist it *and* deliver it live.
+
+    The single "send" operation for every non-socket caller. Creating a message
+    without broadcasting it is a silent half-failure that nothing errors on:
+    the row is saved, the sender's own view refreshes and looks fine, and the
+    message is simply invisible in real time to every other participant with an
+    open socket - the owner, the accepted partners, and the emergency contacts
+    sitting on the portal - until they happen to reload. On a feature whose
+    entire purpose is telling people where someone is while it still matters,
+    that is the worst possible failure mode, and it is one a caller can
+    introduce just by forgetting a line. Pairing the two here means no caller
+    can.
+
+    ``SafetyCheckinChatConsumer`` is the one deliberate non-caller: it already
+    holds the group it would broadcast to and sends the serialized frame itself
+    as part of its receive loop.
+
+    Args:
+        checkin: The check-in the message belongs to.
+        user: The requesting Django user (see ``resolve_message_sender``).
+        contact: The SafetyCheckinContact authorizing this request, or None when
+            the sender is the owner or an accepted partner.
+        body: Message text.
+
+    Returns:
+        The newly created, already-broadcast SafetyCheckinMessage.
+
+    Raises:
+        CheckinArchivedError: The check-in has been archived - see :func:`create_chat_message`.
+        ValueError: ``body`` is blank or too long - see :func:`create_chat_message`.
+    """
+    message = create_chat_message(checkin, user=user, contact=contact, body=body)
+    broadcast_chat_message(checkin, message)
+    return message
 
 
 def _broadcast_status_update(checkin: SafetyCheckin) -> None:

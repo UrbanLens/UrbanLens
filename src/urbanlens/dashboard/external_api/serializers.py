@@ -13,13 +13,15 @@ regardless of caller.
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
 from django.utils import timezone
 from rest_framework import serializers
 
+from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 from urbanlens.dashboard.models.aliases.model import AliasType
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
@@ -59,9 +61,11 @@ from urbanlens.dashboard.services.locations.naming import normalize_name_for_com
 from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
 from urbanlens.dashboard.services.media_labels import MAX_MEDIA_LABEL_NAME_LENGTH, MAX_MEDIA_LABELS
 from urbanlens.dashboard.services.notification_center import preference_field_names
+from urbanlens.dashboard.services.pin_edit import EDITABLE_PIN_FIELDS
 from urbanlens.dashboard.services.text_limits import (
     MAX_COMMENT_TEXT_LENGTH,
     MAX_FRIEND_REQUEST_MESSAGE_LENGTH,
+    MAX_PIN_DESCRIPTION_LENGTH,
     MAX_PIN_LIST_DESCRIPTION_LENGTH,
     MAX_PIN_NOTE_LENGTH,
     MAX_PROFILE_BIO_LENGTH,
@@ -82,9 +86,29 @@ _validate_link_url = URLValidator(schemes=["http", "https"])
 
 
 class WhoAmISerializer(serializers.Serializer):
-    """The only profile data an external application may ever read: its owner's uuid."""
+    """The calling key owner's own identity: their profile uuid and slug.
+
+    Nothing else - no settings, no friends, no contact details. This is still
+    the narrowest thing the API serves, but "uuid only" turned out to be one
+    field short of usable.
+
+    The slug is here because it is the *identifier every other endpoint speaks*.
+    A profile is addressed by slug throughout this API
+    (``/profiles/{profile_slug}/``, ``/messages/{profile_slug}/``), and payloads
+    that name a person name them by slug: every direct message carries a
+    ``sender_slug``, so a client holding only its own uuid literally cannot tell
+    which messages in a conversation are its own. That is not a quirk of one
+    endpoint - it is what happens whenever a client has to recognize itself in a
+    payload it did not send. Handing over the slug at authentication time is the
+    single place that answer belongs.
+    """
 
     uuid = serializers.UUIDField(read_only=True)
+    #: The caller's own profile slug - what every other endpoint's paths and
+    #: ``*_slug`` payload fields use to name a person. Always present:
+    #: ``WhoAmIView`` backfills it via ``Profile.ensure_slug()`` for accounts
+    #: created before slugs existed.
+    slug = serializers.CharField(read_only=True)
 
 
 class PinCreateSerializer(serializers.Serializer):
@@ -430,20 +454,119 @@ class PinDetailSerializer(SyncPinSerializer):
     link_count = serializers.IntegerField(read_only=True)
 
 
+def _security_update_fields() -> dict[str, serializers.Field]:
+    """Build the optional, writable counterpart of :class:`PinSecurityDetailSerializer`.
+
+    Generated from ``models.abstract.security.SECURITY_FIELDS`` rather than
+    typed out, so a ninth indicator added to the model mixin becomes writable
+    here automatically instead of being silently unwritable - the same
+    silent-drop failure this whole serializer widening exists to end.
+
+    Returns:
+        Mapping of field name to an optional ``SecurityLevel`` choice field.
+    """
+    return {name: serializers.ChoiceField(choices=SecurityLevel.choices, required=False) for name, _label in SECURITY_FIELDS}
+
+
+#: The wire key carrying the nested security object in a pin-update payload.
+#: Named as a constant because it collides with a ``Pin`` *column* of the same
+#: name - see :meth:`PinUpdateSerializer.pin_field_edits`, which is the one
+#: place that collision is resolved.
+SECURITY_WIRE_KEY = "security"
+
+
+PinSecurityUpdateSerializer = type(
+    "PinSecurityUpdateSerializer",
+    (serializers.Serializer,),
+    {
+        "__doc__": (
+            "The 8 security indicators, as a partial update.\n\n"
+            "    Every field is optional and an omitted one is left alone, so a client\n"
+            '    that only learned the gate is now locked can send ``{"locked":\n'
+            '    "everywhere"}`` without restating the other seven. None of them accept\n'
+            "    null: ``unknown`` is this model's own representation of \"not known\",\n"
+            "    and the columns are non-nullable, so clearing an indicator means\n"
+            "    setting it back to ``unknown``.\n    "
+        ),
+        **_security_update_fields(),
+    },
+)
+
+
 class PinUpdateSerializer(serializers.Serializer):
     """Validates an untrusted pin-update payload.
 
-    Mirrors what the internal ``PinViewSet``/map-drag flow can already do
-    (rename, re-icon, move, log a visit date) plus one addition the mobile
-    app needs that the internal surface has no single endpoint for:
-    ``parent_id``, to detach a pin (``null``) or re-parent it under another
-    of the caller's own pins (its uuid). Coordinates, when present, must
-    both be present and non-null - a pin can't be moved to "half a point".
+    Covers the whole of what a pin's owner can edit about it from the website's
+    own pin-detail dialog, plus one addition the mobile app needs that no
+    internal endpoint exposes: ``parent_id``, to detach a pin (``null``) or
+    re-parent it under another of the caller's own pins (its uuid).
+
+    Every field is optional; **absent means untouched, and an explicit null
+    clears**. That distinction is the entire point of this serializer. An
+    earlier version accepted only name/icon/last_visited/coordinates/parent_id
+    and *silently dropped* everything else while still answering 200, so a user
+    who edited a pin's description in the app saw a success and lost the edit.
+
+    Three things a client may expect here and will not find:
+
+    * ``rating`` is deliberately excluded. A pin's rating is not a pin field at
+      all - it is the caller's ``Review`` of it, written through
+      ``PUT``/``DELETE /pins/{slug}/review/``. Accepting it here as well would
+      give one value two write paths that must be kept in agreement forever,
+      which is strictly worse than making clients call the endpoint that owns it.
+    * ``address``, ``city``, ``state`` and ``country`` are read-only. They are
+      not stored on the pin: they are derived from the shared ``Location`` the
+      pin points at (see ``models/CLAUDE.md`` on the Location/Pin split), and
+      several people's pins can share one Location. A pin is moved by sending
+      ``latitude``/``longitude``, which repoints it at a different Location -
+      never by rewriting an address.
+    * ``official_name`` likewise belongs to the Location, not the pin; ``name``
+      here is the caller's own private label for it.
+
+    ``priority``, ``danger`` and ``vulnerability`` are not purely private edits:
+    when the owner has the matching ``sync_*_to_wiki`` setting on and the pin is
+    attached to a community wiki, writing one publishes (or withdraws) their
+    ``WikiStatVote`` on that wiki - see ``models.pin.signals.sync_pin_stats_to_wiki``.
+    A client should surface that, which is why it is stated in this endpoint's
+    OpenAPI description too.
     """
 
     name = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
     icon = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
+    #: The owner's personal notes on this pin. Bounded by the same limit the
+    #: website's own editor enforces (``services.text_limits``).
+    description = serializers.CharField(max_length=MAX_PIN_DESCRIPTION_LENGTH, required=False, allow_blank=True, allow_null=True)
+    #: Hex color override for this pin's marker, e.g. ``"#F44336"``. Null/blank
+    #: restores the inherited color (the winning label's, or the default).
+    color = serializers.CharField(max_length=20, required=False, allow_blank=True, allow_null=True)
+    #: What the marker physically represents. Setting it also marks the type
+    #: user-provided, which stops automatic building/parcel classification from
+    #: overruling the choice later.
+    pin_type = serializers.ChoiceField(choices=PinType.choices, required=False)
+    #: How urgently the owner wants to visit (0 = unset, 1-5). See the class
+    #: docstring: this can publish a community wiki vote.
+    priority = serializers.IntegerField(required=False, min_value=0, max_value=5)
+    #: How hazardous the site is (0 = unset, 1-5). Can publish a wiki vote.
+    danger = serializers.IntegerField(required=False, min_value=0, max_value=5)
+    #: How at-risk/fragile the site is (0 = unset, 1-5). Can publish a wiki vote.
+    vulnerability = serializers.IntegerField(required=False, min_value=0, max_value=5)
     last_visited = serializers.DateTimeField(required=False, allow_null=True)
+    date_built = serializers.DateField(required=False, allow_null=True)
+    date_abandoned = serializers.DateField(required=False, allow_null=True)
+    date_last_active = serializers.DateField(required=False, allow_null=True)
+    security = PinSecurityUpdateSerializer(required=False)
+    #: **Full replacement** of the pin's tag/category/status labels, by uuid -
+    #: not a delta. Send the complete set the pin should end up with; sending
+    #: ``[]`` removes them all. Person and media labels are untouched (they are
+    #: attached by other surfaces entirely). Every label dropped by the
+    #: replacement is tombstoned, so keyword/AI auto-tagging cannot quietly put
+    #: it back on the next run. An unknown uuid, or one belonging to another
+    #: user's private label, is a 400 - not a silent skip.
+    label_uuids = serializers.ListField(child=serializers.UUIDField(), required=False, allow_empty=True)
+    #: Convenience over the "Visited" status label: true adds it, false removes
+    #: it *and* clears ``last_visited``. Mutually exclusive with an explicit
+    #: ``last_visited`` in the same request - see :meth:`validate`.
+    visited = serializers.BooleanField(required=False)
     latitude = serializers.FloatField(required=False, allow_null=True, min_value=-90, max_value=90)
     longitude = serializers.FloatField(required=False, allow_null=True, min_value=-180, max_value=180)
     #: A pin uuid to become this pin's new parent, or null to detach it to a
@@ -455,7 +578,24 @@ class PinUpdateSerializer(serializers.Serializer):
     confirm_wiki_loss = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs: dict) -> dict:
-        """Coordinates move together or not at all, and must be finite."""
+        """Reject payloads that are internally contradictory.
+
+        Args:
+            attrs: The field-validated payload.
+
+        Returns:
+            The same payload, unchanged.
+
+        Raises:
+            rest_framework.exceptions.ValidationError: Coordinates were sent
+                half-present, null, or non-finite (a pin cannot be moved to
+                "half a point"), or ``visited`` was combined with an explicit
+                ``last_visited``. The latter is refused rather than resolved
+                because the two make opposite claims about the same fact -
+                ``visited: false`` clears ``last_visited`` outright - and any
+                precedence rule we picked would silently discard one of the two
+                things the client actually asked for.
+        """
         has_lat = "latitude" in attrs
         has_lng = "longitude" in attrs
         if has_lat != has_lng:
@@ -464,7 +604,42 @@ class PinUpdateSerializer(serializers.Serializer):
             raise serializers.ValidationError("latitude and longitude cannot be null.")
         if has_lat and not (math.isfinite(attrs["latitude"]) and math.isfinite(attrs["longitude"])):
             raise serializers.ValidationError("latitude and longitude must be finite numbers.")
+        if "visited" in attrs and "last_visited" in attrs:
+            raise serializers.ValidationError("Send either 'visited' or 'last_visited', not both - they disagree about the same fact.")
         return attrs
+
+    def pin_field_edits(self) -> dict[str, Any]:
+        """Flatten the validated payload into ``Pin`` column name -> value to write.
+
+        Only keys this request actually submitted appear, so the result can be
+        handed straight to ``services.pin_edit.apply_pin_edits`` without
+        breaking its absent-means-untouched contract. Everything that is not a
+        ``Pin`` column (``latitude``/``longitude``, ``parent_id``,
+        ``label_uuids``, ``visited``, ``confirm_wiki_loss``) is dropped here -
+        each of those has its own handling in ``PinDetailView.patch``.
+
+        The nested ``security`` object is flattened into the same mapping
+        rather than given a second write path of its own, because the eight
+        indicators are plain ``Pin`` columns.
+
+        Dropping the ``security`` *wire key* from the flat copy first is
+        load-bearing, not tidiness: ``security`` is **also** the name of one of
+        those eight columns (see ``models.abstract.security.SECURITY_FIELDS``),
+        so it passes the ``EDITABLE_PIN_FIELDS`` membership test and a naive
+        copy would carry the whole nested dict through to
+        ``setattr(pin, "security", {...})``. ``Pin.security`` is a
+        ``varchar(20)``, so that save died with a database ``DataError`` and
+        the caller got a 500 - for the entirely ordinary payload
+        ``{"security": {"locked": "everywhere"}}``.
+
+        Returns:
+            Mapping of ``Pin`` field name to the value to write. Always a
+            subset of ``services.pin_edit.EDITABLE_PIN_FIELDS``.
+        """
+        data = self.validated_data
+        edits: dict[str, Any] = {field: value for field, value in data.items() if field in EDITABLE_PIN_FIELDS and field != SECURITY_WIRE_KEY}
+        edits.update(data.get(SECURITY_WIRE_KEY) or {})
+        return edits
 
 
 class PinVisitSerializer(serializers.Serializer):
@@ -1590,8 +1765,39 @@ class FriendshipSerializer(serializers.Serializer):
     #: Which way the original request ran, relative to the caller.
     direction = serializers.ChoiceField(choices=[("incoming", "Incoming"), ("outgoing", "Outgoing")], read_only=True)
     message = serializers.CharField(read_only=True, allow_null=True)
+    #: Whether this relationship is marked muted. Read the flag, never
+    #: ``status``: mute used to be written *over* ``status``, which un-friended
+    #: the pair for every gate reading ``Profile.are_friends``. It is now a
+    #: separate boolean and ``status`` is left alone.
+    #:
+    #: **Two caveats a client must not paper over.** First, the flag lives on
+    #: the single shared row joining the pair, so it is not per-viewer - label
+    #: it "muted", never "muted by you". Second, and more important:
+    #: *friendship-level mute does not currently suppress anything*. No
+    #: notification delivery path consults it yet (see ``docs/PROBLEMS.md``,
+    #: 2026-07-28), so the muter still receives friend-request, pin-share,
+    #: trip-invite and safety notifications from that profile. The preference is
+    #: recorded faithfully and will start being honored when delivery is wired
+    #: up; until then a UI that promises silence would be lying. The two mute
+    #: mechanisms that *do* work are unrelated: ``DirectMessageMute``
+    #: (per-sender DM mute) and per-group chat mute.
+    is_muted = serializers.BooleanField(read_only=True)
     created = serializers.DateTimeField(read_only=True)
     updated = serializers.DateTimeField(read_only=True)
+
+
+class FriendMuteSerializer(serializers.Serializer):
+    """The desired mute state for a relationship.
+
+    An explicit target rather than a toggle. A toggle is unsafe over a mobile
+    link: a request that succeeds server-side but whose response is lost gets
+    retried by the client and silently *inverts* the state it was trying to
+    set, so the user ends up unmuted by the very retry meant to mute them. With
+    an explicit target the retry is idempotent, which is also why the service
+    functions underneath are no-ops when already in the requested state.
+    """
+
+    is_muted = serializers.BooleanField(required=True)
 
 
 class FriendListQuerySerializer(serializers.Serializer):
@@ -1707,29 +1913,34 @@ class ProfileDetailSerializer(serializers.Serializer):
     visibility = ProfileVisibilitySerializer(read_only=True, allow_null=True)
 
 
-ProfileUpdateSerializer = type(
-    "ProfileUpdateSerializer",
-    (serializers.Serializer,),
-    {
-        "__doc__": (
-            "Validates a partial update to the caller's own profile.\n\n"
-            "    Excludes ``avatar`` on purpose: image upload is the Photos domain's\n"
-            "    problem (size limits, downscaling, quota) and wiring a second upload\n"
-            "    path through here would duplicate all of it. ``avatar_url`` stays\n"
-            "    read-only until that service is reused here.\n\n"
-            "    Community-gated visibility fields may be submitted, but\n"
-            "    ``Profile.save()`` still coerces them to NO_ONE when community is\n"
-            "    off - that enforcement is not reimplemented here.\n    "
-        ),
-        "bio": serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=MAX_PROFILE_BIO_LENGTH),
-        "area": serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=255),
-        "started_exploring": serializers.DateField(required=False, allow_null=True),
-        "distance_units": serializers.ChoiceField(choices=DistanceUnit.choices, required=False, allow_null=True),
-        "theme_mode": serializers.ChoiceField(choices=ThemeChoice.choices, required=False),
-        "community_enabled": serializers.BooleanField(required=False),
-        **_visibility_fields(),
-    },
-)
+class ProfileUpdateSerializer(serializers.Serializer):
+    """Validates a partial update to the caller's own profile.
+
+    Deliberately limited to the three fields that are *public presentation* -
+    what other people see on your profile page. Everything else a profile row
+    happens to carry is a setting, and settings are written through
+    ``PATCH /settings/`` behind the ``settings:write`` scope.
+
+    That split is a privilege boundary, not tidiness. ``PATCH /profiles/{slug}/``
+    is gated on ``social:write`` - the scope an app asks for to send friend
+    requests and keep a note on someone. This serializer previously also
+    accepted ``theme_mode``, ``distance_units``, ``community_enabled`` and all
+    twelve ``*_visibility`` fields, every one of which is already writable via
+    ``PATCH /settings/``. A credential holding only ``social:write`` could
+    therefore rewrite every privacy-visibility field on the account - turning
+    ``profile_visibility`` to ``everyone``, say - which is exactly the surface
+    ``settings:write`` exists to protect. ``ProfileSettingsOverlapTests`` asserts
+    the two field sets stay disjoint so the overlap cannot creep back.
+
+    Excludes ``avatar`` for a different reason: image upload is the Photos
+    domain's problem (size limits, downscaling, quota) and wiring a second
+    upload path through here would duplicate all of it. ``avatar_url`` stays
+    read-only until that service is reused here.
+    """
+
+    bio = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=MAX_PROFILE_BIO_LENGTH)
+    area = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=255)
+    started_exploring = serializers.DateField(required=False, allow_null=True)
 
 
 class ProfileNoteSerializer(serializers.Serializer):

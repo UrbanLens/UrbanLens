@@ -11,15 +11,13 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
-from django.urls import NoReverseMatch, reverse
 from django.views import View
 
 from urbanlens.dashboard.models.comments.model import Comment
-from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
-from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
-from urbanlens.dashboard.services.comments import ALLOWED_EMOJIS, top_level_comment_queryset, visible_comment_tree
+from urbanlens.dashboard.services.comment_notifications import notify_reply
+from urbanlens.dashboard.services.comments import ALLOWED_EMOJIS, CommentValidationError, toggle_reaction, top_level_comment_queryset, visible_comment_tree
 from urbanlens.dashboard.services.map_snapshot import (
     _sanitize_markup_color,
     _sanitize_markup_shapes,
@@ -300,7 +298,7 @@ class PinCommentsView(LoginRequiredMixin, View):
         elif existing_image_id:
             attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
-            _notify_reply(profile, parent, reply=comment)
+            notify_reply(profile, parent, reply=comment)
         ctx = _pin_comments_context(pin, profile, request)
         return _render_comments(request, ctx)
 
@@ -374,7 +372,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
         elif existing_image_id:
             attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
-            _notify_reply(profile, parent, reply=comment)
+            notify_reply(profile, parent, reply=comment)
         ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
         return _render_comments(request, ctx)
 
@@ -423,15 +421,15 @@ class CommentReactionView(LoginRequiredMixin, View):
         # comment_visibility privacy setting.
         if not profile.can_view_comments_from(comment.profile):
             raise Http404
-        emoji = request.POST.get("emoji", "")
-        if emoji not in _ALLOWED_EMOJIS:
+        # The add/remove/notify sequence lives in the service, not here. It used
+        # to be hand-rolled in this view as well, and the two copies agreeing was
+        # a coincidence: fixing a missing notification on the service side (the
+        # external API reacted without ever notifying the author) left this copy
+        # untouched, and only the panel's copy happened to already be correct.
+        try:
+            toggle_reaction(profile, comment, request.POST.get("emoji", ""))
+        except CommentValidationError:
             return HttpResponse("Invalid emoji.", status=400)
-        reaction = Reaction.objects.existing(profile, emoji, comment=comment)
-        if reaction:
-            reaction.delete()
-        else:
-            Reaction.objects.create(profile=profile, emoji=emoji, comment=comment)
-            _notify_reaction(profile, comment)
         return _render_reaction_row(request, comment, profile)
 
 
@@ -526,60 +524,3 @@ class PinnedLocationsJsonView(LoginRequiredMixin, View):
                 results.append({"uuid": str(pin.location.uuid), "name": name})
         return HttpResponse(json.dumps(results), content_type="application/json")
 
-
-# -- Notification helpers ------------------------------------------------------
-
-
-def _comment_url(comment) -> str:
-    """Return the page URL (with anchor) for a comment or trip comment."""
-    anchor = f"#comment-{comment.id}"
-    try:
-        if hasattr(comment, "trip_id") and comment.trip_id:
-            return reverse("trips.detail", kwargs={"trip_slug": comment.trip.slug}) + anchor
-        if hasattr(comment, "pin_id") and comment.pin_id:
-            return reverse("pin.details", kwargs={"pin_slug": comment.pin.slug or str(comment.pin.uuid)}) + anchor
-        if hasattr(comment, "wiki_id") and comment.wiki_id and comment.wiki.location_id:
-            return reverse("location.wiki", kwargs={"location_slug": comment.wiki.location.slug or str(comment.wiki.location.uuid)}) + anchor
-    except NoReverseMatch:
-        logger.warning("Could not build comment URL for comment %s", comment.id)
-    return ""
-
-
-def _notify_reply(actor: Profile, parent_comment, reply=None) -> None:
-    recipient = parent_comment.profile if hasattr(parent_comment, "profile") else parent_comment.author
-    if recipient is None or recipient == actor:
-        return
-    try:
-        pref = recipient.notification_preferences.comment_reply
-    except AttributeError:
-        pref = DeliveryPreference.SITE
-    if pref == DeliveryPreference.NONE:
-        return
-    url = _comment_url(reply or parent_comment)
-    NotificationLog.objects.create(
-        profile=recipient,
-        notification_type=NotificationType.COMMENT_REPLY,
-        title=f"{actor.username} replied to your comment",
-        message=f"@{actor.username} replied to your comment.",
-        url=url,
-    )
-
-
-def _notify_reaction(actor: Profile, comment) -> None:
-    recipient = comment.profile if hasattr(comment, "profile") else comment.author
-    if recipient is None or recipient == actor:
-        return
-    try:
-        pref = recipient.notification_preferences.comment_liked
-    except AttributeError:
-        pref = DeliveryPreference.SITE
-    if pref == DeliveryPreference.NONE:
-        return
-    url = _comment_url(comment)
-    NotificationLog.objects.create(
-        profile=recipient,
-        notification_type=NotificationType.COMMENT_LIKED,
-        title=f"{actor.username} reacted to your comment",
-        message=f"@{actor.username} reacted to your comment.",
-        url=url,
-    )

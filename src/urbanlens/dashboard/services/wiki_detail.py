@@ -22,6 +22,7 @@ from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVot
 from urbanlens.dashboard.services.articles import latest_revision_id
 from urbanlens.dashboard.services.community_counts import wiki_community_summary
 from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
+from urbanlens.dashboard.services.wiki_aliases import alias_is_current_name
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -154,7 +155,10 @@ def build_wiki_detail(wiki: Wiki, location: Location, profile: Profile) -> dict[
         "address": wiki.address or None,
         "cover_photo_url": cover_photo.image.url if cover_photo is not None and cover_photo.image else None,
         "boundary": _boundary_geojson(wiki),
-        "aliases": [{"id": alias.pk, "name": alias.name, "kind": alias.kind, "source": alias.source} for alias in wiki.aliases.all()],
+        # is_current comes from the shared helper rather than a local comparison
+        # so this payload cannot drift from WikiAliasSerializer, which documents
+        # the field, or from the delete guard, which decides what the rule means.
+        "aliases": [{"id": alias.pk, "name": alias.name, "kind": alias.kind, "source": alias.source, "is_current": alias_is_current_name(alias, wiki)} for alias in wiki.aliases.all()],
         "links": [{"id": link.pk, "name": link.name, "url": link.url, "wayback_url": link.wayback_url or None, "order": link.order} for link in wiki.links.order_by("order", "pk")],
         "stats": _stats(wiki, profile),
         "article": _article_summary(wiki, profile),

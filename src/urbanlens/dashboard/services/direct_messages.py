@@ -27,6 +27,7 @@ if TYPE_CHECKING:
 
     from django.db.models import QuerySet
 
+    from urbanlens.dashboard.models.group_chats.model import GroupMessage
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.global_search.parser import ParsedQuery
 
@@ -853,11 +854,19 @@ def delete_message_for_self(message: DirectMessage, actor: Profile) -> DirectMes
     return message
 
 
-def reaction_summary(message: DirectMessage) -> list[dict[str, Any]]:
+def reaction_summary(message: DirectMessage | GroupMessage) -> list[dict[str, Any]]:
     """Summarize a message's reactions grouped by emoji.
 
+    Accepts either message kind on purpose. ``Reaction`` is one table with a
+    nullable foreign key per host (see ``models.reactions``), so a group
+    message's reactions live in the same rows under the same ``reactions``
+    related name, and the summary a client renders is identical for both.
+    Writing a second, group-flavoured copy of this would be how the two
+    summaries eventually disagree about (say) how a masked reactor's slug is
+    reported, in a place nobody would think to compare.
+
     Args:
-        message: The message whose reactions to summarize.
+        message: The direct or group message whose reactions to summarize.
 
     Returns:
         A list of ``{"emoji", "count", "slugs"}`` dicts, one per distinct
@@ -925,6 +934,59 @@ def toggle_reaction(profile: Profile, message: DirectMessage, emoji: str) -> str
         action = "added"
     _broadcast_reaction(message)
     return action
+
+
+def is_conversation_muted(viewer: Profile, partner: Profile) -> bool:
+    """Return whether `viewer` has muted notifications from `partner`.
+
+    Args:
+        viewer: The profile who may have muted.
+        partner: The profile whose messages may be muted.
+
+    Returns:
+        True when a mute row exists for this ordered pair.
+    """
+    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+
+    return DirectMessageMute.objects.for_pair(viewer, partner).exists()
+
+
+def set_conversation_muted(viewer: Profile, partner: Profile, *, muted: bool) -> bool:
+    """Put one conversation's mute state into the requested state, idempotently.
+
+    Declarative rather than a toggle, and that is the whole point of it
+    existing. Every caller before this one flipped the flag, which is unusable
+    over an unreliable link: a retried "mute" whose first (successful) response
+    was lost silently un-mutes the conversation, and the user then misses
+    exactly the notifications they asked to keep off - or gets back the ones
+    they silenced. Naming the desired end state makes a duplicate request a
+    no-op instead of an inversion.
+
+    Muting is **notification-only**, matching ``DirectMessageMute``'s own
+    contract: the conversation, its unread counts, and message delivery are all
+    untouched, and muted threads must keep appearing in the conversation list.
+    Filtering them out would look like a tidy extra feature and would instead
+    hide messages the user still expects to be able to find.
+
+    Args:
+        viewer: The profile whose notification preference this is.
+        partner: The profile whose messages are being muted or unmuted.
+        muted: The desired end state.
+
+    Returns:
+        The resulting mute state, which is always ``muted`` - returned so
+        callers can echo the persisted truth rather than the value they asked
+        for.
+    """
+    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+
+    if muted:
+        # get_or_create, not create: the unique constraint on (viewer, sender)
+        # would otherwise turn a retried mute into an IntegrityError 500.
+        DirectMessageMute.objects.get_or_create(viewer=viewer, sender=partner)
+    else:
+        DirectMessageMute.objects.for_pair(viewer, partner).delete()
+    return muted
 
 
 def display_identity_for(viewer: Profile, partner: Profile) -> dict[str, Any]:

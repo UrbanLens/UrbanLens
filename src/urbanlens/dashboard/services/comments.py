@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.reactions.model import Reaction
+from urbanlens.dashboard.services.comment_notifications import notify_reaction
 from urbanlens.dashboard.services.identity_visibility import mask_profile_references
 from urbanlens.dashboard.services.mentions import extract_location_mentions, render_comment_text, viewer_pinned_uuids
 
@@ -263,6 +264,12 @@ def create_comment(*, profile: Profile, pin: Pin | None = None, wiki: Wiki | Non
 def toggle_reaction(profile: Profile, comment: Comment, emoji: str) -> bool:
     """Add *profile*'s reaction to *comment*, or remove it if already present.
 
+    Adding notifies the comment's author (see
+    :func:`~urbanlens.dashboard.services.comment_notifications.notify_reaction`);
+    removing deliberately does not, because "someone un-reacted to your
+    comment" is not an event worth a notification and sending one would let a
+    reaction be toggled repeatedly to spam the author.
+
     Args:
         profile: The reacting profile.
         comment: The comment being reacted to.
@@ -284,4 +291,10 @@ def toggle_reaction(profile: Profile, comment: Comment, emoji: str) -> bool:
         return False
 
     Reaction.objects.create(profile=profile, emoji=emoji, comment=comment)
+    # The internal HTMX panel has always notified here; the external API's
+    # reaction endpoints route through this service instead of the panel, so
+    # without this line reacting from the mobile client silently notified
+    # nobody - the same reaction produced a notification on the web and none
+    # over the API.
+    notify_reaction(profile, comment)
     return True

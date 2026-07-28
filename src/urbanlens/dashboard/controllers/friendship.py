@@ -32,6 +32,8 @@ from urbanlens.dashboard.services.friendship import (
     reject_friend_request,
     remove_friend as remove_friend_service,
     request_or_accept_friendship,
+    unblock_profile,
+    unmute_profile,
 )
 from urbanlens.dashboard.services.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
 
@@ -338,13 +340,51 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             missing_message="Profile not found.",
         )
 
+    def unblock_friend(self, request: HttpRequest, profile_id: int):
+        """Lift a block this user placed on ``profile_id``.
+
+        The profile page's Unblock button used to post to ``friend.remove``,
+        which reached ``remove_friend`` - a direction-agnostic transition that
+        would just as happily clear a block placed *on* the caller by someone
+        else. That is now refused at the service, so the button needs the real
+        inverse; ``unblock_profile`` also answers 404 rather than 403 when the
+        block is not the caller's, so nothing here confirms one exists.
+        """
+        return self._friend_action(
+            request,
+            profile_id,
+            unblock_profile,
+            htmx_response=lambda _request: HttpResponse("Unblocked."),
+            missing_message="Profile not found.",
+        )
+
     def mute_friend(self, request: HttpRequest, profile_id: int):
-        """Mute an existing relationship with ``profile_id``."""
+        """Mute an existing relationship with ``profile_id``.
+
+        Sets the ``muted`` flag only - the relationship itself (and so every
+        visibility gate that reads ``Profile.are_friends``) is untouched. See
+        ``services.friendship.mute_profile``.
+        """
         return self._friend_action(
             request,
             profile_id,
             mute_profile,
             htmx_response=lambda _request: HttpResponse("Muted."),
+        )
+
+    def unmute_friend(self, request: HttpRequest, profile_id: int):
+        """Un-mute an existing relationship with ``profile_id``.
+
+        The counterpart the profile page never had. Its Unmute button used to
+        post to ``friend.request``, which ``FriendshipStatus.can_request``
+        refuses for a ``Muted`` row, so unmuting always answered 400 and the
+        relationship could not be recovered from the UI at all.
+        """
+        return self._friend_action(
+            request,
+            profile_id,
+            unmute_profile,
+            htmx_response=lambda _request: HttpResponse("Unmuted."),
         )
 
     def remove_friend(self, request: HttpRequest, profile_id: int):
