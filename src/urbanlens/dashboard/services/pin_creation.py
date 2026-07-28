@@ -132,6 +132,7 @@ def create_pin_for_profile(
     place_canonical_name: str | None = None,
     client_uuid: UUID | None = None,
     parent_id: UUID | None = None,
+    name_is_user_provided: bool = False,
 ) -> PinCreationResult:
     """Create a Pin for a profile from raw, untrusted-shaped input.
 
@@ -176,6 +177,11 @@ def create_pin_for_profile(
             parent's own Location. A child pin is exempt from the
             one-root-pin-per-location rule, but not from the narrower rule that
             no two of a profile's pins may share an exact point.
+        name_is_user_provided: Whether ``name`` was deliberately typed by the
+            owner, rather than produced by a parser/importer. True protects it
+            from the automatic name-upgrade sweep
+            (:func:`tasks.upgrade_placeholder_pin_names`) exactly as an
+            explicit rename does. Ignored when ``name`` is blank.
 
     Returns:
         The created (or, for an idempotent replay, existing) pin plus every
@@ -239,13 +245,14 @@ def create_pin_for_profile(
 
     create_kwargs: dict = {
         "name": name,
-        # Creation/import is not an explicit rename.  In particular, file and
-        # offline-client imports commonly put a coordinate or another parser
-        # fallback in ``name``.  Marking every non-empty value as user-provided
-        # made that placeholder permanently outrank names discovered later.
-        # The flag is set by the rename endpoints when the owner deliberately
-        # changes the name.
-        "name_is_user_provided": False,
+        # Defaults to False because a create is not inherently a rename: file
+        # and offline-client imports commonly put a coordinate or another
+        # parser fallback in ``name``, and marking every non-empty value as
+        # user-provided made that placeholder permanently outrank names
+        # discovered later.  Callers that *know* a human typed the name (the
+        # map's add-pin dialog) pass True, which is the same thing the rename
+        # endpoints record.
+        "name_is_user_provided": name_is_user_provided and bool((name or "").strip()),
         "location": location,
         # Link to the place's community wiki when one already exists; wikis
         # are only ever created explicitly from the pin page.

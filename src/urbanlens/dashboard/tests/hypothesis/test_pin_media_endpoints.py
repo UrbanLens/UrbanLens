@@ -72,10 +72,21 @@ class CsrfEnforcedPinMediaEndpointTests(TestCase):
         response_mock = mock.Mock(content=b"fake-jpeg-bytes")
         response_mock.raise_for_status = mock.Mock()
         response_mock.raw.read.return_value = b"fake-jpeg-bytes"
-        with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=response_mock):
+        # A bare Mock's ``is_redirect`` is truthy, which sends
+        # fetch_with_revalidated_redirects down its redirect branch and hands
+        # urljoin() a Mock as the target (TypeError -> 500). Mirrors
+        # test_media_materialize._ok_response.
+        response_mock.is_redirect = False
+        with (
+            # example.test doesn't resolve (RFC 2606); pin the SSRF guard's
+            # hostname lookup to a fixed public IP so this stays a pure
+            # routing/CSRF test with no DNS dependency.
+            mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]),
+            mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=response_mock),
+        ):
             response = self._post_json(
                 reverse("pin.media.relevance", args=[pin.slug]),
-                {"source": "wikipedia", "url": "https://example.com/photo.jpg", "is_relevant": True},
+                {"source": "wikipedia", "url": "https://example.test/photo.jpg", "is_relevant": True},
             )
         self.assertNotEqual(response.status_code, 405, "media/relevance/ must not be shadowed by the media/<source>/ catch-all")
         self.assertNotEqual(response.status_code, 500)

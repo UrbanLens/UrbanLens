@@ -280,6 +280,21 @@ class PinOverviewEditableDescriptionTests(TestCase):
         content = self._get().content.decode()
         self.assertIn('data-raw-description="A crumbling old mill."', content)
 
+    def test_empty_description_still_renders_with_a_placeholder(self) -> None:
+        empty_pin = baker.make(Pin, profile=self.profile, description=None)
+        content = self._get(empty_pin).content.decode()
+        self.assertIn("pin-description--empty", content)
+        self.assertIn("Add a description...", content)
+        self.assertIn('data-raw-description=""', content)
+
+    def test_populated_description_does_not_carry_the_empty_modifier(self) -> None:
+        """Asserted against the partial, not the full page: the full page's
+        inline click-to-edit script mentions ``pin-description--empty`` as a
+        string literal (it toggles the class), so a whole-page ``assertNotIn``
+        can never pass regardless of the pin's description."""
+        content = self._get().content.decode()
+        self.assertNotIn("pin-description--empty", content)
+
 
 class PinDescriptionEditableTests(TestCase):
     """Full-page coverage: the description's click-to-edit JS and pin.edit wiring.
@@ -319,17 +334,6 @@ class PinDescriptionEditableTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.pin.refresh_from_db()
         self.assertEqual(self.pin.description, "Now fully collapsed.")
-
-    def test_empty_description_still_renders_with_a_placeholder(self) -> None:
-        empty_pin = baker.make(Pin, profile=self.profile, description=None)
-        content = self._get(empty_pin).content.decode()
-        self.assertIn("pin-description--empty", content)
-        self.assertIn("Add a description...", content)
-        self.assertIn('data-raw-description=""', content)
-
-    def test_populated_description_does_not_carry_the_empty_modifier(self) -> None:
-        content = self._get().content.decode()
-        self.assertNotIn("pin-description--empty", content)
 
 
 class PinEditRatingClearTests(TestCase):

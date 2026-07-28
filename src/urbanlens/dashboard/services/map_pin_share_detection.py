@@ -61,6 +61,17 @@ ASSUMED_VIEWPORT_HEIGHT_PX = 700
 #: Bearing tolerance (degrees either side) for "an arrow points toward a pin."
 ARROW_BEARING_TOLERANCE_DEGREES = 35.0
 
+#: Below this tail-to-target separation (in degrees) the tail-to-target bearing
+#: is numerically meaningless, so "does the arrow point at it" has no answer.
+#: A boundary centroid computed for a pin sitting exactly on an arrow's tail
+#: lands ~1e-14 degrees away from it through ordinary float error, and
+#: ``bearing_degrees`` happily turns that into a confident-looking angle - which
+#: matched within tolerance often enough to record shares of pins the sender
+#: never called out. ``Location`` stores coordinates at 6dp, so two genuinely
+#: distinct points are never closer than 1e-6 degrees; this sits well below
+#: that and well above the float noise.
+_DEGENERATE_TAIL_SEPARATION_DEGREES = 1e-7
+
 #: When zoomed out, how far beyond the viewport bounds a candidate pin may
 #: still be considered (an arrow drawn near the edge of the frame may point at
 #: a pin just outside it) - a query-cost prefilter, not a correctness rule.
@@ -227,7 +238,10 @@ def arrow_points_toward(item: PinMarkup, target: Point, *, tolerance_degrees: fl
 
     Returns:
         True if the tail-to-head bearing is within tolerance of the
-        tail-to-target bearing.
+        tail-to-target bearing. False when the target sits on the tail, where
+        that bearing is undefined (see
+        ``_DEGENERATE_TAIL_SEPARATION_DEGREES``) - an arrow drawn *from* a pin
+        is not an arrow pointing *at* it.
     """
     coords = (item.geometry or {}).get("coordinates") or []
     if len(coords) < 2:
@@ -236,6 +250,8 @@ def arrow_points_toward(item: PinMarkup, target: Point, *, tolerance_degrees: fl
         tail_lng, tail_lat = float(coords[0][0]), float(coords[0][1])
         head_lng, head_lat = float(coords[-1][0]), float(coords[-1][1])
     except (TypeError, ValueError, IndexError):
+        return False
+    if math.hypot(target.x - tail_lng, target.y - tail_lat) < _DEGENERATE_TAIL_SEPARATION_DEGREES:
         return False
     arrow_bearing = bearing_degrees(tail_lat, tail_lng, head_lat, head_lng)
     target_bearing = bearing_degrees(tail_lat, tail_lng, target.y, target.x)

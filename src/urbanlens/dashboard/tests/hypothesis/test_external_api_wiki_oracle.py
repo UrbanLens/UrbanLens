@@ -18,17 +18,37 @@ must produce a byte-identical response - same status, same body.
 
 from __future__ import annotations
 
+from unittest import mock
 from uuid import uuid4
 
 from django.contrib.auth.models import User
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.external_api.throttling import ExternalApiRateThrottle
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.api_keys import generate_api_key
 
 BASE = "/dashboard/api/external/v1/wikis"
+
+
+def disable_throttling(test_case) -> None:
+    """Turn off the external API's rate limits for the duration of *test_case*.
+
+    :data:`WIKI_ROUTES` is walked once per invisibility case over a single
+    credential, which is far past the burst allowance - without this the tail
+    of the list comes back 429 and the visibility gate these tests exist to
+    check never runs at all. Patching the shared base covers the read, write
+    and burst throttles at once. The throttles themselves are covered by
+    ``test_external_api_throttling.py``.
+
+    Args:
+        test_case: The test whose lifetime the patch should follow.
+    """
+    patcher = mock.patch.object(ExternalApiRateThrottle, "allow_request", return_value=True)
+    patcher.start()
+    test_case.addCleanup(patcher.stop)
 
 
 def grant_wiki_scopes(user) -> None:
@@ -90,6 +110,7 @@ class WikiDiscoveryOracleTests(TestCase):
         self.profile = Profile.objects.get(user=self.user)
         _key, self.raw_key = generate_api_key(self.user, "Oracle client")
         grant_wiki_scopes(self.user)
+        disable_throttling(self)
 
         # (1) nothing at this slug at all.
         self.missing_slug = str(uuid4())

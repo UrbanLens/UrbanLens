@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import re
 from unittest.mock import patch
 
 from django.template.loader import render_to_string
@@ -30,6 +31,29 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityRSVP, TripActivityVote, TripMembership
+
+#: A rendered CSRF token: exactly 64 characters from Django's 62-character
+#: alphabet. ``{% csrf_token %}`` re-masks the same secret on every call, so a
+#: page embeds several *different* strings (the hidden input, base.html's
+#: ``var csrftoken``, the JS config blob) and two renders never match
+#: byte-for-byte. Matching on the shape covers all of them at once.
+_CSRF_TOKEN_RE = re.compile(rb"(?<![A-Za-z0-9])[A-Za-z0-9]{64}(?![A-Za-z0-9])")
+
+
+def _without_csrf_tokens(content: bytes) -> bytes:
+    """Blank out per-request CSRF tokens so two responses can be compared.
+
+    The masking is random per render and reveals nothing about the page, so
+    normalizing it is what makes an "these two responses are identical" check
+    meaningful rather than flaky.
+
+    Args:
+        content: A rendered response body.
+
+    Returns:
+        The body with every CSRF-token-shaped run replaced by a constant.
+    """
+    return _CSRF_TOKEN_RE.sub(b"REDACTED", content)
 
 
 def _make_trip(creator_profile: Profile, **kwargs) -> Trip:
@@ -342,7 +366,10 @@ class TripDetailViewTests(TestCase):
         missing = client.get(reverse("trips.detail", kwargs={"trip_slug": "no-such-trip-slug"}))
         self.assertEqual(forbidden.status_code, 404)
         self.assertEqual(missing.status_code, 404)
-        self.assertEqual(forbidden.content, missing.content)
+        # Django masks the CSRF token afresh per render, so the values differ
+        # between any two responses - including two identical ones. They leak
+        # nothing about the trip; everything else must match exactly.
+        self.assertEqual(_without_csrf_tokens(forbidden.content), _without_csrf_tokens(missing.content))
 
     def test_nonexistent_trip_returns_404(self):
         client = Client()

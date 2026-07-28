@@ -12,9 +12,11 @@ None are regressions from the Place-consolidation phase-0 work: the four files w
 could plausibly have been caused by it were run with that change set `git stash`ed and again with
 it applied, giving **byte-identical results both ways (12 failed, 117 passed, same test IDs)**.
 
-**14 of the 46 are now FIXED** (2026-07-27, same session). The pattern behind almost all of them:
-*tests that depend on ambient machine state or on an implementation shape that has since changed*.
-They pass on a bare CI box with no credentials and fail on a dev box that has them, or vice versa.
+**33 of the 46 are now FIXED** (2026-07-27, same session). Two patterns dominate:
+*tests that depend on ambient machine state or on an implementation shape that has since changed*
+(1-6, 11-14 below - they pass on a bare CI box with no credentials and fail on a dev box that has
+them, or vice versa), and *test-harness behavior leaking into the thing under test* (7-8). Only two
+of the 33 turned out to be product bugs (9-10).
 
 Fixed:
 
@@ -42,24 +44,103 @@ Fixed:
    iterated a bare MagicMock and got nothing, so the expects-a-colour cases failed and the
    expects-None cases passed **without exercising anything**.
 
-Still open, each needing its own investigation:
+**A further 19 across ten files are now also FIXED** (2026-07-27, same session). That set was
+previously listed here as "genuine failures reproducible in isolation" - **that label was wrong for
+more than half of them**, and the correction is the useful part. Those ten files now give
+**344 passed, 0 failed**. Two systemic causes accounted for twelve:
 
-- **Cross-test pollution, not real failures.** `test_external_api_wiki_oracle.py::
-  WikiDiscoveryOracleTests` reported 7 SUBFAILEDs in the big sweep but **passes cleanly in
-  isolation**. Re-check anything there in isolation before treating it as a bug - it guards the
-  wiki-existence oracle, so a spurious failure reads like a security regression.
-- **Genuine failures reproducible in isolation**: `test_pin_edit_controller.py::
-  PinDescriptionEditableTests` (2), `test_profile_hero_meta_editable.py` (2),
-  `test_trip_controller.py` (1), `test_location_place_name_lazy.py` (1),
-  `test_pin_media_endpoints.py` (1), `test_direct_messages.py` (1),
-  `test_export_import_completeness.py::RoundTripCommentsTests` (8),
-  `test_pin_location_conflict.py` (1), `test_share_provenance.py` (2),
-  `test_map_pin_share_detection_integration.py` (1). Given the six causes above, check first
-  whether each depends on ambient config or on a stale mock shape before assuming a product bug.
-- Plus the friend-invite privacy cluster documented below (7).
+7. **`@given` + a row-writing `setUp` leaked rows across an entire test class** (10 failures:
+   `RoundTripCommentsTests` 8, `ArbitraryChainDepthPropertyTests` 2). `hypothesis.extra.django`'s
+   mixin routes `@given` tests through `unittest.TestCase.__call__`, bypassing Django's
+   `_pre_setup`/`_post_teardown` wrapper; hypothesis instead calls those per *example*. `setUp` is
+   still called once by `unittest`'s `run()` - before the first example, so **outside every
+   per-example transaction**. Its rows landed in the class-level atomic and survived to
+   `tearDownClass`, so the *next* test in the class died in its own `setUp` on
+   `dashboard_locations_latitude_longitude_uniq`. Fixed once for the whole repo in
+   `core/tests/testcase.py`: `TestCase` now defers `setUp`/`tearDown` (and drains cleanups) into
+   `setup_example`/`teardown_example`. **Any class mixing a `@given` test with a row-writing
+   `setUp` was affected**, which is most of `tests/hypothesis/`.
+8. **`UL_CELERY_TASK_ALWAYS_EAGER=True` turns "dispatched to a worker" into "ran inline"** (2
+   failures). Needed for local non-Docker pytest, but it silently invalidates any test asserting
+   that a request *didn't* do background work.
+   - `test_direct_messages.py::...::test_second_message_in_same_streak_is_debounced` -
+     `create_direct_message` schedules the alert task, which ran eagerly *outside* the test's patch
+     and claimed the debounce marker, so both explicit calls were no-ops.
+   - `test_location_place_name_lazy.py::...::test_page_render_never_calls_the_live_resolver` - the
+     view correctly dispatches `resolve_location_place_name`; eager mode then resolved *during the
+     request*, which is exactly what the test forbids. It was **order-dependent, not
+     isolation-clean**: it passed when the whole file ran (the preceding class masked it) and
+     failed when run alone.
+   Both now stub `safely_enqueue_task` so they measure the request path, which is the actual claim.
+
+Two were **real product bugs**, both fixed:
+
+9. `services/map_pin_share_detection.arrow_points_toward` returned a garbage answer when a pin sat
+   on an arrow's tail. The boundary centroid lands ~1e-14 degrees off the tail through ordinary
+   float error, and `bearing_degrees` turns that ~1-nanometre displacement into a confident angle -
+   measured at `106.29` vs the arrow's own `89.36`, inside the 35-degree tolerance. An arrow drawn
+   *from* a pin and pointing away therefore recorded a **DETECTED `PinShare` the sender never
+   intended**. Now guarded by `_DEGENERATE_TAIL_SEPARATION_DEGREES` (1e-7, far below the 1e-6
+   coordinate storage precision), with a property test over arrow headings.
+10. Creating a pin through the map's add-pin dialog never set `name_is_user_provided`, so a
+    hand-typed name was eligible for the `tasks.upgrade_placeholder_pin_names` sweep that clears
+    non-user-provided names - despite that task's own docstring defining the flag as "a user
+    actually typed something". `create_pin_for_profile` now takes an explicit
+    `name_is_user_provided` (default False, preserving importer/offline-sync semantics) and
+    `maps.post_add_pin` passes it. **Left deliberately unchanged:** the external API's pin-create
+    still defaults to False, so a name typed in the mobile app is not protected until edited -
+    inconsistent with its own PATCH path (`external_api/views.py:746`), and worth a decision.
+
+The remaining five were test bugs of one shape: **substring assertions against a whole page, where
+the string also appears inside the page's own inline `<script>`**.
+
+11. `test_pin_edit_controller.py::PinDescriptionEditableTests` (2) - asserted description *markup*
+    against the full page, but `#pin-overview` is `hx-get`-loaded, so the markup is only in the
+    partial. Both classes' docstrings already documented this split. The assertions moved to
+    `PinOverviewEditableDescriptionTests`, which renders the partial. Note
+    `assertNotIn("pin-description--empty", full_page)` could **never** pass - the click-to-edit
+    script toggles that class by name.
+12. `test_profile_hero_meta_editable.py` (2) - same thing; the wiring script builds
+    `>Add when you started exploring...</span>` as a string literal, so even the `>...<` idiom the
+    file already used elsewhere was insufficient. Now strips `<script>` blocks and asserts against
+    the markup.
+13. `test_trip_controller.py::...::test_outsider_gets_404_indistinguishable_from_a_missing_trip` -
+    compared two responses byte-for-byte including the CSRF token. Django re-masks the token per
+    call, so a page holds several *different* strings for one secret and no two renders ever match.
+    Now normalizes token-shaped runs before comparing.
+14. `test_pin_media_endpoints.py` (1) - a bare `mock.Mock()` has a truthy `is_redirect`, sending
+    `fetch_with_revalidated_redirects` down its redirect branch and handing `urljoin` a Mock
+    (`TypeError` -> 500). The sibling `test_media_materialize._ok_response` sets it correctly. Also
+    removed the test's real-DNS dependency.
+
+15. **`test_external_api_wiki_oracle.py::WikiDiscoveryOracleTests` was 429ing, not 404ing** (12
+    SUBFAILEDs). An earlier revision of this file claimed it "passes cleanly in isolation" -
+    **that was wrong**; it fails alone too. The class walks all 24 `WIKI_ROUTES` once per
+    invisibility case over a single credential (72 requests), which blows past
+    `ExternalApiBurstThrottle`, so the tail of the list came back **429 instead of 404**. The four
+    routes at the end of `WIKI_ROUTES` are the comment writes, which is why the failures looked
+    suspiciously like a comments-specific security hole. It was not one: all three cases returned
+    429 *identically*, so the anti-enumeration property held throughout. `setUp` now calls
+    `disable_throttling(self)`.
+
+    **The part worth keeping:** because those four routes never got past the throttle, the oracle
+    guarantee for `POST comments/`, `DELETE comments/1/` and both reaction routes was **silently
+    unverified** - the test looked like it covered them and did not. It now genuinely does, and
+    they pass. When a sub-resource is appended to `WIKI_ROUTES`, check it is actually reached.
+
+Measured on `-k "external_api or api_key"` (2026-07-27): **59 failed / 668 passed** before this
+session's fixes, **12 failed / 715 passed** once causes 7-8 landed, and **715 passed / 435 subtests
+passed / 0 failed** once 15 did. Note the original 59-failure figure was only partially itemized at
+the time: the capture had been truncated by a `Select-Object` filter, so ~45 of those were never
+inspected individually; they stopped failing across causes 7-8.
+
+Still open:
+
+- The friend-invite privacy cluster documented below (7).
 
 Reproduce a baseline cheaply with `pytest <files> -q --reuse-db` after `git stash`, rather than
-re-running the whole 41-minute sweep.
+re-running the whole 41-minute sweep. Set `UL_TEST_DB_NAME` to something unique per agent and
+`UL_CELERY_TASK_ALWAYS_EAGER=True` (see cause 8 for what that costs you).
 
 ## RESOLVED 2026-07-27: `test_websocket_auth.py::test_valid_api_key_authenticates_an_anonymous_socket` times out
 
@@ -80,8 +161,6 @@ base.py keeps the real hashers everywhere else). Speeds up every test that bakes
 side benefit.
 
 ## RESOLVED 2026-07-27: `get_nearby_or_create(threshold_meters=0)` could 500 on sub-precision coordinate collisions
-
-## OPEN 2026-07-27: `get_nearby_or_create(threshold_meters=0)` can 500 on sub-precision coordinate collisions
 
 `Location.latitude`/`longitude` are `DecimalField(max_digits=9, decimal_places=6)`, so the
 database rounds to 6dp on insert - but `Location.save()` builds the PostGIS `point` from the raw
