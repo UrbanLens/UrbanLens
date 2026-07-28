@@ -21,7 +21,7 @@ UrbanLens is a Django mapping application for photographers and urban explorers 
 Always run ruff with `--fix`, so you don't waste time looking at issues ruff can solve. `migrations/`, `settings/`, `tests/`, and `__init__.py` are excluded from ruff by the config in `pyproject.toml`.
 
 **MyPy**
-When examining mypy output, never use cast or similar solutions. Remember that the purpose of mypy is to find real errors and improve code quality, not to silence warnings. This will sometimes require going back to the origin of the call and adjusting types, rather than trying to paper over it at the point of failure. If the code at the origin is making a false assumption, fix the bug. Doing things like implementing generics is needed to address some types of mypy warnings. If you're unsure, mark it as a TODO instead of doing things to silence the warning.
+When examining mypy output, never use cast or similar solutions. The purpose of mypy is to find real errors and improve code quality, not to silence warnings. This will sometimes require going back to the origin of the call and adjusting types, rather than trying to paper over it at the point of failure. If the code at the origin is making a false assumption, fix the bug. Things like generics are needed to address some types of mypy warnings. If you're unsure, mark it as a TODO instead of silencing the warning.
 
 **pre-commit**: runs twice (first pass silent) so formatting fixes are applied before real failures are output.
 
@@ -103,13 +103,18 @@ OOP is the standard approach throughout this codebase. Prefer inheritance (with 
 - Modern Python (3.12+) and modern package versions over legacy alternatives
 - Choose actively maintained, modern libraries over dated equivalents
 
+**Comments**:
+Comments should be concise, and only included when it is not already obvious. Assume that someone competent, who is familiar with the tech we're using, will be working on the code after you, and they will be burdened by unnecessary explanation.
+
+Do not leave comments about war stories during a fix. If an explanation is absolutely necessary, just explain why this is the approach now. Do not authoritatively state we've made design decisions, because it discourages reassessing our implementation in the future.
+
 ## Testing Infrastructure
 
-Custom runner in `urbanlens.core.tests.runner.TestRunner` (extends DiscoverRunner):
+Custom DiscoveryRunner in `urbanlens.core.tests.runner.TestRunner`:
 - Uses Model Bakery for fixture generation
 - Suppresses logs on passing tests, surfaces them on failure
 
-Do not create unit tests for trivial code, such as __init__.py, or to test that a logging message precisely matches a string, especially when it will cause extremely minor changes to result in tests failing. Make sure to mock and patch appropriately, especially when testing anything that contacts an external service. Add hypothesis property-based unit tests whenever possible. Use SimpleTestCase when DB access isn't needed.
+Test everything substantive. Do not create trivial unit tests, such as __init__.py, or to test that a logging message precisely matches a string, especially when it will cause extremely minor changes to result in tests failing. Make sure to mock and patch appropriately, especially when testing anything that contacts an external service. Add hypothesis property-based unit tests whenever possible. Use SimpleTestCase when DB access isn't needed.
 
 **Test-running gotchas**:
 - Use pytest, not `manage.py test`
