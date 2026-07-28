@@ -3,7 +3,12 @@ friends-always-qualify rule.
 
 Covers:
 - VisibilityChoice contains ANYTHING_IN_COMMON and is ordered least → most restrictive
-- New-profile defaults changed from ANYONE to ANYTHING_IN_COMMON
+- New-profile defaults changed from ANYONE to ANYTHING_IN_COMMON, except
+  friend_request_visibility, which was moved back to ANYONE (see
+  models/profile/model.py's comment on the field): invite_by_email's
+  unregistered-address branch always sends the invite, so gating the
+  registered-account branch behind ANYTHING_IN_COMMON made having an account
+  strictly harder to reach by friend request than not having one.
 - Accepted friends qualify for every relationship-based visibility option
   (everything except NO_ONE) across profile, contact, image, trip-activity,
   and friend-request checks
@@ -87,7 +92,8 @@ class VisibilityChoiceEnumTests(SimpleTestCase):
 
 
 class VisibilityDefaultsTests(TestCase):
-    """New profiles default to ANYTHING_IN_COMMON where they previously used ANYONE."""
+    """New profiles default to ANYTHING_IN_COMMON where they previously used ANYONE -
+    except friend_request_visibility, moved back to ANYONE (see module docstring)."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -99,8 +105,10 @@ class VisibilityDefaultsTests(TestCase):
     def test_comment_visibility_default(self) -> None:
         self.assertEqual(self.profile.comment_visibility, VisibilityChoice.ANYTHING_IN_COMMON)
 
-    def test_friend_request_visibility_default(self) -> None:
-        self.assertEqual(self.profile.friend_request_visibility, VisibilityChoice.ANYTHING_IN_COMMON)
+    def test_friend_request_visibility_still_defaults_to_anyone(self) -> None:
+        """Unlike its siblings above, this one was moved back to ANYONE - see
+        the class/module docstring."""
+        self.assertEqual(self.profile.friend_request_visibility, VisibilityChoice.ANYONE)
 
     def test_photo_upload_visibility_default(self) -> None:
         self.assertEqual(self.profile.photo_upload_visibility, VisibilityChoice.ANYTHING_IN_COMMON)

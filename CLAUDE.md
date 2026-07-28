@@ -115,8 +115,7 @@ Do not create unit tests for trivial code, such as __init__.py, or to test that 
 - Use pytest, not `manage.py test`
 - **Set `UL_TEST_DB_NAME`** to a unique value when running pytest, so parallel agent
   sessions don't collide.
-- **Hypothesis `@given` and `self.client` don't mix** in this repo's TestCase - the test client
-  keeps state across generated examples. Use `@given` for pure logic; use plain tests for views.
+
 - When a user reports a bug you plan to fix, first reproduce it with a failing unit test (TDD),
   then fix - the test guards against regression.
 

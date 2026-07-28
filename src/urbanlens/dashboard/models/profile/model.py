@@ -144,10 +144,16 @@ class Profile(abstract.PublicDashboardModel):
         choices=VisibilityChoice.choices,
         default=VisibilityChoice.ANYTHING_IN_COMMON,
     )
+    # ANYONE, not ANYTHING_IN_COMMON: invite_by_email's unregistered-address
+    # branch always sends the invitation, unconditionally - so a stricter
+    # default here would make having an account *harder* to reach by friend
+    # request than not having one, which is backwards. The migration that
+    # changed this default backfills existing rows that were still at the old
+    # default, on the same reasoning as welcome_onboarding_complete above.
     friend_request_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,
-        default=VisibilityChoice.ANYTHING_IN_COMMON,
+        default=VisibilityChoice.ANYONE,
     )
     photo_upload_visibility = CharField(
         max_length=20,

@@ -634,6 +634,7 @@ class PinsView(ExternalApiView):
                 pin_type=data.get("pin_type"),
                 client_uuid=data.get("uuid"),
                 parent_id=data.get("parent_id"),
+                name_is_user_provided=data.get("name_is_user_provided", False),
             )
         except PinCreationForbiddenError as exc:
             return Response({"error": str(exc)}, status=403)

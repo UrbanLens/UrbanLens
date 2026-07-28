@@ -195,7 +195,58 @@ Two adjacent bugs surfaced while fixing it, both also fixed:
   unhandled `IntegrityError`. It now raises `PinMoveError` (400 on both the internal and external
   endpoints). Child pins are deliberately unaffected - sharing a parcel is their purpose.
 
-## OPEN 2026-07-26: nine pre-existing friend-invite / pin-sync test failures on `feature/external-api-mobile-v2`
+## RESOLVED 2026-07-27: assigning `Location.cid` performed a synchronous Google lookup
+
+`Location.cid`'s setter (`models/location/model.py`) called
+`GooglePlaceService().set_cid_for_entity(self, value)` and took that method's
+`fetch_if_missing=True` default, so `location.cid = 123` - an assignment that reads like setting a
+field - issued a live Google call to resolve a place name for the coordinates. This is what made
+`test_legacy_cid_coordinate_fix.py` hit the network (see cause 1 in the big entry above); the test
+was fixed at the time, the setter was not.
+
+The setter now passes `fetch_if_missing=False`, matching `place_name`'s documented cache-only
+stance a few lines above it. Callers that genuinely want the lookup should call the service
+directly, where the cost is visible.
+
+Worth knowing: **every** production caller of `set_cid_for_entity` (`services/apis/locations/
+google/maps.py:240,769`) already passed `fetch_if_missing=False` explicitly. The setter was the
+only code path anywhere taking the blocking default, so that default currently has no users. It
+is left as-is - flipping it is a wider API decision - but a future caller relying on it should
+know it is a trap rather than a considered default.
+
+## RESOLVED 2026-07-27: nine pre-existing friend-invite / pin-sync test failures on `feature/external-api-mobile-v2`
+
+**Resolved.** The open question below - "is the gate right, or do the tests encode a real product
+requirement?" - was settled in favour of the gate, on three pieces of evidence: the code comment
+documents it as a deliberate fix, `request_friend` runs the same evaluator (so exempting the email
+path would reintroduce exactly the asymmetry the fix closed), and the bypass it replaced is
+recorded as a vulnerability further down this file. Knowing someone's email address is not a
+secret worth overriding their stated preference for.
+
+So the eight friend-invite tests were stale. They now use a `make_invitable_user` helper
+(`test_friend_invite_privacy.py`) that opts the *target* into `ANYONE`, keeping each test on its
+actual subject; `test_response_identical_regardless_of_target_friend_request_visibility` sets both
+ends explicitly since it is the one test genuinely about the gate. **29 passed.**
+
+The ninth, `PinSyncViewTests::test_child_pins_are_served_with_their_parent_uuid`, was fixed
+independently by the child-pin location work (`resolve_child_pin_location` /
+`get_exact_or_create`) - its `PinCreationError: You already have a pin at this location.` was that
+exact bug. **10 passed.**
+
+**RESOLVED 2026-07-28**: the "invite a friend by email is a no-op for two already-registered
+users" consequence flagged above was decided in favour of option (b) - soften the default.
+`friend_request_visibility`'s default is now `ANYONE` rather than `ANYTHING_IN_COMMON`
+(`models/profile/model.py`, migration `0018_alter_friend_request_visibility_default.py`), on the
+reasoning that having an account should never make a user *harder* to reach by friend request than
+not having one - which is what the stricter default did, since `invite_by_email`'s
+unregistered-address branch always sends the invitation unconditionally. The migration backfills
+existing profiles still at the old default (not ones a user deliberately changed) - see the
+migration's own comment for the reasoning, mirrored from the `welcome_onboarding_complete`
+precedent in `0002`/`0003`. `test_anything_in_common.py::VisibilityDefaultsTests` updated to match
+(every other `ANYTHING_IN_COMMON`-by-default field is unaffected - this was scoped to
+`friend_request_visibility` only). 205 passed across every suite touching this setting.
+
+## Historical detail from the original 2026-07-26 report
 
 Found while building the external-API social domain. **Not caused by that work** - verified by
 reverting `controllers/friendship.py` and `controllers/notifications.py` to `f529b0f4` and
@@ -459,13 +510,13 @@ same response. `services/ai/cloudflare.py`'s parser correctly does *not* self-ca
 other two are a regression rather than by design. Every assistant-chat, document-import, vision-keyword,
 and auto-tag cost/token estimate for Anthropic and OpenAI is currently ~2x actual.
 
-**Friend-request-visibility bypass via the email-invite path.**
-`controllers/friendship.py:666` (`invite_by_email`) only checks
-`to_profile.friend_request_visibility != VisibilityChoice.NO_ONE` for a matched existing account,
-unlike `request_friend` (line 317) which runs the full `Profile.visibility_permits` evaluator. A
-profile restricted to `FRIENDS`/`COMMON_PIN`/`COMMON_FRIEND`/`COMMON_TRIP`/`ANYTHING_IN_COMMON`
-(anything short of `NO_ONE`) can still be friend-requested by any stranger who knows their email.
-Only the `NO_ONE` case has test coverage (`test_friend_invite_privacy.py`).
+**~~Friend-request-visibility bypass via the email-invite path.~~ FIXED - this entry was stale
+(verified 2026-07-27).** It described `invite_by_email` checking only
+`to_profile.friend_request_visibility != VisibilityChoice.NO_ONE`. That logic has since moved out
+of the controller into `services/friendship.py:invite_by_email`, which runs the full
+`Profile.visibility_permits` evaluator - the same one `request_friend` uses. The non-`NO_ONE`
+cases this entry correctly flagged as untested are now covered; see the resolved friend-invite
+entry above, including the UX consequence the fix carries.
 
 **`common_pin_count` is shown regardless of its own visibility gate.**
 `controllers/userprofile.py:157-158` + `templates/pages/profile/index.html:66-77` — the *count* of

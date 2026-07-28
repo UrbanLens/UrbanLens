@@ -120,6 +120,16 @@ class PinCreateSerializer(serializers.Serializer):
     #: would be swallowed by the default fuzzy-location dedup instead of
     #: creating the distinct child.
     parent_id = serializers.UUIDField(required=False, allow_null=True, default=None)
+    #: Whether ``name`` is a name a human deliberately typed, rather than one
+    #: a parser produced. Only the client knows which: an interactive app
+    #: sends True for a name entered in its pin form, while an importer or
+    #: offline outbox replaying captured data leaves it False so a coordinate
+    #: string or "Dropped Pin" fallback doesn't permanently outrank the real
+    #: name discovered later (see ``tasks.upgrade_placeholder_pin_names``).
+    #: Defaults to False, so a client that says nothing keeps the safe
+    #: importer behavior. ``PATCH`` needs no equivalent - an edit naming a pin
+    #: is by definition its owner doing so deliberately.
+    name_is_user_provided = serializers.BooleanField(required=False, default=False)
 
     def validate(self, attrs: dict) -> dict:
         """Require either coordinates or an address - mirrors the map form's own client-side check."""

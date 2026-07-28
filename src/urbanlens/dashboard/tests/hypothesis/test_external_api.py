@@ -109,6 +109,26 @@ class PinCreateViewTests(TestCase):
         pin = Pin.objects.get(uuid=response.json()["uuid"])
         self.assertFalse(pin.name_is_user_provided)
 
+    def test_client_can_declare_a_name_as_deliberately_typed(self) -> None:
+        """An interactive client (the mobile app's pin form) opts in explicitly.
+
+        Without this the name a user typed stayed unprotected until they
+        happened to edit it, leaving it eligible for the placeholder-name
+        upgrade sweep. The default stays False so importers and offline
+        outboxes keep the behavior the two tests above pin down.
+        """
+        response = self._post({"name": "Old Mill", "latitude": 42.5, "longitude": -73.5, "name_is_user_provided": True})
+        self.assertEqual(response.status_code, 201, response.content)
+        pin = Pin.objects.get(uuid=response.json()["uuid"])
+        self.assertTrue(pin.name_is_user_provided)
+
+    def test_declaring_a_blank_name_user_provided_is_ignored(self) -> None:
+        """The flag guards a name; with no name there is nothing to guard."""
+        response = self._post({"name": "", "latitude": 42.6, "longitude": -73.6, "name_is_user_provided": True})
+        self.assertEqual(response.status_code, 201, response.content)
+        pin = Pin.objects.get(uuid=response.json()["uuid"])
+        self.assertFalse(pin.name_is_user_provided)
+
     def test_missing_coordinates_and_address_is_rejected(self) -> None:
         response = self._post({"name": "Nowhere"})
         self.assertEqual(response.status_code, 400)
