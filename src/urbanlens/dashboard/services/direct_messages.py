@@ -174,11 +174,33 @@ def can_direct_message(sender: Profile, recipient: Profile) -> bool:
     return recipient.accepts_direct_messages_from(sender)
 
 
-def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
+def direct_message_images_visible_to(message: DirectMessage, viewer: Profile) -> bool:
+    """Return True when ``viewer`` may receive raw image URLs for ``message``.
+
+    The consent UI is only meaningful if pending recipients never receive the
+    underlying media URL in HTML or live JSON.
+    """
+    if viewer.pk == message.sender_id:
+        return True
+    if viewer.pk != message.recipient_id:
+        return False
+    if message.images_revealed:
+        return True
+
+    from urbanlens.dashboard.models.direct_messages.image_permission import DirectMessageImagePermission
+    from urbanlens.dashboard.models.direct_messages.meta import ImagePermissionStatus
+
+    permission = DirectMessageImagePermission.objects.for_pair(viewer, message.sender).first()
+    return bool(permission and permission.status == ImagePermissionStatus.ALLOWED)
+
+
+def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None = None) -> dict[str, Any]:
     """Serialize a message into the JSON payload pushed over the WebSocket.
 
     Args:
         message: The message to serialize.
+        viewer: The profile who will receive this payload. Image URLs are
+            withheld unless this viewer has consented to see them.
 
     Returns:
         A JSON-serializable dict; ``sender_slug``/``recipient_slug`` let the
@@ -204,6 +226,10 @@ def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
             "key_version": quoted.key_version,
         }
 
+    message_images = list(message.images.all())
+    include_image_urls = bool(message_images) and viewer is not None and direct_message_images_visible_to(message, viewer)
+    images = [{"id": image.pk, **({"url": image.image.url} if include_image_urls else {})} for image in message_images]
+
     return {
         "type": "message",
         "id": message.pk,
@@ -215,7 +241,7 @@ def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
         "sender_slug": message.sender.slug or "",
         "sender_name": message.sender.username,
         "recipient_slug": message.recipient.slug or "",
-        "images": [{"id": image.pk, "url": image.image.url} for image in message.images.all()],
+        "images": images,
         "images_revealed": message.images_revealed,
         "markup_map_uuid": str(message.markup_map.uuid) if message.markup_map is not None else None,
         # Only a cheap presence flag - the actual share (pin/trip/friend
@@ -243,14 +269,16 @@ def _broadcast_direct_message(message: DirectMessage) -> None:
     Args:
         message: The freshly created message.
     """
-    payload = serialize_direct_message(message)
-    groups = {direct_message_group_name(message.sender_id), direct_message_group_name(message.recipient_id)}
+    payloads = {
+        direct_message_group_name(message.sender_id): serialize_direct_message(message, viewer=message.sender),
+        direct_message_group_name(message.recipient_id): serialize_direct_message(message, viewer=message.recipient),
+    }
 
     def _send() -> None:
         layer = get_channel_layer()
         if layer is None:
             return
-        for group in groups:
+        for group, payload in payloads.items():
             try:
                 async_to_sync(layer.group_send)(group, {"type": "dm.message", "message": payload})
             except Exception:

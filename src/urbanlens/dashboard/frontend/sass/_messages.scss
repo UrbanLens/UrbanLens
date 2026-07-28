@@ -1242,6 +1242,13 @@
         gap: .3rem;
     }
 
+    &__placeholder {
+        display: grid;
+        place-items: center;
+        background: rgba(255, 255, 255, .14);
+        color: rgba(255, 255, 255, .7);
+    }
+
     &__prompt {
         margin: 0;
     }

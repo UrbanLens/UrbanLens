@@ -139,6 +139,11 @@ class MaterializeMediaItemSsrfTests(TestCase):
             materialize_media_item(location=self.location, profile=self.profile, source="wikimedia", url="http://169.254.169.254/latest/meta-data/")
         mocked.assert_not_called()
 
+    def test_a_literal_cgnat_ip_target_is_rejected(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get") as mocked, pytest.raises(MaterializeError):
+            materialize_media_item(location=self.location, profile=self.profile, source="wikimedia", url="http://100.64.0.1/internal")
+        mocked.assert_not_called()
+
     def test_a_hostname_that_resolves_to_a_private_ip_is_rejected(self) -> None:
         with (
             mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("127.0.0.1", 0))]),
