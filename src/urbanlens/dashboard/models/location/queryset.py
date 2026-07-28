@@ -9,7 +9,7 @@ from django.contrib.gis.geos import Point
 from django.contrib.gis.measure import D
 
 # Django Imports
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.db.models import DecimalField, Q
 
 # App Imports
@@ -180,7 +180,18 @@ class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuer
         if existing is not None:
             return existing, False
         try:
-            return self.create(latitude=latitude_value, longitude=longitude_value, **(defaults or {})), True
+            # Nested atomic so the raced insert fails inside its *own*
+            # savepoint. Callers run this inside `transaction.atomic()` blocks
+            # (pin moves, in both `PinViewSet.partial_update` and
+            # `PinDetailView.patch`), and an IntegrityError raised in an outer
+            # transaction marks the whole thing for rollback - so catching it
+            # here without a savepoint left the connection in a broken state
+            # and the recovery query below raised TransactionManagementError
+            # instead of returning the winning row. The bare `except` turned a
+            # survivable race into a 500 in exactly the case it was written to
+            # survive.
+            with transaction.atomic():
+                return self.create(latitude=latitude_value, longitude=longitude_value, **(defaults or {})), True
         except IntegrityError:
             # A concurrent request inserted this coordinate pair between the
             # lookup and the insert - use that row rather than surfacing a 500.
@@ -221,7 +232,12 @@ class LocationManager(abstract.PublicDashboardManager.from_queryset(LocationQuer
             **(defaults or {}),
         }
         try:
-            location = self.create(**location_data)
+            # Nested atomic for the same reason as get_or_create_at_coordinates:
+            # without its own savepoint the IntegrityError poisons any
+            # enclosing transaction, and the recovery query below then raises
+            # TransactionManagementError instead of returning the winner.
+            with transaction.atomic():
+                location = self.create(**location_data)
         except IntegrityError:
             # A concurrent request created a Location at these exact coordinates between
             # the existence check above and this insert (the (latitude, longitude)

@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING, Any
 from rest_framework.pagination import PageNumberPagination
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from django.db.models import QuerySet
     from rest_framework.request import Request
     from rest_framework.response import Response
@@ -65,6 +67,7 @@ class PaginatedListMixin:
         request: Request,
         *,
         context: dict[str, Any] | None = None,
+        row_builder: Callable[[Any], Any] | None = None,
     ) -> Response:
         """Serialize one page of *queryset* into the standard envelope.
 
@@ -78,6 +81,17 @@ class PaginatedListMixin:
             context: Extra serializer context. Used to hand a serializer the
                 parent object its fields need (e.g. the pin an alias belongs
                 to), so a whole page resolves without a query per row.
+            row_builder: Optional per-row shaping applied *after* pagination,
+                for endpoints whose payload is a dict built from a model rather
+                than the model itself. Passing a queryset plus this is strictly
+                better than pre-building a list of dicts and paginating that:
+                the list comprehension form evaluates the whole queryset and
+                does its per-row work (resolving storage URLs, following
+                relations) for every row on every request, no matter which page
+                was asked for, so the page-size limit stops bounding anything
+                but the response body. Anything the builder needs that would
+                cost a query per row belongs in the queryset's
+                ``select_related``/``prefetch_related`` instead.
 
         Returns:
             A ``{count, next, previous, results}`` response for the requested
@@ -85,5 +99,6 @@ class PaginatedListMixin:
         """
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request, view=self)
-        serializer = serializer_class(page, many=True, context=context or {})
+        rows = [row_builder(item) for item in page] if row_builder is not None else page
+        serializer = serializer_class(rows, many=True, context=context or {})
         return paginator.get_paginated_response(serializer.data)

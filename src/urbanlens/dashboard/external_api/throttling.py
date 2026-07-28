@@ -276,6 +276,39 @@ class GlobalSearchThrottle(ExternalApiRateThrottle):
     tier = TIER_READ
 
 
+class AssistantMessageThrottle(ExternalApiRateThrottle):
+    """A tight cap on AI assistant chat turns.
+
+    Unlike an ordinary write, one assistant turn bills real model-provider
+    cost and can fan out to up to ``MAX_TOOL_CALLS`` (6) model round trips
+    before it replies - resync-shaped cost, the same reasoning as
+    :class:`GameStartThrottle`'s Street View call. The ordinary write cap
+    bounds how many writes a credential makes, which is the wrong question
+    when one of them can cost several billed model calls.
+
+    Applied *in addition* to the standard three by overriding
+    ``throttle_classes`` on the view, so a chat turn still counts against the
+    burst and write caps too.
+    """
+
+    scope = "external_api_assistant_message"
+    tier = TIER_WRITE
+
+    #: Used when the settings dict has no rate for :attr:`scope`. See
+    #: GameStartThrottle.get_rate for why a missing scope falls back here
+    #: instead of taking the endpoint down.
+    fallback_rate: ClassVar[str] = "60/hour"
+
+    def get_rate(self) -> str:
+        """Return the configured rate for this scope, or :attr:`fallback_rate`."""
+        from django.core.exceptions import ImproperlyConfigured
+
+        try:
+            return super().get_rate()
+        except ImproperlyConfigured:
+            return self.fallback_rate
+
+
 class CalendarExportThrottle(ExternalApiRateThrottle):
     """A tight cap on trip calendar export and unexport.
 
@@ -291,4 +324,18 @@ class CalendarExportThrottle(ExternalApiRateThrottle):
     """
 
     scope = "external_api_calendar"
+    tier = TIER_WRITE
+
+
+class SafetyLocationThrottle(ExternalApiRateThrottle):
+    """A generous cap on live-location PATCHes, sized for foreground GPS tracking.
+
+    An explorer sharing their position pings this every few seconds while a
+    check-in is active - the ordinary write cap (300/hour) would exhaust
+    itself in under an hour at that cadence. Applied *in addition* to the
+    standard three by overriding ``throttle_classes`` on the view, so a
+    location update still counts against the burst and write caps too.
+    """
+
+    scope = "external_api_safety_location"
     tier = TIER_WRITE

@@ -39,6 +39,7 @@ from urbanlens.dashboard.external_api.serializers_messaging import (
     GroupCreateSerializer,
     GroupMemberSerializer,
     GroupMembersSerializer,
+    GroupMessageSendSerializer,
     GroupRenameSerializer,
     MessageSendSerializer,
     MuteStateSerializer,
@@ -58,11 +59,13 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.direct_message_shares import ShareTargetNotFoundError, send_message_with_share
 from urbanlens.dashboard.services.direct_messages import (
     THREAD_PAGE_SIZE,
+    can_direct_message,
     clear_email_debounce,
     delete_message_for_everyone,
     delete_message_for_self,
     is_conversation_muted,
     is_safe_reaction_emoji,
+    resolve_attachment_ids,
     set_conversation_muted,
     thread_page,
     toggle_reaction,
@@ -149,6 +152,32 @@ def _resolve_peer(peer_slug: str) -> Profile | None:
     if peer_slug in RESERVED_PEER_SLUGS:
         return None
     return Profile.objects.select_related("user").filter(slug=peer_slug).first()
+
+
+def _thread_visible(profile: Profile, partner: Profile) -> bool:
+    """Whether ``profile`` may see a conversation thread with ``partner`` at all.
+
+    The external mirror of the check in
+    ``controllers.direct_messages.ConversationView``, and it must stay identical
+    to it: resolving a peer by slug is not the same as being allowed to know
+    that peer exists. A profile whose DM settings reject this caller and who has
+    never exchanged a message with them is hidden, so asking for the thread must
+    read as "no such conversation" rather than returning an empty page - an
+    empty 200 against a 404 for an invented slug is a working existence oracle
+    for precisely the accounts that opted out of being reachable.
+
+    Prior history wins over current settings deliberately: someone who has
+    already talked to you does not vanish from your inbox when they later
+    tighten their DM privacy.
+
+    Args:
+        profile: The requesting profile.
+        partner: The resolved peer.
+
+    Returns:
+        True when a thread may be served for this pair.
+    """
+    return DirectMessage.objects.between(profile, partner).exists() or can_direct_message(profile, partner)
 
 
 def _resolve_membership(request: Request, group_uuid: UUID) -> tuple[Profile, GroupChat, GroupChatMembership] | None:
@@ -280,7 +309,14 @@ class MessageThreadView(ExternalApiView):
         """Return one page of the caller's conversation with ``peer_slug``."""
         profile = request.user.profile
         partner = _resolve_peer(peer_slug)
-        if partner is None:
+        # The same gate controllers.direct_messages.ConversationView applies:
+        # a thread exists for this caller only if they have history with the
+        # partner or are currently permitted to message them. Without it a
+        # profile that rejects the caller's messages answered 200-with-nothing
+        # while an invented slug answered 404, which made this endpoint a
+        # profile-existence oracle for exactly the accounts whose DM settings
+        # were meant to hide them.
+        if partner is None or not _thread_visible(profile, partner):
             return Response({"error": "No such conversation."}, status=404)
 
         messages, has_more_older = thread_page(profile, partner, before_id=_before_id(request), limit=_thread_limit(request, THREAD_PAGE_SIZE))
@@ -326,7 +362,7 @@ class MessageThreadView(ExternalApiView):
                 nonce=data.get("nonce") or "",
                 key_version=data.get("key_version") or 0,
                 reply_to_id=data.get("reply_to_id"),
-                image_ids=list(data.get("image_ids") or []),
+                image_ids=resolve_attachment_ids(profile, image_ids=data.get("image_ids"), image_uuids=data.get("image_uuids")),
                 client_uuid=client_uuid,
             )
         except ShareTargetNotFoundError as exc:
@@ -585,8 +621,13 @@ class GroupMessagesView(ExternalApiView):
     }
 
     @extend_schema(
-        request=MessageSendSerializer,
-        description="Sends a message to the group. Supply `client_uuid` for idempotent retries; a repeat returns the existing message with HTTP 200.",
+        request=GroupMessageSendSerializer,
+        description=(
+            "Sends a message to the group. Supply `client_uuid` for idempotent retries; a repeat returns the "
+            "existing message with HTTP 200. Attachments, replies, markup maps and shares are not supported "
+            "on group messages and are refused with 400 rather than silently dropped - use the group pin-share "
+            "endpoint for pins."
+        ),
         responses={201: None, 200: None, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer},
     )
     def post(self, request: Request, group_uuid: UUID) -> Response:
@@ -598,7 +639,7 @@ class GroupMessagesView(ExternalApiView):
         if group is None or group.membership_for(profile) is None:
             return Response({"error": "No such group."}, status=404)
 
-        serializer = MessageSendSerializer(data=request.data)
+        serializer = GroupMessageSendSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         client_uuid = data.get("client_uuid")
@@ -711,6 +752,17 @@ class GroupMembersView(ExternalApiView):
         serializer = GroupMembersSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         slugs = serializer.validated_data["member_slugs"]
+
+        # Permission before resolution. Resolving first made this endpoint a
+        # profile-slug oracle for any active member: an unknown slug came back
+        # 400 naming it, a real one got far enough to be refused 403 by
+        # add_group_members, and the difference between those two answers is a
+        # yes/no existence check anyone in the group could run at will. A
+        # non-manager must not be able to tell the two apart, so they are
+        # refused before a single submitted slug is looked at.
+        if not group.is_manager(profile):
+            return Response({"error": "Only the group's creator can add members."}, status=403)
+
         members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
         missing = set(slugs) - {member.slug for member in members}
         if missing:
@@ -719,8 +771,8 @@ class GroupMembersView(ExternalApiView):
         try:
             created = add_group_members(group, profile, members)
         except PermissionError as exc:
-            # "Only the group's creator can add members." - server-side and
-            # authoritative, regardless of what a client believed it could do.
+            # Still authoritative - the pre-check above is an anti-enumeration
+            # measure, not a replacement for the service's own permission rule.
             return Response({"error": str(exc)}, status=403)
         except ValueError as exc:
             return Response({"error": str(exc)}, status=400)
@@ -745,6 +797,23 @@ class GroupMembersView(ExternalApiView):
         missing = set(slugs) - {member.slug for member in targets}
         if missing:
             return Response({"error": f"Unknown profile slug(s): {', '.join(sorted(missing))}."}, status=400)
+
+        # Validate the whole batch before removing anybody. Removing as we go
+        # meant a batch that failed on its second target had already removed
+        # the first - and notified them, and pushed the membership change to
+        # every connected client - while answering 400/403 to a caller who now
+        # reasonably believes nothing happened. Those side effects are not
+        # transactional (a rollback cannot unsend a notification or a WebSocket
+        # frame), so the fix has to be to refuse before the first mutation
+        # rather than to wrap the loop.
+        #
+        # Both rules are re-checked by remove_group_member itself; this only
+        # moves the *decision* ahead of the first side effect.
+        for target in targets:
+            if group.membership_for(target) is None:
+                return Response({"error": "They aren't a member of this group."}, status=400)
+            if target.pk != profile.pk and not group.is_manager(profile):
+                return Response({"error": "Only the group's creator can remove other members."}, status=403)
 
         removed = 0
         for target in targets:
@@ -776,9 +845,11 @@ class GroupPinShareView(ExternalApiView):
         description=(
             "Shares the pin named by `shared_pin_id` (a pin slug or uuid, owned by the caller) into the "
             "group, with `body` as the accompanying text. One PinShare is created per member the caller is "
-            "connected to; members they aren't connected to see the card without an accept action."
+            "connected to; members they aren't connected to see the card without an accept action. Supply "
+            "`client_uuid` to make retries idempotent - a repeat returns the existing message with HTTP 200 "
+            "rather than re-sharing the pin to every member again."
         ),
-        responses={201: None, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer},
+        responses={201: None, 200: None, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer},
     )
     def post(self, request: Request, group_uuid: UUID) -> Response:
         """Share a pin into this group as a message."""
@@ -800,14 +871,19 @@ class GroupPinShareView(ExternalApiView):
         if pin is None:
             return Response({"error": "No such pin."}, status=404)
 
+        client_uuid = data.get("client_uuid")
+        # Distinguishes "created" from "idempotent replay" for the status code,
+        # matching the one-to-one send endpoint.
+        existed = bool(client_uuid) and GroupMessage.objects.filter(sender=profile, group=group, client_uuid=client_uuid).exists()
+
         try:
-            message = share_pin_in_group_message(profile, group, pin, data.get("body") or "")
+            message = share_pin_in_group_message(profile, group, pin, data.get("body") or "", client_uuid=client_uuid)
         except PermissionError as exc:
             return Response({"error": str(exc)}, status=403)
         except ValueError as exc:
             return Response({"error": str(exc)}, status=400)
 
-        return Response(build_group_message_payload(message, profile), status=201)
+        return Response(build_group_message_payload(message, profile), status=200 if existed else 201)
 
 
 class GroupMessageReactionView(ExternalApiView):

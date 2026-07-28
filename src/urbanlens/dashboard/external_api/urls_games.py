@@ -42,10 +42,15 @@ if TYPE_CHECKING:
 #: shadowed by another domain's generic route.
 urlpatterns: list[URLPattern] = [
     path("games/spotguessr/", views_games.SpotGuessrOverviewView.as_view(), name="games.spotguessr"),
+    path("games/spotguessr/preferences/", views_games.SpotGuessrPreferencesView.as_view(), name="games.spotguessr.preferences"),
+    path("games/spotguessr/eligible-count/", views_games.SpotGuessrEligibleCountView.as_view(), name="games.spotguessr.eligible-count"),
+    path("games/spotguessr/eligible-pins/", views_games.SpotGuessrEligiblePinsView.as_view(), name="games.spotguessr.eligible-pins"),
     path("games/spotguessr/sessions/", views_games.SpotGuessrSessionsView.as_view(), name="games.spotguessr.sessions"),
     path("games/spotguessr/sessions/<int:session_id>/", views_games.SpotGuessrSessionDetailView.as_view(), name="games.spotguessr.sessions.detail"),
     path("games/spotguessr/sessions/<int:session_id>/round/", views_games.SpotGuessrRoundView.as_view(), name="games.spotguessr.sessions.round"),
     path("games/spotguessr/sessions/<int:session_id>/summary/", views_games.SpotGuessrSummaryView.as_view(), name="games.spotguessr.sessions.summary"),
     path("games/spotguessr/sessions/<int:session_id>/rounds/<int:round_id>/guess/", views_games.SpotGuessrGuessView.as_view(), name="games.spotguessr.sessions.rounds.guess"),
     path("games/spotguessr/sessions/<int:session_id>/rounds/<int:round_id>/image/", views_games.SpotGuessrRoundImageView.as_view(), name="games.spotguessr.sessions.rounds.image"),
+    path("games/spotguessr/sessions/<int:session_id>/rounds/<int:round_id>/expire/", views_games.SpotGuessrRoundExpireView.as_view(), name="games.spotguessr.sessions.rounds.expire"),
+    path("games/spotguessr/sessions/<int:session_id>/rounds/<int:round_id>/feedback/", views_games.SpotGuessrRoundFeedbackView.as_view(), name="games.spotguessr.sessions.rounds.feedback"),
 ]

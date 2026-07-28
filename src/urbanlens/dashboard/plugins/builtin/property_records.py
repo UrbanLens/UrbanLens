@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_BLOCKED, REASON_MANUAL_ONLY, REASON_SOURCE_ERROR
 from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
-from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource, PanelApiKind
 from urbanlens.dashboard.services.geo_boundary import USA
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
@@ -281,6 +281,12 @@ class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
     section_id = "property-records-section"
     icon = "home_work"
     title = "Property Records"
+    # Deliberately not exposed on the external API: this is ownership/tax
+    # record data pulled from county GIS/tax sources, and redistributing it
+    # through a bearer-key API is a different (and more sensitive) exposure
+    # than showing it to a logged-in user on their own pin page. Opt back in
+    # only after that's been explicitly reviewed.
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
 
     def fetch(self, pin: Pin) -> None:
         """Fetch (or reuse the enrichment source's cached fetch of) this pin's property record."""

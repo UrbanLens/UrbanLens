@@ -757,7 +757,7 @@ def _revoke_pin_share(pin_share) -> None:
         pin_share.save(update_fields=["status"])
 
 
-def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body: str) -> GroupMessage:
+def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body: str, *, client_uuid: UUID | None = None) -> GroupMessage:
     """Share `pin` into `group` - one full PinShare per member, plus the chat message.
 
     Every active member (other than the sender) gets their own ``PinShare``
@@ -768,15 +768,26 @@ def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body
     is per recipient); they still see the message and card, just without an
     accept action.
 
+    **Retries must be idempotent here more than anywhere else.** One call fans
+    out to every member, so a mobile client that retries a share whose response
+    it never received would otherwise duplicate the message *and* every
+    member's ``PinShare``, ``LocationExposure`` and notification - the damage
+    scales with group size, and the exposure rows are the provenance chain
+    ``resolve_origin_share`` walks, so duplicates corrupt more than the inbox.
+    A repeat carrying a ``client_uuid`` already seen returns the original
+    message untouched.
+
     Args:
         sender: The sharing profile (must own the pin and be an active member).
         group: The group receiving the share.
         pin: The pin being shared.
         body: Message text accompanying the share (may be blank; a default
             "shared a pin" text is used so the message isn't empty).
+        client_uuid: Caller-generated idempotency key for offline-outbox
+            retries. None disables replay detection.
 
     Returns:
-        The newly created GroupMessage.
+        The newly created GroupMessage, or the existing one on replay.
 
     Raises:
         PermissionError: When `sender` isn't an active member.
@@ -784,7 +795,14 @@ def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body
     """
     from urbanlens.dashboard.services.pin_sharing import create_pin_share
 
-    message = create_group_message(sender, group, body or f"Shared {pin.display_label}", defer_broadcast=True)
+    if client_uuid is not None:
+        # Checked before any fan-out: create_group_message would itself replay,
+        # but only after create_pin_share had already run for every member.
+        existing = GroupMessage.objects.filter(sender=sender, group=group, client_uuid=client_uuid).first()
+        if existing is not None:
+            return existing
+
+    message = create_group_message(sender, group, body or f"Shared {pin.display_label}", defer_broadcast=True, client_uuid=client_uuid)
     for membership in group.active_memberships().exclude(profile_id=sender.pk).select_related("profile", "profile__user"):
         try:
             pin_share = create_pin_share(sender, membership.profile, pin)

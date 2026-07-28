@@ -302,8 +302,11 @@ def apply_pin_share_response(share: PinShare, action: str) -> tuple[Pin | None, 
     an accept specifically to catch it.
 
     Args:
-        share: The share to respond to. Caller must have already confirmed
-            ``share.status == PinShareStatus.PENDING``.
+        share: The share to respond to. Callers still check
+            ``share.status == PinShareStatus.PENDING`` first for the error
+            message, but that check is advisory - accept re-reads the status
+            under a row lock, so a share answered concurrently replays rather
+            than double-applying.
         action: ``"accept"`` or ``"reject"``. Anything else is a no-op reported
             as "Unknown action." rather than an exception, because the internal
             HTMX callers post a raw form field and a typo there must not 500.
@@ -316,6 +319,26 @@ def apply_pin_share_response(share: PinShare, action: str) -> tuple[Pin | None, 
     target_pin = None
     if action == "accept":
         with transaction.atomic():
+            # The row is locked and its status re-read *inside* the
+            # transaction. The caller's PENDING check happened before this
+            # call, so two retries of the same accept could both pass it and
+            # both get here: each would find no recipient pin, both would
+            # create one, and the (location, profile) uniqueness constraint
+            # turned the loser into an uncaught IntegrityError - while bundled
+            # children could be materialized twice when a target pin already
+            # existed. Re-reading under the lock makes the second accept a
+            # no-op replay instead.
+            # Only the *status* is read back, and `share` is deliberately not
+            # rebound to the locked instance: callers hold this object and read
+            # `share.status` from it after this returns, so the accepted state
+            # has to land on the instance they already have.
+            locked_status = PinShare.objects.select_for_update().filter(pk=share.pk).values_list("status", flat=True).first()
+            if locked_status != PinShareStatus.PENDING:
+                # Already answered - report the pin the winner produced, so a
+                # retry is indistinguishable from the original success.
+                share.refresh_from_db(fields=["status"])
+                existing_pin = find_profile_pin_near_location(share.to_profile_id, share.shared_location)
+                return existing_pin, "Pin added to your map."
             target_pin = find_profile_pin_near_location(share.to_profile_id, share.shared_location)
             if target_pin is None:
                 target_pin = create_pin_from_share(share)

@@ -119,17 +119,15 @@ _LOCATION_DATA_OVERVIEW_KEYS = ["nominatim", *_LOCATION_DATA_PLUGIN_TABS.keys()]
 def _viewer_may_see_panel(request: HttpRequest, source: PanelSource) -> bool:
     """Whether this request's user holds the subscription feature a panel requires.
 
-    The single place this controller answers "may they see this panel?", asked
-    both when the page's tab strip is assembled and again when ``panel_info``
-    is asked for that panel's content. Both have to consult the same fact:
-    hiding a tab is presentation, and ``pin.panel`` is a plain URL that anyone
-    logged in can type, so a gate applied only during tab assembly withholds
-    nothing at all.
+    Asked both when the page's tab strip is assembled and again when
+    ``panel_info`` is asked for that panel's content. Both have to consult the
+    same fact: hiding a tab is presentation, and ``pin.panel`` is a plain URL
+    that anyone logged in can type, so a gate applied only during tab assembly
+    withholds nothing at all.
 
-    The fact itself lives on the source (``PanelSource.required_feature``) and
-    not in this module, so a plugin's panel is gated by declaring it rather
-    than by also being added to a controller constant nobody outside this file
-    can see.
+    Delegates to ``services.external_data.panel_visible_to``, which is also
+    what the external API's panel endpoints call - a feature-gated panel must
+    never be visible on one surface and hidden on the other.
 
     Args:
         request: The current request, for its authenticated user.
@@ -139,8 +137,9 @@ def _viewer_may_see_panel(request: HttpRequest, source: PanelSource) -> bool:
         True when the source is unrestricted (the overwhelming majority) or the
         viewer holds the feature it requires.
     """
-    feature = source.required_feature
-    return feature is None or user_has_feature(request.user, feature)
+    from urbanlens.dashboard.services.external_data import panel_visible_to
+
+    return panel_visible_to(request.user, source)
 
 
 class PinController(LoginRequiredMixin, GenericViewSet):

@@ -21,6 +21,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.links.model import PinLink
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.pin_tombstone import PinTombstone
@@ -138,6 +139,31 @@ class PinDetailGetTests(TestCase):
     def test_no_custom_fields_is_an_empty_list(self) -> None:
         body = self._get(self.pin).json()
         self.assertEqual(body["custom_fields"], [])
+
+    def test_address_components_default_to_null(self) -> None:
+        body = self._get(self.pin).json()
+        self.assertIsNone(body["city"])
+        self.assertIsNone(body["state"])
+        self.assertIsNone(body["county"])
+        self.assertIsNone(body["zipcode"])
+
+    def test_address_components_are_read_from_the_pins_location(self) -> None:
+        # city/state/county are Python properties aliasing locality/
+        # administrative_area_level_1/administrative_area_level_2 - a bulk
+        # .update() has to target the real field names.
+        Location.objects.filter(pk=self.pin.location_id).update(
+            locality="Troy",
+            administrative_area_level_1="NY",
+            administrative_area_level_2="Rensselaer",
+            country="US",
+            zipcode="12180",
+        )
+        body = self._get(self.pin).json()
+        self.assertEqual(body["city"], "Troy")
+        self.assertEqual(body["state"], "NY")
+        self.assertEqual(body["county"], "Rensselaer")
+        self.assertEqual(body["country"], "US")
+        self.assertEqual(body["zipcode"], "12180")
 
     def test_child_pin_reports_its_parent_uuid(self) -> None:
         # A child pin is exempt from db_pin_unique_location_per_profile once

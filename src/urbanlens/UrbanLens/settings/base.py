@@ -597,6 +597,16 @@ REST_FRAMEWORK = {
         # upstream call per trip activity. Tight, because the cost lands on a
         # third party's rate limit as much as on ours.
         "external_api_calendar": "30/hour",
+        # One assistant chat turn bills real model-provider cost and can fan
+        # out to up to 6 model round trips before it replies - resync-shaped
+        # cost, same reasoning as external_api_game_start.
+        "external_api_assistant_message": "60/hour",
+        # Live-location updates while a check-in is active are a foreground-
+        # tracking workload, not an ordinary write - the standard write cap
+        # (300/hour) dies in under an hour at one fix per 10 seconds. Its own
+        # budget accommodates that cadence without loosening the cap every
+        # other safety write shares.
+        "external_api_safety_location": "360/hour",
     },
     # Only consulted by views whose schema is actually generated - the
     # preprocessing hook in external_api.schema limits that to the external API.
@@ -642,7 +652,7 @@ OAUTH2_PROVIDER = {
         "visits:read": "Read your visit history",
         "visits:write": "Log visits on your behalf",
         "photos:read": "Read your photos, memories journal, and photo suggestions",
-        "photos:write": "Upload, label, file, vote on, and delete your photos",
+        "photos:write": "Upload, label, file, vote on, and delete your photos, and act on photo suggestions",
         "media:read": "Fetch the actual image/video/document files you may see",
         "wiki:read": "Read community wikis you can see",
         "wiki:write": "Edit community wikis on your behalf",
@@ -660,6 +670,12 @@ OAUTH2_PROVIDER = {
         "games:read": "Read your game history, scores, and leaderboard standing",
         "games:write": "Start games and submit guesses and answers on your behalf",
         "push:manage": "Register and remove this device's push notifications",
+        "custom_fields:read": "Read your custom field definitions and their values",
+        "custom_fields:write": "Create, edit, and delete your custom fields and their values",
+        "undo:read": "Read your recent delete history available to undo",
+        "undo:write": "Restore a previously deleted item",
+        "panels:read": "Read pin-detail enrichment panels (boundaries and other plugin-contributed data)",
+        "assistant:write": "Chat with your AI assistant, including creating trips and trip activities it suggests",
     },
     # Deliberately NOT the full SCOPES list: a token that asked for nothing in
     # particular gets the same minimal grant a PAT does

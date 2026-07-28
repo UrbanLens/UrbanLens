@@ -226,7 +226,7 @@ semantics, named "retention" rather than "disappearing messages", via a new
 `ConversationRetention` model read only at send time. Group chats have no retention field at all
 and would be a separate piece of work.
 
-### D4 — §8 Live location → **design settled, build deferred (P2)**
+### D4 — §8 Live location → **design settled, shipped in the third pass**
 
 The doc deferred this as needing "its own privacy-scoped design". The design question was really
 one thing: should a long-lived PAT be able to read a continuously-updating precise position, or
@@ -244,8 +244,7 @@ under an hour at one fix per ten seconds), and the residual risk stated plainly 
 endpoint description and the key-scope copy — **a leaked PAT holding `safety:read` becomes a
 live tracker for every check-in its holder partners on.**
 
-Not built this pass (P2). The rest of the partner surface — invites, accept/decline, the shared
-chat, and partner-side mark-safe — did ship.
+Shipped: `GET/PATCH /safety/checkins/{slug}/location/` — see Part 7 for the endpoint shape.
 
 ### D5 — §9 `display_name` → **first/last name yes, `username` no**
 
@@ -254,7 +253,8 @@ properties onto `User`, and every `display_name` on the wire resolves to `userna
 `resolve_visible_identity`.
 
 **Recommendation: expose `first_name`, `last_name` and the six contact methods** — no
-uniqueness constraints, no side effects. P2, deferred, not built this pass.
+uniqueness constraints, no side effects. Shipped in the third pass, folded into `GET/PATCH
+/settings/` rather than a new endpoint — see Part 7 for why.
 
 **`username` stays off the external surface** regardless: changing it is a uniqueness-checked
 identity mutation, and `Profile.slug`
@@ -324,8 +324,9 @@ credential-or-session media mixin, requiring `media:read`). `PanelSource.api_pay
 and returns `None` for them, with a comment saying why — the exclusion is enforced in code, not
 just written down here.
 
-(The generic panel listing/fetch endpoints themselves are P2 and deferred. The `api_payload`
-interface they will build on shipped, as did the two panel *security* fixes — see Part 4.)
+(The generic panel listing/fetch endpoints themselves shipped in the second pass — see Part 6.
+The `api_payload` interface they build on shipped here, as did the two panel *security* fixes —
+see Part 4.)
 
 SpotGuessr round images are served as **EXIF-stripped bytes** from a dedicated endpoint under
 `{games:read, media:read}` — which also closes a residual answer leak, since a stored JPEG may
@@ -388,6 +389,15 @@ When the user has never connected a Google account, the endpoint returns **409
 connect route, not a Google URL. A Google authorization URL minted by the API would 302 to the
 login page and lose the `code`; the app should open the site route in a system browser and retry.
 
+### D13 — Wiki detail-pins / child-wiki CRUD → **declined, like D1**
+
+There is no `POST /wikis/` anywhere internally — a wiki is only ever created as a side effect of
+pin creation, or the web "Create Community Wiki" button, both of which go through the same
+pin-sync bridge. A child wiki also carries a real extra constraint the requirements doc didn't
+account for: it needs its own distinct `Location`, never shared with its parent's. Building general
+wiki creation from scratch was not asked for by anyone and is out of scope here; the existing
+pin-sync bridge (child pins → child wikis) remains the real, working mechanism for this.
+
 ---
 
 ## Part 4 — Convention notes for the app
@@ -403,12 +413,13 @@ login page and lose the `code`; the app should open the site route in a system b
   (non-organizer trip settings, deleting someone else's group message) are cases where the caller
   was *already* shown the object, so a 403 leaks nothing — and each carries a comment saying so,
   to stop a future reviewer "fixing" it into a 404.
-- Pagination is unchanged this pass: page-number style almost everywhere, with the pin/tombstone
-  sync feeds cursor-based and a few small envelopes non-paginated. The two normalizations
-  previously considered here — moving the memories journal onto the standard envelope, and
-  wrapping the safety-maps endpoint's bare top-level array — are P2 and deferred. **The bare
-  array is worth fixing before v1 is depended on**: it is the one response shape that can never
-  gain a field later without breaking clients.
+- Pagination is page-number style almost everywhere, with the pin/tombstone sync feeds cursor-based
+  and a couple of small envelopes (a trip's map markers, the undo feed) non-paginated by design.
+  The two normalizations flagged in the previous revision of this note — the memories journal's
+  bespoke `{entries,total,omitted_sources}` shape, and the safety-maps endpoint's bare top-level
+  array — are now fixed (see Part 7). Both moved onto the standard `{count,next,previous,results}`
+  envelope; the journal kept its `omitted_sources` field alongside it, and switched from
+  `limit`/`offset` query params to the usual `page`/`page_size`.
 - **Versioning discipline:** v1 changes additively. Anything breaking mints `/v2/` and serves a
   `Sunset` header on v1.
 - **Scope your credential properly for sockets.** WebSocket connections now enforce scopes, which
@@ -508,16 +519,260 @@ login page and lose the `code`; the app should open the site route in a system b
 
 ### Deferred to a later pass (P2 — not declined)
 
-Pins: bulk operations, visit `PATCH`, city/state/country as separate fields, pin-note threading
-(declined outright, see D1). Lists/labels: REST reorder, bulk delete/edit/convert, list markup
-maps. Wikis: ownership and sale history, public-vote ballots, boundary set/clear, detail-pins
-CRUD, cover-photo write, history hard-delete, alias nickname toggle. Photos: custom fields,
-memories timeline and on-this-day, new-pin suggestions feed. Messaging: photo-uuid attachments
-(`image_ids` still wants integer pks), per-conversation retention (blocked on product, see D3).
-Safety: live location (design settled, see D4). Social: `first_name`/`last_name` and contact
-methods, social links. Misc: enrichment panels as JSON, generic panel listing/fetch, backup
-export/import, undo, site config, AI assistant, Immich/Flickr/Google Photos connections,
-`last_used_at` on introspection, pagination normalizations. Games: round timeout, photo feedback,
-preferences, own-pins feed, area pin count. Also deferred: the styled OAuth consent screen
-(currently django-oauth-toolkit's unstyled default, which is the only user-visible gate before an
-app is granted `messages:*` against an E2EE mailbox — worth doing before public launch).
+Pins: pin-note threading (declined outright, see D1). Wikis: ownership and sale history **write**
+side (read shipped, see Part 7), public-vote ballots, detail-pins CRUD (declined, see D13).
+Messaging: per-conversation retention (blocked on product, see D3). Misc: Immich/Flickr/Google
+Photos connections.
+
+**Shipped in the second pass, no longer on this list** (see Part 6): custom field definitions +
+photo values, undo, enrichment panels as JSON + generic panel listing/fetch, AI assistant.
+
+**Shipped in the third pass, no longer on this list** (see Part 7): the memories-journal and
+safety-maps pagination normalizations, the styled OAuth consent screen; pin bulk
+operations/visit `PATCH`/address components; label REST reorder + bulk delete/edit/convert + list
+markup maps (list-level bulk delete/edit scoped down, see Part 7); safety live location (D4);
+`first_name`/`last_name` + contact methods on `/settings/` and the public social-links endpoint
+(D5, partial — see Part 7 for what's still open); wiki boundary set/clear, cover-photo write, alias
+nickname toggle, article-revision hard-delete, and ownership/sale-history **read** (write deferred,
+see Part 7); memories timeline and on-this-day; the new-pin suggestions review queue
+(`GET/POST /suggestions/pins/...`, accept applies suggestion defaults only — see Part 7); messaging
+`image_uuids` attachments, additive alongside `image_ids` (see Part 7); SpotGuessr round-timer
+expire, photo feedback, preferences write, and the eligible-count/eligible-pins pre-check pair (see
+Part 7 — **SpotGuessr only**, not Trivia/Consensus: see Part 7 for why).
+
+**Off this list entirely, not just deferred** (see Part 6): site config/admin endpoints (will not
+be exposed to the mobile app), backup export/import (not for the mobile app at this time).
+
+---
+
+## Part 6 — Second pass (2026-07-28): Custom Fields, Panels, Undo, AI Assistant
+
+Four of the seven items Part 5 listed as P2-deferred. **Not** in this pass: Site Config, Connections
+(Immich/Flickr/Google Photos), and Tools (backup export/import).
+
+### Site Config and Import/Export — declined for mobile, not deferred
+
+Two of the three remaining items just became decisions rather than open questions:
+
+- **Site config/admin endpoints will not be exposed to the mobile app.** `urls_site.py` stays an
+  empty placeholder by design. If a future need surfaces (announcements, version/health), it gets
+  scoped and decided then — nothing here is scaffolded in anticipation of it.
+- **Import/export (KML/GPX/CSV) will not be built for the mobile app at this time.** Possible in
+  the distant future; not scheduled, not scaffolded.
+
+**Connections (Immich/Flickr/Google Photos) is still genuinely open** — unchanged from D7. The
+Flickr/Google Photos OAuth-callback question is being assessed independently of this API work, and
+nothing in this pass touches it.
+
+### Custom Fields
+
+`GET/POST /custom-fields/`, `PATCH/DELETE /custom-fields/{id}/`, `GET /photos/{uuid}/custom-fields/`,
+`PUT/DELETE /photos/{uuid}/custom-fields/{field_id}/` — see [Custom Fields](../EXTERNAL_API.md#custom-fields).
+New scopes `custom_fields:read`/`custom_fields:write`, additionally requiring `photos:read`/
+`photos:write` on the two photo-scoped routes (a field *value* is photo data — a credential scoped
+for custom fields but not photos shouldn't incidentally read photo-attached data). `reference`-type
+fields are accepted on create/list but not yet writable as a value; that needs its own
+target-resolution design.
+
+### Undo
+
+`GET /undo/`, `POST /undo/{uuid}/restore/` — see [Undo History](../EXTERNAL_API.md#undo-history).
+New scopes `undo:read`/`undo:write`. Routed under `urls_tools.py` (a utility belonging to no single
+resource), not a new `urls_*` module.
+
+### Panels
+
+`GET /pins/{slug}/panels/`, `GET /pins/{slug}/panels/{key}/` — see [Panels](../EXTERNAL_API.md#panels).
+New scope `panels:read`. `satellite`/`street_view` stay excluded per D8, unchanged.
+
+**A latent exposure was found and closed while building this, not requested by anyone:**
+`PanelSource.api_kinds` defaults to non-empty on the two most common plugin base classes
+(`InfoPanelSource`, `GalleryMediaSource`), so every plugin built on them was already implicitly
+"on the API" the moment this endpoint existed — opting in was the default, not opting out. Five
+built-in plugins got an explicit `api_kinds = frozenset()` added before this shipped:
+`property_records` and `loopnet` (real-estate data with licensing concerns), `yelp` and
+`google_places`/`google_images` (third-party ToS on redistribution, and in two cases the photos
+only ever resolved through an internal session-authenticated proxy anyway, so exposing them here
+would have been useless as well as risky). EPA ECHO's two panels were reviewed and left alone
+deliberately: the nearby-facilities list is already gated behind `NEARBY_RESEARCH` (which this
+endpoint honors the same way the web tab strip does), and the exact-site compliance card is
+intentionally public government data.
+
+### AI Assistant
+
+`POST /assistant/message/`, `POST /assistant/reset/` — see [AI Assistant](../EXTERNAL_API.md#ai-assistant).
+New scope `assistant:write`. Stateless: the client carries `history` in the request/response body
+rather than a session, since a bearer-token client has no session to keep it in — `run_assistant_turn`
+already took `history` as a plain argument, so nothing changed at the service layer to support this.
+
+**Bug fixed on the way (benefits the existing web chat too):** `run_assistant_turn` never called
+`log_api_call` despite invoking the model gateway up to `MAX_TOOL_CALLS` (6) times per turn — every
+other gateway-backed feature in this codebase logs its cost per call, this one silently didn't. One
+call now covers the whole turn (the gateway accumulates cost across every `send_prompt()` on the
+same instance, so a single post-loop read is correct regardless of how many tool round-trips
+happened), in a `finally` so it fires whether the turn succeeds, fails, or hits the action limit.
+
+---
+
+## Part 7 — Third pass (2026-07-28): pagination envelopes, styled consent screen, P2 backend items
+
+### Memories journal and safety-maps pagination envelopes
+
+Both normalized onto the standard `{count, next, previous, results}` envelope:
+
+- `GET /memories/journal/` — dropped the bespoke `{entries, total, omitted_sources}` shape and the
+  `limit`/`offset` query params. Now `page`/`page_size` like every other list endpoint, `results`
+  instead of `entries`, `count` instead of `total`. `omitted_sources` is kept as an extra top-level
+  field alongside the standard four — same pattern as global search's `omitted_types`.
+- `GET/POST /safety/checkins/{slug}/maps/` — the bare top-level array is now the standard envelope.
+  A check-in's map list is realistically tiny (a primary route plus a handful of references), so
+  `next`/`previous` are almost always null in practice, but the shape now matches every other list
+  endpoint rather than being a documented exception to it.
+
+Both were genuinely additive-unsafe before this: a bare array or a one-off key set can't gain a
+field later without a client that assumed the old shape breaking. Fixed now, before either endpoint
+has a real client depending on the old response.
+
+### Styled OAuth2 consent screen
+
+`/oauth/authorize/` now renders through the site's own themed auth shell
+(`dashboard/themes/auth_base.html`) instead of django-oauth-toolkit's bundled default, which pulled
+an unstyled Bootstrap 2 stylesheet off a dead CDN link (`netdna.bootstrapcdn.com`). This is the one
+user-visible gate before a client — including this project's own first-party mobile app — is
+granted a scope like `messages:*` against an E2EE mailbox, so it reading as a generic framework
+page rather than UrbanLens was a real trust signal, not just cosmetic.
+
+Only `oauth2_provider/authorize.html` was overridden (`src/urbanlens/dashboard/templates/oauth2_provider/`,
+picked up ahead of the toolkit's own bundled template because `TEMPLATES["DIRS"]` is searched
+before the app-directories loader). The error branch (`{% if error %}`) is themed too. The
+authorize page links to `oauth2_provider:authorized-token-list` (where a user revokes a connected
+app's access) — that page, and the rest of the toolkit's application-management views, still render
+with the unstyled default; restyling those wasn't asked for and is a separate, smaller follow-up if
+it's ever wanted.
+
+### P2 backend items — in progress
+
+The remaining P2 catalog from Part 5 is being picked up in this pass, **except** the three items
+with a standing reason not to: pin-note threading (D1, declined outright, not deferred),
+per-conversation message retention (D3, blocked on a product decision about whose setting
+retention is), and Immich/Flickr/Google Photos connections (D7 — the Flickr/Google Photos
+OAuth-callback question is being assessed independently by the project owner and is explicitly out
+of scope here). Progress and shipped-summary to follow as each domain lands.
+
+#### Shipped so far this pass
+
+**Pins** — `POST /pins/bulk/delete|merge|edit/` (thin wrappers over the map toolbar's existing
+multi-select logic, restored via the generic `/undo/{uuid}/restore/` rather than a bulk-specific
+undo route); `PATCH /pins/{slug}/visits/{visit_id}/` alongside the existing GET/POST/DELETE;
+read-only address components (`city,state,county,country,zipcode`) added to pin detail.
+
+**Lists & Labels** — `POST /labels/reorder/` (mirrors the internal drag-reorder view's D2 rule:
+validates against every visible label, writes only to owned ones, reports `skipped_global_uuids`);
+`POST /labels/bulk/delete|edit|convert/`; `POST /lists/{slug}/markup-map/`. **List-level bulk
+delete/edit was scoped down** — the research pass found only item-level list operations
+internally, no list-level bulk action to wrap, so none was invented; noted here rather than
+silently dropped.
+
+**Safety live location (D4)** — `GET/PATCH /safety/checkins/{slug}/location/`, its own endpoint
+excluded from the check-in read/write bodies, viewer-scoped GET (owner or ACCEPTED partner,
+matching the chat consumer) and owner-only PATCH, own throttle bucket. See D4 above and
+[Safety](../EXTERNAL_API.md#safety) in the reference doc for the full shape.
+
+**Social (D5, partial)** — `first_name`/`last_name` and the six `ContactMethodsForm` fields
+(`phone_number,signal_username,discord_username,whatsapp_number,telegram_username,matrix_handle`)
+added to `GET/PATCH /settings/`, **not** a new endpoint. This needed one real design call:
+`ProfileUpdateSerializer` (`PATCH /profiles/{slug}/`, `social:write`) is deliberately walled off
+from every settings-shaped field — that's the fix from the `social:write`-privacy-escalation bug
+noted under §9 above — and `ContactMethodsForm`'s six fields are exactly settings-shaped (private,
+no public-presentation role), so extending `/settings/` was the only option consistent with that
+boundary; `ProfileSettingsOverlapTests` keeps enforcing it. `first_name`/`last_name` are a`User`
+passthrough with no `Profile` column, so `apply_settings_patch` now saves `user` directly when
+either is touched, alongside its usual `profile` `update_fields` return for the caller.
+`GET/PUT /profiles/{slug}/social-links/` also shipped — the *public* link list
+(Instagram/Bluesky/Discord/UER/Facebook/Flickr/YouTube/TikTok/Reddit/website), which is a
+different resource from the private `discord_username` contact field above and from
+`ContactMethodsForm`'s own separate Discord entry; the two Discord values can legitimately differ.
+PUT is a full replace, matching `/safety/contacts/`'s own precedent. One real bug found and fixed
+during testing: the first `website`-platform validator prepended `https://` to a scheme-less
+handle *before* checking the raw scheme, so `javascript:alert(1)` sailed through disguised as
+`https://javascript:alert(1)` (hostname parses as the harmless-looking `javascript`) — fixed by
+checking the raw scheme first, mirroring `parse_social_link`'s own two-step guard.
+
+**Wikis (D13 addendum + boundary/cover-photo/ownership)** — `GET/POST /wikis/{slug}/boundary/`
+(thin wrapper over `controllers.boundary.WikiBoundaryView`'s resolution chain and
+pending/refreshing polling contract); `PUT/DELETE /wikis/{slug}/cover-photo/` (wraps
+`controllers.image_gallery.WikiCoverPhotoView`, photo must already be in the wiki's gallery);
+`POST /wikis/{slug}/aliases/{id}/toggle-nickname/` (wraps `WikiAlias.toggle_nickname()`, no edit-
+history entry, matching the internal `LocationAliasToggleNicknameView` it mirrors);
+`DELETE /wikis/{slug}/article/revisions/{id}/` (self-service, author-only — see the reference doc);
+`GET /wikis/{slug}/ownership/` and `GET /wikis/{slug}/sales/` (new, read-only — `WikiOwner`/
+`WikiPropertySale` had full models/querysets but no controller at all internally).
+
+The plan's original text said Ownership/Sales should be read-only "since no write UI exists to
+mirror" — that turned out to be **wrong**: `controllers/property_owner.py` has a complete
+`WikiOwnershipPanelView`/`WikiOwnerUpdateView`/`WikiOwnerRemoveView`/`WikiPropertySaleTabView`/
+`WikiPropertySaleDeleteView` stack (owner dedup by case-insensitive name, M2M owner↔location
+linking, OFFICIAL-source write protection). Shipped read-only anyway rather than silently
+expanding this phase's scope to a full CRUD surface with its own dedup/linking/protection design —
+recorded here per the plan's own instruction not to let a scoping-down go undocumented. The write
+side is a reasonable candidate for a future pass; it is a real gap, not a deliberate decision that
+writes shouldn't exist.
+
+Wiki "detail-pins CRUD" is confirmed declined per **D13** in the Decisions Recap below — no
+`POST /wikis/` exists anywhere internally (wikis are only ever created as a side effect of pin
+creation), and a child wiki needs its own distinct `Location`, never shared with its parent; the
+existing pin-sync bridge (child pins → child wikis) remains the real mechanism for this.
+
+**Photos/Memories** — `GET /memories/timeline/` (wraps `services.memories.aggregator.get_memory_events`,
+the same `MemoryEvent` data the internal page's map/timeline renders, standard page envelope,
+defaults to the trailing 90 days like the internal page); `GET /memories/on-this-day/` (mirrors
+`MemoriesOnThisDayView`'s past-year/this-month-day query across visits/routes/photos, kept at its
+internal cap of 10 rows per category rather than paginated). `GET /suggestions/pins/` and
+`POST /suggestions/pins/{id}/{accept|reject}/` — this is genuinely new: the existing
+`POST /pin-suggestions/` route only ever *stages* a suggestion from an external "discovery" app; it
+never listed or resolved the `PinSuggestion` review queue that Immich/local-folder batch scans
+populate (distinct from the already-shipped `GET /suggestions/visits/`, which is `VisitSuggestion` —
+EXIF-derived, for logging a visit at an *existing* pin). Mirrors `VisitSuggestionsView`/
+`VisitSuggestionActionView` exactly: not paginated, `photos:read`/`photos:write` (the same
+containment-is-structural reasoning as D4 — a batch-scan suggestion is a photo-domain artifact even
+though accepting one can create a `Pin`), 404 (not 403) for another profile's suggestion or one
+already handled. **Scoped down deliberately**: accept applies only the suggestion's own defaults
+(its `suggested_name` for a brand-new pin) — the web review queue's richer accept dialog (manual
+name override, label picker, candidate Immich/local-scan photo picker) is not mirrored in this
+pass. Confirmed during implementation that this scoping-down needs no Immich-account gating on the
+server side: `accept_pin_suggestion` only talks to Immich when the caller passes `asset_ids`
+(selected candidate photos), which this endpoint never does, so that whole code path is simply
+never reached rather than needing a permission check.
+
+**Messaging** — `MessageSendSerializer.image_uuids` (list of `Image.uuid`), accepted alongside the
+existing `image_ids` (integer pks) on `POST /messages/{peer_slug}/` — additive, not a breaking
+change: `image_ids` keeps working unchanged, a request may combine both, and `image_uuids` is
+documented as the preferred field for new clients. Resolved through a new
+`services.direct_messages.resolve_attachment_ids` helper that merges/dedupes both fields into the
+one pk list `create_direct_message` already accepted; ownership and not-yet-attached eligibility
+are still enforced there exactly as before, regardless of which field an id came from. Group sends
+refuse `image_uuids` with 400, same as `image_ids` already did (attachments aren't supported on
+group messages yet — see `GroupMessageSendSerializer.unsupported_fields`).
+
+**Games** — five new SpotGuessr endpoints, each a thin wrapper mirroring its internal
+`controllers.spotguessr` equivalent exactly rather than re-deriving any game logic:
+`POST .../rounds/{round_id}/expire/` (wraps `expire_round_timer`, same server-side-authoritative
+timer check as `SpotGuessrRoundTimeoutView`, idempotent no-op response shape);
+`POST .../rounds/{round_id}/feedback/` (wraps `relevance.record_feedback`, same
+guessed-on-this-round/`EXPLICIT_KINDS` validation as `SpotGuessrPhotoFeedbackView`);
+`PATCH /games/spotguessr/preferences/` (writes only `show_ratings_to_friends`, matching
+`SpotGuessrSettingsView` — `last_config` stays auto-managed, not exposed as writable here);
+`GET /games/spotguessr/eligible-count/` and `GET /games/spotguessr/eligible-pins/` (the latter
+paginated, unlike its internal `SpotGuessrPinsView` counterpart, which returns one unbounded list).
+
+**Trivia and Consensus are out of scope for every item in this pass, not silently skipped.**
+`urls_games.py`'s own module docstring already states its routes are "SpotGuessr only, and
+solo-play only" as a prior deliberate decision — confirmed by grep that zero Trivia/Consensus
+routes or views exist anywhere under `external_api/` (only docstring mentions of the words
+"trivia"/"consensus", no actual code). The plan's premise that all three games had comparable base
+session infrastructure to extend was wrong: there is no Trivia/Consensus external API surface at
+all to attach round-timeout/feedback/preferences/eligible-count endpoints to. Building that base
+surface would be new-domain API design (session start/list/detail/round/guess, its own scopes,
+its own answer-leak whitelist review per D8) — a much larger undertaking than "polish", and not
+something this pass attempts. Recorded here as a discovered gap for a future pass, not folded
+into "declined".

@@ -1,10 +1,23 @@
 """Give NotificationLog a public uuid.
 
 Three steps rather than one: a unique column cannot be added to a table that
-already has rows without first giving every existing row its own value. Adding
-``unique=True`` up front would either collide on the shared default or fail
-outright, so the column arrives nullable, is backfilled row by row, and only
-then gains the constraint.
+already has rows without first giving every existing row its own value. The
+column arrives nullable, is backfilled row by row, and only then becomes
+non-null with its callable default.
+
+**The AddField must not carry ``default=uuid.uuid4``.** Django evaluates a
+callable default *once* per ``AddField`` and writes that single value into
+every pre-existing row, so a table with more than one notification would end
+up with one shared uuid: the backfill below then matches nothing (no row is
+null), and the final ``AlterField`` fails on the duplicates - a migration that
+passes on an empty dev database and blocks deployment on a real one. The
+nullable column starts with no default at all, which is what makes the
+backfill the thing that assigns values.
+
+``unique=True`` rides along on the ``AddField`` rather than arriving with the
+final ``AlterField``: nulls do not collide in Postgres, and adding the
+constraint later would build a second index over the same column (see
+``migrations/CLAUDE.md``).
 
 The uuid exists because the external API addresses notifications by it - the
 sequential pk would otherwise become the public handle, leaking notification
@@ -47,7 +60,7 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name="notificationlog",
             name="uuid",
-            field=models.UUIDField(default=uuid.uuid4, editable=False, null=True),
+            field=models.UUIDField(editable=False, null=True, unique=True),
         ),
         migrations.RunPython(_populate_uuids, migrations.RunPython.noop, elidable=True),
         migrations.AlterField(

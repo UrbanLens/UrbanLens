@@ -478,3 +478,64 @@ class SafetyPreferencesApiTests(_SafetyApiTestCase):
     def test_grace_period_floor_is_enforced(self) -> None:
         response = self.client.patch(self.url, {"default_grace_period_seconds": 10}, content_type="application/json", **_bearer(self.raw_key))
         self.assertEqual(response.status_code, 400)
+
+
+class SafetyCheckinMapsTests(_SafetyApiTestCase):
+    """The check-in maps endpoint answers with the standard paginated envelope.
+
+    Regression coverage for the bare top-level array this endpoint used to answer
+    with - it could never gain a field later without breaking clients, so it was
+    normalized onto ``{count,next,previous,results}`` (see
+    ``docs/notes/mobile_app_notes.md`` Part 7).
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.maps_url = reverse("external_api:safety.checkins.maps", kwargs={"checkin_slug": self.checkin.slug})
+
+    def test_empty_checkin_has_standard_keys_and_no_results(self) -> None:
+        response = self.client.get(self.maps_url, **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(set(body), {"count", "next", "previous", "results"})
+        self.assertEqual(body["count"], 0)
+        self.assertEqual(body["results"], [])
+
+    def test_primary_and_reference_maps_are_both_listed(self) -> None:
+        from urbanlens.dashboard.models.markup.model import MarkupMap
+
+        primary = MarkupMap.objects.create(profile=self.profile, title="Route")
+        reference = MarkupMap.objects.create(profile=self.profile, title="Reference")
+        self.checkin.markup_map = primary
+        self.checkin.save(update_fields=["markup_map"])
+        self.checkin.markup_maps.add(reference)
+
+        body = self.client.get(self.maps_url, **_bearer(self.raw_key)).json()
+
+        self.assertEqual(body["count"], 2)
+        by_uuid = {row["uuid"]: row for row in body["results"]}
+        self.assertTrue(by_uuid[str(primary.uuid)]["is_primary"])
+        self.assertFalse(by_uuid[str(reference.uuid)]["is_primary"])
+
+    def test_pages_via_the_standard_page_size_param(self) -> None:
+        from urbanlens.dashboard.models.markup.model import MarkupMap
+
+        for i in range(2):
+            self.checkin.markup_maps.add(MarkupMap.objects.create(profile=self.profile, title=f"Reference {i}"))
+
+        first = self.client.get(self.maps_url, {"page_size": 1}, **_bearer(self.raw_key)).json()
+        self.assertEqual(first["count"], 2)
+        self.assertEqual(len(first["results"]), 1)
+        self.assertIsNotNone(first["next"])
+
+    def test_attach_response_uses_the_same_envelope(self) -> None:
+        from urbanlens.dashboard.models.markup.model import MarkupMap
+
+        own_map = MarkupMap.objects.create(profile=self.profile, title="Mine")
+
+        response = self.client.post(self.maps_url, {"map_uuid": str(own_map.uuid)}, content_type="application/json", **_bearer(self.raw_key))
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["count"], 1)
+        self.assertEqual(body["results"][0]["uuid"], str(own_map.uuid))

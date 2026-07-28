@@ -337,3 +337,46 @@ class PinListResyncTests(ListsApiTestCase):
         other = baker.make(User)
         theirs = PinList.objects.create(profile=Profile.objects.get(user=other), name="Theirs")
         self.assertEqual(self.client.post(f"{_BASE}{theirs.slug}/resync/", **_bearer(self.raw_key)).status_code, 404)
+
+
+class PinListMarkupMapTests(ListsApiTestCase):
+    """POST ``lists/{slug}/markup-map/``."""
+
+    def test_creates_a_markup_map_and_returns_its_uuid(self) -> None:
+        pin_list = self._make_list("Roadtrip")
+        pin = self._make_pin("Waypoint")
+        PinListItem.objects.create(pin_list=pin_list, pin=pin, order=0)
+
+        response = self.client.post(f"{_BASE}{pin_list.slug}/markup-map/", **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertIn("markup_map_uuid", response.json())
+
+        pin_list.refresh_from_db()
+        self.assertIsNotNone(pin_list.markup_map_id)
+        self.assertEqual(str(pin_list.markup_map.uuid), response.json()["markup_map_uuid"])
+
+    def test_reuses_the_existing_map_on_a_second_call(self) -> None:
+        pin_list = self._make_list("Roadtrip")
+        pin = self._make_pin("Waypoint")
+        PinListItem.objects.create(pin_list=pin_list, pin=pin, order=0)
+
+        first = self.client.post(f"{_BASE}{pin_list.slug}/markup-map/", **_bearer(self.raw_key)).json()
+        second = self.client.post(f"{_BASE}{pin_list.slug}/markup-map/", **_bearer(self.raw_key)).json()
+        self.assertEqual(first["markup_map_uuid"], second["markup_map_uuid"])
+
+    def test_empty_list_is_a_400(self) -> None:
+        pin_list = self._make_list("Empty")
+        response = self.client.post(f"{_BASE}{pin_list.slug}/markup-map/", **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, 400)
+
+    def test_requires_lists_write_scope(self) -> None:
+        pin_list = self._make_list("Roadtrip")
+        self._grant(ApiKeyScope.LISTS_READ)
+        response = self.client.post(f"{_BASE}{pin_list.slug}/markup-map/", **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, 403)
+
+    def test_another_users_list_is_404(self) -> None:
+        other = baker.make(User)
+        theirs = PinList.objects.create(profile=Profile.objects.get(user=other), name="Theirs")
+        response = self.client.post(f"{_BASE}{theirs.slug}/markup-map/", **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, 404)

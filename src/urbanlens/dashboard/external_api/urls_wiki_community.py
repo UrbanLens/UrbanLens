@@ -43,4 +43,9 @@ urlpatterns: list[URLPattern] = [
     # from there like any other governance action, which is why the route lives
     # here rather than beside the alias list in urls.py.
     path("wikis/<str:location_slug>/aliases/<int:alias_id>/use/", views_wiki.WikiAliasUseView.as_view(), name="wikis.aliases.use"),
+    # A display preference on shared data, not a rename - alongside alias-use
+    # for the same reason: both act on a WikiAlias row every pinner shares.
+    path("wikis/<str:location_slug>/aliases/<int:alias_id>/toggle-nickname/", views_wiki.WikiAliasToggleNicknameView.as_view(), name="wikis.aliases.toggle_nickname"),
+    # Community boundary proposals, per this module's own docstring above.
+    path("wikis/<str:location_slug>/boundary/", views_wiki.WikiBoundaryApiView.as_view(), name="wikis.boundary"),
 ]

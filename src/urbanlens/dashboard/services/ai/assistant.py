@@ -22,12 +22,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import json
 import logging
+import time
 from typing import TYPE_CHECKING, Any
 
 from django.db.models import Exists, OuterRef, Q
 
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.json_answer import parse_json_answer
+from urbanlens.dashboard.services.rate_limiter import log_api_call
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -301,38 +303,49 @@ def run_assistant_turn(profile: Profile, history: list[dict[str, Any]], user_mes
     transcript = _history_block(history)
     prompt = (f"{transcript}\n" if transcript else "") + f"USER: {user_message}"
     actions: list[str] = []
+    started = time.monotonic()
+    succeeded = True
 
-    for _ in range(MAX_TOOL_CALLS):
-        answer = gateway.send_prompt(prompt)
-        if not answer:
-            return AssistantTurn(reply="Sorry - I couldn't get a response from the assistant just now. Try again in a moment.", actions=actions)
+    try:
+        for _ in range(MAX_TOOL_CALLS):
+            answer = gateway.send_prompt(prompt)
+            if not answer:
+                succeeded = False
+                return AssistantTurn(reply="Sorry - I couldn't get a response from the assistant just now. Try again in a moment.", actions=actions)
 
-        step = _parse_step(answer)
-        if step is None or "reply" in step:
-            # Either a direct reply, or something unparseable - surface the
-            # text rather than looping (the model already said its piece).
-            reply = str(step.get("reply", "")).strip() if isinstance(step, dict) else answer
-            return AssistantTurn(reply=reply or answer, actions=actions)
+            step = _parse_step(answer)
+            if step is None or "reply" in step:
+                # Either a direct reply, or something unparseable - surface the
+                # text rather than looping (the model already said its piece).
+                reply = str(step.get("reply", "")).strip() if isinstance(step, dict) else answer
+                return AssistantTurn(reply=reply or answer, actions=actions)
 
-        tool_name = str(step.get("tool", ""))
-        entry = _TOOLS.get(tool_name)
-        if entry is None:
-            prompt += f'\nTOOL ERROR: unknown tool "{tool_name}". Use only the listed tools, or reply.'
-            continue
+            tool_name = str(step.get("tool", ""))
+            entry = _TOOLS.get(tool_name)
+            if entry is None:
+                prompt += f'\nTOOL ERROR: unknown tool "{tool_name}". Use only the listed tools, or reply.'
+                continue
 
-        handler, action_label = entry
-        raw_args = step.get("args")
-        args = raw_args if isinstance(raw_args, dict) else {}
-        try:
-            result = handler(profile, args)
-        except Exception:
-            logger.exception("Assistant tool %s failed", tool_name)
-            result = {"error": "The tool failed unexpectedly."}
-        if "error" not in result:
-            actions.append(action_label)
-        prompt += f"\nASSISTANT (tool call): {json.dumps(step)}\nTOOL RESULT ({tool_name}): {json.dumps(result, default=str)}"
+            handler, action_label = entry
+            raw_args = step.get("args")
+            args = raw_args if isinstance(raw_args, dict) else {}
+            try:
+                result = handler(profile, args)
+            except Exception:
+                logger.exception("Assistant tool %s failed", tool_name)
+                result = {"error": "The tool failed unexpectedly."}
+            if "error" not in result:
+                actions.append(action_label)
+            prompt += f"\nASSISTANT (tool call): {json.dumps(step)}\nTOOL RESULT ({tool_name}): {json.dumps(result, default=str)}"
 
-    return AssistantTurn(
-        reply="I hit my per-message action limit before finishing - the steps so far are listed below. Ask me to continue if you'd like.",
-        actions=actions,
-    )
+        return AssistantTurn(
+            reply="I hit my per-message action limit before finishing - the steps so far are listed below. Ask me to continue if you'd like.",
+            actions=actions,
+        )
+    finally:
+        # One call covering the whole turn, not per gateway.send_prompt(): the
+        # gateway accumulates sent/received tokens across every call made on
+        # this instance, so gateway.cost here already reflects every round
+        # trip the loop made, however many tool calls that took.
+        elapsed_ms = int((time.monotonic() - started) * 1000)
+        log_api_call("assistant", success=succeeded, response_ms=elapsed_ms, endpoint=gateway.model, cost_estimate=gateway.cost)

@@ -78,6 +78,9 @@ from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError, Re
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
+    from django.contrib.auth.base_user import AbstractBaseUser
+    from django.contrib.auth.models import AnonymousUser
+
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.subscriptions import SiteFeature
     from urbanlens.dashboard.services.apis.assets.base import MediaProvider
@@ -1072,6 +1075,30 @@ def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None) -> d
         readiness[bespoke_source.key] = bespoke_source.is_ready(pin)
 
     return readiness
+
+
+def panel_visible_to(user: AbstractBaseUser | AnonymousUser, source: PanelSource) -> bool:
+    """Whether *user* holds the subscription feature this panel source requires.
+
+    The single place this fact is decided, shared by the web tab strip
+    (``controllers.pin._viewer_may_see_panel``, which now just calls this) and
+    the external API's panel endpoints - a feature-gated panel must never be
+    visible on one surface and hidden on the other.
+
+    Args:
+        user: The user asking to see the panel (typically ``request.user``).
+        source: The panel source being considered.
+
+    Returns:
+        True when the source is unrestricted (the overwhelming majority) or
+        the viewer holds the feature it requires.
+    """
+    feature = source.required_feature
+    if feature is None:
+        return True
+    from urbanlens.dashboard.models.subscriptions import user_has_feature
+
+    return user_has_feature(user, feature)
 
 
 def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:

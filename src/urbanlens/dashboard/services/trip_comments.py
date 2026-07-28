@@ -282,6 +282,42 @@ def delete_comment(trip: Trip, actor: Profile, comment: TripComment) -> None:
         markup_map.delete()
 
 
+def _comment_visible_to(comment: TripComment, viewer: Profile) -> bool:
+    """Whether one trip comment survives every gate :func:`build_comment_tree` applies.
+
+    The single-comment counterpart to that function, for the paths that address
+    a comment by id rather than rendering the panel. It must stay in step with
+    the three gates in the tree builder's loop - author comment-visibility, the
+    pending malware scan, and mention rendering - because a caller reaching a
+    comment by id that the tree would have dropped can both confirm the id
+    exists and act on it.
+
+    Args:
+        comment: The comment being addressed.
+        viewer: The profile acting on it.
+
+    Returns:
+        True when ``viewer`` would have been shown this comment.
+    """
+    from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
+    from urbanlens.dashboard.services.trip_activities import activity_queryset, compute_activity_index_map
+
+    if comment.author is not None and not viewer.can_view_comments_from(comment.author):
+        return False
+    if comment.pending_scan and comment.author != viewer:
+        return False
+
+    # Mentions resolve against the comment's own trip, so the activity index
+    # map has to be rebuilt for it - an @activity token renders only when that
+    # activity is on this trip, and render_comment_text returns None otherwise.
+    trip = comment.trip
+    activities = list(activity_queryset(trip))
+    index_map = compute_activity_index_map(activities)
+    act_objects = {activity.id: activity for activity in activities}
+    act_index_for_render = {index: act_objects[activity_id] for activity_id, index in index_map.items()}
+    return render_comment_text(comment.text, viewer_pinned_uuids(viewer), act_index_for_render) is not None
+
+
 def set_comment_reaction(comment: TripComment, profile: Profile, emoji: str, *, reacted: bool) -> None:
     """Add or remove one emoji reaction on a trip comment.
 
@@ -297,19 +333,24 @@ def set_comment_reaction(comment: TripComment, profile: Profile, emoji: str, *, 
 
     Raises:
         TripValidationError: The emoji is not one of the allowed reactions.
-        TripNotFoundError: The author's comment visibility hides this comment
-            from the reacting profile. Reported as "not found" rather than
-            "forbidden" so reacting can't be used to probe for comments the
-            viewer was never shown.
+        TripNotFoundError: Any of the gates :func:`build_comment_tree` applies
+            hides this comment from the reacting profile. Reported as "not
+            found" rather than "forbidden" so reacting can't be used to probe
+            for comments the viewer was never shown.
     """
     from urbanlens.dashboard.models.reactions.model import Reaction
 
     if emoji not in ALLOWED_COMMENT_EMOJIS:
         raise TripValidationError("Invalid emoji.")
-    # Same gate the panel render applies: a comment the author's
-    # comment_visibility hides from this viewer can't be discovered or
-    # reacted to by id.
-    if comment.author is not None and not profile.can_view_comments_from(comment.author):
+    # *All* the gates the panel render applies, not just the first. Checking
+    # only comment_visibility left the other two reachable by id: a comment
+    # whose image is still pending_scan, and one naming a trip activity or
+    # @loc the viewer can't resolve, are both dropped from build_comment_tree
+    # but were still reactable. That let a member with a guessed sequential id
+    # confirm the comment exists and fire a reaction notification at its
+    # author - the exact probe this function's "not found" answer exists to
+    # prevent.
+    if not _comment_visible_to(comment, profile):
         raise TripNotFoundError(COMMENT_NOT_FOUND)
 
     existing = Reaction.objects.existing(profile, emoji, trip_comment=comment)

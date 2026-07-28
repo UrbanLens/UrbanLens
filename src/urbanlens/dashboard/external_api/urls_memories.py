@@ -25,9 +25,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.urls import path
+
+from urbanlens.dashboard.external_api import views
+
 if TYPE_CHECKING:
     from django.urls.resolvers import URLPattern
 
 #: Routes contributed by this domain. Appended to the flat ``external_api:``
 #: namespace by ``urls.py`` - see this module's docstring before adding to it.
-urlpatterns: list[URLPattern] = []
+urlpatterns: list[URLPattern] = [
+    path("memories/timeline/", views.MemoriesTimelineView.as_view(), name="memories.timeline"),
+    path("memories/on-this-day/", views.MemoriesOnThisDayApiView.as_view(), name="memories.on_this_day"),
+]

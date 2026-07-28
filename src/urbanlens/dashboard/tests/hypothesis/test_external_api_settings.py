@@ -208,6 +208,96 @@ class SettingsFeatureGatingTests(_SettingsApiTestCase):
         self.assertEqual(response.status_code, 200)
 
 
+class SettingsNameAndContactTests(_SettingsApiTestCase):
+    """``first_name``/``last_name`` and the six contact methods, via /settings/.
+
+    These live on ``User`` (name) and ``Profile`` (contact) respectively, but
+    both are meant to look like an ordinary settings field to a client - see
+    ``services.profile_settings``'s docstring on why they're allowlisted here
+    rather than left to ``PATCH /profiles/{slug}/``.
+    """
+
+    def test_patch_writes_first_and_last_name_to_the_user(self) -> None:
+        response = self.client.patch(
+            self.url,
+            {"first_name": "Ada", "last_name": "Lovelace"},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["first_name"], "Ada")
+        self.assertEqual(payload["last_name"], "Lovelace")
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "Ada")
+        self.assertEqual(self.user.last_name, "Lovelace")
+
+    def test_patch_name_only_touches_user_not_profile_update_fields(self) -> None:
+        """A name-only patch must not blow up on an empty Profile update_fields list."""
+        Profile.objects.filter(pk=self.profile.pk).update(map_default_zoom=7)
+        response = self.client.patch(self.url, {"first_name": "Grace"}, content_type="application/json", **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, 200)
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.map_default_zoom, 7)
+
+    def test_patch_writes_contact_methods_to_the_profile(self) -> None:
+        response = self.client.patch(
+            self.url,
+            {"phone_number": "+15551234567", "signal_username": "ada.99", "matrix_handle": "@ada:matrix.org"},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["phone_number"], "+15551234567")
+        self.assertEqual(payload["signal_username"], "ada.99")
+        self.assertEqual(payload["matrix_handle"], "@ada:matrix.org")
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.phone_number, "+15551234567")
+
+    def test_patch_rejects_a_discord_username_outside_the_allowed_charset(self) -> None:
+        response = self.client.patch(self.url, {"discord_username": "no spaces!"}, content_type="application/json", **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("discord_username", response.json()["fields"])
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.discord_username, "")
+
+    def test_patch_accepts_a_valid_discord_username(self) -> None:
+        response = self.client.patch(self.url, {"discord_username": "ada.lovelace"}, content_type="application/json", **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["discord_username"], "ada.lovelace")
+
+    def test_patch_clears_a_contact_method_with_an_empty_string(self) -> None:
+        Profile.objects.filter(pk=self.profile.pk).update(phone_number="+15551234567")
+        response = self.client.patch(self.url, {"phone_number": ""}, content_type="application/json", **_bearer(self.raw_key))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["phone_number"], "")
+        self.profile.refresh_from_db()
+        self.assertEqual(self.profile.phone_number, "")
+
+    def test_email_and_username_remain_unwritable(self) -> None:
+        """Login identity stays off the allowlist even though name/contact are now on it.
+
+        Neither is a declared ``SettingsPatchSerializer`` field, so - like any
+        other undeclared key - it is silently dropped rather than rejected;
+        see ``test_patch_ignores_a_field_outside_the_allowlist`` for the same
+        contract against ``is_superuser``.
+        """
+        original_email = self.user.email
+        original_username = self.user.username
+        response = self.client.patch(
+            self.url,
+            {"email": "new@example.com", "username": "newname", "first_name": "Ada"},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.email, original_email)
+        self.assertEqual(self.user.username, original_username)
+        self.assertEqual(self.user.first_name, "Ada")
+
+
 class SettingsServiceTests(TestCase):
     """Direct tests of the service, below the HTTP layer."""
 
@@ -225,10 +315,26 @@ class SettingsServiceTests(TestCase):
             apply_settings_patch(self.profile, {"not_a_setting": 1}, user=self.user)
         self.assertIn("not_a_setting", ctx.exception.errors)
 
+    def test_apply_saves_first_name_directly_to_the_user(self) -> None:
+        """Unlike Profile fields, name changes are saved immediately, not left for the caller."""
+        touched = apply_settings_patch(self.profile, {"first_name": "Ada"}, user=self.user)
+        self.assertEqual(touched, [])
+        self.user.refresh_from_db()
+        self.assertEqual(self.user.first_name, "Ada")
+
+    def test_apply_does_not_save_user_when_no_name_field_is_submitted(self) -> None:
+        with mock.patch.object(User, "save") as mock_save:
+            apply_settings_patch(self.profile, {"theme_mode": ThemeChoice.LIGHT}, user=self.user)
+        mock_save.assert_not_called()
+
+    def test_apply_rejects_a_discord_username_outside_the_allowed_charset(self) -> None:
+        with self.assertRaises(SettingsValidationError) as ctx:
+            apply_settings_patch(self.profile, {"discord_username": "!!!"}, user=self.user)
+        self.assertIn("discord_username", ctx.exception.errors)
+
     def test_apply_rejects_a_storage_dimension_above_entitlement(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.profile_settings.allowed_user_dimension_values", return_value={1080}):
-            with self.assertRaises(SettingsValidationError) as ctx:
-                apply_settings_patch(self.profile, {"image_downscale_max_dimension": 999999}, user=self.user)
+        with mock.patch("urbanlens.dashboard.services.profile_settings.allowed_user_dimension_values", return_value={1080}), self.assertRaises(SettingsValidationError) as ctx:
+            apply_settings_patch(self.profile, {"image_downscale_max_dimension": 999999}, user=self.user)
         self.assertIn("image_downscale_max_dimension", ctx.exception.errors)
 
     def test_apply_allows_null_storage_dimension(self) -> None:

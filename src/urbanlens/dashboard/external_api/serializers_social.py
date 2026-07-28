@@ -22,6 +22,9 @@ Two conventions worth knowing before adding to this module:
 
 from __future__ import annotations
 
+import re
+from urllib.parse import urlparse
+
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.colors import MaterialColor
@@ -31,6 +34,12 @@ from urbanlens.dashboard.services.profile_annotations import (
     MAX_TRUST_RATING,
     MIN_TRUST_RATING,
 )
+from urbanlens.dashboard.services.social_links import KNOWN_PLATFORMS, validate_handle
+
+#: Mirrors ``forms.profile_form._DISCORD_HANDLE_RE`` / ``services.profile_settings._DISCORD_USERNAME_RE`` -
+#: this is the public-social-link Discord entry (``SocialLink(platform="discord")``), a distinct
+#: row from the private ``Profile.discord_username`` contact field, but the same charset rule.
+_DISCORD_HANDLE_RE = re.compile(r"^[a-zA-Z0-9._#-]{2,100}$")
 
 
 class AvatarEmojiSerializer(serializers.Serializer):
@@ -114,3 +123,118 @@ class ProfileTrustWriteSerializer(serializers.Serializer):
     """
 
     rating = serializers.IntegerField(min_value=MIN_TRUST_RATING, max_value=MAX_TRUST_RATING)
+
+
+class SocialLinkSerializer(serializers.Serializer):
+    """One entry in a profile's public social-links list, as rendered for display.
+
+    Shape matches ``services.social_links.get_profile_links`` field for field -
+    ``url`` is null only for Discord, which has no public profile URL.
+    """
+
+    platform = serializers.CharField(read_only=True)
+    handle = serializers.CharField(read_only=True)
+    url = serializers.CharField(read_only=True, allow_null=True)
+    display_name = serializers.CharField(read_only=True)
+    icon = serializers.CharField(read_only=True)
+
+
+class SocialLinksResponseSerializer(serializers.Serializer):
+    """The full set of a profile's social links (schema-only)."""
+
+    links = SocialLinkSerializer(many=True, read_only=True)
+
+
+class SocialLinkWriteSerializer(serializers.Serializer):
+    """One social-link entry inside a full-replace submission.
+
+    ``handle`` means different things per platform: a username for the eight
+    handle-based platforms - validated by the same
+    ``services.social_links.validate_handle`` rules a pasted URL is checked
+    against internally, so a directly-submitted handle can never be looser
+    than one the web UI would have extracted - Discord's own free-form
+    username (it has no public profile URL to parse one from), or the
+    complete URL itself for ``website``.
+    """
+
+    platform = serializers.ChoiceField(choices=sorted(KNOWN_PLATFORMS))
+    handle = serializers.CharField(max_length=500)
+
+    def validate(self, attrs: dict) -> dict:
+        """Apply the platform-specific handle/URL rule, normalizing where one exists.
+
+        Args:
+            attrs: The already field-validated submission.
+
+        Returns:
+            *attrs*, with ``handle`` normalized (stripped of a leading ``@``
+            for username platforms; stripped of its fragment for ``website``).
+
+        Raises:
+            serializers.ValidationError: The handle is blank, or fails its
+                platform's rule.
+        """
+        platform = attrs["platform"]
+        raw = attrs["handle"].strip()
+        handle = raw if platform == "website" else raw.lstrip("@")
+        if not handle:
+            raise serializers.ValidationError({"handle": "This field may not be blank."})
+
+        if platform == "website":
+            # Mirrors parse_social_link's own two-step check. The raw scheme
+            # must be inspected *before* defaulting a scheme-less submission
+            # ("example.com/me") to https: prepending blindly would turn
+            # "javascript:alert(1)" into "https://javascript:alert(1)", whose
+            # netloc parses to a deceptively harmless-looking hostname
+            # ("javascript") - the raw scheme has to be rejected first.
+            raw_scheme = urlparse(handle).scheme
+            if raw_scheme not in {"", "http", "https"} and ("://" in handle or raw_scheme in {"javascript", "vbscript", "data", "ftp", "file", "mailto"}):
+                raise serializers.ValidationError({"handle": "Must be a valid http:// or https:// URL."})
+            url_str = handle if "://" in handle else f"https://{handle}"
+            parsed = urlparse(url_str)
+            if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+                raise serializers.ValidationError({"handle": "Must be a valid http:// or https:// URL."})
+            handle = parsed._replace(fragment="").geturl()
+            if len(handle) > 500:
+                raise serializers.ValidationError({"handle": "URL must be 500 characters or fewer."})
+        elif platform == "discord":
+            if not _DISCORD_HANDLE_RE.match(handle):
+                raise serializers.ValidationError({"handle": "2-100 characters: letters, digits, underscores, dots, hyphens, or #."})
+        else:
+            error = validate_handle(platform, handle)
+            if error:
+                raise serializers.ValidationError({"handle": error})
+
+        attrs["handle"] = handle
+        return attrs
+
+
+class SocialLinksReplaceSerializer(serializers.Serializer):
+    """Validates a full-replace PUT of the caller's social links.
+
+    PUT rather than PATCH, matching ``SafetyContactDefaultsSerializer``'s own
+    precedent: the underlying write deletes and recreates the whole set, and
+    there is no per-entry addressing (a platform key inside the body isn't
+    one) to PATCH against. Submitting an empty ``links`` list clears every
+    platform.
+    """
+
+    links = SocialLinkWriteSerializer(many=True)
+
+    def validate_links(self, value: list[dict]) -> list[dict]:
+        """Reject a submission naming the same platform twice.
+
+        Args:
+            value: The per-entry validated list.
+
+        Returns:
+            *value*, unchanged.
+
+        Raises:
+            serializers.ValidationError: A platform appears more than once,
+                which would make the outcome depend on list order.
+        """
+        platforms = [link["platform"] for link in value]
+        if len(platforms) != len(set(platforms)):
+            raise serializers.ValidationError("Each platform may appear at most once.")
+        return value

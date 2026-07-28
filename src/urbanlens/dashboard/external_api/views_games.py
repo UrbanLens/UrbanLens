@@ -32,10 +32,15 @@ accidentally remove:
 
 from __future__ import annotations
 
+from datetime import timedelta
+import json
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from django.contrib.gis.gdal.error import GDALException
+from django.contrib.gis.geos import GEOSException
 from django.http import HttpResponse
+from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
 
@@ -43,9 +48,18 @@ from urbanlens.dashboard.external_api.pagination import PaginatedListMixin
 from urbanlens.dashboard.external_api.permissions import credential_grants
 from urbanlens.dashboard.external_api.serializers import ErrorSerializer
 from urbanlens.dashboard.external_api.serializers_games import (
+    SpotGuessrEligibleCountQuerySerializer,
+    SpotGuessrEligibleCountResponseSerializer,
+    SpotGuessrEligiblePinSerializer,
+    SpotGuessrEligiblePinsQuerySerializer,
+    SpotGuessrFeedbackResponseSerializer,
+    SpotGuessrFeedbackSerializer,
     SpotGuessrGuessResponseSerializer,
     SpotGuessrGuessSerializer,
     SpotGuessrOverviewSerializer,
+    SpotGuessrPreferencesResponseSerializer,
+    SpotGuessrPreferencesUpdateSerializer,
+    SpotGuessrRoundExpireResponseSerializer,
     SpotGuessrRoundResponseSerializer,
     SpotGuessrSessionCreateResponseSerializer,
     SpotGuessrSessionCreateSerializer,
@@ -66,16 +80,23 @@ from urbanlens.dashboard.external_api.throttling import (
 )
 from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import (
     GameRound,
     GameSession,
     GameSessionParticipant,
     GameSessionStatus,
+    Guess,
     SpotGuessrMode,
 )
 from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
-from urbanlens.dashboard.services.spotguessr import overview as spotguessr_overview, round_image as spotguessr_round_image, session as spotguessr_session
+from urbanlens.dashboard.services.spotguessr import (
+    overview as spotguessr_overview,
+    relevance as spotguessr_relevance,
+    round_image as spotguessr_round_image,
+    session as spotguessr_session,
+)
 from urbanlens.dashboard.services.spotguessr.social import visible_friend_ratings
 
 if TYPE_CHECKING:
@@ -111,6 +132,35 @@ def _rating_payload(rating: PlayerModeRating | None) -> dict[str, Any] | None:
         "games_played": rating.games_played,
         "last_played_at": rating.last_played_at,
     }
+
+
+def _parse_geo_bounds_query(raw: str | None) -> tuple[dict | None, Response | None]:
+    """Parse+validate an optional ``geo_bounds`` GeoJSON query-string value.
+
+    Mirrors ``controllers.spotguessr._parse_geo_bounds`` exactly, translated to
+    this API's ``{"error": ...}`` envelope instead of ``JsonResponse``.
+
+    Args:
+        raw: The raw ``geo_bounds`` query parameter, or None.
+
+    Returns:
+        ``(geojson, None)`` on success (``geojson`` is None when ``raw`` was
+        empty), or ``(None, response)`` carrying the 400 to return as-is.
+    """
+    try:
+        geo_bounds_geojson = json.loads(raw) if raw else None
+    except (TypeError, ValueError):
+        return None, Response({"error": "Invalid geo_bounds - must be GeoJSON."}, status=400)
+
+    config = spotguessr_session.GameConfig(geo_bounds_geojson=geo_bounds_geojson)
+    try:
+        # GameConfig.geo_bounds only parses the GeoJSON lazily on access -
+        # force it now so a malformed-but-valid-JSON payload 400s here,
+        # rather than surfacing as a 500 later inside the pin query.
+        _ = config.geo_bounds
+    except (GEOSException, GDALException, ValueError, TypeError):
+        return None, Response({"error": "Invalid geo_bounds - must be a valid GeoJSON polygon."}, status=400)
+    return geo_bounds_geojson, None
 
 
 class SoloSessionOnlyMixin:
@@ -268,6 +318,103 @@ class SpotGuessrOverviewView(ExternalApiView):
         return rows
 
 
+class SpotGuessrPreferencesView(ExternalApiView):
+    """PATCH: update the one genuinely user-editable SpotGuessr preference.
+
+    Mirrors ``controllers.spotguessr.SpotGuessrSettingsView`` exactly.
+    ``last_config`` stays off this surface entirely - it is auto-managed by
+    ``remember_last_config`` on every session start, never directly
+    user-writable (confirmed against the internal view, which also only ever
+    touches ``show_ratings_to_friends``).
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "PATCH": frozenset({ApiKeyScope.GAMES_WRITE}),
+    }
+
+    @extend_schema(request=SpotGuessrPreferencesUpdateSerializer, responses={200: SpotGuessrPreferencesResponseSerializer})
+    def patch(self, request: Request) -> Response:
+        """Write the caller's ``show_ratings_to_friends`` preference."""
+        serializer = SpotGuessrPreferencesUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        preference = spotguessr_overview.get_preference(request.user.profile)
+        preference.show_ratings_to_friends = serializer.validated_data["show_ratings_to_friends"]
+        preference.save(update_fields=["show_ratings_to_friends", "updated"])
+        return Response({"show_ratings_to_friends": preference.show_ratings_to_friends})
+
+
+class SpotGuessrEligibleCountView(ExternalApiView):
+    """GET: how many of the caller's own pins fall inside a candidate area.
+
+    Mirrors ``controllers.spotguessr.SpotGuessrAreaPinCountView`` exactly - a
+    lightweight pre-check so a client can warn "not enough pins here" before
+    spending the (tighter, billed-imagery-capable) session-start budget on a
+    config that has nothing to play.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.GAMES_READ}),
+    }
+
+    @extend_schema(parameters=[SpotGuessrEligibleCountQuerySerializer], responses={200: SpotGuessrEligibleCountResponseSerializer, 400: ErrorSerializer})
+    def get(self, request: Request) -> Response:
+        """Return the count of the caller's own pins inside ``geo_bounds``."""
+        query = SpotGuessrEligibleCountQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+
+        geo_bounds_geojson, error = _parse_geo_bounds_query(query.validated_data["geo_bounds"])
+        if error is not None:
+            return error
+
+        geo_bounds = spotguessr_session.GameConfig(geo_bounds_geojson=geo_bounds_geojson).geo_bounds
+        count = Pin.objects.filter(profile=request.user.profile, location__point__within=geo_bounds).count()
+        return Response({"count": count})
+
+
+class SpotGuessrEligiblePinsView(PaginatedListMixin, ExternalApiView):
+    """GET: the caller's own pins that are currently SpotGuessr-eligible.
+
+    A browse/read endpoint, not a play mode - solo eligibility is exactly "the
+    player's own pinned locations" (see ``services.spotguessr.eligibility``),
+    optionally narrowed to a candidate ``geo_bounds`` the same way session
+    start and the area-count pre-check are. Mirrors
+    ``controllers.spotguessr.SpotGuessrPinsView``, paginated instead of
+    returned as one unbounded list.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.GAMES_READ}),
+    }
+
+    @extend_schema(parameters=[SpotGuessrEligiblePinsQuerySerializer], responses={200: SpotGuessrEligiblePinSerializer(many=True), 400: ErrorSerializer})
+    def get(self, request: Request) -> Response:
+        """Return one page of the caller's own pins, as candidate locations."""
+        query = SpotGuessrEligiblePinsQuerySerializer(data=request.query_params)
+        query.is_valid(raise_exception=True)
+
+        pins = Pin.objects.filter(profile=request.user.profile).select_related("location").order_by("pk")
+
+        raw_bounds = query.validated_data.get("geo_bounds")
+        if raw_bounds:
+            geo_bounds_geojson, error = _parse_geo_bounds_query(raw_bounds)
+            if error is not None:
+                return error
+            geo_bounds = spotguessr_session.GameConfig(geo_bounds_geojson=geo_bounds_geojson).geo_bounds
+            pins = pins.filter(location__point__within=geo_bounds)
+
+        return self.paginated_response(
+            pins,
+            SpotGuessrEligiblePinSerializer,
+            request,
+            row_builder=lambda pin: {
+                "label": pin.get_unique_search_name() or pin.name or "Unnamed pin",
+                "latitude": pin.effective_latitude,
+                "longitude": pin.effective_longitude,
+            },
+        )
+
+
 class SpotGuessrSessionsView(PaginatedListMixin, ExternalApiView):
     """GET: the caller's session history. POST: start a new solo session.
 
@@ -412,8 +559,13 @@ class SpotGuessrRoundView(SpotGuessrSessionScopedView):
     fetch.
     """
 
+    #: ``games:write`` as well as ``games:read``, because this GET *writes* -
+    #: see the class docstring. Reclassifying it into the write throttle tier
+    #: (below) bounded how often it could be called but authorized nothing: a
+    #: read-only credential could still generate rounds, freeze the session's
+    #: ``bonus_scope`` and complete the session. A throttle is not a permission.
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
-        "GET": frozenset({ApiKeyScope.GAMES_READ}),
+        "GET": frozenset({ApiKeyScope.GAMES_READ, ApiKeyScope.GAMES_WRITE}),
     }
     #: Overrides the scope-derived classification: ``games:read`` would
     #: otherwise put this in the read tier. See the class docstring.
@@ -491,6 +643,81 @@ class SpotGuessrGuessView(SpotGuessrSessionScopedView):
 
         round_.refresh_from_db()
         return Response(build_reveal_payload(round_, guess, list(bonus_tiers), rating_change))
+
+
+class SpotGuessrRoundExpireView(SpotGuessrSessionScopedView):
+    """POST: force-reveal the current round because its round timer expired.
+
+    Mirrors ``controllers.spotguessr.SpotGuessrRoundTimeoutView``. The
+    authoritative check is server-side (``round_.created`` plus the session's
+    own ``round_time_limit_seconds``, never the client's clock) - this just
+    gives a client whose local countdown hit zero a fast path to
+    ``expire_round_timer``. A no-op (200, not an error) when the round is
+    already revealed or the timer genuinely hasn't expired yet - a
+    late/duplicate/clock-skewed call is harmless either way.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.GAMES_WRITE}),
+    }
+
+    @extend_schema(responses={200: SpotGuessrRoundExpireResponseSerializer, 404: ErrorSerializer, 409: ErrorSerializer})
+    def post(self, request: Request, session_id: int, round_id: int) -> Response:
+        """Reveal the round if its timer has genuinely expired, and report its state."""
+        session, refusal = self.resolve_solo_session(request, session_id)
+        if session is None:
+            return refusal
+
+        round_ = GameRound.objects.filter(pk=round_id, session=session).first()
+        if round_ is None:
+            return Response({"error": "Not found."}, status=404)
+
+        time_limit = (session.config or {}).get("round_time_limit_seconds")
+        if round_.revealed_at is None and time_limit and timezone.now() >= round_.created + timedelta(seconds=time_limit):
+            spotguessr_session.expire_round_timer(round_)
+            round_.refresh_from_db()
+
+        return Response({"revealed": round_.revealed_at is not None})
+
+
+class SpotGuessrRoundFeedbackView(SpotGuessrSessionScopedView):
+    """POST: thumbs up/down, or report, the photo a Photos-mode round just showed.
+
+    Mirrors ``controllers.spotguessr.SpotGuessrPhotoFeedbackView``. Feeds
+    ``services.media_relevance.effective_relevance`` at a reduced weight (or,
+    for a report, full weight against "not relevant") - see
+    ``services.spotguessr.relevance`` for exactly how. A 400 for a round with
+    no photo (Named Place/Street View); a 403 for a round this profile never
+    guessed on - there is no "reaction to a photo you weren't shown" case to
+    support.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.GAMES_WRITE}),
+    }
+
+    @extend_schema(request=SpotGuessrFeedbackSerializer, responses={200: SpotGuessrFeedbackResponseSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer, 409: ErrorSerializer})
+    def post(self, request: Request, session_id: int, round_id: int) -> Response:
+        """Record the caller's reaction to the round's photo, if it has one."""
+        session, refusal = self.resolve_solo_session(request, session_id)
+        if session is None:
+            return refusal
+
+        round_ = GameRound.objects.filter(pk=round_id, session=session).select_related("session").first()
+        if round_ is None:
+            return Response({"error": "Not found."}, status=404)
+
+        serializer = SpotGuessrFeedbackSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        kind = serializer.validated_data["kind"]
+
+        if not Guess.objects.filter(round=round_, profile=request.user.profile).exists():
+            return Response({"error": "You can only react to a round you've guessed on."}, status=403)
+
+        feedback = spotguessr_relevance.record_feedback(round_, request.user.profile, kind)
+        if feedback is None:
+            return Response({"error": "This round has no photo to react to."}, status=400)
+        return Response({"kind": feedback.kind})
 
 
 class SpotGuessrSummaryView(SpotGuessrSessionScopedView):

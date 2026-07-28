@@ -22,22 +22,26 @@ to paths starting `/dashboard/api/external/v1/` plus the anchored `/dashboard/e2
 5. [Account & Identity](#account--identity)
 6. [Pins](#pins)
 7. [Pin Sub-resources](#pin-sub-resources)
-8. [Lists & Saved Filters](#lists--saved-filters)
-9. [Labels](#labels)
-10. [Photos](#photos)
-11. [Locations & Suggestions](#locations--suggestions)
-12. [Memories](#memories)
-13. [Community Wikis](#community-wikis)
-14. [Trips](#trips)
-15. [Direct Messages & Group Chats](#direct-messages--group-chats)
-16. [WebSockets](#websockets)
-17. [Safety](#safety)
-18. [Friends & Social](#friends--social)
-19. [Notifications & Push](#notifications--push)
-20. [Games](#games)
-21. [Search](#search)
-22. [End-to-End Encryption (E2EE)](#end-to-end-encryption-e2ee)
-23. [Not Yet Implemented](#not-yet-implemented)
+8. [Panels](#panels)
+9. [Custom Fields](#custom-fields)
+10. [Lists & Saved Filters](#lists--saved-filters)
+11. [Labels](#labels)
+12. [Photos](#photos)
+13. [Locations & Suggestions](#locations--suggestions)
+14. [Memories](#memories)
+15. [Community Wikis](#community-wikis)
+16. [Trips](#trips)
+17. [Direct Messages & Group Chats](#direct-messages--group-chats)
+18. [WebSockets](#websockets)
+19. [Safety](#safety)
+20. [Friends & Social](#friends--social)
+21. [Notifications & Push](#notifications--push)
+22. [Games](#games)
+23. [Undo History](#undo-history)
+24. [Search](#search)
+25. [AI Assistant](#ai-assistant)
+26. [End-to-End Encryption (E2EE)](#end-to-end-encryption-e2ee)
+27. [Not Yet Implemented](#not-yet-implemented)
 
 ---
 
@@ -54,6 +58,14 @@ The first-party mobile/desktop app is a registered **public** OAuth2 client (`cl
 urbanlens-mobile`), provisioned by migration (`provision_mobile_oauth_client`) — no client secret,
 PKCE required, redirect URIs `urbanlens://oauth/callback` and `http://127.0.0.1/callback` (desktop
 loopback, any port). A third-party integration would register its own client the same way.
+
+The consent screen at `/oauth/authorize/` (`oauth2_provider/authorize.html`, overridden under
+`dashboard/templates/`) now uses the site's own themed auth shell rather than django-oauth-toolkit's
+unstyled Bootstrap-2 default — this is the one user-visible gate before a client is granted a scope
+like `messages:*` against an E2EE mailbox, so it matters that it reads as UrbanLens rather than a
+generic framework page. Only `authorize.html` was restyled; the token/application management pages
+under `oauth2_provider:` (e.g. `authorized-token-list`, used to revoke a connected app) are linked
+from it but still render with the toolkit's own default template.
 
 A handful of endpoints (`whoami/`, `settings/`, and the E2EE views under `dashboard/e2ee/`) also
 accept the caller's browser session cookie — they extend `DualAuthJsonView` and try session auth
@@ -89,6 +101,10 @@ declared scopes means access denied, never "no scope needed."
 | `search:read` | Search your pins, wikis, and photos |
 | `games:read` / `games:write` | Read game history/scores / play games on your behalf |
 | `push:manage` | Register/remove this device's push notifications |
+| `custom_fields:read` / `custom_fields:write` | Read your custom field definitions and values / create, edit, delete them |
+| `undo:read` / `undo:write` | Read your recent delete history available to undo / restore a previously deleted item |
+| `panels:read` | Read pin-detail enrichment panels (boundaries and other plugin-contributed data) |
+| `assistant:write` | Chat with your AI assistant, including creating trips and trip activities it suggests |
 
 **`messages:read`/`messages:write` can never be granted to a PAT**, even one hand-edited to carry
 them — `external_api.permissions.OAUTH2_ONLY_SCOPES` refuses them for any credential without
@@ -137,9 +153,10 @@ in a couple of seconds.
   in code as deliberate.
 - **Pagination**: page-number style almost everywhere (`{count,next,previous,results}`). The
   pin/tombstone sync feeds and message-thread endpoints are cursor-based instead. A few small
-  envelopes are non-paginated by design (a trip's map markers, a safety check-in's maps list, the
-  memories journal). `memories/journal/` and `safety/checkins/{slug}/maps/` are known deferred
-  normalizations onto the standard envelope (see `docs/PROBLEMS.md`).
+  envelopes remain non-paginated by design (a trip's map markers, the undo feed). `memories/journal/`
+  and `safety/checkins/{slug}/maps/` used to be among them (a bare top-level array, and a bespoke
+  `{entries,total,omitted_sources}` shape) but were normalized onto the standard envelope before v1
+  gained any real client depending on the old shape — see their entries below.
 - **Versioning**: `v1` changes additively only. A breaking change mints `/v2/` and serves a
   `Sunset` header on `v1`.
 - **WebSockets enforce scopes** exactly like HTTP: `ws/messages/` needs `messages:read` to connect
@@ -163,9 +180,9 @@ in a couple of seconds.
 
 `GET /auth/session/` — `AuthSessionView` — scopes: session-or-credential (`IsAuthenticated` only, no scope — a client asks this to discover its own grant) — describes the calling credential — response: `{credential_type: "oauth2"|"api_key", scopes[], expires_at, issued_at, client_id, name, user_uuid}` — throttle tier forced to `read` (would otherwise default to `write` since it declares no scopes).
 
-`GET /settings/` — `AccountSettingsView` — scopes: `settings:read` — full account-preferences document (hand-enumerated allowlist, not model-derived — deliberately fails closed on new `Profile` fields) — response: ~50 explicit fields grouped as privacy visibilities, DM prefs, style/theme, map display/center, markup defaults, places/AI/keyword-tagging feature toggles, history tracking, community/wiki-sync toggles, external-APIs toggle, storage downscaling limits, plus read-only `updated`, `effective_distance_units`, `features{ai,places}`, `allowed_image_dimensions[]`, `allowed_video_heights[]`.
+`GET /settings/` — `AccountSettingsView` — scopes: `settings:read` — full account-preferences document (hand-enumerated allowlist, not model-derived — deliberately fails closed on new `Profile` fields) — response: `first_name`/`last_name`(read through to `User`), the six contact methods (`phone_number,signal_username,discord_username,whatsapp_number,telegram_username,matrix_handle`), plus ~50 further fields grouped as privacy visibilities, DM prefs, style/theme, map display/center, markup defaults, places/AI/keyword-tagging feature toggles, history tracking, community/wiki-sync toggles, external-APIs toggle, storage downscaling limits, plus read-only `updated`, `effective_distance_units`, `features{ai,places}`, `allowed_image_dimensions[]`, `allowed_video_heights[]`.
 
-`PATCH /settings/` — `AccountSettingsView` — scopes: `settings:write` — partial update, absent=untouched — request: same field set, all optional — response: full post-save document (never echoes submission — `community_enabled:false` coerces gated visibility/wiki-sync fields off server-side) — 400 `{error, fields: {...}}` per-field (feature-gated fields rejected while the feature is off).
+`PATCH /settings/` — `AccountSettingsView` — scopes: `settings:write` — partial update, absent=untouched — request: same field set, all optional — response: full post-save document (never echoes submission — `community_enabled:false` coerces gated visibility/wiki-sync fields off server-side) — 400 `{error, fields: {...}}` per-field (feature-gated fields rejected while the feature is off) — `first_name`/`last_name` save straight to `User`, not `Profile` (no uniqueness check, unlike `username`/`email` which stay off this surface entirely); `discord_username` is charset-checked (`2-100 chars: letters, digits, underscores, dots, hyphens, or #`) — this is the private contact-info Discord field, a separate row from the public one under [Profile Social Extras](#profile-social-extras).
 
 ---
 
@@ -177,13 +194,18 @@ in a couple of seconds.
 
 `GET /pins/deleted/` — `PinTombstonesView` — scopes: `pins:read` — delta feed of hard-deletions, companion to `pins/` — query: `deleted_since`, `cursor`, `limit` — response: `{tombstones: [{pin_uuid, deleted_at}], next_cursor, sync_watermark}` — **410 Gone** + `{full_resync_required: true}` when `deleted_since` predates the tombstone retention window — client must fully re-walk `pins/` with no `modified_since` and drop locally-held pins absent from the result. (This literal route sits textually behind `pins/<slug>/`; the specificity re-sort guarantees it can never be shadowed.)
 
-`GET /pins/{pin_slug}/` — `PinDetailView` — scopes: `pins:read` — full detail, superset of the sync payload — adds: official_name, date_built/date_abandoned/date_last_active, `security{fences,alarms,cameras,security,signs,vps,plywood,locked}`, location_slug(navigate wikis with this, not wiki_slug), wiki_slug(informational only), cover_photo_url, boundary(GeoJSON, nullable), notes[]/aliases[]/links[]/custom_fields[{id,name,type,value}], note_count/alias_count/link_count.
+`GET /pins/{pin_slug}/` — `PinDetailView` — scopes: `pins:read` — full detail, superset of the sync payload — adds: official_name, `city`/`state`/`county`/`country`/`zipcode`(read-only, geocoded from the pin's Location — never exposed via a direct Location lookup, only through a pin the caller already owns), date_built/date_abandoned/date_last_active, `security{fences,alarms,cameras,security,signs,vps,plywood,locked}`, location_slug(navigate wikis with this, not wiki_slug), wiki_slug(informational only), cover_photo_url, boundary(GeoJSON, nullable), notes[]/aliases[]/links[]/custom_fields[{id,name,type,value}], note_count/alias_count/link_count.
 
 `PATCH /pins/{pin_slug}/` — `PinDetailView` — scopes: `pins:write` — partial; **absent = untouched, explicit null = cleared** — request: name, icon, description, color, pin_type, priority/danger/vulnerability(0-5; publishes/withdraws a community `WikiStatVote` when the matching sync-to-wiki setting is on), last_visited, date_built/date_abandoned/date_last_active, `security{...}`(partial, 8 fields, `unknown` clears), `label_uuids[]`(**full replacement**, not delta, of tag/category/status labels only — removed ones tombstoned so auto-tagging can't re-add them), `visited`(bool convenience toggle — mutually exclusive with an explicit `last_visited` in the same call), latitude+longitude(must both be present; relinks Location), parent_id(uuid to reparent, null to detach), confirm_wiki_loss — response: full detail — `rating` NOT accepted here (use `/review/`); address/city/state/country/official_name read-only (derived from Location); **409** `{requires_wiki_loss_confirmation: true, wikis:[{name,slug}]}` when a move would end community-wiki access — resend with `confirm_wiki_loss:true`.
 
 `DELETE /pins/{pin_slug}/` — `PinDetailView` — scopes: `pins:write` — stages an Undo History entry + tombstone — query: `children=delete|keep` — **409** `{requires_children_decision: true, children: <count>}` if the pin has children and the param is omitted.
 
 `POST /pin-suggestions/` — `PinSuggestionsView` — scopes: `pins:write` — stages a **pending `PinSuggestion`**, not a real pin (owner must accept/reject from Memories → Locations); merges into an existing pin/pending suggestion via the same clustering pipeline as Immich/local-scan hits — request: name, latitude+longitude or address, description, pin_type, `aliases[]`(≤10), `links[{name,url}]`(≤10, http/https only), `photos[]`(URLs to download, ≤3) — response 201: `{suggestion_id, status, matched_existing_pin, photos_attached, review_url}` — 403 if visit-history tracking is off (a suggestion is itself a location-history trail); 403 if address-only and external lookups are disabled.
+
+**Bulk operations** — thin wrappers over the main map's multi-select toolbar (`dashboard/controllers/pin_bulk.py`), routed from `urls_pin_extra.py`. Every pin named that isn't the caller's own is silently ignored rather than refused (an offline client replaying a queued batch shouldn't fail wholesale over one pin gone meanwhile), but an unresolvable `add_label_uuids`/`remove_label_uuids`/`parent_uuid` value is a 400 — the caller asked for something specific and impossible, not something merely stale.
+- `POST /pins/bulk/delete/` — `PinBulkDeleteView` — `pins:write` — request: `{uuids[]}`(≤500) — deletes each pin's full detail-pin subtree, stashing one `UndoAction` covering everything removed — response: `{deleted, descendant_count, total_count, undo_uuid}` — restore via the existing generic `POST /undo/{undo_uuid}/restore/` (needs `undo:write` too), not a bulk-specific undo endpoint — 404 if none of `uuids` are the caller's.
+- `POST /pins/bulk/merge/` — `PinBulkMergeView` — `pins:write` — request: `{target_uuid, source_uuids[]}`(≤500) — every source becomes a detail pin of the target; a target that's currently itself a detail pin is promoted to top-level first — response: `{target: PinSummary, merged_uuids[], skipped_uuids[]}` (skips are sources that would have made the target their own descendant) — 400 if promoting the target would collide with another top-level pin at the same location, or if nothing ended up merged — 404 if `target_uuid` isn't the caller's.
+- `POST /pins/bulk/edit/` — `PinBulkEditView` — `pins:write` — request: `{uuids[]}`(≤500) plus any of `description`(absent=untouched, null/empty=cleared), `rating`(1-5 sets a `Review` for each pin, null clears it — absent=untouched; kept off single-pin PATCH for the same reason, see `/review/` above, but bulk has no per-pin alternative), `add_label_uuids[]`/`remove_label_uuids[]`(delta, not a replacement — contrast single-pin PATCH's `label_uuids`; removals write the same `PinAutoRemoval` tombstone so auto-tagging can't put a label back), `parent_uuid`(reparent every pin under one target, null detaches to top-level) — response: `{count, reparented}` — 404 if none of `uuids` are the caller's.
 
 ---
 
@@ -204,6 +226,7 @@ in a couple of seconds.
 
 **Visits** — own scope family (`visits:*`, not `pins:*`) so a client can be granted a pin's contents without the owner's movement history
 - `GET/POST /pins/{pin_slug}/visits/` — `PinVisitsView` — `visits:read`/`visits:write` — most-recent-first. POST: `visited_at`(required), `notes`(≤50000). Response: `{id, uuid, visited_at, notes, source(read-only), tentative(read-only), photo_count, created, updated}` — 403 if visit-tracking off.
+- `PATCH /pins/{pin_slug}/visits/{visit_id}/` — `PinVisitDetailView` — `visits:write` — partial, absent=untouched — request: `visited_at`, `notes` (the same two fields POST accepts — participants/photos/markup-map stay the web dialog's concern) — re-derives the pin's last-visited date on any change — response: full visit.
 - `DELETE /pins/{pin_slug}/visits/{visit_id}/` — `visits:write` — re-derives the pin's last-visited date.
 
 **Comments** — owner's private annotation, scoped `pins:*` (not `wiki:*`)
@@ -226,6 +249,37 @@ in a couple of seconds.
 
 **Pin shares**
 - `POST /pin-shares/{share_id}/respond/` — `PinShareRespondView` — scopes: `pins:write`(not `messages:*` — shares also arrive as bare notifications) — request: `{action: "accept"|"reject"}` — response: `{status, pin_slug(null on reject), detail}` — 404 if share doesn't exist *or* addressed to someone else; 400 if already handled; deliberately does **not** call `record_share_exposure`.
+
+---
+
+## Panels
+
+Pin-detail enrichment panels (the same `PanelSource` plugin data backing the internal HTMX tab strip) as JSON — a job-shaped ask/cached-or-pending/poll surface, since a cold fetch talks to an upstream provider from a Celery worker, never on the request thread.
+
+`GET /pins/{pin_slug}/panels/` — `PinPanelsListView` — scopes: `panels:read` — every panel exposed to this API for this pin, with its readiness. A source is listed only when it has declared a non-empty `api_kinds` (the panel author's explicit opt-in — see below), passes its own `gate(pin)` precondition (e.g. has usable coordinates), and the caller holds whatever `SiteFeature` the source requires, if any — a feature-gated source the caller can't see is omitted entirely, the same rule the web tab strip applies. Response: `[{key, kinds[], ready}]`.
+
+`GET /pins/{pin_slug}/panels/{key}/` — `PinPanelDetailView` — scopes: `panels:read` — an unknown key, empty `api_kinds`, failed `gate`, or an ungranted feature gate all answer **404**, identically — never 403, which would confirm a paywalled panel has something to say about this specific pin. Ready → **200** with the panel's own `api_payload(pin)` body (shape varies per `PanelApiKind` — `info`/`media`/`boundary`/`buildings` — declared per source, not fixed by this endpoint). Ready but genuinely empty → **204** (a media search that found zero results is a real answer, not a missing one). Not ready → schedules a fetch and answers **202** `{"ready": false, "poll_after_seconds": N}` — `N` is 2 seconds while a fetch is in flight, larger if scheduling failed (broker down, or this source was recently suppressed after a failure).
+
+**`satellite` and `street_view` are permanently excluded** — empty `api_kinds` by design, not an oversight (see D8 in `docs/notes/mobile_app_notes.md`): their web payload is base64 `data:` URIs (5-15MB/response), and this API's throttle counts requests, not bytes, so exposing them would hand any key holder an unmetered bandwidth amplifier. Needs a signed slide-image proxy that doesn't exist yet.
+
+**A panel source is closed to the API by default.** `PanelSource.api_kinds` defaults to an empty frozenset at the base class — the authoritative "not on the API" signal, independent of whether `api_payload()` happens to return data right now (it also returns `None` whenever the data simply hasn't landed yet). `InfoPanelSource`/`GalleryMediaSource` (the two most common plugin base classes) default `api_kinds` to non-empty, so a plugin author gets API exposure automatically unless they opt back out — five built-in plugins do so deliberately: `property_records`, `loopnet`, `yelp`, `google_places` (photos), and `google_images`, each citing a third-party redistribution/ToS restriction or a photo path that only resolves through an internal session-authenticated proxy anyway. EPA ECHO's nearby-facilities panel stays exposed *and* feature-gated (`NEARBY_RESEARCH`); its exact-site compliance card stays exposed and ungated, since that half is public government data by design.
+
+---
+
+## Custom Fields
+
+Field *definitions* (shared across every entity type: pins, photos, profiles, markup maps) plus read/write of PHOTO-entity *values*. A pin's own custom-field values remain readable, read-only, embedded on `GET /pins/{pin_slug}/` (`custom_fields[{id,name,type,value}]`) — writing a pin's values through this domain is not yet exposed.
+
+`GET /custom-fields/` — `CustomFieldDefinitionsView` — scopes: `custom_fields:read` — the caller's own field definitions, paginated — query: `entity_type`(`pin`|`photo`|`profile`|`markup_map`) — response rows: `{id, entity_type, name, field_type, options[](select only), order}`.
+
+`POST /custom-fields/` — scopes: `custom_fields:write` — request: `entity_type`, `name`, `field_type`(`text`|`number`|`date`|`time`|`select`|`checkbox`|`url`|`reference` — **`reference` is accepted for parity but not yet writable as a value**, since resolving it needs its own target-lookup design), `options[]`(required, deduplicated, for `select`), `order` — 400 on a duplicate `(entity_type, name)` pair or an empty `options[]` on a `select` field.
+
+`PATCH /custom-fields/{field_id}/` — scopes: `custom_fields:write` — partial update — 400 if changing `field_type` while values already exist for this field (would silently corrupt stored values), or removing a `select` option a stored value still uses — `entity_type` is ignored if sent (immutable after creation).
+`DELETE /custom-fields/{field_id}/` — scopes: `custom_fields:write` — cascades to every stored value.
+
+`GET /photos/{image_uuid}/custom-fields/` — `PhotoCustomFieldsView` — scopes: **`custom_fields:read` AND `photos:read`** — every field defined for the `photo` entity type, `value: null` when unset on this photo (not omitted) — response: `[{id, name, type, value}]`.
+`PUT /photos/{image_uuid}/custom-fields/{field_id}/` — scopes: **`custom_fields:write` AND `photos:write`** — request: `{value: str}` — typed parsing/validation per the field's own `field_type` (400 on a value that doesn't parse) — an empty value **clears** the stored value (**204**) rather than storing a blank.
+`DELETE /photos/{image_uuid}/custom-fields/{field_id}/` — same scopes — clears the value, same as an empty PUT.
 
 ---
 
@@ -297,11 +351,19 @@ in a couple of seconds.
 
 `POST /suggestions/visits/{suggestion_id}/{action}/` — scopes: `photos:write` — `action` is `accept` or `dismiss` (404 for anything else) — 204 — 403 if accepting requires visit-logging and it's off.
 
+`GET /suggestions/pins/` — `PinSuggestionListApiView` — scopes: `photos:read` — caller's pending batch-scan pin suggestions (Immich library sweep, local-folder scan, or an external app's own submission via `POST /pin-suggestions/`), PENDING only, not paginated — response: `{suggestions:[{id, status, origin, is_new_pin, pin_slug, pin_name, latitude, longitude, hit_count, visit_dates, suggested_name, suggested_description, suggested_pin_type, suggested_aliases, suggested_links, created}]}`.
+
+`POST /suggestions/pins/{suggestion_id}/{action}/` — scopes: `photos:write` — `action` is `accept` or `reject` (404 for anything else) — accepts using the suggestion's own defaults (its `suggested_name` for a brand-new pin; no label or candidate-photo selection — the web review queue's richer accept dialog is not mirrored here) — 204 — 404 for another profile's suggestion or one already handled.
+
 ---
 
 ## Memories
 
-`GET /memories/journal/` — `MemoriesJournalView` — scopes: `photos:read` — unified journal (visit notes, ratings, comments, article edits), newest first. Query: `limit`(1-200, default 50), `offset`(default 0) — response: `{entries:[{kind, occurred_at, icon, title, subtitle, body, url, rating}], total}` — bare-ish envelope, not yet on the standard paginated shape (known deferred normalization).
+`GET /memories/journal/` — `MemoriesJournalView` — scopes: `photos:read` — unified journal (visit notes, ratings, comments, article edits), newest first. Query: `page`, `page_size` (standard pagination, `page_size` up to 100) — response: the standard `{count, next, previous, results:[{kind, occurred_at, icon, title, subtitle, body, url, rating}]}` envelope plus `omitted_sources` (journal sources — `visits`/`reviews`/`comments`/`articles` — dropped because the credential lacks that source's domain scope; empty for a session caller or a fully scoped credential).
+
+`GET /memories/timeline/` — `MemoriesTimelineView` — scopes: `photos:read` — the same map/timeline data the internal Memories page renders (routes, trips, visits, photos), newest first. Query: `start`, `end` (ISO dates, default to the trailing 90 days), `bbox` (`minLat,minLng,maxLat,maxLng`, malformed values silently ignored), plus standard `page`/`page_size` — response: the standard `{count, next, previous, results:[{type, occurred_at, ended_at, title, subtitle, latitude, longitude, url, thumbnail_url, icon, color, extra}]}` envelope.
+
+`GET /memories/on-this-day/` — `MemoriesOnThisDayApiView` — scopes: `photos:read` — past-year visits/routes/photos matching today's month/day, capped at 10 rows per category (not paginated) — response: `{today, visits:[{pin_slug, pin_name, visited_at, notes}], routes:[{uuid, name, started_at, distance_meters, path}], photos:[...same shape as GET /photos/]}`.
 
 ---
 
@@ -327,6 +389,7 @@ Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wi
 
 `GET /wikis/{location_slug}/article/revisions/` — scopes: `wiki:read` — paginated, newest first — `{id, edit_summary, editor(masked), size_delta, restored_from, created}`.
 `GET /wikis/{location_slug}/article/revisions/{revision_id}/` — scopes: `wiki:read` — adds `content, diff[{kind,text}]` vs predecessor (no line numbers by design).
+`DELETE /wikis/{location_slug}/article/revisions/{revision_id}/` — scopes: `wiki:write` — self-service scrub of a revision the caller themselves authored (`ArticleRevision.editor`) — someone else's revision, or one with no editor (system-seeded), → 404. Never touches the article's current text (`Article.content` is its own field, not derived from history); a later restore that pointed at the deleted revision has its `restored_from` set to null automatically.
 `POST /wikis/{location_slug}/article/revisions/{revision_id}/restore/` — scopes: `wiki:write` — restore as newest (append-only, tagged `restored_from`).
 
 ### Wiki Comments & Reactions
@@ -342,6 +405,7 @@ Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wi
 `GET/POST /wikis/{location_slug}/aliases/` — scopes: `wiki:read`/`wiki:write` — rows: `{id, name, kind, source, is_current}`.
 `DELETE /wikis/{location_slug}/aliases/{alias_id}/` — scopes: `wiki:write`.
 `POST /wikis/{location_slug}/aliases/{alias_id}/use/` — scopes: `wiki:write` — promote to current community name; idempotent; recorded as a wiki edit (revertible via history) — response: full wiki detail.
+`POST /wikis/{location_slug}/aliases/{alias_id}/toggle-nickname/` — scopes: `wiki:write` — flip nickname-only ↔ alternate; a display preference on shared data, not a rename, so unlike alias-use it is **not** recorded in the wiki edit history — response: the updated alias.
 
 `GET/POST /wikis/{location_slug}/links/` — scopes: `wiki:read`/`wiki:write` — ordered by `(order, pk)` — rows: `{id, name, url, wayback_url, order}`.
 `DELETE /wikis/{location_slug}/links/{link_id}/` — scopes: `wiki:write`.
@@ -349,6 +413,16 @@ Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wi
 ### Wiki Gallery
 
 `GET /wikis/{location_slug}/gallery/` — scopes: `wiki:read` — paginated shared photo gallery, filtered through uploader visibility + viewer's own photo filter — rows: `{id, url, caption, author, source_url, copyright, created}` — **read-only**; upload deferred (needs the async malware-scan handshake the comment-image path uses).
+
+### Wiki Boundary, Cover Photo & Property Records
+
+`GET/POST /wikis/{location_slug}/boundary/` — scopes: `wiki:read`/`wiki:write` — the wiki page map's typed (property/building) boundaries — GET response: `{latitude, longitude, default_radius_meters, pending, refreshing, boundaries:{property:{polygon,source}, building:{polygon,source}}}` (`source` one of `wiki`/`generated`/`circle`/`null`; `pending`/`refreshing` drive the same generation-polling contract as the internal map) — POST: `{boundary_type: "property"|"building", polygon: <GeoJSON Polygon|MultiPolygon|null>}`, null clears the community drawing back down the resolution chain — 400 on an oversized or malformed polygon — recorded as a wiki edit.
+
+`PUT/DELETE /wikis/{location_slug}/cover-photo/` — scopes: `wiki:write` — PUT: `{image_uuid}`, must already be in the wiki's own gallery (404 otherwise) — DELETE clears it — response: `{cover_photo_url}`.
+
+`GET /wikis/{location_slug}/ownership/` — scopes: `wiki:read` — paginated shared owner records (`WikiOwner`) currently or previously linked to this place — rows: `{id, name, company_name, address, phone, email, notes, source, created, updated}` — **read-only this pass**; see `docs/notes/mobile_app_notes.md` Part 7 for why the write side (which does exist internally) is deferred.
+
+`GET /wikis/{location_slug}/sales/` — scopes: `wiki:read` — paginated shared sale history (`WikiPropertySale`), newest first — rows: `{id, sale_price, sale_date, notes, source, previous_owners:[{id,name}], new_owners:[{id,name}], created}` — read-only, same reason as Ownership above.
 
 ---
 
@@ -409,7 +483,7 @@ Every `messages:*`-scoped endpoint is **OAuth2-only** — `messages:read`/`messa
 
 - `GET /messages/conversations/` — unified inbox, DMs + groups merged, most recent first — `{kind, peer_slug/group_uuid, display_name, unread_count, is_muted, last_message, ...}`.
 - `GET /messages/{peer_slug}/` — one page of a 1:1 thread, oldest-first, cursor-paginated — 404 if `peer_slug` doesn't resolve or is reserved (`conversations`, `settings`, `groups`).
-- `POST /messages/{peer_slug}/` — send a message, optionally with one `@pin`/`@trip`/`@friend` share — request: `body` or `ciphertext`+`nonce`+`key_version`(never both), `reply_to_id`, `markup_map_id`, `image_ids[]`(max 20), `shared_pin_id`/`shared_trip_slug`/`shared_profile_slug`(exactly one), `client_uuid`(idempotency) — 201/200 replay — pin shares preserve `LocationExposure` provenance.
+- `POST /messages/{peer_slug}/` — send a message, optionally with one `@pin`/`@trip`/`@friend` share — request: `body` or `ciphertext`+`nonce`+`key_version`(never both), `reply_to_id`, `markup_map_id`, `image_ids[]`(max 20, integer pks) and/or `image_uuids[]`(max 20, `Image.uuid` — **preferred for new clients**, additive alongside `image_ids` rather than replacing it), `shared_pin_id`/`shared_trip_slug`/`shared_profile_slug`(exactly one), `client_uuid`(idempotency) — 201/200 replay — pin shares preserve `LocationExposure` provenance. Both attachment fields are scoped to the sender's own not-yet-attached images and may be combined in one request.
 - `POST /messages/{peer_slug}/read/` — mark thread read — `{marked_read: <count>}`.
 - `POST /messages/{peer_slug}/react/{message_id}/` — toggle emoji reaction — 400 if emoji fails a safety check (relayed verbatim to the other party's client).
 - `DELETE /messages/{peer_slug}/messages/{message_id}/` — delete one message — query: `?scope=everyone|self`(default self) — `everyone`(sender only) tombstones for recipient + revokes any carried share; `self`(recipient only) hides just caller's view.
@@ -459,10 +533,11 @@ Every `messages:*`-scoped endpoint is **OAuth2-only** — `messages:read`/`messa
 - `DELETE /safety/checkins/{checkin_slug}/partners/{partner_id}/` — remove a partner — also force-closes an accepted partner's open WebSocket.
 - `GET/POST /safety/checkins/{checkin_slug}/photos/` — list / attach an already-uploaded image by uuid (not a second upload path).
 - `DELETE /safety/checkins/{checkin_slug}/photos/{image_id}/` — delete photo + stored file.
-- `GET/POST /safety/checkins/{checkin_slug}/maps/` — primary route map + attached reference maps (**plain, non-paginated list**) / attach one of caller's own maps.
+- `GET/POST /safety/checkins/{checkin_slug}/maps/` — primary route map + attached reference maps, standard `{count, next, previous, results:[{uuid, title, is_primary}]}` envelope / attach one of caller's own maps (POST returns the same envelope).
 - `DELETE /safety/checkins/{checkin_slug}/maps/{map_uuid}/` — detach a reference map — map itself untouched.
 - `GET/PUT /safety/contacts/` — caller's saved default emergency contacts — PUT replaces wholesale (deletes+recreates), not PATCH.
 - `GET/PATCH /safety/settings/` — `{default_message,default_grace_period_seconds,auto_delete_after_days}`.
+- `GET/PATCH /safety/checkins/{checkin_slug}/location/` — the owner's live position — deliberately its own endpoint, excluded from the check-in detail above so a `safety:read` credential that only syncs check-in metadata never incidentally accumulates a movement trail. GET: viewer-scoped (owner **or** ACCEPTED partner, same rule as chat) — `{sharing_enabled, latitude, longitude, accuracy, updated_at}`, all null when sharing is off. PATCH: **owner only** — a partner gets the same 404 an unrelated caller would, never a 403 — `{sharing_enabled?, latitude?, longitude?, accuracy?}`; `latitude`/`longitude` must arrive together; turning sharing on and reporting the first fix works in one call; turning sharing off clears the last-known position rather than leaving a stale marker. Own rate-limit bucket (`external_api_safety_location`, 360/hour) since one-fix-per-10s would exhaust the standard write cap in under an hour. **Residual risk:** a leaked `safety:read` credential becomes a live tracker for every check-in its holder partners on, for as long as that check-in stays active and sharing stays on — the same exposure a connected browser tab already carries via the WebSocket location group, not a new capability.
 
 ### Safety Check-in Chat
 
@@ -513,6 +588,7 @@ Every `messages:*`-scoped endpoint is **OAuth2-only** — `messages:read`/`messa
 - `PUT/DELETE /profiles/{profile_slug}/nickname/` — set/clear private nickname — PUT blank **not allowed** (use DELETE to clear).
 - `PUT/DELETE /profiles/{profile_slug}/trust/` — set/clear private trust rating (1-5).
 - All annotation/nickname/trust rows are strictly private to their author.
+- `GET/PUT /profiles/{profile_slug}/social-links/` — a profile's public social links (Instagram, Bluesky, Discord, UER, Facebook, Flickr, YouTube, TikTok, Reddit, or a generic website) — scopes: `profile:read`+`social:read` / `social:write`. GET carries **no separate contact-visibility gate**, unlike phone/Discord/etc. under `contact` — anyone who can see the profile at all (the same `profile_visibility` check every other route here uses) sees its links, matching the public profile page. PUT is a **full replace** (deletes+recreates the whole set, like `/safety/contacts/` — there's no per-entry addressing to PATCH against) — request: `{links: [{platform, handle}, ...]}`; `handle` means a username for the eight handle-based platforms (validated against the same rules a pasted profile URL is checked against on the web), Discord's own free-form username (charset-checked, no public profile URL to parse), or the full URL itself for `website` — 400 on an invalid handle/URL, an unknown platform, or a platform repeated in the same request — response (both verbs): `{links: [{platform, handle, url(null for discord), display_name, icon}]}`. Own profile only; any other slug is 404, never 403. Distinct from `discord_username` under [Account & Identity](#account--identity) — that's a private contact field, this is a public link, and they can hold different values.
 
 ---
 
@@ -537,6 +613,12 @@ Every `messages:*`-scoped endpoint is **OAuth2-only** — `messages:read`/`messa
 
 `GET /games/spotguessr/` — `SpotGuessrOverviewView` — scopes: `games:read`(+`social:read` for `friend_ratings`) — start-screen data: modes, limits, saved config, own rating, resumable session, friend ratings (masked for restricted friends).
 
+`PATCH /games/spotguessr/preferences/` — `SpotGuessrPreferencesView` — scopes: `games:write` — body: `show_ratings_to_friends` (bool) — the only genuinely user-editable SpotGuessr preference; `last_config` stays read-only here (auto-managed from every session start) — response echoes the saved value.
+
+`GET /games/spotguessr/eligible-count/?geo_bounds={geojson}` — `SpotGuessrEligibleCountView` — scopes: `games:read` — count of the caller's own pins inside a candidate `geo_bounds` polygon (required) — a lightweight pre-check before spending the `GameStartThrottle` budget on a config with nothing to play — 400 for missing/malformed `geo_bounds` (never a 500).
+
+`GET /games/spotguessr/eligible-pins/?geo_bounds={geojson}` — `SpotGuessrEligiblePinsView` — scopes: `games:read` — paginated (`{count,next,previous,results}`) feed of the caller's own pins as candidate SpotGuessr locations (`label`, `latitude`, `longitude`), optionally narrowed by the same `geo_bounds` param — a browse/read endpoint, not a play mode; solo eligibility is exactly "the player's own pinned locations".
+
 `GET/POST /games/spotguessr/sessions/` — `SpotGuessrSessionsView` — scopes: `games:read`/`games:write` — list caller's session history / start a solo session + generate its first round — POST request: `mode`(default photos), `total_rounds`, `difficulty`, `allow_arbitrary_external_photos`, `require_visited_all`, `date_guessing_enabled`, `use_aliases`(default true), `round_time_limit_seconds`, `geo_bounds`(GeoJSON) — 201 or 409 `{error_code:"no_eligible_locations"}` — **own extra throttle** `GameStartThrottle`(40/hour) stacked on the standard three (round generation runs up to 25 eligibility passes + a possible billed Street View call).
 
 `GET /games/spotguessr/sessions/{session_id}/` — scopes: `games:read` — resume-state row — 404 if not participant (never 403); 409 `multiplayer_unsupported` for a LOBBY/multi-participant session (solo-only surface).
@@ -547,7 +629,21 @@ Every `messages:*`-scoped endpoint is **OAuth2-only** — `messages:read`/`messa
 
 `GET /games/spotguessr/sessions/{session_id}/summary/` — scopes: `games:read` — final scoreboard incl. rating movement, per-participant totals.
 
+`POST /games/spotguessr/sessions/{session_id}/rounds/{round_id}/expire/` — `SpotGuessrRoundExpireView` — scopes: `games:write` — client-driven fast path for "the round timer hit zero"; the authoritative check is still server-side (`round.created` + the session's `round_time_limit_seconds`, never the client's clock) — response `{"revealed": bool}` — a no-op, not an error, when the round is already revealed or the timer genuinely hasn't expired yet.
+
+`POST /games/spotguessr/sessions/{session_id}/rounds/{round_id}/feedback/` — `SpotGuessrRoundFeedbackView` — scopes: `games:write` — body: `kind` (`thumbs_up`/`thumbs_down`/`reported`) — records (or overwrites) the caller's reaction to a Photos-mode round's photo, feeding `services.media_relevance` — 403 if the caller never guessed on this round; 400 for a round with no photo (Named Place/Street View).
+
 `GET /games/spotguessr/sessions/{session_id}/rounds/{round_id}/image/` — `SpotGuessrRoundImageView` — scopes: **`games:read` AND `media:read`** (both required) — round photo as raw bytes with **all EXIF metadata stripped** (source photo routinely carries GPS tags pointing at the answer) — `Cache-Control: private, max-age=300` — metered against the **media** throttle bucket (`ExternalApiMediaThrottle`), not the JSON read/write budgets.
+
+---
+
+## Undo History
+
+A thin, scope-aware wrapper over the existing Undo History service (`services.undo`) that already backs pin/wiki/trip/saved-filter/safety-checkin deletes on the website — nothing new was built at the model layer.
+
+`GET /undo/` — `UndoListView` — scopes: `undo:read` — the caller's active (non-expired) undo entries across every undoable model, newest first. Aggregating across model types means a credential can hold `undo:read` without holding every domain's own read scope — an entry is **omitted, not 403'd**, when the caller lacks that model_label's paired domain-read scope (`pin`→`pins:read`, `wiki`→`wiki:read`, `trip`→`trips:read`, `saved_filter`→`lists:read`, `safety_checkin`→`safety:read`). Response: `{entries: [{uuid, model_label, object_repr, created, expires_at}], omitted: [model_label, ...]}` — a client should prompt the user to re-authorize when `omitted` is non-empty rather than silently rendering a forever-incomplete list.
+
+`POST /undo/{uuid}/restore/` — `UndoRestoreView` — scopes: **`undo:write` AND the entry's own domain write scope** (restoring a delete needs the same authority the delete itself needed) — a missing scope, an unknown uuid, or another profile's uuid are all **404**, identically — never 403. **410 Gone** `{"error": "This undo entry has expired."}` when the entry is past its 7-day retention window — deliberately distinguished from 404 ("never yours to begin with"), since the entry genuinely existed; the stale row is deleted on this attempt. Success: **200** `{"restored": true}`.
 
 ---
 
@@ -556,6 +652,14 @@ Every `messages:*`-scoped endpoint is **OAuth2-only** — `messages:read`/`messa
 `GET /search/` — `GlobalSearchView` — scopes: `search:read`(floor only — each result-type section additionally requires its own domain scope) — cross-domain search over pins, photos, wikis, articles, trips, visits, messages, maps, safety check-ins, comments. Query: `q`(optional, blank returns `total:0` not a 400), `types`(comma-separated, unrecognized dropped), `limit`(1-50/section) — response: `{query, total, used_fallback, filter_chips[], errors[], omitted_types[], groups:[{type,label,icon,results:[...]}]}` — **grouped, not paginated** — own extra throttle `GlobalSearchThrottle`(300/hour) stacked on the standard three.
 
 **Per-section scope gating**: each section needs `search:read` **plus** its own scope — `pins`→`pins:read`, `photos`→`photos:read`, `wikis`/`articles`→`wiki:read`, `trips`→`trips:read`, `visits`→`visits:read`, `messages`→`messages:read`(**OAuth2-only** — a PAT can never reach DM search results), `maps`/`comments`→`pins:read`, `safety`→`safety:read`. A denied section is dropped from the provider chain before any query runs (never a 403 for the whole call) and its slug appears in `omitted_types[]` — a section *absent from `groups` but present in `omitted_types`* means "not authorized"; present with empty `results` means "authorized, no matches."
+
+---
+
+## AI Assistant
+
+`POST /assistant/message/` — `AssistantMessageView` — scopes: `assistant:write` — one chat turn against the same tool-calling assistant (UL-293) the website's session-based chat uses (`services.ai.assistant.run_assistant_turn`), but **stateless**: a bearer-token client has no session to keep history in, so the client carries `history` in the request body and resends the `history` this endpoint returns as the next call's input. Request: `{message, history: [{role:"user"|"assistant", content}]}` — `history` capped to the last 20 entries server-side both on the way in and the way out. Response: `{reply, actions[], history}` — `actions` are human-readable labels of anything the assistant actually did (e.g. "Created a trip"); it can only act through a small allowlisted tool set scoped to the caller's own data, never deletes/shares/changes privacy settings, and every tool result it sees is JSON, never raw prose from another account. **503** `{"error": "AI features are currently turned off for your account or this site."}` when AI is disabled — own extra throttle (`external_api_assistant_message`, default 60/hour) stacked on the standard three, since one turn can fan out to several billed model calls.
+
+`POST /assistant/reset/` — `AssistantResetView` — scopes: `assistant:write` — a genuine no-op for this stateless shape (`{"history": []}`) — kept for surface symmetry with the web chat's reset button; a client "resets" by simply discarding its own `history` and sending an empty list next time.
 
 ---
 
@@ -589,10 +693,9 @@ Mounted at `dashboard/e2ee/` (not under `api/external/v1/`, but published in the
 
 The following `urls_*.py` modules exist under `external_api/` purely as placeholders — each is a docstring plus an empty `urlpatterns = []`, with no backing views and no reserved scopes in `ApiKeyScope`. Nothing below is reachable on this branch; treat any assumption otherwise as wrong.
 
-- **Connections** (`urls_connections.py`) — Immich/OAuth-identity-provider/plugin-backed connect-disconnect-status-resync flows. Docstring flags that a status endpoint must never echo a stored `EncryptedTextField` secret back through the API.
-- **Custom Fields** (`urls_custom_fields.py`) — definitions + values as their own domain. **Partial exception**: custom field *values* are already exposed read-only, embedded on `GET /pins/{pin_slug}/` (`custom_fields[{id,name,type,value}]`) — there is no way to create/edit a definition or write a value through the external API yet.
-- **Memories, extra** (`urls_memories.py`) — on-this-day/period recaps, dismissible memory cards. (The one live route, `GET /memories/journal/`, predates this split and is documented under [Memories](#memories) above.)
-- **Panels** (`urls_panels.py`) — generic pin-detail panel listing/fetch (a job-shaped ask/cached-or-pending/poll surface over `PanelSource`-backed plugin panels). The backing infrastructure exists and is used by the internal HTMX UI; nothing in `external_api/` wires it up yet.
-- **Site** (`urls_site.py`) — an allow-listed subset of site settings/quotas/feature flags, announcements, version/health, staff-only site-admin ops.
-- **Tools** (`urls_tools.py`) — import/export (KML/GPX/CSV), bulk edits, map/geometry helpers.
-- **AI Assistant** (`urls_assistant.py`) — conversational location/data queries, AI-assisted tagging/import, suggestion generation. Docstring requires that AI output only ever be a suggestion — no route may write to a pin/wiki without an explicit user confirmation step. An internal AI assistant service already exists (`services/ai/assistant.py`) but is not wired to any external route.
+- **Connections** (`urls_connections.py`) — Immich/OAuth-identity-provider/plugin-backed connect-disconnect-status-resync flows. Docstring flags that a status endpoint must never echo a stored `EncryptedTextField` secret back through the API. Deferred, decision pending — see D7 in `docs/notes/mobile_app_notes.md`.
+- **Memories, extra** (`urls_memories.py`) — now carries the timeline and on-this-day routes (see [Memories](#memories) above), plus the pre-existing `GET /memories/journal/` which predates this split. Dismissible memory cards remain unscheduled P2.
+- **Site** (`urls_site.py`) — **will not be exposed to the mobile app.** Site settings/quotas/feature flags, announcements, version/health, and staff-only site-admin ops are not part of this API's contract, now or planned — this module stays an empty placeholder by decision, not by scheduling.
+- **Tools** (`urls_tools.py`) — **import/export (KML/GPX/CSV) will not be built for the mobile app at this time**, though it may be revisited in the distant future; bulk edits and map/geometry helpers remain unscheduled P2. **Undo/restore already lives in this module** (`GET /undo/`, `POST /undo/{uuid}/restore/`) — see [Undo History](#undo-history) — it just isn't one of the "tools" the module's own docstring originally had in mind.
+
+Custom Fields, Panels, and the AI Assistant (formerly listed here) are implemented — see their own sections above.

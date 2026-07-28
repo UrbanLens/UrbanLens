@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from decimal import Decimal
 from unittest.mock import patch
 
 from django.urls import reverse
@@ -94,11 +95,18 @@ class AssistantToolTests(TestCase):
 
 
 class _StubGateway:
-    """Feeds a scripted sequence of answers to the loop."""
+    """Feeds a scripted sequence of answers to the loop.
+
+    Carries ``model``/``cost`` because ``run_assistant_turn`` reads both,
+    once, in its ``finally`` block to log the turn's cost - same shape a real
+    ``LLMGateway`` always provides.
+    """
 
     def __init__(self, answers: list[str]) -> None:
         self.answers = list(answers)
         self.prompts: list[str] = []
+        self.model = "gpt-5-nano"
+        self.cost = Decimal("0.01")
 
     def send_prompt(self, prompt: str, **kwargs) -> str | None:
         self.prompts.append(prompt)

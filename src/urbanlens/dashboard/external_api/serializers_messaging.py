@@ -27,7 +27,7 @@ the masking step.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from rest_framework import serializers
 
@@ -188,6 +188,10 @@ class MessageSendSerializer(serializers.Serializer):
     reply_to_id = serializers.IntegerField(required=False, allow_null=True, default=None)
     markup_map_id = serializers.UUIDField(required=False, allow_null=True, default=None)
     image_ids = serializers.ListField(required=False, child=serializers.IntegerField(), max_length=MAX_ATTACHED_IMAGES, default=list)
+    #: Preferred over ``image_ids`` for new clients - addresses the sender's
+    #: own not-yet-attached images by uuid instead of integer pk. Additive:
+    #: ``image_ids`` keeps working unchanged, and a request may combine both.
+    image_uuids = serializers.ListField(required=False, child=serializers.UUIDField(), max_length=MAX_ATTACHED_IMAGES, default=list)
     #: A pin *slug* despite the ``_id`` suffix, matching the naming this
     #: application already uses for pin references on the wire (the same
     #: `slug_or_uuid` lookup accepts either). Renaming it here would be more
@@ -240,6 +244,56 @@ class MessageSendSerializer(serializers.Serializer):
             raise serializers.ValidationError("Message cannot be empty.")
 
         return attrs
+
+
+class GroupMessageSendSerializer(MessageSendSerializer):
+    """Validates a "send a message into a group" payload.
+
+    Identical to :class:`MessageSendSerializer` except that it **refuses** the
+    fields the group path cannot honor, rather than accepting and dropping
+    them. ``create_group_message`` forwards only body/ciphertext/nonce/
+    key_version/client_uuid - it has no attachment, reply, markup-map or share
+    handling - so validating a group send with the one-to-one serializer
+    answered 201 to a message carrying an image or a reply and then delivered
+    neither. Silent data loss on a 201 is worse than a 400: the client has been
+    told the send succeeded and has no reason to retry.
+
+    An attachment-only group send was worse still - it passed the "not empty"
+    check on the strength of ``image_ids``, then reached the service with no
+    content at all and failed there as an empty message, so the same payload
+    produced a confusing 400 from a completely different layer.
+
+    These stay *rejected* rather than quietly supported because implementing
+    them is a real feature (per-member attachment visibility, group reply
+    threading), not a plumbing change. When that lands, drop the field from
+    :attr:`unsupported_fields` and forward it.
+    """
+
+    #: Fields ``MessageSendSerializer`` accepts that the group send path cannot
+    #: act on. Rejected explicitly so the failure names the field.
+    unsupported_fields: ClassVar[tuple[str, ...]] = ("image_ids", "image_uuids", "markup_map_id", "reply_to_id", "shared_pin_id", "shared_trip_slug", "shared_profile_slug")
+
+    def validate(self, attrs: dict) -> dict:
+        """Reject fields the group path would otherwise discard.
+
+        Args:
+            attrs: The deserialized payload.
+
+        Returns:
+            The validated payload, once every unsupported field is absent.
+
+        Raises:
+            rest_framework.serializers.ValidationError: The payload names a
+                field this endpoint cannot honor, or fails one of the inherited
+                content invariants.
+        """
+        # Before super(): the inherited "cannot be empty" check counts
+        # image_ids and markup_map_id as content, so an attachment-only payload
+        # would otherwise pass validation here and fail deeper in the service.
+        supplied = [name for name in self.unsupported_fields if attrs.get(name)]
+        if supplied:
+            raise serializers.ValidationError(f"Group messages do not support: {', '.join(sorted(supplied))}. Send them in a one-to-one message instead.")
+        return super().validate(attrs)
 
 
 class GroupCreateSerializer(serializers.Serializer):

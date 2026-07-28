@@ -13,7 +13,7 @@ regardless of caller.
 from __future__ import annotations
 
 import math
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import URLValidator
@@ -398,9 +398,11 @@ class PinLinkCreateSerializer(serializers.Serializer):
     url = serializers.URLField(max_length=MAX_LINK_URL_LENGTH)
 
 
-class PinCustomFieldDetailSerializer(serializers.Serializer):
-    """One custom field's value on this pin (schema-only).
+class CustomFieldValueSerializer(serializers.Serializer):
+    """One custom field's value on a target object (schema-only).
 
+    Shared by the pin-detail payload's nested ``custom_fields`` and the
+    standalone ``custom-fields/`` domain - both describe the same row shape.
     ``value`` is deliberately untyped: its shape follows ``type`` (text,
     number, date, time, a boolean checkbox, or a reference object) exactly
     as ``CustomFieldValue.export_value()`` returns it.
@@ -435,6 +437,13 @@ class PinDetailSerializer(SyncPinSerializer):
     """
 
     official_name = serializers.CharField(read_only=True, allow_null=True)
+    #: Address components, split out from the combined `address` string
+    #: (geocoded from the pin's Location - never user-writable).
+    city = serializers.CharField(read_only=True, allow_null=True)
+    state = serializers.CharField(read_only=True, allow_null=True)
+    county = serializers.CharField(read_only=True, allow_null=True)
+    country = serializers.CharField(read_only=True, allow_null=True)
+    zipcode = serializers.CharField(read_only=True, allow_null=True)
     date_built = serializers.DateField(read_only=True, allow_null=True)
     date_abandoned = serializers.DateField(read_only=True, allow_null=True)
     date_last_active = serializers.DateField(read_only=True, allow_null=True)
@@ -450,7 +459,7 @@ class PinDetailSerializer(SyncPinSerializer):
     notes = PinNoteSerializer(many=True, read_only=True)
     aliases = PinAliasSerializer(many=True, read_only=True)
     links = PinLinkSerializer(many=True, read_only=True)
-    custom_fields = PinCustomFieldDetailSerializer(many=True, read_only=True)
+    custom_fields = CustomFieldValueSerializer(many=True, read_only=True)
     note_count = serializers.IntegerField(read_only=True)
     alias_count = serializers.IntegerField(read_only=True)
     link_count = serializers.IntegerField(read_only=True)
@@ -807,6 +816,16 @@ class SettingsSerializer(serializers.Serializer):
     computed context (see ``services.profile_settings.read_settings``).
     """
 
+    # Name (User passthrough).
+    first_name = serializers.CharField(read_only=True, allow_blank=True)
+    last_name = serializers.CharField(read_only=True, allow_blank=True)
+    # Contact methods.
+    phone_number = serializers.CharField(read_only=True, allow_blank=True)
+    signal_username = serializers.CharField(read_only=True, allow_blank=True)
+    discord_username = serializers.CharField(read_only=True, allow_blank=True)
+    whatsapp_number = serializers.CharField(read_only=True, allow_blank=True)
+    telegram_username = serializers.CharField(read_only=True, allow_blank=True)
+    matrix_handle = serializers.CharField(read_only=True, allow_blank=True)
     # Privacy visibilities.
     profile_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, read_only=True)
     comment_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, read_only=True)
@@ -905,6 +924,17 @@ class SettingsPatchSerializer(serializers.Serializer):
     read-only keys.
     """
 
+    # Name (User passthrough) - blank clears to "", matching User's own default.
+    first_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    last_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
+    # Contact methods. discord_username's charset is checked in
+    # services.profile_settings (mirrors ContactMethodsForm.clean_discord_username).
+    phone_number = serializers.CharField(required=False, allow_blank=True, max_length=30)
+    signal_username = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    discord_username = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    whatsapp_number = serializers.CharField(required=False, allow_blank=True, max_length=30)
+    telegram_username = serializers.CharField(required=False, allow_blank=True, max_length=100)
+    matrix_handle = serializers.CharField(required=False, allow_blank=True, max_length=200)
     # Privacy visibilities.
     profile_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, required=False)
     comment_visibility = serializers.ChoiceField(choices=VisibilityChoice.choices, required=False)
@@ -1218,6 +1248,12 @@ class PinListResyncResponseSerializer(serializers.Serializer):
     """Documents the smart-list resync response (schema-only)."""
 
     pin_count = serializers.IntegerField(read_only=True)
+
+
+class PinListMarkupMapResponseSerializer(serializers.Serializer):
+    """Documents the list markup-map create/refresh response (schema-only)."""
+
+    markup_map_uuid = serializers.UUIDField(read_only=True)
 
 
 class SavedFilterSerializer(serializers.Serializer):
@@ -1703,6 +1739,15 @@ class SafetyMapSerializer(serializers.Serializer):
     title = serializers.CharField(read_only=True, allow_blank=True)
     #: True for the check-in's own drawn route map, false for attached reference maps.
     is_primary = serializers.BooleanField(read_only=True)
+
+
+class SafetyMapListResponseSerializer(serializers.Serializer):
+    """Documents the paginated check-in maps list envelope (schema-only)."""
+
+    count = serializers.IntegerField(read_only=True)
+    next = serializers.CharField(read_only=True, allow_null=True)
+    previous = serializers.CharField(read_only=True, allow_null=True)
+    results = SafetyMapSerializer(many=True, read_only=True)
 
 
 class SafetyMapAttachSerializer(serializers.Serializer):
@@ -2268,6 +2313,98 @@ class VisitSuggestionListResponseSerializer(serializers.Serializer):
     suggestions = VisitSuggestionSerializer(many=True, read_only=True)
 
 
+class PinSuggestionApiSerializer(serializers.Serializer):
+    """One pending batch-scan pin suggestion (schema-only).
+
+    A field-for-field mirror of ``models.pin_suggestions.model.PinSuggestion``,
+    the sibling of ``VisitSuggestionSerializer`` for the other suggestion kind.
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    status = serializers.CharField(read_only=True)
+    origin = serializers.CharField(read_only=True)
+    #: True when accepting would create a brand-new pin rather than log a
+    #: visit on one the profile already has.
+    is_new_pin = serializers.BooleanField(read_only=True)
+    pin_slug = serializers.CharField(read_only=True, allow_null=True)
+    pin_name = serializers.CharField(read_only=True, allow_null=True)
+    latitude = serializers.DecimalField(max_digits=9, decimal_places=6, read_only=True)
+    longitude = serializers.DecimalField(max_digits=9, decimal_places=6, read_only=True)
+    hit_count = serializers.IntegerField(read_only=True)
+    visit_dates = serializers.ListField(child=serializers.CharField(), read_only=True)
+    suggested_name = serializers.CharField(read_only=True, allow_blank=True)
+    suggested_description = serializers.CharField(read_only=True, allow_blank=True)
+    suggested_pin_type = serializers.CharField(read_only=True, allow_blank=True)
+    suggested_aliases = serializers.ListField(child=serializers.CharField(), read_only=True)
+    suggested_links = serializers.ListField(child=serializers.DictField(), read_only=True)
+    created = serializers.DateTimeField(read_only=True)
+
+
+class PinSuggestionListResponseSerializer(serializers.Serializer):
+    """The pending pin-suggestions list envelope (schema-only)."""
+
+    suggestions = PinSuggestionApiSerializer(many=True, read_only=True)
+
+
+class MemoryEventSerializer(serializers.Serializer):
+    """One row in a profile's unified Memories timeline (schema-only).
+
+    A field-for-field mirror of ``services.memories.aggregator.MemoryEvent``.
+    """
+
+    type = serializers.CharField(read_only=True)
+    occurred_at = serializers.DateTimeField(read_only=True)
+    ended_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    title = serializers.CharField(read_only=True)
+    subtitle = serializers.CharField(read_only=True, allow_blank=True)
+    latitude = serializers.FloatField(read_only=True, allow_null=True)
+    longitude = serializers.FloatField(read_only=True, allow_null=True)
+    url = serializers.CharField(read_only=True, allow_blank=True)
+    thumbnail_url = serializers.CharField(read_only=True, allow_null=True)
+    icon = serializers.CharField(read_only=True)
+    color = serializers.CharField(read_only=True)
+    extra = serializers.JSONField(read_only=True)
+
+
+class MemoriesTimelineQuerySerializer(serializers.Serializer):
+    """Validates the query params of the Memories timeline endpoint."""
+
+    start = serializers.DateField(required=False, allow_null=True, default=None)
+    end = serializers.DateField(required=False, allow_null=True, default=None)
+    #: "minLat,minLng,maxLat,maxLng" - silently ignored if malformed, matching
+    #: the internal Memories page's own tolerant bbox parsing.
+    bbox = serializers.CharField(required=False, allow_blank=True, allow_null=True, default=None)
+
+
+class OnThisDayVisitSerializer(serializers.Serializer):
+    """One past-year visit surfaced by the on-this-day endpoint (schema-only)."""
+
+    pin_slug = serializers.CharField(read_only=True, allow_null=True)
+    pin_name = serializers.CharField(read_only=True, allow_null=True)
+    visited_at = serializers.DateTimeField(read_only=True)
+    notes = serializers.CharField(read_only=True, allow_null=True, allow_blank=True)
+
+
+class OnThisDayRouteSerializer(serializers.Serializer):
+    """One past-year route surfaced by the on-this-day endpoint (schema-only)."""
+
+    uuid = serializers.UUIDField(read_only=True)
+    name = serializers.CharField(read_only=True, allow_blank=True)
+    started_at = serializers.DateTimeField(read_only=True, allow_null=True)
+    distance_meters = serializers.FloatField(read_only=True)
+    #: GeoJSON LineString.
+    path = serializers.JSONField(read_only=True)
+
+
+class OnThisDayResponseSerializer(serializers.Serializer):
+    """The on-this-day recap envelope (schema-only)."""
+
+    today = serializers.CharField(read_only=True)
+    visits = OnThisDayVisitSerializer(many=True, read_only=True)
+    routes = OnThisDayRouteSerializer(many=True, read_only=True)
+    photos = PhotoSerializer(many=True, read_only=True)
+
+
 class JournalEntrySerializer(serializers.Serializer):
     """One Memories journal entry (schema-only).
 
@@ -2286,19 +2423,23 @@ class JournalEntrySerializer(serializers.Serializer):
     rating = serializers.IntegerField(read_only=True, allow_null=True)
 
 
-class JournalQuerySerializer(serializers.Serializer):
-    """Validates the window requested from the Memories journal."""
-
-    limit = serializers.IntegerField(required=False, default=50, min_value=1, max_value=200)
-    offset = serializers.IntegerField(required=False, default=0, min_value=0)
-
-
 class JournalResponseSerializer(serializers.Serializer):
-    """One window of the Memories journal (schema-only)."""
+    """One page of the Memories journal (schema-only).
 
-    entries = JournalEntrySerializer(many=True, read_only=True)
-    #: Total entries available, for paging - the journal is materialized whole.
-    total = serializers.IntegerField(read_only=True)
+    The standard ``{count, next, previous, results}`` envelope, plus one
+    addition - see ``omitted_sources`` below.
+    """
+
+    count = serializers.IntegerField(read_only=True)
+    next = serializers.CharField(read_only=True, allow_null=True)
+    previous = serializers.CharField(read_only=True, allow_null=True)
+    results = JournalEntrySerializer(many=True, read_only=True)
+    #: Journal sources dropped because the credential lacks their domain scopes
+    #: (``visits``, ``reviews``, ``comments``, ``articles``). Empty for a
+    #: session caller or a fully scoped credential. Present so a client can
+    #: distinguish an empty feed from an under-scoped one and prompt for
+    #: re-authorization rather than rendering a permanently blank timeline.
+    omitted_sources = serializers.ListField(child=serializers.CharField(), read_only=True)
 # -- Trips ---------------------------------------------------------------------
 #
 # Every serializer below reads either a model instance or one of the plain dicts
@@ -2692,14 +2833,85 @@ class TripCreateSerializer(serializers.Serializer):
         return attrs
 
 
-class TripUpdateSerializer(serializers.Serializer):
+class _StoredRangeValidationMixin(serializers.Serializer):
+    """Validates a range whose other endpoint may live on the stored row.
+
+    A partial update is the case a plain ``attrs``-only range check cannot
+    handle: when a PATCH sends one endpoint and omits the other, the omitted
+    one is simply absent from ``attrs``, so ``start and end and end < start``
+    is vacuously true and the check passes. Moving ``end_date`` before the
+    trip's stored ``start_date``, or ``scheduled_at`` after the activity's
+    stored ``scheduled_end``, was therefore accepted and persisted as an
+    inverted range - which then produces incoherent itinerary and calendar
+    output far from where it was introduced.
+
+    Subclasses set :attr:`range_fields`; the view passes the row being edited
+    as ``context["instance"]``. Without that context the mixin falls back to
+    submitted values alone, so a caller that forgets it loses the improvement
+    rather than crashing.
+
+    A real ``Serializer`` subclass rather than a bare mixin over ``object``: it
+    reads ``self.context`` and chains through ``super().validate()``, so its
+    only correct use *is* as part of a serializer, and saying that in the base
+    list is what lets the type checker see both members. It declares no fields,
+    so it contributes nothing to ``_declared_fields`` and the concrete classes'
+    own bases keep deciding the field set - inheriting it costs only the
+    validation behaviour it exists for.
+    """
+
+    #: ``(start_field, end_field, message)`` for the range this serializer owns.
+    range_fields: ClassVar[tuple[str, str, str]]
+
+    def _resolve_range(self, attrs: dict) -> tuple[Any, Any]:
+        """Combine submitted values with the stored instance's.
+
+        Args:
+            attrs: The validated field values for this request.
+
+        Returns:
+            The ``(start, end)`` pair the update would result in.
+        """
+        start_field, end_field, _message = self.range_fields
+        instance = self.context.get("instance")
+        start = attrs[start_field] if start_field in attrs else getattr(instance, start_field, None)
+        end = attrs[end_field] if end_field in attrs else getattr(instance, end_field, None)
+        return start, end
+
+    def validate(self, attrs: dict) -> dict:
+        """Reject an update that would leave the range inverted.
+
+        Args:
+            attrs: The validated field values.
+
+        Returns:
+            The unchanged values when the resulting range is coherent.
+
+        Raises:
+            serializers.ValidationError: The resulting range ends before it
+                starts.
+        """
+        attrs = super().validate(attrs)
+        _start_field, _end_field, message = self.range_fields
+        start, end = self._resolve_range(attrs)
+        if start and end and end < start:
+            raise serializers.ValidationError(message)
+        return attrs
+
+
+class TripUpdateSerializer(_StoredRangeValidationMixin):
     """Validates a partial trip update.
 
     No field carries a default, so ``"x" in validated_data`` distinguishes
     "omitted" from "explicitly set to null" - the same presence-keyed pattern
     :class:`PinUpdateSerializer` uses, and what ``services.trip_crud.update_trip``
     expects.
+
+    Unlike :class:`TripCreateSerializer` this had no range validation at all,
+    so a PATCH naming both dates inverted stored them unchecked; the mixin adds
+    that plus the stored-value comparison a partial update needs.
     """
+
+    range_fields: ClassVar[tuple[str, str, str]] = ("start_date", "end_date", "end_date cannot be before start_date.")
 
     name = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
     description = serializers.CharField(max_length=MAX_TRIP_DESCRIPTION_LENGTH, required=False, allow_blank=True, allow_null=True)
@@ -2776,12 +2988,21 @@ class TripActivityCreateSerializer(serializers.Serializer):
         return attrs
 
 
-class TripActivityUpdateSerializer(TripActivityCreateSerializer):
+class TripActivityUpdateSerializer(_StoredRangeValidationMixin, TripActivityCreateSerializer):
     """Validates a partial activity update.
 
     Every field drops its default so presence drives the update, exactly as in
     :class:`TripUpdateSerializer`.
+
+    Dropping the defaults is exactly what broke the inherited schedule check:
+    with ``default=None`` gone, an omitted endpoint is absent from ``attrs``
+    rather than present-and-None, so the parent's ``start and end`` guard
+    silently skipped every single-endpoint PATCH. The mixin supplies the
+    missing half from the stored activity - see its docstring. The parent's
+    coordinate-pairing check still runs through ``super().validate``.
     """
+
+    range_fields: ClassVar[tuple[str, str, str]] = ("scheduled_at", "scheduled_end", "scheduled_end cannot be before scheduled_at.")
 
     title = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
     notes = serializers.CharField(max_length=MAX_TRIP_ACTIVITY_NOTES_LENGTH, required=False, allow_blank=True, allow_null=True)

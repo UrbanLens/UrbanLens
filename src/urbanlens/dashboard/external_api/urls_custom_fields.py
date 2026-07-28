@@ -26,9 +26,18 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.urls import path
+
+from urbanlens.dashboard.external_api import views_custom_fields
+
 if TYPE_CHECKING:
     from django.urls.resolvers import URLPattern
 
 #: Routes contributed by this domain. Appended to the flat ``external_api:``
 #: namespace by ``urls.py`` - see this module's docstring before adding to it.
-urlpatterns: list[URLPattern] = []
+urlpatterns: list[URLPattern] = [
+    path("custom-fields/", views_custom_fields.CustomFieldDefinitionsView.as_view(), name="custom_fields"),
+    path("custom-fields/<int:field_id>/", views_custom_fields.CustomFieldDefinitionDetailView.as_view(), name="custom_fields.detail"),
+    path("photos/<uuid:image_uuid>/custom-fields/", views_custom_fields.PhotoCustomFieldsView.as_view(), name="custom_fields.photo"),
+    path("photos/<uuid:image_uuid>/custom-fields/<int:field_id>/", views_custom_fields.PhotoCustomFieldValueView.as_view(), name="custom_fields.photo.detail"),
+]

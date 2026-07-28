@@ -17,6 +17,7 @@ would each quietly ruin the game rather than error:
 
 from __future__ import annotations
 
+from datetime import timedelta
 import io
 from itertools import count
 import json
@@ -25,6 +26,7 @@ from django.contrib.auth.models import User
 from django.core.files.base import ContentFile
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 from PIL import Image as PILImage
 from PIL.TiffImagePlugin import IFDRational
@@ -38,7 +40,7 @@ from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import GameRound, GameSession, GameSessionStatus, Guess, SpotGuessrMode
+from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind, GameRound, GameSession, GameSessionStatus, Guess, SpotGuessrMode
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.api_keys import generate_api_key
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_multiplayer_session, start_solo_session
@@ -120,6 +122,10 @@ class _SpotGuessrApiTestCase(TestCase):
     def _post(self, name: str, *args, body: dict | None = None, key: str | None = None):
         """POST JSON to a named external-API route with a bearer key."""
         return self.client.post(reverse(name, args=args), body or {}, content_type="application/json", **_bearer(key or self.raw_key))
+
+    def _patch(self, name: str, *args, body: dict | None = None, key: str | None = None):
+        """PATCH JSON to a named external-API route with a bearer key."""
+        return self.client.patch(reverse(name, args=args), body or {}, content_type="application/json", **_bearer(key or self.raw_key))
 
     def _start_session(self) -> dict:
         """Start a solo session over the API and return the response body."""
@@ -529,3 +535,231 @@ class SpotGuessrRoundImageTests(_SpotGuessrApiTestCase):
         text_round = GameRound.objects.create(session=self.session, sequence_index=1, location=self.location, display_text="Old Mill House")
         response = self._get("external_api:games.spotguessr.sessions.rounds.image", self.session.pk, text_round.pk, key=self.media_key)
         self.assertEqual(response.status_code, 404)
+
+
+class SpotGuessrPreferencesTests(_SpotGuessrApiTestCase):
+    """Writing the one genuinely user-editable preference."""
+
+    def test_patch_updates_show_ratings_to_friends(self) -> None:
+        response = self._patch("external_api:games.spotguessr.preferences", body={"show_ratings_to_friends": False})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(response.json()["show_ratings_to_friends"])
+        body = self._get("external_api:games.spotguessr").json()
+        self.assertFalse(body["show_ratings_to_friends"])
+
+    def test_last_config_is_not_writable_here(self) -> None:
+        response = self._patch("external_api:games.spotguessr.preferences", body={"show_ratings_to_friends": True, "last_config": {"difficulty": 0.9}})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertNotIn("last_config", response.json())
+
+    def test_needs_the_write_scope(self) -> None:
+        read_key = self._key_with_scopes([ApiKeyScope.GAMES_READ.value])
+        response = self._patch("external_api:games.spotguessr.preferences", body={"show_ratings_to_friends": False}, key=read_key)
+        self.assertEqual(response.status_code, 403)
+
+    def test_missing_field_is_a_400(self) -> None:
+        response = self._patch("external_api:games.spotguessr.preferences", body={})
+        self.assertEqual(response.status_code, 400)
+
+
+class SpotGuessrEligibleCountTests(_SpotGuessrApiTestCase):
+    """The pre-check that warns a player before they start a session with nothing to play."""
+
+    def _polygon_around(self, location: Location) -> dict:
+        lat, lng = float(location.latitude), float(location.longitude)
+        return {"type": "Polygon", "coordinates": [[[lng - 0.01, lat - 0.01], [lng - 0.01, lat + 0.01], [lng + 0.01, lat + 0.01], [lng + 0.01, lat - 0.01], [lng - 0.01, lat - 0.01]]]}
+
+    def test_counts_pins_inside_the_area(self) -> None:
+        geo_bounds = json.dumps(self._polygon_around(self.location))
+        response = self._get("external_api:games.spotguessr.eligible-count", data={"geo_bounds": geo_bounds})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["count"], 1)
+
+    def test_an_area_with_nothing_pinned_counts_zero(self) -> None:
+        elsewhere = baker.make(Location, latitude="10.000000", longitude="10.000000", official_name="Nowhere Near")
+        geo_bounds = json.dumps(self._polygon_around(elsewhere))
+        response = self._get("external_api:games.spotguessr.eligible-count", data={"geo_bounds": geo_bounds})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["count"], 0)
+
+    def test_malformed_geo_bounds_is_a_400_not_a_500(self) -> None:
+        response = self._get("external_api:games.spotguessr.eligible-count", data={"geo_bounds": "{not json"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_geo_bounds_is_required(self) -> None:
+        response = self._get("external_api:games.spotguessr.eligible-count")
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_read_only_credential_is_enough(self) -> None:
+        read_key = self._key_with_scopes([ApiKeyScope.GAMES_READ.value])
+        geo_bounds = json.dumps(self._polygon_around(self.location))
+        response = self._get("external_api:games.spotguessr.eligible-count", data={"geo_bounds": geo_bounds}, key=read_key)
+        self.assertEqual(response.status_code, 200)
+
+
+class SpotGuessrEligiblePinsTests(_SpotGuessrApiTestCase):
+    """The browse feed of the caller's own pins - a read, not a play mode."""
+
+    def test_lists_the_callers_own_pins(self) -> None:
+        response = self._get("external_api:games.spotguessr.eligible-pins")
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual(body["count"], 1)
+        row = body["results"][0]
+        self.assertAlmostEqual(row["latitude"], float(self.location.latitude), places=3)
+        self.assertAlmostEqual(row["longitude"], float(self.location.longitude), places=3)
+        self.assertIn("label", row)
+
+    def test_never_lists_another_profiles_pins(self) -> None:
+        other_location = self._make_location()
+        baker.make(Pin, profile=self.other_profile, location=other_location)
+        body = self._get("external_api:games.spotguessr.eligible-pins").json()
+        self.assertEqual(body["count"], 1)
+
+    def test_can_be_narrowed_by_geo_bounds(self) -> None:
+        elsewhere = baker.make(Location, latitude="10.000000", longitude="10.000000", official_name="Nowhere Near")
+        baker.make(Pin, profile=self.profile, location=elsewhere)
+
+        lat, lng = float(self.location.latitude), float(self.location.longitude)
+        polygon = {"type": "Polygon", "coordinates": [[[lng - 0.01, lat - 0.01], [lng - 0.01, lat + 0.01], [lng + 0.01, lat + 0.01], [lng + 0.01, lat - 0.01], [lng - 0.01, lat - 0.01]]]}
+        body = self._get("external_api:games.spotguessr.eligible-pins", data={"geo_bounds": json.dumps(polygon)}).json()
+        self.assertEqual(body["count"], 1)
+
+    def test_malformed_geo_bounds_is_a_400_not_a_500(self) -> None:
+        response = self._get("external_api:games.spotguessr.eligible-pins", data={"geo_bounds": "{not json"})
+        self.assertEqual(response.status_code, 400)
+
+
+class SpotGuessrRoundExpireTests(_SpotGuessrApiTestCase):
+    """Force-revealing a round whose timer genuinely ran out."""
+
+    def setUp(self) -> None:
+        """Start a timed session so its round can actually expire."""
+        super().setUp()
+        session = start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig(round_time_limit_seconds=30))
+        self.session_id = session.pk
+        self.round = GameRound.objects.create(session=session, sequence_index=0, location=self.location)
+
+    def test_an_expired_timer_is_revealed(self) -> None:
+        GameRound.objects.filter(pk=self.round.pk).update(created=timezone.now() - timedelta(seconds=60))
+        response = self._post("external_api:games.spotguessr.sessions.rounds.expire", self.session_id, self.round.pk)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.json()["revealed"])
+        self.round.refresh_from_db()
+        self.assertIsNotNone(self.round.revealed_at)
+
+    def test_a_timer_that_has_not_expired_yet_is_a_harmless_no_op(self) -> None:
+        response = self._post("external_api:games.spotguessr.sessions.rounds.expire", self.session_id, self.round.pk)
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["revealed"])
+        self.round.refresh_from_db()
+        self.assertIsNone(self.round.revealed_at)
+
+    def test_a_repeat_call_after_reveal_stays_a_no_op(self) -> None:
+        GameRound.objects.filter(pk=self.round.pk).update(created=timezone.now() - timedelta(seconds=60))
+        self._post("external_api:games.spotguessr.sessions.rounds.expire", self.session_id, self.round.pk)
+        response = self._post("external_api:games.spotguessr.sessions.rounds.expire", self.session_id, self.round.pk)
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["revealed"])
+
+    def test_another_users_session_is_a_404(self) -> None:
+        theirs = start_solo_session(self.other_profile, SpotGuessrMode.PHOTOS, GameConfig(round_time_limit_seconds=30))
+        their_round = GameRound.objects.create(session=theirs, sequence_index=0, location=self.location)
+        response = self._post("external_api:games.spotguessr.sessions.rounds.expire", theirs.pk, their_round.pk)
+        self.assertEqual(response.status_code, 404)
+
+    def test_needs_the_write_scope(self) -> None:
+        read_key = self._key_with_scopes([ApiKeyScope.GAMES_READ.value])
+        response = self._post("external_api:games.spotguessr.sessions.rounds.expire", self.session_id, self.round.pk, key=read_key)
+        self.assertEqual(response.status_code, 403)
+
+
+class SpotGuessrRoundFeedbackTests(_SpotGuessrApiTestCase):
+    """Reacting to the photo a Photos-mode round showed."""
+
+    def setUp(self) -> None:
+        """Start a session, guess on its round, so there is something to react to."""
+        super().setUp()
+        started = self._start_session()
+        self.session_id = started["session_id"]
+        self.round_id = started["round"]["round_id"]
+
+    def _guess(self) -> None:
+        self._post(
+            "external_api:games.spotguessr.sessions.rounds.guess",
+            self.session_id,
+            self.round_id,
+            body={"latitude": 42.0, "longitude": -73.0},
+        )
+
+    def test_thumbs_up_is_recorded(self) -> None:
+        self._guess()
+        response = self._post(
+            "external_api:games.spotguessr.sessions.rounds.feedback",
+            self.session_id,
+            self.round_id,
+            body={"kind": GamePhotoFeedbackKind.THUMBS_UP},
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["kind"], GamePhotoFeedbackKind.THUMBS_UP)
+        self.assertTrue(GamePhotoFeedback.objects.filter(round_id=self.round_id, profile=self.profile, kind=GamePhotoFeedbackKind.THUMBS_UP).exists())
+
+    def test_a_repeat_reaction_overwrites_the_first(self) -> None:
+        self._guess()
+        self._post(
+            "external_api:games.spotguessr.sessions.rounds.feedback",
+            self.session_id,
+            self.round_id,
+            body={"kind": GamePhotoFeedbackKind.THUMBS_UP},
+        )
+        self._post(
+            "external_api:games.spotguessr.sessions.rounds.feedback",
+            self.session_id,
+            self.round_id,
+            body={"kind": GamePhotoFeedbackKind.REPORTED},
+        )
+        self.assertEqual(GamePhotoFeedback.objects.filter(round_id=self.round_id, profile=self.profile).count(), 1)
+        self.assertEqual(GamePhotoFeedback.objects.get(round_id=self.round_id, profile=self.profile).kind, GamePhotoFeedbackKind.REPORTED)
+
+    def test_reacting_before_guessing_is_refused(self) -> None:
+        response = self._post(
+            "external_api:games.spotguessr.sessions.rounds.feedback",
+            self.session_id,
+            self.round_id,
+            body={"kind": GamePhotoFeedbackKind.THUMBS_UP},
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_an_unknown_kind_is_a_400(self) -> None:
+        self._guess()
+        response = self._post(
+            "external_api:games.spotguessr.sessions.rounds.feedback",
+            self.session_id,
+            self.round_id,
+            body={"kind": "not_a_real_kind"},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_round_with_no_photo_has_nothing_to_react_to(self) -> None:
+        text_session = start_solo_session(self.profile, SpotGuessrMode.NAMED_PLACE, GameConfig())
+        text_round = GameRound.objects.create(session=text_session, sequence_index=0, location=self.location, display_text="Old Mill House")
+        Guess.objects.create(round=text_round, profile=self.profile, guess_point=self.location.point)
+        response = self._post(
+            "external_api:games.spotguessr.sessions.rounds.feedback",
+            text_session.pk,
+            text_round.pk,
+            body={"kind": GamePhotoFeedbackKind.THUMBS_UP},
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_needs_the_write_scope(self) -> None:
+        self._guess()
+        read_key = self._key_with_scopes([ApiKeyScope.GAMES_READ.value])
+        response = self._post(
+            "external_api:games.spotguessr.sessions.rounds.feedback",
+            self.session_id,
+            self.round_id,
+            body={"kind": GamePhotoFeedbackKind.THUMBS_UP},
+            key=read_key,
+        )
+        self.assertEqual(response.status_code, 403)

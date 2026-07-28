@@ -27,7 +27,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
-from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.reactions.model import Reaction
 from urbanlens.dashboard.services.api_keys import generate_api_key
 from urbanlens.dashboard.services.comments import toggle_reaction
@@ -236,11 +236,20 @@ class ReactionNotificationTests(TestCase):
         the pin, so the roles here are inverted relative to the rest of this
         class - the reactor is the pin owner and the author is a guest
         commenter.
+
+        The guest's ``comment_visibility`` is widened to ANYONE because owning
+        the pin is not the same as being allowed to read every comment on it:
+        under the ``ANYTHING_IN_COMMON`` default this guest's comment is hidden
+        from the owner, and reacting to a comment the thread would not show is
+        now a 404. That gate is the subject of its own test; here it would only
+        obscure the notification behaviour being checked.
         """
         owner_user = baker.make(User, username="pinowner")
         owner = Profile.objects.get(user=owner_user)
         _key, raw_key = generate_api_key(owner_user, "Reaction client")
         pin = create_pin_for_profile(owner, name="Guest thread", latitude=44.1, longitude=-75.2).pin
+        self.author.comment_visibility = VisibilityChoice.ANYONE
+        self.author.save(update_fields=["comment_visibility"])
         guest_comment = baker.make("dashboard.Comment", pin=pin, profile=self.author, text="Been here")
 
         url = f"{BASE}/{pin.slug or pin.uuid}/comments/{guest_comment.pk}/reactions/{THUMBS_UP}/"

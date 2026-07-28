@@ -26,9 +26,16 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.urls import path
+
+from urbanlens.dashboard.external_api import views_panels
+
 if TYPE_CHECKING:
     from django.urls.resolvers import URLPattern
 
 #: Routes contributed by this domain. Appended to the flat ``external_api:``
 #: namespace by ``urls.py`` - see this module's docstring before adding to it.
-urlpatterns: list[URLPattern] = []
+urlpatterns: list[URLPattern] = [
+    path("pins/<str:pin_slug>/panels/", views_panels.PinPanelsListView.as_view(), name="pins.panels"),
+    path("pins/<str:pin_slug>/panels/<str:panel_key>/", views_panels.PinPanelDetailView.as_view(), name="pins.panels.detail"),
+]

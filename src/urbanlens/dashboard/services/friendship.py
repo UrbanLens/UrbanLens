@@ -283,6 +283,54 @@ def _existing_friendship(actor: Profile, target: Profile) -> Friendship:
     return friendship
 
 
+def _incoming_pending_request(actor: Profile, target: Profile) -> Friendship:
+    """The pending request ``target`` sent ``actor``, or raise.
+
+    Every answer to a friend request - accept, decline, ignore - is a response
+    to *someone else's* pending offer, and this is the only function that
+    establishes that premise. :func:`_existing_friendship` cannot: it resolves
+    the pair's single row in either direction and reports nothing about its
+    status, while ``Friendship.accept``/``decline``/``ignore`` overwrite
+    ``status`` unconditionally. Answering a request through those two together
+    therefore used to apply the transition to *whatever row happened to exist*,
+    which is wrong in two directions at once:
+
+    - **A block is not a request.** ``decline()`` or ``ignore()`` against a
+      ``Blocked`` row rewrites it to ``Declined``/``Ignored``, so the *blocked*
+      party could clear a block placed on them and resume contact operations
+      that consult ``Profile.are_blocked``. That is the same one-call bypass of
+      the site's only hard safety control that :func:`remove_friend` documents
+      and guards against - reachable from the accept/reject/ignore endpoints
+      instead of the remove one.
+    - **A request is not consent.** ``accept()`` against the caller's *own*
+      outgoing ``Requested`` row makes them both parties to the acceptance,
+      creating a friendship the other person never agreed to. The same call
+      against a ``Declined``, ``Ignored`` or ``Removed`` row resurrects a
+      relationship its owner deliberately ended.
+
+    Requiring ``REQUESTED`` **and** ``from_profile == target`` refuses all of
+    the above with the one check the transitions themselves never make.
+
+    Args:
+        actor: The profile answering the request (the recipient).
+        target: The profile that must have sent it.
+
+    Returns:
+        The pending Friendship directed from ``target`` to ``actor``.
+
+    Raises:
+        FriendshipNotFoundError: No row joins the pair, the row is not pending,
+            or it is pending in the other direction. Deliberately one
+            indistinguishable error - a caller must not be able to tell "you
+            are blocked" from "there is nothing here", which is the whole point
+            of that exception's docstring.
+    """
+    friendship = _existing_friendship(actor, target)
+    if friendship.status != FriendshipStatus.REQUESTED or friendship.from_profile_id != target.pk:
+        raise FriendshipNotFoundError
+    return friendship
+
+
 def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
     """Accept ``target``'s pending friend request to ``actor``.
 
@@ -298,12 +346,13 @@ def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
         The now-accepted Friendship.
 
     Raises:
-        FriendshipNotFoundError: No request exists between the pair.
+        FriendshipNotFoundError: ``target`` has no pending request to ``actor``
+            - see :func:`_incoming_pending_request`.
         FriendLimitExceededError: Either profile is already at the site's
             ``max_friends_per_user`` limit.
         FriendshipActionError: Either profile has Community disabled.
     """
-    friendship = _existing_friendship(actor, target)
+    friendship = _incoming_pending_request(actor, target)
 
     if not friendship.accept():
         # Friendship.accept() returns a bare False for both refusal reasons;
@@ -338,9 +387,10 @@ def reject_friend_request(actor: Profile, target: Profile) -> Friendship:
         The declined Friendship.
 
     Raises:
-        FriendshipNotFoundError: No request exists between the pair.
+        FriendshipNotFoundError: ``target`` has no pending request to ``actor``
+            - see :func:`_incoming_pending_request`.
     """
-    friendship = _existing_friendship(actor, target)
+    friendship = _incoming_pending_request(actor, target)
     friendship.decline()
     _mark_friend_request_notifications_read(actor, target.pk)
     return friendship
@@ -362,9 +412,10 @@ def ignore_friend_request(actor: Profile, target: Profile) -> Friendship:
         The ignored Friendship.
 
     Raises:
-        FriendshipNotFoundError: No request exists between the pair.
+        FriendshipNotFoundError: ``target`` has no pending request to ``actor``
+            - see :func:`_incoming_pending_request`.
     """
-    friendship = _existing_friendship(actor, target)
+    friendship = _incoming_pending_request(actor, target)
     friendship.ignore()
     _mark_friend_request_notifications_read(actor, target.pk)
     return friendship

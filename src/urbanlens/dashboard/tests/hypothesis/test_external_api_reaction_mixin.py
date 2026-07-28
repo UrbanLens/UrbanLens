@@ -35,7 +35,7 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.external_api.mixins import _ReactionMixin
 from urbanlens.dashboard.external_api.views_wiki import WikiCommentReactionView
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
-from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.reactions.model import Reaction
 from urbanlens.dashboard.services.api_keys import generate_api_key
 from urbanlens.dashboard.services.comments import ALLOWED_EMOJIS, aggregate_reactions, toggle_reaction
@@ -239,13 +239,41 @@ class ReactionMixinBehaviourTests(TestCase):
         Worth pinning explicitly: the neighbouring DELETE-comment endpoint *is*
         author-scoped, and a mixin that copied that scoping would break the
         feature outright while looking more secure.
+
+        The author is given ``comment_visibility = ANYONE`` deliberately. The
+        default is ``ANYTHING_IN_COMMON``, under which a brand-new profile's
+        comment is invisible to this caller - so a fixture at the default was
+        asserting that a comment the *list* endpoint hides can still be reacted
+        to by id, which is the enumeration hole ``comment_is_visible`` closes,
+        not the not-owner-scoped behavior this test is for. ANYONE isolates the
+        property under test.
         """
         other = Profile.objects.get(user=baker.make(User))
+        other.comment_visibility = VisibilityChoice.ANYONE
+        other.save(update_fields=["comment_visibility"])
         theirs = baker.make("dashboard.Comment", wiki=self.wiki, profile=other, text="Theirs")
 
         response = self.client.put(self._url(THUMBS_UP, comment_id=theirs.pk), **self._headers())
         self.assertEqual(response.status_code, 200)
         self.assertTrue(Reaction.objects.filter(comment=theirs, profile=self.profile).exists())
+
+    def test_reacting_to_a_comment_hidden_from_the_caller_is_not_found(self) -> None:
+        """A comment the thread listing drops cannot be reached by guessing its id.
+
+        The counterpart to the test above: wiki scope alone left every comment
+        on a visible wiki reactable by sequential id, including those
+        ``visible_comment_tree`` withholds. Reacting returned a summary (so the
+        id was confirmed) and notified an author whose comments this caller is
+        not permitted to read.
+        """
+        other = Profile.objects.get(user=baker.make(User))
+        other.comment_visibility = VisibilityChoice.FRIENDS
+        other.save(update_fields=["comment_visibility"])
+        hidden = baker.make("dashboard.Comment", wiki=self.wiki, profile=other, text="Hidden")
+
+        response = self.client.put(self._url(THUMBS_UP, comment_id=hidden.pk), **self._headers())
+        self.assertEqual(response.status_code, 404)
+        self.assertFalse(Reaction.objects.filter(comment=hidden, profile=self.profile).exists())
 
     def test_read_only_scope_cannot_react(self) -> None:
         """Reacting is a write; ``wiki:read`` alone must not reach it."""

@@ -235,6 +235,70 @@ class JournalContractTests(SimpleTestCase):
         self.assertEqual(dataclass_fields, serializer_fields)
 
 
+class JournalResponseShapeTests(TestCase):
+    """The journal answers with the external API's standard paginated envelope.
+
+    Regression coverage for the bare ``{entries,total,omitted_sources}`` shape this
+    endpoint used to answer with - it could never gain a field later without
+    breaking clients, so it was normalized onto ``{count,next,previous,results}``
+    (see ``docs/notes/mobile_app_notes.md`` Part 7).
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = Profile.objects.get(user=self.user)
+
+    def _make_pin(self, name: str, lat: float, lng: float):
+        location = baker.make("dashboard.Location", latitude=lat, longitude=lng)
+        return baker.make("dashboard.Pin", profile=self.profile, location=location, name=name)
+
+    def test_envelope_has_standard_keys_plus_omitted_sources(self) -> None:
+        """A partially-scoped credential gets the standard envelope, with
+        omitted_sources naming the journal sources it can't see."""
+        pin = self._make_pin("Old Factory", 40.0, -73.0)
+        baker.make("dashboard.Review", profile=self.profile, pin=pin, rating=4)
+        raw_key = _key_with_scopes(self.user, [ApiKeyScope.PHOTOS_READ, ApiKeyScope.PINS_READ])
+
+        response = self.client.get(reverse("external_api:memories.journal"), **_bearer(raw_key))
+
+        self.assertEqual(response.status_code, HTTPStatus.OK)
+        body = response.json()
+        self.assertEqual(set(body), {"count", "next", "previous", "results", "omitted_sources"})
+        self.assertEqual(body["count"], 1)
+        self.assertEqual(len(body["results"]), 1)
+        self.assertEqual(body["results"][0]["kind"], "review")
+        self.assertCountEqual(body["omitted_sources"], ["visits", "comments", "articles"])
+
+    def test_fully_scoped_credential_omits_nothing(self) -> None:
+        raw_key = _key_with_scopes(
+            self.user,
+            [ApiKeyScope.PHOTOS_READ, ApiKeyScope.PINS_READ, ApiKeyScope.VISITS_READ, ApiKeyScope.WIKI_READ, ApiKeyScope.TRIPS_READ],
+        )
+
+        response = self.client.get(reverse("external_api:memories.journal"), **_bearer(raw_key))
+
+        self.assertEqual(response.json()["omitted_sources"], [])
+
+    def test_pages_via_the_standard_page_size_param(self) -> None:
+        """?page_size= pages the merged feed exactly like every other list endpoint."""
+        for i in range(2):
+            pin = self._make_pin(f"Pin {i}", 41.0 + i, -74.0 - i)
+            baker.make("dashboard.Review", profile=self.profile, pin=pin, rating=3)
+        raw_key = _key_with_scopes(self.user, [ApiKeyScope.PHOTOS_READ, ApiKeyScope.PINS_READ])
+
+        first = self.client.get(reverse("external_api:memories.journal"), {"page_size": 1}, **_bearer(raw_key)).json()
+        self.assertEqual(first["count"], 2)
+        self.assertEqual(len(first["results"]), 1)
+        self.assertIsNotNone(first["next"])
+        self.assertIsNone(first["previous"])
+
+        second = self.client.get(reverse("external_api:memories.journal"), {"page_size": 1, "page": 2}, **_bearer(raw_key)).json()
+        self.assertEqual(len(second["results"]), 1)
+        self.assertIsNone(second["next"])
+        self.assertIsNotNone(second["previous"])
+        self.assertNotEqual(first["results"][0]["title"], second["results"][0]["title"])
+
+
 @override_settings(MEDIA_X_ACCEL=False)
 class MediaGateCredentialTests(TestCase):
     """The media gate accepts credentials with media:read, and nothing else."""

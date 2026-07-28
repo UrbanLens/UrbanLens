@@ -485,8 +485,9 @@ class E2EERewrapView(DualAuthJsonView):
 
     @extend_schema(
         description=(
-            "Re-wraps the caller's private key under new secrets. Re-wrapping under a password requires "
-            "`current_password` even for OAuth2 callers - see the enroll endpoint for the rationale."
+            "Re-wraps the caller's private key under new secrets. Any rewrap - password, recovery, or both - "
+            "requires `current_password` on password-backed accounts, even for OAuth2 callers; see the enroll "
+            "endpoint for the rationale. Accounts with no usable password (OAuth-only) have no proof to give."
         ),
     )
     def post(self, request: Request) -> Response:
@@ -521,10 +522,22 @@ class E2EERewrapView(DualAuthJsonView):
             return Response({"error": "password_wrapped_secret and password_wrap_salt must be provided together"}, status=400)
         if not password_wrapped and not recovery_wrapped:
             return Response({"error": "Nothing to update"}, status=400)
-        if password_wrapped:
-            proof_error = _require_current_password_proof(profile.user, data)
-            if proof_error is not None:
-                return proof_error
+        # Proof is required for *either* wrapped copy, not just the password
+        # one. Gating it on `password_wrapped` alone left the recovery-only
+        # rewrap unauthenticated beyond the bearer token: a stolen
+        # `messages:write` credential could post a `recovery_wrapped_secret`
+        # by itself and overwrite the victim's recovery-wrapped private key
+        # without knowing their password. The private key is unrecoverable
+        # once its last valid wrapping is replaced, so that is a silent,
+        # permanent destruction of the account's messages - the exact outcome
+        # the password proof on the other branch exists to prevent, reachable
+        # by simply omitting a field.
+        # Unconditional: the guard above already established that at least one
+        # wrapped copy is being replaced. (OAuth-only accounts have no password
+        # to prove and pass through - see the helper.)
+        proof_error = _require_current_password_proof(profile.user, data)
+        if proof_error is not None:
+            return proof_error
 
         update_fields = ["updated"]
         if password_wrapped:

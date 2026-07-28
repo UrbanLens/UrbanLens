@@ -111,7 +111,21 @@ class CredentialOrSessionMediaMixin:
     media_scope: ClassVar[ApiKeyScope] = ApiKeyScope.MEDIA_READ
 
     def resolve_media_profile(self, request: HttpRequest) -> Profile | None:
-        """Identify the profile making this request, by session or by credential.
+        """Identify the profile making this request, by credential or by session.
+
+        **A presented credential wins over an ambient session.** Checking the
+        session first meant a request carrying both a cookie and an
+        ``Authorization`` header was served as the *cookie's* account, with the
+        credential never authenticated and :attr:`media_scope` never checked -
+        so a WebView sharing the site's cookie jar (the mobile client these
+        routes exist for) could fetch media as whichever account happened to be
+        logged in, and a token without ``media:read`` bypassed that scope
+        entirely whenever a session was also present. It also skipped the
+        per-credential throttle below, since that only runs on the credential
+        branch.
+
+        Only a request with no ``Authorization`` header at all falls through to
+        the session, so the ordinary browser flow is unchanged.
 
         Args:
             request: The current request.
@@ -127,13 +141,18 @@ class CredentialOrSessionMediaMixin:
         """
         from urbanlens.dashboard.models.profile.model import Profile
 
-        user = getattr(request, "user", None)
-        if user is not None and user.is_authenticated:
-            profile, _created = Profile.objects.get_or_create(user=user)
-            return profile
-
         resolved = self.profile_from_credential(request)
         if resolved is None:
+            # No credential was presented (or the one presented is invalid or
+            # unscoped, which must not silently fall back to the session's
+            # authority). Only a genuinely credential-free request may use the
+            # cookie.
+            if request.META.get("HTTP_AUTHORIZATION"):
+                return None
+            user = getattr(request, "user", None)
+            if user is not None and user.is_authenticated:
+                profile, _created = Profile.objects.get_or_create(user=user)
+                return profile
             return None
         credential_user, credential = resolved
 

@@ -29,7 +29,7 @@ from rest_framework.views import APIView
 from urbanlens.dashboard.external_api.authentication import ApiKeyAuthentication
 from urbanlens.dashboard.external_api.errors import ErrorEnvelopeMixin
 from urbanlens.dashboard.external_api.pagination import PaginatedListMixin
-from urbanlens.dashboard.external_api.permissions import HasApiKeyScope
+from urbanlens.dashboard.external_api.permissions import HasApiKeyScope, credential_grants, filter_sources_by_grants
 from urbanlens.dashboard.external_api.serializers import (
     AuthSessionSerializer,
     ErrorSerializer,
@@ -41,7 +41,6 @@ from urbanlens.dashboard.external_api.serializers import (
     FriendRequestCreateSerializer,
     FriendshipSerializer,
     JournalEntrySerializer,
-    JournalQuerySerializer,
     JournalResponseSerializer,
     LabelCustomizationSerializer,
     LabelMergeResponseSerializer,
@@ -51,10 +50,13 @@ from urbanlens.dashboard.external_api.serializers import (
     LabelWriteSerializer,
     LocationSearchQuerySerializer,
     LocationSearchResponseSerializer,
+    MemoriesTimelineQuerySerializer,
+    MemoryEventSerializer,
     NotificationListQuerySerializer,
     NotificationListResponseSerializer,
     NotificationPreferenceSerializer,
     NotificationSerializer,
+    OnThisDayResponseSerializer,
     PhotoFileSerializer,
     PhotoLabelsSerializer,
     PhotoListQuerySerializer,
@@ -84,6 +86,7 @@ from urbanlens.dashboard.external_api.serializers import (
     PinNoteSerializer,
     PinSuggestionCreateResponseSerializer,
     PinSuggestionCreateSerializer,
+    PinSuggestionListResponseSerializer,
     PinSyncQuerySerializer,
     PinSyncResponseSerializer,
     PinUpdateSerializer,
@@ -104,6 +107,7 @@ from urbanlens.dashboard.external_api.serializers import (
     SafetyContactDefaultsResponseSerializer,
     SafetyContactDefaultsSerializer,
     SafetyMapAttachSerializer,
+    SafetyMapListResponseSerializer,
     SafetyMapSerializer,
     SafetyPartnerInviteSerializer,
     SafetyPhotoAttachSerializer,
@@ -165,9 +169,10 @@ from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
-from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin
+from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import _COMMUNITY_GATED_VISIBILITY_FIELDS, Profile
 from urbanlens.dashboard.models.profile.note import ProfileNote
+from urbanlens.dashboard.models.routes.model import Route
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinPartner, SafetyCheckinStatus, SafetyPreference
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
@@ -200,6 +205,7 @@ from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 from urbanlens.dashboard.services.map_pins.autocomplete import resolve_google_place, search_google_places, search_local
 from urbanlens.dashboard.services.media_labels import MediaLabelError, set_media_labels
 from urbanlens.dashboard.services.media_relevance import toggle_media_vote
+from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
 from urbanlens.dashboard.services.memories.journal import get_journal_entries
 from urbanlens.dashboard.services.memories.photos import create_pin_and_log_visit, log_visit_on_pin
 from urbanlens.dashboard.services.notification_center import (
@@ -247,7 +253,7 @@ from urbanlens.dashboard.services.pin_subresources import (
     delete_pin_note,
     promote_alias_to_name,
 )
-from urbanlens.dashboard.services.pin_suggestions import LocationHit, attach_suggestion_photos, ingest_location_hits
+from urbanlens.dashboard.services.pin_suggestions import LocationHit, accept_pin_suggestion, attach_suggestion_photos, ingest_location_hits, pending_suggestions_for_profile, reject_pin_suggestion
 from urbanlens.dashboard.services.pin_sync import InvalidSyncCursorError, StaleDeletedSinceError, sync_pins_page, sync_tombstones_page
 from urbanlens.dashboard.services.profile_settings import SettingsValidationError, apply_settings_patch, read_settings
 from urbanlens.dashboard.services.push import PushRegistrationError, register_device, unregister_device
@@ -300,6 +306,7 @@ from urbanlens.dashboard.services.visits import (
     create_manual_visit,
     delete_visit,
     reject_visit_suggestion,
+    sync_last_visited,
     visit_logging_allowed,
 )
 from urbanlens.dashboard.services.wiki_access import wikis_hidden_by_pin_move
@@ -1214,9 +1221,20 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
 
         visit = None
         if data.get("visit") is not None:
-            visit = PinVisit.objects.filter(pk=data["visit"], pin__profile=profile).first()
+            visit = PinVisit.objects.filter(pk=data["visit"], pin__profile=profile).select_related("pin__location").first()
             if visit is None:
                 return Response({"error": "No such visit."}, status=400)
+            # The two references have to agree. Each passed its own ownership
+            # check independently, so a `pin` of A plus a `visit` belonging to
+            # B was accepted and stored verbatim - a photo that shows in A's
+            # gallery while claiming it was taken on a visit to B, which
+            # quietly breaks both gallery filtering and visit history.
+            if pin is not None and visit.pin_id != pin.pk:
+                return Response({"error": "That visit belongs to a different pin."}, status=400)
+            # A visit implies its pin, so a caller naming only the visit gets
+            # the association filled in rather than an unfiled photo.
+            if pin is None:
+                pin = visit.pin
 
         try:
             image = upload_photo(profile, data["file"], caption=data.get("caption") or None, pin=pin, visit=visit)
@@ -1304,6 +1322,16 @@ class PhotoVoteView(_OwnedImageMixin, ExternalApiView):
     Only meaningful for a photo materialized into a Location's Media gallery -
     a plain personal upload has no ``(source, item_key)`` identity for
     ``MediaRelevance`` to key a vote by, and is refused with 400.
+
+    **Resolves by visibility, not ownership** - the one write in this group
+    that does, and deliberately so. A relevance vote does not mutate the image:
+    it inserts the *caller's own* ``MediaRelevance`` row keyed by
+    ``(source, item_key, profile)``, which is why the reasoning in
+    :class:`_OwnedImageMixin` (a write must not reach a photo you can merely
+    look at) does not apply here. Voting only on your own uploads is not
+    community voting at all, and a gallery photo belonging to someone else has
+    no other endpoint through which a client could reach it - the wiki gallery
+    surfaces it, ``PhotoDetailView.get`` serves it, and this route answered 404.
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -1313,7 +1341,11 @@ class PhotoVoteView(_OwnedImageMixin, ExternalApiView):
     @extend_schema(request=PhotoVoteSerializer, responses={200: PhotoVoteResponseSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def post(self, request: Request, image_uuid: UUID) -> Response:
         """Record the caller's vote and return the item's new net score."""
+        # Same two-step widening PhotoDetailView.get uses: the caller's own
+        # photo first, then anything visible_to() admits.
         image = self._get_image(request, image_uuid)
+        if image is None:
+            image = Image.objects.visible_to(request.user.profile).filter(uuid=image_uuid).select_related("location", "profile").first()
         if image is None:
             return Response({"error": "No such photo."}, status=404)
         if image.location_id is None or not image.media_source_key or not image.media_item_key:
@@ -1450,34 +1482,233 @@ class VisitSuggestionActionView(ExternalApiView):
         return Response(status=204)
 
 
-class MemoriesJournalView(ExternalApiView):
-    """GET: the caller's Memories journal - visit notes, ratings, comments, article edits."""
+class PinSuggestionListApiView(ExternalApiView):
+    """GET: the caller's pending batch-scan pin suggestions.
+
+    Distinct from ``PinSuggestionsView`` (POST-only - stages a *new*
+    suggestion submitted by an external "discovery" app): this lists the
+    review queue an Immich library sweep or local-folder scan already
+    populated, mirroring ``VisitSuggestionsView`` for the sibling suggestion
+    type. Not paginated, matching that sibling - a review queue is naturally
+    small and bounded by how much a batch scan found.
+    """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
         "GET": frozenset({ApiKeyScope.PHOTOS_READ}),
     }
 
-    @extend_schema(parameters=[JournalQuerySerializer], responses={200: JournalResponseSerializer})
+    @extend_schema(responses={200: PinSuggestionListResponseSerializer})
     def get(self, request: Request) -> Response:
-        """Return one window of the caller's journal, newest first."""
-        serializer = JournalQuerySerializer(data=request.query_params)
-        serializer.is_valid(raise_exception=True)
-        params = serializer.validated_data
+        """List every pending suggestion in the caller's batch-scan review queue."""
+        profile = request.user.profile
+        suggestions = pending_suggestions_for_profile(profile).select_related("pin").order_by("-created")
 
-        # get_journal_entries materializes every source in full - that is the
-        # existing internal behavior (the Memories page renders the whole
-        # feed), so the window is applied in Python rather than pushed into
-        # the service, which would mean paginating four heterogeneous
-        # querysets and merging them.
-        entries = get_journal_entries(request.user.profile)
-        offset = params["offset"]
-        window = entries[offset : offset + params["limit"]]
-        return Response(
+        payload = [
             {
-                "entries": JournalEntrySerializer(window, many=True).data,
-                "total": len(entries),
+                "id": suggestion.pk,
+                "status": suggestion.status,
+                "origin": suggestion.origin,
+                "is_new_pin": suggestion.is_new_pin,
+                "pin_slug": suggestion.pin.slug if suggestion.pin else None,
+                "pin_name": suggestion.pin.effective_name if suggestion.pin else None,
+                "latitude": suggestion.latitude,
+                "longitude": suggestion.longitude,
+                "hit_count": suggestion.hit_count,
+                "visit_dates": suggestion.visit_dates,
+                "suggested_name": suggestion.suggested_name,
+                "suggested_description": suggestion.suggested_description,
+                "suggested_pin_type": suggestion.suggested_pin_type,
+                "suggested_aliases": suggestion.suggested_aliases,
+                "suggested_links": suggestion.suggested_links,
+                "created": suggestion.created,
             }
+            for suggestion in suggestions
+        ]
+        return Response(PinSuggestionListResponseSerializer({"suggestions": payload}).data)
+
+
+class PinSuggestionActionApiView(ExternalApiView):
+    """POST: accept or reject one pending pin suggestion.
+
+    Applies the suggestion's own defaults - its ``suggested_name`` for a
+    brand-new pin, no label or candidate-photo selection. The web review
+    queue's richer accept dialog (name override, label picker, candidate
+    Immich/local-scan photo picker) is not mirrored here in this pass; see
+    ``docs/notes/mobile_app_notes.md``.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.PHOTOS_WRITE}),
+    }
+
+    # request=None: the action is carried entirely by the URL, so there is no
+    # body for drf-spectacular to infer a request serializer from.
+    @extend_schema(request=None, responses={204: None, 404: ErrorSerializer})
+    def post(self, request: Request, suggestion_id: int, action: str) -> Response:
+        """Apply ``accept`` or ``reject`` to one of the caller's pending suggestions."""
+        if action not in {"accept", "reject"}:
+            return Response({"error": "No such action."}, status=404)
+
+        profile = request.user.profile
+        suggestion = PinSuggestion.objects.filter(pk=suggestion_id, profile=profile, status=PinSuggestionStatus.PENDING).first()
+        if suggestion is None:
+            return Response({"error": "No such suggestion."}, status=404)
+
+        if action == "reject":
+            reject_pin_suggestion(suggestion)
+        else:
+            accept_pin_suggestion(suggestion, profile)
+        return Response(status=204)
+
+
+class MemoriesTimelineView(PaginatedListMixin, ExternalApiView):
+    """GET: one page of the caller's Memories timeline - routes, trips, visits, photos.
+
+    Defaults to the trailing 90 days, matching the internal Memories page's
+    own default window - a full history is never loaded from a single
+    request. Wraps ``services.memories.aggregator.get_memory_events``, the
+    same data the internal page's map/timeline renders.
+    """
+
+    #: Mirrors ``controllers.memories._DEFAULT_WINDOW_DAYS``.
+    _DEFAULT_WINDOW_DAYS = 90
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.PHOTOS_READ}),
+    }
+
+    @extend_schema(parameters=[MemoriesTimelineQuerySerializer], responses={200: MemoryEventSerializer(many=True), 400: ErrorSerializer})
+    def get(self, request: Request) -> Response:
+        """Return one page of MemoryEvents for the requested date range/viewport."""
+        serializer = MemoriesTimelineQuerySerializer(data=request.query_params)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        today = timezone.now().date()
+        start = data.get("start") or today - timedelta(days=self._DEFAULT_WINDOW_DAYS)
+        end = data.get("end") or today
+
+        bbox = None
+        raw_bbox = data.get("bbox")
+        if raw_bbox:
+            try:
+                min_lat, min_lng, max_lat, max_lng = (float(part) for part in raw_bbox.split(","))
+            except ValueError:
+                bbox = None
+            else:
+                bbox = BBox(min_lat, min_lng, max_lat, max_lng)
+
+        events = get_memory_events(request.user.profile, start, end, bbox=bbox)
+        return self.paginated_response(events, MemoryEventSerializer, request)
+
+
+class MemoriesOnThisDayApiView(ExternalApiView):
+    """GET: past-year visits/routes/photos matching today's month/day.
+
+    Mirrors the internal Memories page's "on this day" callout, including its
+    cap of ``_ON_THIS_DAY_LIMIT`` rows per category - a sensible default for a
+    naturally small, date-scoped result rather than a fully paginated feed.
+    """
+
+    _ON_THIS_DAY_LIMIT = 10
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.PHOTOS_READ}),
+    }
+
+    @extend_schema(responses={200: OnThisDayResponseSerializer})
+    def get(self, request: Request) -> Response:
+        """Return this month/day's past-year visits, routes, and photos."""
+        from urbanlens.dashboard.services.geo import geometry_to_geojson
+
+        profile = request.user.profile
+        today = timezone.now().date()
+
+        visits = PinVisit.objects.filter(pin__profile=profile, visited_at__month=today.month, visited_at__day=today.day).exclude(visited_at__year=today.year).select_related("pin").order_by("-visited_at")[: self._ON_THIS_DAY_LIMIT]
+        routes = Route.objects.for_profile(profile).filter(started_at__month=today.month, started_at__day=today.day).exclude(started_at__year=today.year).order_by("-started_at")[: self._ON_THIS_DAY_LIMIT]
+        photos = (
+            Image.objects.filter(profile=profile, taken_at__month=today.month, taken_at__day=today.day)
+            .exclude(taken_at__year=today.year)
+            .select_related("pin", "wiki", "wiki__location", "profile", "location", "visit", "direct_message")
+            .prefetch_related("labels")
+            .order_by("-taken_at")[: self._ON_THIS_DAY_LIMIT]
         )
+
+        payload = {
+            "today": today.isoformat(),
+            "visits": [{"pin_slug": visit.pin.slug, "pin_name": visit.pin.effective_name, "visited_at": visit.visited_at, "notes": visit.notes} for visit in visits],
+            "routes": [{"uuid": route.uuid, "name": route.name, "started_at": route.started_at, "distance_meters": route.distance_meters, "path": geometry_to_geojson(route.path)} for route in routes],
+            "photos": [build_photo_payload(image, profile) for image in photos],
+        }
+        return Response(OnThisDayResponseSerializer(payload).data)
+
+
+class MemoriesJournalView(PaginatedListMixin, ExternalApiView):
+    """GET: the caller's Memories journal - visit notes, ratings, comments, article edits.
+
+    The journal is an aggregate of four separate privacy domains, so it is
+    filtered per source rather than gated by a single scope - the same
+    partial-fulfilment contract global search and the undo feed use. See
+    :data:`JOURNAL_SOURCE_SCOPES`.
+    """
+
+    #: Every scope a credential must hold before the matching journal source is
+    #: included, keyed by ``services.memories.journal.JOURNAL_SOURCES`` key.
+    #:
+    #: ``photos:read`` alone used to serve the whole feed, which was a scope
+    #: escalation rather than a convenience: the entries carry complete visit
+    #: notes, pin/wiki/trip comment bodies, ratings, and - when a revision has
+    #: no edit summary - the full text of private pin and wiki articles. Those
+    #: are exactly the payloads ``visits:read``, ``pins:read``, ``trips:read``
+    #: and ``wiki:read`` exist to gate, so a photos-only integration could read
+    #: all of them by asking the journal instead of the domain endpoint.
+    #:
+    #: Each entry lists ``PHOTOS_READ`` (the endpoint's own scope) *as well as*
+    #: its domain scope, per ``filter_sources_by_grants``' contract: a section
+    #: must never be granted on the strength of a check made elsewhere.
+    #:
+    #: ``comments`` requires ``pins:read`` *and* ``trips:read`` because the one
+    #: source yields pin, wiki and trip comments interleaved and cannot be
+    #: split without three separate queries; ``wiki:read`` joins them for the
+    #: wiki comments it also carries. Requiring all three is the strict
+    #: reading, and the strict reading is the correct default for a source that
+    #: cannot be subdivided.
+    JOURNAL_SOURCE_SCOPES: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "visits": frozenset({ApiKeyScope.PHOTOS_READ, ApiKeyScope.VISITS_READ}),
+        "reviews": frozenset({ApiKeyScope.PHOTOS_READ, ApiKeyScope.PINS_READ}),
+        "comments": frozenset({ApiKeyScope.PHOTOS_READ, ApiKeyScope.PINS_READ, ApiKeyScope.WIKI_READ, ApiKeyScope.TRIPS_READ}),
+        "articles": frozenset({ApiKeyScope.PHOTOS_READ, ApiKeyScope.PINS_READ, ApiKeyScope.WIKI_READ}),
+    }
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.PHOTOS_READ}),
+    }
+
+    @extend_schema(responses={200: JournalResponseSerializer})
+    def get(self, request: Request) -> Response:
+        """Return one page of the caller's journal, newest first.
+
+        Uses the external API's standard page-number envelope - see
+        ``PaginatedListMixin`` - rather than the bespoke ``offset``/``limit``/
+        ``total`` shape this endpoint used to answer with, which could never
+        gain a field later without breaking clients.
+        """
+        grants = filter_sources_by_grants(request.auth, self.JOURNAL_SOURCE_SCOPES)
+
+        # get_journal_entries materializes every selected source in full - that
+        # is the existing internal behavior (the Memories page renders the whole
+        # feed), so pagination is applied to the resulting list rather than
+        # pushed into the service, which would mean paginating four
+        # heterogeneous querysets and merging them.
+        entries = get_journal_entries(request.user.profile, sources=grants.granted)
+        paginator = self.pagination_class()
+        page = paginator.paginate_queryset(entries, request, view=self)
+        response = paginator.get_paginated_response(JournalEntrySerializer(page, many=True).data)
+        # Named so a client can tell "nothing happened yet" from "your
+        # credential cannot see this kind of entry" and prompt for
+        # re-authorization - see SourceGrants.
+        response.data["omitted_sources"] = list(grants.omitted)
+        return response
 
 
 class PinListsView(PaginatedListMixin, ExternalApiView):
@@ -2017,13 +2248,20 @@ class LabelDetailView(ExternalApiView):
             label.allow_auto_tag = data["allow_auto_tag"]
         if "keywords" in data:
             label.keywords = data.get("keywords") or None
+
+        # Validated before anything is written. Saving first and checking the
+        # hierarchy afterwards meant a PATCH combining an ordinary field with a
+        # cycle-forming `parent_uuids` persisted the ordinary field and *then*
+        # answered 400 - a rejected request that had already been half applied,
+        # which no client can reason about or undo.
+        parent_ids = [parent.pk for parent in parents]
+        if "parent_uuids" in data and would_create_cycle(label, parent_ids):
+            return Response({"error": "That parent would create a loop in the label hierarchy."}, status=400)
+
         # `kind` is deliberately ignored on update - see LabelWriteSerializer.
         label.save()
 
         if "parent_uuids" in data:
-            parent_ids = [parent.pk for parent in parents]
-            if would_create_cycle(label, parent_ids):
-                return Response({"error": "That parent would create a loop in the label hierarchy."}, status=400)
             label.parents.set(parents)
 
         return Response(LabelSerializer(_reload_label(label, profile)).data)
@@ -2129,9 +2367,20 @@ class LabelMergeView(ExternalApiView):
         serializer.is_valid(raise_exception=True)
         profile = request.user.profile
 
-        sources = list(Label.objects.filter(uuid__in=serializer.validated_data["source_uuids"], profile=profile))
+        requested_uuids = serializer.validated_data["source_uuids"]
+        sources = list(Label.objects.filter(uuid__in=requested_uuids, profile=profile))
         if not sources:
             return Response({"error": "No labels to merge."}, status=400)
+
+        # All-or-nothing. Filtering by owner silently dropped any uuid that was
+        # unknown or belonged to someone else, so a stale or malformed batch
+        # merged and *deleted* whichever sources happened to resolve and then
+        # reported success - an irreversible partial application of a
+        # destructive operation the caller believes ran in full. Anything the
+        # caller named that can't be merged fails the whole request instead.
+        unresolved = {str(value) for value in requested_uuids} - {str(source.uuid) for source in sources}
+        if unresolved:
+            return Response({"error": f"No such label(s): {', '.join(sorted(unresolved))}."}, status=404)
 
         # Captured before the merge - the source rows are gone afterwards.
         merged_uuids = [str(source.uuid) for source in sources]
@@ -2495,11 +2744,47 @@ class PinVisitsView(OwnedPinMixin, PaginatedListMixin, ExternalApiView):
 
 
 class PinVisitDetailView(OwnedPinMixin, ExternalApiView):
-    """DELETE: remove one of the pin's logged visits."""
+    """PATCH: edit one of the pin's logged visits. DELETE: remove it."""
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "PATCH": frozenset({ApiKeyScope.VISITS_WRITE}),
         "DELETE": frozenset({ApiKeyScope.VISITS_WRITE}),
     }
+
+    @extend_schema(request=PinVisitCreateSerializer, responses={200: PinVisitSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
+    def patch(self, request: Request, pin_slug: str, visit_id: int) -> Response:
+        """Update the visit's date and/or notes, then re-derive the pin's last-visited date.
+
+        Only the two fields the create endpoint itself accepts (``visited_at``,
+        ``notes``) are writable here - participants, photos, and the drawn map
+        snapshot stay the web dialog's concern, so there is only ever one write
+        path for each of those.
+        """
+        pin = self.get_owned_pin_lite(request, pin_slug)
+        if pin is None:
+            return Response({"error": "No such pin."}, status=404)
+
+        visit = pin.visit_history.filter(pk=visit_id).first()
+        if visit is None:
+            return Response({"error": "No such visit."}, status=404)
+
+        serializer = PinVisitCreateSerializer(data=request.data, partial=True)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        update_fields = []
+        if "visited_at" in data:
+            visit.visited_at = data["visited_at"]
+            update_fields.append("visited_at")
+        if "notes" in data:
+            visit.notes = data["notes"]
+            update_fields.append("notes")
+        if update_fields:
+            visit.save(update_fields=[*update_fields, "updated"])
+            sync_last_visited(pin)
+
+        updated = pin.visit_history.annotate(photo_count=Count("images")).get(pk=visit.pk)
+        return Response(PinVisitSerializer(updated).data)
 
     @extend_schema(responses={204: None, 404: ErrorSerializer})
     def delete(self, request: Request, pin_slug: str, visit_id: int) -> Response:
@@ -2990,7 +3275,7 @@ class SafetyCheckinPhotoDetailView(SafetyCheckinScopedView):
         return Response(status=204)
 
 
-class SafetyCheckinMapsView(SafetyCheckinScopedView):
+class SafetyCheckinMapsView(SafetyCheckinScopedView, PaginatedListMixin):
     """GET: the check-in's maps. POST: attach one of the caller's own maps."""
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
@@ -2998,7 +3283,7 @@ class SafetyCheckinMapsView(SafetyCheckinScopedView):
         "POST": frozenset({ApiKeyScope.SAFETY_WRITE}),
     }
 
-    @extend_schema(responses={200: SafetyMapSerializer(many=True), 404: ErrorSerializer})
+    @extend_schema(responses={200: SafetyMapListResponseSerializer, 404: ErrorSerializer})
     def get(self, request: Request, checkin_slug: str) -> Response:
         """Return the check-in's primary route map plus every attached reference map."""
         checkin = self._get_checkin(request, checkin_slug)
@@ -3008,9 +3293,9 @@ class SafetyCheckinMapsView(SafetyCheckinScopedView):
         if checkin.markup_map is not None:
             maps.append({"uuid": str(checkin.markup_map.uuid), "title": checkin.markup_map.title, "is_primary": True})
         maps += [{"uuid": str(m.uuid), "title": m.title, "is_primary": False} for m in checkin.markup_maps.all()]
-        return Response(maps)
+        return self.paginated_response(maps, SafetyMapSerializer, request)
 
-    @extend_schema(request=SafetyMapAttachSerializer, responses={200: SafetyMapSerializer(many=True), 400: ErrorSerializer, 404: ErrorSerializer})
+    @extend_schema(request=SafetyMapAttachSerializer, responses={200: SafetyMapListResponseSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def post(self, request: Request, checkin_slug: str) -> Response:
         """Attach one of the caller's existing maps as a reference map."""
         checkin = self._get_checkin(request, checkin_slug)
@@ -3583,7 +3868,35 @@ class ProfileDetailView(ExternalApiView):
         if is_self:
             payload["visibility"] = {name: getattr(target, name) for name in _COMMUNITY_GATED_VISIBILITY_FIELDS}
 
-        return Response(ProfileDetailSerializer(payload).data)
+        return Response(ProfileDetailSerializer(self._redact_unreadable(request, payload)).data)
+
+    def _redact_unreadable(self, request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        """Drop the read-scoped sections when the caller only holds write scope.
+
+        ``PATCH`` answers with this same payload, and its declared scope is
+        ``social:write`` alone - so returning the built profile unconditionally
+        turned a write-only credential into a reader of the two things this
+        endpoint's ``GET`` scopes exist to protect: the account's contact
+        methods and its private visibility configuration. The escalation did
+        not even require a real edit; any accepted PATCH body reached the same
+        response.
+
+        Gating the *payload* rather than only the empty-body case is what makes
+        that airtight - a rule enforced on "did this request change anything"
+        is one trivially-satisfied field away from being no rule at all.
+
+        Args:
+            request: The current request, carrying the credential (if any).
+            payload: The fully built profile payload.
+
+        Returns:
+            The payload, with ``contact`` and ``visibility`` blanked when a
+            credential caller lacks the ``GET`` scopes. Session callers hold no
+            credential and are unaffected.
+        """
+        if request.auth is None or credential_grants(request.auth, self.required_scopes_by_method["GET"]):
+            return payload
+        return {**payload, "contact": None, "visibility": None}
 
     @extend_schema(request=ProfileUpdateSerializer, responses={200: ProfileDetailSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
     def patch(self, request: Request, profile_slug: str) -> Response:
@@ -4097,11 +4410,19 @@ class TripDetailView(TripScopedApiView):
     @extend_schema(request=TripUpdateSerializer, responses={200: TripDetailSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})
     def patch(self, request: Request, trip_slug: str) -> Response:
         """Apply a partial update to one of the caller's trips."""
-        serializer = TripUpdateSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
         profile = request.user.profile
+        # Resolved before validation so the serializer can compare a submitted
+        # date against the stored one - a PATCH sending only `end_date` has no
+        # `start_date` in its payload to check it against.
         try:
-            trip = update_trip(self.trip(request, trip_slug), profile, changes=serializer.validated_data)
+            trip = self.trip(request, trip_slug)
+        except TripError as exc:
+            return self.error_response(exc)
+
+        serializer = TripUpdateSerializer(data=request.data, context={"instance": trip})
+        serializer.is_valid(raise_exception=True)
+        try:
+            trip = update_trip(trip, profile, changes=serializer.validated_data)
         except TripError as exc:
             return self.error_response(exc)
         return Response(TripDetailSerializer(_trip_detail_payload(trip, profile), context={"viewer": profile}).data)
@@ -4376,17 +4697,29 @@ class TripActivityDetailView(TripScopedApiView):
     )
     def patch(self, request: Request, trip_slug: str, activity_id: int) -> Response:
         """Apply a partial update to one activity."""
-        serializer = TripActivityUpdateSerializer(data=request.data)
+        profile = request.user.profile
+        # Resolved before validation so the serializer can compare a submitted
+        # schedule endpoint against the stored one - moving `scheduled_at` past
+        # the activity's existing `scheduled_end` is only detectable with the
+        # activity in hand.
+        try:
+            trip = self.trip(request, trip_slug)
+        except TripError as exc:
+            return self.error_response(exc)
+        activity = TripActivity.objects.filter(pk=activity_id, trip=trip).first()
+
+        serializer = TripActivityUpdateSerializer(data=request.data, context={"instance": activity})
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
-        profile = request.user.profile
 
         changes: dict[str, object] = {key: data[key] for key in ("title", "notes", "scheduled_at", "scheduled_end", "status", "location_hidden", "child_trip_uuid") if key in data}
         if _has_place_fields(data):
             changes["place"] = _activity_place_fields(data)
 
         try:
-            trip = self.trip(request, trip_slug)
+            # Left to the service to raise for a missing activity, so the
+            # not-found answer stays in one place rather than being duplicated
+            # from the lookup above (which exists only for validation context).
             update_activity(trip, profile, activity_id, changes=changes)
         except TripError as exc:
             return self.error_response(exc)

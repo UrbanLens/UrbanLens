@@ -68,6 +68,8 @@ from urbanlens.dashboard.external_api import (
     urls_connections,
     urls_custom_fields,
     urls_games,
+    urls_labels_extra,
+    urls_lists_extra,
     urls_memories,
     urls_messaging,
     urls_panels,
@@ -79,6 +81,7 @@ from urbanlens.dashboard.external_api import (
     urls_tools,
     urls_trips,
     urls_wiki_community,
+    urls_wiki_extra,
     views,
     views_messaging,
     views_wiki,
@@ -232,6 +235,8 @@ _CORE_URLPATTERNS: list[URLPattern] = [
     path("locations/search/", views.LocationSearchView.as_view(), name="locations.search"),
     path("locations/resolve/", views.PlaceResolveView.as_view(), name="locations.resolve"),
     path("pin-suggestions/", views.PinSuggestionsView.as_view(), name="pin_suggestions"),
+    path("suggestions/pins/", views.PinSuggestionListApiView.as_view(), name="suggestions.pins"),
+    path("suggestions/pins/<int:suggestion_id>/<str:action>/", views.PinSuggestionActionApiView.as_view(), name="suggestions.pins.action"),
     path("photos/", views.PhotosView.as_view(), name="photos"),
     path("photos/<uuid:image_uuid>/", views.PhotoDetailView.as_view(), name="photos.detail"),
     path("photos/<uuid:image_uuid>/labels/", views.PhotoLabelsView.as_view(), name="photos.labels"),
@@ -354,6 +359,8 @@ urlpatterns: list[URLPattern] = order_by_specificity(
     + urls_connections.urlpatterns
     + urls_custom_fields.urlpatterns
     + urls_games.urlpatterns
+    + urls_labels_extra.urlpatterns
+    + urls_lists_extra.urlpatterns
     + urls_memories.urlpatterns
     + urls_messaging.urlpatterns
     + urls_panels.urlpatterns
@@ -365,4 +372,5 @@ urlpatterns: list[URLPattern] = order_by_specificity(
     + urls_tools.urlpatterns
     + urls_trips.urlpatterns
     + urls_wiki_community.urlpatterns
+    + urls_wiki_extra.urlpatterns
 )

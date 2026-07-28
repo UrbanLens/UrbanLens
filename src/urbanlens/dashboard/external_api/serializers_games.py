@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.spotguessr.model import GameSessionStatus, SpotGuessrMode
-from urbanlens.dashboard.services.spotguessr import session as spotguessr_session
+from urbanlens.dashboard.services.spotguessr import relevance as spotguessr_relevance, session as spotguessr_session
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.spotguessr.model import GameRound, GameSession, Guess
@@ -341,6 +341,73 @@ class SpotGuessrSessionListQuerySerializer(serializers.Serializer):
     """Query parameters for the session list."""
 
     status = serializers.ChoiceField(choices=GameSessionStatus.choices, required=False)
+
+
+class SpotGuessrRoundExpireResponseSerializer(serializers.Serializer):
+    """Whether the round timer's expiry call actually revealed the round."""
+
+    revealed = serializers.BooleanField(read_only=True)
+
+
+class SpotGuessrFeedbackSerializer(serializers.Serializer):
+    """A player's explicit reaction to the photo/imagery a round just showed."""
+
+    kind = serializers.ChoiceField(choices=[(kind, kind) for kind in spotguessr_relevance.EXPLICIT_KINDS])
+
+
+class SpotGuessrFeedbackResponseSerializer(serializers.Serializer):
+    """The feedback kind actually recorded."""
+
+    kind = serializers.CharField(read_only=True)
+
+
+class SpotGuessrPreferencesUpdateSerializer(serializers.Serializer):
+    """The one genuinely user-editable SpotGuessr preference.
+
+    ``last_config`` is deliberately absent - it is auto-managed by
+    ``remember_last_config`` on every session start, never directly
+    user-writable (see ``services.spotguessr.overview``).
+    """
+
+    show_ratings_to_friends = serializers.BooleanField()
+
+
+class SpotGuessrPreferencesResponseSerializer(serializers.Serializer):
+    """The preference row after a write."""
+
+    show_ratings_to_friends = serializers.BooleanField(read_only=True)
+
+
+class SpotGuessrEligibleCountQuerySerializer(serializers.Serializer):
+    """Query parameters for the eligible-pin-count pre-check."""
+
+    #: A GeoJSON-encoded string, matching the internal
+    #: ``SpotGuessrAreaPinCountView`` query param exactly - unlike the session
+    #: create body, this travels in a query string, which has no native JSON
+    #: type.
+    geo_bounds = serializers.CharField()
+
+
+class SpotGuessrEligibleCountResponseSerializer(serializers.Serializer):
+    """How many of the caller's own pins fall inside a candidate area."""
+
+    count = serializers.IntegerField(read_only=True)
+
+
+class SpotGuessrEligiblePinsQuerySerializer(serializers.Serializer):
+    """Query parameters for the eligible-pins browse feed."""
+
+    #: Optional - omitting it lists every one of the caller's pins, matching
+    #: solo play's own eligibility rule (see ``services.spotguessr.eligibility``).
+    geo_bounds = serializers.CharField(required=False)
+
+
+class SpotGuessrEligiblePinSerializer(serializers.Serializer):
+    """One of the caller's own pins, as a candidate SpotGuessr location."""
+
+    label = serializers.CharField(read_only=True)
+    latitude = serializers.FloatField(read_only=True)
+    longitude = serializers.FloatField(read_only=True)
 
 
 def build_session_payload(session: GameSession, *, host_slug: str | None) -> dict[str, Any]:

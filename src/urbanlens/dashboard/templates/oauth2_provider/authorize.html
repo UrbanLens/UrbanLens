@@ -1,0 +1,56 @@
+{% extends "dashboard/themes/auth_base.html" %}
+
+{% block title %}{% if error %}Authorization error{% else %}Authorize {{ application.name }}{% endif %} - UrbanLens{% endblock %}
+
+{% block auth_header %}
+{% if error %}
+<h1 class="auth-title">Authorization error</h1>
+{% else %}
+<h1 class="auth-title">Authorize {{ application.name }}?</h1>
+<p class="auth-subtitle">This app wants to connect to your UrbanLens account.</p>
+{% endif %}
+{% endblock %}
+
+{% block content %}
+{% if error %}
+<div class="auth-errors">
+    <p>{{ error.description }}</p>
+</div>
+<div class="auth-footer">
+    <a href="{% url 'index' %}">Back to UrbanLens</a>
+</div>
+{% else %}
+<form method="post" class="auth-form" id="oauth-consent-form">
+    {% csrf_token %}
+    {% for field in form %}
+        {% if field.is_hidden %}{{ field }}{% endif %}
+    {% endfor %}
+
+    <div class="oauth-consent-scopes">
+        <p class="oauth-consent-scopes-label">This will allow {{ application.name }} to:</p>
+        <ul class="oauth-consent-scope-list">
+            {% for scope in scopes_descriptions %}
+            <li><i class="material-icons" aria-hidden="true">check_circle</i>{{ scope }}</li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    {% if form.errors or form.non_field_errors %}
+    <div class="auth-errors">
+        {{ form.errors }}
+        {{ form.non_field_errors }}
+    </div>
+    {% endif %}
+
+    <div class="oauth-consent-actions">
+        <button type="submit" class="btn btn--secondary">Cancel</button>
+        <button type="submit" name="allow" value="Authorize" class="btn btn--primary">Authorize</button>
+    </div>
+</form>
+
+<p class="oauth-consent-footnote">
+    You can revoke access for {{ application.name }} at any time from your
+    <a href="{% url 'oauth2_provider:authorized-token-list' %}">connected apps</a>.
+</p>
+{% endif %}
+{% endblock %}

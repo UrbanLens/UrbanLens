@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING
 
 from django.urls import path
 
-from urbanlens.dashboard.external_api import views_pin_article, views_pin_comments, views_pin_shares, views_pin_sync
+from urbanlens.dashboard.external_api import views_pin_article, views_pin_bulk, views_pin_comments, views_pin_shares, views_pin_sync
 
 if TYPE_CHECKING:
     from django.urls.resolvers import URLPattern
@@ -37,6 +37,13 @@ if TYPE_CHECKING:
 #: Routes contributed by this domain. Appended to the flat ``external_api:``
 #: namespace by ``urls.py`` - see this module's docstring before adding to it.
 urlpatterns: list[URLPattern] = [
+    # Multi-select actions from the main map's bulk toolbar. "bulk" is a
+    # literal that a pin slug would otherwise swallow whole, same hazard as
+    # "deleted" in urls.py's core pin routes - order_by_specificity protects
+    # it regardless of where this module ends up in the concatenated list.
+    path("pins/bulk/delete/", views_pin_bulk.PinBulkDeleteView.as_view(), name="pins.bulk.delete"),
+    path("pins/bulk/merge/", views_pin_bulk.PinBulkMergeView.as_view(), name="pins.bulk.merge"),
+    path("pins/bulk/edit/", views_pin_bulk.PinBulkEditView.as_view(), name="pins.bulk.edit"),
     # Emoji reactions on a pin's own comment thread. ``pins:write``, matching
     # the comment list/create/delete routes in ``urls.py``, not ``wiki:write``:
     # a pin's thread is the owner's private annotation of their own pin.

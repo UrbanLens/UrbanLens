@@ -66,6 +66,16 @@ def build_pin_detail(pin: Pin, profile: Profile) -> dict[str, Any]:
     payload = serialize_sync_pin(service, pin)
 
     payload["official_name"] = pin.effective_official_name or None
+    # Address components, split out from the combined "address" string the
+    # sync payload already carries - geocoded from the pin's Location, never
+    # user-writable. Location itself is never exposed directly (it would leak
+    # a place's existence to a caller who hasn't pinned it), but reading these
+    # through a pin the caller already owns is safe.
+    payload["city"] = pin.effective_city
+    payload["state"] = pin.effective_state
+    payload["county"] = pin.effective_county
+    payload["country"] = pin.effective_country
+    payload["zipcode"] = pin.location.zipcode if pin.location else None
     payload["date_built"] = _isoformat_or_none(pin.date_built)
     payload["date_abandoned"] = _isoformat_or_none(pin.date_abandoned)
     payload["date_last_active"] = _isoformat_or_none(pin.date_last_active)

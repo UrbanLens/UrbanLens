@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from django.contrib.gis.geos import GEOSException
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import get_object_or_404
@@ -57,10 +58,16 @@ from urbanlens.dashboard.external_api.serializers_wiki import (
     ReviewSerializer,
     WikiAliasCreateSerializer,
     WikiAliasSerializer,
+    WikiBoundaryPayloadSerializer,
+    WikiBoundaryUpdateSerializer,
+    WikiCoverPhotoResponseSerializer,
+    WikiCoverPhotoUpdateSerializer,
     WikiDetailSerializer,
     WikiEditSerializer,
     WikiLinkCreateSerializer,
     WikiLinkSerializer,
+    WikiOwnerSerializer,
+    WikiPropertySaleSerializer,
     WikiStatSerializer,
     WikiStatVoteInputSerializer,
     WikiUpdateSerializer,
@@ -69,9 +76,12 @@ from urbanlens.dashboard.external_api.views import ExternalApiView, OwnedPinMixi
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.aliases.model import WikiAlias
 from urbanlens.dashboard.models.article.model import ArticleRevision
+from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.links.model import WikiLink
+from urbanlens.dashboard.models.property_owner.model import WikiOwner, WikiPropertySale
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
@@ -87,12 +97,15 @@ from urbanlens.dashboard.services.comments import (
     ALLOWED_EMOJIS,
     CommentValidationError,
     aggregate_reactions,
+    comment_is_visible,
     comment_mentions,
     create_comment,
     toggle_reaction,
     top_level_comment_queryset,
     visible_comment_tree,
 )
+from urbanlens.dashboard.services.geo import geometry_to_geojson, parse_multipolygon_geojson
+from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, schedule_location_boundary_generation
 from urbanlens.dashboard.services.reviews import clear_review, upsert_review
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 from urbanlens.dashboard.services.wiki_aliases import promote_wiki_alias_to_name
@@ -469,6 +482,208 @@ class WikiAliasDetailView(WikiApiView):
         return Response(status=204)
 
 
+class WikiAliasToggleNicknameView(WikiApiView):
+    """POST: flip one of the wiki's aliases between nickname-only and a plain alternate name.
+
+    Nickname-only aliases are excluded from external name-provider queries but
+    still shown in the wiki's own alias list - toggling this is a display
+    preference on shared data, not a rename, so unlike :class:`WikiAliasUseView`
+    it is not recorded in the wiki's edit history, matching the internal
+    ``LocationAliasToggleNicknameView`` it wraps.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.WIKI_WRITE}),
+    }
+
+    @extend_schema(request=None, responses={200: WikiAliasSerializer, 404: ErrorSerializer})
+    def post(self, request: Request, location_slug: str, alias_id: int) -> Response:
+        """Flip one alias's nickname flag and return it.
+
+        Args:
+            request: The authenticated request. No body is read.
+            location_slug: The Location slug or uuid from the URL.
+            alias_id: The alias to toggle, scoped to this wiki.
+
+        Returns:
+            The updated alias.
+
+        Raises:
+            Http404: The wiki is not visible to this caller, or *alias_id* is
+                not an alias of it.
+        """
+        _location, wiki, _profile = self.resolve(request, location_slug)
+        alias = get_object_or_404(WikiAlias, id=alias_id, wiki=wiki)
+        alias.toggle_nickname()
+        return Response(WikiAliasSerializer(alias, context={"wiki": wiki}).data)
+
+
+class WikiBoundaryApiView(WikiApiView):
+    """GET the wiki page map's typed boundaries; POST to save or clear the community drawing of one.
+
+    Thin wrapper over ``controllers.boundary.WikiBoundaryView`` - same
+    resolution chain, same polling contract (``pending``/``refreshing``), and
+    the same rule that a community drawing lives on a wiki-keyed ``Boundary``
+    row, never on the shared location-default row that API-generated geometry
+    occupies, so a community edit can never influence point-to-location
+    matching.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.WIKI_READ}),
+        "POST": frozenset({ApiKeyScope.WIKI_WRITE}),
+    }
+
+    def _payload(self, wiki: Any, *, pending: bool, refreshing: bool) -> dict[str, Any]:
+        """Build the boundary payload, mirroring ``controllers.boundary._wiki_boundary_payload``."""
+        boundaries = {}
+        for boundary_type in (BoundaryType.PROPERTY, BoundaryType.BUILDING):
+            polygon, source = Boundary.objects.resolve_for_wiki(wiki, boundary_type)
+            boundaries[str(boundary_type.value)] = {"polygon": geometry_to_geojson(polygon), "source": source}
+        location = wiki.location
+        return {
+            "latitude": float(location.latitude) if location and location.latitude is not None else None,
+            "longitude": float(location.longitude) if location and location.longitude is not None else None,
+            "default_radius_meters": DEFAULT_RADIUS_METERS,
+            "pending": pending,
+            "refreshing": refreshing,
+            "boundaries": boundaries,
+        }
+
+    @extend_schema(responses={200: WikiBoundaryPayloadSerializer, 404: ErrorSerializer})
+    def get(self, request: Request, location_slug: str) -> Response:
+        """Return the wiki's effective boundaries, scheduling generation/refresh when needed."""
+        location, wiki, profile = self.resolve(request, location_slug)
+        already_ran = boundary_generation_ran(location)
+        in_flight = schedule_location_boundary_generation(location, profile)
+        return Response(self._payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran))
+
+    @extend_schema(request=WikiBoundaryUpdateSerializer, responses={200: WikiBoundaryPayloadSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
+    def post(self, request: Request, location_slug: str) -> Response:
+        """Save or clear the community-drawn boundary of one type, with audit."""
+        location, wiki, profile = self.resolve(request, location_slug)
+
+        serializer = WikiBoundaryUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+        boundary_type = data["boundary_type"]
+
+        row = Boundary.objects.row_for_wiki(wiki, boundary_type)
+        old_wkt = row.polygon.wkt if row and row.polygon else None
+
+        polygon_geojson = data.get("polygon")
+        if polygon_geojson:
+            try:
+                geom = parse_multipolygon_geojson(polygon_geojson)
+            except (TypeError, ValueError) as exc:
+                return Response({"error": str(exc)}, status=400)
+
+            from urbanlens.dashboard.models.site_settings import SiteSettings
+
+            max_km2 = SiteSettings.get_current().max_bbox_area_km2
+            try:
+                area_km2 = geom.transform(6933, clone=True).area / 1_000_000
+            except GEOSException:
+                area_km2 = 0.0
+            if area_km2 > max_km2:
+                return Response({"error": f"Boundary is too large ({area_km2:,.0f} km²). Maximum allowed area is {max_km2:,.0f} km²."}, status=400)
+
+            if row is None:
+                row = Boundary(wiki=wiki, location=location, boundary_type=boundary_type)
+            row.polygon = geom
+            if row.location_id != wiki.location_id:
+                row.location = wiki.location
+            row.save()
+            new_wkt = geom.wkt
+        else:
+            if row is not None:
+                row.delete()
+            new_wkt = None
+
+        WikiEdit.objects.create(wiki=wiki, editor=profile, changes={f"boundary_{boundary_type}": {"from": old_wkt, "to": new_wkt}})
+
+        already_ran = boundary_generation_ran(location)
+        in_flight = schedule_location_boundary_generation(location, profile)
+        return Response(self._payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran))
+
+
+class WikiCoverPhotoApiView(WikiApiView):
+    """PUT to set the wiki's hero-banner cover photo; DELETE to clear it.
+
+    Wraps ``controllers.image_gallery.WikiCoverPhotoView``. Any profile with a
+    pin at the wiki's location may set it - the wiki is community content
+    editable by everyone who can see it, the same rule comments, markup and
+    aliases already share. The photo must already be in the wiki's own
+    gallery (resolved by ``image_uuid``, matching the addressing every other
+    photo route in this module uses) rather than accepted as an ad-hoc upload.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "PUT": frozenset({ApiKeyScope.WIKI_WRITE}),
+        "DELETE": frozenset({ApiKeyScope.WIKI_WRITE}),
+    }
+
+    @extend_schema(request=WikiCoverPhotoUpdateSerializer, responses={200: WikiCoverPhotoResponseSerializer, 404: ErrorSerializer})
+    def put(self, request: Request, location_slug: str) -> Response:
+        """Set the wiki's cover photo to one already in its gallery."""
+        location, wiki, profile = self.resolve(request, location_slug)
+
+        serializer = WikiCoverPhotoUpdateSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        image = get_object_or_404(Image.objects.visible_to(profile), uuid=serializer.validated_data["image_uuid"])
+        if image.wiki_id != wiki.pk and image.location_id != location.pk:
+            raise Http404
+        wiki.cover_photo = image
+        wiki.save(update_fields=["cover_photo", "updated"])
+        return Response({"cover_photo_url": image.image.url if image.image else image.source_url})
+
+    @extend_schema(responses={200: WikiCoverPhotoResponseSerializer, 404: ErrorSerializer})
+    def delete(self, request: Request, location_slug: str) -> Response:
+        """Clear the wiki's cover photo."""
+        _location, wiki, _profile = self.resolve(request, location_slug)
+        wiki.cover_photo = None
+        wiki.save(update_fields=["cover_photo", "updated"])
+        return Response({"cover_photo_url": None})
+
+
+class WikiOwnershipView(PaginatedListMixin, WikiApiView):
+    """GET the wiki's shared Ownership card: current and past owners of this place.
+
+    Read-only this pass - see ``docs/notes/mobile_app_notes.md`` Part 7 for why
+    the write side (adding/editing/unlinking an owner) is deferred rather than
+    built here.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.WIKI_READ}),
+    }
+
+    @extend_schema(responses={200: WikiOwnerSerializer(many=True), 404: ErrorSerializer})
+    def get(self, request: Request, location_slug: str) -> Response:
+        """Return one page of the location's shared owners."""
+        location, _wiki, _profile = self.resolve(request, location_slug)
+        return self.paginated_response(WikiOwner.objects.for_location(location), WikiOwnerSerializer, request)
+
+
+class WikiPropertySalesView(PaginatedListMixin, WikiApiView):
+    """GET the wiki's shared Sale History tab, newest first.
+
+    Read-only this pass, for the same reason as :class:`WikiOwnershipView`.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.WIKI_READ}),
+    }
+
+    @extend_schema(responses={200: WikiPropertySaleSerializer(many=True), 404: ErrorSerializer})
+    def get(self, request: Request, location_slug: str) -> Response:
+        """Return one page of the location's shared sale records."""
+        location, _wiki, _profile = self.resolve(request, location_slug)
+        sales = WikiPropertySale.objects.for_location(location).prefetch_related("previous_owners", "new_owners")
+        return self.paginated_response(sales, WikiPropertySaleSerializer, request)
+
+
 class WikiLinksView(WikiApiView):
     """GET the wiki's external links; POST to add one."""
 
@@ -512,6 +727,31 @@ class WikiLinkDetailView(WikiApiView):
         return Response(status=204)
 
 
+def _gallery_row(image: Image) -> dict[str, Any]:
+    """Shape one gallery image into its API payload.
+
+    A module-level function rather than an inline comprehension so it can be
+    handed to ``paginated_response`` as a ``row_builder`` and therefore run on
+    the requested page only - see that method's docstring.
+
+    Args:
+        image: A wiki gallery image with a non-empty file.
+
+    Returns:
+        The serializable row for :class:`GalleryImageSerializer`.
+    """
+    return {
+        "id": image.pk,
+        "uuid": image.uuid,
+        "url": image.image.url,
+        "caption": image.caption,
+        "author": image.author,
+        "source_url": image.source_url,
+        "copyright": image.copyright,
+        "created": image.created.isoformat(),
+    }
+
+
 class WikiGalleryView(PaginatedListMixin, WikiApiView):
     """GET the wiki's shared photo gallery.
 
@@ -530,21 +770,19 @@ class WikiGalleryView(PaginatedListMixin, WikiApiView):
         # visible_to applies the uploader's photo-visibility setting and the
         # viewer's own photo filter - a wiki being visible does not make every
         # photo on it visible.
-        images = Image.objects.filter(wiki=wiki).visible_to(profile).order_by("-created", "-pk")
-        rows = [
-            {
-                "id": image.pk,
-                "url": image.image.url,
-                "caption": image.caption,
-                "author": image.author,
-                "source_url": image.source_url,
-                "copyright": image.copyright,
-                "created": image.created.isoformat(),
-            }
-            for image in images
-            if image.image
-        ]
-        return self.paginated_response(rows, GalleryImageSerializer, request)
+        #
+        # `exclude(image="")` is pushed into the queryset rather than filtered
+        # out in Python so the page the paginator slices is the page that gets
+        # returned; a Python-side `if image.image` would make pages short and
+        # the count wrong.
+        images = Image.objects.filter(wiki=wiki).visible_to(profile).exclude(image="").order_by("-created", "-pk")
+        # The queryset is paginated, then rows are built for the page only.
+        # Building rows first materialized the *entire* visible gallery and
+        # resolved a storage URL per image on every request before the
+        # paginator sliced the resulting list - so the page-size limit bounded
+        # only the response body, while the work behind it grew with the whole
+        # gallery.
+        return self.paginated_response(images, GalleryImageSerializer, request, row_builder=_gallery_row)
 
 
 class WikiArticleView(WikiApiView):
@@ -649,10 +887,23 @@ class WikiArticleRevisionsView(PaginatedListMixin, WikiApiView):
 
 
 class WikiArticleRevisionDetailView(WikiApiView):
-    """GET one article revision, with its diff against the preceding one."""
+    """GET one article revision, with its diff against the preceding one. DELETE to scrub it from history.
+
+    Deletion is self-service, restricted to the revision's own
+    ``editor`` - this is a contributor removing something they personally
+    wrote (an accidentally-shared private detail, say), not moderation of
+    someone else's edit. It never touches the article's *current* text:
+    ``Article.content`` is its own denormalized field, not derived live from
+    the newest revision, so deleting even the newest revision only removes it
+    from the history list. A revision that some other, later restore points
+    back at (``ArticleRevision.restored_from``) is left with that link set to
+    null by the FK's own ``on_delete=SET_NULL`` - no extra handling needed
+    here for the dangling reference.
+    """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
         "GET": frozenset({ApiKeyScope.WIKI_READ}),
+        "DELETE": frozenset({ApiKeyScope.WIKI_WRITE}),
     }
 
     @extend_schema(responses={200: ArticleRevisionDetailSerializer, 404: ErrorSerializer})
@@ -682,6 +933,35 @@ class WikiArticleRevisionDetailView(WikiApiView):
                 "diff": [{"kind": row.kind, "text": row.text} for row in diff_revisions(previous.content if previous is not None else "", revision.content)],
             },
         )
+
+    @extend_schema(responses={204: None, 404: ErrorSerializer})
+    def delete(self, request: Request, location_slug: str, revision_id: int) -> Response:
+        """Permanently remove one revision the caller themselves wrote.
+
+        A 404, not a 403, when the revision exists but belongs to someone
+        else - matching every other lookup miss in this module. A caller who
+        cannot see the wiki learns nothing beyond "no such revision" either
+        way, so telling apart "wrong author" from "wrong wiki" would be a
+        needless extra disclosure.
+
+        Args:
+            request: The authenticated request.
+            location_slug: The Location slug or uuid from the URL.
+            revision_id: The revision to delete, scoped to this wiki's article.
+
+        Returns:
+            204 on success, or the uniform 404 when the revision does not
+            exist, belongs to a different article, or was not authored by
+            the caller.
+        """
+        _location, wiki, profile = self.resolve(request, location_slug)
+        article = get_article(wiki=wiki)
+        if article is None:
+            raise Http404
+
+        revision = get_object_or_404(ArticleRevision, id=revision_id, article=article, editor=profile)
+        revision.delete()
+        return Response(status=204)
 
 
 class WikiArticleRevisionRestoreView(WikiApiView):
@@ -758,14 +1038,36 @@ class _CommentListMixin(PaginatedListMixin):
         parent: CommentModel | None = None
         if data.get("parent_id") is not None:
             # Scoped to the same host, so a comment id from another pin/wiki
-            # can't be used to graft a reply across threads.
+            # can't be used to graft a reply across threads - and gated by the
+            # same visibility rules the list applies, so a parent the caller
+            # was never shown reads as "no such comment" rather than accepting
+            # the reply. Without the second check a guessed sequential id
+            # confirmed its own existence *and* created a reply the author
+            # could never retrieve, since visible_comment_tree omits a hidden
+            # parent together with everything under it.
             scope = {"pin": pin} if pin is not None else {"wiki": wiki}
-            parent = get_object_or_404(Comment, id=data["parent_id"], **scope)
+            parent = get_object_or_404(Comment.objects.select_related("profile"), id=data["parent_id"], **scope)
+            if not comment_is_visible(parent, profile):
+                raise Http404
 
         try:
             comment = create_comment(profile=profile, pin=pin, wiki=wiki, text=data["text"], parent=parent)
         except CommentValidationError as exc:
             return Response({"error": str(exc)}, status=400)
+
+        # The freshly created comment never passes through visible_comment_tree,
+        # so its mentions are resolved here without the gate that call would
+        # have applied. comment_mentions performs a *global* location lookup:
+        # fed a crafted `@[name](loc:<uuid>)` token for a location the author
+        # has not pinned, it answers with the real slug when that uuid exists
+        # and echoes the submitted uuid when it doesn't - turning comment
+        # creation into exactly the location-existence oracle the mention gate
+        # is built to prevent. Serializing through the same gate the list uses
+        # closes it; a comment whose own author cannot see it is refused
+        # outright rather than persisted invisibly.
+        if not comment_is_visible(comment, profile):
+            comment.delete()
+            return Response({"error": "That comment mentions a location you haven't pinned."}, status=400)
 
         return Response(
             {
@@ -852,11 +1154,20 @@ class WikiCommentReactionView(_ReactionMixin, WikiApiView):
     def resolve_reaction_target(self, request: Request, **kwargs: Any) -> tuple[CommentModel, Profile]:
         """Resolve the wiki comment being reacted to, or 404.
 
-        Both gates are lookups rather than permission branches: ``self.resolve``
+        Every gate is a lookup rather than a permission branch: ``self.resolve``
         404s unless the caller has pinned the location (see the module
-        docstring), and ``wiki=wiki`` in the comment lookup keeps a comment id
-        from another wiki - or from a wiki this caller cannot see - from being
-        reachable by guessing integers.
+        docstring), ``wiki=wiki`` keeps a comment id from another wiki - or
+        from a wiki this caller cannot see - from being reachable by guessing
+        integers, and :func:`comment_is_visible` applies the same per-comment
+        gates the thread listing does.
+
+        That third check is not redundant with the second. Wiki scope alone
+        left every comment on a wiki the caller can see reachable by its
+        sequential id, including the ones ``visible_comment_tree`` drops for
+        this viewer: hidden by the author's comment-visibility, awaiting a
+        malware scan, or naming a location the caller has not pinned. Reacting
+        to one returned its reaction summary (confirming the id exists) and
+        notified an author whose comments this caller is not allowed to read.
 
         Args:
             request: The authenticated request.
@@ -867,11 +1178,14 @@ class WikiCommentReactionView(_ReactionMixin, WikiApiView):
             Tuple of (the comment, the requesting profile).
 
         Raises:
-            Http404: Unknown location, invisible wiki, or a comment id that is
-                not on that wiki.
+            Http404: Unknown location, invisible wiki, a comment id that is not
+                on that wiki, or a comment this caller was never shown - all
+                indistinguishable.
         """
         _location, wiki, profile = self.resolve(request, kwargs["location_slug"])
-        comment = get_object_or_404(Comment, id=kwargs["comment_id"], wiki=wiki)
+        comment = get_object_or_404(Comment.objects.select_related("profile"), id=kwargs["comment_id"], wiki=wiki)
+        if not comment_is_visible(comment, profile):
+            raise Http404
         return comment, profile
 
 

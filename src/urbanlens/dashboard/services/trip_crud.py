@@ -10,6 +10,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from django.db import IntegrityError, transaction
+
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
@@ -113,7 +115,26 @@ def create_trip(
         # explicitly at the ORM layer - serializers/forms never bind it.
         create_kwargs["uuid"] = client_uuid
 
-    trip = Trip.objects.create(**create_kwargs)
+    try:
+        # Nested atomic so a lost idempotency race fails inside its own
+        # savepoint rather than poisoning any enclosing transaction - the same
+        # shape `services.direct_messages.create_direct_message` uses.
+        with transaction.atomic():
+            trip = Trip.objects.create(**create_kwargs)
+    except IntegrityError:
+        # Two offline retries carrying the same client uuid arrived close
+        # enough together that both passed the existence check above. The uuid
+        # is globally unique, so the loser lands here - and must replay the
+        # winner's trip, exactly as a sequential retry would, rather than
+        # surfacing the collision as a 500 for a request the client was
+        # promised would be idempotent.
+        if client_uuid is None:
+            raise
+        existing = Trip.objects.filter(uuid=client_uuid).first()
+        if existing is None or existing.creator_id != creator.id:
+            raise
+        return existing, False
+
     TripMembership.objects.get_or_create(trip=trip, profile=creator, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
 
     invite_members(trip, creator, invite_profile_ids)

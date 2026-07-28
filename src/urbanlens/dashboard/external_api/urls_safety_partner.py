@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING
 
 from django.urls import path
 
-from urbanlens.dashboard.external_api import views_safety_chat
+from urbanlens.dashboard.external_api import views_safety_chat, views_safety_location
 
 if TYPE_CHECKING:
     from django.urls.resolvers import URLPattern
@@ -55,6 +55,7 @@ if TYPE_CHECKING:
 #: silently widens a read instead of failing to resolve a route.
 urlpatterns: list[URLPattern] = [
     path("safety/checkins/<str:checkin_slug>/messages/", views_safety_chat.SafetyCheckinMessagesView.as_view(), name="safety.checkins.messages"),
+    path("safety/checkins/<str:checkin_slug>/location/", views_safety_location.SafetyCheckinLocationView.as_view(), name="safety.checkins.location"),
     path("safety/partner-invites/", views_safety_chat.SafetyPartnerInvitesView.as_view(), name="safety.partner_invites"),
     path("safety/partner-invites/<uuid:checkin_uuid>/accept/", views_safety_chat.SafetyPartnerInviteAcceptView.as_view(), name="safety.partner_invites.accept"),
     path("safety/partner-invites/<uuid:checkin_uuid>/decline/", views_safety_chat.SafetyPartnerInviteDeclineView.as_view(), name="safety.partner_invites.decline"),

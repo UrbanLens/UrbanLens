@@ -28,6 +28,7 @@ from rest_framework import serializers
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
+from urbanlens.dashboard.models.boundary.model import BoundaryType
 from urbanlens.dashboard.services.text_limits import (
     MAX_ARTICLE_EDIT_SUMMARY_LENGTH,
     MAX_ARTICLE_LENGTH,
@@ -366,9 +367,98 @@ class GalleryImageSerializer(serializers.Serializer):
     """
 
     id = serializers.IntegerField(read_only=True)
+    #: The photo's public handle, and the *only* one the generic photo routes
+    #: accept - ``/photos/{image_uuid}/`` and its vote sub-route are addressed
+    #: by uuid, not by pk. Without this field a gallery photo belonging to
+    #: another profile was unaddressable: the gallery is the only endpoint that
+    #: surfaces it, and it published just the integer id, so a client could see
+    #: a community photo but had no way to open or vote on it.
+    uuid = serializers.UUIDField(read_only=True)
     url = serializers.CharField(read_only=True)
     caption = serializers.CharField(read_only=True, allow_null=True)
     author = serializers.CharField(read_only=True, allow_null=True)
     source_url = serializers.CharField(read_only=True, allow_null=True)
     copyright = serializers.CharField(read_only=True, allow_null=True)
+    created = serializers.DateTimeField(read_only=True)
+
+
+class WikiBoundaryEntrySerializer(serializers.Serializer):
+    """One typed boundary's resolved geometry and where it came from (schema-only)."""
+
+    polygon = serializers.JSONField(read_only=True, allow_null=True)
+    source = serializers.CharField(read_only=True, allow_null=True)
+
+
+class WikiBoundaryPayloadSerializer(serializers.Serializer):
+    """The wiki page map's full boundary payload (schema-only).
+
+    Field-for-field identical to the internal ``WikiBoundaryView``'s response
+    (see ``controllers.boundary``'s module docstring for the shape) - this is
+    a thin wrapper over the same resolution chain and polling contract, not a
+    redesign.
+    """
+
+    latitude = serializers.FloatField(read_only=True, allow_null=True)
+    longitude = serializers.FloatField(read_only=True, allow_null=True)
+    default_radius_meters = serializers.IntegerField(read_only=True)
+    pending = serializers.BooleanField(read_only=True)
+    refreshing = serializers.BooleanField(read_only=True)
+    boundaries = serializers.DictField(child=WikiBoundaryEntrySerializer(), read_only=True)
+
+
+class WikiBoundaryUpdateSerializer(serializers.Serializer):
+    """Save or clear one typed boundary. A null ``polygon`` clears the custom drawing."""
+
+    boundary_type = serializers.ChoiceField(choices=BoundaryType.choices)
+    polygon = serializers.JSONField(required=False, allow_null=True)
+
+
+class WikiCoverPhotoUpdateSerializer(serializers.Serializer):
+    """Set the wiki's cover photo to one already in its own gallery."""
+
+    image_uuid = serializers.UUIDField()
+
+
+class WikiCoverPhotoResponseSerializer(serializers.Serializer):
+    """The wiki's cover photo after a set/clear (schema-only)."""
+
+    cover_photo_url = serializers.CharField(read_only=True, allow_null=True)
+
+
+class WikiOwnerSerializer(serializers.Serializer):
+    """One shared owner record on a wiki's Ownership card (schema-only, read-only).
+
+    Write support is deliberately out of scope this pass - see
+    ``docs/notes/mobile_app_notes.md`` Part 7 for why.
+    """
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+    company_name = serializers.CharField(read_only=True, allow_blank=True)
+    address = serializers.CharField(read_only=True, allow_blank=True)
+    phone = serializers.CharField(read_only=True, allow_blank=True)
+    email = serializers.CharField(read_only=True, allow_blank=True)
+    notes = serializers.CharField(read_only=True, allow_blank=True)
+    source = serializers.CharField(read_only=True)
+    created = serializers.DateTimeField(read_only=True)
+    updated = serializers.DateTimeField(read_only=True)
+
+
+class WikiPropertySaleOwnerRefSerializer(serializers.Serializer):
+    """A minimal owner reference nested inside a sale record (schema-only)."""
+
+    id = serializers.IntegerField(read_only=True)
+    name = serializers.CharField(read_only=True)
+
+
+class WikiPropertySaleSerializer(serializers.Serializer):
+    """One shared sale record on a wiki's Sale History tab (schema-only, read-only)."""
+
+    id = serializers.IntegerField(read_only=True)
+    sale_price = serializers.DecimalField(max_digits=12, decimal_places=2, read_only=True, allow_null=True)
+    sale_date = serializers.DateField(read_only=True, allow_null=True)
+    notes = serializers.CharField(read_only=True, allow_blank=True)
+    source = serializers.CharField(read_only=True)
+    previous_owners = WikiPropertySaleOwnerRefSerializer(many=True, read_only=True)
+    new_owners = WikiPropertySaleOwnerRefSerializer(many=True, read_only=True)
     created = serializers.DateTimeField(read_only=True)

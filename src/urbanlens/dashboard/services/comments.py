@@ -187,6 +187,39 @@ def _render_if_visible(comment: Comment, profile: Profile, pinned: set[Any], can
     return render_comment_text(comment.text, pinned)
 
 
+def comment_is_visible(comment: Comment, profile: Profile) -> bool:
+    """Whether *profile* may see this one comment - gates 1-3, same as the list.
+
+    The single-comment counterpart to :func:`visible_comment_tree`, for the
+    endpoints that address a comment **by id** rather than rendering a thread:
+    reacting to one, replying to one, resolving one for a detail response.
+    Those paths bypassed the tree entirely and so bypassed its gates, leaving
+    them scoped only by host ("is this comment on this wiki?"). Comment ids are
+    sequential, so that was enough to walk them:
+
+    - a comment hidden by its author's comment-visibility, by a pending malware
+      scan, or by an ``@loc`` mention the caller has not pinned still answered
+      *differently* from a nonexistent id, which is the existence oracle the
+      mention gate is specifically built to deny (see this module's docstring);
+    - reacting to one notified its author, so a caller could reach a person
+      whose comments they are not permitted to read.
+
+    Gate 4 (identity masking) is not applied here: it shapes how a surviving
+    author is *displayed*, and a caller of this function has not been handed
+    any author identity to mask.
+
+    Args:
+        comment: The comment being addressed. Its ``profile`` should be
+            selected/prefetched - this reads it.
+        profile: The viewing profile.
+
+    Returns:
+        True when the comment would have survived
+        :func:`visible_comment_tree`.
+    """
+    return _render_if_visible(comment, profile, viewer_pinned_uuids(profile), {comment.profile_id: profile.can_view_comments_from(comment.profile)}) is not None
+
+
 def comment_mentions(text: str) -> list[dict[str, str]]:
     """Resolve the ``@[Display](loc:uuid)`` tokens in *text* to display/slug pairs.
 

@@ -50,6 +50,8 @@ from urbanlens.dashboard.external_api.serializers_social import (
     ProfileAnnotationsSerializer,
     ProfileNicknameWriteSerializer,
     ProfileTrustWriteSerializer,
+    SocialLinksReplaceSerializer,
+    SocialLinksResponseSerializer,
 )
 
 # Imported rather than reimplemented, for the same reason ``views_trips``
@@ -63,6 +65,7 @@ from urbanlens.dashboard.external_api.serializers_social import (
 # change does not own.
 from urbanlens.dashboard.external_api.views import ExternalApiView, FriendActionView, ProfileDetailView, _resolve_profile
 from urbanlens.dashboard.models.account.model import ApiKeyScope
+from urbanlens.dashboard.models.social_link.model import SocialLink
 from urbanlens.dashboard.services.avatar import AvatarUploadError, clear_profile_avatar, set_profile_avatar, set_profile_avatar_from_emoji
 from urbanlens.dashboard.services.friendship import unblock_profile
 from urbanlens.dashboard.services.profile_annotations import (
@@ -73,6 +76,7 @@ from urbanlens.dashboard.services.profile_annotations import (
     set_nickname,
     set_trust,
 )
+from urbanlens.dashboard.services.social_links import get_profile_links
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -485,3 +489,78 @@ class ProfileTrustView(_AnnotationApiView):
         viewer = request.user.profile
         clear_trust(viewer, subject)
         return self.annotations_response(viewer, subject)
+
+
+class ProfileSocialLinksView(_OwnProfileApiView):
+    """GET a profile's public social links; PUT to fully replace the caller's own.
+
+    Visible to anyone who can see the profile at all - unlike contact methods,
+    a social link carries no separate ``contact_visibility`` gate, matching
+    ``controllers.userprofile.ViewProfileView``, which renders them for any
+    visitor the profile-visibility check admits. Only the owner may write
+    them, via :class:`_OwnProfileApiView`'s own-slug-only resolution.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        # Reading someone else's links is a social read, like the rest of
+        # ProfileDetailView.get - matches its scope pairing exactly.
+        "GET": frozenset({ApiKeyScope.PROFILE_READ, ApiKeyScope.SOCIAL_READ}),
+        "PUT": frozenset({ApiKeyScope.SOCIAL_WRITE}),
+    }
+
+    def _links_response(self, profile: Profile) -> Response:
+        """Build the shared social-links payload.
+
+        Args:
+            profile: The profile whose links are being served.
+
+        Returns:
+            200 with every link currently on the profile.
+        """
+        return Response(SocialLinksResponseSerializer({"links": get_profile_links(profile)}).data)
+
+    @extend_schema(responses={200: SocialLinksResponseSerializer, 404: ErrorSerializer})
+    def get(self, request: Request, profile_slug: str) -> Response:
+        """Return the named profile's social links, if this caller may see the profile at all.
+
+        Args:
+            request: The authenticated request.
+            profile_slug: The subject's slug or uuid.
+
+        Returns:
+            200 with the link list (empty when none are set); 404 when the
+            profile does not resolve or its visibility excludes the caller.
+        """
+        viewer = request.user.profile
+        target = _resolve_profile(profile_slug)
+        if target is None or not target.can_view_profile(viewer):
+            return Response({"error": _NO_SUCH_PROFILE}, status=404)
+        return self._links_response(target)
+
+    @extend_schema(request=SocialLinksReplaceSerializer, responses={200: SocialLinksResponseSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
+    def put(self, request: Request, profile_slug: str) -> Response:
+        """Replace the caller's entire social-link set.
+
+        Args:
+            request: The authenticated request carrying ``links``.
+            profile_slug: The caller's own slug or uuid.
+
+        Returns:
+            200 with the refreshed link list; 400 when a handle/URL fails its
+            platform's rule or a platform is repeated; 404 for any slug that
+            is not the caller's own.
+        """
+        profile = self.own_profile(request, profile_slug)
+        if profile is None:
+            return Response({"error": _NO_SUCH_PROFILE}, status=404)
+
+        serializer = SocialLinksReplaceSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        submitted = serializer.validated_data["links"]
+
+        submitted_platforms = {link["platform"] for link in submitted}
+        profile.social_links.exclude(platform__in=submitted_platforms).delete()
+        for link in submitted:
+            SocialLink.objects.update_or_create(profile=profile, platform=link["platform"], defaults={"handle": link["handle"]})
+
+        return self._links_response(profile)

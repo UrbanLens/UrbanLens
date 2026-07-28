@@ -102,12 +102,23 @@ class IsSessionAuthenticated(BasePermission):
 class DualAuthJsonView(ErrorEnvelopeMixin, APIView):
     """A JSON endpoint reachable by browser cookies *or* an API key / OAuth2 token.
 
-    Authentication is tried session-first, so an ordinary page-load fetch from
-    the logged-in web client behaves exactly as it did before this view was a
-    DRF view - including CSRF, which ``SessionAuthentication`` continues to
-    enforce on unsafe methods. A credential-bearing request carries no session,
-    falls through to the credential authenticators, and is correctly exempt
-    from CSRF (it never relies on ambient browser authority).
+    **Credentials are tried first, sessions only as a fallback.** DRF stops at
+    the first authenticator that returns a result, so ordering here decides who
+    a request that carries *both* a session cookie and an ``Authorization``
+    header authenticates as. Session-first answered "the cookie", which silently
+    discarded the credential: ``request.auth`` stayed None, ``IsSessionAuthenticated``
+    passed, and ``HasApiKeyScope`` was never consulted. A WebView sharing the
+    site's cookie jar - precisely the mobile client these routes were opened
+    for - could therefore read the *session* account's wrapped key material
+    while believing it was using its token, and a token missing ``messages:read``
+    reached read endpoints on the strength of an unrelated cookie.
+
+    Credential-first removes the ambiguity: a request that presents a credential
+    is judged as that credential, scopes and all, and a malformed one is
+    refused rather than quietly downgraded to ambient browser authority. The
+    ordinary web client is unaffected - it sends no ``Authorization`` header, so
+    both credential authenticators decline and ``SessionAuthentication`` handles
+    it exactly as before, CSRF enforcement on unsafe methods included.
 
     The permission expresses "authenticated, and then either a credential
     carrying the right scopes or a plain session":
@@ -131,9 +142,10 @@ class DualAuthJsonView(ErrorEnvelopeMixin, APIView):
     what lets its error path be written once. See ``external_api.errors``.
     """
 
-    #: Session first: the web client's existing cookie flow must keep working
-    #: unchanged, and a credential request carries no session cookie to match.
-    authentication_classes = [SessionAuthentication, ApiKeyAuthentication, OAuth2Authentication]
+    #: Credential first, session last - see the class docstring. Both credential
+    #: authenticators return None when no ``Authorization`` header is present,
+    #: so a cookie-only request still lands on ``SessionAuthentication``.
+    authentication_classes = [ApiKeyAuthentication, OAuth2Authentication, SessionAuthentication]
     permission_classes = [IsAuthenticated & (HasApiKeyScope | IsSessionAuthenticated)]
     #: Same tiered per-credential caps the rest of the package uses. These are
     #: inert for session callers by construction - ``get_cache_key`` returns

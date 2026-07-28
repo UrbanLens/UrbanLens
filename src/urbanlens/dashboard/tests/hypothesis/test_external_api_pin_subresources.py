@@ -75,6 +75,9 @@ class SubResourceTestCase(TestCase):
     def _delete(self, path: str):
         return self.client.delete(path, **_bearer(self.raw_key))
 
+    def _patch(self, path: str, payload: dict):
+        return self.client.patch(path, data=payload, content_type="application/json", **_bearer(self.raw_key))
+
 
 class PinNoteEndpointTests(SubResourceTestCase):
     """Notes list, create, and delete."""
@@ -242,6 +245,41 @@ class PinVisitEndpointTests(SubResourceTestCase):
 
         self.pin.refresh_from_db()
         self.assertIsNone(self.pin.last_visited)
+
+    def test_patch_updates_notes_only(self) -> None:
+        visit = PinVisit.objects.create(pin=self.pin, visited_at=self.visited_at, notes="Original")
+        response = self._patch(f"{_base(self.pin)}visits/{visit.pk}/", {"notes": "Revised"})
+        self.assertEqual(response.status_code, 200, response.content)
+        visit.refresh_from_db()
+        self.assertEqual(visit.notes, "Revised")
+        self.assertEqual(visit.visited_at, self.visited_at)
+
+    def test_patch_updates_visited_at_and_rederives_last_visited(self) -> None:
+        visit = PinVisit.objects.create(pin=self.pin, visited_at=self.visited_at)
+        new_date = self.visited_at + timedelta(days=5)
+        response = self._patch(f"{_base(self.pin)}visits/{visit.pk}/", {"visited_at": new_date.isoformat()})
+        self.assertEqual(response.status_code, 200, response.content)
+        visit.refresh_from_db()
+        self.assertEqual(visit.visited_at, new_date)
+        self.pin.refresh_from_db()
+        self.assertEqual(self.pin.last_visited, new_date)
+
+    def test_patch_with_no_fields_leaves_the_visit_unchanged(self) -> None:
+        visit = PinVisit.objects.create(pin=self.pin, visited_at=self.visited_at, notes="Keep me")
+        response = self._patch(f"{_base(self.pin)}visits/{visit.pk}/", {})
+        self.assertEqual(response.status_code, 200, response.content)
+        visit.refresh_from_db()
+        self.assertEqual(visit.notes, "Keep me")
+
+    def test_patch_unknown_visit_id_is_a_404(self) -> None:
+        response = self._patch(f"{_base(self.pin)}visits/999999/", {"notes": "nope"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_patch_another_users_pin_is_a_404(self) -> None:
+        other_pin = self._other_users_pin()
+        visit = PinVisit.objects.create(pin=other_pin, visited_at=self.visited_at)
+        response = self._patch(f"{_base(other_pin)}visits/{visit.pk}/", {"notes": "hijacked"})
+        self.assertEqual(response.status_code, 404)
 
     def test_pins_scopes_do_not_grant_visit_access(self) -> None:
         # Visit history is movement data; a client trusted with a pin's contents

@@ -28,9 +28,20 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.urls import path
+
+from urbanlens.dashboard.external_api import views_undo
+
 if TYPE_CHECKING:
     from django.urls.resolvers import URLPattern
 
 #: Routes contributed by this domain. Appended to the flat ``external_api:``
 #: namespace by ``urls.py`` - see this module's docstring before adding to it.
-urlpatterns: list[URLPattern] = []
+#:
+#: Undo lives here rather than in its own module: it is a utility belonging to
+#: no single resource, aggregating across every model the undo framework can
+#: restore - exactly the shape this domain's docstring describes.
+urlpatterns: list[URLPattern] = [
+    path("undo/", views_undo.UndoListView.as_view(), name="undo"),
+    path("undo/<uuid:undo_uuid>/restore/", views_undo.UndoRestoreView.as_view(), name="undo.restore"),
+]

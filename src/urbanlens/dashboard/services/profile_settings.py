@@ -23,6 +23,7 @@ Two deliberate divergences from the internal view:
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
@@ -32,6 +33,24 @@ if TYPE_CHECKING:
     from django.contrib.auth.models import User
 
     from urbanlens.dashboard.models.profile.model import Profile
+
+#: Mirrors ``forms.settings_form._DISCORD_USERNAME_RE`` - this is private
+#: contact info rather than a public identity claim, so it stays permissive
+#: (no discriminator-length enforcement) rather than duplicating Discord's own
+#: 100-char ceiling.
+_DISCORD_USERNAME_RE = re.compile(r"^[a-zA-Z0-9._#-]{2,100}$")
+
+#: Profile columns that hold a private contact method (ContactMethodsForm).
+#: Free text with no uniqueness constraint - unlike the OAuth-linked login
+#: identity this module's own docstring excludes, these are just a way for
+#: someone else to reach you and carry no side effects on write.
+_CONTACT_FIELDS: tuple[str, ...] = ("phone_number", "signal_username", "discord_username", "whatsapp_number", "telegram_username", "matrix_handle")
+
+#: Read-through ``User`` fields exposed here rather than living on ``Profile``
+#: itself - see ``apply_settings_patch``/``read_settings`` for why they need
+#: their own handling instead of the flat ``getattr``/``setattr`` the rest of
+#: ``SETTINGS_FIELDS`` uses.
+_USER_PASSTHROUGH_FIELDS: tuple[str, ...] = ("first_name", "last_name")
 
 
 class SettingsValidationError(Exception):
@@ -59,10 +78,22 @@ class SettingsValidationError(Exception):
 #: field on ``Profile`` must be added here on purpose before an external client
 #: can read or write it, so the surface can never widen by accident.
 #:
-#: Account *identity* (email, Discord handle) is deliberately absent - changing
-#: a login identifier is not a preference sync, and the internal form applies
-#: uniqueness checks and side effects that don't belong behind a scope grant.
+#: Account **login identity** (``username``, ``email``, and the linked OAuth
+#: social-auth accounts) is deliberately absent - changing one of those is not
+#: a preference sync, and the internal views apply uniqueness checks and side
+#: effects (availability lookups, session/social-auth implications) that don't
+#: belong behind a scope grant. ``first_name``/``last_name`` and the six
+#: ``ContactMethodsForm`` fields below are a different thing - free-text
+#: display/contact info with no uniqueness constraint and no side effects,
+#: matching how ``controllers.userprofile.ProfileFieldUpdateView`` already
+#: treats them (see its ``_USER_FIELDS``/``_PROFILE_CONTACT``, which this
+#: mirrors) - so they belong here, unlike the identity fields above them.
 SETTINGS_FIELDS: tuple[str, ...] = (
+    # Name (User passthrough - see _USER_PASSTHROUGH_FIELDS below).
+    "first_name",
+    "last_name",
+    # Contact methods (ContactMethodsForm).
+    *_CONTACT_FIELDS,
     # Privacy visibilities (PrivacySettingsForm) - all community-gated.
     "profile_visibility",
     "comment_visibility",
@@ -176,27 +207,47 @@ def _validate_storage_dimensions(profile: Profile, data: dict[str, Any], errors:
             errors["video_downscale_max_height"] = "That video quality is not available on your plan."
 
 
-def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) -> list[str]:
-    """Validate and apply a partial settings update to *profile* in memory.
+def _validate_discord_username(data: dict[str, Any], errors: dict[str, str]) -> None:
+    """Reject a ``discord_username`` outside ``ContactMethodsForm``'s allowed character set.
 
-    Does not save - the caller owns the transaction and the ``update_fields``
-    list, which is what the returned names are for.
+    Args:
+        data: The submitted patch.
+        errors: Accumulator mutated in place with any failure.
+    """
+    value = data.get("discord_username")
+    if value and not _DISCORD_USERNAME_RE.match(value):
+        errors["discord_username"] = "2-100 characters: letters, digits, underscores, dots, hyphens, or #."
+
+
+def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) -> list[str]:
+    """Validate and apply a partial settings update to *profile* (and, for name fields, *user*) in memory.
+
+    Does not save *profile* - the caller owns its transaction and the
+    ``update_fields`` list, which is what the returned names are for.
+    ``first_name``/``last_name`` are the one exception: they live on ``User``,
+    not ``Profile``, so this function saves *user* itself immediately when
+    either is touched, rather than asking the caller to manage a second
+    model's save alongside the one it already owns.
 
     Args:
         profile: The profile to mutate.
         data: Submitted field -> value pairs. Only keys actually present are
             touched, so omitting a field differs from setting it null.
-        user: The user whose feature entitlements gate the AI/Places fields.
+        user: The user whose feature entitlements gate the AI/Places fields,
+            and whose ``first_name``/``last_name`` are written directly.
             Passed separately rather than read off ``profile.user`` so the
-            caller's authenticated user is what's checked.
+            caller's authenticated user is what's checked and written.
 
     Returns:
-        The names of the fields that were changed, for ``update_fields``.
+        The names of the changed *profile* fields, for the caller's own
+        ``update_fields`` - never includes ``first_name``/``last_name``,
+        which this function has already saved onto ``user`` itself.
 
     Raises:
         SettingsValidationError: If any submitted field is unknown, gated
-            behind a feature the user lacks, or outside the values their plan
-            entitles them to.
+            behind a feature the user lacks, outside the values their plan
+            entitles them to, or (for ``discord_username``) outside the
+            allowed character set.
     """
     errors: dict[str, str] = {}
 
@@ -209,15 +260,22 @@ def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) 
             errors[field] = f"The {feature.label} feature is not enabled for your account."
 
     _validate_storage_dimensions(profile, data, errors)
+    _validate_discord_username(data, errors)
 
     if errors:
         raise SettingsValidationError(errors)
 
     touched: list[str] = []
+    user_touched: list[str] = []
     for field in SETTINGS_FIELDS:
         if field not in data:
             continue
         value = data[field]
+        if field in _USER_PASSTHROUGH_FIELDS:
+            if getattr(user, field) != value:
+                setattr(user, field, value)
+            user_touched.append(field)
+            continue
         if getattr(profile, field) != value:
             setattr(profile, field, value)
         # Reported as touched even when the value matches: the caller builds
@@ -225,6 +283,9 @@ def apply_settings_patch(profile: Profile, data: dict[str, Any], *, user: User) 
         # UPDATE, whereas omitting a field the model later coerces would drop
         # that coercion on the floor.
         touched.append(field)
+
+    if user_touched:
+        user.save(update_fields=user_touched)
 
     return touched
 

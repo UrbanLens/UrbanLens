@@ -242,30 +242,54 @@ def share_pin_in_message(
             messaging is otherwise not permitted.
         ValueError: Propagated from `create_direct_message` for bad input.
     """
-    from django.db import transaction
+    from django.db import IntegrityError, transaction
 
+    from urbanlens.dashboard.models.direct_messages.model import DirectMessage as DirectMessageModel
     from urbanlens.dashboard.services.pin_sharing import create_pin_share
+
+    # Replay is settled before the PinShare is created, not after. Deferring to
+    # create_direct_message's own idempotency check was too late: create_pin_share
+    # had already run, so a retry minted a *second* PinShare - and a second
+    # LocationExposure, the provenance row resolve_origin_share walks - before
+    # the message call returned the original. The share row insert below then
+    # collided with the winner's (one-to-one shares are unique per message) and
+    # raised an uncaught IntegrityError, so a send the caller was promised was
+    # idempotent answered 500 while having already corrupted the exposure chain.
+    if client_uuid is not None:
+        replayed = DirectMessageModel.objects.filter(sender=sender, client_uuid=client_uuid).first()
+        if replayed is not None:
+            return replayed
 
     # One transaction: if the message itself is refused (e.g. the recipient's
     # DM visibility rejects this sender despite the friendship), the PinShare
     # and its exposure record must roll back with it - a share offer must
     # never exist without the message that carries it.
-    with transaction.atomic():
-        pin_share = create_pin_share(sender, recipient, pin)
-        message = create_direct_message(
-            sender,
-            recipient,
-            body,
-            ciphertext=ciphertext,
-            nonce=nonce,
-            key_version=key_version,
-            markup_map_uuid=markup_map_uuid,
-            reply_to_id=reply_to_id,
-            image_ids=image_ids,
-            client_uuid=client_uuid,
-            defer_broadcast=True,
-        )
-        DirectMessageShare.objects.create(message=message, kind=DirectMessageShareKind.PIN, pin_share=pin_share)
+    try:
+        with transaction.atomic():
+            pin_share = create_pin_share(sender, recipient, pin)
+            message = create_direct_message(
+                sender,
+                recipient,
+                body,
+                ciphertext=ciphertext,
+                nonce=nonce,
+                key_version=key_version,
+                markup_map_uuid=markup_map_uuid,
+                reply_to_id=reply_to_id,
+                image_ids=image_ids,
+                client_uuid=client_uuid,
+                defer_broadcast=True,
+            )
+            DirectMessageShare.objects.create(message=message, kind=DirectMessageShareKind.PIN, pin_share=pin_share)
+    except IntegrityError:
+        # Two retries raced past the check above. The whole block rolled back,
+        # including this call's PinShare and its exposure, so the winner's
+        # message is canonical and complete - return it rather than surfacing
+        # the collision.
+        replayed = DirectMessageModel.objects.filter(sender=sender, client_uuid=client_uuid).first() if client_uuid is not None else None
+        if replayed is None:
+            raise
+        return replayed
     broadcast_direct_message(message)
     return message
 

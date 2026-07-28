@@ -177,6 +177,55 @@ def can_direct_message(sender: Profile, recipient: Profile) -> bool:
     return recipient.accepts_direct_messages_from(sender)
 
 
+def direct_message_images_visible_to(message: DirectMessage, viewer: Profile) -> bool:
+    """Whether ``viewer`` may be given the raw image URLs on ``message``.
+
+    The image-consent handshake (blurred preview + Allow / Allow Once / Reject)
+    only means anything if a recipient who has not yet consented never receives
+    the underlying media URL. A blur is a CSS property: shipping the real URL
+    and styling it out leaves the image one devtools inspection - or one glance
+    at the WebSocket frame - away from being viewed, which is precisely the
+    decision the prompt is asking the recipient to make.
+
+    Args:
+        message: The message whose attachments are being rendered.
+        viewer: The profile the payload is for.
+
+    Returns:
+        True for the sender (their own images), and for a recipient who has
+        either allowed this sender outright or revealed this one message via
+        "Allow Once". False for anyone else, including third parties.
+    """
+    if viewer.pk == message.sender_id:
+        return True
+    if viewer.pk != message.recipient_id:
+        return False
+    if message.images_revealed:
+        return True
+
+    from urbanlens.dashboard.models.direct_messages.image_permission import DirectMessageImagePermission
+    from urbanlens.dashboard.models.direct_messages.meta import ImagePermissionStatus
+
+    permission = DirectMessageImagePermission.objects.for_pair(viewer, message.sender).first()
+    return bool(permission and permission.status == ImagePermissionStatus.ALLOWED)
+
+
+def _serialize_images(message: DirectMessage, viewer: Profile | None) -> list[dict[str, Any]]:
+    """Render the message's attachments for one viewer, withholding URLs without consent.
+
+    Args:
+        message: The message whose attachments are being rendered.
+        viewer: The profile the payload is for, or None.
+
+    Returns:
+        One dict per attachment, always with ``id``, and with ``url`` only when
+        this viewer is entitled to it.
+    """
+    images = list(message.images.all())
+    include_urls = viewer is not None and direct_message_images_visible_to(message, viewer)
+    return [{"id": image.pk, **({"url": image.image.url} if include_urls else {})} for image in images]
+
+
 def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None = None) -> dict[str, Any]:
     """Serialize a message into the JSON payload pushed over the WebSocket.
 
@@ -186,12 +235,16 @@ def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None =
             sender names are resolved through ``display_identity_for`` so a
             live incoming message never reveals a name the server-rendered
             thread would mask for that viewer (docs/PROBLEMS.md; decision
-            2026-07-23: per-recipient payloads). None keeps the raw names -
-            correct only for the sender's own sessions.
+            2026-07-23: per-recipient payloads), and image URLs are withheld
+            unless that viewer has consented to see them. None keeps the raw
+            names and *omits every image URL* - a payload with no identified
+            viewer cannot be shown to have consent, so it fails closed.
 
     Returns:
         A JSON-serializable dict; ``sender_slug``/``recipient_slug`` let the
-        frontend route the payload to the right open conversation.
+        frontend route the payload to the right open conversation. Each entry
+        in ``images`` always carries ``id``; ``url`` is present only when this
+        viewer may see it.
     """
 
     def _name_for(subject: Profile) -> str:
@@ -230,7 +283,7 @@ def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None =
         "sender_slug": message.sender.slug or "",
         "sender_name": _name_for(message.sender),
         "recipient_slug": message.recipient.slug or "",
-        "images": [{"id": image.pk, "url": image.image.url} for image in message.images.all()],
+        "images": _serialize_images(message, viewer),
         "images_revealed": message.images_revealed,
         "markup_map_uuid": str(message.markup_map.uuid) if message.markup_map is not None else None,
         # Only a cheap presence flag - the actual share (pin/trip/friend
@@ -260,9 +313,16 @@ def _broadcast_direct_message(message: DirectMessage) -> None:
     """
     # Per-recipient payloads: the recipient's copy resolves the sender's name
     # through their own visibility (a live message must never reveal a name a
-    # refresh would mask); the sender's copy keeps raw names (self-view).
+    # refresh would mask) and carries image URLs only once they have consented
+    # to see images from this sender.
+    #
+    # The sender's copy names them as viewer too, rather than passing None.
+    # For names that is identical (`_name_for` short-circuits when viewer is
+    # the subject), but it is what keeps the sender's *own* attachments
+    # visible in their own live thread now that a viewer-less payload
+    # deliberately withholds every URL.
     deliveries = [
-        (direct_message_group_name(message.sender_id), serialize_direct_message(message)),
+        (direct_message_group_name(message.sender_id), serialize_direct_message(message, viewer=message.sender)),
         (direct_message_group_name(message.recipient_id), serialize_direct_message(message, viewer=message.recipient)),
     ]
 
@@ -587,6 +647,31 @@ def send_message_email_now(message: DirectMessage) -> None:
         logger.exception("Failed to send new-message email to %s", recipient_email)
 
 
+def resolve_attachment_ids(sender: Profile, *, image_ids: list[int] | None = None, image_uuids: list[UUID] | None = None) -> list[int]:
+    """Merge integer ``image_ids`` with uuid-addressed ``image_uuids`` into one pk list.
+
+    ``image_uuids`` is the preferred field for new clients (``MessageSendSerializer``
+    accepts both, additively - see its docstring); this only resolves addressing.
+    Ownership and not-yet-attached eligibility are still enforced downstream by
+    ``create_direct_message`` regardless of which field a given id came from.
+
+    Args:
+        sender: The profile whose images may be attached.
+        image_ids: Pks from the legacy field, if any.
+        image_uuids: Uuids from the new field, if any.
+
+    Returns:
+        A deduplicated list of image pks, legacy ids first.
+    """
+    from urbanlens.dashboard.models.images.model import Image
+
+    ids = list(image_ids or [])
+    if image_uuids:
+        resolved = Image.objects.filter(uuid__in=image_uuids, profile=sender).values_list("pk", flat=True)
+        ids.extend(pk for pk in resolved if pk not in ids)
+    return ids
+
+
 def create_direct_message(
     sender: Profile,
     recipient: Profile,
@@ -613,7 +698,10 @@ def create_direct_message(
         nonce: Base64 nonce for ``ciphertext`` (required with it).
         key_version: ``ConversationKey.version`` that encrypted this message.
         image_ids: PKs of the sender's own not-yet-attached ``Image`` rows
-            (uploaded separately beforehand) to attach to this message.
+            (uploaded separately beforehand) to attach to this message. Ids the
+            sender doesn't own, or that are already attached elsewhere, are
+            dropped; supplying only ineligible ids is an error rather than a
+            silently empty message.
         markup_map_uuid: UUID of a ``MarkupMap`` owned by the sender to attach.
         reply_to_id: PK of an earlier message in this conversation to quote.
         client_uuid: Caller-generated idempotency key. When a message from this
@@ -658,7 +746,22 @@ def create_direct_message(
             raise ValueError("Malformed encrypted message.")
     elif nonce or key_version:
         raise ValueError("Malformed encrypted message.")
-    if not body and not ciphertext and not image_ids and not markup_map_uuid:
+    # Attachments are resolved *before* the emptiness check, not after the
+    # insert. The check counts image_ids as content, but the attach step below
+    # filters them by ownership and un-attachedness - so a stale, foreign or
+    # already-attached id used to satisfy "not empty", create the message, then
+    # update zero rows. The result was a blank message, persisted, broadcast to
+    # the recipient and answered 201, for a request that attached nothing the
+    # caller asked for.
+    from urbanlens.dashboard.models.images.model import Image
+
+    eligible_image_ids: list[int] = []
+    if image_ids:
+        eligible_image_ids = list(Image.objects.filter(pk__in=image_ids, profile=sender, direct_message__isnull=True).values_list("pk", flat=True))
+        if not eligible_image_ids:
+            raise ValueError("None of those attachments are available to send.")
+
+    if not body and not ciphertext and not eligible_image_ids and not markup_map_uuid:
         raise ValueError("Message cannot be empty.")
     if not can_direct_message(sender, recipient):
         raise PermissionError("This user isn't accepting messages from you.")
@@ -699,10 +802,12 @@ def create_direct_message(
             raise
         return replayed
 
-    if image_ids:
-        from urbanlens.dashboard.models.images.model import Image
-
-        attached = Image.objects.filter(pk__in=image_ids, profile=sender, direct_message__isnull=True).update(direct_message=message)
+    if eligible_image_ids:
+        # Re-filtered rather than a bare pk__in on the resolved list: the
+        # ownership/un-attachedness conditions must still hold at write time,
+        # since a concurrent send could have claimed one of these images
+        # between the resolution above and here.
+        attached = Image.objects.filter(pk__in=eligible_image_ids, profile=sender, direct_message__isnull=True).update(direct_message=message)
         if attached:
             from urbanlens.dashboard.models.direct_messages.image_permission import DirectMessageImagePermission
 

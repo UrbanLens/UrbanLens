@@ -199,7 +199,7 @@ class ApiKeyScope(TextChoices):
     VISITS_READ = "visits:read", "Read your visit history"
     VISITS_WRITE = "visits:write", "Log visits on your behalf"
     PHOTOS_READ = "photos:read", "Read your photos, memories journal, and photo suggestions"
-    PHOTOS_WRITE = "photos:write", "Upload, label, file, vote on, and delete your photos"
+    PHOTOS_WRITE = "photos:write", "Upload, label, file, vote on, and delete your photos, and act on photo suggestions"
     MEDIA_READ = "media:read", "Fetch the actual image/video/document files you may see"
     WIKI_READ = "wiki:read", "Read community wikis you can see"
     WIKI_WRITE = "wiki:write", "Edit community wikis on your behalf"
@@ -227,6 +227,12 @@ class ApiKeyScope(TextChoices):
     GAMES_READ = "games:read", "Read your game history, scores, and leaderboard standing"
     GAMES_WRITE = "games:write", "Start games and submit guesses and answers on your behalf"
     PUSH_MANAGE = "push:manage", "Register and remove this device's push notifications"
+    CUSTOM_FIELDS_READ = "custom_fields:read", "Read your custom field definitions and their values"
+    CUSTOM_FIELDS_WRITE = "custom_fields:write", "Create, edit, and delete your custom fields and their values"
+    UNDO_READ = "undo:read", "Read your recent delete history available to undo"
+    UNDO_WRITE = "undo:write", "Restore a previously deleted item"
+    PANELS_READ = "panels:read", "Read pin-detail enrichment panels (boundaries and other plugin-contributed data)"
+    ASSISTANT_WRITE = "assistant:write", "Chat with your AI assistant, including creating trips and trip activities it suggests"
 
 
 def _default_api_key_scopes() -> list[str]:

@@ -53,4 +53,5 @@ urlpatterns: list[URLPattern] = [
     path("profiles/<str:profile_slug>/annotations/", views_social.ProfileAnnotationsView.as_view(), name="profiles.annotations"),
     path("profiles/<str:profile_slug>/nickname/", views_social.ProfileNicknameView.as_view(), name="profiles.nickname"),
     path("profiles/<str:profile_slug>/trust/", views_social.ProfileTrustView.as_view(), name="profiles.trust"),
+    path("profiles/<str:profile_slug>/social-links/", views_social.ProfileSocialLinksView.as_view(), name="profiles.social_links"),
 ]

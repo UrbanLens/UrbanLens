@@ -21,11 +21,13 @@ be if they regressed:
 
 from __future__ import annotations
 
+import base64
+from datetime import timedelta
 import json
 import os
-from datetime import timedelta
 
 from django.contrib.auth.models import User
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -37,6 +39,7 @@ from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoi
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.exposure import LocationExposure
@@ -44,6 +47,11 @@ from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID
 from urbanlens.dashboard.services.api_keys import generate_api_key
 from urbanlens.dashboard.services.direct_messages import create_direct_message
+
+#: A real 1x1 PNG - ImageField stores whatever bytes it's given, but the
+#: upload pipeline sniffs content, so a valid file avoids testing the wrong
+#: rejection path.
+_PNG_BYTES = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
 
 AccessToken = get_access_token_model()
 Application = get_application_model()
@@ -140,6 +148,38 @@ class SendMessageTests(MessagingBaseTestCase):
 
     def test_unknown_peer_is_404(self) -> None:
         self.assertEqual(self._post_json(reverse("external_api:messages.thread", kwargs={"peer_slug": "nobody-here"}), {"body": "x"}).status_code, 404)
+
+
+def _make_image(profile: Profile, **kwargs) -> Image:
+    """Create an Image row owned by *profile* with a real stored file."""
+    return Image.objects.create(image=SimpleUploadedFile("photo.png", _PNG_BYTES, content_type="image/png"), profile=profile, **kwargs)
+
+
+class SendMessageAttachmentTests(MessagingBaseTestCase):
+    """``image_uuids`` is additive alongside the pre-existing integer ``image_ids``."""
+
+    def test_image_uuids_attaches_the_image(self) -> None:
+        image = _make_image(self.sender)
+        response = self._post_json(self._thread_url(), {"body": "look", "image_uuids": [str(image.uuid)]})
+        self.assertEqual(response.status_code, 201)
+        image.refresh_from_db()
+        self.assertEqual(image.direct_message_id, DirectMessage.objects.get(sender=self.sender).pk)
+
+    def test_image_ids_and_image_uuids_together_both_attach(self) -> None:
+        by_id = _make_image(self.sender)
+        by_uuid = _make_image(self.sender)
+        response = self._post_json(self._thread_url(), {"body": "two photos", "image_ids": [by_id.pk], "image_uuids": [str(by_uuid.uuid)]})
+        self.assertEqual(response.status_code, 201)
+        message = DirectMessage.objects.get(sender=self.sender, body="two photos")
+        self.assertEqual(set(Image.objects.filter(direct_message=message).values_list("pk", flat=True)), {by_id.pk, by_uuid.pk})
+
+    def test_another_profiles_image_uuid_is_not_attached(self) -> None:
+        """image_uuids is scoped to the sender's own images, matching image_ids."""
+        foreign_image = _make_image(self.partner)
+        response = self._post_json(self._thread_url(), {"body": "nice try", "image_uuids": [str(foreign_image.uuid)]})
+        self.assertEqual(response.status_code, 201)
+        foreign_image.refresh_from_db()
+        self.assertIsNone(foreign_image.direct_message_id)
 
 
 class CredentialKindTests(MessagingBaseTestCase):
@@ -469,6 +509,12 @@ class GroupMessageTests(MessagingBaseTestCase):
             **_bearer(_token_for(stranger.user)),
         )
         self.assertEqual(response.status_code, 404)
+
+    def test_image_uuids_is_refused_same_as_image_ids(self) -> None:
+        """Attachments aren't supported on group sends - refused with 400, not silently dropped."""
+        image = _make_image(self.sender)
+        response = self._post_json(self.url, {"body": "photo", "image_uuids": [str(image.uuid)]})
+        self.assertEqual(response.status_code, 400)
 
 
 class RetentionSettingsTests(MessagingBaseTestCase):

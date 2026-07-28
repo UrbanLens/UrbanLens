@@ -24,6 +24,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from django.http import Http404
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view
 
@@ -34,7 +35,7 @@ from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.external_api.views_pin_article import OwnedPinRequiredMixin
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.comments.model import Comment
-from urbanlens.dashboard.services.comments import ALLOWED_EMOJIS, aggregate_reactions, toggle_reaction
+from urbanlens.dashboard.services.comments import ALLOWED_EMOJIS, aggregate_reactions, comment_is_visible, toggle_reaction
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -71,12 +72,20 @@ class PinCommentReactionView(OwnedPinRequiredMixin, _ReactionMixin, ExternalApiV
     def resolve_reaction_target(self, request: Request, **kwargs: Any) -> tuple[Comment, Profile]:
         """Resolve the pin comment being reacted to, or 404.
 
-        Both gates are expressed as lookups rather than permission branches:
-        ``get_owned_pin_lite`` filters on the credential owner, and ``pin=pin``
-        scopes the comment id to that pin. A comment on someone else's pin - or
-        a comment id from a different pin of the caller's own - is therefore
+        Every gate is expressed as a lookup rather than a permission branch:
+        ``get_owned_pin_lite`` filters on the credential owner, ``pin=pin``
+        scopes the comment id to that pin, and :func:`comment_is_visible`
+        applies the same per-comment gates the thread listing does. A comment on
+        someone else's pin, a comment id from a different pin of the caller's
+        own, and a comment this caller was never shown are therefore all
         indistinguishable from one that was never created, which is what stops
         the sequential comment ids from being enumerable.
+
+        Owning the pin is not the same as being allowed to read every comment
+        on it: others comment on shared pins, and their comment-visibility
+        setting, a pending malware scan, or an ``@loc`` mention the caller has
+        not pinned each drop a comment from the thread this caller sees. Scoped
+        by pin alone, reacting by id reached all three.
 
         Args:
             request: The authenticated request.
@@ -87,8 +96,12 @@ class PinCommentReactionView(OwnedPinRequiredMixin, _ReactionMixin, ExternalApiV
             Tuple of (the comment, the requesting profile).
 
         Raises:
-            Http404: No such pin for this caller, or that comment is not on it.
+            Http404: No such pin for this caller, that comment is not on it, or
+                it is not visible to them.
         """
         pin = self.get_owned_pin_or_404(request, kwargs["pin_slug"])
-        comment = get_object_or_404(Comment, id=kwargs["comment_id"], pin=pin)
-        return comment, request.user.profile
+        comment = get_object_or_404(Comment.objects.select_related("profile"), id=kwargs["comment_id"], pin=pin)
+        profile = request.user.profile
+        if not comment_is_visible(comment, profile):
+            raise Http404
+        return comment, profile

@@ -1526,3 +1526,80 @@ already reset between tests.
   must re-block to normalize the row, and the blocked party can lift it. Worth a one-off
   audit query (`Friendship.objects.filter(status="Blocked", created__lt=<deploy>)`) rather
   than an automated migration.
+
+## 2026-07-28: `test_loopnet.py::FetchTests::test_unconfigured_gateway_gracefully_persists_empty` makes a real outbound connection on this machine
+
+Noted while running the full test suite as a regression check after adding `api_kinds =
+frozenset()` to five plugins' `PanelSource` subclasses (an unrelated change - see Part 6 of
+`docs/notes/mobile_app_notes.md`). This test's own docstring says it expects `RedataGateway()` to
+raise `ValueError` because it's *unconfigured* in the test environment, and only mocks
+`LocationCache.set`. On this machine it instead reaches all the way into `requests` and attempts a
+real TCP connection to `10.2.0.214:443`, which the test sandbox's `LocalhostOnlyNetwork` guard
+correctly blocks (`src/urbanlens/core/testing_network.py`) - so the symptom here is a hard failure
+rather than the silent false-negative the test is nominally guarding against.
+
+Root cause confirmed: this checkout's `.env` sets `UL_REDATA_API_URL=https://redata.urbanlens.org`
+(a real, working REData instance, `resolve`d to `10.2.0.214` here) plus `UL_REDATA_API_KEY` -
+legitimate for this developer's normal workflow against the real service, but Pydantic's
+`app.py` settings load `.env` unconditionally, so it also configures `RedataGateway` under
+`pytest`/`UL_ENVIRONMENT=test`. The test's own name ("unconfigured gateway") only holds on a
+checkout with no REData credentials in `.env` at all; on this one it isn't unconfigured, so
+`fetch()` proceeds past the `ValueError` branch straight into a real HTTP call, which the test
+sandbox's `LocalhostOnlyNetwork` guard (`src/urbanlens/core/testing_network.py`) then correctly
+blocks. Not fixed here - out of scope for the change that surfaced it (`git diff` confirms
+`plugins/builtin/loopnet.py`'s only edit was the additive `api_kinds` class attribute, nowhere
+near `fetch()` or `RedataGateway`) - but the test should mock/patch the gateway (or settings
+should force REData unconfigured under `UL_ENVIRONMENT=test` the way `settings/_gdal_windows.py`
+scopes its own local-only behavior) rather than depending on `.env` being REData-credential-free.
+
+## 2026-07-28: `_StoredRangeValidationMixin._resolve_range` fails mypy (`serializers.py:2741`) - RESOLVED
+
+**Resolved 2026-07-28** by the session that owned the in-progress work (the PR #124 Codex-review
+pass). Diagnosis below was correct, including that a `cast` was the wrong answer. The fix was to
+make the mixin a real `serializers.Serializer` subclass rather than a bare mixin over `object`:
+its only correct use *is* as part of a serializer (it reads `self.context` and chains through
+`super().validate()`), so the base list is the honest place to say so, and it types `context` and
+`validate` together. It declares no fields, so `_declared_fields` is unaffected.
+
+A `TYPE_CHECKING`-conditional base (`_Base = Serializer if TYPE_CHECKING else object`) was tried
+first and rejected by mypy - `Variable ... is not valid as a type [valid-type]` - in both the
+conditional-expression and statement-level `if`/`else` forms. Worth knowing before reaching for
+that idiom here again.
+
+Original report follows.
+
+
+Noted while running `mypy` on `external_api/serializers.py` as a regression check after the
+memories-journal/safety-maps pagination-envelope fix and the OAuth consent screen (unrelated
+changes - see Part 7 of `docs/notes/mobile_app_notes.md`). `git diff` confirms neither of those
+touched `_StoredRangeValidationMixin`, `TripUpdateSerializer`, or `TripActivityUpdateSerializer` -
+this is uncommitted, in-progress work on trip/activity range validation, presumably from a
+concurrent session on this same checkout (per `CLAUDE.local.md`'s note that multiple agents may be
+working simultaneously).
+
+`_resolve_range` reads `self.context.get("instance")`, but the mixin is a plain class (not a
+`serializers.Serializer` subclass) - mypy has no way to know `self` will actually be a `Serializer`
+at the point it's mixed in via `class TripUpdateSerializer(_StoredRangeValidationMixin,
+serializers.Serializer)`. The fix is a type hint at the mixin boundary (e.g. a `Protocol` with a
+`context: dict` attribute, or having the mixin only ever appear via a small typed base), not a
+`cast`. Left alone rather than fixed here, since it belongs to a feature this pass didn't touch and
+guessing at its intended shape risks colliding with whoever is actively editing it.
+
+## 2026-07-28: `services/consensus/fields.py` - 9 pre-existing `[has-type]` mypy errors
+
+Found while running a full `mypy src/urbanlens/dashboard` sweep as part of the external-API P2
+parity-polish pass's Phase 8 prep (Games polish - SpotGuessr/Trivia/Consensus). Not caused by this
+pass - nothing in this session touches `services/consensus/fields.py`, and `git log` shows it
+predates this branch's work (Consensus was built 2026-07-25, per a separate session).
+
+All nine errors are `Cannot determine type of "<field>"  [has-type]` on lines 315/316 (`name`),
+322/323 (`description`), 329/330 (`indoor_outdoor`), 338/339/339 (`pin_type`,
+`pin_type_is_user_provided`) - each inside a lambda (`current_value=lambda w: w.name`, etc.) passed
+as a keyword argument to `_wiki_field_strategy(...)` while building the `_STRATEGIES` dict. `w` is a
+`Wiki` instance and every one of these is an ordinary model field, so this isn't an obviously wrong
+runtime assumption the way the boundary/queryset.py and forms/search.py entries above are - it looks
+like a mypy inference limitation on the lambda's implicit parameter type when `_wiki_field_strategy`
+itself is generic/`Callable`-typed, rather than a real bug. Left uninvestigated because Phase 8 does
+not touch `_STRATEGIES` or the field-strategy machinery, only Consensus's session/eligibility/vote
+services - fixing this would mean guessing at `_wiki_field_strategy`'s intended generic signature
+without the context of whoever wrote it.
