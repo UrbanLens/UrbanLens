@@ -316,7 +316,9 @@ class PinNoteSerializer(serializers.Serializer):
 
     Notes are append-only by design (see ``models.pin.note.PinNote``), so
     there is no update counterpart: a client edits a note by deleting it and
-    adding another.
+    adding another. A note is also single-author and private, so it has no
+    threading and no reactions - a client wanting either should point at
+    ``/pins/{slug}/comments/`` instead, which already supports both.
     """
 
     id = serializers.IntegerField(read_only=True)

@@ -47,6 +47,24 @@ Deliberately left out of the schema change: wiring a new suppression rule into e
 notification producer is a behaviour change of its own size, and the external API's `is_muted`
 surface (Batch S) needs the flag to exist first.
 
+## 2026-07-28: Satellite/street-view imagery render path re-runs the full provider chain even when "ready"
+
+`services/external_data.py`'s `SlidesPanelSource` (base of `SatellitePanelSource`/street-view
+equivalent) tracks readiness with a summary marker (`is_ready`, `ready_key`) set after a background
+warm-up pass, separate from each provider's own 24h slide cache (`SLIDES_READY_TTL_SECONDS`,
+line ~108). The class docstring (line ~875) confirms "the Celery warm-up task and the request-path
+render share this exact function" - `collect()` runs the same per-provider gateway chain
+(`collect_satellite_slides`/`collect_street_view_slides`) on the request thread regardless of
+whether `is_ready` is true, rather than reading a fully-materialized result. In practice this is
+usually cheap (each provider serves from its own warm cache), but there's no short-circuit: a
+request landing in the gap where the summary marker has lapsed but not yet re-warmed pays the full
+provider-chain latency inline on the request thread instead of getting a fast placeholder.
+
+Fix would be to have `render`/`api_payload` read a materialized slide list when `is_ready` is true
+instead of re-invoking `collect()`, reserving the shared function for the warm-up task alone. Not
+investigated further - flagged while auditing `docs/notes/mobile_app_notes.md`'s claim (D8) that
+this was already logged here, which it wasn't until now.
+
 ## RESOLVED 2026-07-28 (documented judgement call): restoring legacy `status='Muted'` friendships
 
 Migration `0020_friendship_muted_flag` has to guess what a `status='Muted'` row was *before* it
