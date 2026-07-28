@@ -98,7 +98,7 @@ class ParseHelpersTests(SimpleTestCase):
     def test_validate_url_rejects_non_http_and_private_hosts(self) -> None:
         with patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]):
             self.assertEqual(_validate_extraction_url("https://example.com/page"), "https://example.com/page")
-        for bad in ("ftp://example.com", "javascript:alert(1)", "http://localhost/x", "http://127.0.0.1/x", "http://192.168.1.1/x", "http://[::1]/x", "", "https://" + "a" * 2100):
+        for bad in ("ftp://example.com", "javascript:alert(1)", "http://localhost/x", "http://127.0.0.1/x", "http://192.168.1.1/x", "http://100.64.0.1/x", "http://[::1]/x", "", "https://" + "a" * 2100):
             with self.assertRaises(LinkExtractionError):
                 _validate_extraction_url(bad)
 

@@ -12,6 +12,8 @@ import ipaddress
 import socket
 from urllib.parse import urlsplit
 
+_CGNAT_NETWORK = ipaddress.ip_network("100.64.0.0/10")
+
 
 class UnsafeUrlError(ValueError):
     """Raised when a url fails the public-reachability check."""
@@ -19,7 +21,14 @@ class UnsafeUrlError(ValueError):
 
 def is_blocked_address(address: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
     """True if ``address`` shouldn't be reachable from a user-directed fetch."""
-    return address.is_private or address.is_loopback or address.is_link_local or address.is_reserved or address.is_multicast
+    return (
+        address.is_private
+        or address.is_loopback
+        or address.is_link_local
+        or address.is_reserved
+        or address.is_multicast
+        or (address.version == _CGNAT_NETWORK.version and address in _CGNAT_NETWORK)
+    )
 
 
 def ensure_public_http_url(url: str, *, max_length: int = 2048) -> str:
