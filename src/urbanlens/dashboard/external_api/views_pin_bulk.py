@@ -32,7 +32,7 @@ from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinA
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.services.pin_edit import ORGANIZE_LABEL_KINDS
+from urbanlens.dashboard.services.pin_edit import ORGANIZE_LABEL_KINDS, PinReparentError, reparent_pin
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
@@ -115,18 +115,25 @@ class PinBulkMergeView(OwnedPinMixin, ExternalApiView):
         if target is None:
             return Response({"error": "No such pin to merge into."}, status=404)
 
+        # Resolved and validated before any write: returning from inside
+        # transaction.atomic() without raising commits whatever was already
+        # saved rather than rolling it back, so the target's promotion must
+        # not happen until we know there's at least one valid source.
+        promote_target = target.parent_pin_id is not None
+        if promote_target:
+            conflict = Pin.objects.filter(profile=target.profile, location_id=target.location_id, parent_pin__isnull=True).exclude(pk=target.pk).exists()
+            if conflict:
+                return Response({"error": "You already have a top-level pin at this exact location. Choose a different pin as the merge target."}, status=400)
+
+        source_uuids = [str(value) for value in data["source_uuids"]]
+        sources = [pin for pin in _owned_pins(request, source_uuids) if pin.pk != target.pk]
+        if not sources:
+            return Response({"error": "No valid source pins."}, status=400)
+
         with transaction.atomic():
-            if target.parent_pin_id is not None:
-                conflict = Pin.objects.filter(profile=target.profile, location_id=target.location_id, parent_pin__isnull=True).exclude(pk=target.pk).exists()
-                if conflict:
-                    return Response({"error": "You already have a top-level pin at this exact location. Choose a different pin as the merge target."}, status=400)
+            if promote_target:
                 target.parent_pin = None
                 target.save(update_fields=["parent_pin", "updated"])
-
-            source_uuids = [str(value) for value in data["source_uuids"]]
-            sources = [pin for pin in _owned_pins(request, source_uuids) if pin.pk != target.pk]
-            if not sources:
-                return Response({"error": "No valid source pins."}, status=400)
 
             merged_uuids: list[str] = []
             skipped_uuids: list[str] = []
@@ -178,63 +185,81 @@ class PinBulkEditView(ExternalApiView):
             return Response({"error": "No matching pins."}, status=404)
         profile = request.user.profile
 
-        if "description" in data:
-            description = data["description"]
-            if description:
-                length_error = text_length_error(description, MAX_PIN_DESCRIPTION_LENGTH, "Description")
-                if length_error:
-                    return Response({"error": length_error}, status=400)
-            for pin in pins:
-                pin.description = description or None
-                pin.save(update_fields=["description", "updated"])
-
-        if "rating" in data:
-            rating = data["rating"]
-            if rating is None:
-                Review.objects.filter(profile=profile, pin__in=pins).delete()
-            else:
-                for pin in pins:
-                    Review.objects.update_or_create(profile=profile, pin=pin, defaults={"rating": rating})
+        # Every field is resolved and validated up front, before any write:
+        # this endpoint isn't wrapped in a single all-or-nothing transaction
+        # (each field's changes are independently meaningful), so a 400
+        # raised partway through would otherwise leave earlier fields' edits
+        # committed despite the batch as a whole being rejected.
+        if data.get("description"):
+            length_error = text_length_error(data["description"], MAX_PIN_DESCRIPTION_LENGTH, "Description")
+            if length_error:
+                return Response({"error": length_error}, status=400)
 
         add_uuids = [str(value) for value in data.get("add_label_uuids") or []]
-        remove_uuids = [str(value) for value in data.get("remove_label_uuids") or []]
+        to_add: list[Label] = []
         if add_uuids:
             to_add = list(Label.objects.visible_to(profile).filter(uuid__in=add_uuids, kind__in=ORGANIZE_LABEL_KINDS))
             if len(to_add) != len(set(add_uuids)):
                 return Response({"error": "One or more add_label_uuids do not name a label you can use."}, status=400)
-            for pin in pins:
-                pin.labels.add(*to_add)
 
+        remove_uuids = [str(value) for value in data.get("remove_label_uuids") or []]
+        to_remove: list[Label] = []
         if remove_uuids:
             to_remove = list(Label.objects.visible_to(profile).filter(uuid__in=remove_uuids, kind__in=ORGANIZE_LABEL_KINDS))
             if len(to_remove) != len(set(remove_uuids)):
                 return Response({"error": "One or more remove_label_uuids do not name a label you can use."}, status=400)
-            for pin in pins:
-                present = [label for label in to_remove if pin.labels.filter(pk=label.pk).exists()]
-                if not present:
-                    continue
-                for label in present:
-                    PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LABEL, value=str(label.pk))
-                pin.labels.remove(*present)
 
-        reparented = 0
-        if "parent_uuid" in data:
-            parent_uuid = data["parent_uuid"]
-            if parent_uuid is None:
+        parent: Pin | None = None
+        if "parent_uuid" in data and data["parent_uuid"] is not None:
+            parent = Pin.objects.filter(uuid=str(data["parent_uuid"]), profile=profile).first()
+            if parent is None:
+                return Response({"error": "No such pin to set as parent."}, status=400)
+
+        with transaction.atomic():
+            if "description" in data:
+                description = data["description"]
                 for pin in pins:
-                    if pin.parent_pin_id is not None:
-                        pin.parent_pin = None
+                    pin.description = description or None
+                    pin.save(update_fields=["description", "updated"])
+
+            if "rating" in data:
+                rating = data["rating"]
+                if rating is None:
+                    Review.objects.filter(profile=profile, pin__in=pins).delete()
+                else:
+                    for pin in pins:
+                        Review.objects.update_or_create(profile=profile, pin=pin, defaults={"rating": rating})
+
+            if to_add:
+                for pin in pins:
+                    pin.labels.add(*to_add)
+
+            if to_remove:
+                for pin in pins:
+                    present = [label for label in to_remove if pin.labels.filter(pk=label.pk).exists()]
+                    if not present:
+                        continue
+                    for label in present:
+                        PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LABEL, value=str(label.pk))
+                    pin.labels.remove(*present)
+
+            reparented = 0
+            if "parent_uuid" in data:
+                if parent is None:
+                    for pin in pins:
+                        if pin.parent_pin_id is None:
+                            continue
+                        try:
+                            reparent_pin(pin, None)
+                        except PinReparentError:
+                            continue
+                        reparented += 1
+                else:
+                    for pin in pins:
+                        if pin.pk == parent.pk or pin.would_create_cycle(parent):
+                            continue
+                        pin.parent_pin = parent
                         pin.save(update_fields=["parent_pin", "updated"])
                         reparented += 1
-            else:
-                parent = Pin.objects.filter(uuid=str(parent_uuid), profile=profile).first()
-                if parent is None:
-                    return Response({"error": "No such pin to set as parent."}, status=400)
-                for pin in pins:
-                    if pin.pk == parent.pk or pin.would_create_cycle(parent):
-                        continue
-                    pin.parent_pin = parent
-                    pin.save(update_fields=["parent_pin", "updated"])
-                    reparented += 1
 
         return Response({"count": len(pins), "reparented": reparented})

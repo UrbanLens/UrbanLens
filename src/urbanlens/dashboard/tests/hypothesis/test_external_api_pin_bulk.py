@@ -142,6 +142,16 @@ class PinBulkMergeTests(PinBulkTestCase):
         response = self._post(f"{_BASE}merge/", {"target_uuid": str(self.pin_a.uuid), "source_uuids": [str(theirs.uuid)]})
         self.assertEqual(response.status_code, 400)
 
+    def test_promotion_does_not_persist_when_sources_are_all_invalid(self) -> None:
+        """A rejected merge must not leave the target promoted to top-level."""
+        pin_c = create_pin_for_profile(self.profile, name="Pin C", latitude=44.5, longitude=-75.5).pin
+        Pin.objects.filter(pk=self.pin_b.pk).update(parent_pin=pin_c)
+        theirs = self._other_users_pin()
+        response = self._post(f"{_BASE}merge/", {"target_uuid": str(self.pin_b.uuid), "source_uuids": [str(theirs.uuid)]})
+        self.assertEqual(response.status_code, 400)
+        self.pin_b.refresh_from_db()
+        self.assertEqual(self.pin_b.parent_pin_id, pin_c.pk)
+
 
 class PinBulkEditTests(PinBulkTestCase):
     def test_sets_description_on_every_pin(self) -> None:
@@ -235,6 +245,28 @@ class PinBulkEditTests(PinBulkTestCase):
     def test_unknown_parent_uuid_is_a_400(self) -> None:
         response = self._post(f"{_BASE}edit/", {"uuids": [str(self.pin_a.uuid)], "parent_uuid": "00000000-0000-0000-0000-000000000000"})
         self.assertEqual(response.status_code, 400)
+
+    def test_detaching_a_pin_whose_location_conflicts_with_an_existing_root_is_skipped(self) -> None:
+        """Detaching must not raise IntegrityError when the pin's own Location already has an unrelated top-level pin."""
+        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin_a.location, parent_pin=self.pin_b, name="Shares pin_a's spot")
+        response = self._post(f"{_BASE}edit/", {"uuids": [str(child.uuid)], "parent_uuid": None})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["reparented"], 0)
+        child.refresh_from_db()
+        self.assertEqual(child.parent_pin_id, self.pin_b.pk)
+
+    def test_invalid_add_label_uuid_rolls_back_earlier_edits_in_the_same_batch(self) -> None:
+        response = self._post(
+            f"{_BASE}edit/",
+            {
+                "uuids": [str(self.pin_a.uuid)],
+                "description": "Should not stick",
+                "add_label_uuids": ["00000000-0000-0000-0000-000000000000"],
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.pin_a.refresh_from_db()
+        self.assertNotEqual(self.pin_a.description, "Should not stick")
 
     def test_another_users_pin_is_silently_dropped_from_the_batch(self) -> None:
         theirs = self._other_users_pin()

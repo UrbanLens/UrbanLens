@@ -155,6 +155,19 @@ class LabelBulkEditTests(LabelBulkTestCase):
         response = self._post("bulk/edit/", {"uuids": [str(self.label_a.uuid)], "icon": "star"})
         self.assertEqual(response.status_code, 403)
 
+    def test_invalid_add_parent_uuid_rolls_back_earlier_edits_in_the_same_batch(self) -> None:
+        response = self._post(
+            "bulk/edit/",
+            {
+                "uuids": [str(self.label_a.uuid)],
+                "icon": "star",
+                "add_parent_uuids": ["00000000-0000-0000-0000-000000000000"],
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.label_a.refresh_from_db()
+        self.assertNotEqual(self.label_a.icon, "star")
+
 
 class LabelBulkConvertTests(LabelBulkTestCase):
     def test_converts_tags_to_categories(self) -> None:

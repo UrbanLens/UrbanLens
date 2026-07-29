@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
+from django.db import transaction
 from drf_spectacular.utils import extend_schema
 from rest_framework.response import Response
 
@@ -128,45 +129,54 @@ class LabelBulkEditView(ExternalApiView):
         if not labels:
             return Response({"error": "No matching labels."}, status=404)
 
-        update_fields: set[str] = set()
-        for label in labels:
-            if "icon" in data:
-                label.icon = data["icon"] or None
-                update_fields.add("icon")
-            if "color" in data:
-                label.color = data["color"] or None
-                update_fields.add("color")
-            if "description" in data:
-                label.description = data["description"] or None
-                update_fields.add("description")
-            if "order" in data:
-                label.order = data["order"]
-                update_fields.add("order")
-        if update_fields:
-            Label.objects.bulk_update(labels, list(update_fields))
-
         # Unknown parent/child uuids are refused, not dropped - silently
         # building a smaller hierarchy than the client asked for is worse than
         # refusing, matching LabelDetailView.patch's single-label semantics.
+        # Resolved up front, before any write, so a 400 here can't leave the
+        # icon/color/description/order changes below already committed.
         add_parent_uuids = [str(value) for value in data.get("add_parent_uuids") or []]
+        parents: list[Label] = []
         if add_parent_uuids:
             parents = list(Label.objects.visible_to(profile).filter(uuid__in=add_parent_uuids))
             if len(parents) != len(set(add_parent_uuids)):
                 return Response({"error": "One or more add_parent_uuids do not name a label you can use."}, status=400)
-            for label in labels:
-                safe_parents = [parent for parent in parents if parent.pk != label.pk and not would_create_cycle(label, [parent.pk])]
-                if safe_parents:
-                    label.parents.add(*safe_parents)
 
         add_child_uuids = [str(value) for value in data.get("add_child_uuids") or []]
+        children: list[Label] = []
         if add_child_uuids:
             children = list(Label.objects.visible_to(profile).filter(uuid__in=add_child_uuids))
             if len(children) != len(set(add_child_uuids)):
                 return Response({"error": "One or more add_child_uuids do not name a label you can use."}, status=400)
-            for child in children:
-                safe_labels = [label for label in labels if label.pk != child.pk and not would_create_cycle(child, [label.pk])]
-                if safe_labels:
-                    child.parents.add(*safe_labels)
+
+        with transaction.atomic():
+            update_fields: set[str] = set()
+            for label in labels:
+                if "icon" in data:
+                    label.icon = data["icon"] or None
+                    update_fields.add("icon")
+                if "color" in data:
+                    label.color = data["color"] or None
+                    update_fields.add("color")
+                if "description" in data:
+                    label.description = data["description"] or None
+                    update_fields.add("description")
+                if "order" in data:
+                    label.order = data["order"]
+                    update_fields.add("order")
+            if update_fields:
+                Label.objects.bulk_update(labels, list(update_fields))
+
+            if parents:
+                for label in labels:
+                    safe_parents = [parent for parent in parents if parent.pk != label.pk and not would_create_cycle(label, [parent.pk])]
+                    if safe_parents:
+                        label.parents.add(*safe_parents)
+
+            if children:
+                for child in children:
+                    safe_labels = [label for label in labels if label.pk != child.pk and not would_create_cycle(child, [label.pk])]
+                    if safe_labels:
+                        child.parents.add(*safe_labels)
 
         return Response({"count": len(labels)})
 
