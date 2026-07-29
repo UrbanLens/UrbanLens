@@ -233,6 +233,8 @@ class ApiKeyScope(TextChoices):
     UNDO_WRITE = "undo:write", "Restore a previously deleted item"
     PANELS_READ = "panels:read", "Read pin-detail enrichment panels (boundaries and other plugin-contributed data)"
     ASSISTANT_WRITE = "assistant:write", "Chat with your AI assistant, including creating trips and trip activities it suggests"
+    DEVICE_SCANS_READ = "device_scans:read", "Read nearby expected devices and their signal info"
+    DEVICE_SCANS_WRITE = "device_scans:write", "Upload wireless device scan data"
 
 
 def _default_api_key_scopes() -> list[str]:

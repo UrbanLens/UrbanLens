@@ -150,6 +150,7 @@ SETTINGS_FIELDS: tuple[str, ...] = (
     "track_pin_visits",
     "track_routes",
     "track_geolocation",
+    "track_device_scans",
     "generate_photo_keywords",
     # Community (CommunitySettingsForm).
     "community_enabled",

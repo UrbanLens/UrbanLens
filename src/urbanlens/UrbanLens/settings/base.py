@@ -676,6 +676,8 @@ OAUTH2_PROVIDER = {
         "undo:write": "Restore a previously deleted item",
         "panels:read": "Read pin-detail enrichment panels (boundaries and other plugin-contributed data)",
         "assistant:write": "Chat with your AI assistant, including creating trips and trip activities it suggests",
+        "device_scans:read": "Read nearby expected devices and their signal info",
+        "device_scans:write": "Upload wireless device scan data",
     },
     # Deliberately NOT the full SCOPES list: a token that asked for nothing in
     # particular gets the same minimal grant a PAT does

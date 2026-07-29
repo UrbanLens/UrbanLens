@@ -407,6 +407,10 @@ class Profile(abstract.PublicDashboardModel):
     track_pin_visits = BooleanField(default=True, help_text="Log visits to your pins from journal entries, imports, and photo tagging.")
     track_routes = BooleanField(default=True, help_text="Save imported GPS routes/tracks.")
     track_geolocation = BooleanField(default=True, help_text="Record visits from your live device location.")
+    track_device_scans = BooleanField(
+        default=True,
+        help_text="Associate wireless device scans you upload with your account (enables personal scan history). When off, your scans are stored anonymously.",
+    )
 
     # When False: your pins are forced private, your profile and privacy
     # settings are locked to the most restrictive option, and you cannot send

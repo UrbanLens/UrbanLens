@@ -880,6 +880,7 @@ class SettingsSerializer(serializers.Serializer):
     track_pin_visits = serializers.BooleanField(read_only=True)
     track_routes = serializers.BooleanField(read_only=True)
     track_geolocation = serializers.BooleanField(read_only=True)
+    track_device_scans = serializers.BooleanField(read_only=True)
     generate_photo_keywords = serializers.BooleanField(read_only=True)
     # Community.
     community_enabled = serializers.BooleanField(read_only=True)
@@ -990,6 +991,7 @@ class SettingsPatchSerializer(serializers.Serializer):
     track_pin_visits = serializers.BooleanField(required=False)
     track_routes = serializers.BooleanField(required=False)
     track_geolocation = serializers.BooleanField(required=False)
+    track_device_scans = serializers.BooleanField(required=False)
     generate_photo_keywords = serializers.BooleanField(required=False)
     # Community. Turning community_enabled off coerces the visibility and
     # wiki-sync fields in Profile.save(); the response reports the result.

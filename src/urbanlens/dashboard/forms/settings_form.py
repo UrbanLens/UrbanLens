@@ -578,6 +578,12 @@ class HistorySettingsForm(forms.ModelForm):
         label="Live Location",
         help_text="Record visits from your live device location.",
     )
+    track_device_scans = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Device Scans",
+        help_text="Associate wireless device scans you upload (from the mobile app's scanning feature) with your account, enabling personal scan history. When off, your scans are stored anonymously.",
+    )
     generate_photo_keywords = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
@@ -587,7 +593,7 @@ class HistorySettingsForm(forms.ModelForm):
 
     class Meta:
         model = Profile
-        fields = ["track_pin_visits", "track_routes", "track_geolocation", "generate_photo_keywords"]
+        fields = ["track_pin_visits", "track_routes", "track_geolocation", "track_device_scans", "generate_photo_keywords"]
 
 
 class CommunitySettingsForm(forms.ModelForm):

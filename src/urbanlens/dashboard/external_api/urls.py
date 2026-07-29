@@ -67,6 +67,7 @@ from urbanlens.dashboard.external_api import (
     urls_assistant,
     urls_connections,
     urls_custom_fields,
+    urls_device_scans,
     urls_games,
     urls_labels_extra,
     urls_lists_extra,
@@ -358,6 +359,7 @@ urlpatterns: list[URLPattern] = order_by_specificity(
     + urls_assistant.urlpatterns
     + urls_connections.urlpatterns
     + urls_custom_fields.urlpatterns
+    + urls_device_scans.urlpatterns
     + urls_games.urlpatterns
     + urls_labels_extra.urlpatterns
     + urls_lists_extra.urlpatterns
