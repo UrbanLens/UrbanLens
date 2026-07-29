@@ -776,3 +776,44 @@ surface would be new-domain API design (session start/list/detail/round/guess, i
 its own answer-leak whitelist review per D8) — a much larger undertaking than "polish", and not
 something this pass attempts. Recorded here as a discovered gap for a future pass, not folded
 into "declined".
+
+## Part 8 — Wireless device scanning (2026-07-29)
+
+New feature, not a mobile-parity item: as a user walks a route, the app can detect nearby
+wireless devices (MAC, signal strength, a location/type guess) so it can flag cameras, sensors, or
+trackers a user didn't expect. Two attribution/scope questions were resolved before building:
+`Profile.track_device_scans` defaults **on**, matching the existing `track_pin_visits`/
+`track_routes`/`track_geolocation` convention; trackers count as "security-relevant" alongside
+cameras/sensors (added to the spec's list since "something is following me" is the same safety
+narrative). Full design in the session's plan; see [Device Scanning](../EXTERNAL_API.md#device-scanning)
+in the reference doc for the shipped shape.
+
+Shipped: `dashboard/models/device_scan/` (`ScannedDevice`, `DeviceScanUpload`, `DeviceScanEntry`,
+`DeviceSignalReading`, `WikiDeviceMarker` — the last has **no `profile` FK at all**, by design);
+`services/device_scan/` (MAC normalization, OUI/name-based type guessing, wiki-boundary lookup, a
+recency-weighted clustering pipeline that reconciles computed clusters against existing markers
+per `(device, wiki)` and ages out uncorroborated ones to `STALE`/`PRESUMED_REMOVED`); a Celery task
+(`process_device_scan_upload`) on the default queue; `POST /device-scans/` and
+`GET /device-scans/nearby/` on the external API, gated by new `device_scans:read`/`device_scans:write`
+scopes (opt-in only, not in `_default_api_key_scopes()`, matching every other new-scope precedent
+here).
+
+**Privacy invariant, explicitly requested and verified this pass**: individual scan data (which
+device was seen by which person, when, where) must never be retrievable through any API —
+`/rest/` or the external API — only the cumulative `WikiDeviceMarker` a wiki's contributors
+collectively produce. This holds structurally, not just by convention: `WikiDeviceMarker` has no
+identity FK to reintroduce, the internal `/rest/` router registers only `PinViewSet`, and neither
+external-API view class exposes a GET-individual-scan/upload/reading route at all — there is
+nothing to lock down because the read path was never built. `test_device_scan_privacy.py` pins
+this down structurally (model has no identity field, exactly 2 routes exist, wrong HTTP method is
+refused even with full scopes, `nearby/`'s serializer fields are allowlisted) and behaviorally (two
+uploaders' scans of the same device merge into one `observation_count=2` marker whose response body
+contains no trace of either uploader's username or profile uuid).
+
+A pre-existing generic test (`test_get_returns_every_allowlisted_field` in
+`test_external_api_settings.py`, which iterates `SETTINGS_FIELDS` rather than a hand-maintained
+list) caught a real bug while writing this pass's coverage: `track_device_scans` had been added to
+`SETTINGS_FIELDS`/`HistorySettingsForm` but `SettingsSerializer`/`SettingsPatchSerializer` in
+`external_api/serializers.py` hand-enumerate every field separately and were never updated, so the
+preference silently never appeared in external API settings responses. Fixed by adding the field to
+both serializers — a reminder that any settings field needs updating in three places, not two.

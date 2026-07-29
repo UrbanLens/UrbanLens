@@ -34,14 +34,15 @@ to paths starting `/dashboard/api/external/v1/` plus the anchored `/dashboard/e2
 17. [Direct Messages & Group Chats](#direct-messages--group-chats)
 18. [WebSockets](#websockets)
 19. [Safety](#safety)
-20. [Friends & Social](#friends--social)
-21. [Notifications & Push](#notifications--push)
-22. [Games](#games)
-23. [Undo History](#undo-history)
-24. [Search](#search)
-25. [AI Assistant](#ai-assistant)
-26. [End-to-End Encryption (E2EE)](#end-to-end-encryption-e2ee)
-27. [Not Yet Implemented](#not-yet-implemented)
+20. [Device Scanning](#device-scanning)
+21. [Friends & Social](#friends--social)
+22. [Notifications & Push](#notifications--push)
+23. [Games](#games)
+24. [Undo History](#undo-history)
+25. [Search](#search)
+26. [AI Assistant](#ai-assistant)
+27. [End-to-End Encryption (E2EE)](#end-to-end-encryption-e2ee)
+28. [Not Yet Implemented](#not-yet-implemented)
 
 ---
 
@@ -96,6 +97,7 @@ declared scopes means access denied, never "no scope needed."
 | `trips:read` / `trips:write` | Read / create and edit your trips |
 | `social:read` / `social:write` | Read your friends list / manage friend relationships |
 | `safety:read` / `safety:write` | Read / start, update, clear safety check-ins |
+| `device_scans:read` / `device_scans:write` | Read nearby *cumulative* device markers / upload wireless device-scan data |
 | `messages:read` / `messages:write` | Read / send encrypted messages, manage encryption keys — **OAuth2 only, see below** |
 | `notifications:read` / `notifications:write` | Read / mark-read and change delivery prefs |
 | `search:read` | Search your pins, wikis, and photos |
@@ -153,7 +155,8 @@ in a couple of seconds.
   in code as deliberate.
 - **Pagination**: page-number style almost everywhere (`{count,next,previous,results}`). The
   pin/tombstone sync feeds and message-thread endpoints are cursor-based instead. A few small
-  envelopes remain non-paginated by design (a trip's map markers, the undo feed). `memories/journal/`
+  envelopes remain non-paginated by design (a trip's map markers, the undo feed, nearby device
+  markers). `memories/journal/`
   and `safety/checkins/{slug}/maps/` used to be among them (a bare top-level array, and a bespoke
   `{entries,total,omitted_sources}` shape) but were normalized onto the standard envelope before v1
   gained any real client depending on the old shape — see their entries below.
@@ -554,6 +557,25 @@ Every `messages:*`-scoped endpoint is **OAuth2-only** — `messages:read`/`messa
 - `POST /safety/partner-checkins/{checkin_uuid}/mark-safe/` — partner confirms owner is safe, resolving the check-in — 409 if already resolved by someone else (conditional UPDATE prevents a double-resolve race).
 
 **Addressing note:** the chat route is addressed by check-in **slug**; every partner-facing route is addressed by **uuid only** (a slug is unique per-owner, not globally). Every refusal on both surfaces — including "doesn't exist" — is 404, never 403, since a 403 on a safety identifier would itself disclose that a specific person is out somewhere right now.
+
+---
+
+## Device Scanning
+
+The mobile app's wireless-device-scanning feature (Wi-Fi/Bluetooth devices detected while walking a
+route, so a user can notice a camera/sensor/tracker they didn't expect) uploads raw scan data for
+background classification and clustering. **This API never reads that raw data back — there is no
+endpoint, here or on the internal session-authenticated `/rest/` surface, that returns an individual
+scan, upload, or reading, or who submitted it.** The only thing ever queryable is the cumulative,
+unattributed result: a fuzzy `WikiDeviceMarker` location per (device, wiki), which carries no
+`profile`/uploader reference at all — even when scans from several different accounts corroborate
+the same marker, nothing in its stored fields or its API representation distinguishes one
+contributor from another. Markers are also only ever returned for wikis the caller has already
+discovered, via the same `wiki_access` visibility gate every other wiki-scoped read in this API uses.
+
+`POST /device-scans/` — `DeviceScanUploadView` — scopes: `device_scans:write` — upload one batch from a walked route. Request: `client_session_uuid?`, `devices: [{mac_address, device_name?, device_type_guess?("camera"|"sensor"|"tracker"|"access_point"|"phone"|"wearable"|"iot"|"other"|null), detected(default true), estimated_latitude, estimated_longitude, expected_marker_uuid?(from a prior `nearby/` response, confirms/refutes that marker), readings?: [{latitude, longitude, signal_strength?, observed_at}]}]` (≤200 devices/upload, ≤500 readings/device) — response **202**: `{upload_uuid}` — classification, wiki-matching, and marker clustering all happen afterward in the background (`dashboard.tasks.process_device_scan_upload`); this response describes nothing about what was found, and nothing about it is ever readable back through this API. Attribution to the caller's account is controlled entirely by `Profile.track_device_scans` (see [Account & Identity](#account--identity)) — authentication is always required regardless of this preference, but the stored data carries no profile reference when it's off; either way the upload is fully processed, since classification and the community marker it may produce don't need an owner. Camera/sensor/tracker detections update a fuzzy marker on every wiki (including child wikis) whose boundary contains the reported coordinates, possibly several or none; other device types are recorded but never raise a marker.
+
+`GET /device-scans/nearby/` — `NearbyDeviceMarkersView` — scopes: `device_scans:read` — devices already known nearby, so the app can decide when to turn scanning on or enrich what it shows on a live detection. Query: `latitude`, `longitude`, `radius_meters?`(default 500, max 50000). Response: `{markers: [{marker_uuid, device: {mac_address, device_type, display_name}, latitude, longitude, radius_meters, confidence, avg_signal_strength, last_observed_at, status("active"|"stale")}]}` — `presumed_removed`/`dismissed` markers are never returned, and no field here ever identifies a contributor. The fuzzy area (`radius_meters`) shrinks and `confidence` rises as more scans corroborate the same location over time, weighted toward recent activity; a device that appears to have moved shows up as two separate markers until the old one goes stale. A caller reporting `expected_marker_uuid` with `detected: false` on a later upload feeds an absence streak that eventually flips a marker to `presumed_removed`.
 
 ---
 
