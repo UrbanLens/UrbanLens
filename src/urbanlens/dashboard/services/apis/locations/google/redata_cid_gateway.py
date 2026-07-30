@@ -30,6 +30,17 @@ from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
+
+class RedataPermissionError(GatewayRequestError):
+    """Raised when REData rejects the API key itself (401/403), not a transient failure.
+
+    An expired/invalid key or a key missing the ``places:read`` scope will
+    never succeed no matter how many times the request is retried - distinct
+    from ``GatewayRequestError`` so callers can stop retrying and surface this
+    to the user instead of looping forever.
+    """
+
+
 _REQUEST_TIMEOUT = 60
 
 #: REData caps a single call's batch at 10,000 (400 too_many_cids above that) -
@@ -93,6 +104,8 @@ class RedataCidGateway(Gateway):
             A :class:`RedataCidBatchResult` partitioning every input cid.
 
         Raises:
+            RedataPermissionError: REData rejected the API key itself (401/403) -
+                not transient, callers should stop retrying.
             GatewayRequestError: A chunk's request to REData failed outright
                 (network error, non-200, unparseable/malformed body). Callers
                 should treat the whole batch as transiently unresolved and
@@ -161,6 +174,8 @@ class RedataCidGateway(Gateway):
 
         if response.status_code != 200:
             logger.warning("REData CID resolution failed (%s): %s", response.status_code, response.text[:500])
+            if response.status_code in (401, 403):
+                raise RedataPermissionError(f"REData rejected the request with status {response.status_code} - check UL_REDATA_API_KEY's scopes.")
             raise GatewayRequestError(f"REData request failed with status {response.status_code}.")
 
         try:

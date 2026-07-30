@@ -248,6 +248,25 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             },
         )
 
+    def infrastructure_features(self, request, *args, **kwargs):
+        """Return viewport-scoped active and historic rail/water routes as GeoJSON."""
+        from urbanlens.dashboard.services.infrastructure_map import infrastructure_feature_collection, parse_infrastructure_bbox
+        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+
+        try:
+            bounds = parse_infrastructure_bbox(request.GET.get("bbox"))
+        except ValueError as exc:
+            return JsonResponse({"error": str(exc)}, status=400)
+
+        try:
+            collection = infrastructure_feature_collection(bounds)
+        except RateLimitExceededError:
+            return JsonResponse({"error": "Infrastructure data is temporarily busy. Please try again shortly."}, status=503)
+
+        response = JsonResponse(collection)
+        response["Cache-Control"] = "private, max-age=300"
+        return response
+
     def post_add_pin(self, request, *args, **kwargs):
         try:
             name = request.POST.get("name")

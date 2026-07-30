@@ -20,9 +20,9 @@
     {# Rendered by the shared {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} tag and driven by      #}
     {# window.MapLayers - the same code every other map on the site uses.       #}
     {% if show_places_layer %}
-    {% map_layers_panel "street,terrain,satellite,weather,pins,childpins,dark,borders,places" %}
+    {% map_layers_panel "street,terrain,satellite,weather,pins,childpins,dark,borders,infrastructure,places" %}
     {% else %}
-    {% map_layers_panel "street,terrain,satellite,weather,pins,childpins,dark,borders" %}
+    {% map_layers_panel "street,terrain,satellite,weather,pins,childpins,dark,borders,infrastructure" %}
     {% endif %}
 
     {# -- Saved-filters toggle toolbar (bottom-right; toggle saved filters on/off) -- #}
@@ -2088,6 +2088,151 @@
     let _placesLayerActive = false;
     const _PLACES_MIN_ZOOM = 10;  // only fetch when zoom >= this level
 
+    // Waterways + railways, including OSM lifecycle-tagged historic routes.
+    // Geometry is fetched only for the visible viewport from UrbanLens'
+    // server-side Overpass proxy; this keeps browser requests small and avoids
+    // exposing or depending directly on a public community endpoint.
+    const _infrastructureLayerGroup = L.layerGroup();
+    const _infrastructureRenderer = L.canvas({ padding: 0.5 });
+    const _INFRASTRUCTURE_MIN_ZOOM = 11;
+    let _infrastructureLayerActive = false;
+    let _infrastructureAbortController = null;
+    let _infrastructureRequestSerial = 0;
+    let _infrastructureLastBbox = '';
+    let _infrastructureFetchTimer = null;
+    let _infrastructureZoomNoticeShown = false;
+
+    function _infrastructureStyle(feature) {
+        const props = feature?.properties || {};
+        if (props.kind === 'rail') {
+            return {
+                color: props.historic ? '#d97706' : '#8b1e3f',
+                weight: props.historic ? 3 : 3.5,
+                opacity: 0.9,
+                dashArray: props.historic ? '8 7' : null,
+                lineCap: 'round',
+                lineJoin: 'round',
+            };
+        }
+        return {
+            color: props.historic ? '#0f766e' : '#1479b8',
+            weight: props.historic ? 2.75 : 3,
+            opacity: 0.9,
+            dashArray: props.historic ? '4 7' : null,
+            lineCap: 'round',
+            lineJoin: 'round',
+        };
+    }
+
+    function _bindInfrastructureFeature(feature, layer) {
+        const props = feature?.properties || {};
+        const name = _escHtml(props.name || (props.kind === 'rail' ? 'Railway' : 'Waterway'));
+        const type = _escHtml(props.type || '');
+        const status = _escHtml(props.status || '');
+        const osmUrl = typeof props.osm_url === 'string' && props.osm_url.startsWith('https://www.openstreetmap.org/')
+            ? props.osm_url
+            : '';
+        const swatch = props.kind === 'rail' ? (props.historic ? '#d97706' : '#8b1e3f') : (props.historic ? '#0f766e' : '#1479b8');
+        layer.bindTooltip(name, { sticky: true, direction: 'top' });
+        layer.bindPopup(`
+            <div class="pin-popup">
+                <div class="popup-title"><span style="color:${swatch};margin-right:.3rem;">━</span>${name}</div>
+                <div class="popup-address">${type}${type && status ? ' · ' : ''}${status}</div>
+                ${osmUrl ? `<a href="${osmUrl}" target="_blank" rel="noopener noreferrer" class="view-full-pin">View source on OpenStreetMap</a>` : ''}
+            </div>
+        `);
+    }
+
+    function _setInfrastructureLoading(loading) {
+        const button = document.querySelector('[data-map-layer="infrastructure"]');
+        if (button) {
+            button.classList.toggle('is-loading', loading);
+            button.setAttribute('aria-busy', loading ? 'true' : 'false');
+        }
+    }
+
+    function _loadInfrastructure() {
+        if (!_infrastructureLayerActive) return;
+        if (map.getZoom() < _INFRASTRUCTURE_MIN_ZOOM) {
+            if (_infrastructureAbortController) _infrastructureAbortController.abort();
+            _infrastructureLayerGroup.clearLayers();
+            _infrastructureLastBbox = '';
+            _setInfrastructureLoading(false);
+            if (!_infrastructureZoomNoticeShown) {
+                toastr.info('Zoom in to level 11 or closer to load waterways and railways.');
+                _infrastructureZoomNoticeShown = true;
+            }
+            return;
+        }
+
+        _infrastructureZoomNoticeShown = false;
+        const bbox = map.getBounds().toBBoxString();
+        if (bbox === _infrastructureLastBbox && _infrastructureLayerGroup.getLayers().length) return;
+        if (_infrastructureAbortController) _infrastructureAbortController.abort();
+        _infrastructureAbortController = new AbortController();
+        const requestSerial = ++_infrastructureRequestSerial;
+        _setInfrastructureLoading(true);
+
+        fetch(`{% url "map.infrastructure" %}?bbox=${encodeURIComponent(bbox)}`, {
+            signal: _infrastructureAbortController.signal,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        })
+        .then(async response => {
+            if (response.ok) return response.json();
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.error || 'Could not load infrastructure data.');
+        })
+        .then(data => {
+            if (!_infrastructureLayerActive || requestSerial !== _infrastructureRequestSerial) return;
+            _infrastructureLayerGroup.clearLayers();
+            L.geoJSON(data, {
+                renderer: _infrastructureRenderer,
+                style: _infrastructureStyle,
+                onEachFeature: _bindInfrastructureFeature,
+            }).addTo(_infrastructureLayerGroup);
+            _infrastructureLastBbox = bbox;
+            if (data.truncated) toastr.warning('This area has many waterways and railways. Zoom in to see the complete set.');
+        })
+        .catch(error => {
+            if (error.name !== 'AbortError' && _infrastructureLayerActive) {
+                toastr.warning(error.message || 'Could not load waterways and railways.');
+            }
+        })
+        .finally(() => {
+            if (requestSerial === _infrastructureRequestSerial) _setInfrastructureLoading(false);
+        });
+    }
+
+    function _scheduleInfrastructureFetch() {
+        if (!_infrastructureLayerActive) return;
+        clearTimeout(_infrastructureFetchTimer);
+        _infrastructureFetchTimer = setTimeout(_loadInfrastructure, 250);
+    }
+
+    function toggleInfrastructureLayer() {
+        _infrastructureLayerActive = !_infrastructureLayerActive;
+        if (_infrastructureLayerActive) {
+            _infrastructureLayerGroup.addTo(map);
+            _loadInfrastructure();
+        } else {
+            clearTimeout(_infrastructureFetchTimer);
+            if (_infrastructureAbortController) _infrastructureAbortController.abort();
+            _setInfrastructureLoading(false);
+            map.removeLayer(_infrastructureLayerGroup);
+        }
+        _renderMapAttribution();
+    }
+
+    map.on('moveend', _scheduleInfrastructureFetch);
+
+    let _mapBaseAttributionText = '';
+    function _renderMapAttribution() {
+        const el = document.getElementById('page-footer-attribution-text');
+        if (!el) return;
+        el.textContent = _mapBaseAttributionText
+            + (_infrastructureLayerActive ? ' · Infrastructure © OpenStreetMap contributors' : '');
+    }
+
     // -- Layers: shared engine (ts/shared/map-layers.ts) ------------------------
     // Tile layers, the layers flyout panel, dark map mode, "remember"
     // persistence, tile-loading feedback, and footer attribution all live in
@@ -2103,8 +2248,8 @@
         // Footer attribution replaces Leaflet's on-map control (see the shared
         // partials/layout/footer.html, rendered via show_map_footer=True).
         onAttribution: function (text) {
-            const el = document.getElementById('page-footer-attribution-text');
-            if (el) el.textContent = text;
+            _mapBaseAttributionText = text;
+            _renderMapAttribution();
         },
         // Persist dark mode to the server so the preference survives page refresh.
         onDarkModeChange: function (mode) {
@@ -2120,6 +2265,7 @@
             // The pins button highlights when pins are HIDDEN (activeWhenOff).
             pins:      { isActive: () => pinsVisible, toggle: togglePins, activeWhenOff: true },
             childpins: { isActive: () => _childPinsActive, toggle: toggleChildPins },
+            infrastructure: { isActive: () => _infrastructureLayerActive, toggle: toggleInfrastructureLayer },
             places:    { isActive: () => _placesLayerActive, toggle: togglePlacesLayer },
         },
     });

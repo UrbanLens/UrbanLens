@@ -30,7 +30,7 @@ import logging
 import requests
 
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
-from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway
+from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway, RedataPermissionError
 from urbanlens.dashboard.services.gateway import GatewayRequestError
 from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
 from urbanlens.UrbanLens.settings.app import settings
@@ -57,6 +57,11 @@ class CidResolutionResult:
     #: Rate-limited or a transient failure - the caller should retry these
     #: later, not treat them as done.
     pending: list[int] = field(default_factory=list)
+    #: REData rejected the API key itself (401/403) - also left in `pending`
+    #: for its count, but this flag tells the caller retrying is pointless
+    #: until the key/scope is fixed, so it should stop and surface the failure
+    #: instead of looping forever.
+    auth_failed: bool = False
 
 
 def resolve_cids(cids: list[int]) -> CidResolutionResult:
@@ -77,6 +82,9 @@ def resolve_cids(cids: list[int]) -> CidResolutionResult:
 def _resolve_via_redata(cids: list[int]) -> CidResolutionResult:
     try:
         batch = RedataCidGateway().resolve_cids(cids)
+    except RedataPermissionError:
+        logger.exception("REData rejected the API key resolving %d cid(s) - not retrying until UL_REDATA_API_KEY's scopes are fixed.", len(cids))
+        return CidResolutionResult(provider=PROVIDER_REDATA, pending=list(cids), auth_failed=True)
     except GatewayRequestError:
         logger.warning("REData CID batch resolution failed for %d cid(s) - deferring for retry.", len(cids))
         return CidResolutionResult(provider=PROVIDER_REDATA, pending=list(cids))

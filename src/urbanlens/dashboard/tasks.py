@@ -1173,6 +1173,20 @@ def resolve_deferred_pin_locations(
 
     result = resolve_cids(all_cids)
 
+    if result.auth_failed:
+        logger.error("resolve_deferred_pin_locations: REData rejected the API key resolving %d cid(s) for profile %s - not retrying.", len(all_cids), profile_id)
+        NotificationLog.objects.create(
+            profile=profile,
+            status=Status.UNREAD,
+            importance=Importance.HIGH,
+            notification_type=NotificationType.ERROR,
+            title="Pin import couldn't finish",
+            message=(f"{len(all_cids)} pin(s) needed a live location lookup that was denied by a permission error and won't be retried automatically. Re-import once this is fixed."),
+            url=reverse("map.view"),
+        )
+        update_task_progress(self, current=total, total=total, message="Failed: location lookup was denied.")
+        return {"created": 0, "exists": 0, "skipped": len(all_cids)}
+
     if result.pending:
         pending_set = set(result.pending)
         remaining_lists = []

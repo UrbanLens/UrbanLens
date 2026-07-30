@@ -11,7 +11,7 @@ from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations import cid_resolution
-from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidBatchResult
+from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidBatchResult, RedataPermissionError
 from urbanlens.dashboard.services.gateway import GatewayRequestError
 from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
 from urbanlens.UrbanLens.settings.app import settings
@@ -71,6 +71,25 @@ class ResolveViaRedataTests(SimpleTestCase):
             redata_cls.return_value.resolve_cids.side_effect = GatewayRequestError("boom")
             result = cid_resolution.resolve_cids([1, 2])
 
+        self.assertEqual(result.pending, [1, 2])
+        self.assertEqual(result.resolved, {})
+        self.assertFalse(result.auth_failed)
+        google_cls.assert_not_called()
+
+    def test_permission_error_marks_auth_failed_and_does_not_fall_back_to_google(self) -> None:
+        """A rejected API key will never succeed by retrying - callers must be told to stop."""
+        with (
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway",
+            ) as redata_cls,
+            mock.patch(
+                "urbanlens.dashboard.services.apis.locations.cid_resolution.GoogleGeocodingGateway",
+            ) as google_cls,
+        ):
+            redata_cls.return_value.resolve_cids.side_effect = RedataPermissionError("boom")
+            result = cid_resolution.resolve_cids([1, 2])
+
+        self.assertTrue(result.auth_failed)
         self.assertEqual(result.pending, [1, 2])
         self.assertEqual(result.resolved, {})
         google_cls.assert_not_called()

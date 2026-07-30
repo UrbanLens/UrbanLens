@@ -261,6 +261,11 @@ urlpatterns = [
             [
                 path("", maps.MapController.as_view({"get": "view_map"}), name="map.view"),
                 path("init/", maps.MapController.as_view({"get": "init_map"}), name="map.init"),
+                path(
+                    "infrastructure/",
+                    maps.MapController.as_view({"get": "infrastructure_features"}),
+                    name="map.infrastructure",
+                ),
                 path("pins/", maps.MapController.as_view({"get": "map_pins_json"}), name="map.pins"),
                 path("pins/children/", maps.MapController.as_view({"get": "map_child_pins_json"}), name="map.pins.children"),
                 path("pins/meta/", maps.MapController.as_view({"get": "map_pins_meta"}), name="map.pins.meta"),

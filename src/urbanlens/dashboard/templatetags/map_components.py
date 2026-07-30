@@ -210,6 +210,18 @@ register_map_layer(
 )
 register_map_layer(
     MapLayerSpec(
+        key="infrastructure",
+        kind="custom",
+        label="Water & Rail",
+        aria_label="Toggle waterways and railways, including historic routes",
+        tooltip="Active and historic waterways, railways, canals, and rail trails",
+        icon="conversion_path",
+        thumb_alt="Waterways and Railways Layer",
+        button_id="infrastructure-button",
+    )
+)
+register_map_layer(
+    MapLayerSpec(
         key="details",
         kind="custom",
         label="Markup",
