@@ -21,7 +21,7 @@ from django.urls import reverse
 from django.utils import timezone
 from django.views import View
 
-from urbanlens.dashboard.controllers.trip import _apply_trip_list_identity_masking, _trip_or_403, _trips_for_list
+from urbanlens.dashboard.controllers.trip import _apply_trip_list_identity_masking, _trips_for_list, trip_or_not_found
 from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.calendar.google import (
@@ -86,6 +86,13 @@ def calendar_context(profile: Profile, trip=None) -> dict:
 
 
 _RECONNECT_MESSAGE = "Your Google Calendar connection has expired. Please reconnect below to keep importing and exporting."
+
+#: GatewayRequestError is shared across every gateway integration
+#: (Calendar, Flickr, Immich, REData, ...); some of them build its message
+#: from an upstream response's own error text, which is not safe to return
+#: verbatim to a caller. Never surface it - log it and answer with this
+#: fixed message instead.
+_GATEWAY_FAILURE_MESSAGE = "Google Calendar could not be reached. Please try again shortly."
 
 
 def _drop_expired_account(account: GoogleCalendarAccount) -> None:
@@ -245,7 +252,8 @@ class CalendarImportView(LoginRequiredMixin, View):
             account = None
             error = _RECONNECT_MESSAGE
         except GatewayRequestError as exc:
-            error = str(exc)
+            logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
+            error = _GATEWAY_FAILURE_MESSAGE
 
         return render(
             request,
@@ -285,7 +293,8 @@ class CalendarImportView(LoginRequiredMixin, View):
             _drop_expired_account(account)
             return HttpResponse(_RECONNECT_MESSAGE, status=502)
         except GatewayRequestError as exc:
-            return HttpResponse(str(exc), status=502)
+            logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
+            return HttpResponse(_GATEWAY_FAILURE_MESSAGE, status=502)
 
         trips = list(_trips_for_list(profile))
         _apply_trip_list_identity_masking(profile, trips)
@@ -328,7 +337,8 @@ class CalendarImportPreviewView(LoginRequiredMixin, View):
             _drop_expired_account(account)
             return HttpResponse(_RECONNECT_MESSAGE, status=502)
         except GatewayRequestError as exc:
-            return HttpResponse(str(exc), status=502)
+            logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
+            return HttpResponse(_GATEWAY_FAILURE_MESSAGE, status=502)
 
         importable = [entry for entry in previews if not entry["skip_reason"]]
         return render(
@@ -372,7 +382,7 @@ class TripCalendarExportView(LoginRequiredMixin, View):
 
     def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_slug, profile)
+        result = trip_or_not_found(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -390,7 +400,8 @@ class TripCalendarExportView(LoginRequiredMixin, View):
             _drop_expired_account(account)
             return self._render_button(request, trip, profile, toast=("warning", _RECONNECT_MESSAGE))
         except GatewayRequestError as exc:
-            return self._render_button(request, trip, profile, toast=("error", str(exc)))
+            logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
+            return self._render_button(request, trip, profile, toast=("error", _GATEWAY_FAILURE_MESSAGE))
 
         auto_sync = request.POST.get("auto_sync") == "1"
         if link.auto_sync != auto_sync:
@@ -404,7 +415,7 @@ class TripCalendarExportView(LoginRequiredMixin, View):
 
     def delete(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_slug, profile)
+        result = trip_or_not_found(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result
@@ -419,7 +430,8 @@ class TripCalendarExportView(LoginRequiredMixin, View):
             _drop_expired_account(account)
             return self._render_button(request, trip, profile, toast=("warning", _RECONNECT_MESSAGE))
         except GatewayRequestError as exc:
-            return self._render_button(request, trip, profile, toast=("error", str(exc)))
+            logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=True)
+            return self._render_button(request, trip, profile, toast=("error", _GATEWAY_FAILURE_MESSAGE))
 
         toast = ("success", "Trip removed from your Google Calendar.") if removed else ("info", "This trip was not on your Google Calendar.")
         return self._render_button(request, trip, profile, toast=toast)
@@ -435,7 +447,7 @@ class TripCalendarAutoSyncView(LoginRequiredMixin, View):
 
     def post(self, request, trip_slug):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        result = _trip_or_403(request, trip_slug, profile)
+        result = trip_or_not_found(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result

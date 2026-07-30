@@ -22,6 +22,8 @@ from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.direct_messages import (
     REACTION_PICKER_EMOJIS,
+    DirectMessagePermissionError,
+    DirectMessageValidationError,
     all_conversations_for,
     build_thread_timeline,
     can_direct_message,
@@ -30,12 +32,14 @@ from urbanlens.dashboard.services.direct_messages import (
     delete_message_for_everyone,
     delete_message_for_self,
     display_identity_for,
+    is_conversation_muted,
     is_profile_online,
     is_safe_reaction_emoji,
     key_change_events_for,
     mark_thread_open,
     reaction_summary,
     search_direct_messages,
+    set_conversation_muted,
     thread_page,
     toggle_reaction,
 )
@@ -145,8 +149,6 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
     Returns:
         Context dict for ``_thread.html``.
     """
-    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
-
     clear_email_debounce(partner.pk, profile.pk)
     mark_thread_open(profile.pk, partner.pk)
     thread_messages, has_more_older = thread_page(profile, partner)
@@ -175,7 +177,7 @@ def _thread_context(profile: Profile, partner: Profile) -> dict:
         "partner_e2ee_enrolled": _e2ee_enrolled(partner),
         "has_more_older": has_more_older,
         "oldest_message_id": thread_messages[0].pk if thread_messages else None,
-        "is_muted": DirectMessageMute.objects.for_pair(profile, partner).exists(),
+        "is_muted": is_conversation_muted(profile, partner),
         **identity,
     }
 
@@ -291,13 +293,24 @@ class ConversationMuteToggleView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
-        from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+        """Flip the caller's mute for this conversation and return the refreshed thread.
 
+        The flip lives here rather than in the service because it is a property
+        of *this button*: the web UI has one control whose meaning is "the
+        other state". ``set_conversation_muted`` names an end state instead, so
+        the external API's PUT/DELETE pair cannot be turned into a toggle by a
+        retry - see its docstring.
+
+        Args:
+            request: The incoming request.
+            profile_slug: Slug of the conversation partner.
+
+        Returns:
+            The re-rendered thread partial.
+        """
         profile = _get_profile(request)
         partner = _get_partner(profile, profile_slug)
-        mute, created = DirectMessageMute.objects.get_or_create(viewer=profile, sender=partner)
-        if not created:
-            mute.delete()
+        set_conversation_muted(profile, partner, muted=not is_conversation_muted(profile, partner))
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         response["HX-Trigger"] = json.dumps({"dmListRefresh": {"target": "body"}})
@@ -336,12 +349,10 @@ class ConversationSendView(LoginRequiredMixin, View):
                 markup_map_uuid=request.POST.get("markup_map_uuid") or None,
                 reply_to_id=int(reply_to_raw) if reply_to_raw.isdigit() else None,
             )
-        except ValueError as exc:
-            # create_direct_message only raises ValueError with a fixed, developer-authored
-            # message (blank/too-long body) - never a stack trace or sensitive data.
-            return HttpResponseBadRequest(str(exc))  # lgtm[py/stack-trace-exposure]
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
+        except DirectMessageValidationError as exc:
+            return HttpResponseBadRequest(exc.safe_message)
+        except DirectMessagePermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)
 
@@ -415,7 +426,7 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
         """
         from urbanlens.dashboard.models.images.model import Image, MediaKind
         from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
-        from urbanlens.dashboard.services.storage import quota_error_for_upload
+        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
 
         profile = _get_profile(request)
         image_file = request.FILES.get("image")
@@ -429,12 +440,13 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
             message, status = upload_error
             return JsonResponse({"error": message}, status=status)
 
-        quota_error = quota_error_for_upload(profile, image_file.size)
-        if quota_error:
-            return JsonResponse({"error": quota_error}, status=413)
-
         checksum = compute_checksum(image_file)
-        image = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size)
+        with per_profile_upload_lock(profile):
+            quota_error = quota_error_for_upload(profile, image_file.size)
+            if quota_error:
+                return JsonResponse({"error": quota_error}, status=413)
+
+            image = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size)
 
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
@@ -509,8 +521,8 @@ class MessageReactionToggleView(LoginRequiredMixin, View):
 
         try:
             toggle_reaction(profile, message, emoji)
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
+        except DirectMessagePermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
 
         return render(
             request,
@@ -558,8 +570,8 @@ class MessageDeleteView(LoginRequiredMixin, View):
                 delete_message_for_self(message, profile)
             else:
                 return HttpResponseBadRequest("Unknown delete scope.")
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
+        except DirectMessagePermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)

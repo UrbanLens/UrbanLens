@@ -228,6 +228,76 @@
             </form>
         </div>
 
+        {# -- Pin Suggestions (subsection) --------------------------------------- #}
+        <div class="settings-subsection" id="pin-suggestions-settings-section">
+            <h3 class="settings-subsection-title">
+                <i class="material-symbols-outlined">add_location_alt</i>
+                Pin Suggestions
+            </h3>
+            <p class="settings-section-desc">Places found in your photos, shared by the community, or submitted by connected apps wait for your review on the <a href="{% url 'memories.locations' %}">Locations</a> page. Turn suggestions off entirely, or just from specific sources.</p>
+
+            <form method="post" class="settings-form" id="pin-suggestions-form">
+                {% csrf_token %}
+                <input type="hidden" name="section" value="pin_suggestions">
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ pin_suggestions_form.pin_suggestions_enabled }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ pin_suggestions_form.pin_suggestions_enabled.label }}</strong>
+                            <span class="settings-help">{{ pin_suggestions_form.pin_suggestions_enabled.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if pin_suggestions_form.pin_suggestions_enabled.errors %}
+                    <p class="settings-error">{{ pin_suggestions_form.pin_suggestions_enabled.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ pin_suggestions_form.suggest_public_pins }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ pin_suggestions_form.suggest_public_pins.label }}</strong>
+                            <span class="settings-help">{{ pin_suggestions_form.suggest_public_pins.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if pin_suggestions_form.suggest_public_pins.errors %}
+                    <p class="settings-error">{{ pin_suggestions_form.suggest_public_pins.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ pin_suggestions_form.suggest_pins_from_photos }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ pin_suggestions_form.suggest_pins_from_photos.label }}</strong>
+                            <span class="settings-help">{{ pin_suggestions_form.suggest_pins_from_photos.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if pin_suggestions_form.suggest_pins_from_photos.errors %}
+                    <p class="settings-error">{{ pin_suggestions_form.suggest_pins_from_photos.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ pin_suggestions_form.suggest_pins_from_external_apis }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ pin_suggestions_form.suggest_pins_from_external_apis.label }}</strong>
+                            <span class="settings-help">{{ pin_suggestions_form.suggest_pins_from_external_apis.help_text }}</span>
+                        </span>
+                    </label>
+                    {% if pin_suggestions_form.suggest_pins_from_external_apis.errors %}
+                    <p class="settings-error">{{ pin_suggestions_form.suggest_pins_from_external_apis.errors|join:", " }}</p>
+                    {% endif %}
+                </div>
+                {% if not pin_suggestions_form.instance.pin_suggestions_enabled %}
+                <p class="settings-help">All sources below are off while Pin Suggestions (above) is off.</p>
+                {% endif %}
+
+                <div class="settings-actions">
+                    <button type="submit" class="settings-save-btn">Save</button>
+                </div>
+            </form>
+        </div>
+
         {# -- Wiki Sync (subsection) -------------------------------------------- #}
         <div class="settings-subsection" id="wiki-sync-settings-section">
             <h3 class="settings-subsection-title">
@@ -348,6 +418,16 @@
                         <span class="settings-toggle-label">
                             <strong>{{ history_form.track_geolocation.label }}</strong>
                             <span class="settings-help">{{ history_form.track_geolocation.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
+                        {{ history_form.track_device_scans }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ history_form.track_device_scans.label }}</strong>
+                            <span class="settings-help">{{ history_form.track_device_scans.help_text }}</span>
                         </span>
                     </label>
                 </div>
@@ -1629,11 +1709,13 @@
     if (!card || !window.UrbanLensE2EE) return;
     UrbanLensE2EE.init({
         selfSlug: "{{ self_slug }}",
+        loginIdentifier: "{{ request.user.username|escapejs }}",
         urls: {
             loginParams: "{% url 'e2ee.login_params' %}",
             enroll: "{% url 'e2ee.enroll' %}",
             keys: "{% url 'e2ee.keys' %}",
             rewrap: "{% url 'e2ee.rewrap' %}",
+            validatePassword: "{% url 'validate_password_policy' %}",
             rewrapAll: "{% url 'e2ee.rewrap_all' %}",
             reset: "{% url 'e2ee.reset' %}",
             partnerKeyBase: "{% url 'e2ee.keys' %}",

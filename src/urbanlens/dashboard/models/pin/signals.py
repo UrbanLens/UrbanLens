@@ -74,6 +74,30 @@ def delete_map_pin_cache(sender: type[Pin], instance: Pin, **kwargs) -> None:
         _delete_cached_pin(instance.pk, instance.profile_id)
 
 
+@receiver(post_delete, sender=Pin, dispatch_uid="pin_record_tombstone")
+def record_pin_tombstone(sender: type[Pin], instance: Pin, **kwargs) -> None:
+    """Durably record the deletion for external-API delta-sync clients.
+
+    Written synchronously (not ``on_commit``) so the tombstone commits or
+    rolls back together with the delete itself.
+
+    Only fires when the deletion originated on pins (a single ``pin.delete()``
+    or a Pin queryset delete, including the cascade over ``parent_pin``
+    children either triggers). When the deletion is a cascade from the owning
+    profile/user - account deletion - no tombstones are written: the rows
+    would FK a profile that is itself mid-delete (and was collected before
+    they existed), and an account deletion leaves no sync clients behind to
+    tell.
+    """
+    origin = kwargs.get("origin")
+    origin_model = getattr(origin, "model", type(origin))
+    if origin_model is not Pin or not instance.profile_id:
+        return
+    from urbanlens.dashboard.models.pin_tombstone import PinTombstone
+
+    PinTombstone.objects.record(profile_id=instance.profile_id, pin_uuid=instance.uuid)
+
+
 @receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_refresh_map_pin_cache")
 def refresh_map_pin_cache_for_labels(sender, instance: Pin, action: str, **kwargs) -> None:
     if action in {"post_add", "post_remove", "post_clear"} and instance.profile_id:
@@ -107,7 +131,7 @@ def refresh_map_pin_cache_for_label_customization(sender: type[LabelCustomizatio
 def propagate_visited_label_to_ancestors(sender, instance: Pin, action: str, pk_set=None, reverse: bool = False, **kwargs) -> None:
     """Mark a child pin's ancestors Visited when the child gains the Visited label.
 
-    Visiting a sub pin (an entrance, a building on a campus) means the parent
+    Visiting a child pin (an entrance, a building on a campus) means the parent
     place was visited too, so the profile's "Visited" status label cascades up
     the ``parent_pin`` chain. The whole chain is stamped in one pass with a
     cycle-safe walk (see ``Pin.ancestor_chain``); the m2m adds this performs

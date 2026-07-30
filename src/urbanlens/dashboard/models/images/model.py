@@ -19,11 +19,14 @@ class ImageSource(TextChoices):
     """Where a photo originated - drives the Media section's per-source tabs.
 
     ``UPLOAD`` is the default for ordinary user uploads (personal galleries).
-    The external values are set only on rows materialized from the Media
+    Most external values are set only on rows materialized from the Media
     gallery's transient provider results (see ``services.external_data`` and
     ``services.media_materialize``) when a user sends one to a wiki or sets it
     as a cover photo - the Media gallery itself renders straight from each
     provider's live results without persisting an ``Image`` row per item.
+    ``EXTERNAL_API`` is the exception: it's set on candidate photos an
+    external-app pin suggestion submits (see ``services.pin_suggestions.attach_suggestion_photos``),
+    staged against a ``PinSuggestion`` rather than materialized from the Media gallery.
     """
 
     UPLOAD = "upload", "Upload"
@@ -40,6 +43,7 @@ class ImageSource(TextChoices):
     GOOGLE_PHOTOS = "google_photos", "Google Photos"
     LOOPNET = "loopnet", "LoopNet"
     CRIS = "cris", "NY Historic Preservation (CRIS)"
+    EXTERNAL_API = "external_api", "External app"
 
 
 class MediaKind(TextChoices):
@@ -144,12 +148,37 @@ class Image(abstract.FrontendDashboardModel):
     author = CharField(max_length=255, null=True, blank=True)
     source_url = URLField(max_length=500, null=True, blank=True)
     copyright = CharField(max_length=255, null=True, blank=True)
+    # Set only on rows materialized from the Media gallery's transient provider
+    # results (see services.media_materialize) - the *raw* provider panel key
+    # (e.g. "wikimedia", "loc") and the sha1 hash of the item's full-resolution
+    # url, i.e. exactly the (source, item_key) identity MediaRelevance marks
+    # are keyed by (models.images.relevance.media_item_key). `source_url`
+    # can't stand in for this: it's set to `page_url or url`, which diverges
+    # from the raw `url` that item_key is always hashed from whenever a
+    # provider supplies a page_url - these two fields are what let a
+    # materialized Image row be reliably joined back to its wiki votes (see
+    # services.media_relevance.effective_relevance). Deliberately NOT the
+    # same value as `source` above, which stores the *translated*
+    # ImageSource value and can differ from the raw panel key (see
+    # media_materialize._PANEL_KEY_TO_IMAGE_SOURCE).
+    media_source_key = CharField(max_length=30, null=True, blank=True)
+    media_item_key = CharField(max_length=40, null=True, blank=True)
     # The photo's own GPS position (EXIF, or user drag-placement on the map).
     # Kept separate from the `location` FK so each photo can scatter at its exact
     # capture point on the map layer; `location` records which shared place the
     # photo belongs to.
     latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    # Crowd-sourced approximation of this photo's own position, from
+    # anonymized SpotGuessr guesses (services.photo_coordinates) - only ever
+    # set once a photo has accumulated enough guesses to be worth showing,
+    # and always deferred to `latitude`/`longitude` above the moment a real
+    # (manual or EXIF) position exists for this photo - see effective_latitude/
+    # effective_longitude below. Never treat this as confirmed; it exists
+    # specifically to surface still-unplaced photos on maps so a wiki user
+    # notices and corrects the exact placement.
+    estimated_latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    estimated_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     # Compass bearing (0-360, true or magnetic north per the device's own
     # EXIF GPSImgDirectionRef - not itself preserved, see
     # services.images.extract_gps_direction) the camera was facing when this
@@ -208,14 +237,20 @@ class Image(abstract.FrontendDashboardModel):
     def effective_latitude(self) -> Decimal | None:
         """The best-known latitude for this photo.
 
-        Prefers the photo's own GPS position; falls back to the coordinates of
-        the shared Location it belongs to.
+        Prefers the photo's own real (manual/EXIF) GPS position; then a
+        crowd-sourced SpotGuessr estimate, if one exists; then falls back to
+        the coordinates of the shared Location it belongs to. A real
+        position always wins outright, no matter how many guesses back the
+        estimate - see ``estimated_latitude``'s docstring.
 
         Returns:
-            The latitude, or None when neither the photo nor its location has one.
+            The latitude, or None when the photo has no position of any kind
+            and its location doesn't either.
         """
         if self.latitude is not None:
             return self.latitude
+        if self.estimated_latitude is not None:
+            return self.estimated_latitude
         location = self.location
         if location is not None and location.latitude is not None:
             return location.latitude
@@ -225,14 +260,20 @@ class Image(abstract.FrontendDashboardModel):
     def effective_longitude(self) -> Decimal | None:
         """The best-known longitude for this photo.
 
-        Prefers the photo's own GPS position; falls back to the coordinates of
-        the shared Location it belongs to.
+        Prefers the photo's own real (manual/EXIF) GPS position; then a
+        crowd-sourced SpotGuessr estimate, if one exists; then falls back to
+        the coordinates of the shared Location it belongs to. A real
+        position always wins outright, no matter how many guesses back the
+        estimate - see ``estimated_latitude``'s docstring.
 
         Returns:
-            The longitude, or None when neither the photo nor its location has one.
+            The longitude, or None when the photo has no position of any
+            kind and its location doesn't either.
         """
         if self.longitude is not None:
             return self.longitude
+        if self.estimated_longitude is not None:
+            return self.estimated_longitude
         location = self.location
         if location is not None and location.longitude is not None:
             return location.longitude
@@ -241,4 +282,7 @@ class Image(abstract.FrontendDashboardModel):
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_images"
         get_latest_by = "updated"
-        indexes = [Index(fields=["uuid"], name="idxdb_image_uuid")]
+        indexes = [
+            Index(fields=["uuid"], name="idxdb_image_uuid"),
+            Index(fields=["location", "media_source_key", "media_item_key"], name="idxdb_image_media_key"),
+        ]

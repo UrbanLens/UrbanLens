@@ -828,9 +828,9 @@
                 var them = n === 1 ? 'it' : 'them';
                 var choice = await window.confirmDialog({
                     title: 'Delete child pins too?',
-                    message: 'This pin has ' + n + ' sub pin' + plural + '.\n\nDelete ' + them + ' as well, or keep ' + them + ' on your map?',
+                    message: 'This pin has ' + n + ' child pin' + plural + '.\n\nDelete ' + them + ' as well, or keep ' + them + ' on your map?',
                     confirmLabel: 'Delete all',
-                    altLabel: 'Keep sub pin' + plural,
+                    altLabel: 'Keep child pin' + plural,
                 });
                 if (!choice) return false;
                 try { response = await _send(choice === 'alt' ? '?children=keep' : '?children=delete'); } catch (e) { return null; }

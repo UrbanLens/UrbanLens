@@ -87,8 +87,7 @@ class PinLinkViewTests(TestCase):
 
 
 class PinDetailsPageLinksCardTests(TestCase):
-    """Links moved out of the Details card into their own standalone card -
-    see docs/prompts.txt's resolution note for why.
+    """Links moved out of the Details card into their own standalone card
 
     The card lives directly in pages/location/index.html (a static block, not
     part of the pin.overview HTMX partial - PinOverviewView/pin_overview_partial.html

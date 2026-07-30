@@ -11,7 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import GalleryMediaSource
+from urbanlens.dashboard.services.external_data import GalleryMediaSource, PanelApiKind
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -28,6 +28,10 @@ class GoogleImagesPanelSource(GalleryMediaSource):
     cache_source = "google_images"
     icon = "image_search"
     title = "Google Images"
+    # Deliberately not exposed on the external API: Google Custom Search's
+    # terms restrict redistributing image-search results beyond direct
+    # display to the user who triggered the search.
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
 
     def gate(self, pin: Pin) -> bool:
         """Requires configured Custom Search credentials and an address to search on."""

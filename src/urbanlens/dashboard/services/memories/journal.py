@@ -1,7 +1,9 @@
 """Aggregates a profile's personal "journal" - visit notes, ratings, and comments.
 
-Adding a future journal entry type is one new ``_x_entries`` function appended
-to ``_JOURNAL_SOURCES`` below - nothing else needs to change.
+Adding a future journal entry type is one new ``_x_entries`` function keyed
+into ``JOURNAL_SOURCES`` below, plus the matching scope entry in the external
+API's ``MemoriesJournalView`` - which fails closed on a source it has no scope
+mapping for, so a new domain cannot reach API callers unnoticed.
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ from typing import TYPE_CHECKING
 from django.urls import reverse
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterator
+    from collections.abc import Callable, Iterable, Iterator
     from datetime import datetime
 
     from urbanlens.dashboard.models.profile.model import Profile
@@ -144,25 +146,46 @@ def _article_entries(profile: Profile) -> Iterator[JournalEntry]:
         )
 
 
-_JOURNAL_SOURCES: tuple[Callable[[Profile], Iterator[JournalEntry]], ...] = (
-    _visit_entries,
-    _review_entries,
-    _comment_entries,
-    _article_entries,
-)
+#: Journal sources by key, in the order they are declared.
+#:
+#: Keyed rather than a bare tuple because the journal is a *multi-domain*
+#: aggregate: a visit note, a pin comment, a trip comment and a wiki article
+#: body are four different privacy domains that happen to share one feed. The
+#: internal Memories page always wants all four, but the external API must be
+#: able to serve only the subset a credential's scopes cover, and it can only
+#: do that if the sources are individually addressable. See
+#: ``external_api.views.MemoriesJournalView.JOURNAL_SOURCE_SCOPES``, which maps
+#: these keys onto scopes.
+#:
+#: Adding a source means adding an entry here *and* a scope entry there - the
+#: view fails closed on an unmapped key, so a new domain cannot be exposed by
+#: forgetting the second half.
+JOURNAL_SOURCES: dict[str, Callable[[Profile], Iterator[JournalEntry]]] = {
+    "visits": _visit_entries,
+    "reviews": _review_entries,
+    "comments": _comment_entries,
+    "articles": _article_entries,
+}
 
 
-def get_journal_entries(profile: Profile) -> list[JournalEntry]:
-    """Merge every registered journal source for a profile, sorted newest-first.
+def get_journal_entries(profile: Profile, sources: Iterable[str] | None = None) -> list[JournalEntry]:
+    """Merge journal sources for a profile, sorted newest-first.
 
     Args:
         profile: The profile whose journal to build.
+        sources: Keys from :data:`JOURNAL_SOURCES` to include. None (the
+            default) means every source, which is what the internal Memories
+            page wants; the external API passes the subset its caller's scopes
+            allow. Unknown keys are ignored rather than raising, so a caller
+            filtering against a stale key list degrades to fewer entries rather
+            than a 500.
 
     Returns:
-        List of JournalEntry across all sources, newest first.
+        List of JournalEntry across the selected sources, newest first.
     """
+    selected = JOURNAL_SOURCES.values() if sources is None else [JOURNAL_SOURCES[key] for key in sources if key in JOURNAL_SOURCES]
     entries: list[JournalEntry] = []
-    for source in _JOURNAL_SOURCES:
+    for source in selected:
         entries.extend(source(profile))
     entries.sort(key=lambda entry: entry.occurred_at, reverse=True)
     return entries

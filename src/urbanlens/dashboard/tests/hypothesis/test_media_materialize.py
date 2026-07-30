@@ -2,7 +2,7 @@
 item into a persisted Image row.
 
 Covers the two things changed to support "mark relevant -> save locally"
-(see docs/prompts/completed.md's "persist relevant media locally" entry):
+("persist relevant media locally" entry):
 - materialize_media_item's new `pin` parameter, and the dedup scoping that
   comes with it (a personal "save this for me" action must never reuse -
   or be reused by - another profile's already-materialized copy of the same
@@ -59,6 +59,14 @@ class MaterializeMediaItemTests(TestCase):
         self.assertEqual(image.caption, "A photo")
         self.assertTrue(image.checksum)
 
+    def test_sends_descriptive_user_agent(self) -> None:
+        """Wikimedia Commons 403s the default python-requests UA; materialize
+        must send the same descriptive UrbanLens agent the API gateways use."""
+        with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=_ok_response()) as mocked:
+            materialize_media_item(location=self.location, profile=self.profile, source="wikimedia", url="https://example.test/photo.jpg")
+        headers = mocked.call_args.kwargs.get("headers") or {}
+        self.assertIn("UrbanLens", headers.get("User-Agent", ""))
+
     def test_panel_key_loc_translates_to_library_of_congress(self) -> None:
         """The "loc" panel key never matched ImageSource.LIBRARY_OF_CONGRESS's
         real value ("library_of_congress") - without the translation this
@@ -66,6 +74,61 @@ class MaterializeMediaItemTests(TestCase):
         with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=_ok_response()):
             image = materialize_media_item(location=self.location, profile=self.profile, source="loc", url="https://example.test/photo.jpg")
         self.assertEqual(image.source, ImageSource.LIBRARY_OF_CONGRESS)
+
+    def test_resending_a_translated_source_item_reuses_the_row_instead_of_duplicating(self) -> None:
+        """Regression: the dedupe filter used to compare against the raw panel
+        key ("loc"), but rows are persisted with the *translated* ImageSource
+        value ("library_of_congress") - for any source with a translation,
+        that mismatch meant the dedupe lookup could never match, and every
+        repeat "send to wiki"/"mark relevant" click re-downloaded and
+        duplicated the row."""
+        with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=_ok_response()) as mocked:
+            first = materialize_media_item(location=self.location, profile=self.profile, source="loc", url="https://example.test/photo.jpg")
+            second = materialize_media_item(location=self.location, profile=self.profile, source="loc", url="https://example.test/photo.jpg")
+        self.assertEqual(first.pk, second.pk)
+        mocked.assert_called_once()
+
+    def test_sets_media_source_key_and_media_item_key(self) -> None:
+        from urbanlens.dashboard.models.images.relevance import media_item_key
+
+        with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=_ok_response()):
+            image = materialize_media_item(location=self.location, profile=self.profile, source="wikimedia", url="https://example.test/photo.jpg")
+        self.assertEqual(image.media_source_key, "wikimedia")
+        self.assertEqual(image.media_item_key, media_item_key("https://example.test/photo.jpg"))
+
+    def test_media_item_key_is_hashed_from_the_raw_url_not_page_url(self) -> None:
+        """MediaRelevance.item_key is always hashed from the raw image url
+        (see models.images.relevance.media_item_key's docstring) - Image.media_item_key
+        must match that exactly, even when a page_url is also given and ends
+        up stored as `source_url` instead."""
+        from urbanlens.dashboard.models.images.relevance import media_item_key
+
+        with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=_ok_response()):
+            image = materialize_media_item(
+                location=self.location,
+                profile=self.profile,
+                source="wikimedia",
+                url="https://example.test/full-res.jpg",
+                page_url="https://example.test/item-page",
+            )
+        self.assertEqual(image.source_url, "https://example.test/item-page")
+        self.assertEqual(image.media_item_key, media_item_key("https://example.test/full-res.jpg"))
+
+    def test_reusing_an_existing_row_backfills_missing_media_keys(self) -> None:
+        """A row materialized before these fields existed (or otherwise
+        missing them) gets backfilled on the next dedupe hit, rather than
+        staying permanently un-joinable to its MediaRelevance votes."""
+        legacy = baker.make(Image, location=self.location, source=ImageSource.WIKIMEDIA, source_url="https://example.test/photo.jpg", media_source_key=None, media_item_key=None)
+
+        from urbanlens.dashboard.models.images.relevance import media_item_key
+
+        with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get") as mocked:
+            reused = materialize_media_item(location=self.location, profile=self.profile, source="wikimedia", url="https://example.test/photo.jpg")
+
+        mocked.assert_not_called()
+        self.assertEqual(reused.pk, legacy.pk)
+        self.assertEqual(reused.media_source_key, "wikimedia")
+        self.assertEqual(reused.media_item_key, media_item_key("https://example.test/photo.jpg"))
 
     def test_unknown_source_falls_back_to_upload(self) -> None:
         with mock.patch("urbanlens.dashboard.services.media_materialize.requests.get", return_value=_ok_response()):

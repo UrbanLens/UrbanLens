@@ -178,6 +178,6 @@ def api_keys_settings_context(user: User, request: HttpRequest, **extra: object)
         "api_keys": list(ApiKey.objects.for_user(user).order_by("-created").prefetch_related("usage_log")),
         "new_api_key": request.session.pop("new_api_key", None),
         "external_api_whoami_url": request.build_absolute_uri(reverse("external_api:whoami")),
-        "external_api_pins_url": request.build_absolute_uri(reverse("external_api:pins.create")),
+        "external_api_pins_url": request.build_absolute_uri(reverse("external_api:pins")),
         **extra,
     }

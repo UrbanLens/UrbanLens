@@ -1098,4 +1098,16 @@
             color: $color-amber-300;
         }
     }
+
+    // .notif-prefs__saved had no dark variant, so the settings-saved confirmation
+    // banner rendered as a light-green patch on the dark settings page. Mirrors
+    // the .notif-item--unread friend_request/friend_accepted treatment above.
+    .notif-prefs__saved {
+        background: rgba($color-green-600, .15);
+        color: $color-green-400;
+    }
+
+    // .role-pill's dark override now lives in _admin.scss, colocated with the
+    // component - this file's copy was a dead duplicate (identical selector,
+    // _admin.scss's @use comes later in style.scss so its rule always won).
 }

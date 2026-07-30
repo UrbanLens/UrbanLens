@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING, Any
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.core.cache import cache
-from django.db import DatabaseError, transaction
+from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
@@ -23,12 +23,38 @@ from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from django.db.models import QuerySet
 
+    from urbanlens.dashboard.models.group_chats.model import GroupMessage
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.global_search.parser import ParsedQuery
 
 logger = logging.getLogger(__name__)
+
+
+class DirectMessageValidationError(ValueError):
+    """A direct message could not be created or modified as submitted.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
+
+
+class DirectMessagePermissionError(PermissionError):
+    """A direct-message action was refused because of who is involved.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
+
 
 #: Common emoji offered by the quick "add a reaction" picker on each message.
 REACTION_PICKER_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "🎉"]
@@ -174,16 +200,81 @@ def can_direct_message(sender: Profile, recipient: Profile) -> bool:
     return recipient.accepts_direct_messages_from(sender)
 
 
-def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
+def direct_message_images_visible_to(message: DirectMessage, viewer: Profile) -> bool:
+    """Whether ``viewer`` may be given the raw image URLs on ``message``.
+
+    The image-consent handshake (blurred preview + Allow / Allow Once / Reject)
+    only means anything if a recipient who has not yet consented never receives
+    the underlying media URL. A blur is a CSS property: shipping the real URL
+    and styling it out leaves the image one devtools inspection - or one glance
+    at the WebSocket frame - away from being viewed, which is precisely the
+    decision the prompt is asking the recipient to make.
+
+    Args:
+        message: The message whose attachments are being rendered.
+        viewer: The profile the payload is for.
+
+    Returns:
+        True for the sender (their own images), and for a recipient who has
+        either allowed this sender outright or revealed this one message via
+        "Allow Once". False for anyone else, including third parties.
+    """
+    if viewer.pk == message.sender_id:
+        return True
+    if viewer.pk != message.recipient_id:
+        return False
+    if message.images_revealed:
+        return True
+
+    from urbanlens.dashboard.models.direct_messages.image_permission import DirectMessageImagePermission
+    from urbanlens.dashboard.models.direct_messages.meta import ImagePermissionStatus
+
+    permission = DirectMessageImagePermission.objects.for_pair(viewer, message.sender).first()
+    return bool(permission and permission.status == ImagePermissionStatus.ALLOWED)
+
+
+def _serialize_images(message: DirectMessage, viewer: Profile | None) -> list[dict[str, Any]]:
+    """Render the message's attachments for one viewer, withholding URLs without consent.
+
+    Args:
+        message: The message whose attachments are being rendered.
+        viewer: The profile the payload is for, or None.
+
+    Returns:
+        One dict per attachment, always with ``id``, and with ``url`` only when
+        this viewer is entitled to it.
+    """
+    images = list(message.images.all())
+    include_urls = viewer is not None and direct_message_images_visible_to(message, viewer)
+    return [{"id": image.pk, **({"url": image.image.url} if include_urls else {})} for image in images]
+
+
+def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None = None) -> dict[str, Any]:
     """Serialize a message into the JSON payload pushed over the WebSocket.
 
     Args:
         message: The message to serialize.
+        viewer: The profile this payload will be delivered to. When given,
+            sender names are resolved through ``display_identity_for`` so a
+            live incoming message never reveals a name the server-rendered
+            thread would mask for that viewer (docs/PROBLEMS.md; decision
+            2026-07-23: per-recipient payloads), and image URLs are withheld
+            unless that viewer has consented to see them. None keeps the raw
+            names and *omits every image URL* - a payload with no identified
+            viewer cannot be shown to have consent, so it fails closed.
 
     Returns:
         A JSON-serializable dict; ``sender_slug``/``recipient_slug`` let the
-        frontend route the payload to the right open conversation.
+        frontend route the payload to the right open conversation. Each entry
+        in ``images`` always carries ``id``; ``url`` is present only when this
+        viewer may see it.
     """
+
+    def _name_for(subject: Profile) -> str:
+        if viewer is None or viewer.pk == subject.pk:
+            return subject.username
+        return display_identity_for(viewer, subject)["display_name"]
+
     reply_to = None
     if message.reply_to_id and message.reply_to is not None:
         quoted = message.reply_to
@@ -197,7 +288,7 @@ def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
             quoted_preview = "📷 Photo" if quoted.images.exists() else ("🗺️ Map" if quoted.markup_map_id else "Message")
         reply_to = {
             "id": quoted.pk,
-            "sender_name": quoted.sender.username,
+            "sender_name": _name_for(quoted.sender),
             "preview": quoted_preview,
             "ciphertext": quoted.ciphertext,
             "nonce": quoted.nonce,
@@ -213,9 +304,9 @@ def serialize_direct_message(message: DirectMessage) -> dict[str, Any]:
         "key_version": message.key_version,
         "created": message.created.isoformat(),
         "sender_slug": message.sender.slug or "",
-        "sender_name": message.sender.username,
+        "sender_name": _name_for(message.sender),
         "recipient_slug": message.recipient.slug or "",
-        "images": [{"id": image.pk, "url": image.image.url} for image in message.images.all()],
+        "images": _serialize_images(message, viewer),
         "images_revealed": message.images_revealed,
         "markup_map_uuid": str(message.markup_map.uuid) if message.markup_map is not None else None,
         # Only a cheap presence flag - the actual share (pin/trip/friend
@@ -243,14 +334,26 @@ def _broadcast_direct_message(message: DirectMessage) -> None:
     Args:
         message: The freshly created message.
     """
-    payload = serialize_direct_message(message)
-    groups = {direct_message_group_name(message.sender_id), direct_message_group_name(message.recipient_id)}
+    # Per-recipient payloads: the recipient's copy resolves the sender's name
+    # through their own visibility (a live message must never reveal a name a
+    # refresh would mask) and carries image URLs only once they have consented
+    # to see images from this sender.
+    #
+    # The sender's copy names them as viewer too, rather than passing None.
+    # For names that is identical (`_name_for` short-circuits when viewer is
+    # the subject), but it is what keeps the sender's *own* attachments
+    # visible in their own live thread now that a viewer-less payload
+    # deliberately withholds every URL.
+    deliveries = [
+        (direct_message_group_name(message.sender_id), serialize_direct_message(message, viewer=message.sender)),
+        (direct_message_group_name(message.recipient_id), serialize_direct_message(message, viewer=message.recipient)),
+    ]
 
     def _send() -> None:
         layer = get_channel_layer()
         if layer is None:
             return
-        for group in groups:
+        for group, payload in deliveries:
             try:
                 async_to_sync(layer.group_send)(group, {"type": "dm.message", "message": payload})
             except Exception:
@@ -290,7 +393,12 @@ def _notify_recipient(message: DirectMessage) -> None:
     if DirectMessageMute.objects.for_pair(message.recipient, message.sender).exists():
         return
 
-    already_unread = DirectMessage.objects.filter(sender=message.sender, recipient=message.recipient, read_at__isnull=True).exclude(pk=message.pk).exists()
+    # visible_to: a message the recipient already removed from their own view
+    # (deleted_by_recipient_at) must not keep suppressing new notifications
+    # from this sender - otherwise "Remove for me" on an unread message
+    # silently mutes that sender's future notifications until the recipient
+    # next opens the thread.
+    already_unread = DirectMessage.objects.visible_to(message.recipient).filter(sender=message.sender, recipient=message.recipient, read_at__isnull=True).exclude(pk=message.pk).exists()
     if already_unread:
         return
 
@@ -371,27 +479,41 @@ def _text_alert_debounce_key(sender_id: int, recipient_id: int) -> str:
 def is_email_debounced(sender_id: int, recipient_id: int) -> bool:
     """Return True if an email was already sent for this sender/recipient's current unread streak.
 
+    Checks and claims the debounce marker in one atomic ``cache.add`` - two
+    Celery workers racing on the same (sender, recipient) delayed task can't
+    both pass: only the first caller's ``cache.add`` succeeds (winning the
+    right to send), and it sets the marker in that same step rather than in
+    a later, separate ``cache.set`` inside ``send_message_email_now`` (which
+    previously left a plain check-then-act gap between the two).
+
     Args:
         sender_id: PK of the message sender.
         recipient_id: PK of the recipient.
 
     Returns:
-        True if the debounce marker is set.
+        True if an email for this streak already went out (or was just
+        claimed by a concurrent caller); False when this call just claimed
+        the marker and the caller should proceed to send.
     """
-    return bool(cache.get(_email_debounce_key(sender_id, recipient_id)))
+    return not cache.add(_email_debounce_key(sender_id, recipient_id), value=True, timeout=_EMAIL_DEBOUNCE_TTL_SECONDS)
 
 
 def is_text_alert_debounced(sender_id: int, recipient_id: int) -> bool:
     """Return True if a WhatsApp/SMS alert already went out for this unread streak.
 
+    Same atomic check-and-claim shape as :func:`is_email_debounced` - see its
+    docstring for why this can't be a plain ``cache.get``.
+
     Args:
         sender_id: PK of the message sender.
         recipient_id: PK of the recipient.
 
     Returns:
-        True if the debounce marker is set.
+        True if an alert for this streak already went out (or was just
+        claimed by a concurrent caller); False when this call just claimed
+        the marker and the caller should proceed to send.
     """
-    return bool(cache.get(_text_alert_debounce_key(sender_id, recipient_id)))
+    return not cache.add(_text_alert_debounce_key(sender_id, recipient_id), value=True, timeout=_EMAIL_DEBOUNCE_TTL_SECONDS)
 
 
 def clear_email_debounce(sender_id: int, recipient_id: int) -> None:
@@ -484,7 +606,8 @@ def send_message_text_alerts_now(message: DirectMessage) -> None:
     except AttributeError:
         return
 
-    cache.set(_text_alert_debounce_key(message.sender_id, message.recipient_id), 1, timeout=_EMAIL_DEBOUNCE_TTL_SECONDS)
+    # The debounce marker is already claimed atomically by the caller's
+    # is_text_alert_debounced() check - no separate cache.set() needed here.
 
     # Recipient-scoped masking, same as the thread/email/notification paths.
     sender_display_name = display_identity_for(message.recipient, message.sender)["display_name"]
@@ -515,7 +638,8 @@ def send_message_email_now(message: DirectMessage) -> None:
     if not recipient_email:
         return
 
-    cache.set(_email_debounce_key(message.sender_id, message.recipient_id), 1, timeout=_EMAIL_DEBOUNCE_TTL_SECONDS)
+    # The debounce marker is already claimed atomically by the caller's
+    # is_email_debounced() check - no separate cache.set() needed here.
 
     if message.is_encrypted:
         # End-to-end encrypted - the server has no plaintext to preview.
@@ -546,6 +670,31 @@ def send_message_email_now(message: DirectMessage) -> None:
         logger.exception("Failed to send new-message email to %s", recipient_email)
 
 
+def resolve_attachment_ids(sender: Profile, *, image_ids: list[int] | None = None, image_uuids: list[UUID] | None = None) -> list[int]:
+    """Merge integer ``image_ids`` with uuid-addressed ``image_uuids`` into one pk list.
+
+    ``image_uuids`` is the preferred field for new clients (``MessageSendSerializer``
+    accepts both, additively - see its docstring); this only resolves addressing.
+    Ownership and not-yet-attached eligibility are still enforced downstream by
+    ``create_direct_message`` regardless of which field a given id came from.
+
+    Args:
+        sender: The profile whose images may be attached.
+        image_ids: Pks from the legacy field, if any.
+        image_uuids: Uuids from the new field, if any.
+
+    Returns:
+        A deduplicated list of image pks, legacy ids first.
+    """
+    from urbanlens.dashboard.models.images.model import Image
+
+    ids = list(image_ids or [])
+    if image_uuids:
+        resolved = Image.objects.filter(uuid__in=image_uuids, profile=sender).values_list("pk", flat=True)
+        ids.extend(pk for pk in resolved if pk not in ids)
+    return ids
+
+
 def create_direct_message(
     sender: Profile,
     recipient: Profile,
@@ -557,6 +706,7 @@ def create_direct_message(
     image_ids: list[int] | None = None,
     markup_map_uuid: str | None = None,
     reply_to_id: int | None = None,
+    client_uuid: UUID | None = None,
     defer_broadcast: bool = False,
 ) -> DirectMessage:
     """Validate, persist, broadcast, and notify for one new direct message.
@@ -571,9 +721,17 @@ def create_direct_message(
         nonce: Base64 nonce for ``ciphertext`` (required with it).
         key_version: ``ConversationKey.version`` that encrypted this message.
         image_ids: PKs of the sender's own not-yet-attached ``Image`` rows
-            (uploaded separately beforehand) to attach to this message.
+            (uploaded separately beforehand) to attach to this message. Ids the
+            sender doesn't own, or that are already attached elsewhere, are
+            dropped; supplying only ineligible ids is an error rather than a
+            silently empty message.
         markup_map_uuid: UUID of a ``MarkupMap`` owned by the sender to attach.
         reply_to_id: PK of an earlier message in this conversation to quote.
+        client_uuid: Caller-generated idempotency key. When a message from this
+            sender already carries it, that message is returned untouched
+            instead of a duplicate being created - so an offline outbox can
+            retry a send until it is acknowledged without the recipient seeing
+            the same message twice.
         defer_broadcast: When True, skip the live WebSocket push - the caller
             is attaching a ``DirectMessageShare`` to this message right after
             and must call ``broadcast_direct_message`` once that's done, so
@@ -591,20 +749,45 @@ def create_direct_message(
     """
     from urbanlens.dashboard.services.e2ee import MAX_CIPHERTEXT_LENGTH, MAX_NONCE_LENGTH, valid_blob
 
+    # Idempotent replay, checked before validation and before the permission
+    # gate: the message this uuid names was already accepted and delivered, so
+    # re-answering with it is correct even if the sender's standing to send a
+    # *new* message has since changed (a later block must not turn a retry of
+    # an already-delivered message into an error the client retries forever).
+    if client_uuid is not None:
+        replayed = DirectMessage.objects.filter(sender=sender, client_uuid=client_uuid).first()
+        if replayed is not None:
+            return replayed
+
     body = body.strip()
     if len(body) > MAX_DIRECT_MESSAGE_LENGTH:
-        raise ValueError(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
+        raise DirectMessageValidationError(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
     if ciphertext:
         if body:
-            raise ValueError("A message is either plaintext or encrypted, never both.")
+            raise DirectMessageValidationError("A message is either plaintext or encrypted, never both.")
         if not valid_blob(ciphertext, MAX_CIPHERTEXT_LENGTH) or not valid_blob(nonce, MAX_NONCE_LENGTH) or key_version < 1:
-            raise ValueError("Malformed encrypted message.")
+            raise DirectMessageValidationError("Malformed encrypted message.")
     elif nonce or key_version:
-        raise ValueError("Malformed encrypted message.")
-    if not body and not ciphertext and not image_ids and not markup_map_uuid:
-        raise ValueError("Message cannot be empty.")
+        raise DirectMessageValidationError("Malformed encrypted message.")
+    # Attachments are resolved *before* the emptiness check, not after the
+    # insert. The check counts image_ids as content, but the attach step below
+    # filters them by ownership and un-attachedness - so a stale, foreign or
+    # already-attached id used to satisfy "not empty", create the message, then
+    # update zero rows. The result was a blank message, persisted, broadcast to
+    # the recipient and answered 201, for a request that attached nothing the
+    # caller asked for.
+    from urbanlens.dashboard.models.images.model import Image
+
+    eligible_image_ids: list[int] = []
+    if image_ids:
+        eligible_image_ids = list(Image.objects.filter(pk__in=image_ids, profile=sender, direct_message__isnull=True).values_list("pk", flat=True))
+        if not eligible_image_ids:
+            raise DirectMessageValidationError("None of those attachments are available to send.")
+
+    if not body and not ciphertext and not eligible_image_ids and not markup_map_uuid:
+        raise DirectMessageValidationError("Message cannot be empty.")
     if not can_direct_message(sender, recipient):
-        raise PermissionError("This user isn't accepting messages from you.")
+        raise DirectMessagePermissionError("This user isn't accepting messages from you.")
 
     from urbanlens.dashboard.models.markup.model import MarkupMap
 
@@ -616,22 +799,38 @@ def create_direct_message(
     if reply_to_id:
         reply_to = DirectMessage.objects.between(sender, recipient).filter(pk=reply_to_id).first()
 
-    message = DirectMessage.objects.create(
-        sender=sender,
-        recipient=recipient,
-        body=body,
-        ciphertext=ciphertext,
-        nonce=nonce,
-        key_version=key_version,
-        markup_map=markup_map,
-        reply_to=reply_to,
-        sender_delete_after=sender.direct_message_delete_after,
-    )
+    try:
+        # Nested atomic so a lost idempotency race raises inside its own
+        # savepoint - an IntegrityError would otherwise poison an outer
+        # transaction (share sends wrap this call in one) and take the
+        # caller's whole unit of work down with it.
+        with transaction.atomic():
+            message = DirectMessage.objects.create(
+                sender=sender,
+                recipient=recipient,
+                body=body,
+                ciphertext=ciphertext,
+                nonce=nonce,
+                key_version=key_version,
+                markup_map=markup_map,
+                reply_to=reply_to,
+                client_uuid=client_uuid,
+                sender_delete_after=sender.direct_message_delete_after,
+            )
+    except IntegrityError:
+        # Two retries of the same send landed concurrently and the other one
+        # committed first; its row is the canonical message.
+        replayed = DirectMessage.objects.filter(sender=sender, client_uuid=client_uuid).first() if client_uuid is not None else None
+        if replayed is None:
+            raise
+        return replayed
 
-    if image_ids:
-        from urbanlens.dashboard.models.images.model import Image
-
-        attached = Image.objects.filter(pk__in=image_ids, profile=sender, direct_message__isnull=True).update(direct_message=message)
+    if eligible_image_ids:
+        # Re-filtered rather than a bare pk__in on the resolved list: the
+        # ownership/un-attachedness conditions must still hold at write time,
+        # since a concurrent send could have claimed one of these images
+        # between the resolution above and here.
+        attached = Image.objects.filter(pk__in=eligible_image_ids, profile=sender, direct_message__isnull=True).update(direct_message=message)
         if attached:
             from urbanlens.dashboard.models.direct_messages.image_permission import DirectMessageImagePermission
 
@@ -741,7 +940,7 @@ def delete_message_for_everyone(message: DirectMessage, actor: Profile) -> Direc
         PermissionError: If `actor` isn't the message's sender.
     """
     if actor.pk != message.sender_id:
-        raise PermissionError("Only the sender can delete this message for everyone.")
+        raise DirectMessagePermissionError("Only the sender can delete this message for everyone.")
     if message.deleted_by_sender_at is None:
         message.deleted_by_sender_at = timezone.now()
         message.save(update_fields=["deleted_by_sender_at"])
@@ -772,7 +971,7 @@ def delete_message_for_self(message: DirectMessage, actor: Profile) -> DirectMes
         PermissionError: If `actor` isn't the message's recipient.
     """
     if actor.pk != message.recipient_id:
-        raise PermissionError("Only the recipient can remove this message from their own view.")
+        raise DirectMessagePermissionError("Only the recipient can remove this message from their own view.")
     if message.deleted_by_recipient_at is None:
         message.deleted_by_recipient_at = timezone.now()
         message.save(update_fields=["deleted_by_recipient_at"])
@@ -783,11 +982,19 @@ def delete_message_for_self(message: DirectMessage, actor: Profile) -> DirectMes
     return message
 
 
-def reaction_summary(message: DirectMessage) -> list[dict[str, Any]]:
+def reaction_summary(message: DirectMessage | GroupMessage) -> list[dict[str, Any]]:
     """Summarize a message's reactions grouped by emoji.
 
+    Accepts either message kind on purpose. ``Reaction`` is one table with a
+    nullable foreign key per host (see ``models.reactions``), so a group
+    message's reactions live in the same rows under the same ``reactions``
+    related name, and the summary a client renders is identical for both.
+    Writing a second, group-flavoured copy of this would be how the two
+    summaries eventually disagree about (say) how a masked reactor's slug is
+    reported, in a place nobody would think to compare.
+
     Args:
-        message: The message whose reactions to summarize.
+        message: The direct or group message whose reactions to summarize.
 
     Returns:
         A list of ``{"emoji", "count", "slugs"}`` dicts, one per distinct
@@ -844,7 +1051,7 @@ def toggle_reaction(profile: Profile, message: DirectMessage, emoji: str) -> str
     from urbanlens.dashboard.models.reactions.model import Reaction
 
     if profile.pk not in (message.sender_id, message.recipient_id):
-        raise PermissionError("You aren't part of this conversation.")
+        raise DirectMessagePermissionError("You aren't part of this conversation.")
 
     existing = Reaction.objects.existing(profile, emoji, direct_message=message)
     if existing:
@@ -855,6 +1062,59 @@ def toggle_reaction(profile: Profile, message: DirectMessage, emoji: str) -> str
         action = "added"
     _broadcast_reaction(message)
     return action
+
+
+def is_conversation_muted(viewer: Profile, partner: Profile) -> bool:
+    """Return whether `viewer` has muted notifications from `partner`.
+
+    Args:
+        viewer: The profile who may have muted.
+        partner: The profile whose messages may be muted.
+
+    Returns:
+        True when a mute row exists for this ordered pair.
+    """
+    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+
+    return DirectMessageMute.objects.for_pair(viewer, partner).exists()
+
+
+def set_conversation_muted(viewer: Profile, partner: Profile, *, muted: bool) -> bool:
+    """Put one conversation's mute state into the requested state, idempotently.
+
+    Declarative rather than a toggle, and that is the whole point of it
+    existing. Every caller before this one flipped the flag, which is unusable
+    over an unreliable link: a retried "mute" whose first (successful) response
+    was lost silently un-mutes the conversation, and the user then misses
+    exactly the notifications they asked to keep off - or gets back the ones
+    they silenced. Naming the desired end state makes a duplicate request a
+    no-op instead of an inversion.
+
+    Muting is **notification-only**, matching ``DirectMessageMute``'s own
+    contract: the conversation, its unread counts, and message delivery are all
+    untouched, and muted threads must keep appearing in the conversation list.
+    Filtering them out would look like a tidy extra feature and would instead
+    hide messages the user still expects to be able to find.
+
+    Args:
+        viewer: The profile whose notification preference this is.
+        partner: The profile whose messages are being muted or unmuted.
+        muted: The desired end state.
+
+    Returns:
+        The resulting mute state, which is always ``muted`` - returned so
+        callers can echo the persisted truth rather than the value they asked
+        for.
+    """
+    from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
+
+    if muted:
+        # get_or_create, not create: the unique constraint on (viewer, sender)
+        # would otherwise turn a retried mute into an IntegrityError 500.
+        DirectMessageMute.objects.get_or_create(viewer=viewer, sender=partner)
+    else:
+        DirectMessageMute.objects.for_pair(viewer, partner).delete()
+    return muted
 
 
 def display_identity_for(viewer: Profile, partner: Profile) -> dict[str, Any]:
@@ -902,7 +1162,11 @@ def conversations_for(profile: Profile) -> list[dict[str, Any]]:
         return []
 
     partners = ProfileModel.objects.select_related("user").in_bulk([row["partner_id"] for row in rows])
-    last_messages = DirectMessage.objects.in_bulk([row["last_message_id"] for row in rows])
+    # prefetch_related("images"): without it, a last message with no body
+    # (image-only or map-only send) makes the `message_preview` template tag's
+    # `images.exists()` fallback issue its own query per such row - an N+1
+    # across the sidebar's conversation list.
+    last_messages = DirectMessage.objects.filter(pk__in=[row["last_message_id"] for row in rows]).prefetch_related("images").in_bulk()
     muted_sender_ids = set(DirectMessageMute.objects.filter(viewer=profile).values_list("sender_id", flat=True))
 
     conversations = []
@@ -1010,7 +1274,10 @@ def thread_page(profile: Profile, partner: Profile, *, before_id: int | None = N
             "share__recommended_profile",
             "markup_map",
         )
-        .prefetch_related("images", "reactions__profile", "markup_map__items", "location_mentions__location", "location_mentions__pin_share")
+        # reply_to__images: without it, the reply-quote payload's fallback
+        # preview (`quoted.images.exists()` in serialize_direct_message)
+        # issues one extra query per reply message in the page.
+        .prefetch_related("images", "reactions__profile", "markup_map__items", "location_mentions__location", "location_mentions__pin_share", "reply_to__images")
     )
     if before_id is not None:
         queryset = queryset.filter(pk__lt=before_id)

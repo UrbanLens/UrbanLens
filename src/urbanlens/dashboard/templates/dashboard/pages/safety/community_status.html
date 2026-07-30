@@ -36,7 +36,13 @@ check-in, and a contact gets the same limited view rather than the full owner pa
 
 {% block content %}
 <div class="safety-page page-content">
+{% if is_archived %}
+    {% include "dashboard/partials/safety/_archived_notice.html" %}
+{% else %}
 
+    {% if checkin.is_resolved and archive_at %}
+    {% include "dashboard/partials/safety/_archive_countdown.html" %}
+    {% endif %}
 
     <div class="card safety-community-notice">
         {% if checkin.is_resolved %}
@@ -57,5 +63,7 @@ check-in, and a contact gets the same limited view rather than the full owner pa
 
     {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=True destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.destination_latitude map_center_lng=checkin.destination_longitude %}
 
+{% endif %}
 </div>
+{% include "dashboard/partials/safety/_dissolve_animation.html" %}
 {% endblock %}

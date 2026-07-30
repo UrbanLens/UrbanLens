@@ -188,6 +188,106 @@ def deserialize_criteria(stored: dict[str, Any], profile: Profile) -> dict[str, 
     return criteria
 
 
+class CriteriaOwnershipError(ValueError):
+    """Stored criteria referenced a label or custom field the profile may not use.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
+
+
+def referenced_label_ids(stored: dict[str, Any]) -> set[int]:
+    """Every Label primary key a stored criteria dict refers to.
+
+    Label pks appear in three places: the flat ``tags``/``exclude_tags`` lists
+    and the richer ``label_groups`` formula (``[{"op": ..., "ids": [...]}]``).
+
+    Args:
+        stored: A criteria dict in the stored (JSON-safe) shape.
+
+    Returns:
+        The set of referenced label pks. Non-integer entries are ignored - they
+        cannot match a real label, and this function's job is to enumerate, not
+        to validate the shape.
+    """
+    ids: set[int] = set()
+    for key in _LABEL_LIST_KEYS:
+        for value in stored.get(key) or []:
+            if isinstance(value, int):
+                ids.add(value)
+    for group in stored.get("label_groups") or []:
+        if not isinstance(group, dict):
+            continue
+        for value in group.get("ids") or []:
+            if isinstance(value, int):
+                ids.add(value)
+    return ids
+
+
+def referenced_custom_field_ids(stored: dict[str, Any]) -> set[int]:
+    """Every CustomField primary key a stored criteria dict refers to.
+
+    Args:
+        stored: A criteria dict in the stored (JSON-safe) shape.
+
+    Returns:
+        The set of referenced custom-field pks.
+    """
+    ids: set[int] = set()
+    for criterion in stored.get("custom_fields") or []:
+        if isinstance(criterion, dict) and isinstance(criterion.get("field_id"), int):
+            ids.add(criterion["field_id"])
+    return ids
+
+
+def validate_criteria_ownership(stored: dict[str, Any], profile: Profile) -> None:
+    """Refuse criteria that reference labels or custom fields *profile* may not use.
+
+    This check does not exist on the internal write paths, and its absence is
+    invisible there: the web form builds its label and custom-field pickers
+    from querysets already scoped to the user, so the browser never offers an
+    id the user cannot see. That is a *UI* constraint, not a data-layer one.
+
+    An API client is under no such obligation. Without this, a caller could
+    save a filter naming an arbitrary label or custom-field pk and read the
+    match count back out - turning saved filters into an oracle for probing
+    other users' (and global) primary-key space one id at a time. Any external
+    write path accepting ``criteria`` must call this.
+
+    ``deserialize_criteria`` silently drops unknown custom fields at *read*
+    time, which prevents them from affecting results but happens far too late
+    to stop the probe, and does nothing at all for label ids.
+
+    Args:
+        stored: A criteria dict in the stored (JSON-safe) shape.
+        profile: The profile the criteria will belong to.
+
+    Raises:
+        CriteriaOwnershipError: If any referenced label is not visible to
+            *profile*, or any referenced custom field is not theirs. The
+            message deliberately does not say which id was rejected, since
+            distinguishing "exists but not yours" from "does not exist" is the
+            very thing being denied.
+    """
+    from urbanlens.dashboard.models.custom_fields.model import CustomField
+    from urbanlens.dashboard.models.labels.model import Label
+
+    label_ids = referenced_label_ids(stored)
+    if label_ids:
+        visible = set(Label.objects.visible_to(profile).filter(pk__in=label_ids).values_list("pk", flat=True))
+        if visible != label_ids:
+            raise CriteriaOwnershipError("Filter criteria reference a label that does not exist.")
+
+    field_ids = referenced_custom_field_ids(stored)
+    if field_ids:
+        owned = set(CustomField.objects.filter(profile=profile, pk__in=field_ids).values_list("pk", flat=True))
+        if owned != field_ids:
+            raise CriteriaOwnershipError("Filter criteria reference a custom field that does not exist.")
+
+
 def _deserialize_custom_field_bounds(criterion: dict[str, Any]) -> dict[str, Any]:
     if "contains" in criterion:
         return {"contains": criterion["contains"]}

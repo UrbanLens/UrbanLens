@@ -19,7 +19,11 @@ import re
 
 from django.utils import timezone
 
-#: Words users type mapped to RESULT_TYPES slugs. Matched as whole tokens only.
+#: Words users type mapped to RESULT_TYPES slugs. Matched as whole tokens only,
+#: and only when the token is the FIRST word of the query (see
+#: ``_extract_type_keywords``) - many of these are ordinary English words
+#: ("pin", "map", "trip", "visit", "comment") that would otherwise hijack
+#: mid-sentence text like "please visit my page" into a visits-only search.
 TYPE_KEYWORDS: dict[str, str] = {
     "photo": "photos",
     "photos": "photos",
@@ -338,7 +342,12 @@ def _extract_dates(text: str, today: date) -> tuple[str, date | None, date | Non
         (re.compile(r"\bthis week\b"), lambda _m: (today - timedelta(days=today.weekday()), today)),
         (re.compile(r"\byesterday\b"), lambda _m: (today - timedelta(days=1), today - timedelta(days=1))),
         (re.compile(r"\btoday\b"), lambda _m: (today, today)),
-        (re.compile(r"\b(?:from |during |in )?(20\d{2})\b"), lambda m: (date(int(m.group(1)), 1, 1), date(int(m.group(1)), 12, 31))),
+        # The preposition is mandatory here (unlike the season/month patterns
+        # above, which explicitly allow bare mentions with a comment
+        # explaining why): a bare 4-digit token needs no other context to
+        # show up in ordinary text ("Building 2024", "Route 2027"), so
+        # treating it as an implicit date filter would be too eager.
+        (re.compile(r"\b(?:from|during|in)\s+(20\d{2})\b"), lambda m: (date(int(m.group(1)), 1, 1), date(int(m.group(1)), 12, 31))),
     ]
 
     for pattern, resolver in patterns:
@@ -380,8 +389,17 @@ def _extract_near_me(text: str) -> tuple[str, str | None]:
     return text, None
 
 
+#: Clause-introducing keywords recognized elsewhere in the pipeline (the
+#: "in/near/around/at <place>" clause, extracted right after the person
+#: clause - see call order in ``parse_query``). The person-clause match stops
+#: before one of these so "pins from Alice in Cincinnati" splits into
+#: person="alice" + place="cincinnati" instead of swallowing both into the
+#: person name.
+_CLAUSE_BOUNDARY_KEYWORDS = ("in", "near", "around", "at", "during")
+
+
 def _extract_person(text: str) -> tuple[str, str | None]:
-    """Strip a trailing "from <person>" clause from ``text``.
+    """Strip a "from <person>" clause from ``text``, stopping at the next clause.
 
     Only recognized when the query already named the ``messages`` or ``pins``
     type (see call site), so "photos from paris" keeps "paris" as free
@@ -394,8 +412,12 @@ def _extract_person(text: str) -> tuple[str, str | None]:
         (remaining text, person name or None).
     """
     # Bound matches Django's User.username max_length (150) so long usernames
-    # are still captured in full.
-    match = re.search(r"(?:^|\s)from\s+(.{2,150})$", text)
+    # are still captured in full. The match is non-greedy and stops before a
+    # following recognized clause keyword (e.g. "in <place>") rather than
+    # running to the end of the string, so "from Alice in Cincinnati" doesn't
+    # get read as a single person named "alice in cincinnati".
+    boundary = "|".join(_CLAUSE_BOUNDARY_KEYWORDS)
+    match = re.search(rf"(?:^|\s)from\s+(.{{2,150}}?)(?=\s+(?:{boundary})\s+|$)", text)
     if not match:
         return text, None
     # Unlike place names, usernames commonly include digits ("john123"), so
@@ -403,7 +425,10 @@ def _extract_person(text: str) -> tuple[str, str | None]:
     person = match.group(1).strip(" .,")
     if not person:
         return text, None
-    remaining = text[: match.start()].strip()
+    # Unlike the old end-anchored match, a following clause (e.g. "in
+    # cincinnati") is not consumed by the match (only asserted via lookahead),
+    # so it must be preserved in the remainder for _extract_place to see.
+    remaining = (text[: match.start()] + " " + text[match.end() :]).strip()
     return remaining, person
 
 
@@ -430,6 +455,62 @@ def _extract_place(text: str) -> tuple[str, str | None]:
     return remaining, place
 
 
+def _extract_type_keywords(working: str) -> tuple[str, set[str]]:
+    """Strip type-restricting keywords from ``working``, but only as the first word.
+
+    Many entries in ``TYPE_KEYWORDS`` are ordinary English words ("pin",
+    "map", "trip", "visit", "comment"). Restricting the match to the query's
+    first word preserves the useful "type-scoped search" pattern (e.g.
+    "photos of the abandoned mill") while eliminating false-positive hijacks
+    from the word appearing later in the sentence (e.g. "please visit my
+    page" should not become a visits-only search).
+
+    Args:
+        working: Lowercased query text with dates already removed.
+
+    Returns:
+        (remaining text, set of RESULT_TYPES slugs recognized).
+    """
+    # Type keywords are whole tokens; hyphens survive tokenization for "check-ins".
+    tokens = re.findall(r"[a-z0-9][a-z0-9'-]*", working)
+    types: set[str] = set()
+    kept_tokens: list[str] = []
+    for index, token in enumerate(tokens):
+        slug = TYPE_KEYWORDS.get(token) if index == 0 else None
+        if slug:
+            types.add(slug)
+        else:
+            kept_tokens.append(token)
+    return " ".join(kept_tokens), types
+
+
+def extract_fallback_terms(raw: str) -> list[str]:
+    """Reduce a raw query to leftover meaningful words, for the plain-text fallback.
+
+    Applies the same date-phrase, type-keyword, near-me-phrase, and stopword
+    stripping the primary parse uses, without imposing any of those as search
+    filters. Used by :class:`~urbanlens.dashboard.services.global_search.engine.GlobalSearchEngine`
+    when a structured interpretation (parsed place/date/type) matches
+    nothing, so e.g. "photos from last summer" retries on "summer" alone
+    instead of requiring the literal word "photos" in the target text.
+
+    Args:
+        raw: The query exactly as typed (``ParsedQuery.raw``).
+
+    Returns:
+        Lowercased leftover tokens with stopwords removed.
+    """
+    cleaned = " ".join(raw.split())
+    if not cleaned:
+        return []
+    today = timezone.localdate()
+    working = cleaned.lower()
+    working, _start, _end, _phrase = _extract_dates(working, today)
+    working, _types = _extract_type_keywords(working)
+    working, _near_phrase = _extract_near_me(working)
+    return [token for token in re.findall(r"[a-z0-9][a-z0-9'-]*", working) if token not in _STOPWORDS]
+
+
 def parse_query(raw: str) -> ParsedQuery:
     """Parse a raw global-search query into structured filters plus free text.
 
@@ -450,16 +531,7 @@ def parse_query(raw: str) -> ParsedQuery:
 
     working, parsed.date_start, parsed.date_end, parsed.date_phrase = _extract_dates(working, today)
 
-    # Type keywords are whole tokens; hyphens survive tokenization for "check-ins".
-    tokens = re.findall(r"[a-z0-9][a-z0-9'-]*", working)
-    kept_tokens: list[str] = []
-    for token in tokens:
-        slug = TYPE_KEYWORDS.get(token)
-        if slug:
-            parsed.types.add(slug)
-        else:
-            kept_tokens.append(token)
-    working = " ".join(kept_tokens)
+    working, parsed.types = _extract_type_keywords(working)
 
     working, parsed.near_phrase = _extract_near_me(working)
     parsed.near_me = parsed.near_phrase is not None

@@ -8,22 +8,50 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import redirect, render
-from django.template.loader import render_to_string
 from django.urls import reverse
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.controllers.notifications import _trigger_label_refresh
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
-from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
+from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.connections import get_connections
+from urbanlens.dashboard.services.friendship import (
+    FriendshipActionError,
+    FriendshipNotFoundError,
+    InviteRateLimitedError,
+    InviteValidationError,
+    _mark_friend_request_notifications_read,
+    accept_friend_request,
+    block_profile,
+    ignore_friend_request,
+    invite_by_email as invite_by_email_service,
+    mute_profile,
+    notify_friend_request,
+    reject_friend_request,
+    remove_friend as remove_friend_service,
+    request_or_accept_friendship,
+    unblock_profile,
+    unmute_profile,
+)
 from urbanlens.dashboard.services.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH, text_length_error
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from datetime import datetime
 
 logger = logging.getLogger(__name__)
+
+# Re-exported for callers that imported these from this module before the
+# transitions moved to ``services.friendship`` (the notification signal handlers
+# and several tests do). New code should import from the service directly.
+__all__ = [
+    "FriendController",
+    "_mark_friend_request_notifications_read",
+    "notify_friend_request",
+    "request_or_accept_friendship",
+]
 
 
 def _pending_cancel_token(profile_id: int, kind: str, pk: int) -> str:
@@ -154,102 +182,6 @@ def _friend_list_ctx(viewer: Profile | None, profile: Profile) -> dict:
     }
 
 
-def notify_friend_request(from_profile: Profile, to_profile: Profile, message: str | None = None) -> None:
-    """Create an in-app notification when a friend request is sent.
-
-    Args:
-        from_profile: Profile sending the request.
-        to_profile: Profile receiving the request.
-        message: Optional note the requester attached, appended to the notification.
-    """
-    try:
-        pref = to_profile.notification_preferences.friend_request
-    except AttributeError:
-        pref = DeliveryPreference.SITE
-
-    if pref == DeliveryPreference.NONE:
-        return
-
-    body = f"{from_profile.username} wants to be your friend."
-    if message:
-        body += f' "{message}"'
-
-    NotificationLog.objects.create(
-        profile=to_profile,
-        status=Status.UNREAD,
-        importance=Importance.MEDIUM,
-        notification_type=NotificationType.FRIEND_REQUEST,
-        title="New friend request",
-        message=body,
-        url=reverse("profile.view_user", kwargs={"profile_slug": from_profile.slug or str(from_profile.uuid)}),
-        source_profile=from_profile,
-    )
-
-
-def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, message: str | None = None) -> Friendship | None:
-    """Send a friend request, auto-accepting instead if one is already pending in reverse.
-
-    If `to_profile` already sent `from_profile` a pending request, the two profiles
-    clearly want to be friends - accept that request instead of creating a redundant
-    crossed request and a duplicate "new friend request" notification.
-
-    Args:
-        from_profile: Profile initiating this request.
-        to_profile: Profile being requested.
-        message: Optional note from the requester. Ignored when this call
-            resolves to an auto-accept (both profiles already wanted to be
-            friends, so there's no pending request left to attach a note to).
-
-    Returns:
-        The resulting Friendship (pending or newly accepted), or None if the request
-        could not be created.
-    """
-    existing = Friendship.objects.all().between(from_profile, to_profile)
-    if existing and existing.status == FriendshipStatus.REQUESTED and existing.from_profile_id == to_profile.pk:
-        if not existing.accept():
-            return None
-        NotificationLog.objects.create(
-            profile=to_profile,
-            status=Status.UNREAD,
-            importance=Importance.MEDIUM,
-            notification_type=NotificationType.FRIEND_ACCEPTED,
-            title="Friend request accepted",
-            message=f"{from_profile.username} accepted your friend request.",
-            url=reverse("profile.view_user", kwargs={"profile_slug": from_profile.slug or str(from_profile.uuid)}),
-            source_profile=from_profile,
-        )
-        # Mark from_profile's own pending friend_request notification (from to_profile) as read
-        NotificationLog.objects.filter(
-            profile=from_profile,
-            notification_type=NotificationType.FRIEND_REQUEST,
-            source_profile_id=to_profile.pk,
-        ).update(status=Status.READ)
-        return existing
-
-    friendship = Friendship.request(from_profile=from_profile, to_profile=to_profile.pk, message=message)
-    if friendship:
-        notify_friend_request(from_profile, to_profile, message)
-    return friendship
-
-
-def _mark_friend_request_notifications_read(viewer_profile: Profile, source_profile_id: int) -> None:
-    """Mark the viewer's pending "new friend request" notification(s) from a source as read.
-
-    Accepting/declining/ignoring a request on the profile page (rather than via the
-    notification dropdown's own accept/decline buttons) previously left the originating
-    notification unread indefinitely, inflating the bell label count forever.
-
-    Args:
-        viewer_profile: Profile who just acted on the request.
-        source_profile_id: pk of the profile that sent the request.
-    """
-    NotificationLog.objects.filter(
-        profile=viewer_profile,
-        notification_type=NotificationType.FRIEND_REQUEST,
-        source_profile_id=source_profile_id,
-    ).update(status=Status.READ)
-
-
 def _mark_incoming_request_notifications_read(viewer_profile: Profile, incoming_requests: list[Friendship]) -> None:
     """Mark "new friend request" notifications read once the owner views the pending requests.
 
@@ -341,125 +273,123 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             )
         return _redirect_to_profile(profile_id)
 
-    def accept_friend(self, request: HttpRequest, profile_id: int):
+    def _friend_action(
+        self,
+        request: HttpRequest,
+        profile_id: int,
+        action: Callable[[Profile, Profile], Friendship],
+        *,
+        htmx_response: Callable[[HttpRequest], HttpResponse],
+        missing_message: str = "Friend request not found.",
+    ) -> HttpResponse:
+        """Run one ``services.friendship`` transition and render this controller's reply.
+
+        The transitions themselves (and their error taxonomy) live in the
+        service so the external API shares them; this only maps those errors
+        onto the status codes the profile-page buttons have always returned.
+
+        Args:
+            request: The incoming request.
+            profile_id: pk of the other profile in the relationship.
+            action: The service function to apply, as ``(actor, target)``.
+            htmx_response: Builds the partial returned to an HTMX caller.
+            missing_message: Body used when the target profile does not exist.
+
+        Returns:
+            The rendered partial (HTMX) or a redirect back to the profile.
+        """
         if not isinstance(request.user, User):
             return HttpResponse("Authentication required.", status=401)
+
+        target = Profile.objects.filter(pk=profile_id).first()
+        if target is None:
+            return HttpResponse(missing_message, status=404)
+
         try:
-            friendship = Friendship.objects.all().between(profile_id, request.user.profile)
-        except Friendship.DoesNotExist:
-            return HttpResponse("Friend request not found.", status=404)
-        if not friendship:
-            return HttpResponse("Friend request not found.", status=404)
-
-        if not friendship.accept():
-            if Friendship.profile_at_max_friends(request.user.profile) or Friendship.profile_at_max_friends(friendship.from_profile):
-                return HttpResponse("This would exceed the maximum number of friends allowed.", status=403)
-            return HttpResponse("Enable Community in Settings to accept friend requests.", status=403)
-
-        # Notify the original requester that their request was accepted.
-        requester = friendship.from_profile if friendship.to_profile == request.user.profile else friendship.to_profile
-        NotificationLog.objects.create(
-            profile=requester,
-            status=Status.UNREAD,
-            importance=Importance.MEDIUM,
-            notification_type=NotificationType.FRIEND_ACCEPTED,
-            title="Friend request accepted",
-            message=f"{request.user.profile.username} accepted your friend request.",
-            url=reverse("profile.view_user", kwargs={"profile_slug": request.user.profile.slug or str(request.user.profile.uuid)}),
-        )
-        _mark_friend_request_notifications_read(request.user.profile, profile_id)
+            action(request.user.profile, target)
+        except FriendshipNotFoundError as exc:
+            return HttpResponse(exc.safe_message, status=404)
+        except FriendshipActionError as exc:
+            # Covers FriendLimitExceededError and the community-disabled case,
+            # both of which this surface has always answered with 403.
+            return HttpResponse(exc.safe_message, status=403)
 
         if request.headers.get("HX-Request"):
-            return _own_friend_widget_response(request)
+            return htmx_response(request)
         return _redirect_to_profile(profile_id)
+
+    def accept_friend(self, request: HttpRequest, profile_id: int):
+        """Accept a pending friend request from ``profile_id``."""
+        return self._friend_action(request, profile_id, accept_friend_request, htmx_response=_own_friend_widget_response)
 
     def reject_friend(self, request: HttpRequest, profile_id: int):
-        if not isinstance(request.user, User):
-            return HttpResponse("Authentication required.", status=401)
-        try:
-            friendship = Friendship.objects.all().between(profile_id, request.user.profile)
-        except Friendship.DoesNotExist:
-            return HttpResponse("Friend request not found.", status=404)
-        if not friendship:
-            return HttpResponse("Friend request not found.", status=404)
-
-        friendship.decline()
-        _mark_friend_request_notifications_read(request.user.profile, profile_id)
-        if request.headers.get("HX-Request"):
-            return _own_friend_widget_response(request)
-        return _redirect_to_profile(profile_id)
+        """Decline a pending friend request from ``profile_id``."""
+        return self._friend_action(request, profile_id, reject_friend_request, htmx_response=_own_friend_widget_response)
 
     def ignore_friend(self, request: HttpRequest, profile_id: int):
         """Ignore a friend request - no notification sent, button stays unavailable."""
-        if not isinstance(request.user, User):
-            return HttpResponse("Authentication required.", status=401)
-        try:
-            friendship = Friendship.objects.all().between(profile_id, request.user.profile)
-        except Friendship.DoesNotExist:
-            return HttpResponse("Friend request not found.", status=404)
-        if not friendship:
-            return HttpResponse("Friend request not found.", status=404)
-
-        friendship.ignore()
-        _mark_friend_request_notifications_read(request.user.profile, profile_id)
-        if request.headers.get("HX-Request"):
-            return _own_friend_widget_response(request)
-        return _redirect_to_profile(profile_id)
+        return self._friend_action(request, profile_id, ignore_friend_request, htmx_response=_own_friend_widget_response)
 
     def block_friend(self, request: HttpRequest, profile_id: int):
-        if not isinstance(request.user, User):
-            return HttpResponse("Authentication required.", status=401)
-        try:
-            friendship = Friendship.objects.all().between(profile_id, request.user.profile)
-        except Friendship.DoesNotExist:
-            friendship = None
+        """Block ``profile_id``, creating the relationship row if there isn't one."""
+        return self._friend_action(
+            request,
+            profile_id,
+            block_profile,
+            htmx_response=lambda _request: HttpResponse("Profile blocked."),
+            missing_message="Profile not found.",
+        )
 
-        if friendship:
-            friendship.status = FriendshipStatus.BLOCKED
-            friendship.save()
-        else:
-            other = Profile.objects.filter(pk=profile_id).first()
-            if not other:
-                return HttpResponse("Profile not found.", status=404)
-            Friendship.objects.create(
-                from_profile=request.user.profile,
-                to_profile=other,
-                status=FriendshipStatus.BLOCKED,
-            )
-        if request.headers.get("HX-Request"):
-            return HttpResponse("Profile blocked.")
-        return _redirect_to_profile(profile_id)
+    def unblock_friend(self, request: HttpRequest, profile_id: int):
+        """Lift a block this user placed on ``profile_id``.
+
+        The profile page's Unblock button used to post to ``friend.remove``,
+        which reached ``remove_friend`` - a direction-agnostic transition that
+        would just as happily clear a block placed *on* the caller by someone
+        else. That is now refused at the service, so the button needs the real
+        inverse; ``unblock_profile`` also answers 404 rather than 403 when the
+        block is not the caller's, so nothing here confirms one exists.
+        """
+        return self._friend_action(
+            request,
+            profile_id,
+            unblock_profile,
+            htmx_response=lambda _request: HttpResponse("Unblocked."),
+            missing_message="Profile not found.",
+        )
 
     def mute_friend(self, request: HttpRequest, profile_id: int):
-        if not isinstance(request.user, User):
-            return HttpResponse("Authentication required.", status=401)
-        try:
-            friendship = Friendship.objects.all().between(profile_id, request.user.profile)
-        except Friendship.DoesNotExist:
-            return HttpResponse("Friend request not found.", status=404)
-        if not friendship:
-            return HttpResponse("Friend request not found.", status=404)
+        """Mute an existing relationship with ``profile_id``.
 
-        friendship.status = FriendshipStatus.MUTED
-        friendship.save()
-        if request.headers.get("HX-Request"):
-            return HttpResponse("Muted.")
-        return _redirect_to_profile(profile_id)
+        Sets the ``muted`` flag only - the relationship itself (and so every
+        visibility gate that reads ``Profile.are_friends``) is untouched. See
+        ``services.friendship.mute_profile``.
+        """
+        return self._friend_action(
+            request,
+            profile_id,
+            mute_profile,
+            htmx_response=lambda _request: HttpResponse("Muted."),
+        )
+
+    def unmute_friend(self, request: HttpRequest, profile_id: int):
+        """Un-mute an existing relationship with ``profile_id``.
+
+        The counterpart the profile page never had. Its Unmute button used to
+        post to ``friend.request``, which ``FriendshipStatus.can_request``
+        refuses for a ``Muted`` row, so unmuting always answered 400 and the
+        relationship could not be recovered from the UI at all.
+        """
+        return self._friend_action(
+            request,
+            profile_id,
+            unmute_profile,
+            htmx_response=lambda _request: HttpResponse("Unmuted."),
+        )
 
     def remove_friend(self, request: HttpRequest, profile_id: int):
-        if not isinstance(request.user, User):
-            return HttpResponse("Authentication required.", status=401)
-        try:
-            friendship = Friendship.objects.all().between(profile_id, request.user.profile)
-        except Friendship.DoesNotExist:
-            return HttpResponse("Friend request not found.", status=404)
-        if not friendship:
-            return HttpResponse("Friend request not found.", status=404)
-
-        friendship.remove()
-        if request.headers.get("HX-Request"):
-            return _own_friend_widget_response(request)
-        return _redirect_to_profile(profile_id)
+        """End an existing friendship with ``profile_id``."""
+        return self._friend_action(request, profile_id, remove_friend_service, htmx_response=_own_friend_widget_response)
 
     def cancel_pending(self, request: HttpRequest, token: str):
         """Cancel one of the current user's own pending outgoing requests, by opaque token.
@@ -613,42 +543,12 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         account, since that would let a caller enumerate site membership by
         trying addresses one at a time.
         """
-        import smtplib
-
         from django.contrib.auth.models import User
-        from django.core.exceptions import ValidationError
-        from django.core.mail import EmailMultiAlternatives
-        from django.core.validators import validate_email
-
-        from urbanlens.dashboard.models.email_log import EmailType
-        from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
-        from urbanlens.dashboard.services.email_normalization import find_user_by_email, normalize_email
-        from urbanlens.dashboard.services.email_safety import email_rate_limit_error, has_sent_join_email, record_email_sent
 
         if not isinstance(request.user, User):
             return HttpResponse("Authentication required.", status=401)
 
-        email = request.POST.get("email", "").strip().lower()
-        try:
-            validate_email(email)
-        except ValidationError:
-            return HttpResponse("Please enter a valid email address.", status=400)
-
         inviter = request.user.profile
-        if normalize_email(email) == normalize_email(inviter.email):
-            return HttpResponse("That's your own email address.", status=400)
-
-        message = request.POST.get("message", "").strip()
-        length_error = text_length_error(message, MAX_FRIEND_REQUEST_MESSAGE_LENGTH, "Message")
-        if length_error:
-            return HttpResponse(length_error, status=400)
-
-        # Rate limiting must be checked before we know whether the address is
-        # registered - erroring only on the actually-sends-an-email path would
-        # let a capped caller distinguish member from non-member addresses.
-        rate_limit_error = email_rate_limit_error(inviter)
-        if rate_limit_error:
-            return HttpResponse(rate_limit_error, status=429)
 
         subscription_role_slug = request.POST.get("subscription_role", "").strip()
         subscription_duration = request.POST.get("subscription_duration", "")
@@ -659,65 +559,19 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
             SubscriptionRole.ensure_defaults()
             subscription_role = SubscriptionRole.objects.get_by_slug(subscription_role_slug)
 
-        existing_user = find_user_by_email(email)
-        if existing_user:
-            to_profile = existing_user.profile
-            # Respect visibility settings silently - no error, no distinguishable response.
-            if to_profile != inviter and to_profile.friend_request_visibility != VisibilityChoice.NO_ONE:
-                friendship = request_or_accept_friendship(inviter, to_profile, message or None)
-                if friendship and subscription_role is not None:
-                    from urbanlens.dashboard.controllers.site_admin import _parse_duration_months
-                    from urbanlens.dashboard.models.subscriptions import grant_subscription
-
-                    grant_subscription(existing_user, subscription_role, request.user, _parse_duration_months(subscription_duration))
-        else:
-            # No registered account - create an invitation token and send email.
-            # Avoid duplicate pending invitations from the same inviter.
-            FriendInvitation.objects.filter(
-                inviter=inviter,
-                email=email,
-                accepted_at__isnull=True,
-            ).delete()
-
-            invitation = FriendInvitation(inviter=inviter, email=email, message=message or None)
-            invitation.save()
-            if subscription_role is not None:
-                from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant
-
-                PendingSubscriptionGrant.objects.create(
-                    invitation=invitation,
-                    role=subscription_role,
-                    granted_by=request.user,
-                    duration_months="" if subscription_duration == "indefinite" else subscription_duration,
-                )
-
-            # A given user only ever sends one join-the-site email to a given
-            # address - the invitation row above still enables auto-friending
-            # on sign-up, but the mailbox is not contacted again.
-            if not has_sent_join_email(inviter, email):
-                signup_url = request.build_absolute_uri(
-                    f"/signup/?invite={invitation.token}",
-                )
-                context = {
-                    "inviter": inviter,
-                    "signup_url": signup_url,
-                    "message": message or None,
-                }
-                subject = f"{inviter.username} invited you to join UrbanLens"
-                text_body = f"Hi,\n\n{inviter.username} invited you to join UrbanLens - a private mapping platform for urban explorers and photographers."
-                if message:
-                    text_body += f'\n\n"{message}"'
-                text_body += f"\n\nAccept the invitation:\n{signup_url}\n\n- UrbanLens"
-                html_body = render_to_string("dashboard/email/friend_invite.html", context)
-
-                try:
-                    msg = EmailMultiAlternatives(subject=subject, body=text_body, from_email=None, to=[email])
-                    msg.attach_alternative(html_body, "text/html")
-                    msg.send()
-                except (smtplib.SMTPException, OSError):
-                    logger.exception("Failed to send friend invitation to %s", email)
-                else:
-                    record_email_sent(inviter, email, EmailType.JOIN_INVITE)
+        try:
+            invite_by_email_service(
+                inviter,
+                request.POST.get("email", ""),
+                request.POST.get("message", ""),
+                signup_url_builder=lambda token: request.build_absolute_uri(f"/signup/?invite={token}"),
+                subscription_role=subscription_role,
+                subscription_duration=subscription_duration,
+            )
+        except InviteValidationError as exc:
+            return HttpResponse(exc.safe_message, status=400)
+        except InviteRateLimitedError as exc:
+            return HttpResponse(exc.safe_message, status=429)
 
         # The response body must be byte-identical no matter what happened above -
         # embedding a friend-list refresh directly here would let a caller tell a

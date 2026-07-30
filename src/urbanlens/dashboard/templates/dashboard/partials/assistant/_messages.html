@@ -1,0 +1,25 @@
+{% comment %}
+The assistant chat log. Assistant entries may carry an ``actions`` list -
+human-readable labels of the tools it ran for that turn.
+{% endcomment %}
+<div id="assistant-messages" class="assistant-messages">
+    {% if not messages_history %}
+    <div class="assistant-empty">
+        <i class="material-symbols-outlined">travel_explore</i>
+        <p>Ask me to find pins you haven't visited, plan a trip, or pull together places for a weekend.</p>
+        <p class="assistant-empty-hint">Try: &ldquo;Plan a trip with three unvisited pins&rdquo;</p>
+    </div>
+    {% endif %}
+    {% for entry in messages_history %}
+    <div class="assistant-msg assistant-msg--{{ entry.role }}">
+        <div class="assistant-msg-bubble">{{ entry.content|linebreaksbr }}</div>
+        {% if entry.actions %}
+        <div class="assistant-msg-actions">
+            {% for action in entry.actions %}
+            <span class="badge badge--muted"><i class="material-symbols-outlined">check</i>{{ action }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>

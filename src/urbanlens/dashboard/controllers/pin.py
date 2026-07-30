@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
     from rest_framework.request import Request
 
-    from urbanlens.dashboard.services.external_data import LocationCachePanelSource, ProviderFetchResult
+    from urbanlens.dashboard.services.external_data import LocationCachePanelSource, PanelSource, ProviderFetchResult
 
 logger = logging.getLogger(__name__)
 
@@ -48,8 +48,8 @@ _WEB_SEARCH_CLIENT_PAGE_SIZE = 5
 # section's default "All" view - matches image_gallery.PinGalleryView's own
 # per-page size, so the preview shows the same "at a glance" amount as the
 # old standalone Photos section did. Browsing beyond this many is still
-# fully supported (unlimited, paginated) via the section's "Mine" tab - see
-# docs/prompts/completed.md's Photos+Media merge entry for why the preview
+# fully supported (unlimited, paginated) via the section's "Mine" tab -
+# Photos+Media merge entry for why the preview
 # is capped instead of listing every photo into the client-side gallery.
 _MEDIA_PHOTOS_PREVIEW_LIMIT = 12
 _ADAPTIVE_PAGE_BATCH_MULTIPLIER = 2
@@ -76,14 +76,19 @@ _CONDENSED_PLUGIN_TABS = {
 }
 
 # InfoPanelSource keys appended to the same "Regional Data" tab strip (see
-# panel_tabs below) only when the viewer has SiteFeature.NEARBY_RESEARCH -
-# data about facilities/features *near* the pin rather than at its own
-# coordinates, which is exactly what a free EPA-facility-detail card at this
-# pin's own location doesn't cover. EPA's nearby-facility list (as opposed to
-# its unconditional exact-site detail card, "epa_echo_detail" - see
+# panel_tabs below) - data about facilities/features *near* the pin rather than
+# at its own coordinates, which is exactly what a free EPA-facility-detail card
+# at this pin's own location doesn't cover. EPA's nearby-facility list (as
+# opposed to its unconditional exact-site detail card, "epa_echo_detail" - see
 # plugins/builtin/epa_echo.py) is the first tab; more sources land here later.
-# Kept as a separate dict from _CONDENSED_PLUGIN_TABS (rather than merged into
-# one) purely so the subscription gate has a clean boundary to filter on.
+#
+# This dict decides *ordering and labels only*. Whether a viewer may see any of
+# these tabs is decided by each source's own PanelSource.required_feature (see
+# _viewer_may_see_panel), NOT by membership here - a panel's gate has to be one
+# fact in one place, or the tab strip and the endpoint that serves the tab's
+# content end up disagreeing about who may see it. That disagreement is not
+# hypothetical: this dict used to BE the gate, and pin.panel served every one
+# of these panels to anyone who typed the URL.
 _NEARBY_RESEARCH_TABS = {
     "epa_echo": "EPA",
 }
@@ -109,6 +114,32 @@ _METERS_PER_FOOT = 0.3048
 # used by location_data_overview to build its combined summary. Order here is
 # the order sections appear in the Overview tab.
 _LOCATION_DATA_OVERVIEW_KEYS = ["nominatim", *_LOCATION_DATA_PLUGIN_TABS.keys()]
+
+
+def _viewer_may_see_panel(request: HttpRequest, source: PanelSource) -> bool:
+    """Whether this request's user holds the subscription feature a panel requires.
+
+    Asked both when the page's tab strip is assembled and again when
+    ``panel_info`` is asked for that panel's content. Both have to consult the
+    same fact: hiding a tab is presentation, and ``pin.panel`` is a plain URL
+    that anyone logged in can type, so a gate applied only during tab assembly
+    withholds nothing at all.
+
+    Delegates to ``services.external_data.panel_visible_to``, which is also
+    what the external API's panel endpoints call - a feature-gated panel must
+    never be visible on one surface and hidden on the other.
+
+    Args:
+        request: The current request, for its authenticated user.
+        source: The panel source being considered.
+
+    Returns:
+        True when the source is unrestricted (the overwhelming majority) or the
+        viewer holds the feature it requires.
+    """
+    from urbanlens.dashboard.services.external_data import panel_visible_to
+
+    return panel_visible_to(request.user, source)
 
 
 class PinController(LoginRequiredMixin, GenericViewSet):
@@ -176,7 +207,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # parcel's building list stands in for them. See services.locations.site_scope.
         site_scope = is_site_scope(pin)
 
-        # Page-wide "show sub pin details" toggle: when on (?children=1), the
+        # Page-wide "show child pin details" toggle: when on (?children=1), the
         # map, photo gallery, and visit history all include content from this
         # pin's child pins (any depth). Off by default so the page stays
         # simple for the majority of users who never nest pins - except on a
@@ -191,9 +222,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if pin.cover_photo_id:
             pin_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in pin.images.exclude(pk=pin.cover_photo_id).order_by("-created")[:20] if img.image]
 
-        from urbanlens.dashboard.services.external_data import InfoPanelSource, panel_sources
+        from urbanlens.dashboard.services.external_data import InfoPanelSource, panel_readiness, panel_sources
 
-        all_info_panels = {source.key: source for source in panel_sources().values() if isinstance(source, InfoPanelSource)}
+        # Subscription-gated sources are filtered out once, here, rather than at
+        # each of the four surfaces built from this dict below (three tab strips
+        # plus the auto-loading standalone panels) - a source the viewer may not
+        # see is then absent from all of them by construction, instead of each
+        # surface having to remember to ask.
+        all_info_panels = {source.key: source for source in panel_sources().values() if isinstance(source, InfoPanelSource) and _viewer_may_see_panel(request, source)}
         condensed_panel_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _CONDENSED_PLUGIN_TABS.items() if key in all_info_panels]
         nearby_research_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _NEARBY_RESEARCH_TABS.items() if key in all_info_panels]
         location_data_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _LOCATION_DATA_PLUGIN_TABS.items() if key in all_info_panels]
@@ -204,13 +240,20 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # with their own tab strip - merged into one "Regional Data" section.
         # The (subscription-gated) Nearby Research tabs are appended after the
         # always-available ones rather than interleaved, so the free tabs stay
-        # in a stable position regardless of the viewer's subscription.
-        panel_tabs = condensed_panel_tabs + (nearby_research_tabs if user_has_feature(request.user, SiteFeature.NEARBY_RESEARCH) else [])
+        # in a stable position regardless of the viewer's subscription. No
+        # feature check here: nearby_research_tabs is already empty for a viewer
+        # without the feature, because all_info_panels dropped its sources.
+        panel_tabs = condensed_panel_tabs + nearby_research_tabs
 
         # If any tab already has fresh cached data, show it immediately instead of
         # making the user click a tab first to discover that - the first tab (in
         # display order) that's ready wins, matching the order the tabs are shown in.
-        default_panel_tab_key = next((tab["key"] for tab in panel_tabs if all_info_panels[tab["key"]].is_ready(pin)), None)
+        # Readiness is resolved in one bulk pass: asking each source its own
+        # is_ready() is a LocationCache query per tab, all answering the same
+        # "which of this location's cache rows are fresh?" question, and this
+        # runs on every pin detail page render.
+        tab_readiness = panel_readiness(pin, [all_info_panels[tab["key"]] for tab in panel_tabs])
+        default_panel_tab_key = next((tab["key"] for tab in panel_tabs if tab_readiness[tab["key"]]), None)
 
         # Whether the profile has ever added/kept an alias on ANY pin - not just this
         # one - so the aliases onboarding card stops nagging once the feature is
@@ -473,11 +516,27 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return self._pending_media(request, pin, source)
         items = panel.media_items(cached.data or {})
 
+        from urbanlens.dashboard.services.media_relevance import local_images_for_gallery_items
+
         profile, _ = Profile.objects.get_or_create(user=request.user)
         relevance = dict(
             MediaRelevance.objects.for_gallery(profile, location, source).values_list("item_key", "is_relevant"),
         )
-        rendered_items = [{"item": item, "key": media_item_key(item.url), "is_relevant": relevance.get(media_item_key(item.url))} for item in items]
+        # Prefer an already-materialized local copy over hot-linking the
+        # provider, if anyone (this profile or another) has previously voted
+        # this exact item relevant - see media_relevance.py and
+        # services.media_materialize's docstring. The remote page_url stays
+        # the "Open source" link regardless, so the original is never lost.
+        local_images = local_images_for_gallery_items(location, source, [item.url for item in items])
+        rendered_items = [
+            {
+                "item": item,
+                "key": media_item_key(item.url),
+                "is_relevant": relevance.get(media_item_key(item.url)),
+                "local_url": local_images[item.url].image.url if item.url in local_images else None,
+            }
+            for item in items
+        ]
 
         # Render even when a provider found nothing, so admins can see what was
         # searched (including every candidate query tried) in the debug overlay
@@ -589,7 +648,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             try:
                 coordinates = coerce_coordinates(data)
             except ValueError as exc:
-                return JsonResponse({"error": str(exc)}, status=400)
+                # coerce_coordinates() raises one of a fixed set of
+                # developer-authored literals; match rather than echo exc so a
+                # future raise site added there can't leak unsafe text here.
+                if str(exc) == "Coordinates must be finite numbers.":
+                    return JsonResponse({"error": "Coordinates must be finite numbers."}, status=400)
+                if str(exc) == "Coordinates out of range.":
+                    return JsonResponse({"error": "Coordinates out of range."}, status=400)
+                return JsonResponse({"error": "Invalid request data."}, status=400)
 
         item_key = data.get("item_key") or media_item_key(url)
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -611,8 +677,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             try:
                 image = materialize_media_item(location=pin.location, profile=profile, source=source, url=url, page_url=page_url, caption=caption, pin=pin)
             except MaterializeError as exc:
+                # MaterializeError can embed raw requests/OSError text (e.g. a
+                # failed download), which isn't safe to return verbatim - log
+                # it server-side and surface a generic message instead.
                 logger.warning("media_relevance: failed to materialize %s: %s", url, exc)
-                response["materialize_error"] = str(exc)
+                response["materialize_error"] = "Could not save this photo."
             else:
                 response["image_id"] = image.pk
                 response["image_url"] = image.image.url
@@ -662,8 +731,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 )
                 created += 1
             except MaterializeError as exc:
+                # Same rationale as media_relevance above: don't echo exc.
                 logger.warning("media_send_to_wiki: failed to materialize %s: %s", entry.get("url"), exc)
-                errors.append(str(exc))
+                errors.append("Could not save this photo.")
             except (KeyError, TypeError, ValueError):
                 logger.warning("media_send_to_wiki: malformed item entry: %r", entry)
 
@@ -922,12 +992,22 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # expired -- bounded staleness beats an unbounded inline refetch.
         coord_query = f"{lat:.5f}, {lng:.5f}"
         default: tuple[list[_SlideT], list[ProviderFetchResult]] = ([], [])
-        slides, provider_results = call_with_deadline(
-            lambda: collector(float(lat), float(lng)),
-            timeout=EXTERNAL_CALL_DEADLINE,
-            default=default,
-            name=deadline_name,
-        )
+        try:
+            # call_with_deadline only catches its own timeout internally (see
+            # timeout_utils.py) - collector() itself has no surrounding handler here,
+            # so an unexpected per-provider exception (vs. the count=0-per-result
+            # failures the providers are supposed to report themselves) is caught at
+            # this call site instead, preserving the documented "failures surface as
+            # count=0 entries" contract rather than turning into an unhandled 500.
+            slides, provider_results = call_with_deadline(
+                lambda: collector(float(lat), float(lng)),
+                timeout=EXTERNAL_CALL_DEADLINE,
+                default=default,
+                name=deadline_name,
+            )
+        except (OSError, ValueError, RuntimeError) as e:
+            logger.exception("Unable to collect %s slides for pin: %s", deadline_name, e)
+            slides, provider_results = default
         # Failures surface as count=0 entries, matching the old inline behaviour.
         debug_entries = []
         for result in provider_results:
@@ -1756,12 +1836,25 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         ``InfoPanelSource`` subclass alone - no new route or controller method
         needed. Panels with bespoke markup (Wikipedia, Yelp, NPS, Nominatim,
         Azure Maps, LoopNet, USGS Topo, ...) keep their own dedicated methods.
+
+        A source declaring ``required_feature`` is refused here as well as
+        omitted from the page's tab strip - see :func:`_viewer_may_see_panel`.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.external_data import InfoPanelSource, get_panel_source
 
         panel = get_panel_source(panel_key)
         if not isinstance(panel, InfoPanelSource):
+            return HttpResponse(status=404)
+
+        # Refused before the pin is even looked up, so a viewer without the
+        # feature can neither read the panel nor (via _pending_panel below)
+        # spend an upstream fetch they will never be shown the result of.
+        # 404 rather than 403: a 403 confirms the gated panel exists and has
+        # something to say about this pin, which is most of what a paywalled
+        # panel knows - so the refusal is made byte-identical to the answer for
+        # a panel key no source has ever claimed.
+        if not _viewer_may_see_panel(request, panel):
             return HttpResponse(status=404)
 
         try:

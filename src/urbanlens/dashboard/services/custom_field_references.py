@@ -66,7 +66,7 @@ def referenceable_queryset(kind: str, profile: Profile) -> QuerySet:
     from urbanlens.dashboard.services.wiki_access import visible_wiki_location_ids
 
     if kind == "pin":
-        return Pin.objects.filter(profile=profile)
+        return Pin.objects.filter(profile=profile).select_related("location")
     if kind == "wiki":
         # location__pins__profile=profile alone missed boundary-mate wikis -
         # a pin can sit on the same real-world place as an existing wiki but

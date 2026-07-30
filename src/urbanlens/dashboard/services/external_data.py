@@ -32,15 +32,41 @@ controller that follows the ready-render-or-schedule pattern -- the task
 plumbing, deduplication, and failure handling are shared. The satellite and
 street-view carousels similarly assemble their provider chains from plugins'
 ``get_satellite_providers``/``get_street_view_providers`` contributions.
+
+Reading a panel as JSON
+-----------------------
+
+The web UI reads a panel through whatever renders it: ``render_context`` for
+the generic info panels, ``media_items`` for the gallery tabs, and a bespoke
+controller method plus its own template for the handful that fit neither. None
+of that is usable by a native client, which wants the panel's *data*, not its
+markup, so :class:`PanelSource` additionally carries a read interface:
+:attr:`PanelSource.api_kinds` (which JSON shapes this source can serve, see
+:class:`PanelApiKind`) and :meth:`PanelSource.api_payload` (the body itself).
+
+Both default to "nothing". That is deliberate and load-bearing: panel sources
+are a *plugin* extension point, so the set of classes reaching this interface
+is open-ended and includes code this repository never sees. A default that
+guessed at a payload -- dumping the raw ``LocationCache`` row, say -- would
+turn "a plugin author forgot to think about the API" into a data leak of
+whatever that plugin happened to cache. Failing closed makes the same mistake
+produce a panel that is merely absent from the API, which is recoverable.
+:class:`InfoPanelSource`, :class:`GalleryMediaSource` and
+:class:`BoundaryPanelSource` do opt in on their subclasses' behalf, because
+those three base classes define the payload themselves from an already-uniform
+contract (a render context, a media-item list, a boundary row) rather than from
+anything a subclass can smuggle arbitrary data through.
 """
 
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
+from datetime import timedelta
+from enum import StrEnum
 import logging
 import time
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from celery.exceptions import SoftTimeLimitExceeded
 from django.core.cache import cache
@@ -50,7 +76,13 @@ from urbanlens.dashboard.services.apis.assets.base import MediaItem
 from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDisabledError
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Sequence
+
+    from django.contrib.auth.base_user import AbstractBaseUser
+    from django.contrib.auth.models import AnonymousUser
+
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.subscriptions import SiteFeature
     from urbanlens.dashboard.services.apis.assets.base import MediaProvider
     from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
     from urbanlens.dashboard.services.geo_boundary import GeoBoundary
@@ -96,6 +128,117 @@ class ProviderFetchResult:
     ok: bool = True
 
 
+class PanelApiKind(StrEnum):
+    """A read shape a panel's JSON body can take on the external API.
+
+    A source lists every shape it can serve in :attr:`PanelSource.api_kinds`,
+    and :meth:`PanelSource.api_payload` puts each of those shapes under the
+    matching top-level key. That pairing is the whole point of the interface:
+    a native client branches on the *kind*, never on the source key, so a
+    panel contributed by a plugin written long after the client shipped still
+    renders instead of being ignored as an unknown string.
+
+    A source may declare more than one kind when it genuinely serves more than
+    one (the CRIS plugin is both an information card and a media provider); its
+    payload then carries both keys.
+
+    Members:
+        INFO: ``{"info": {...}}`` - the information-card contract built by
+            :func:`info_card`; the JSON twin of ``_simple_info_panel.html``.
+        MEDIA: ``{"media": [{...}, ...]}`` - :class:`MediaItem` dicts, the same
+            items the web Media gallery renders as tiles.
+        BOUNDARY: ``{"boundary": {...}}`` - GeoJSON geometry plus the
+            provenance a client needs to decide whether drawing it is honest.
+        BUILDINGS: ``{"buildings": [{...}, ...]}`` - one row per structure
+            standing on the pin's parcel, each already paired with the child
+            pin (if any) that covers it.
+    """
+
+    INFO = "info"
+    MEDIA = "media"
+    BOUNDARY = "boundary"
+    BUILDINGS = "buildings"
+
+
+#: Keys of an ``InfoPanelSource.render_context`` result that carry panel *data*
+#: rather than template plumbing (``nested``, and the ``section_id``/``icon``/
+#: ``title``/``pin`` the dispatcher injects afterwards). The API's info card is
+#: built by copying this allowlist rather than by passing the context straight
+#: through, so a plugin that later stashes something private in its context -
+#: a raw upstream response for a template tag to chew on, an internal id - does
+#: not silently start publishing it the moment someone edits that plugin.
+_INFO_CONTEXT_DATA_KEYS = ("heading_name", "chips", "facts", "meta", "header_link", "footer_link")
+
+
+def info_card(
+    *,
+    heading_name: str | None = None,
+    chips: Sequence[str | None] | None = None,
+    facts: Sequence[dict] | None = None,
+    meta: Sequence[dict] | None = None,
+    header_link: dict | None = None,
+    footer_link: dict | None = None,
+    image_url: str | None = None,
+    description: str | None = None,
+) -> dict[str, Any]:
+    """Build the :attr:`PanelApiKind.INFO` body, the one information-card contract.
+
+    Every panel that reads as "some facts about this place" answers in this
+    exact shape, whether it renders through ``_simple_info_panel.html`` on the
+    web or has fully bespoke markup there (NPS, Nominatim, Azure Maps). Having
+    one constructor rather than each source hand-rolling a dict is what keeps
+    that promise true: a client can lay out the card once and every panel,
+    including ones added later, lands in it.
+
+    All keys are always present, including the ones a given source never fills.
+    A stable key set costs a few null bytes and saves every consumer from
+    guessing whether a missing key means "no value" or "older server".
+
+    Args:
+        heading_name: Primary line - usually the place's name at this provider.
+        chips: Short category/status pills (e.g. ``["Historic building"]``).
+            Falsy entries - including None - are dropped, which is why the
+            annotation admits them: a caller can write
+            ``chips=[data.get("kind_label")]`` without first proving the key
+            exists, and a blank pill never reaches a client.
+        facts: Icon-led quick facts, each ``{"icon", "text", "href"?}``.
+        meta: Label/value rows, each ``{"label", "value", "href"?}``.
+        header_link: ``{"url", "label"}`` for the card's header affordance.
+        footer_link: ``{"url", "label"}`` for the card's "view on X" link.
+        image_url: A single representative image, for the panels that have one
+            (NPS park photos, Nominatim's ``image`` tag). Absolute upstream URL
+            - never proxied, so a client must be prepared for it to 404.
+        description: A paragraph of prose, for the panels that have one.
+
+    Returns:
+        The info-card dict, ready to nest under the payload's ``"info"`` key.
+    """
+    return {
+        "heading_name": heading_name or None,
+        "chips": [chip for chip in (chips or []) if chip],
+        "facts": list(facts or []),
+        "meta": list(meta or []),
+        "header_link": header_link or None,
+        "footer_link": footer_link or None,
+        "image_url": image_url or None,
+        "description": description or None,
+    }
+
+
+def info_card_from_render_context(context: dict) -> dict[str, Any]:
+    """Project an ``InfoPanelSource.render_context`` result onto the info-card contract.
+
+    Args:
+        context: A render context (see ``InfoPanelSource.render_context``).
+
+    Returns:
+        The equivalent :func:`info_card`, carrying only the allowlisted data
+        keys - see :data:`_INFO_CONTEXT_DATA_KEYS` for why that is an
+        allowlist and not a straight copy.
+    """
+    return info_card(**{key: context.get(key) for key in _INFO_CONTEXT_DATA_KEYS})
+
+
 class PanelSource(ABC):
     """One external-data panel: readiness check plus Celery-side fetch.
 
@@ -121,6 +264,20 @@ class PanelSource(ABC):
             once on a thread pool would cause GIL contention that slows down
             every other panel sharing it, defeating the point of splitting
             the queue in the first place.
+        api_kinds: Which :class:`PanelApiKind` shapes this source can serve as
+            JSON. Empty - the default - means "this panel is not exposed on
+            the external API at all", and is the authoritative signal for
+            that: a caller asking whether to advertise a panel checks
+            ``api_kinds``, not whether ``api_payload`` happens to return None
+            right now (which it also does whenever the data simply hasn't
+            landed yet). See the module docstring for why the default is
+            closed rather than a guess.
+        required_feature: The :class:`SiteFeature` a viewer must hold for this
+            source's data to be shown to them, or None when it is unrestricted
+            (the overwhelming majority). Declared on the source rather than
+            only at each call site so every surface - web tab strip, external
+            API, anything added later - gates on the same fact instead of each
+            re-deciding it and eventually disagreeing.
     """
 
     key: ClassVar[str]
@@ -130,6 +287,8 @@ class PanelSource(ABC):
     outer_class: ClassVar[str] = ""
     outer_is_card: ClassVar[bool] = False
     queue: ClassVar[str] = "panel_fetch"
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
+    required_feature: ClassVar[SiteFeature | None] = None
 
     def scope(self, pin: Pin) -> str:
         """Cache-key scope identifying which rows/entries this pin's fetch fills.
@@ -194,6 +353,35 @@ class PanelSource(ABC):
             pin: The pin whose panel data should be fetched.
         """
 
+    def api_payload(self, pin: Pin) -> dict[str, Any] | None:
+        """This panel's already-landed data as a JSON body, or None.
+
+        Never fetches. This is a pure read of whatever ``fetch`` previously
+        persisted, so it is safe to call on the request path; a source whose
+        data hasn't landed yet answers None and the caller schedules a fetch
+        the same way the HTMX panels do.
+
+        The default returns None for every source, which - paired with the
+        empty default :attr:`api_kinds` - means a panel is invisible to the
+        API until someone deliberately writes an override. See the module
+        docstring: this interface is reachable by third-party plugin code, so
+        the failure mode of forgetting about it has to be an absent panel and
+        not an unreviewed dump of whatever that plugin cached.
+
+        Args:
+            pin: The pin whose panel is being read. Sources that need the
+                viewer's own scope (e.g. which child pins exist) read it from
+                here rather than from a request, since this also runs from
+                background code paths that have no request.
+
+        Returns:
+            A JSON-serializable body whose top-level keys are the source's
+            declared :attr:`api_kinds` (see :class:`PanelApiKind`), or None
+            when this source is not exposed, has no data yet, or has data that
+            isn't worth showing (the JSON equivalent of the web panel's 204).
+        """
+        return None
+
 
 class LocationCachePanelSource(PanelSource, ABC):
     """Base for panels whose store is a ``LocationCache`` row.
@@ -211,6 +399,28 @@ class LocationCachePanelSource(PanelSource, ABC):
 
         return LocationCache.get_fresh(pin.location, self.cache_source) is not None
 
+    def cached_data(self, pin: Pin) -> dict | None:
+        """This source's fresh cached payload, or None when nothing has landed.
+
+        The read half of the store this class owns, factored out so the API
+        payload builders don't each re-derive "which row, and is it stale?"
+        from :attr:`cache_source`.
+
+        Args:
+            pin: The pin whose panel is being read.
+
+        Returns:
+            The row's ``data`` dict - possibly ``{}``, which means "we
+            searched and found nothing", a real answer - or None when no fresh
+            row exists (never fetched, or gone stale).
+        """
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+        if pin.location_id is None:
+            return None
+        row = LocationCache.get_fresh(pin.location, self.cache_source)
+        return None if row is None else (row.data or {})
+
 
 class InfoPanelSource(LocationCachePanelSource, ABC):
     """Base for panels that render through the generic ``_simple_info_panel.html`` template.
@@ -226,7 +436,17 @@ class InfoPanelSource(LocationCachePanelSource, ABC):
     Panels with genuinely bespoke markup (their own JS, a listings grid, a
     map, ...) don't fit this shape and should keep a dedicated controller
     method, route, and template instead of forcing themselves in here.
+
+    Every subclass is exposed on the external API as
+    :attr:`~PanelApiKind.INFO` without doing anything, because the payload is
+    derived from ``render_context`` - a contract the subclass already had to
+    satisfy for the web, and one narrow enough (heading/chips/facts/meta/links)
+    that there is nothing for a careless subclass to accidentally publish
+    through it. A subclass that genuinely must not reach the API sets
+    ``api_kinds = frozenset()`` to opt back out.
     """
+
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO})
 
     @abstractmethod
     def render_context(self, pin: Pin, data: dict) -> dict | None:
@@ -256,6 +476,34 @@ class InfoPanelSource(LocationCachePanelSource, ABC):
             data: The ``LocationCache`` row's ``data`` dict.
         """
         return 1
+
+    def api_info(self, pin: Pin, data: dict) -> dict[str, Any] | None:
+        """This source's cached data as an :attr:`PanelApiKind.INFO` card.
+
+        Routed through ``render_context`` on purpose rather than reading
+        ``data`` again independently: the alternative is two mappings from the
+        same cached row to the same facts, which drift the first time someone
+        fixes a field name in one of them.
+
+        Args:
+            pin: The pin whose panel is being read (``render_context`` may
+                branch on it - see the CRIS plugin's site-scope handling).
+            data: The ``LocationCache`` row's ``data`` dict.
+
+        Returns:
+            The info card, or None when ``render_context`` decided there is
+            nothing worth showing.
+        """
+        context = self.render_context(pin, data)
+        return None if context is None else info_card_from_render_context(context)
+
+    def api_payload(self, pin: Pin) -> dict[str, Any] | None:
+        """The panel's cached data as ``{"info": {...}}``, or None."""
+        data = self.cached_data(pin)
+        if data is None:
+            return None
+        card = self.api_info(pin, data)
+        return None if card is None else {PanelApiKind.INFO.value: card}
 
 
 class CoordinateGatedInfoPanelSource(InfoPanelSource, ABC):
@@ -287,7 +535,14 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
     ``LocationCachePanelSource``) and ``media_items`` (turning that row's
     ``data`` back into displayable items) - the gallery controller and
     template are otherwise oblivious to which provider it's rendering.
+
+    The external API gets the same deal: every subclass is exposed as
+    :attr:`~PanelApiKind.MEDIA` for free, because ``media_items`` already
+    normalizes the provider's cached response into a fixed dataclass and there
+    is no route through it for a subclass to publish anything else.
     """
+
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.MEDIA})
 
     @abstractmethod
     def media_items(self, data: dict) -> list[MediaItem]:
@@ -300,6 +555,35 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
         Returns:
             The items to render as ``.media-item`` tiles; may be empty.
         """
+
+    def api_media(self, data: dict) -> list[dict[str, Any]]:
+        """This source's cached data as plain JSON media dicts.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict for this source.
+
+        Returns:
+            One dict per :class:`MediaItem`, field-for-field. Some providers
+            deliberately emit *relative* ``url``/``thumb_url`` values pointing
+            at an in-app proxy (CRIS attachments, Immich assets) so an upstream
+            API key never reaches a client; those stay relative here too and a
+            native client must resolve them against its API base URL rather
+            than assuming every media URL is absolute.
+        """
+        return [asdict(item) for item in self.media_items(data)]
+
+    def api_payload(self, pin: Pin) -> dict[str, Any] | None:
+        """The provider's cached media as ``{"media": [...]}``, or None.
+
+        An empty list is a real answer ("searched, found nothing") and is
+        returned as such; None means the fetch hasn't landed yet, which is the
+        distinction the caller needs to decide between showing an empty tab and
+        scheduling a fetch.
+        """
+        data = self.cached_data(pin)
+        if data is None:
+            return None
+        return {PanelApiKind.MEDIA.value: self.api_media(data)}
 
 
 class MediaPanelSource(GalleryMediaSource):
@@ -416,6 +700,7 @@ class BoundaryPanelSource(PanelSource):
     # running concurrently on a thread pool would cause enough GIL contention
     # to slow down every other panel sharing it. See PanelSource.queue.
     queue = "celery"
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.BOUNDARY})
 
     def scope(self, pin: Pin) -> str:
         """Location-scoped: default boundaries are keyed by Location."""
@@ -449,6 +734,66 @@ class BoundaryPanelSource(PanelSource):
         if pin.location_id is None or self.is_ready(pin):
             return
         generate_location_boundaries(pin.location, name=pin.effective_name)
+
+    def api_payload(self, pin: Pin) -> dict[str, Any] | None:
+        """The pin's effective property and building geometry as GeoJSON.
+
+        Resolution is delegated to ``Boundary.objects.resolve_for_pin``, the
+        same chain the map draws from (pin's own row, then an inherited parent
+        boundary, then the wiki's, then the location default, then a
+        synthesized circle) - reimplementing any part of that ordering here
+        would let the API and the map disagree about where a place *is*.
+
+        The ``source`` and ``is_fallback_circle`` flags are not decoration.
+        For a property with no real geometry anywhere, ``resolve_for_pin``
+        synthesizes a fixed-radius circle around the coordinates so the map has
+        something to show; a client that drew that as though it were a surveyed
+        parcel boundary would be asserting a property line this app has never
+        actually looked up. Both flags are emitted so a client can style it as
+        the approximation it is (or drop it), rather than having to infer
+        "suspiciously round" from the coordinates.
+
+        Args:
+            pin: The pin whose boundaries are being read.
+
+        Returns:
+            ``{"boundary": {"property": ..., "building": ...}}`` with each side
+            either a ``{"geometry", "source", "is_fallback_circle"}`` dict or
+            None, or None overall when the pin has no location or neither side
+            resolved to anything.
+        """
+        if pin.location_id is None:
+            return None
+
+        from urbanlens.dashboard.models.boundary.model import BoundaryType
+
+        property_side = self._boundary_side(pin, BoundaryType.PROPERTY)
+        building_side = self._boundary_side(pin, BoundaryType.BUILDING)
+        if property_side is None and building_side is None:
+            return None
+        return {PanelApiKind.BOUNDARY.value: {"property": property_side, "building": building_side}}
+
+    @staticmethod
+    def _boundary_side(pin: Pin, boundary_type: str) -> dict[str, Any] | None:
+        """One boundary type's resolved geometry plus its provenance.
+
+        Args:
+            pin: The pin to resolve for.
+            boundary_type: A :class:`BoundaryType` value.
+
+        Returns:
+            ``{"geometry", "source", "is_fallback_circle"}``, or None when
+            nothing resolved for this type (which for BUILDING is the normal
+            case - a missing building boundary means "no known building", and
+            unlike PROPERTY it has no circle fallback).
+        """
+        from urbanlens.dashboard.models.boundary.model import Boundary
+        from urbanlens.dashboard.services.geo import geometry_to_geojson
+
+        polygon, source = Boundary.objects.resolve_for_pin(pin, boundary_type)
+        if polygon is None:
+            return None
+        return {"geometry": geometry_to_geojson(polygon), "source": source, "is_fallback_circle": source == "circle"}
 
 
 def _satellite_gateways() -> list[SatelliteViewProvider]:
@@ -535,6 +880,20 @@ class SlidesPanelSource(PanelSource, ABC):
     the marker always lapses (triggering a background re-warm) before the
     underlying entries can expire mid-render.
     """
+
+    # Deliberately absent from the external API for now: api_kinds stays empty
+    # and api_payload keeps PanelSource's None. These carousels are the one
+    # panel family whose "data" is the imagery itself - each slide carries a
+    # base64 `data:` URI fetched server-side (so the provider's API key never
+    # reaches a client), and several providers x ~5 slides each is plausibly
+    # 5-15 MB in a single JSON response. The external API's throttle counts
+    # requests, not bytes, so exposing these would hand any key holder a
+    # multi-megabyte amplifier that the rate limiter cannot see. The fix is a
+    # signed slide-image proxy - the payload becomes a list of short URLs the
+    # client fetches individually, which the throttle can then actually count -
+    # and that proxy does not exist yet. Until it does, a mobile client renders
+    # its own map imagery instead.
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
 
     def scope(self, pin: Pin) -> str:
         """Coordinate-scoped, matching the providers' own cache keys."""
@@ -637,6 +996,111 @@ def get_panel_source(source_key: str) -> PanelSource | None:
     return panel_sources().get(source_key)
 
 
+def _fresh_location_cache_sources(pin: Pin) -> set[str]:
+    """Every ``LocationCache.source`` that has a non-stale row for this pin's location.
+
+    One query for the whole set, deliberately replacing N calls to
+    ``LocationCache.get_fresh``. The staleness rule is the same one
+    ``LocationCache.is_stale`` applies (age against
+    ``SiteSettings.external_data_cache_days``), just expressed as a cutoff the
+    database can filter on instead of a per-row Python comparison - so this
+    stays a single query no matter how many panel sources exist.
+
+    Args:
+        pin: The pin whose location's cache rows are being examined.
+
+    Returns:
+        The set of fresh source names; empty when the pin has no location.
+    """
+    from urbanlens.dashboard.models.cache.location_cache import LocationCache
+    from urbanlens.dashboard.models.site_settings import SiteSettings
+
+    if pin.location_id is None:
+        return set()
+    cutoff = timezone.now() - timedelta(days=SiteSettings.get_current().external_data_cache_days)
+    return set(LocationCache.objects.filter(location_id=pin.location_id, updated__gte=cutoff).values_list("source", flat=True))
+
+
+def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None) -> dict[str, bool]:
+    """Whether each panel source already has data for ``pin``, in one pass.
+
+    The bulk form of :meth:`PanelSource.is_ready`. Asking each source
+    individually is one ``LocationCache`` query per source - with ~30
+    registered sources (three core plus every enabled plugin's contributions)
+    that is ~30 round trips to answer a question the database can answer once,
+    and it happens on the pin detail page's own render. Anything that needs the
+    readiness of more than one source should call this instead of looping.
+
+    Sources are grouped by where their store actually lives, so each group
+    costs one lookup:
+
+    * ``LocationCachePanelSource`` - one query for the pin's location's fresh
+      cache rows (see :func:`_fresh_location_cache_sources`).
+    * ``SlidesPanelSource`` - one ``cache.get_many`` for the warm-up markers.
+    * Anything else (``BoundaryPanelSource``, a plugin's bespoke source) falls
+      back to its own ``is_ready``. Correctness before cleverness: a source
+      this function doesn't recognise still gets the right answer, just not a
+      batched one.
+
+    Args:
+        pin: The pin whose panels are being checked.
+        sources: The sources to report on; defaults to every registered source.
+            Pass a subset when only a few panels are in play - the batched
+            lookups then cover only what was asked for.
+
+    Returns:
+        Mapping of source key to readiness. Keys are exactly the keys of the
+        sources passed in (or of every registered source), so a caller can
+        index it directly rather than guarding every lookup.
+    """
+    resolved = list(sources) if sources is not None else list(panel_sources().values())
+    readiness: dict[str, bool] = {}
+
+    cache_backed = [source for source in resolved if isinstance(source, LocationCachePanelSource)]
+    slide_backed = [source for source in resolved if isinstance(source, SlidesPanelSource)]
+    bespoke = [source for source in resolved if not isinstance(source, (LocationCachePanelSource, SlidesPanelSource))]
+
+    if cache_backed:
+        fresh_sources = _fresh_location_cache_sources(pin)
+        for cache_source in cache_backed:
+            readiness[cache_source.key] = cache_source.cache_source in fresh_sources
+
+    if slide_backed:
+        ready_keys = {slide_source.key: slide_source.ready_key(pin) for slide_source in slide_backed}
+        warm = cache.get_many(list(ready_keys.values()))
+        for source_key, ready_key in ready_keys.items():
+            readiness[source_key] = bool(warm.get(ready_key))
+
+    for bespoke_source in bespoke:
+        readiness[bespoke_source.key] = bespoke_source.is_ready(pin)
+
+    return readiness
+
+
+def panel_visible_to(user: AbstractBaseUser | AnonymousUser, source: PanelSource) -> bool:
+    """Whether *user* holds the subscription feature this panel source requires.
+
+    The single place this fact is decided, shared by the web tab strip
+    (``controllers.pin._viewer_may_see_panel``, which now just calls this) and
+    the external API's panel endpoints - a feature-gated panel must never be
+    visible on one surface and hidden on the other.
+
+    Args:
+        user: The user asking to see the panel (typically ``request.user``).
+        source: The panel source being considered.
+
+    Returns:
+        True when the source is unrestricted (the overwhelming majority) or
+        the viewer holds the feature it requires.
+    """
+    feature = source.required_feature
+    if feature is None:
+        return True
+    from urbanlens.dashboard.models.subscriptions import user_has_feature
+
+    return user_has_feature(user, feature)
+
+
 def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
     """Ensure a background fetch is in flight for this panel, single-flight.
 
@@ -647,8 +1111,9 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
     Returns:
         True when a fetch is in flight (newly scheduled or already running) --
         the caller should return a polling placeholder. False when the source
-        is unknown (e.g. its plugin was disabled) or currently suppressed
-        after a failure or disable -- the caller should give up quietly (204).
+        is unknown (e.g. its plugin was disabled), currently suppressed after
+        a failure or disable, or the Celery broker was unreachable -- the
+        caller should give up quietly (204).
     """
     source = get_panel_source(source_key)
     if source is None:
@@ -660,10 +1125,17 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
         logger.debug("schedule_panel_fetch: %s for pin %s is suppressed, skipping", source_key, pin.pk)
         return False
     if cache.add(source.flight_key(pin), 1, FLIGHT_TTL_SECONDS):
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import fetch_panel_source
 
         logger.debug("schedule_panel_fetch: dispatching %s for pin %s to queue '%s'", source_key, pin.pk, source.queue)
-        fetch_panel_source.apply_async(args=[source_key, pin.pk], queue=source.queue)
+        if safely_enqueue_task(fetch_panel_source, source_key, pin.pk, queue=source.queue) is None:
+            # Broker down: a raised error here would 500 every panel on the pin
+            # detail page at once. Release the just-claimed single-flight marker
+            # so the next poll retries the enqueue instead of waiting out
+            # FLIGHT_TTL_SECONDS behind a task that was never queued.
+            cache.delete(source.flight_key(pin))
+            return False
     return True
 
 

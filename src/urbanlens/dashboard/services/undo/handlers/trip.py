@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 _RESTORABLE_FIELDS = (
     "name",
@@ -20,6 +23,12 @@ _RESTORABLE_FIELDS = (
 
 _MEMBERSHIP_FIELDS = ("rsvp", "is_organizer")
 
+#: Registry key for this handler. Exposed as a module-level constant so call
+#: sites can import it (``from ...handlers.trip import MODEL_LABEL``) instead
+#: of hand-typing ``"trip"`` - a typo in a hand-typed string only fails at
+#: runtime via ``get_handler``'s ``ValueError``.
+MODEL_LABEL = "trip"
+
 
 @register
 class TripUndoHandler(UndoHandler):
@@ -29,10 +38,10 @@ class TripUndoHandler(UndoHandler):
     gets a chance to capture them, and are not restored.
     """
 
-    model_label = "trip"
+    model_label = MODEL_LABEL
 
     @classmethod
-    def serialize(cls, instances: list[Trip]) -> list[dict[str, Any]]:
+    def serialize(cls, instances: Sequence[Trip]) -> list[dict[str, Any]]:
         return [cls._serialize_one(trip) for trip in instances]
 
     @classmethod
@@ -51,7 +60,7 @@ class TripUndoHandler(UndoHandler):
         }
 
     @classmethod
-    def describe(cls, instances: list[Trip]) -> str:
+    def describe(cls, instances: Sequence[Trip]) -> str:
         return describe_batch("Trip", "trips", [t.name for t in instances])
 
     @classmethod

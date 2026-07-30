@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import cached_property
 from typing import TYPE_CHECKING
 
 from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, ForeignKey, OneToOneField
@@ -84,11 +85,20 @@ class DirectMessageShare(abstract.DashboardModel):
         if self.kind == DirectMessageShareKind.TRIP:
             return self.trip_membership is not None and self.trip_membership.rsvp is None
         if self.kind == DirectMessageShareKind.FRIEND:
-            return not self._friend_request_exists()
+            return not self._friend_request_exists
         return False
 
+    @cached_property
     def _friend_request_exists(self) -> bool:
-        """True if a Friendship row already links the recommended profile and the recipient."""
+        """True if a Friendship row already links the recommended profile and the recipient.
+
+        Cached on the instance: this is a hot per-render check (every DM
+        thread render with a pending friend-share calls `is_actionable`, and
+        `revoke()` may check it again for the same instance), and nothing
+        this object does can change the underlying Friendship state, so a
+        second read within the same instance's lifetime would always return
+        the same answer anyway.
+        """
         from django.db.models import Q
 
         from urbanlens.dashboard.models.friendship.model import Friendship
@@ -122,7 +132,7 @@ class DirectMessageShare(abstract.DashboardModel):
                 self.trip_membership.delete()
                 self.trip_membership = None
         elif self.kind == DirectMessageShareKind.FRIEND:
-            if self._friend_request_exists():
+            if self._friend_request_exists:
                 return
             if self.recommended_profile_id is not None:
                 from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess

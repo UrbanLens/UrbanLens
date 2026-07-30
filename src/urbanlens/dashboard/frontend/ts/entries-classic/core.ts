@@ -17,6 +17,7 @@
  * classic script preserves the exact head-executes-before-body ordering the
  * site already depends on.
  */
+import { installGlobalLabelPicker } from "../shared/label-picker";
 import { installGlobalLocationSearchEngine } from "../shared/location-search-engine";
 import { installGlobalMapExport } from "../shared/map-export";
 import { installGlobalMapLayers } from "../shared/map-layers";
@@ -27,6 +28,7 @@ installGlobalLocationSearchEngine();
 installGlobalMapLayers();
 installGlobalMarkupEngine();
 installGlobalMapExport();
+installGlobalLabelPicker();
 
 window.createMarkupToolbar = createMarkupToolbar;
 

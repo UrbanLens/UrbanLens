@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 import unittest
 
 from django.contrib.auth.models import User
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 if TYPE_CHECKING:
@@ -27,6 +28,16 @@ from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.social_link.queryset import SocialLinkQuerySet as SocialLinkQuerySet
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.models.visits.queryset import VisitQuerySet
+from urbanlens.dashboard.tests.hypothesis.strategies import friendship_status, nonempty_name
+
+# DB-backed @given tests below never touch self.client - only ORM/queryset
+# calls - per this repo's documented rule that hypothesis's per-example DB
+# flush and the Django test client don't mix.
+_db_settings = settings(
+    max_examples=15,
+    deadline=None,
+    suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
+)
 
 # -- CommentQuerySet ------------------------------------------------------------
 
@@ -614,6 +625,64 @@ class ConversationKeyQuerySetTests(TestCase):
         v1: ConversationKey = baker.make("dashboard.ConversationKey", profile_low=low, profile_high=high, version=1)
 
         self.assertEqual(list(ConversationKey.objects.between(self.profile_a, self.profile_b)), [v1, v2])
+
+
+class ConversationKeyQuerySetOrderIndependencePropertyTests(TestCase):
+    """Property-based extension of test_between_is_order_independent above:
+    the canonical low/high-pk pattern must hold for arbitrary generated
+    profile pairs (fresh pks each example), not just one hand-picked pair.
+    """
+
+    @given(version=st.integers(min_value=1, max_value=1000))
+    @_db_settings
+    def test_between_is_order_independent_for_arbitrary_pairs(self, version: int) -> None:
+        from urbanlens.dashboard.models.e2ee import ConversationKey
+
+        profile_a = baker.make("auth.User").profile
+        profile_b = baker.make("auth.User").profile
+        low, high = ConversationKey.canonical_pair(profile_a, profile_b)
+        key: ConversationKey = baker.make("dashboard.ConversationKey", profile_low=low, profile_high=high, version=version)
+
+        self.assertEqual(list(ConversationKey.objects.between(profile_a, profile_b)), [key])
+        self.assertEqual(list(ConversationKey.objects.between(profile_b, profile_a)), [key])
+
+
+class DirectMessageQuerySetOrderIndependencePropertyTests(TestCase):
+    """DirectMessageQuerySet.between() is the same canonical-pair pattern as
+    ConversationKeyQuerySet.between() - a two-way conversation must be found
+    regardless of argument order, for arbitrary generated profile pairs and
+    message bodies."""
+
+    @given(body=nonempty_name)
+    @_db_settings
+    def test_between_is_order_independent_for_arbitrary_pairs(self, body: str) -> None:
+        from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+
+        profile_a = baker.make("auth.User").profile
+        profile_b = baker.make("auth.User").profile
+        message = DirectMessage.objects.create(sender=profile_a, recipient=profile_b, body=body)
+
+        self.assertEqual(list(DirectMessage.objects.between(profile_a, profile_b)), [message])
+        self.assertEqual(list(DirectMessage.objects.between(profile_b, profile_a)), [message])
+
+
+class FriendshipQuerySetOrderIndependencePropertyTests(TestCase):
+    """Friendship.objects.between() is the third canonical-pair implementation
+    in the codebase (alongside ConversationKey's and DirectMessage's) - same
+    order-independence property, for arbitrary generated profile pairs and
+    friendship statuses."""
+
+    @given(status=friendship_status)
+    @_db_settings
+    def test_between_is_order_independent_for_arbitrary_pairs(self, status: str) -> None:
+        from urbanlens.dashboard.models.friendship.model import Friendship
+
+        profile_a = baker.make("auth.User").profile
+        profile_b = baker.make("auth.User").profile
+        friendship = Friendship.objects.create(from_profile=profile_a, to_profile=profile_b, status=status)
+
+        self.assertEqual(Friendship.objects.between(profile_a, profile_b), friendship)
+        self.assertEqual(Friendship.objects.between(profile_b, profile_a), friendship)
 
 
 class GroupKeyQuerySetTests(TestCase):

@@ -7,13 +7,22 @@ calls. Both endpoints share one payload shape:
     {
         "latitude": ..., "longitude": ...,
         "default_radius_meters": 50,
-        "pending": bool,          # default-boundary generation in flight
+        "pending": bool,          # never generated yet - nothing to show, generation in flight
+        "refreshing": bool,       # already generated, but stale - shown value is being refreshed in the background
         "boundaries": {
             "property": {"polygon": <GeoJSON|null>, "source": "pin|wiki|inherited|generated|circle|null"},
             "building": {"polygon": <GeoJSON|null>, "source": ...},
         },
         "detail_buildings": [{"pin_id": ..., "polygon": <GeoJSON>}, ...],
     }
+
+``pending`` and ``refreshing`` are mutually exclusive: a location is either
+still waiting on its first-ever generation (``pending``, nothing usable to
+show), or it already has *something* to show (real geometry or the default
+circle) that may be getting refreshed in the background (``refreshing``) once
+it's older than ``SiteSettings.boundary_cache_days``. The client polls on
+either flag the same way (see ``map-annotations.ts``'s ``fetchBoundaries``),
+redrawing from whatever ``boundaries`` it gets back each time.
 
 POST bodies carry ``{"boundary_type": "property"|"building", "polygon":
 <GeoJSON geometry|null>}``; null clears the custom drawing so display falls
@@ -39,7 +48,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.external_data import schedule_panel_fetch
-from urbanlens.dashboard.services.geo import geometry_to_geojson as _geojson, parse_multipolygon_geojson as _parse_multipolygon
+from urbanlens.dashboard.services.geo import InvalidPolygonGeoJSONError, geometry_to_geojson as _geojson, parse_multipolygon_geojson as _parse_multipolygon
 from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, schedule_location_boundary_generation
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
@@ -77,7 +86,7 @@ def _detail_building_entries(pin: Pin) -> list[dict]:
     return entries
 
 
-def _pin_boundary_payload(pin: Pin, *, pending: bool) -> dict:
+def _pin_boundary_payload(pin: Pin, *, pending: bool, refreshing: bool = False) -> dict:
     """Full boundary payload for a pin detail page map."""
     boundaries = {}
     for boundary_type in (BoundaryType.PROPERTY, BoundaryType.BUILDING):
@@ -88,12 +97,13 @@ def _pin_boundary_payload(pin: Pin, *, pending: bool) -> dict:
         "longitude": pin.effective_longitude,
         "default_radius_meters": DEFAULT_RADIUS_METERS,
         "pending": pending,
+        "refreshing": refreshing,
         "boundaries": boundaries,
         "detail_buildings": _detail_building_entries(pin),
     }
 
 
-def _wiki_boundary_payload(wiki: Wiki, *, pending: bool) -> dict:
+def _wiki_boundary_payload(wiki: Wiki, *, pending: bool, refreshing: bool = False) -> dict:
     """Full boundary payload for a wiki page map."""
     boundaries = {}
     for boundary_type in (BoundaryType.PROPERTY, BoundaryType.BUILDING):
@@ -105,6 +115,7 @@ def _wiki_boundary_payload(wiki: Wiki, *, pending: bool) -> dict:
         "longitude": float(location.longitude) if location and location.longitude is not None else None,
         "default_radius_meters": DEFAULT_RADIUS_METERS,
         "pending": pending,
+        "refreshing": refreshing,
         "boundaries": boundaries,
         "detail_buildings": [],
     }
@@ -118,22 +129,31 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
 
         Default boundaries are generated lazily: the first view of a pin
         detail page schedules the provider chain in Celery (via the
-        "boundary" panel source) and the map JS polls while ``pending``.
+        "boundary" panel source) and the map JS polls while ``pending``. Once
+        generated, they're periodically refreshed the same way, lazily and in
+        the background, whenever a view finds them older than
+        ``SiteSettings.boundary_cache_days`` - the stale geometry is served
+        immediately (``refreshing: true``) while the map JS keeps polling for
+        the newer answer.
         """
         if not request.user.is_authenticated:
             return JsonResponse({"error": "Authentication required."}, status=401)
 
         try:
-            pin = Pin.objects.select_related("location", "wiki", "parent_pin").get(slug=pin_slug, profile__user=request.user)
+            pin = Pin.objects.select_related("location", "wiki", "parent_pin", "profile").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return JsonResponse({"error": "Pin not found"}, status=404)
 
         pending = False
-        if pin.location_id and not boundary_generation_ran(pin.location):
-            # Heavy provider-chain work never runs on the request path.
-            pending = schedule_panel_fetch("boundary", pin)
+        refreshing = False
+        if pin.location_id:
+            if not boundary_generation_ran(pin.location):
+                # Heavy provider-chain work never runs on the request path.
+                pending = schedule_panel_fetch("boundary", pin)
+            else:
+                refreshing = schedule_location_boundary_generation(pin.location, pin.profile)
 
-        return JsonResponse(_pin_boundary_payload(pin, pending=pending))
+        return JsonResponse(_pin_boundary_payload(pin, pending=pending, refreshing=refreshing))
 
     def save_boundary(self, request: Request, pin_slug):
         """Create, update, or clear the user's custom boundary of one type.
@@ -147,7 +167,7 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"error": "Authentication required."}, status=401)
 
         try:
-            pin = Pin.objects.select_related("location", "wiki", "parent_pin").get(slug=pin_slug, profile__user=request.user)
+            pin = Pin.objects.select_related("location", "wiki", "parent_pin", "profile").get(slug=pin_slug, profile__user=request.user)
         except Pin.DoesNotExist:
             return JsonResponse({"error": "Pin not found"}, status=404)
 
@@ -167,8 +187,8 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
         if polygon_geojson:
             try:
                 geom = _parse_multipolygon(polygon_geojson)
-            except (TypeError, ValueError) as exc:
-                return JsonResponse({"error": str(exc)}, status=400)
+            except InvalidPolygonGeoJSONError as exc:
+                return JsonResponse({"error": exc.safe_message}, status=400)
             row, _created = Boundary.objects.get_or_create(
                 pin=pin,
                 boundary_type=boundary_type,
@@ -183,52 +203,16 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
             Boundary.objects.filter(pin=pin, boundary_type=boundary_type).delete()
 
         pending = False
-        if pin.location_id and not boundary_generation_ran(pin.location):
-            pending = schedule_panel_fetch("boundary", pin)
+        refreshing = False
+        if pin.location_id:
+            if not boundary_generation_ran(pin.location):
+                pending = schedule_panel_fetch("boundary", pin)
+            else:
+                refreshing = schedule_location_boundary_generation(pin.location, pin.profile)
 
-        payload = _pin_boundary_payload(pin, pending=pending)
+        payload = _pin_boundary_payload(pin, pending=pending, refreshing=refreshing)
         payload["status"] = "ok"
         return JsonResponse(payload)
-
-    def list_boundaries(self, request: HttpRequest):
-        """Return all boundaries visible to the current user for the main map overlay.
-
-        Returns the user's own pin boundaries, plus location-default rows for
-        locations not already covered by one of those pin boundaries.
-        """
-        if not request.user.is_authenticated:
-            return JsonResponse({"error": "Authentication required."}, status=401)
-        try:
-            profile: Profile | None = request.user.profile
-        except Profile.DoesNotExist:
-            profile = None
-
-        if profile:
-            pin_rows = list(Boundary.objects.for_profile(profile).with_coordinate_location())
-            covered = {(row.pin.location_id, row.boundary_type) for row in pin_rows if row.pin and row.pin.location_id}
-            defaults = [row for row in Boundary.objects.location_defaults().with_coordinate_location() if (row.location_id, row.boundary_type) not in covered]
-            rows = pin_rows + defaults
-        else:
-            rows = list(Boundary.objects.location_defaults().with_coordinate_location())
-
-        result = []
-        for row in rows:
-            location = row.coordinate_location
-            if location is None or location.latitude is None or location.longitude is None:
-                continue
-            polygon = row.effective_polygon
-            result.append(
-                {
-                    "id": row.id,
-                    "boundary_type": row.boundary_type,
-                    "location_id": location.id,
-                    "latitude": float(location.latitude),
-                    "longitude": float(location.longitude),
-                    "polygon": _geojson(polygon),
-                    "default_radius_meters": row.default_radius_meters,
-                },
-            )
-        return JsonResponse({"boundaries": result})
 
 
 class WikiBoundaryView(LoginRequiredMixin, View):
@@ -243,10 +227,11 @@ class WikiBoundaryView(LoginRequiredMixin, View):
     """
 
     def get(self, request, location_slug):
-        """Return the wiki's effective boundaries, scheduling generation when needed."""
+        """Return the wiki's effective boundaries, scheduling generation/refresh when needed."""
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        pending = schedule_location_boundary_generation(location, profile)
-        return JsonResponse(_wiki_boundary_payload(wiki, pending=pending))
+        already_ran = boundary_generation_ran(location)
+        in_flight = schedule_location_boundary_generation(location, profile)
+        return JsonResponse(_wiki_boundary_payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran))
 
     def post(self, request, location_slug):
         """Save or clear the community-drawn boundary of one type, with audit."""
@@ -269,8 +254,8 @@ class WikiBoundaryView(LoginRequiredMixin, View):
         if polygon_geojson:
             try:
                 geom = _parse_multipolygon(polygon_geojson)
-            except (TypeError, ValueError) as exc:
-                return JsonResponse({"error": str(exc)}, status=400)
+            except InvalidPolygonGeoJSONError as exc:
+                return JsonResponse({"error": exc.safe_message}, status=400)
 
             # Check area against the site-wide limit.  Project to an equal-area
             # CRS (EPSG:6933) so the area calculation is meaningful globally.
@@ -305,7 +290,8 @@ class WikiBoundaryView(LoginRequiredMixin, View):
             changes={f"boundary_{boundary_type}": {"from": old_wkt, "to": new_wkt}},
         )
 
-        pending = schedule_location_boundary_generation(location, profile)
-        payload = _wiki_boundary_payload(wiki, pending=pending)
+        already_ran = boundary_generation_ran(location)
+        in_flight = schedule_location_boundary_generation(location, profile)
+        payload = _wiki_boundary_payload(wiki, pending=in_flight and not already_ran, refreshing=in_flight and already_ran)
         payload["ok"] = True
         return JsonResponse(payload)

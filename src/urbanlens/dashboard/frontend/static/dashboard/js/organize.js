@@ -1,14 +1,14 @@
 import {
+  IconPicker,
+  renderIconGlyphHtml,
+  resetIconPicker
+} from "./article-wysiwyg-ee3vhq76.js";
+import {
   confirmAction,
   getCsrfToken,
   htmxProcess,
   toast
 } from "./article-wysiwyg-5jnnp4sj.js";
-import {
-  IconPicker,
-  renderIconGlyphHtml,
-  resetIconPicker
-} from "./article-wysiwyg-ee3vhq76.js";
 import"./article-wysiwyg-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/organize-icon-picker.ts

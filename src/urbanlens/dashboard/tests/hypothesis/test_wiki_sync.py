@@ -403,7 +403,7 @@ class SettingsViewWikiSyncSectionTests(TestCase):
 class MediaCacheInvalidationOnNewAliasTests(TestCase):
     """A new pin/wiki alias may surface a name-quality-dependent match (a
     Wikipedia article, or images on one) that couldn't be found under the
-    previous name set - see docs/prompts/completed.md's "Wikipedia article
+    previous name set - "Wikipedia article
     images not reliably reaching Media section" entry. A genuinely new alias
     should clear the location's Wikipedia/Wikimedia LocationCache rows so the
     next panel view does a fresh lookup; renaming an existing alias should not.

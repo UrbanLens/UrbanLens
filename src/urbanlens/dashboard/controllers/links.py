@@ -15,9 +15,11 @@ from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
-from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
+from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, WikiAutoRemoval
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink, WikiLink
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.pin_subresources import InvalidLinkError, create_pin_link, delete_pin_link
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
 logger = logging.getLogger(__name__)
@@ -87,11 +89,10 @@ class PinLinksView(LoginRequiredMixin, View):
 
     def post(self, request, pin_slug):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        cleaned = _clean_link_input(request)
-        if isinstance(cleaned, HttpResponse):
-            return cleaned
-        name, url = cleaned
-        PinLink.objects.create(pin=pin, name=name, url=url)
+        try:
+            create_pin_link(pin, name=(request.POST.get("name") or ""), url=(request.POST.get("url") or ""))
+        except InvalidLinkError as exc:
+            return HttpResponse(exc.safe_message, status=400)
         return _render_pin_links(request, pin)
 
 
@@ -99,10 +100,7 @@ class PinLinkDeleteView(LoginRequiredMixin, View):
     def delete(self, request, pin_slug, link_id):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         link = get_object_or_404(PinLink, id=link_id, pin=pin)
-        # Tombstone first: a plugin panel (Nominatim, EPA) can otherwise
-        # recreate this exact link the next time its cache goes stale.
-        PinAutoRemoval.objects.record(pin=pin, kind=AutoRemovalKind.LINK, value=link.url)
-        link.delete()
+        delete_pin_link(pin, link)
         return _render_pin_links(request, pin)
 
 
@@ -120,15 +118,26 @@ class LocationLinksView(LoginRequiredMixin, View):
             return cleaned
         name, url = cleaned
         WikiLink.objects.create(wiki=wiki, name=name, url=url, created_by=profile)
+        WikiEdit.objects.create(
+            wiki=wiki,
+            editor=profile,
+            changes={"link_added": {"from": None, "to": url}},
+        )
         return _render_wiki_links(request, wiki)
 
 
 class LocationLinkDeleteView(LoginRequiredMixin, View):
     def delete(self, request, location_slug, link_id):
-        _location, wiki, _profile = resolve_visible_wiki(request, location_slug)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
         link = get_object_or_404(WikiLink, id=link_id, wiki=wiki)
+        link_url = link.url
         # Tombstone first: a plugin panel (Nominatim, EPA) can otherwise
         # recreate this exact link the next time its cache goes stale.
-        WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.LINK, value=link.url)
+        WikiAutoRemoval.objects.record(wiki=wiki, kind=AutoRemovalKind.LINK, value=link_url)
         link.delete()
+        WikiEdit.objects.create(
+            wiki=wiki,
+            editor=profile,
+            changes={"link_removed": {"from": link_url, "to": None}},
+        )
         return _render_wiki_links(request, wiki)

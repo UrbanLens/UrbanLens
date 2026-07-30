@@ -144,10 +144,16 @@ class Profile(abstract.PublicDashboardModel):
         choices=VisibilityChoice.choices,
         default=VisibilityChoice.ANYTHING_IN_COMMON,
     )
+    # ANYONE, not ANYTHING_IN_COMMON: invite_by_email's unregistered-address
+    # branch always sends the invitation, unconditionally - so a stricter
+    # default here would make having an account *harder* to reach by friend
+    # request than not having one, which is backwards. The migration that
+    # changed this default backfills existing rows that were still at the old
+    # default, on the same reasoning as welcome_onboarding_complete above.
     friend_request_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,
-        default=VisibilityChoice.ANYTHING_IN_COMMON,
+        default=VisibilityChoice.ANYONE,
     )
     photo_upload_visibility = CharField(
         max_length=20,
@@ -354,7 +360,36 @@ class Profile(abstract.PublicDashboardModel):
     # Off silences the suggestion everywhere at once; declining it on a single
     # pin instead is per-pin and permanent (Pin.restructure_offer_dismissed).
     # See services.pin_restructure.
-    suggest_pin_restructure = BooleanField(default=True, help_text="Offer to organize pins into buildings and sub pins when you open a property that has several.")
+    suggest_pin_restructure = BooleanField(default=True, help_text="Offer to organize pins into buildings and child pins when you open a property that has several.")
+
+    # Master switch for the whole pin-suggestion surface (Memories -> Locations).
+    # Off overrides every per-source toggle below: no new suggestions are
+    # created and any already-pending ones are hidden (not deleted) - see
+    # services.pin_suggestions.pending_suggestions_for_profile.
+    pin_suggestions_enabled = BooleanField(default=True, help_text="Suggest pins based on your photos, public locations, and connected apps.")
+
+    # Whether community-approved public locations appear in this profile's
+    # suggestion queue. Public locations are the (rare) outcome of the
+    # public-pin vote - see services.public_pins. Off both stops new
+    # suggestions from being created and hides any pending ones.
+    suggest_public_pins = BooleanField(default=True, help_text="Suggest community-approved public locations that you haven't pinned yet.")
+
+    # Whether Immich/local-folder photo scans may raise pin suggestions. Off
+    # both stops new suggestions from being created (see
+    # services.pin_suggestions.ingest_location_hits) and hides any pending ones.
+    suggest_pins_from_photos = BooleanField(default=True, help_text="Suggest pins found by scanning your Immich library or local photo folders.")
+
+    # Whether external apps (via the Pin Suggestions API endpoint) may raise
+    # pin suggestions for this profile. Off both stops new suggestions from
+    # being created and hides any pending ones.
+    suggest_pins_from_external_apis = BooleanField(default=True, help_text="Suggest pins submitted by connected external apps.")
+
+    # Whether the new-user "suggested pins near you" dialog has already been
+    # shown on the map. Set the first time it's shown (regardless of the
+    # user's answer) so it never nags again - see controllers.maps.view_map.
+    # Existing profiles are backfilled to True by the migration that adds this
+    # field, so only genuinely new accounts ever see it.
+    map_pin_suggestions_intro_seen = BooleanField(default=False, help_text="Internal: whether the new-user pin-suggestions intro dialog has been shown on the map.")
 
     # Default ordering for the pin detail page's Media gallery. "relevant"
     # surfaces items this user has explicitly marked relevant first (falling
@@ -372,6 +407,10 @@ class Profile(abstract.PublicDashboardModel):
     track_pin_visits = BooleanField(default=True, help_text="Log visits to your pins from journal entries, imports, and photo tagging.")
     track_routes = BooleanField(default=True, help_text="Save imported GPS routes/tracks.")
     track_geolocation = BooleanField(default=True, help_text="Record visits from your live device location.")
+    track_device_scans = BooleanField(
+        default=True,
+        help_text="Associate wireless device scans you upload with your account (enables personal scan history). When off, your scans are stored anonymously.",
+    )
 
     # When False: your pins are forced private, your profile and privacy
     # settings are locked to the most restrictive option, and you cannot send

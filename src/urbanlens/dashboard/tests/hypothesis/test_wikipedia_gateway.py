@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from unittest import mock
 
-from urbanlens.core.tests.testcase import SimpleTestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.services.apis.assets.wikipedia import WikipediaGateway, WikipediaMediaGateway, _absolute_media_url
 
 _COMPONENTS = {"locality": "Poughkeepsie", "route": "Main St", "street_number": "103", "administrative_area_level_1": "NY"}
@@ -145,9 +145,8 @@ class GetArticleMediaTests(SimpleTestCase):
 
     This exists specifically because a Wikimedia Commons text search (see
     WikimediaGateway) can miss images that are only reachable through an
-    in-body gallery and aren't independently discoverable by name - see
-    docs/prompts/completed.md's "Wikipedia article images not reliably
-    reaching Media section" entry.
+    in-body gallery and aren't independently discoverable by name -
+    "Wikipedia article images not reliably reaching Media section" entry.
     """
 
     def setUp(self) -> None:
@@ -205,6 +204,67 @@ class GetArticleMediaTests(SimpleTestCase):
         self.assertEqual(media, [])
 
 
+class WikipediaCampusFallbackTests(TestCase):
+    """UL-354: a child pin whose own coordinates find no article retries from
+    each ancestor pin's coordinates and name (campus-aware search).
+
+    A large campus has one article geotagged at a single point (usually the
+    main building); an outbuilding pin can sit outside the geosearch radius,
+    so its own search legitimately finds nothing - the parent's point and
+    name are the right second query, without widening the global radius.
+    """
+
+    _CAMPUS_ARTICLE = {"title": "Hudson River State Hospital", "extract": "x", "url": "", "thumbnail": "", "description": "", "page_id": 1, "infobox": []}
+
+    def setUp(self) -> None:
+        super().setUp()
+        from django.contrib.auth.models import User
+        from model_bakery import baker
+
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        self.profile = baker.make(User).profile
+        self.campus_location = baker.make(Location, latitude=41.6, longitude=-73.8)
+        self.campus = baker.make(Pin, profile=self.profile, location=self.campus_location, name="Hudson River State Hospital")
+        self.child_location = baker.make(Location, latitude=41.61, longitude=-73.81)
+        self.child = baker.make(Pin, profile=self.profile, location=self.child_location, name="Boiler House", parent_pin=self.campus)
+
+    def _article_only_at_campus(self, lat, lng, components, name=""):
+        return self._CAMPUS_ARTICLE if abs(lat - 41.6) < 1e-6 else None
+
+    def test_child_pin_falls_back_to_parent_coordinates(self) -> None:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaPanelSource
+
+        with mock.patch.object(WikipediaGateway, "get_article_for_location", side_effect=self._article_only_at_campus):
+            WikipediaPanelSource().fetch(self.child)
+
+        row = LocationCache.get_fresh(self.child_location, "wikipedia")
+        assert row is not None
+        self.assertEqual(row.data.get("title"), "Hudson River State Hospital")
+
+    def test_own_coordinate_match_never_consults_the_parent(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaPanelSource
+
+        with mock.patch.object(WikipediaGateway, "get_article_for_location", return_value=dict(self._CAMPUS_ARTICLE)) as get_article:
+            WikipediaPanelSource().fetch(self.child)
+
+        get_article.assert_called_once()
+
+    def test_top_level_pin_with_no_article_stores_an_empty_result(self) -> None:
+        from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.plugins.builtin.wikipedia import WikipediaPanelSource
+
+        with mock.patch.object(WikipediaGateway, "get_article_for_location", return_value=None) as get_article:
+            WikipediaPanelSource().fetch(self.campus)
+
+        get_article.assert_called_once()
+        row = LocationCache.get_fresh(self.campus_location, "wikipedia")
+        assert row is not None
+        self.assertEqual(row.data, {})
+
+
 class WikipediaMediaGatewayTests(SimpleTestCase):
     """WikipediaMediaGateway._generate_media() - the MediaProvider wrapper around get_article_media."""
 
@@ -243,7 +303,7 @@ class WikipediaMediaGatewayTests(SimpleTestCase):
 class FetchInfoboxTests(SimpleTestCase):
     """WikipediaGateway._fetch_infobox() - regression coverage for the
     "started from Wikipedia" seed missing the infobox" report
-    (docs/prompts/completed.md).
+    (docs/notes/ai/completed.md).
 
     _fetch_summary/_fetch_extended_extract are both backed by the
     TextExtracts extension, which strips infoboxes before returning "extract"

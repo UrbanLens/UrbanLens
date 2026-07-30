@@ -1,7 +1,7 @@
 # UrbanLens Features
 
 A feature inventory of what UrbanLens currently supports, generated from a codebase audit
-(2026-07-11, last verified/expanded 2026-07-18). This is a snapshot, not a promise — see `TODO.md` for what's planned or partially
+(2026-07-11, last verified/expanded 2026-07-29). This is a snapshot, not a promise — see `TODO.md` for what's planned or partially
 built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 
 ## Mapping & Pins
@@ -116,11 +116,11 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, Photon, EPA ECHO, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering, an admin-only drag-to-reorder priority list (Site Admin), and Google Places demoted to fallback-only (only considered when no other source has a candidate) - individual users cannot override the ordering
 - Boundary drawing — property/building polygons per pin, generated automatically from a typed
   provider chain (`services.locations.boundaries.BoundaryProviderChain`) trying, in order:
-  REData's authoritative county GIS parcel/building geometry (`RedataBoundaryProvider` - see
-  `docs/redata.md`, US-only, coverage limited to jurisdictions REData has researched), then
-  OSM/Overpass, Overture Maps, Microsoft Building Footprints, and Google Open Buildings; editable
+  REData's authoritative county GIS parcel/building geometry (`RedataBoundaryProvider`, US-only,
+  coverage varies by jurisdiction), then OSM/Overpass, Overture Maps, Microsoft Building
+  Footprints, and Google Open Buildings; editable
   by the user
-- Standalone reusable **MarkupMaps** with freehand drawing/annotation tools (point, line, arrow, text, box, circle, polygon), attachable to pins, wikis, safety check-ins, or kept independent; also embedded in the **safety check-in creation form** for drawing routes and destinations
+- Standalone reusable **MarkupMaps** with freehand drawing/annotation tools (point, line, freehand, arrow, text, box, circle, polygon), attachable to pins, wikis, safety check-ins, or kept independent; also embedded in the **safety check-in creation form** for drawing routes and destinations
 - Detail pins — sub-markers placed inside a pin/wiki's bounding box for finer-grained mapping
   (rooms, entrances, hazards, etc.)
 
@@ -138,14 +138,10 @@ On-demand, cached lookups shown as panels on the pin detail page:
 - **National Park Service** (USA) — nearby park info
 - **LoopNet** (USA) — commercial real-estate listings
 - **Property Records** (USA) — county parcel ownership/tax/sale-history lookup, retrieved from
-  REData (`../REData`, a standalone service - see `docs/redata.md`) via `RedataGateway`
+  REData (`../REData`, a standalone service) via `RedataGateway`
   (`services.apis.property_records.redata_gateway`); populates the wiki's Ownership and Sale
-  History cards with `OFFICIAL`-sourced records in addition to a details card. REData owns the
-  4-tier fallback pipeline (free ArcGIS REST/Socrata county GIS, vendor-platform scraping,
-  bespoke per-county recipes, explicit manual-only), jurisdiction resolution, and per-field
-  merging; coverage depends on REData's own jurisdiction registry. Requires
-  `UL_REDATA_API_URL`/`UL_REDATA_API_KEY` to be configured - see `docs/property-records-plan.md`
-  for the original tiered design this feature was built from
+  History cards with `OFFICIAL`-sourced records in addition to a details card. Coverage varies by
+  county. Requires `UL_REDATA_API_URL`/`UL_REDATA_API_KEY` to be configured
 - **USGS Historical Topo Maps** (USA) — historical topographic maps
 - **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim structured data and Photon nearest-feature lookup)
 - **Regional Data** — US Census, Wildlife, Seismic, and EPA data loaded on demand per sub-tab
@@ -205,7 +201,7 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 ## Trips
 
 - Multi-stop trip planning shared among friends: activities, scheduling, map view
-- RSVP per member, per-activity thumbs up/down voting on proposed activities
+- RSVP per member with trip-wide defaults and per-activity overrides; per-activity thumbs up/down voting on proposed activities
 - Trip comments with emoji reactions
 - List and calendar views of trips, sortable
 - Two-way Google Calendar sync — connect an account, import calendar events as trips
@@ -222,6 +218,28 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   view attached maps, and chat in real time
 - Live two-way WebSocket chat between check-in owner and emergency contacts
 - Reusable saved emergency contacts, per-contact opt-out, auto-delete retention policy
+
+## Device Scanning
+
+- Mobile app feature: scans for nearby wireless (Wi-Fi/Bluetooth) devices while a user walks a
+  route, to help them notice a camera, sensor, or tracker they didn't expect. Uploads MAC address,
+  signal-strength samples along the route, an estimated location, and an optional device-type guess
+  through a single external-API endpoint (`device_scans:write`); a background task classifies the
+  device (trusting the client's own guess, otherwise a small MAC-OUI/name heuristic) and, for
+  camera/sensor/tracker types, updates a fuzzy map marker on every wiki (including child wikis)
+  whose boundary contains the reported coordinates.
+- Markers start as an imprecise area and get more precise automatically as more scans corroborate
+  the same location, weighted toward recent activity over old; a device that appears to move shows
+  up as two separate markers until the stale one ages out. The app can query which devices/signal
+  strengths are already expected nearby (`device_scans:read`) and report back when an expected
+  device wasn't detected, which — after a few consecutive misses — flips the marker to "presumed
+  removed."
+- Attribution to the uploader's account is a privacy preference (`track_device_scans`, Settings →
+  History, default on) independent of authentication, which is always required; turning it off
+  stores the same scan data anonymously instead of skipping it.
+- **Individual scans are never retrievable through any API** — only the cumulative, unattributed
+  marker per (device, wiki) is ever readable, and only for wikis the caller has already discovered.
+- No manual marker-placement UI yet; markers are maintained entirely by the background pipeline.
 
 ## Social Layer
 
@@ -262,7 +280,7 @@ relationships, bulk edit and bulk convert between kinds, per-user color/icon cus
 - Real-time push over WebSockets (`ws/notifications/`) with desktop `Notification` API support and
   a 60s polling fallback
 - Outbound email notifications with per-role rate caps (hourly/daily/monthly) and safety controls
-- **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. **Delivery caveat:** WhatsApp/SMS dispatch is currently implemented only for safety check-in alerts and new direct messages — the other event types' WhatsApp toggles are stored but not yet wired to a sender (see `docs/PROBLEMS.md`).
+- **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. WhatsApp/SMS delivery is wired for every event type: DMs and safety check-ins keep their dedicated pipelines, and all other types dispatch centrally via a `NotificationLog` post_save signal (`services/notification_text_alerts.py`) — delayed 2 minutes, skipped if read in the meantime, debounced per type per 6h.
 - Admin-only critical alerting via email + Gotify push (distinct from user-facing notifications)
 
 ## Custom Fields
@@ -311,14 +329,20 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
 
 ## AI Integration
 
-- Pluggable AI provider gateway (OpenAI, Cloudflare, Hugging Face)
+- Pluggable AI provider gateway (OpenAI, Cloudflare, Anthropic, Hugging Face). The AI chat
+  assistant is pinned to Anthropic regardless of the site-wide provider setting, since its
+  tool-calling protocol needs reliable instruction-following that smaller/free models don't
+  consistently provide.
 - AI-assisted import: extract pins from freeform documents/notes
 - AI-assisted label styling: suggest colors/icons for auto-created labels
 - Keyword-based and AI-assisted auto-tagging of pins/wikis
 - **AI link extraction** — a per-link sparkle button (on the pin's Links card and inside
   external-data panels such as web search, Wikipedia, LoopNet, and news results) has AI read the
   linked page and extract allowlisted structured fields (date built, date abandoned, owner
-  name/company, sale date/price, aliases) into the pin; admin-settable per-user daily limit, a
+  name/company, sale date/price, aliases) into the pin; the same run also asks a writing assistant
+  for new plain-text paragraphs to append to the pin article and (when one exists) the location
+  wiki article, after stripping all markup and a fail-closed safety AI review (no operational
+  access/trespass guidance or inappropriate content); admin-settable per-user daily limit, a
   review page (`/ai/extractions/`) for results that couldn't be applied automatically, and a
   completion notification
 - **Local keyword tagging** — entirely local (no AI or network call), keyword-match auto-categorize / auto-tag / auto-status on pin save; master toggle + per-type sub-toggles in Settings → Connections
@@ -372,3 +396,132 @@ for the boundary rationale:
   reaction updates for DMs and group chats (with an HTTP fallback for sending)
 - `ws/safety/checkin/<uuid>/chat/` and `ws/safety/contact/<token>/chat/` — safety check-in chat,
   shared between the check-in owner and emergency contacts
+
+## Games: SpotGuessr
+
+A GeoGuessr-style game built on the user's own pin/wiki/photo data. Full design and phase
+mapping: `docs/designs/drafts/spotguessr.md`. **Built (UL-391..UL-393): solo and multiplayer
+play, all three guess modes.** Everything below the line is not yet built.
+
+- Three modes: **Photos** (a photo shared to a pinned location's wiki - never a private,
+  un-shared pin photo; guess by clicking a Leaflet map or searching your own pins), **Named
+  Place** (a meaningful place name or, by default, a random alias/nickname - togglable off;
+  map-click only, no pin search - the point is recognizing the name without being able to look
+  it up), and **Street View** (imagery from the existing Street View integration, point-scored;
+  map-click or pin search)
+- Photos-mode community-relevance feedback: in-game thumbs up/down/report on the shown photo
+  feed a blended relevance score (`services.media_relevance.effective_relevance`) alongside the
+  wiki's own thumbs, weighted down for in-game signal (thumbs down at only a token weight - see
+  the design doc's "Photo relevance feedback"); an "allow arbitrary external photos" setting
+  (off by default) opts a session out of the relevance filter
+- Crowd-sourced coordinates for still-unplaced photos: every guess against a Photos-mode photo
+  with no coordinates of its own is anonymously recorded (no profile/round FK at all - just the
+  guessed point, correct/incorrect, and a timestamp); 5+ correct guesses average into an
+  estimated position (with a loose outlier trim past 10), shown on maps via
+  `Image.effective_latitude`/`effective_longitude` until a real coordinate takes over - see the
+  design doc's "Crowd-sourced photo coordinates"
+- Eligibility engine: a location is only ever offered if it's pinned by every *joined*
+  participant (an invited-but-not-yet-accepted player never gates this) — no exceptions, no
+  caching across sessions
+- Scoring: geodesic point distance when a photo/Street View shot has its own coordinates,
+  geodesic distance to the location's effective property boundary (0 inside it) otherwise
+  (always the boundary rule for Named Place) — real PostGIS `ST_Distance`, not an approximation
+- Glicko-2 ratings, tracked per mode: player skill (`PlayerModeRating`) and location difficulty
+  (`LocationModeRating`), updated after every round
+- Difficulty slider (weights location selection toward a target difficulty band), a
+  geographic-boundary restriction (draw a rectangle to confine rounds to an area), and
+  anti-clustering location selection (never repeats a location in a session, avoids picking
+  somewhere near the immediately preceding round). Locations with too little (or no) play
+  history are seeded from proxies (pin count, photo count) instead of sitting at a flat neutral
+  rating, so the slider has a real effect on unplayed locations from day one, not just
+  well-worn ones
+- Optional date-guessing bonus (guess the photo's capture date for extra points, default off,
+  Photos mode only)
+- Optional per-round timer (30/60/90/120 seconds, or untimed) - a live countdown auto-reveals
+  the round when it expires, for either solo or multiplayer play
+- Own Glicko-2 rating + friends' ratings on the overview page, with a per-profile opt-out
+  (`SpotGuessrPreference.show_ratings_to_friends`, default on); each round's own rating change is
+  now shown at reveal time (e.g. "▲ +14 rating"), plus a net-change-for-the-session total on the
+  final summary screen alongside each player's best round
+- Reveal-screen "feel": an animated point count-up, the guess-to-answer distance line drawing
+  itself in rather than snapping into place, and a richer summary screen (winner callout for
+  multiplayer, animated score-card count-ups)
+- **Multiplayer**: a friends-only invite/join lobby (invite notification deep-links straight
+  into the lobby) with a host-controlled start that locks the roster, a live scoreboard, and
+  WebSocket-driven round sync (`GameSessionConsumer`, one group per session) so every
+  participant sees rounds/reveals/results together in real time
+- **Multiplayer stall handling**: a round stuck because a participant went AFK is force-revealed
+  by a Celery beat sweep after 10 minutes (marking the session `ABANDONED` if literally nobody
+  guessed), and the host can end an in-progress or not-yet-started game immediately at any time
+  from an "End game" control - no more waiting out a dead lobby or stuck round
+- **Live text chat** scoped to a session (WebSocket-only, no E2EE - unlike DMs, session banter
+  between people already visible to each other on the scoreboard has no privacy surface to
+  protect)
+
+Not yet built: the community photo submission/moderation pipeline itself - upload-to-wiki with
+a submit-to-game checkbox, a "submit this wiki photo to the game" lightbox button, and the
+nudity/person moderation classifier (UL-394; in-game thumbs/report voting is built, see above) -
+voice chat (UL-395), and a persistent site-wide leaderboard (UL-396; the live in-game scoreboard
+and reveal/summary animation polish described above are already built). Also not built
+(deliberate scope cuts, not oversights): join-by-link invites and mid-game joining - see the
+design doc's "Multiplayer sessions" and "Multiplayer stall handling" sections.
+
+## Games: Trivia
+
+A quiz game built on the same pin/wiki/location data as SpotGuessr: answer questions about
+places you've pinned, solo or with friends. Full design and phase mapping:
+`docs/designs/drafts/trivia.md`. **Built (Phases 1-4): solo and multiplayer play, all three
+question sources, AI content moderation, AI answer checking, and AI wiki incorporation.**
+Everything below the line is not yet built.
+
+- Three question sources, all gated by the same content classifier before reaching a player:
+  **deterministic** templates from cached property-records data (year built, building number,
+  and building count once a parcel has more than a few buildings - all only for named
+  buildings), **AI-generated** from wiki articles with substantial content (up to 3 per wiki),
+  and **user-submitted** questions about a location the submitter has pinned
+- Content classifier (`services.trivia.classifier`): rejects a question about a specific
+  individual - even one only referenced indirectly and never named (e.g. "the year *someone*
+  did X" still centers a person), rejects bullying language, rejects references to a specific
+  exploring group/crew/party rather than the location itself, and rejects anything not actually
+  about the place. Fails closed on any AI unavailability. Used identically for user submissions
+  and AI-generated candidates - same rules, same code path
+- **No feedback loop for submitters**: a submitted question's approval/rejection is never
+  disclosed to its author, so a rejected question can't be iteratively tweaked past the filter -
+  except that a solo player's own not-yet-approved question may still surface to them, very
+  rarely, in solo play only (never to anyone else, never in multiplayer)
+- Answers are checked case-insensitively and stripped to alphanumeric first; on a mismatch, an
+  optional AI fallback judges whether the answer means the same thing just phrased differently
+  (gated on the AI subscription feature - without it, exact-match-only, never blocked from
+  playing)
+- Upvote/downvote/report voting on questions, with a small passive +0.05 "shown, no reaction"
+  default per play - a question whose blended score goes negative (downvotes and reports carry
+  real weight, unlike SpotGuessr's near-token photo-thumbs-down) drops out of rotation until its
+  score recovers
+- Glicko-2 ratings: player skill (`PlayerTriviaRating`, one per profile - no per-mode split,
+  unlike SpotGuessr) and question difficulty (`TriviaQuestionRating`), updated after every round
+  from a binary correct/incorrect outcome
+- Difficulty slider, applied per-question (a location can host both an easy and a hard
+  question) rather than per-location
+- **AI wiki incorporation**: once a user-submitted question's community vote score crosses a
+  threshold well above the bare rotation gate, an AI writing agent drafts a short paragraph
+  folding the fact into the location's wiki article - reusing the same sanitize/safety-classify/
+  append pipeline as link-based article expansion, not a separate one
+- **Multiplayer**: a friends-only invite/join lobby with a host-controlled start, live scoreboard,
+  and WebSocket-driven round sync (`TriviaSessionConsumer`, sharing its connect/relay skeleton
+  with SpotGuessr's `GameSessionConsumer` via a common base class) plus live text chat
+  (WebSocket-only, no E2EE, same rationale as SpotGuessr's session chat)
+- Own Glicko-2 rating + friends' ratings on the overview page, with a per-profile opt-out
+  (`TriviaPreference.show_ratings_to_friends`, default on)
+- Four independent `SiteSettings` toggles gate content moderation, AI generation, AI answer
+  checking, and AI wiki incorporation separately - turning any one off never bypasses moderation
+  for the others, it just holds the gated content back until AI is available again
+- **Multiplayer stall handling and leave/kick**: a round stuck because a participant went AFK
+  is force-revealed by a Celery beat sweep after 10 minutes (marking the session `ABANDONED` if
+  literally nobody answered), the host can end an in-progress or not-yet-started game
+  immediately at any time, and any participant can voluntarily leave (or decline an invite) -
+  or be removed by the host from the pre-game lobby roster - at which point the host role
+  transfers automatically if the host themselves leaves
+
+Not yet built: a moderation review UI for AI-rejected questions (the only way to inspect why a
+question was rejected today is direct DB access) - explicitly decided against, not just
+unbuilt - see the design doc's "Known gaps" section.

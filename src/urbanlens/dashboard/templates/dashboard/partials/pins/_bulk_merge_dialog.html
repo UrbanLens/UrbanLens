@@ -1,4 +1,4 @@
-{# Merge dialog: pick which selected pin survives as top-level; the rest become its detail pins. #}
+{# Merge dialog: pick which selected pin survives as top-level; the rest become its child pins. #}
 <dialog id="bulk-merge-dialog" class="ul-dialog cat-merge-dialog bulk-merge-dialog">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Merge pins" title_id="bulk-merge-dialog-title" %}
     <div class="cat-merge-dialog-body">
@@ -6,7 +6,7 @@
             <div class="cat-merge-section-label"><i class="material-symbols-outlined">check_circle</i> Top-level pin</div>
             <div id="bulk-merge-target-card" class="cat-merge-target-card"></div>
         </div>
-        <div class="cat-merge-divider"><i class="material-symbols-outlined">merge</i><span>Will become its detail pins</span></div>
+        <div class="cat-merge-divider"><i class="material-symbols-outlined">merge</i><span>Will become its child pins</span></div>
         <div class="cat-merge-section">
             <div class="cat-merge-section-label">
                 <i class="material-symbols-outlined">low_priority</i> Sources

@@ -35,10 +35,10 @@ Context:
         </h2>
         <p>
             {% if building_count %}
-            Add a sub pin for each building{% if sample_names %} &mdash; {% for name in sample_names %}{{ name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if building_count > 3 %}, and more{% endif %}{% endif %}.
+            Add a child pin for each building{% if sample_names %} &mdash; {% for name in sample_names %}{{ name }}{% if not forloop.last %}, {% endif %}{% endfor %}{% if building_count > 3 %}, and more{% endif %}{% endif %}.
             {% endif %}
             {% if nestable_count %}
-            Move {% if nestable_count == 1 %}it{% else %}them{% endif %} under this pin as sub pins &mdash; nothing is merged or deleted, and everything on them comes along.
+            Move {% if nestable_count == 1 %}it{% else %}them{% endif %} under this pin as child pins &mdash; nothing is merged or deleted, and everything on them comes along.
             {% endif %}
             You can undo any of this afterwards.
         </p>

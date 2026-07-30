@@ -60,10 +60,13 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
         super().setup(**kwargs)
 
     def get_client(self) -> OpenAI:
-        return OpenAI(
-            base_url=str(self.api_url),
-            api_key=self.api_key,
-        )
+        # `setup()` never assigns `api_url` (unlike the Cloudflare/HuggingFace gateways), so it's
+        # always None here - passing it through unconditionally would send OpenAI's SDK the
+        # literal string "None" as base_url instead of letting it fall back to the real default
+        # endpoint.
+        if self.api_url:
+            return OpenAI(base_url=str(self.api_url), api_key=self.api_key)
+        return OpenAI(api_key=self.api_key)
 
     def _get_response(self, message_queue: MessageQueue) -> ChatCompletion | None:
         """
@@ -97,7 +100,7 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
                 messages=messages,
                 max_tokens=self.max_tokens,
             )
-        except openai.BadRequestError as e:
+        except openai.APIError as e:
             logger.exception("Error sending a message to OpenAI: %s", e)
             return None
 
@@ -118,7 +121,6 @@ class OpenAIGateway(LLMGateway[ChatCompletion]):
         """
         try:
             body = response.choices[0].message.content
-            self.receive_tokens(body)
             logger.debug("AI Response: %s", body)
         except (IndexError, AttributeError) as e:
             logger.exception("Error retrieving response: %s", e)

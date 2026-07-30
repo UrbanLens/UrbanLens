@@ -58,9 +58,14 @@ _DETAILS_URL = "https://archive.org/details/{identifier}"
 #: re-checks the match locally rather than trusting the remote ranking.
 _FIELDS = ("identifier", "title", "description", "date", "mediatype", "creator", "subject")
 
-#: Restrict results to media types with a displayable preview image - excludes
-#: books/audio/software/data noise that isn't useful in a photo gallery.
-_MEDIA_TYPE_FILTER = "mediatype:(image OR movies)"
+#: Restrict results to media types worth a gallery tile. ``texts`` is included
+#: deliberately (decision 2026-07-23): live testing showed it holds the richest
+#: location material in the archive (inspectors' annual reports, legislature
+#: committee reports, local-landmark books), and
+#: ``archive.org/services/img/{identifier}`` generates a cover thumbnail for
+#: texts items, so they render as real tiles. Audio/software/data stay
+#: excluded - no preview, no location value.
+_MEDIA_TYPE_FILTER = "mediatype:(image OR movies OR texts)"
 
 #: Collections excluded outright. Every one of these is a bulk ingest of
 #: material that is *about* current events rather than about places, and whose

@@ -11,6 +11,7 @@ class AiProviderChoice(TextChoices):
 
     CLOUDFLARE = "cloudflare", "Cloudflare Workers AI"
     OPENAI = "openai", "OpenAI"
+    ANTHROPIC = "anthropic", "Anthropic (Claude)"
 
 
 class SearchProviderChoice(TextChoices):
@@ -55,3 +56,4 @@ class EnvironmentOverrideChoice(TextChoices):
 
 DEFAULT_OPENAI_MODEL = "gpt-5-nano"
 DEFAULT_CLOUDFLARE_MODEL = "@cf/mistral/mistral-7b-instruct-v0.1"
+DEFAULT_ANTHROPIC_MODEL = "claude-haiku-4-5"

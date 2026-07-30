@@ -8,6 +8,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
+from django.core.files.storage import default_storage
 from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -18,7 +19,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json, image_upload_error, parse_reposition_payload
 from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.storage import quota_error_for_upload
+from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -42,7 +43,7 @@ def _wiki_for_location(location: Location | None) -> Wiki | None:
 def _pin_gallery_images(request: HttpRequest, pin: Pin, profile: Profile):
     """Images for a pin's gallery, optionally including child-pin photos.
 
-    With ``?children=1`` (the pin page's "show sub pin details" toggle) photos
+    With ``?children=1`` (the pin page's "show child pin details" toggle) photos
     uploaded to any descendant child pin are included too, so the parent's
     gallery shows the whole place.
 
@@ -54,7 +55,7 @@ def _pin_gallery_images(request: HttpRequest, pin: Pin, profile: Profile):
     Returns:
         Tuple of (queryset, include_children flag).
     """
-    # Child expansion is owner-only: the "show sub pin details" toggle exists
+    # Child expansion is owner-only: the "show child pin details" toggle exists
     # on the owner's own pin page, and another user's child pins are theirs.
     include_children = request.GET.get("children") == "1" and pin.profile_id == profile.pk
     if include_children:
@@ -107,20 +108,22 @@ class PinGalleryView(LoginRequiredMixin, View):
         checksum = compute_checksum(image_file)
         if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
             return JsonResponse({"error": "You already uploaded this photo to this pin."}, status=409)
-        quota_error = quota_error_for_upload(profile, image_file.size)
-        if quota_error:
-            return JsonResponse({"error": quota_error}, status=413)
 
-        img = Image.objects.create(
-            image=image_file,
-            pin=pin,
-            wiki=_wiki_for_location(pin.location),
-            location=pin.location,
-            profile=profile,
-            caption=request.POST.get("caption", "").strip() or None,
-            checksum=checksum,
-            file_size=image_file.size,
-        )
+        with per_profile_upload_lock(profile):
+            quota_error = quota_error_for_upload(profile, image_file.size)
+            if quota_error:
+                return JsonResponse({"error": quota_error}, status=413)
+
+            img = Image.objects.create(
+                image=image_file,
+                pin=pin,
+                wiki=_wiki_for_location(pin.location),
+                location=pin.location,
+                profile=profile,
+                caption=request.POST.get("caption", "").strip() or None,
+                checksum=checksum,
+                file_size=image_file.size,
+            )
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 
@@ -169,12 +172,15 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
         images = Image.objects.filter(pk__in=image_ids, pin=pin, profile=profile)
 
         if action == "delete":
-            count = 0
-            for img in images:
-                img.image.delete(save=False)
-                img.delete()
-                count += 1
-            return JsonResponse({"deleted": count})
+            # Collect the stored file paths first, then delete the underlying
+            # storage files (Django has no bulk API for that) followed by a
+            # single bulk DB delete, instead of one DELETE per row.
+            image_paths = list(images.values_list("image", flat=True))
+            for path in image_paths:
+                if path:
+                    default_storage.delete(path)
+            images.delete()
+            return JsonResponse({"deleted": len(image_paths)})
 
         if action == "send_to_wiki":
             wiki = _wiki_for_location(pin.location)
@@ -291,19 +297,21 @@ class WikiGalleryView(LoginRequiredMixin, View):
         checksum = compute_checksum(image_file)
         if Image.objects.filter(wiki=wiki, profile=profile, checksum=checksum).exists():
             return JsonResponse({"error": "You already uploaded this photo to this wiki."}, status=409)
-        quota_error = quota_error_for_upload(profile, image_file.size)
-        if quota_error:
-            return JsonResponse({"error": quota_error}, status=413)
 
-        img = Image.objects.create(
-            image=image_file,
-            wiki=wiki,
-            location=location,
-            profile=profile,
-            caption=request.POST.get("caption", "").strip() or None,
-            checksum=checksum,
-            file_size=image_file.size,
-        )
+        with per_profile_upload_lock(profile):
+            quota_error = quota_error_for_upload(profile, image_file.size)
+            if quota_error:
+                return JsonResponse({"error": quota_error}, status=413)
+
+            img = Image.objects.create(
+                image=image_file,
+                wiki=wiki,
+                location=location,
+                profile=profile,
+                caption=request.POST.get("caption", "").strip() or None,
+                checksum=checksum,
+                file_size=image_file.size,
+            )
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 

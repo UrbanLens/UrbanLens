@@ -11,6 +11,7 @@ from unittest import mock
 
 from django.test import RequestFactory
 from django.urls import reverse
+from kombu.exceptions import KombuError
 import pytest
 
 from urbanlens.dashboard.baker_recipes import _make_profile
@@ -81,7 +82,7 @@ def test_schedule_panel_fetch_runs_when_external_apis_enabled() -> None:
         result = schedule_panel_fetch("boundary", pin)
 
     assert result is True
-    fetch_task.apply_async.assert_called_once_with(args=["boundary", pin.pk], queue="celery")
+    fetch_task.apply_async.assert_called_once_with(args=("boundary", pin.pk), kwargs={}, queue="celery")
 
 
 @pytest.mark.django_db
@@ -96,7 +97,42 @@ def test_fast_panel_dispatches_to_the_panel_fetch_queue() -> None:
     with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
         schedule_panel_fetch("photon", pin)
 
-    fetch_task.apply_async.assert_called_once_with(args=["photon", pin.pk], queue="panel_fetch")
+    fetch_task.apply_async.assert_called_once_with(args=("photon", pin.pk), kwargs={}, queue="panel_fetch")
+
+
+@pytest.mark.django_db
+def test_schedule_panel_fetch_degrades_quietly_when_broker_unreachable() -> None:
+    """A dead Celery broker must not 500 the panel endpoint - schedule_panel_fetch
+    reports "give up quietly" (False -> 204) instead of letting the enqueue
+    error propagate into the request."""
+    from model_bakery import baker
+
+    pin: Pin = baker.make_recipe("dashboard.pin")
+
+    with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
+        fetch_task.apply_async.side_effect = KombuError("broker down")
+        result = schedule_panel_fetch("boundary", pin)
+
+    assert result is False
+
+
+@pytest.mark.django_db
+def test_schedule_panel_fetch_releases_flight_marker_on_broker_failure() -> None:
+    """A failed enqueue must release the single-flight marker so the next poll
+    retries the dispatch immediately, rather than waiting out FLIGHT_TTL_SECONDS
+    behind a task that was never queued."""
+    from model_bakery import baker
+
+    pin: Pin = baker.make_recipe("dashboard.pin")
+
+    with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
+        fetch_task.apply_async.side_effect = KombuError("broker down")
+        assert schedule_panel_fetch("boundary", pin) is False
+
+    with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
+        assert schedule_panel_fetch("boundary", pin) is True
+
+    fetch_task.apply_async.assert_called_once()
 
 
 @pytest.mark.django_db

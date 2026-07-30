@@ -464,8 +464,27 @@
 .iw-log-icon.created { color: #43a047; }
 .iw-log-icon.existed { color: #9aa0a6; }
 .iw-log-icon.skipped { color: #e57373; }
+.iw-log-icon.deferred { color: #f0a020; }
 .iw-log-name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--ul-grey-0); }
 .iw-log-status { font-size: .72rem; color: #9aa0a6; flex-shrink: 0; }
+
+/* Background-continuation note (shown when some pins need a live CID lookup).
+   Use :not([hidden]) so this display:flex never fights the hidden attribute -
+   otherwise the empty note div renders even while [hidden] is set. */
+.iw-deferred-note:not([hidden]) {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    margin-top: 12px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: #fff8e6;
+    border: 1px solid #f0d999;
+    font-size: .83rem;
+    color: #7a5c00;
+    line-height: 1.5;
+}
+.iw-deferred-note i { font-size: 1.2rem; flex-shrink: 0; color: #f0a020; }
 </style>
 
 <div class="dialog-overlay" id="import-screen"></div>
@@ -582,6 +601,10 @@
                 <span>Skipped <strong id="iw-n-skipped">0</strong></span>
             </div>
             <div class="iw-item-log" id="iw-item-log"></div>
+            <div class="iw-deferred-note" id="iw-deferred-note" hidden>
+                <i class="material-symbols-outlined">cloud_sync</i>
+                <span id="iw-deferred-note-text"></span>
+            </div>
         </div>
         <div class="iw-footer">
             <button id="iw-btn-done" class="btn btn--primary btn--lg btn--submit" hidden>Done</button>
@@ -1198,7 +1221,8 @@ function handleProgressEvent(evt) {
             $('iw-btn-done').hidden = false;
             document.querySelector('.iw-step-dots').style.display = 'none';
             toastr.success(
-                evt.created + ' created · ' + evt.exists + ' existed · ' + evt.skipped + ' skipped',
+                evt.created + ' created · ' + evt.exists + ' existed · ' + evt.skipped + ' skipped' +
+                (evt.deferred ? ' · ' + evt.deferred + ' fetching precise location...' : ''),
                 'Import complete', { timeOut: 8000 }
             );
             if (evt.created > 0) {
@@ -1218,6 +1242,15 @@ function handleProgressEvent(evt) {
                     try { localStorage.setItem('ul_pins_dirty', '1'); } catch (_) {}
                 }
             }
+            break;
+
+        case 'deferred':
+            var note = $('iw-deferred-note');
+            note.hidden = false;
+            $('iw-deferred-note-text').textContent =
+                evt.count + ' pin' + (evt.count !== 1 ? 's' : '') + ' need' + (evt.count === 1 ? 's' : '') +
+                ' extra data from Google to place accurately - this can take a while. We’ll notify you ' +
+                'when they’re ready. You can close this dialog and keep using the site in the meantime.';
             break;
 
         case 'error':
@@ -1257,6 +1290,7 @@ function finaliseLogRow(row) {
     var cls, mat, lbl;
     if (row.dataset.outcome === 'created') { cls = 'created'; mat = 'check_circle'; lbl = 'new'; }
     else if (row.dataset.outcome === 'exists') { cls = 'existed'; mat = 'remove_circle_outline'; lbl = 'existed'; }
+    else if (row.dataset.outcome === 'deferred') { cls = 'deferred'; mat = 'cloud_sync'; lbl = 'fetching...'; }
     else { cls = 'skipped'; mat = 'cancel'; lbl = 'skipped'; }
 
     icon.className = 'material-icons iw-log-icon ' + cls;

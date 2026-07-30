@@ -25,6 +25,7 @@ from django.db.models import CASCADE, RESTRICT, SET_NULL, ForeignKey, Index, Man
 from django.db.models.fields import BooleanField, CharField, DateField, IntegerField, SlugField, TextField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor
 from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.wiki.queryset import WikiManager
 from urbanlens.dashboard.services.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
@@ -77,6 +78,17 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     pin_type_is_user_provided = BooleanField(
         default=False,
         help_text="Prevents automatic building/parcel classification from overwriting an editor-chosen type.",
+    )
+    # Whether this place is indoors, outdoors, or both (e.g. a building with an
+    # outdoor courtyard). Left unset (None) until something actually
+    # classifies it - groundwork for a future feature, not yet surfaced in
+    # any UI.
+    indoor_outdoor = CharField(
+        max_length=10,
+        choices=IndoorOutdoor.choices,
+        null=True,
+        blank=True,
+        help_text="Whether this place is inside, outside, or both; unset when not yet classified.",
     )
 
     # Direct hex color override for this wiki's map marker (e.g. "#F44336").
@@ -206,7 +218,7 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
                 # that row instead of racing the DB constraint.
                 WikiAlias.objects.get_or_create(wiki=self, name__iexact=new_name, defaults={"name": new_name})
             except DatabaseError:
-                logger.debug("Could not ensure alias for wiki %s name %r", self.pk, self.name, exc_info=True)
+                logger.exception("Could not ensure alias for wiki %s name %r", self.pk, self.name)
         self._loaded_name = self.name
 
     # ------------------------------------------------------------------

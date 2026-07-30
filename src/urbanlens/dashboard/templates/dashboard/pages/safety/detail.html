@@ -22,9 +22,24 @@
 
 {% block content %}
 <div class="safety-page page-content">
+{% if is_archived %}
+    {% include "dashboard/partials/safety/_archived_notice.html" %}
+{% else %}
 
+    {% if checkin.is_resolved and archive_at %}
+    {% include "dashboard/partials/safety/_archive_countdown.html" %}
+    {% endif %}
 
     <div class="safety-toolbar">
+        {% if viewer_is_partner %}
+        <div id="safety-resolve-actions" {% if checkin.is_resolved %}hidden{% endif %}>
+        <form method="post" action="{% url 'safety.partner.mark_safe' checkin.uuid %}" style="display:inline"
+              onsubmit="window._safetySkipLeaveWarning = true;">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--primary">Mark {{ checkin.profile.username }} safe</button>
+        </form>
+        </div>
+        {% else %}
         <div id="safety-resolve-actions" {% if checkin.is_resolved %}hidden{% endif %}>
         <form method="post" action="{% url 'safety.checkin.checkin' checkin.slug|default:checkin.uuid %}" style="display:inline"
               onsubmit="window._safetySkipLeaveWarning = true;">
@@ -42,6 +57,7 @@
                 data-contacts-notified="{% if checkin.contacts_locked %}1{% endif %}">
             <i class="material-symbols-outlined">delete</i> Delete
         </button>
+        {% endif %}
     </div>
 
     <p class="safety-autosave-status safety-autosave-status--floating is-hidden" id="safety-autosave-status" aria-live="polite"></p>
@@ -56,7 +72,7 @@
             </div>
             <div class="card__body">
                 <div class="form-row">
-                    <input type="text" name="title" id="title" value="{{ checkin.title }}" {% if checkin.contacts_locked %}disabled{% endif %}>
+                    <input type="text" name="title" id="title" value="{{ checkin.title }}" {% if checkin.contacts_locked or viewer_is_partner %}disabled{% endif %}>
                     {% if checkin.contacts_locked %}<p class="form-hint">Locked - emergency contacts have already been notified.</p>{% endif %}
                 </div>
             </div>
@@ -70,7 +86,7 @@
             <div class="card__body">
                 <div class="form-row">
                     <label for="plan_details">Plan</label>
-                    <textarea name="plan_details" id="plan_details" rows="4" class="safety-autoexpand">{{ checkin.plan_details }}</textarea>
+                    <textarea name="plan_details" id="plan_details" rows="4" class="safety-autoexpand" {% if viewer_is_partner %}disabled{% endif %}>{{ checkin.plan_details }}</textarea>
                     {% if checkin.contacts_locked %}<p class="form-hint">Editing this will notify your emergency contacts of the update.</p>{% endif %}
                 </div>
                 <div class="form-row form-row--map">
@@ -79,12 +95,12 @@
                     {% url 'markup_map.markup' checkin.markup_map.uuid as markup_create_url %}
                     {% url 'markup_map.markup.edit' checkin.markup_map.uuid '00000000-0000-0000-0000-000000000000' as markup_edit_url_template %}
                     {% url 'markup_map.view_state' '11111111-1111-1111-1111-111111111111' as markup_map_view_url_template %}
-                    {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=False destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.markup_map.center_latitude|default:checkin.destination_latitude map_center_lng=checkin.markup_map.center_longitude|default:checkin.destination_longitude map_layer_mode=checkin.markup_map.layer_mode map_show_borders=checkin.markup_map.show_borders markup_map_uuid=checkin.markup_map.uuid markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template markup_map_view_url_template=markup_map_view_url_template %}
+                    {% include "dashboard/partials/safety/_safety_map_script.html" with readonly=viewer_is_partner destination_lat=checkin.destination_latitude destination_lng=checkin.destination_longitude map_center_lat=checkin.markup_map.center_latitude|default:checkin.destination_latitude map_center_lng=checkin.markup_map.center_longitude|default:checkin.destination_longitude map_layer_mode=checkin.markup_map.layer_mode map_show_borders=checkin.markup_map.show_borders markup_map_uuid=checkin.markup_map.uuid markup_json_url=markup_json_url markup_create_url=markup_create_url markup_edit_url_template=markup_edit_url_template markup_map_view_url_template=markup_map_view_url_template %}
                     {% if checkin.contacts_locked %}<p class="form-hint">Editing the destination or route will notify your emergency contacts of the update.</p>{% endif %}
                 </div>
                 <div class="form-row form-row--maps">
                     <label>Additional reference maps</label>
-                    {% include "dashboard/partials/safety/_attached_maps.html" %}
+                    {% include "dashboard/partials/safety/_attached_maps.html" with viewer_is_partner=viewer_is_partner %}
                 </div>
                 {% if checkin.wiki_notified_at %}
                 <div class="form-row safety-wiki-notify">
@@ -101,7 +117,7 @@
                      hx-trigger="change from:#safety-destination-lat"
                      hx-include="#safety-destination-lat, #safety-destination-lng, #notify_community_wiki"
                      hx-swap="innerHTML">
-                    {% include "dashboard/partials/safety/_wiki_notify_toggle.html" with wiki=destination_wiki checked=checkin.notify_community_wiki last_wiki_edit=last_wiki_edit wiki_editor_count=wiki_editor_count %}
+                    {% include "dashboard/partials/safety/_wiki_notify_toggle.html" with wiki=destination_wiki checked=checkin.notify_community_wiki last_wiki_edit=last_wiki_edit wiki_editor_count=wiki_editor_count locked=viewer_is_partner %}
                 </div>
                 {% endif %}
             </div>
@@ -114,18 +130,44 @@
             </div>
             <div class="card__body">
                 <div class="form-row">
-                    <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand" {% if checkin.notifications_locked %}disabled{% endif %}>{{ checkin.contact_message }}</textarea>
+                    <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand" {% if checkin.notifications_locked or viewer_is_partner %}disabled{% endif %}>{{ checkin.contact_message }}</textarea>
                     {% if checkin.notifications_locked %}<p class="form-hint">Locked - emergency contacts have already been notified, or you've already checked in.</p>{% endif %}
                 </div>
             </div>
         </div>
 
         <div id="safety-contact-picker-container">
-            {% include "dashboard/partials/safety/_contact_picker.html" with contacts=contacts_input contact_status=contact_status locked=checkin.notifications_locked collapsible=True %}
+            {% include "dashboard/partials/safety/_contact_picker.html" with contacts=contacts_input contact_status=contact_status locked=contact_picker_locked collapsible=True %}
         </div>
     </form>
 
+    <div id="safety-partner-picker-container">
+        {% include "dashboard/partials/safety/_partner_picker.html" with partners=partners viewer_is_partner=viewer_is_partner %}
+    </div>
+
+    <div class="card safety-section-card" id="safety-live-location-card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">my_location</i>
+            <h3>Live location</h3>
+        </div>
+        <div class="card__body">
+            {% if viewer_is_partner %}
+            <p class="form-hint" id="safety-live-location-status">
+                {% if checkin.live_location_sharing_enabled %}Live location sharing is on - waiting for an update.{% else %}{{ checkin.profile.username }} is not sharing their live location.{% endif %}
+            </p>
+            {% else %}
+            <label class="safety-live-location-toggle-row">
+                <input type="checkbox" id="safety-live-location-toggle" {% if checkin.live_location_sharing_enabled %}checked{% endif %} {% if checkin.is_resolved %}disabled{% endif %}>
+                <span>Share my live location with partners</span>
+            </label>
+            <p class="form-hint" id="safety-live-location-status">Only accepted partners can see this - never emergency contacts.</p>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if not viewer_is_partner %}
     {% include "dashboard/partials/safety/_map_picker_dialog.html" %}
+    {% endif %}
 
     {# -- Photos -------------------------------------------------------------- #}
     <div id="safety-gallery-panel"
@@ -142,7 +184,6 @@
 
     {% include "dashboard/partials/safety/_chat_panel.html" with contact=None %}
 
-</div>
 {% include "dashboard/partials/safety/_autoexpand_textareas.html" %}
 <script>
 (function () {
@@ -348,4 +389,115 @@
     });
 }());
 </script>
+{% if not viewer_is_partner %}
+<script>
+(function () {
+    // -- Live location sharing toggle + throttled position reporting -----------
+    // 30s balances "a partner watching in an emergency wants a current position"
+    // against battery/bandwidth - tightening it wouldn't meaningfully help a
+    // partner (someone overdue on a hike isn't moving fast enough for sub-30s
+    // updates to matter).
+    var MIN_INTERVAL_MS = 30000;
+    var toggle = document.getElementById('safety-live-location-toggle');
+    if (!toggle) return;
+    var toggleUrl = "{% url 'safety.checkin.location.toggle' checkin.slug|default:checkin.uuid %}";
+    var updateUrl = "{% url 'safety.checkin.location.update' checkin.slug|default:checkin.uuid %}";
+    var csrfToken = document.querySelector('#safety-checkin-form [name=csrfmiddlewaretoken]').value;
+    var watchId = null;
+    var lastSentAt = 0;
+    var pendingPosition = null;
+    var sendTimer = null;
+
+    function sendPosition(position) {
+        lastSentAt = Date.now();
+        var body = new FormData();
+        body.append('latitude', position.coords.latitude);
+        body.append('longitude', position.coords.longitude);
+        if (position.coords.accuracy != null) body.append('accuracy', position.coords.accuracy);
+        fetch(updateUrl, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: body }).catch(function () {});
+    }
+
+    function onPosition(position) {
+        var elapsed = Date.now() - lastSentAt;
+        if (elapsed >= MIN_INTERVAL_MS) {
+            sendPosition(position);
+            return;
+        }
+        pendingPosition = position;
+        if (sendTimer) return;
+        sendTimer = setTimeout(function () {
+            sendTimer = null;
+            if (pendingPosition) { sendPosition(pendingPosition); pendingPosition = null; }
+        }, MIN_INTERVAL_MS - elapsed);
+    }
+
+    function startWatching() {
+        if (watchId !== null || !navigator.geolocation) return;
+        watchId = navigator.geolocation.watchPosition(onPosition, function () {
+            if (window.toastr) toastr.error('Could not get your location - live location sharing may not work.');
+        }, { enableHighAccuracy: true });
+    }
+
+    function stopWatching() {
+        if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
+        window.clearTimeout(sendTimer);
+        sendTimer = null;
+        pendingPosition = null;
+    }
+
+    toggle.addEventListener('change', function () {
+        var enabled = toggle.checked;
+        var body = new FormData();
+        body.append('enabled', enabled ? '1' : '0');
+        fetch(toggleUrl, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: body })
+            .catch(function () { if (window.toastr) toastr.error('Could not update live location sharing.'); });
+        if (enabled) startWatching(); else stopWatching();
+    });
+
+    if (toggle.checked) startWatching();
+}());
+</script>
+{% endif %}
+<script>
+(function () {
+    // -- Live location marker (owner sees their own share confirmed; a partner
+    // sees it update in real time) -------------------------------------------
+    var liveMarker = null;
+    document.body.addEventListener('safetyLocationUpdate', function (e) {
+        var data = e.detail;
+        var statusEl = document.getElementById('safety-live-location-status');
+        if (data.latitude == null || data.longitude == null) {
+            if (liveMarker && window.map) { window.map.removeLayer(liveMarker); liveMarker = null; }
+            if (statusEl) statusEl.textContent = "{{ checkin.profile.username }} is not sharing their live location.";
+            return;
+        }
+        if (window.map && typeof L !== 'undefined') {
+            if (!liveMarker) {
+                liveMarker = L.circleMarker([data.latitude, data.longitude], { radius: 8, color: '#2563eb', fillColor: '#3b82f6', fillOpacity: 0.9 }).addTo(window.map);
+            } else {
+                liveMarker.setLatLng([data.latitude, data.longitude]);
+            }
+        }
+        if (statusEl) {
+            var updated = new Date(data.updated_at);
+            statusEl.textContent = 'Live location updated ' + (isNaN(updated.getTime()) ? 'just now' : updated.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })) + '.';
+        }
+    });
+
+    // Hydrate from the server-rendered last-known position on initial page load, rather
+    // than waiting for a live WebSocket event that may never arrive again (e.g. the
+    // owner's phone died mid-trip - the exact scenario live location exists to help
+    // with). Reuses the same handler above, so rendering stays in one place.
+    document.body.dispatchEvent(new CustomEvent('safetyLocationUpdate', {
+        detail: {
+            latitude: {{ checkin.live_latitude|default:"null" }},
+            longitude: {{ checkin.live_longitude|default:"null" }},
+            updated_at: {% if checkin.live_location_updated_at %}"{{ checkin.live_location_updated_at.isoformat }}"{% else %}null{% endif %}
+        }
+    }));
+}());
+</script>
+{% endif %}
+</div>
+{% include "dashboard/partials/safety/_dissolve_animation.html" %}
 {% endblock %}

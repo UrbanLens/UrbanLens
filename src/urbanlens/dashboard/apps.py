@@ -25,6 +25,7 @@ class DashboardConfig(AppConfig):
         import urbanlens.dashboard.models.profile.signals
         import urbanlens.dashboard.models.trips.signals
         import urbanlens.dashboard.models.wiki.signals
+        import urbanlens.dashboard.models.wiki_edit.signals
         from urbanlens.dashboard.plugins import plugin_registry
 
         post_save.connect(create_default_tags, sender=Profile, dispatch_uid="label_create_default_tags")

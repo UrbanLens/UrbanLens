@@ -95,7 +95,7 @@ class VisitHistoryViewTests(TestCase):
 
     def test_add_dialog_shows_three_attachment_buttons(self):
         """Photos/Map/Participants collapse behind one button each instead of
-        three always-visible "(optional)" field rows - see docs/prompts/completed.md."""
+        three always-visible "(optional)" field rows -."""
         response = self.client.get(reverse("pin.visits", args=[self.pin.slug]))
 
         self.assertContains(response, "visit-attachment-toggle", count=3)

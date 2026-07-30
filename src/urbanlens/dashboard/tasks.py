@@ -89,33 +89,36 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def generate_boundaries_for_location(location_id: int) -> bool:
-    """Generate the default property/building boundaries for a Location.
+    """Generate (or, if stale, refresh) the default property/building boundaries for a Location.
 
     Scheduled single-flight by ``schedule_location_boundary_generation`` (wiki
-    page) - the pin detail page uses the "boundary" panel source instead, which
-    calls the same ``generate_location_boundaries`` function.
+    page, and the pin detail page's stale-refresh path) - the pin detail
+    page's first-ever generation uses the "boundary" panel source instead,
+    which calls the same ``generate_location_boundaries`` function.
 
     Args:
         location_id: PK of the Location.
 
     Returns:
-        True when the location existed and generation ran (or had already run).
+        True when the location existed and generation ran (or was already
+        fresh).
     """
     from django.core.cache import cache
 
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, generate_location_boundaries
+    from urbanlens.dashboard.services.locations.boundaries import generate_location_boundaries, generation_lock_key, generation_status
 
     try:
         location = Location.objects.filter(pk=location_id).first()
         if location is None:
             logger.info("generate_boundaries_for_location: location %s no longer exists", location_id)
             return False
-        if not boundary_generation_ran(location):
+        ran, stale = generation_status(location)
+        if not ran or stale:
             generate_location_boundaries(location)
         return True
     finally:
-        cache.delete(f"ul_boundary_generation_{location_id}")
+        cache.delete(generation_lock_key(location_id))
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -209,13 +212,13 @@ def push_trip_to_calendar(trip_id: int) -> int:
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str, job_id: str | None = None) -> bool:
+def run_user_data_export(self, user_id: int, export_types: list[str], export_dir: str, base_url: str, job_id: str | None = None, email_to_user: bool = False) -> bool:
     """Build a user's data export archive outside the web request."""
     from urbanlens.dashboard.services.export import run_export
 
     logger.info("Starting data export for user %s", user_id)
     update_task_progress(self, current=0, total=1, message="Preparing export...")
-    success = run_export(user_id, export_types, export_dir, base_url, job_id=job_id)
+    success = run_export(user_id, export_types, export_dir, base_url, job_id=job_id, email_to_user=email_to_user)
     if success:
         update_task_progress(self, current=1, total=1, message="Export ready")
         logger.info("Finished data export for user %s", user_id)
@@ -976,6 +979,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
         return counts
 
     gateway = ImmichGateway(account=account)
+    existing_checksums = set(Image.objects.filter(pin=pin, profile=profile).values_list("checksum", flat=True))
     total = len(asset_ids)
     for index, asset_id in enumerate(asset_ids):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -987,7 +991,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
+        if checksum in existing_checksums:
             counts["skipped"] += 1
             continue
         if quota_error_for_upload(profile, len(content)):
@@ -1010,6 +1014,7 @@ def import_immich_photos(self, pin_id: int, profile_id: int, asset_ids: list[str
         if target_visit is None:
             log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
+        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -1107,6 +1112,142 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
     return result
 
 
+@shared_task(bind=True, max_retries=None)
+def resolve_deferred_pin_locations(
+    self,
+    profile_id: int,
+    deferred_lists: list[dict],
+    auto_tag: bool = True,
+    original_total: int | None = None,
+) -> dict[str, int]:
+    """Place pins whose Google Maps CID needed a live lookup to be accurate.
+
+    Queued by ``GoogleMapsGateway.import_preview_streaming`` for any
+    confirmed pin whose cid had neither an existing Location nor a cached
+    Places lookup - see that method's docstring for why the preview's own
+    lat/lng can't be trusted for these. Resolves every cid in one batch via
+    ``services.apis.locations.cid_resolution.resolve_cids`` (REData if
+    configured, else Google Places directly), places whatever resolves now,
+    and retries later - with the resolved subset already placed and pruned
+    from the retry args, so a retry never redoes finished work - if anything
+    is still pending on a rate limit or a REData outage. Reports a summary via
+    NotificationLog once every cid is either placed or confirmed unresolvable.
+
+    Args:
+        profile_id: PK of the importing profile.
+        deferred_lists: Same shape as import_preview_streaming's
+            confirmed_lists, restricted to pins needing a live cid lookup -
+            shrinks on each retry to just what's still unresolved.
+        auto_tag: Whether to enqueue AI category suggestion for newly-created pins.
+        original_total: Total pin count across the *first* call, before any
+            retry narrowed deferred_lists - carried through retries purely so
+            progress reporting stays relative to the whole job, not just
+            whatever's left. Defaults to this call's own pin count when unset
+            (i.e. on the first, non-retry invocation).
+
+    Returns:
+        Summary counts (created/exists/skipped).
+    """
+    from django.urls import reverse
+
+    from urbanlens.dashboard.models.labels.model import Label
+    from urbanlens.dashboard.models.location import Location
+    from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.apis.locations.cid_resolution import resolve_cids
+    from urbanlens.dashboard.services.apis.locations.google.maps import _create_pin_from_confirmed
+
+    empty = {"created": 0, "exists": 0, "skipped": 0}
+    profile = Profile.objects.filter(pk=profile_id).first()
+    if profile is None:
+        logger.info("resolve_deferred_pin_locations: profile %s no longer exists", profile_id)
+        return empty
+
+    all_cids = [pin["cid"] for lst in deferred_lists for pin in lst.get("pins", [])]
+    if not all_cids:
+        return empty
+    total = original_total if original_total is not None else len(all_cids)
+
+    update_task_progress(self, current=total - len(all_cids), total=total, message=f"Fetching precise locations for {len(all_cids)} pin(s)...")
+
+    result = resolve_cids(all_cids)
+
+    if result.pending:
+        pending_set = set(result.pending)
+        remaining_lists = []
+        for lst in deferred_lists:
+            remaining_pins = [p for p in lst.get("pins", []) if p["cid"] in pending_set]
+            if remaining_pins:
+                remaining_lists.append({**lst, "pins": remaining_pins})
+
+        if result.provider == "google_places":
+            countdown, message = 65, "Waiting on Google's rate limit - resuming shortly..."
+        else:
+            countdown, message = 120, "Having trouble reaching REData - retrying shortly..."
+
+        update_task_progress(self, current=total - len(result.pending), total=total, message=message)
+        raise self.retry(args=[profile_id, remaining_lists, auto_tag, total], countdown=countdown, max_retries=None)
+
+    created_count = exists_count = skipped_count = 0
+    for lst in deferred_lists:
+        stem = lst.get("stem", "")
+        list_label_ids = lst.get("label_ids") or []
+        create_category = bool(lst.get("create_category", False))
+        list_labels = list(Label.objects.filter(id__in=list_label_ids)) if list_label_ids else []
+
+        category_label = None
+        if create_category and stem:
+            category_label, _ = Label.objects.get_or_create(
+                profile=profile,
+                name__iexact=stem,
+                defaults={"name": stem, "kind": "category"},
+            )
+
+        for pin_dict in lst.get("pins", []):
+            cid = pin_dict["cid"]
+            coords = result.resolved.get(cid)
+            if coords is None:
+                skipped_count += 1
+                continue
+
+            # Re-check now, not just at defer time: an earlier pin in this
+            # same batch referencing the same cid (saved to two lists) may
+            # have just linked/created its Location.
+            location = Location.objects.by_cid(cid).first()
+            pin, created = _create_pin_from_confirmed(
+                pin_dict,
+                location=location,
+                latitude=coords[0],
+                longitude=coords[1],
+                user_profile=profile,
+                list_labels=list_labels,
+                category_label=category_label,
+                auto_tag=auto_tag,
+            )
+            if pin:
+                if created:
+                    created_count += 1
+                else:
+                    exists_count += 1
+            else:
+                skipped_count += 1
+
+    unresolved = len(result.unresolvable)
+    provider_label = "REData" if result.provider == "redata" else "Google Places"
+    NotificationLog.objects.create(
+        profile=profile,
+        status=Status.UNREAD,
+        importance=Importance.MEDIUM,
+        notification_type=NotificationType.PIN_IMPORT_COMPLETE,
+        title=f"Finished placing {created_count + exists_count} pin(s)",
+        message=(f"{created_count} created · {exists_count} existed · {skipped_count} skipped" + (f" ({unresolved} could not be located)" if unresolved else "") + f" — resolved via {provider_label}."),
+        url=reverse("map.view"),
+    )
+    update_task_progress(self, current=total, total=total, message="Done.")
+    return {"created": created_count, "exists": exists_count, "skipped": skipped_count}
+
+
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str]) -> dict[str, int]:
     """Download selected Flickr photos and import them onto a pin.
@@ -1147,6 +1288,7 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
         return counts
 
     gateway = FlickrGateway(account=account)
+    existing_checksums = set(Image.objects.filter(pin=pin, profile=profile).values_list("checksum", flat=True))
     total = len(photo_ids)
     for index, photo_id in enumerate(photo_ids):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -1158,7 +1300,7 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
+        if checksum in existing_checksums:
             counts["skipped"] += 1
             continue
         if quota_error_for_upload(profile, len(content)):
@@ -1177,6 +1319,7 @@ def import_flickr_photos(self, pin_id: int, profile_id: int, photo_ids: list[str
         )
         log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
+        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -1244,6 +1387,7 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
     photos_by_id = {photo.id: photo for photo in album.photos}
     selected = [photos_by_id[photo_id] for photo_id in photo_ids if photo_id in photos_by_id]
     dedupe_filter = {"pin": pin} if pin is not None else {"wiki": wiki}
+    existing_checksums = set(Image.objects.filter(profile=profile, **dedupe_filter).values_list("checksum", flat=True))
     total = len(selected)
     for index, photo in enumerate(selected):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -1255,7 +1399,7 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if Image.objects.filter(profile=profile, checksum=checksum, **dedupe_filter).exists():
+        if checksum in existing_checksums:
             counts["skipped"] += 1
             continue
         if quota_error_for_upload(profile, len(content)):
@@ -1276,6 +1420,7 @@ def import_flickr_album_photos(self, target_kind: str, target_id: int, profile_i
             file_size=len(content),
         )
         safely_enqueue_task(process_image_upload, image.pk)
+        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -1341,6 +1486,7 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
         except GatewayRequestError:
             logger.warning("import_google_photos: could not re-list session %s to resolve %d missing item(s)", session_id, len(missing_ids), exc_info=True)
 
+    existing_checksums = set(Image.objects.filter(pin=pin, profile=profile).values_list("checksum", flat=True))
     total = len(media_item_ids)
     for index, item_id in enumerate(media_item_ids):
         update_task_progress(self, current=index, total=total, message=f"Importing photo {index + 1} of {total}...")
@@ -1356,7 +1502,7 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
             continue
 
         checksum = compute_checksum(io.BytesIO(content))
-        if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
+        if checksum in existing_checksums:
             counts["skipped"] += 1
             continue
         if quota_error_for_upload(profile, len(content)):
@@ -1374,6 +1520,7 @@ def import_google_photos(self, pin_id: int, profile_id: int, session_id: str, me
         )
         log_visit_on_pin(profile, image, pin)
         safely_enqueue_task(process_image_upload, image.pk)
+        existing_checksums.add(checksum)
         counts["imported"] += 1
 
     summary = f"Imported {counts['imported']}"
@@ -1486,49 +1633,138 @@ def refresh_pin_web_search(self, pin_id: int) -> int:
     return len(results)
 
 
+# These safety check-in beat tasks share the RUN_LOCK_CACHE_KEY-style guard already
+# used by run_scheduled_enrichment: they run every 5 minutes (see CELERY_BEAT_SCHEDULE), and
+# without a lock, an overrunning execution (many due checkins, slow SMTP) racing the next
+# scheduled tick could process the same rows twice - most seriously for escalation, which
+# would otherwise re-email emergency contacts.
+_CHECKIN_REMINDER_LOCK_CACHE_KEY = "urbanlens:safety:reminder-lock"
+_CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY = "urbanlens:safety:final-warning-lock"
+_CHECKIN_ESCALATION_LOCK_CACHE_KEY = "urbanlens:safety:escalation-lock"
+_CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY = "urbanlens:safety:archival-sweep-lock"
+_CHECKIN_LOCK_TIMEOUT_SECONDS = 270  # just under the 5-minute beat interval
+
+
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_due_checkin_reminders() -> int:
     """Send the check-in-due reminder for every safety check-in whose time has arrived."""
+    from django.core.cache import cache
+
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.safety import send_checkin_reminder
 
-    count = 0
-    for checkin in SafetyCheckin.objects.due_for_reminder():
-        send_checkin_reminder(checkin)
-        count += 1
-    if count:
-        logger.info("Sent %s safety check-in reminder(s)", count)
-    return count
+    if not cache.add(_CHECKIN_REMINDER_LOCK_CACHE_KEY, value=True, timeout=_CHECKIN_LOCK_TIMEOUT_SECONDS):
+        logger.info("send_due_checkin_reminders: a previous run is still in flight; skipping")
+        return 0
+    try:
+        count = 0
+        for checkin in SafetyCheckin.objects.due_for_reminder():
+            send_checkin_reminder(checkin)
+            count += 1
+        if count:
+            logger.info("Sent %s safety check-in reminder(s)", count)
+        return count
+    finally:
+        cache.delete(_CHECKIN_REMINDER_LOCK_CACHE_KEY)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_final_checkin_warnings() -> int:
     """Send a final "check in now" warning for every safety check-in about to escalate."""
+    from django.core.cache import cache
+
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.safety import send_final_warning
 
-    count = 0
-    for checkin in SafetyCheckin.objects.due_for_final_warning():
-        send_final_warning(checkin)
-        count += 1
-    if count:
-        logger.info("Sent %s safety check-in final warning(s)", count)
-    return count
+    if not cache.add(_CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY, value=True, timeout=_CHECKIN_LOCK_TIMEOUT_SECONDS):
+        logger.info("send_final_checkin_warnings: a previous run is still in flight; skipping")
+        return 0
+    try:
+        count = 0
+        for checkin in SafetyCheckin.objects.due_for_final_warning():
+            send_final_warning(checkin)
+            count += 1
+        if count:
+            logger.info("Sent %s safety check-in final warning(s)", count)
+        return count
+    finally:
+        cache.delete(_CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def escalate_overdue_checkins() -> int:
     """Notify emergency contacts for every safety check-in whose grace period has elapsed."""
+    from django.core.cache import cache
+
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.safety import escalate_checkin
 
-    count = 0
-    for checkin in SafetyCheckin.objects.overdue():
-        escalate_checkin(checkin)
-        count += 1
-    if count:
-        logger.info("Escalated %s overdue safety check-in(s)", count)
-    return count
+    if not cache.add(_CHECKIN_ESCALATION_LOCK_CACHE_KEY, value=True, timeout=_CHECKIN_LOCK_TIMEOUT_SECONDS):
+        logger.info("escalate_overdue_checkins: a previous run is still in flight; skipping")
+        return 0
+    try:
+        count = 0
+        for checkin in SafetyCheckin.objects.overdue():
+            escalate_checkin(checkin)
+            count += 1
+        if count:
+            logger.info("Escalated %s overdue safety check-in(s)", count)
+        return count
+    finally:
+        cache.delete(_CHECKIN_ESCALATION_LOCK_CACHE_KEY)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def archive_safety_checkin(checkin_id: int) -> None:
+    """Encrypt-and-scrub one resolved check-in, dispatched with a countdown= at resolution
+    time (``services.safety.schedule_checkin_archival``) for responsiveness.
+
+    Idempotent - ``services.safety.archive_checkin`` no-ops if the check-in already has
+    an archive, so a duplicate dispatch (or this task racing the sweep below) is harmless.
+    """
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+    from urbanlens.dashboard.services.safety import archive_checkin
+
+    checkin = SafetyCheckin.objects.filter(pk=checkin_id).first()
+    if checkin is not None:
+        archive_checkin(checkin)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_due_safety_checkin_archival() -> int:
+    """Backstop for ``archive_safety_checkin``'s countdown-scheduled dispatch.
+
+    A broker/worker restart can drop a countdown-scheduled task outright; a bare
+    5-minute poll alone would also make the "no other viewers - archive immediately"
+    case visibly wait up to 5 minutes, which isn't "immediately". Running both gives
+    responsiveness on the common path and durability against the scheduled task
+    getting lost - the same trade-off the other checkin beat tasks above already make
+    for their own timing precision vs. this file's 5-minute cadence.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+    from urbanlens.dashboard.services.safety import archive_checkin
+
+    if not cache.add(_CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY, value=True, timeout=_CHECKIN_LOCK_TIMEOUT_SECONDS):
+        logger.info("sweep_due_safety_checkin_archival: a previous run is still in flight; skipping")
+        return 0
+    try:
+        count = 0
+        for checkin in SafetyCheckin.objects.due_for_archival():
+            # One checkin's failure (e.g. a malformed key bundle) must not stop the
+            # sweep from archiving every other overdue checkin in this same run -
+            # each is independent, and the next sweep will retry only the failed one.
+            try:
+                archive_checkin(checkin)
+                count += 1
+            except Exception:
+                logger.exception("Safety checkin %s failed to archive during sweep; will retry next sweep", checkin.pk)
+        if count:
+            logger.info("Archived %s overdue safety check-in(s)", count)
+        return count
+    finally:
+        cache.delete(_CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -1548,9 +1784,12 @@ def delete_expired_safety_checkins() -> int:
 def prune_expired_undo_actions() -> int:
     """Delete UndoAction rows past their retention window.
 
-    The cached payload each row points at has already expired via its own
-    TTL by this point - this just tidies up the DB-side index so the
-    settings page's history list doesn't need to filter expired rows forever.
+    Each row's restore payload is stored directly on the row itself (see
+    ``models.undo.UndoAction``'s docstring), not in a cache, specifically so
+    an entry's restorability depends only on its own ``created`` timestamp
+    versus ``UNDO_RETENTION`` - not on a separately-expiring cache TTL. This
+    task just deletes rows once that window has passed, so the settings
+    page's history list doesn't need to filter expired rows forever.
     """
     from urbanlens.dashboard.models.undo import UndoAction
 
@@ -1731,6 +1970,77 @@ def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
 
 
 @shared_task
+def prune_pin_tombstones() -> int:
+    """Remove pin-deletion tombstones older than the sync retention window.
+
+    Scheduled daily (see ``CELERY_BEAT_SCHEDULE``). Retention is
+    ``services.pin_sync.TOMBSTONE_RETENTION`` - the longest supported
+    sync-client offline gap. A client whose ``deleted_since`` predates that
+    floor gets an HTTP 410 full-resync signal from ``pins/deleted/`` instead
+    of a silently incomplete deletions feed, so pruning can never cause a
+    quiet miss.
+
+    Returns:
+        Number of tombstone rows deleted.
+    """
+    from urbanlens.dashboard.models.pin_tombstone import PinTombstone
+    from urbanlens.dashboard.services.pin_sync import TOMBSTONE_RETENTION
+
+    deleted = PinTombstone.objects.prune_older_than(TOMBSTONE_RETENTION)
+    if deleted:
+        logger.info("Pruned %d pin tombstone(s) older than %s", deleted, TOMBSTONE_RETENTION)
+    return deleted
+
+
+@shared_task
+def evaluate_public_pin_candidates() -> dict[str, int]:
+    """Run the public-pin eligibility engine and settle open votes.
+
+    Scheduled hourly (see ``CELERY_BEAT_SCHEDULE``). Everything lives in
+    ``services.public_pins`` - this is only the beat entry point. Idempotent
+    at any frequency; hourly keeps vote outcomes and suggestion fan-out
+    reasonably fresh without the engine's aggregate queries running hot.
+
+    Returns:
+        Transition counters (opened/reopened/suspended/passed/rejected).
+    """
+    from urbanlens.dashboard.services import public_pins
+
+    counters = public_pins.evaluate_public_pin_candidates()
+    if any(counters.values()):
+        logger.info("Public-pin evaluation: %s", counters)
+    return counters
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def send_notification_text_alerts_if_unread(notification_id: int) -> None:
+    """Send the delayed WhatsApp/SMS alert for a site notification, unless read or debounced.
+
+    Scheduled by ``services.notification_text_alerts.schedule_notification_text_alerts``
+    (via the ``notification_text_alerts`` post_save signal) with a countdown,
+    mirroring the DM text-alert flow: no-ops when the notification was read in
+    the meantime, when a same-type text recently went to this recipient, or
+    when the recipient turned the toggles off after it was enqueued.
+
+    Args:
+        notification_id: PK of the notification to check and possibly alert about.
+    """
+    from urbanlens.dashboard.models.notifications.meta import Status
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.services.notification_text_alerts import is_text_alert_debounced, send_notification_text_alerts_now
+
+    try:
+        notification = NotificationLog.objects.select_related("profile__user").get(pk=notification_id)
+    except NotificationLog.DoesNotExist:
+        return
+    if notification.profile_id is None or notification.status != Status.UNREAD:
+        return
+    if is_text_alert_debounced(notification.profile_id, notification.notification_type):
+        return
+    send_notification_text_alerts_now(notification)
+
+
+@shared_task
 def run_link_extraction(extraction_id: int) -> None:
     """Execute one queued AI link-extraction run (fetch, AI call, apply, notify).
 
@@ -1751,6 +2061,88 @@ def run_link_extraction(extraction_id: int) -> None:
         logger.info("run_link_extraction: extraction %s no longer exists", extraction_id)
         return
     run_extraction(extraction)
+
+
+@shared_task
+def classify_trivia_submission(question_id: int) -> None:
+    """Classify one pending user-submitted Trivia question and record its verdict.
+
+    No Celery autoretry: each attempt consumes an AI call, and this is a
+    background action with no user waiting on it - if this task never runs
+    (or the classifier can't reach AI right now), the question simply stays
+    PENDING_REVIEW (silently excluded from rotation, see
+    services.trivia.submission.classify_and_update), no different from any
+    other transient Celery outage.
+
+    Args:
+        question_id: PK of the pending TriviaQuestion row.
+    """
+    from urbanlens.dashboard.models.trivia.model import TriviaQuestion
+    from urbanlens.dashboard.services.trivia.submission import classify_and_update
+
+    question = TriviaQuestion.objects.filter(pk=question_id).select_related("location", "submitted_by").first()
+    if question is None:
+        logger.info("classify_trivia_submission: question %s no longer exists", question_id)
+        return
+    classify_and_update(question)
+
+
+@shared_task
+def run_scheduled_trivia_generation() -> dict:
+    """Generate AI trivia questions for a bounded batch of not-yet-processed wikis.
+
+    Fired hourly by Celery beat, mirroring run_scheduled_enrichment's
+    single-flight lock (a run that's still going when the next hour ticks
+    over is left alone rather than started twice). No autoretry: each
+    wiki considered spends AI tokens on generation and classification, so an
+    automatic retry would silently multiply cost; a skipped wiki is simply
+    picked up on the next scheduled run.
+
+    Returns:
+        The sweep summary dict, or a skip marker when another run holds the
+        single-flight lock.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.trivia.generation import sweep_wikis_for_generation
+
+    lock_key = "trivia_generation_sweep_lock"
+    if not cache.add(lock_key, 1, 3300):
+        logger.info("run_scheduled_trivia_generation: another sweep is still running; skipping")
+        return {"skipped": "already_running"}
+    try:
+        return sweep_wikis_for_generation()
+    finally:
+        cache.delete(lock_key)
+
+
+@shared_task
+def run_scheduled_trivia_wiki_incorporation() -> dict:
+    """Fold well-upvoted user-submitted Trivia questions into their location wikis.
+
+    Fired hourly by Celery beat, mirroring run_scheduled_trivia_generation's
+    single-flight lock (a run still going when the next hour ticks over is
+    left alone rather than started twice). No autoretry: each candidate
+    question considered spends AI tokens on writing and safety review, so an
+    automatic retry would silently multiply cost; a skipped question is
+    simply picked up on the next scheduled run.
+
+    Returns:
+        The sweep summary dict, or a skip marker when another run holds the
+        single-flight lock.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.trivia.wiki_incorporation import sweep_questions_for_wiki_incorporation
+
+    lock_key = "trivia_wiki_incorporation_sweep_lock"
+    if not cache.add(lock_key, 1, 3300):
+        logger.info("run_scheduled_trivia_wiki_incorporation: another sweep is still running; skipping")
+        return {"skipped": "already_running"}
+    try:
+        return sweep_questions_for_wiki_incorporation()
+    finally:
+        cache.delete(lock_key)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -1802,3 +2194,249 @@ def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
     if upgraded:
         logger.info("upgrade_placeholder_pin_names: cleared %s placeholder pin name(s)", upgraded)
     return upgraded
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def dispatch_native_push(notification_id: int) -> int:
+    """Deliver one notification to the recipient's registered native push devices.
+
+    Enqueued by ``models.notifications.signals.enqueue_native_push`` on every
+    ``NotificationLog`` insert; exits immediately for the (common) profile with
+    no registered devices. Delivery itself is best-effort per device - see
+    ``services.push.send_push_to_profile``.
+
+    Args:
+        notification_id: Primary key of the ``NotificationLog`` row to deliver.
+
+    Returns:
+        Number of devices successfully delivered to.
+    """
+    from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.models.notifications.signals import as_push_payload
+    from urbanlens.dashboard.services.push import send_push_to_profile
+
+    notification = NotificationLog.objects.filter(pk=notification_id).first()
+    if notification is None or not notification.profile_id:
+        return 0
+    return send_push_to_profile(notification.profile_id, as_push_payload(notification))
+
+
+_SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:spotguessr:stall-sweep-lock"
+_SPOTGUESSR_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_stalled_spotguessr_sessions() -> int:
+    """Force-reveal any SpotGuessr round that's been open too long.
+
+    The safety net for a multiplayer round that can otherwise stall forever:
+    a round only completes once every joined participant has guessed
+    (``services.spotguessr.session.submit_guess``), but a participant who
+    simply closes their tab is invisible to that check - there's no
+    disconnect signal wired into the game state (see the SpotGuessr audit's
+    "multiplayer stall" finding). This sweep finds any session whose current
+    round has sat unrevealed past ``STALL_ROUND_TIMEOUT_MINUTES`` and force-
+    reveals it (``force_reveal_round``), which either lets the game continue
+    with whoever did guess, or marks the session ``ABANDONED`` if literally
+    nobody did.
+    """
+    from datetime import timedelta
+
+    from django.core.cache import cache
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.spotguessr.model import GameSession
+    from urbanlens.dashboard.services.spotguessr.session import STALL_ROUND_TIMEOUT_MINUTES, force_reveal_round
+
+    if not cache.add(_SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY, value=True, timeout=_SPOTGUESSR_STALL_SWEEP_LOCK_TIMEOUT_SECONDS):
+        logger.info("sweep_stalled_spotguessr_sessions: a previous run is still in flight; skipping")
+        return 0
+    try:
+        cutoff = timezone.now() - timedelta(minutes=STALL_ROUND_TIMEOUT_MINUTES)
+        count = 0
+        for session in GameSession.objects.stalled(cutoff=cutoff):
+            current_round = session.rounds.filter(revealed_at__isnull=True).first()
+            if current_round is None:
+                continue  # raced with a normal guess completing it - nothing to do
+            try:
+                force_reveal_round(current_round)
+            except Exception:
+                logger.exception("Failed to force-reveal stalled SpotGuessr round %s", current_round.pk)
+                continue
+            count += 1
+        if count:
+            logger.info("Force-revealed %s stalled SpotGuessr round(s)", count)
+        return count
+    finally:
+        cache.delete(_SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY)
+
+
+_TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:trivia:stall-sweep-lock"
+_TRIVIA_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_stalled_trivia_sessions() -> int:
+    """Force-reveal any Trivia round that's been open too long.
+
+    The safety net for a multiplayer round that can otherwise stall forever:
+    a round only completes once every joined participant has answered
+    (``services.trivia.session.submit_answer``), but a participant who
+    simply closes their tab is invisible to that check - there's no
+    disconnect signal wired into the game state. Mirrors
+    ``sweep_stalled_spotguessr_sessions`` exactly. This sweep finds any
+    session whose current round has sat unrevealed past
+    ``STALL_ROUND_TIMEOUT_MINUTES`` and force-reveals it
+    (``force_reveal_round``), which either lets the game continue with
+    whoever did answer, or marks the session ``ABANDONED`` if literally
+    nobody did.
+    """
+    from datetime import timedelta
+
+    from django.core.cache import cache
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.trivia.model import TriviaSession
+    from urbanlens.dashboard.services.trivia.session import STALL_ROUND_TIMEOUT_MINUTES, force_reveal_round
+
+    if not cache.add(_TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY, value=True, timeout=_TRIVIA_STALL_SWEEP_LOCK_TIMEOUT_SECONDS):
+        logger.info("sweep_stalled_trivia_sessions: a previous run is still in flight; skipping")
+        return 0
+    try:
+        cutoff = timezone.now() - timedelta(minutes=STALL_ROUND_TIMEOUT_MINUTES)
+        count = 0
+        for session in TriviaSession.objects.stalled(cutoff=cutoff):
+            current_round = session.rounds.filter(revealed_at__isnull=True).first()
+            if current_round is None:
+                continue  # raced with a normal answer completing it - nothing to do
+            try:
+                force_reveal_round(current_round)
+            except Exception:
+                logger.exception("Failed to force-reveal stalled Trivia round %s", current_round.pk)
+                continue
+            count += 1
+        if count:
+            logger.info("Force-revealed %s stalled Trivia round(s)", count)
+        return count
+    finally:
+        cache.delete(_TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY)
+
+
+_CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:consensus:stall-sweep-lock"
+_CONSENSUS_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_stalled_consensus_sessions() -> int:
+    """Force-resolve any Consensus round that's been open too long.
+
+    Unlike SpotGuessr/Trivia, a Consensus round has *two* sub-phases that
+    can each stall independently: answer-collection (mirrors
+    ``sweep_stalled_spotguessr_sessions`` - force-reveals via
+    ``force_reveal_round``) and, for a competitive round whose answers
+    disagreed, the follow-on vote (force-tallies via
+    ``force_resolve_vote``). Both are swept in the same task run.
+    """
+    from datetime import timedelta
+
+    from django.core.cache import cache
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.consensus.model import ConsensusRoundResolution, ConsensusSession
+    from urbanlens.dashboard.services.consensus.session import STALL_ROUND_TIMEOUT_MINUTES, force_resolve_vote, force_reveal_round
+
+    if not cache.add(_CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY, value=True, timeout=_CONSENSUS_STALL_SWEEP_LOCK_TIMEOUT_SECONDS):
+        logger.info("sweep_stalled_consensus_sessions: a previous run is still in flight; skipping")
+        return 0
+    try:
+        cutoff = timezone.now() - timedelta(minutes=STALL_ROUND_TIMEOUT_MINUTES)
+        count = 0
+        for session in ConsensusSession.objects.answer_stalled(cutoff=cutoff):
+            current_round = session.rounds.filter(resolution=ConsensusRoundResolution.PENDING).first()
+            if current_round is None:
+                continue  # raced with a normal answer completing it - nothing to do
+            try:
+                force_reveal_round(current_round)
+            except Exception:
+                logger.exception("Failed to force-reveal stalled Consensus round %s", current_round.pk)
+                continue
+            count += 1
+        for session in ConsensusSession.objects.vote_stalled(cutoff=cutoff):
+            current_round = session.rounds.filter(resolution=ConsensusRoundResolution.VOTE_OPEN).first()
+            if current_round is None:
+                continue  # raced with a normal vote completing it - nothing to do
+            try:
+                force_resolve_vote(current_round)
+            except Exception:
+                logger.exception("Failed to force-resolve stalled Consensus vote for round %s", current_round.pk)
+                continue
+            count += 1
+        if count:
+            logger.info("Force-resolved %s stalled Consensus round(s)", count)
+        return count
+    finally:
+        cache.delete(_CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def recompute_fact_confidence(fact_id: int) -> None:
+    """Recompute one Fact's confidence/status/value from its accumulated evidence.
+
+    Queued (never called inline) from every Facts evidence write site - see
+    ``services.facts.evidence.record_evidence``. Per-fact evidence volume is
+    small by construction, mirroring the same reasoning behind SpotGuessr's
+    synchronous-but-cheap ``recompute_estimated_coordinates``, so no
+    debounce/locking is needed here.
+    """
+    from urbanlens.dashboard.services.facts.confidence import recompute
+
+    recompute(fact_id)
+
+
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def process_device_scan_upload(self, upload_id: int) -> bool:
+    """Classify, wiki-match, and cluster one wireless device-scan upload.
+
+    Runs on the default queue - real CPU-bound geometry work, not
+    ``panel_fetch`` (same reasoning as ``classify_detail_marker``). Always
+    marks the upload PROCESSED or FAILED by the time this returns, even on an
+    unexpected error, so a stuck PENDING row always means the task never ran
+    at all rather than having failed silently mid-way.
+
+    Claims the upload by flipping PENDING -> PROCESSED atomically before doing
+    any work, so a redelivered or manually retried task for an upload that
+    already finished (or is being worked by another worker) is a no-op rather
+    than re-running ``record_absence_report`` and inflating a marker's absence
+    streak a second time for the same physical report.
+
+    Args:
+        upload_id: PK of the DeviceScanUpload to process.
+
+    Returns:
+        True when this call claimed and processed the upload (successfully or
+        not); False when it no longer exists, or was already claimed by a
+        prior run.
+    """
+    from urbanlens.dashboard.models.device_scan.model import DeviceScanUpload, ScanUploadStatus
+    from urbanlens.dashboard.services.device_scan.pipeline import process_scan_upload
+
+    claimed = DeviceScanUpload.objects.filter(pk=upload_id, status=ScanUploadStatus.PENDING).update(status=ScanUploadStatus.PROCESSED)
+    if not claimed:
+        logger.info("process_device_scan_upload: upload %s no longer exists or is not pending", upload_id)
+        return False
+
+    upload = DeviceScanUpload.objects.select_related("profile").prefetch_related("entries__device", "entries__expected_marker").filter(pk=upload_id).first()
+    if upload is None:
+        return False
+
+    update_task_progress(self, current=0, total=1, message="Processing device scan...")
+    try:
+        process_scan_upload(upload)
+    except Exception as exc:
+        logger.exception("process_device_scan_upload: failed for upload %s", upload_id)
+        DeviceScanUpload.objects.filter(pk=upload_id).update(status=ScanUploadStatus.FAILED, error=str(exc))
+        update_task_progress(self, current=1, total=1, message="Device scan processing failed")
+        return True
+
+    update_task_progress(self, current=1, total=1, message="Device scan processed")
+    return True

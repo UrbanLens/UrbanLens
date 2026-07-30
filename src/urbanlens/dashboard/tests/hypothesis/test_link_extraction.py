@@ -327,9 +327,16 @@ class AvailabilityAndLimitTests(TestCase):
 class _FakeGateway:
     def __init__(self, answer: str | None):
         self._answer = answer
+        self.model = "fake-model"
 
     def send_prompt(self, prompt: str, **kwargs) -> str | None:
         return self._answer
+
+    @property
+    def cost(self):
+        from decimal import Decimal
+
+        return Decimal("0.001")
 
 
 class RunExtractionPipelineTests(TestCase):
@@ -343,13 +350,28 @@ class RunExtractionPipelineTests(TestCase):
         self.extraction = LinkExtraction.objects.create(profile=self.profile, pin=self.pin, url="https://example.com/history")
         _grant_ai_to_everyone()
 
-    def _run(self, page_text: str | None = "Some page text", answer: str | None = "{}") -> LinkExtraction:
+    def _run(
+        self,
+        page_text: str | None = "Some page text",
+        answer: str | None = "{}",
+        *,
+        article_rows: list | None = None,
+    ) -> LinkExtraction:
         fetch_patch = (
             patch("urbanlens.dashboard.services.ai.link_extraction.fetch_page_text", return_value=page_text)
             if page_text is not None
             else patch("urbanlens.dashboard.services.ai.link_extraction.fetch_page_text", side_effect=LinkExtractionError("The page couldn't be fetched."))
         )
-        with fetch_patch, patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=_FakeGateway(answer)):
+        # Isolate structured-field pipeline tests from article expansion (covered in test_article_expansion).
+        expand_patch = patch(
+            "urbanlens.dashboard.services.ai.article_expansion.expand_articles_from_page",
+            return_value=article_rows if article_rows is not None else [],
+        )
+        with (
+            fetch_patch,
+            expand_patch,
+            patch("urbanlens.dashboard.services.ai.factory.get_gateway", return_value=_FakeGateway(answer)),
+        ):
             run_extraction(self.extraction)
         self.extraction.refresh_from_db()
         return self.extraction
@@ -381,7 +403,12 @@ class RunExtractionPipelineTests(TestCase):
         self.assertEqual(self.pin.name, "Old Mill")
         self.assertEqual(self.pin.date_abandoned, date(1998, 1, 1))
         recorded_keys = {row["key"] for row in extraction.results_rows}
-        self.assertEqual(recorded_keys, {"date_abandoned"})
+        # Only the field-extraction registry's own allowlisted keys are relevant here -
+        # article expansion (also enabled by _grant_ai_to_everyone) may incidentally add
+        # its own "article_pin" row from the same fake gateway, which isn't this test's concern.
+        self.assertIn("date_abandoned", recorded_keys)
+        self.assertNotIn("name", recorded_keys)
+        self.assertNotIn("profile", recorded_keys)
 
 
 class RecentlyRequestedUrlsTests(TestCase):

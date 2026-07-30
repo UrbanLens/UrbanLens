@@ -103,7 +103,7 @@ def add_environment_indicator(request: HttpRequest) -> dict[str, str]:
 
 #: URL-name prefixes that belong to a nav-bar section other than their own, e.g.
 #: pin detail pages (``pin.*``) are reached from the map and should keep "Map" active.
-_NAV_SECTION_ALIASES = {"pin": "map"}
+_NAV_SECTION_ALIASES = {"pin": "map", "spotguessr": "games", "trivia": "games"}
 
 
 def add_page_name(request: HttpRequest) -> dict[str, str]:
@@ -220,6 +220,7 @@ def add_feature_access(request: HttpRequest) -> dict[str, bool]:
             "show_places_layer": user_has_feature(request.user, SiteFeature.PLACES),
             "can_use_web_search": user_has_feature(request.user, SiteFeature.SEARCH),
             "can_upload_videos": user_has_feature(request.user, SiteFeature.VIDEO_UPLOADS),
+            "show_games_nav": user_has_feature(request.user, SiteFeature.ALPHA_FEATURES),
         }
     except (ImportError, DatabaseError):
-        return {"can_use_ai_features": False, "show_places_layer": False, "can_use_web_search": False, "can_upload_videos": False}
+        return {"can_use_ai_features": False, "show_places_layer": False, "can_use_web_search": False, "can_upload_videos": False, "show_games_nav": False}

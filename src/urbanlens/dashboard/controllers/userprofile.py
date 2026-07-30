@@ -102,16 +102,12 @@ class ViewProfileView(LoginRequiredMixin, View):
         if avatar_file:
             from django.contrib import messages
 
-            from urbanlens.dashboard.models.images.model import MediaKind
-            from urbanlens.dashboard.services.images import image_upload_error
+            from urbanlens.dashboard.services.avatar import AvatarUploadError, set_profile_avatar
 
-            upload_error = image_upload_error(avatar_file, MediaKind.PHOTO)
-            if upload_error:
-                message, _status = upload_error
-                messages.error(request, message)
-                return redirect("profile.view")
-            profile.avatar = avatar_file
-            profile.save(update_fields=["avatar"])
+            try:
+                set_profile_avatar(profile, avatar_file)
+            except AvatarUploadError as exc:
+                messages.error(request, exc.safe_message)
         return redirect("profile.view")
 
     def _can_view_profile(self, request: HttpRequest, profile: Profile) -> bool:
@@ -154,8 +150,13 @@ class ViewProfileView(LoginRequiredMixin, View):
         )
         shared_visited_ids = their_visited_ids & my_visited_ids
 
-        context["common_pin_count"] = len(common_ids)
-        context["can_view_common_pins"] = bool(common_ids) and profile.can_view_common_pins_with(my_profile)
+        # common_pin_count itself must be gated the same as the detail-page link -
+        # otherwise a profile that opted out of sharing common-pin data (or a
+        # viewer who hasn't opted in themselves) still had the count rendered on
+        # the stats row, just without a clickable link to the detail page.
+        common_pins_permitted = profile.can_view_common_pins_with(my_profile)
+        context["common_pin_count"] = len(common_ids) if common_pins_permitted else None
+        context["can_view_common_pins"] = bool(common_ids) and common_pins_permitted
         context["shared_visited"] = Location.objects.filter(id__in=shared_visited_ids).select_related("wiki").order_by("wiki__name", "official_name") if shared_visited_ids else Location.objects.none()
 
         # Friendship relationship
@@ -167,6 +168,13 @@ class ViewProfileView(LoginRequiredMixin, View):
         # FriendshipStatus values are capitalized ("Accepted", "Requested"), so normalize here.
         context["friendship_status"] = friendship.status.lower() if friendship else None
         context["friends_since"] = friendship.updated if friendship and friendship.status == FriendshipStatus.ACCEPTED else None
+        # Only the profile that *placed* a block may lift it (see
+        # ``services.friendship.unblock_profile``). Both parties see the
+        # "Blocked" chip, because ``Friendship.objects.between`` matches either
+        # direction, so without this flag the blocked party is offered an
+        # Unblock button that now correctly answers 404 - an action the UI
+        # promises and the server refuses.
+        context["viewer_placed_block"] = bool(friendship and friendship.status == FriendshipStatus.BLOCKED and friendship.from_profile_id == my_profile.pk)
 
         # Trips in common
         from urbanlens.dashboard.models.trips.model import TripMembership
@@ -408,11 +416,19 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
         if field == "avatar":
+            from urbanlens.dashboard.services.avatar import AvatarUploadError, set_profile_avatar
+
             file = request.FILES.get("file_value")
             if not file:
                 return JsonResponse({"error": "No file provided."}, status=400)
-            profile.avatar = file
-            profile.save(update_fields=["avatar"])
+            # Previously this assigned the upload straight onto the model: no
+            # size cap, no magic-byte sniffing, no antivirus - unlike the hero
+            # card's form, which has always run them. Routing both through
+            # ``set_profile_avatar`` closes the unguarded half.
+            try:
+                set_profile_avatar(profile, file)
+            except AvatarUploadError as exc:
+                return JsonResponse({"error": exc.safe_message}, status=exc.status_code)
             return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
 
         if field == "avatar_gravatar":
@@ -491,21 +507,21 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
 
     def _save_avatar_emoji(self, request: HttpRequest, profile: Profile) -> JsonResponse:
-        from django.core.files.base import ContentFile
+        """Generate and store an emoji avatar from the inline picker.
 
-        from urbanlens.dashboard.models.colors import MaterialColor
-        from urbanlens.dashboard.services.avatar import AvatarService
+        Args:
+            request: The HTTP request. POST params: ``animal``, ``color``.
+            profile: The requesting user's own profile.
 
-        animal = request.POST.get("animal", "fox")
-        color = request.POST.get("color", "#4CAF50")
-        emoji = AvatarService.ANIMAL_EMOJIS.get(animal, "🦊")
-        if color.lower() not in {v.lower() for v in MaterialColor.values}:
-            color = MaterialColor.GREY.value
-        svg = AvatarService.generate_emoji_svg(emoji, color)
-        profile.avatar.save(
-            f"emoji_{request.user.pk}.svg",
-            ContentFile(svg.encode("utf-8")),
-            save=True,
+        Returns:
+            JSON carrying the new avatar URL.
+        """
+        from urbanlens.dashboard.services.avatar import DEFAULT_AVATAR_ANIMAL, DEFAULT_AVATAR_COLOR, set_profile_avatar_from_emoji
+
+        set_profile_avatar_from_emoji(
+            profile,
+            request.POST.get("animal", DEFAULT_AVATAR_ANIMAL),
+            request.POST.get("color", DEFAULT_AVATAR_COLOR),
         )
         return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
 
@@ -973,26 +989,44 @@ class ProfileTrustView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
-        from urbanlens.dashboard.models.profile.trust import ProfileTrust
+        """Apply a trust rating, or clear it when the value is out of range.
+
+        Args:
+            request: The HTTP request. POST param: ``rating`` (1-5, or 0/absent
+                to clear).
+            profile_slug: Slug of the profile being rated.
+
+        Returns:
+            The re-rendered annotation partial, or 400 for a self-rating.
+        """
+        from urbanlens.dashboard.services.profile_annotations import (
+            MAX_TRUST_RATING,
+            MIN_TRUST_RATING,
+            SelfAnnotationError,
+            clear_trust,
+            require_distinct,
+            set_trust,
+        )
 
         subject = get_object_or_404(Profile, slug=profile_slug)
         author = _authenticated_profile(request)
-        if author == subject:
-            return HttpResponse("Cannot rate your own profile.", status=400)
+
+        try:
+            require_distinct(author, subject, "Cannot rate your own profile.")
+        except SelfAnnotationError as exc:
+            return HttpResponse(exc.safe_message, status=400)
 
         try:
             rating = int(request.POST.get("rating", 0))
         except (TypeError, ValueError):
             rating = 0
 
-        if 1 <= rating <= 5:
-            ProfileTrust.objects.update_or_create(
-                author=author,
-                subject=subject,
-                defaults={"rating": rating},
-            )
+        # An out-of-range value is this widget's "clear" signal, not an error -
+        # the star row posts 0 when the user un-picks their current rating.
+        if MIN_TRUST_RATING <= rating <= MAX_TRUST_RATING:
+            set_trust(author, subject, rating)
         else:
-            ProfileTrust.objects.for_pair(author, subject).delete()
+            clear_trust(author, subject)
 
         return _render_profile_annotation_partial(request, author, subject)
 
@@ -1005,23 +1039,34 @@ class ProfileNicknameView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, profile_slug: UUID) -> HttpResponse:
-        from urbanlens.dashboard.models.profile.nickname import ProfileNickname
+        """Set the nickname, or clear it when the submitted value is blank.
+
+        Args:
+            request: The HTTP request. POST param: ``nickname``.
+            profile_slug: Slug of the profile being nicknamed.
+
+        Returns:
+            The re-rendered annotation partial, or 400 for a self-nickname.
+        """
+        from urbanlens.dashboard.services.profile_annotations import AnnotationError, SelfAnnotationError, clear_nickname, require_distinct, set_nickname
 
         subject = get_object_or_404(Profile, slug=profile_slug)
         author = _authenticated_profile(request)
-        if author == subject:
-            return HttpResponse("Cannot nickname your own profile.", status=400)
+
+        try:
+            require_distinct(author, subject, "Cannot nickname your own profile.")
+        except SelfAnnotationError as exc:
+            return HttpResponse(exc.safe_message, status=400)
 
         nickname = request.POST.get("nickname", "").strip()
-
-        if nickname:
-            ProfileNickname.objects.update_or_create(
-                author=author,
-                subject=subject,
-                defaults={"nickname": nickname},
-            )
+        if not nickname:
+            # A blank submission is this widget's "clear" signal, not an error.
+            clear_nickname(author, subject)
         else:
-            ProfileNickname.objects.for_pair(author, subject).delete()
+            try:
+                set_nickname(author, subject, nickname)
+            except AnnotationError as exc:
+                return HttpResponse(exc.safe_message, status=400)
 
         return _render_profile_annotation_partial(request, author, subject)
 

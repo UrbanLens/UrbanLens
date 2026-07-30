@@ -3,22 +3,31 @@
 <ul class="trip-card-list">
     {% for t in trips %}
     <li class="trip-card trip-card--{{ t.timeline_status }}" id="trip-card-{{ t.uuid }}">
-        <a href="{% url 'trips.detail' t.slug %}" class="trip-card-link">
-            <div class="trip-card-accent" aria-hidden="true"></div>
+        <div class="trip-card-accent" aria-hidden="true"></div>
 
+        <div class="trip-card-body">
             <div class="trip-card-top">
+                {% if t.timeline_status == 'active' and t.duration_days and t.duration_days > 1 %}
+                <span class="trip-card-status trip-card-status--ongoing">
+                    <span class="trip-card-status-dot" aria-hidden="true"></span>
+                    Day {{ t.elapsed_day }} of {{ t.duration_days }}
+                </span>
+                {% else %}
                 <span class="trip-card-status trip-card-status--{{ t.timeline_status }}">
                     {% if t.timeline_status == 'upcoming' %}Upcoming
                     {% elif t.timeline_status == 'active' %}In progress
                     {% elif t.timeline_status == 'past' %}Completed
                     {% else %}Planning{% endif %}
                 </span>
+                {% endif %}
                 <span class="trip-card-updated" title="Last updated {{ t.updated|date:'M j, Y g:i A' }}">
                     Updated {{ t.updated|human_timesince }}
                 </span>
             </div>
 
-            <h2 class="trip-card-name">{{ t.name }}</h2>
+            <h2 class="trip-card-name">
+                <a href="{% url 'trips.detail' t.slug %}">{{ t.name }}</a>
+            </h2>
 
             {% if t.effective_start_date %}
             <div class="trip-card-dates">
@@ -50,6 +59,12 @@
                     <i class="material-icons" aria-hidden="true">group</i>
                     {{ t.member_count }} member{{ t.member_count|pluralize }}
                 </span>
+                {% if t.pin_count %}
+                <span class="trip-card-stat" title="Pins on this trip">
+                    <i class="material-icons" aria-hidden="true">push_pin</i>
+                    {{ t.pin_count }} pin{{ t.pin_count|pluralize }}
+                </span>
+                {% endif %}
                 {% if t.comment_count %}
                 <span class="trip-card-stat" title="Comments on this trip">
                     <i class="material-icons" aria-hidden="true">chat_bubble_outline</i>
@@ -58,39 +73,65 @@
                 {% endif %}
             </div>
 
-            <div class="trip-card-footer">
-                <div class="trip-card-members" aria-label="{{ t.member_count }} member{{ t.member_count|pluralize }}">
-                    {% for membership in t.memberships.all|slice:":4" %}
-                    <span class="trip-card-member-avatar" title="{% if membership.profile.is_masked %}{{ membership.profile.display_name }}{% else %}@{{ membership.profile.user.username }}{% endif %}">
-                        {% if membership.profile.display_avatar_url %}
-                        <img src="{{ membership.profile.display_avatar_url }}" alt="" class="trip-card-member-avatar-img">
+            {% if t.memberships.all %}
+            <ul class="trip-card-rsvp-list">
+                {% for membership in t.memberships.all|slice:":5" %}
+                {% with member=membership.profile %}
+                <li class="trip-card-rsvp-row">
+                    <div class="trip-member-avatar">
+                        {% if member.display_avatar_url %}
+                        <img src="{{ member.display_avatar_url }}" alt="" class="trip-member-avatar-img">
                         {% else %}
-                        <span class="trip-card-member-avatar-initial">{{ membership.profile.display_name|first|upper }}</span>
+                        <span class="trip-member-avatar-initial {{ member.avatar_color_class }}">{{ member.display_name|first|upper }}</span>
                         {% endif %}
-                    </span>
-                    {% endfor %}
-                    {% if t.member_count > 4 %}
-                    <span class="trip-card-member-overflow">+{{ t.member_count|add:"-4" }}</span>
-                    {% endif %}
-                </div>
-
-                <div class="trip-card-meta">
-                    {% if profile and t.creator_id == profile.id %}
-                    <span class="trip-card-role">
-                        <i class="material-icons" aria-hidden="true">star</i>
-                        Your trip
-                    </span>
-                    {% elif t.creator %}
-                    <span class="trip-card-creator">
-                        <i class="material-icons" aria-hidden="true">person</i>
-                        {% if t.creator.is_masked %}{{ t.creator.display_name }}{% else %}@{{ t.creator.user.username }}{% endif %}
+                    </div>
+                    <span class="trip-card-rsvp-name">{{ member.display_name }}</span>
+                    {% if membership.status == 'invited' %}
+                    <span class="trip-member-rsvp trip-member-rsvp--invited" title="Hasn't joined the trip yet">Invited</span>
+                    {% else %}
+                    <span class="trip-member-rsvp trip-member-rsvp--{{ membership.rsvp|default:'none' }}" title="RSVP status">
+                        {% if membership.rsvp == 'yes' %}Going
+                        {% elif membership.rsvp == 'no' %}Not Coming
+                        {% elif membership.rsvp == 'maybe' %}Maybe
+                        {% else %}-{% endif %}
                     </span>
                     {% endif %}
-                </div>
+                </li>
+                {% endwith %}
+                {% endfor %}
+                {% if t.member_count > 5 %}
+                <li class="trip-card-rsvp-overflow">+{{ t.member_count|add:"-5" }} more</li>
+                {% endif %}
+            </ul>
+            {% endif %}
 
-                <i class="material-icons trip-card-arrow" aria-hidden="true">arrow_forward</i>
+            <div class="trip-card-meta">
+                {% if profile and t.creator_id == profile.id %}
+                <span class="trip-card-role">
+                    <i class="material-icons" aria-hidden="true">star</i>
+                    Your trip
+                </span>
+                {% elif t.creator %}
+                <span class="trip-card-creator">
+                    <i class="material-icons" aria-hidden="true">person</i>
+                    {% if t.creator.is_masked %}{{ t.creator.display_name }}{% else %}@{{ t.creator.user.username }}{% endif %}
+                </span>
+                {% endif %}
             </div>
-        </a>
+
+            <div class="trip-card-actions">
+                <a href="{% url 'trips.detail' t.slug %}" class="btn btn--primary btn--sm">
+                    <i class="material-symbols-outlined">map</i>
+                    Open itinerary
+                </a>
+                {% if t.viewer_membership and t.viewer_membership.status == 'joined' %}
+                <a href="{% url 'safety.checkin.create' %}?trip={{ t.slug }}" class="btn btn--secondary btn--sm">
+                    <i class="material-symbols-outlined">shield</i>
+                    Start a check-in
+                </a>
+                {% endif %}
+            </div>
+        </div>
     </li>
     {% endfor %}
 </ul>

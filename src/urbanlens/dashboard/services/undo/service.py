@@ -12,11 +12,15 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+from django.db import transaction
+
 from urbanlens.dashboard.models.undo import UNDO_RETENTION, UndoAction
 from urbanlens.dashboard.services.undo import handlers as _handlers
 from urbanlens.dashboard.services.undo.base import get_handler
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from django.db.models import Model, QuerySet
 
     from urbanlens.dashboard.models.profile.model import Profile
@@ -28,7 +32,7 @@ class UndoExpiredError(Exception):
     """Raised when an UndoAction is past its retention window."""
 
 
-def stash_for_undo(model_label: str, instances: list[Model], profile: Profile) -> UndoAction:
+def stash_for_undo(model_label: str, instances: Sequence[Model], profile: Profile) -> UndoAction:
     """Serialize ``instances`` and index them for a profile's undo history.
 
     Must be called before the instances are deleted.
@@ -62,15 +66,26 @@ def restore_undo_action(undo_action: UndoAction) -> list[Any]:
 
     Raises:
         UndoExpiredError: If the entry is past its ``UNDO_RETENTION`` window -
-            the stale row is deleted before this is raised.
+            the stale row is deleted before this is raised. Also raised by a
+            handler's own ``restore()`` when a foreign key it needs to recreate
+            a row (e.g. a profile, label, or wiki creator) was independently
+            deleted during the retention window.
     """
     if undo_action.is_expired:
         undo_action.delete()
         raise UndoExpiredError(f"UndoAction {undo_action.pk} is past its {UNDO_RETENTION.days}-day retention window.")
 
     handler = get_handler(undo_action.model_label)
-    restored = handler.restore(undo_action.payload)
-    undo_action.delete()
+    with transaction.atomic():
+        # A handler's restore() may raise UndoExpiredError partway through a
+        # multi-instance batch (e.g. the second of three stashed pins
+        # references a label that's since been deleted) - wrapping in
+        # transaction.atomic() ensures that failure can't leave the first
+        # instance restored while the UndoAction itself still gets deleted
+        # below, which would otherwise silently orphan a partially-restored
+        # batch with no surviving undo entry to retry from.
+        restored = handler.restore(undo_action.payload)
+        undo_action.delete()
     return restored
 
 

@@ -195,7 +195,13 @@ class PinOwnershipPanelView(LoginRequiredMixin, View):
         fields = _owner_fields_from_post(request)
         if not fields["name"]:
             return _render_pin_ownership_panel(request, pin, error="Owner name is required.")
-        PinOwner.objects.create(pin=pin, **fields)
+        # Same case-insensitive dedup the Sale History tab's get_or_create
+        # already applies (see PinPropertySaleTabView.post) - without it this
+        # panel and that tab disagree on whether "Alice" and "alice" are the
+        # same owner, producing duplicate PinOwner rows for one real owner.
+        existing = PinOwner.objects.for_pin(pin).filter(name__iexact=fields["name"]).first()
+        if existing is None:
+            PinOwner.objects.create(pin=pin, **fields)
         return _render_pin_ownership_panel(request, pin)
 
 
@@ -333,7 +339,13 @@ class WikiOwnershipPanelView(LoginRequiredMixin, View):
         fields = _owner_fields_from_post(request)
         if not fields["name"]:
             return _render_wiki_ownership_panel(request, location, error="Owner name is required.")
-        owner = WikiOwner.objects.create(created_by=profile, **fields)
+        # Same case-insensitive dedup the Sale History tab's get_or_create
+        # already applies (see WikiPropertySaleTabView.post) - without it this
+        # panel and that tab disagree on whether "Alice" and "alice" are the
+        # same owner, producing duplicate WikiOwner rows for one real owner.
+        owner = WikiOwner.objects.for_location(location).filter(name__iexact=fields["name"]).first()
+        if owner is None:
+            owner = WikiOwner.objects.create(created_by=profile, **fields)
         owner.locations.add(location)
         return _render_wiki_ownership_panel(request, location)
 

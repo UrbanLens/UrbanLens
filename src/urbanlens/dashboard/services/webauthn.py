@@ -54,7 +54,14 @@ MAX_CREDENTIALS_PER_USER = 10
 
 
 class WebAuthnError(Exception):
-    """Raised when a registration or authentication ceremony can't be completed."""
+    """Raised when a registration or authentication ceremony can't be completed.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 def _rp_id(request: HttpRequest) -> str:
@@ -132,7 +139,7 @@ def verify_and_save_registration(request: HttpRequest, user: User, credential_js
         user: The account enrolling the passkey.
         credential_json: The raw JSON produced by ``navigator.credentials.create()``'s response.
         name: A user-supplied label for the new passkey (e.g. "Bitwarden"). Registration no
-            longer prompts for one up front (see docs/prompts/completed.md), so this is normally
+            longer prompts for one up front, so this is normally
             empty - in that case, an auto-generated "Passkey N" name is used instead, numbered
             after the user's current passkey count. The user can still rename it afterward via
             the existing inline rename field.

@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
 from django.core.exceptions import ValidationError
+from django.db import transaction
 from django.db.models import Q
 from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404
@@ -20,6 +21,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action, stash_for_undo
 
 if TYPE_CHECKING:
@@ -78,9 +80,16 @@ class PinBulkDeleteView(LoginRequiredMixin, View):
             return HttpResponse("No matching pins.", status=404)
 
         subtree = list(Pin.objects.filter(pk__in=[p.pk for p in pins]).with_descendants())
-        undo_action = stash_for_undo("pin", subtree, profile)
-        for pin in subtree:
-            pin.delete()
+        with transaction.atomic():
+            # The stash must happen inside the same atomic block as the delete: stashing
+            # first and deleting after ensures a mid-delete failure rolls back both together,
+            # rather than leaving a committed UndoAction claiming a deletion that never
+            # actually happened. Pin.parent_pin is on_delete=CASCADE, so deleting just the
+            # originally-selected pins already cascades to every descendant captured in
+            # `subtree` above in one bulk operation - no need to delete each subtree member
+            # individually.
+            undo_action = stash_for_undo(PIN_MODEL_LABEL, subtree, profile)
+            Pin.objects.filter(pk__in=[p.pk for p in pins]).delete()
 
         descendant_count = len(subtree) - len(pins)
         return JsonResponse({"ok": True, "undo_token": str(undo_action.uuid), "count": len(pins), "descendant_count": descendant_count, "total_count": len(subtree)})
@@ -116,7 +125,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
     """Merge selected pins: all but the target become the target's detail pins.
 
     The target becomes (or stays) the top-level pin; a target that's currently
-    a sub pin is promoted first (see the conflict check below).
+    a child pin is promoted first (see the conflict check below).
     """
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
@@ -135,13 +144,13 @@ class PinBulkMergeView(LoginRequiredMixin, View):
         profile = _request_profile(request)
         target = get_object_or_404(Pin.objects.filter(profile=profile), uuid=target_uuid)
         if target.parent_pin_id is not None:
-            # The target is itself a sub pin - promote it to top-level first, since
+            # The target is itself a child pin - promote it to top-level first, since
             # merging always makes the chosen target the new top-level pin.
             conflict = Pin.objects.filter(profile=profile, location_id=target.location_id, parent_pin__isnull=True).exclude(pk=target.pk).exists()
             if conflict:
                 return HttpResponse("You already have a top-level pin at this exact location. Choose a different pin as the merge target.", status=400)
             target.parent_pin = None
-            target.save(update_fields=["parent_pin"])
+            target.save(update_fields=["parent_pin", "updated"])
         sources = list(_owned_pins(profile, source_uuids).exclude(pk=target.pk))
         if not sources:
             return HttpResponse("No valid source pins.", status=400)
@@ -155,7 +164,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
             if source.would_create_cycle(target):
                 continue
             source.parent_pin = target
-            source.save(update_fields=["parent_pin"])
+            source.save(update_fields=["parent_pin", "updated"])
             merged += 1
 
         if not merged:
@@ -189,7 +198,7 @@ class PinBulkEditView(LoginRequiredMixin, View):
                 return HttpResponse(length_error, status=400)
             for pin in pins:
                 pin.description = description
-                pin.save(update_fields=["description"])
+                pin.save(update_fields=["description", "updated"])
 
         # rating lives on Review (one per profile/pin pair, see PinEditView.post
         # for the single-pin equivalent) - 0 explicitly clears every selected
@@ -228,7 +237,7 @@ class PinBulkEditView(LoginRequiredMixin, View):
                 if pin.pk == parent.pk or pin.would_create_cycle(parent):
                     continue
                 pin.parent_pin = parent
-                pin.save(update_fields=["parent_pin"])
+                pin.save(update_fields=["parent_pin", "updated"])
                 reparented += 1
 
         return JsonResponse({"ok": True, "count": len(pins), "reparented": reparented})

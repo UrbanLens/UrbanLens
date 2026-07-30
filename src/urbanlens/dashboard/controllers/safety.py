@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING
 from django.contrib import messages
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from django.http import Http404, HttpResponse, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.template.loader import render_to_string
@@ -20,30 +21,46 @@ from django.views import View
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinStatus, SafetyContactOptOutScope
+from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus, SafetyContactOptOutScope
+from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.connections import get_connections
 from urbanlens.dashboard.services.images import image_to_gallery_json, parse_reposition_payload
 from urbanlens.dashboard.services.map_snapshot import default_markup_map_title
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.safety import (
+    CheckinArchivedError,
     ContactInput,
+    SafetyValidationError,
+    accept_checkin_partner_invite,
+    apply_checkin_edit,
+    attach_draft_markup_map,
     check_in,
-    create_chat_message,
     create_checkin,
+    decline_checkin_partner_invite,
     default_contacts_as_input,
+    delete_checkin,
     find_community_wiki,
     get_active_checkin,
+    get_active_checkins,
     get_or_create_preference,
+    get_partner_role,
+    invite_checkin_partner,
+    is_accepted_partner,
     is_contact_opted_out,
+    is_owner_or_accepted_partner,
+    list_partnered_checkins,
+    list_pending_partner_invites,
     mark_found_safe,
-    notify_contacts_of_update,
+    mark_found_safe_by_partner,
+    post_chat_message,
     record_contact_opt_out,
+    remove_checkin_partner,
     save_contact_defaults,
-    set_checkin_contacts,
+    set_live_location_sharing,
+    update_live_location,
     validate_notifiable_contacts,
     wiki_notify_stats,
 )
-from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -59,6 +76,48 @@ _GALLERY_PAGE_SIZE = 12
 # rendered as static text in the page footer covering all of them, matching
 # the main map's "attributionControl: false" + footer-attribution convention.
 _MAP_ATTRIBUTION = "© OpenStreetMap contributors · Tiles © Esri · © OpenTopoMap (CC-BY-SA) · Leaflet"
+
+
+def _resolve_checkin_trip(profile: Profile, trip_slug: str | None) -> Trip | None:
+    """Resolve a check-in's trip scope from a slug, requiring the viewer to have joined it.
+
+    Args:
+        profile: The viewer creating (or looking up) the check-in.
+        trip_slug: The trip's slug from the request, or empty/None for the general scope.
+
+    Returns:
+        The Trip, or None if no ``trip_slug`` was given.
+
+    Raises:
+        Http404: If the slug doesn't match a trip the viewer has joined.
+    """
+    if not trip_slug:
+        return None
+    trip = get_object_or_404(Trip, slug=trip_slug)
+    is_member = trip.creator_id == profile.id or TripMembership.objects.for_trip_and_profile(trip, profile).filter(status=TripMembership.STATUS_JOINED).exists()
+    if not is_member:
+        raise Http404("Trip not found.")
+    return trip
+
+
+def _trip_checkin_prefill(trip: Trip) -> tuple[str, str]:
+    """Return (title, plan_details) defaults for a check-in started from a trip.
+
+    Args:
+        trip: The trip the check-in is scoped to.
+
+    Returns:
+        A short title referencing the trip, and a plan-details blurb
+        summarizing it - the user can still edit both before submitting.
+    """
+    title = f"{trip.name} check-in"
+    plan_details = f'Part of the trip "{trip.name}".'
+    if trip.effective_start_date:
+        date_range = trip.effective_start_date.strftime("%b %d, %Y")
+        if trip.effective_end_date and trip.effective_end_date != trip.effective_start_date:
+            date_range += f" - {trip.effective_end_date.strftime('%b %d, %Y')}"
+        plan_details += f" {date_range}."
+    return title, plan_details
 
 
 def _markup_style_context(profile: Profile) -> dict:
@@ -170,6 +229,39 @@ def _get_checkin_by_slug(profile: Profile, checkin_slug: str) -> SafetyCheckin:
             raise Http404 from exc
 
 
+def _get_checkin_as_partner(profile: Profile, checkin_slug: str) -> SafetyCheckin | None:
+    """Look up a check-in ``profile`` is an accepted partner on, by slug or UUID.
+
+    A partner has no slug access of their own - the URL value reaching here is
+    always the check-in's UUID (see ``services.safety._notify_checkin_partner_invite``) -
+    but resolving the same way ``_get_checkin_by_slug`` does (slug then UUID)
+    costs nothing and stays consistent.
+
+    Args:
+        profile: The requesting partner.
+        checkin_slug: The `<slug:checkin_slug>` value captured from the URL.
+
+    Returns:
+        The matching SafetyCheckin, or None if not found or not an accepted partner.
+    """
+    accepted = Q(partners__profile=profile, partners__status=SafetyCheckinPartnerStatus.ACCEPTED)
+    try:
+        return SafetyCheckin.objects.get(accepted, slug=checkin_slug)
+    except SafetyCheckin.DoesNotExist:
+        try:
+            return SafetyCheckin.objects.get(accepted, uuid=checkin_slug)
+        except (SafetyCheckin.DoesNotExist, ValidationError):
+            return None
+        except SafetyCheckin.MultipleObjectsReturned:
+            return None
+    except SafetyCheckin.MultipleObjectsReturned:
+        # slug is only unique per-owner - a partner accepted on two different owners'
+        # check-ins whose titles happen to slugify to the same text can't be disambiguated
+        # from the slug alone. Treat as unresolved rather than raising a 500; the caller
+        # falls back to the community view / 404, same as any other not-found check-in.
+        return None
+
+
 def _contact_display_label(contact_profile: Profile | None, email: str | None, label: str) -> str:
     """Return the best display label for a saved contact, for the defaults summary.
 
@@ -276,11 +368,11 @@ def _parse_auto_delete_days(request: HttpRequest) -> int | None:
 
 
 class SafetyActiveCheckinBannerView(LoginRequiredMixin, View):
-    """Navbar banner for the profile's currently active (unresolved) check-in, if any.
+    """Navbar banner for the profile's currently active (unresolved) check-ins, if any.
 
     Loaded via HTMX from the site-wide navbar (see partials/layout/header.html)
     on every page, so it stays in sync without every page's view needing to
-    fetch and pass the active check-in itself.
+    fetch and pass the active check-ins itself.
 
     GET /safety/nav-banner/
     """
@@ -292,10 +384,12 @@ class SafetyActiveCheckinBannerView(LoginRequiredMixin, View):
             request: Incoming HTTP request.
 
         Returns:
-            Rendered banner partial - empty when the profile has no active check-in.
+            Rendered banner partial - empty when the profile has no active
+            check-ins. A profile may have several at once (general plus one
+            per trip - see ``get_active_checkins``), so every one renders.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        return render(request, "dashboard/partials/safety/_active_checkin_banner.html", {"checkin": get_active_checkin(profile)})
+        return render(request, "dashboard/partials/safety/_active_checkin_banner.html", {"checkins": get_active_checkins(profile)})
 
 
 class SafetyHomeView(LoginRequiredMixin, View):
@@ -314,15 +408,21 @@ class SafetyHomeView(LoginRequiredMixin, View):
             Rendered page.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        checkins = SafetyCheckin.objects.filter(profile=profile).prefetch_related("contacts")
+        checkins = SafetyCheckin.objects.filter(profile=profile).select_related("trip").prefetch_related("contacts")
         return render(
             request,
             "dashboard/pages/safety/home.html",
             {
                 "checkins": checkins,
-                "active_checkin": get_active_checkin(profile),
+                # Scoped to the general (non-trip) check-in - this toolbar's
+                # "New Check-in"/"View active check-in" choice is about
+                # starting a general one; trip-scoped check-ins are started
+                # from their trip's card and don't block this.
+                "active_checkin": get_active_checkin(profile, trip=None),
                 "stats": _overview_stats(checkins),
                 "shared_checkins": SafetyCheckin.objects.shared_with(profile).select_related("profile"),
+                "partnered_checkins": list_partnered_checkins(profile),
+                "pending_partner_invites": list_pending_partner_invites(profile),
             },
         )
 
@@ -407,15 +507,17 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
             request: Incoming HTTP request.
 
         Returns:
-            Rendered page, or a redirect to the profile's already-active
-            check-in - only one may be active at a time.
+            Rendered page, or a redirect to the already-active check-in for
+            this scope - only one may be active per (profile, trip) at a time.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        active_checkin = get_active_checkin(profile)
+        trip = _resolve_checkin_trip(profile, request.GET.get("trip"))
+        active_checkin = get_active_checkin(profile, trip=trip)
         if active_checkin is not None:
             messages.info(request, "You already have an active check-in - check in or cancel it before starting a new one.")
             return redirect("safety.checkin.detail", checkin_slug=active_checkin.slug or active_checkin.uuid)
         preference = get_or_create_preference(profile)
+        title_prefill, plan_details_prefill = _trip_checkin_prefill(trip) if trip else ("", "")
         return render(
             request,
             "dashboard/pages/safety/create.html",
@@ -424,6 +526,9 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
                 "default_contacts": default_contacts_as_input(profile),
                 "connections": get_connections(profile),
                 "checkin": None,
+                "trip": trip,
+                "title_prefill": title_prefill,
+                "plan_details_prefill": plan_details_prefill,
                 "map_attribution": _MAP_ATTRIBUTION,
                 **_markup_style_context(profile),
             },
@@ -439,11 +544,13 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
             Redirect to the new check-in's detail page, or a 400 on bad input.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
+        trip = _resolve_checkin_trip(profile, request.POST.get("trip"))
         error_context = {
             "preference": get_or_create_preference(profile),
             "default_contacts": default_contacts_as_input(profile),
             "connections": get_connections(profile),
             "checkin": None,
+            "trip": trip,
             "map_attribution": _MAP_ATTRIBUTION,
             **_markup_style_context(profile),
         }
@@ -476,13 +583,14 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
                 grace_period=_parse_grace_period(request),
                 plan_details=request.POST.get("plan_details", "").strip(),
                 contact_message=request.POST.get("contact_message", "").strip(),
+                trip=trip,
                 destination_latitude=float(lat) if lat else None,
                 destination_longitude=float(lng) if lng else None,
                 contacts=allowed_contacts,
                 notify_community_wiki="notify_community_wiki" in request.POST,
             )
-        except ValueError as exc:
-            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": str(exc)}, status=400)
+        except SafetyValidationError as exc:
+            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": exc.safe_message}, status=400)
         self._link_markup_map(request, profile, checkin)
         return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
@@ -500,18 +608,7 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
             profile: The check-in owner.
             checkin: The freshly created check-in.
         """
-        map_uuid = request.POST.get("markup_map", "").strip()
-        if not map_uuid:
-            return
-        try:
-            markup_map = MarkupMap.objects.for_profile(profile).unattached().filter(uuid=map_uuid).first()
-        except (ValidationError, ValueError):
-            markup_map = None
-        if markup_map is None:
-            logger.warning("Ignoring markup_map %r on check-in create: not an unattached map owned by profile %s", map_uuid, profile.pk)
-            return
-        checkin.markup_map = markup_map
-        checkin.save(update_fields=["markup_map"])
+        attach_draft_markup_map(checkin, profile, request.POST.get("markup_map", "").strip())
 
 
 class SafetyCheckinDetailView(LoginRequiredMixin, View):
@@ -522,12 +619,19 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
-        """Render the check-in detail/monitor page, or the community view for non-owners.
+        """Render the check-in detail/monitor page, or a fallback view for non-owners.
 
-        A non-owner following the link from a community wiki comment (see
-        ``services.safety.post_checkin_to_community_wiki``) gets a limited
-        read-only status page instead of a 404 - but only for check-ins that
-        were actually posted to a wiki, and only via their UUID link.
+        Two non-owner fallbacks exist, tried in order:
+
+        * An accepted partner (see ``services.safety.is_owner_or_accepted_partner``)
+          gets the exact same full detail page as the owner, minus the
+          edit/contact-management/cancel/delete controls (``viewer_is_partner``
+          in the template context) - a partner's whole point is seeing the plan
+          "before it's missed", not a limited view.
+        * Otherwise, a non-owner following the link from a community wiki comment
+          (see ``services.safety.post_checkin_to_community_wiki``) gets the
+          limited read-only status page - but only for check-ins that were
+          actually posted to a wiki, and only via their UUID link.
 
         Args:
             request: Incoming HTTP request.
@@ -540,9 +644,44 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         try:
             checkin = _get_checkin_by_slug(profile, checkin_slug)
         except Http404:
+            partner_checkin = _get_checkin_as_partner(profile, checkin_slug)
+            if partner_checkin is not None:
+                return self._render_full_detail(request, partner_checkin, profile, viewer_is_partner=True)
             return self._render_community_view(request, checkin_slug)
+        return self._render_full_detail(request, checkin, profile, viewer_is_partner=False)
+
+    def _render_full_detail(self, request: HttpRequest, checkin: SafetyCheckin, viewer: Profile, *, viewer_is_partner: bool) -> HttpResponse:
+        """Render the full check-in detail page, for the owner or an accepted partner.
+
+        Args:
+            request: Incoming HTTP request.
+            checkin: The check-in to render - owned by ``viewer`` unless ``viewer_is_partner``.
+            viewer: The requesting profile.
+            viewer_is_partner: Whether ``viewer`` is an accepted partner rather than the owner -
+                gates the edit/contact-management/cancel/delete controls in the template.
+
+        Returns:
+            Rendered page.
+        """
+        owner = checkin.profile
+        is_archived = hasattr(checkin, "archive")
+        can_unlock = is_archived and not viewer_is_partner
+        if is_archived:
+            return render(
+                request,
+                "dashboard/pages/safety/detail.html",
+                {
+                    "checkin": checkin,
+                    "viewer_is_partner": viewer_is_partner,
+                    "is_archived": True,
+                    "can_unlock": can_unlock,
+                    "archive": checkin.archive if can_unlock else None,
+                    "map_attribution": _MAP_ATTRIBUTION,
+                },
+            )
+
         checkin.ensure_slug()
-        _ensure_markup_map(checkin, profile)
+        _ensure_markup_map(checkin, owner)
         contacts = list(checkin.contacts.all())
         destination_wiki = find_community_wiki(checkin.destination_latitude, checkin.destination_longitude)
         last_wiki_edit, wiki_editor_count = wiki_notify_stats(destination_wiki) if destination_wiki else (None, 0)
@@ -551,17 +690,22 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             "dashboard/pages/safety/detail.html",
             {
                 "checkin": checkin,
+                "viewer_is_partner": viewer_is_partner,
+                "is_archived": False,
                 "contacts": contacts,
                 "contacts_input": [(c.contact_profile, c.email, c.name) for c in contacts],
                 "contact_status": _contact_status_map(checkin, contacts),
-                "connections": get_connections(profile),
+                "contact_picker_locked": checkin.notifications_locked or viewer_is_partner,
+                "connections": get_connections(owner),
                 "messages": checkin.messages.select_related("sender_profile", "sender_contact").all(),
                 "destination_wiki": destination_wiki,
                 "last_wiki_edit": last_wiki_edit,
                 "wiki_editor_count": wiki_editor_count,
                 "attached_maps": checkin.markup_maps.all(),
+                "partners": checkin.partners.select_related("profile", "invited_by").all(),
+                "archive_at": checkin.archive_scheduled_at,
                 "map_attribution": _MAP_ATTRIBUTION,
-                **_markup_style_context(profile),
+                **_markup_style_context(owner),
             },
         )
 
@@ -603,14 +747,18 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         is_contact = checkin.contacts.filter(contact_profile=profile).exists()
         if checkin.wiki_notified_at is None and not is_contact:
             raise Http404
+        is_archived = hasattr(checkin, "archive")
         return render(
             request,
             "dashboard/pages/safety/community_status.html",
             {
                 "checkin": checkin,
-                "wiki": find_community_wiki(checkin.destination_latitude, checkin.destination_longitude) if checkin.wiki_notified_at else None,
+                "wiki": find_community_wiki(checkin.destination_latitude, checkin.destination_longitude) if checkin.wiki_notified_at and not is_archived else None,
                 "map_attribution": _MAP_ATTRIBUTION,
                 "viewer_is_contact": is_contact,
+                "is_archived": is_archived,
+                "can_unlock": False,
+                "archive_at": checkin.archive_scheduled_at,
             },
         )
 
@@ -643,63 +791,34 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             return redirect("safety.home")
 
         is_xhr = request.headers.get("X-Requested-With") == "XMLHttpRequest"
-        warnings: list[str] = []
-        plan_or_map_changed = False
 
         lat = request.POST.get("destination_latitude") or None
         lng = request.POST.get("destination_longitude") or None
-        new_lat = float(lat) if lat else None
-        new_lng = float(lng) if lng else None
-        old_lat = float(checkin.destination_latitude) if checkin.destination_latitude is not None else None
-        old_lng = float(checkin.destination_longitude) if checkin.destination_longitude is not None else None
 
-        new_plan = request.POST.get("plan_details", checkin.plan_details).strip()
-        if new_plan != checkin.plan_details:
-            checkin.plan_details = new_plan
-            plan_or_map_changed = True
-        if new_lat != old_lat or new_lng != old_lng:
-            checkin.destination_latitude = new_lat
-            checkin.destination_longitude = new_lng
-            plan_or_map_changed = True
+        try:
+            outcome = apply_checkin_edit(
+                checkin,
+                editor=profile,
+                title=request.POST.get("title"),
+                plan_details=request.POST.get("plan_details"),
+                contact_message=request.POST.get("contact_message"),
+                # Always submitted by this form (the map writes both hidden inputs),
+                # so an absent pair genuinely means "cleared", not "untouched".
+                destination=(float(lat) if lat else None, float(lng) if lng else None),
+                # Absent means unchecked - either the box was cleared or the destination has no
+                # community wiki (the toggle isn't rendered at all then), which disables it too.
+                notify_community_wiki="notify_community_wiki" in request.POST,
+                contacts=_parse_contacts_from_post(request, profile),
+            )
+        except CheckinArchivedError as exc:
+            # The GET path already renders archived check-ins read-only, so reaching
+            # here means a stale tab autosaved into the archival window.
+            if is_xhr:
+                return JsonResponse({"ok": False, "error": exc.safe_message}, status=409)
+            messages.error(request, exc.safe_message)
+            return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
-        update_fields = ["plan_details", "destination_latitude", "destination_longitude", "updated"]
-
-        if checkin.contacts_locked:
-            submitted_title = request.POST.get("title")
-            if submitted_title is not None and submitted_title.strip() != checkin.title:
-                warnings.append("Title is locked and can't be changed once contacts have been notified.")
-        else:
-            checkin.title = request.POST.get("title", checkin.title).strip() or checkin.title
-            update_fields.append("title")
-
-        if checkin.notifications_locked:
-            existing_contacts = list(checkin.contacts.all())
-            submitted_message = request.POST.get("contact_message")
-            if submitted_message is not None and submitted_message.strip() != checkin.contact_message:
-                warnings.append("Message is locked and can't be changed once contacts have been notified or you've checked in.")
-            submitted_ids = set(request.POST.getlist("contact_profile_ids"))
-            submitted_emails = {e.strip().lower() for e in request.POST.getlist("contact_emails") if e.strip()}
-            current_ids = {str(c.contact_profile_id) for c in existing_contacts if c.contact_profile_id}
-            current_emails = {c.email.lower() for c in existing_contacts if c.email}
-            if submitted_ids != current_ids or submitted_emails != current_emails:
-                warnings.append("Contacts are locked and can't be changed once they've been notified or you've checked in.")
-            if "notify_community_wiki" in request.POST and not checkin.notify_community_wiki:
-                warnings.append("Community wiki notification is locked and can't be changed once contacts have been notified or you've checked in.")
-        else:
-            checkin.contact_message = request.POST.get("contact_message", checkin.contact_message).strip()
-            # Absent means unchecked - either the box was cleared or the destination has no
-            # community wiki (the toggle isn't rendered at all then), which disables it too.
-            checkin.notify_community_wiki = "notify_community_wiki" in request.POST
-            update_fields += ["contact_message", "notify_community_wiki"]
-
-            allowed, rejected = validate_notifiable_contacts(profile, _parse_contacts_from_post(request, profile), checkin=checkin)
-            set_checkin_contacts(checkin, allowed)
-            warnings.extend(rejected)
-
-        checkin.save(update_fields=update_fields)
-
-        if plan_or_map_changed and checkin.contacts_locked:
-            notify_contacts_of_update(checkin, "updated their trip plan or destination")
+        warnings = outcome.warnings
 
         if is_xhr:
             contacts = list(checkin.contacts.all())
@@ -769,10 +888,7 @@ class SafetyCheckinDeleteView(LoginRequiredMixin, View):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         checkin = _get_checkin_by_slug(profile, checkin_slug)
-        if not checkin.is_resolved:
-            check_in(checkin, profile)
-        stash_for_undo("safety_checkin", [checkin], profile)
-        checkin.delete()
+        delete_checkin(checkin, profile)
         messages.success(request, "Check-in deleted. You can undo this from Settings → Undo History within 7 days.")
         return redirect("safety.home")
 
@@ -815,6 +931,254 @@ class SafetyCheckinCheckInView(LoginRequiredMixin, View):
         return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
 
+def _render_partner_picker(request: HttpRequest, checkin: SafetyCheckin, *, error: str | None = None) -> HttpResponse:
+    """Render the partner list/invite partial for a check-in's owner.
+
+    Args:
+        request: Incoming HTTP request (needed for template context processors).
+        checkin: The check-in whose partners should be listed.
+        error: An invite-rejection message to display, if the last POST failed.
+
+    Returns:
+        Rendered HTML for ``_partner_picker.html``.
+    """
+    return render(
+        request,
+        "dashboard/partials/safety/_partner_picker.html",
+        {
+            "checkin": checkin,
+            "partners": checkin.partners.select_related("profile", "invited_by").all(),
+            "error": error,
+        },
+    )
+
+
+class SafetyCheckinPartnersView(LoginRequiredMixin, View):
+    """List and invite safety check-in partners (owner-only).
+
+    GET  /safety/<slug:checkin_slug>/partners/
+    POST /safety/<slug:checkin_slug>/partners/ - invite by username.
+    """
+
+    def get(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
+        """Render the partner list/invite partial.
+
+        Args:
+            request: Incoming HTTP request.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
+
+        Returns:
+            Rendered partial.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        return _render_partner_picker(request, checkin)
+
+    def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
+        """Invite a partner by username and return the refreshed partial.
+
+        Args:
+            request: Incoming HTTP request. Reads ``username``.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
+
+        Returns:
+            Rendered partial, including an ``error`` message if the invite was rejected.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        username = request.POST.get("username", "").strip()
+        error = None
+        if not username:
+            error = "Enter a username to invite."
+        else:
+            try:
+                invite_checkin_partner(checkin, inviter=profile, username=username)
+            except SafetyValidationError as exc:
+                error = exc.safe_message
+        return _render_partner_picker(request, checkin, error=error)
+
+
+class SafetyCheckinPartnerRemoveView(LoginRequiredMixin, View):
+    """Remove a partner from a check-in (owner-only).
+
+    POST /safety/<slug:checkin_slug>/partners/<int:partner_id>/remove/
+    """
+
+    def post(self, request: HttpRequest, checkin_slug: str, partner_id: int) -> HttpResponse:
+        """Remove the partner and return the refreshed partial.
+
+        Args:
+            request: Incoming HTTP request.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
+            partner_id: PK of the ``SafetyCheckinPartner`` row to remove.
+
+        Returns:
+            Rendered partial.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        partner = get_object_or_404(SafetyCheckinPartner, pk=partner_id, checkin=checkin)
+        remove_checkin_partner(partner)
+        return _render_partner_picker(request, checkin)
+
+
+class SafetyCheckinPartnerInviteAcceptView(LoginRequiredMixin, View):
+    """Accept a pending safety check-in partner invite.
+
+    POST /safety/<uuid:checkin_uuid>/partners/accept/
+    """
+
+    def post(self, request: HttpRequest, checkin_uuid: str) -> HttpResponse:
+        """Accept the invite and redirect to the check-in's detail page.
+
+        Args:
+            request: Incoming HTTP request.
+            checkin_uuid: UUID of the check-in.
+
+        Returns:
+            Redirect to the check-in detail page.
+
+        Raises:
+            Http404: If the caller holds no partner row on that check-in.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        # Same narrowly-scoped lookup the external API uses, so the two surfaces
+        # cannot drift on which invitations a caller may address - see
+        # services.safety.get_partner_role for why it is scoped to the caller
+        # and why it carries no status filter.
+        partner = get_partner_role(profile, checkin_uuid)
+        if partner is None:
+            raise Http404
+        accept_checkin_partner_invite(partner)
+        return redirect("safety.checkin.detail", checkin_slug=checkin_uuid)
+
+
+class SafetyCheckinPartnerInviteDeclineView(LoginRequiredMixin, View):
+    """Decline a pending safety check-in partner invite.
+
+    POST /safety/<uuid:checkin_uuid>/partners/decline/
+    """
+
+    def post(self, request: HttpRequest, checkin_uuid: str) -> HttpResponse:
+        """Decline the invite and redirect to the safety overview page.
+
+        Args:
+            request: Incoming HTTP request.
+            checkin_uuid: UUID of the check-in.
+
+        Returns:
+            Redirect to the safety overview page.
+
+        Raises:
+            Http404: If the caller holds no partner row on that check-in.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        partner = get_partner_role(profile, checkin_uuid)
+        if partner is None:
+            raise Http404
+        decline_checkin_partner_invite(partner)
+        return redirect("safety.home")
+
+
+class SafetyCheckinPartnerMarkSafeView(LoginRequiredMixin, View):
+    """Mark the check-in owner as safe, as an accepted partner.
+
+    POST /safety/<uuid:checkin_uuid>/partners/mark-safe/
+    """
+
+    def post(self, request: HttpRequest, checkin_uuid: str) -> HttpResponse:
+        """Mark the owner safe and redirect to the check-in's detail page.
+
+        Args:
+            request: Incoming HTTP request.
+            checkin_uuid: UUID of the check-in.
+
+        Returns:
+            Redirect to the check-in detail page.
+
+        Raises:
+            Http404: If the requester isn't an accepted partner on this check-in.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkin = get_object_or_404(SafetyCheckin, uuid=checkin_uuid)
+        # Via the service, never an inline partners.filter(): the ACCEPTED clause
+        # is the whole check, and dropping it here would let someone who was only
+        # ever *invited* conclude another person's safety check-in.
+        if not is_accepted_partner(checkin, profile):
+            raise Http404
+        mark_found_safe_by_partner(checkin, profile)
+        return redirect("safety.checkin.detail", checkin_slug=checkin_uuid)
+
+
+class SafetyCheckinLocationSharingToggleView(LoginRequiredMixin, View):
+    """Turn live location sharing on or off for a check-in (owner-only).
+
+    POST /safety/<slug:checkin_slug>/location/toggle/
+    """
+
+    def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
+        """Toggle sharing and return the refreshed toggle state.
+
+        Args:
+            request: Incoming HTTP request. Reads ``enabled`` (``"1"``/``"0"``).
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
+
+        Returns:
+            JSON with the new ``enabled`` state.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        enabled = request.POST.get("enabled") == "1"
+        set_live_location_sharing(checkin, enabled=enabled)
+        return JsonResponse({"enabled": enabled})
+
+
+class SafetyCheckinLocationUpdateView(LoginRequiredMixin, View):
+    """Record the owner's current position while live location sharing is enabled (owner-only).
+
+    POST /safety/<slug:checkin_slug>/location/
+    """
+
+    #: The client throttles itself to one update per this many seconds, but that's
+    #: trivially bypassed - this is the cheap server-side floor, scoped per-checkin so
+    #: legitimate updates from one check-in never block another.
+    _MIN_UPDATE_INTERVAL_SECONDS = 10
+
+    def post(self, request: HttpRequest, checkin_slug: str) -> HttpResponse:
+        """Update the check-in's live position.
+
+        Args:
+            request: Incoming HTTP request. Reads ``latitude``/``longitude``/``accuracy``.
+            checkin_slug: Slug (or, for older links, UUID) of the check-in.
+
+        Returns:
+            204 on success (including when a too-frequent update is silently
+            dropped, so a throttled client doesn't treat it as an error), or a
+            400 if sharing is disabled/the check-in already concluded, or the
+            coordinates couldn't be parsed.
+        """
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        try:
+            latitude = float(request.POST["latitude"])
+            longitude = float(request.POST["longitude"])
+            accuracy = float(request.POST["accuracy"]) if request.POST.get("accuracy") else None
+        except (KeyError, ValueError):
+            return HttpResponseBadRequest("Invalid coordinates.")
+
+        from django.core.cache import cache
+
+        throttle_key = f"urbanlens:safety:location-update-throttle:{checkin.pk}"
+        if not cache.add(throttle_key, value=True, timeout=self._MIN_UPDATE_INTERVAL_SECONDS):
+            return HttpResponse(status=204)
+
+        try:
+            update_live_location(checkin, latitude=latitude, longitude=longitude, accuracy=accuracy)
+        except SafetyValidationError as exc:
+            return HttpResponseBadRequest(exc.safe_message)
+        return HttpResponse(status=204)
+
+
 class SafetyCheckinWikiOptionView(LoginRequiredMixin, View):
     """HTMX fragment: the "also notify the community wiki" toggle for a destination point.
 
@@ -855,6 +1219,35 @@ class SafetyCheckinWikiOptionView(LoginRequiredMixin, View):
                 "wiki_editor_count": wiki_editor_count,
             },
         )
+
+
+def _get_checkin_for_viewer(profile: Profile, checkin_slug: str) -> SafetyCheckin:
+    """Look up a check-in by slug/UUID for read-only access: owner or accepted partner.
+
+    Used by sub-resource endpoints (e.g. the photo gallery panel) that the full
+    detail page loads via HTMX after the initial render already decided the
+    viewer is authorized - those endpoints only ever read, so an accepted
+    partner belongs here even though they can't reach the owner-only edit
+    endpoints (gallery upload, map attach/detach, autosave) that still use
+    ``_get_checkin_by_slug`` directly.
+
+    Args:
+        profile: The requesting profile.
+        checkin_slug: The `<slug:checkin_slug>` value captured from the URL.
+
+    Returns:
+        The matching SafetyCheckin.
+
+    Raises:
+        Http404: If neither the owner lookup nor the partner lookup matches.
+    """
+    try:
+        return _get_checkin_by_slug(profile, checkin_slug)
+    except Http404:
+        checkin = _get_checkin_as_partner(profile, checkin_slug)
+        if checkin is None:
+            raise
+        return checkin
 
 
 def _render_attached_maps(request: HttpRequest, checkin: SafetyCheckin) -> str:
@@ -933,6 +1326,12 @@ class SafetyCheckinMapAttachView(LoginRequiredMixin, View):
             markup_map = MarkupMap.objects.get(uuid=map_uuid, profile=profile)
         except (MarkupMap.DoesNotExist, ValidationError, ValueError):
             return HttpResponseBadRequest("Invalid map.")
+        if markup_map.pk == checkin.markup_map_id:
+            # The picker (SafetyCheckinMapPickerView) already excludes the primary map from
+            # its candidate list, but that's UI-only - re-enforce it here too, since
+            # services.safety._build_archive_payload's "maps" list is keyed by primary map
+            # first and would otherwise carry the same map twice once archived.
+            return HttpResponseBadRequest("This map is already the check-in's primary route map.")
         checkin.markup_maps.add(markup_map)
         return HttpResponse(_render_attached_maps(request, checkin))
 
@@ -973,7 +1372,7 @@ class SafetyGalleryView(LoginRequiredMixin, View):
 
     def _get_context(self, request: HttpRequest, checkin_slug: str) -> dict:
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        checkin = _get_checkin_by_slug(profile, checkin_slug)
+        checkin = _get_checkin_for_viewer(profile, checkin_slug)
         images = Image.objects.filter(safety_checkin=checkin).select_related("profile").order_by("-created")
         page_obj = get_page(request, images, _GALLERY_PAGE_SIZE)
         return {
@@ -1022,20 +1421,21 @@ class SafetyGalleryView(LoginRequiredMixin, View):
         checksum = compute_checksum(image_file)
         if Image.objects.filter(safety_checkin=checkin, checksum=checksum).exists():
             return JsonResponse({"error": "That photo is already on this check-in."}, status=409)
-        from urbanlens.dashboard.services.storage import quota_error_for_upload
+        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
 
-        quota_error = quota_error_for_upload(profile, image_file.size)
-        if quota_error:
-            return JsonResponse({"error": quota_error}, status=413)
-        img = Image.objects.create(
-            image=image_file,
-            safety_checkin=checkin,
-            location=checkin.destination_location,
-            profile=profile,
-            caption=request.POST.get("caption", "").strip() or None,
-            checksum=checksum,
-            file_size=image_file.size,
-        )
+        with per_profile_upload_lock(profile):
+            quota_error = quota_error_for_upload(profile, image_file.size)
+            if quota_error:
+                return JsonResponse({"error": quota_error}, status=413)
+            img = Image.objects.create(
+                image=image_file,
+                safety_checkin=checkin,
+                location=checkin.destination_location,
+                profile=profile,
+                caption=request.POST.get("caption", "").strip() or None,
+                checksum=checksum,
+                file_size=image_file.size,
+            )
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 
@@ -1110,6 +1510,7 @@ class SafetyContactPortalView(View):
         """
         contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin", "checkin__profile").by_token(token))
         checkin = contact.checkin
+        is_archived = hasattr(checkin, "archive")
         return render(
             request,
             "dashboard/pages/safety/contact_portal.html",
@@ -1119,6 +1520,9 @@ class SafetyContactPortalView(View):
                 "other_contacts": checkin.contacts.exclude(pk=contact.pk),
                 "messages": checkin.messages.select_related("sender_profile", "sender_contact").all(),
                 "map_attribution": _MAP_ATTRIBUTION,
+                "is_archived": is_archived,
+                "can_unlock": False,
+                "archive_at": checkin.archive_scheduled_at,
             },
         )
 
@@ -1228,12 +1632,16 @@ class SafetyCheckinMessageView(View):
         body = request.POST.get("body", "").strip()
         if body:
             try:
-                create_chat_message(checkin, user=request.user, contact=contact, body=body)
-            except ValueError as exc:
-                # create_chat_message only raises ValueError with a fixed, developer-authored
-                # message (blank/too-long body) - never a stack trace or sensitive data.
+                # post_chat_message is create+broadcast as one operation. The
+                # WebSocket path (SafetyCheckinChatConsumer.receive) broadcasts
+                # after creating a message; this no-JS/socket-down fallback must
+                # too, or a message sent this way is invisible in real time to
+                # every other participant with an open socket (they'd only see it
+                # on their next manual reload).
+                post_chat_message(checkin, user=request.user, contact=contact, body=body)
+            except SafetyValidationError as exc:
                 logger.info("Safety chat HTTP fallback rejected message on checkin %s: %s", checkin.uuid, exc)
-                return HttpResponseBadRequest(str(exc))  # lgtm[py/stack-trace-exposure]
+                return HttpResponseBadRequest(exc.safe_message)
         return render(
             request,
             "dashboard/partials/safety/_chat_panel.html",
@@ -1245,24 +1653,24 @@ class SafetyCheckinMessageView(View):
 
         Args:
             request: Incoming HTTP request.
-            checkin_uuid: UUID of the check-in (owner route), if this is the owner route.
+            checkin_uuid: UUID of the check-in (session route), if this is the session route.
             token: Contact's magic-link token, if this is the contact route.
 
         Returns:
-            (checkin, contact) - contact is None on the owner route.
+            (checkin, contact) - contact is None on the session route.
 
         Raises:
-            Http404: If the owner route is used while logged out, or with a
-                check-in the caller doesn't own; or the token doesn't match
-                any contact.
+            Http404: If the session route is used while logged out, or by someone
+                who is neither the owner nor an accepted partner; or the token
+                doesn't match any contact.
         """
         if token is not None:
             contact = get_object_or_404(SafetyCheckinContact.objects.select_related("checkin").by_token(token))
             return contact.checkin, contact
         if not request.user.is_authenticated:
-            from django.http import Http404
-
             raise Http404
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        checkin = get_object_or_404(SafetyCheckin, uuid=checkin_uuid, profile=profile)
+        checkin = get_object_or_404(SafetyCheckin, uuid=checkin_uuid)
+        if not is_owner_or_accepted_partner(checkin, profile):
+            raise Http404
         return checkin, None

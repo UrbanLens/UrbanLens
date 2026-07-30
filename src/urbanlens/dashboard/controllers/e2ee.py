@@ -3,13 +3,27 @@
 Every blob accepted here was encrypted client-side; these views only validate
 shape, enforce ownership, and store. See ``docs/e2ee.md`` for the scheme and
 ``services/e2ee.py`` for the shared helpers.
+
+These are *dual-auth* endpoints (see
+``external_api.mixins.DualAuthJsonView``): the same URL serves the site's own
+web client over a session cookie and the mobile client over an OAuth2 access
+token. There is deliberately one implementation rather than a session copy
+here and a credential copy under ``api/external/`` - the key-exchange contract
+(version races, the opaque group-member tokens, the exact 409 bodies clients
+retry on) is delicate enough that two copies would drift, and a drift here
+means someone's messages stop decrypting.
+
+Because they are ``APIView`` subclasses, ``authentication_classes`` /
+``permission_classes`` / ``throttle_classes`` are actually honored - on a
+plain Django ``View`` those attributes are inert decoration, and an endpoint
+carrying them would look converted while remaining session-only.
 """
 
 from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.contrib.auth import update_session_auth_hash
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -17,8 +31,16 @@ from django.db import IntegrityError, transaction
 from django.http import Http404, HttpResponseBadRequest, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views import View
+from drf_spectacular.utils import extend_schema
+from rest_framework.exceptions import ParseError
+from rest_framework.permissions import AllowAny
+from rest_framework.renderers import JSONRenderer
+from rest_framework.request import Request
+from rest_framework.response import Response
+from rest_framework.views import APIView
 
-from urbanlens.dashboard.models.account.model import AccountKdf
+from urbanlens.dashboard.external_api.mixins import DualAuthJsonView
+from urbanlens.dashboard.models.account.model import AccountKdf, ApiKeyScope
 from urbanlens.dashboard.models.e2ee import ConversationKey, MessagingKeyBundle
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.direct_messages import can_direct_message
@@ -32,6 +54,8 @@ from urbanlens.dashboard.services.e2ee import (
 )
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from django.http import HttpRequest, HttpResponse
 
 logger = logging.getLogger(__name__)
@@ -41,7 +65,7 @@ logger = logging.getLogger(__name__)
 RESET_CONFIRMATION = "RESET"
 
 
-def _get_profile(request: HttpRequest) -> Profile:
+def _get_profile(request: HttpRequest | Request) -> Profile:
     """Return (creating if needed) the requesting user's profile.
 
     Args:
@@ -54,15 +78,42 @@ def _get_profile(request: HttpRequest) -> Profile:
     return profile
 
 
-def _json_body(request: HttpRequest) -> dict[str, Any] | None:
+def _json_body(request: HttpRequest | Request) -> dict[str, Any] | None:
     """Parse the request body as a JSON object.
 
     Args:
-        request: The incoming request.
+        request: The incoming request. A DRF request has already parsed and
+            validated the body by the time a handler runs, so its ``.data`` is
+            reused rather than re-reading (and re-decoding) ``.body``; the one
+            remaining plain-Django view here has no ``.data`` and still parses
+            for itself.
 
     Returns:
         The parsed dict, or None when the body is not a JSON object.
     """
+    # Tested with isinstance rather than ``hasattr(request, "data")``: reading
+    # that attribute is what *runs* the parser, and hasattr only suppresses
+    # AttributeError - a malformed body would raise ParseError straight out of
+    # the probe, before the try block below could catch it, and the caller
+    # would answer with DRF's ``{"detail": ...}`` instead of this module's
+    # ``{"error": ...}``.
+    if isinstance(request, Request):
+        try:
+            data = request.data
+        except ParseError:
+            # Malformed JSON. Returned as None so the caller answers with this
+            # module's own ``{"error": ...}`` 400 rather than DRF's
+            # ``{"detail": ...}`` - the status is the same either way, but the
+            # body shape is part of what clients already parse.
+            #
+            # Reached for session callers only. django-oauth-toolkit's
+            # authenticator inspects the request body while verifying a token,
+            # so for a *credential* caller a malformed body raises ParseError
+            # during authentication and DRF answers with ``{"detail": ...}``
+            # before this handler is entered. Still a JSON 400 either way; the
+            # web client's exact contract is what this branch preserves.
+            return None
+        return data if isinstance(data, dict) else None
     try:
         data = json.loads(request.body)
     except (json.JSONDecodeError, UnicodeDecodeError):
@@ -70,7 +121,32 @@ def _json_body(request: HttpRequest) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-class E2EELoginParamsView(View):
+def _require_current_password_proof(user: Any, data: dict[str, Any]) -> Response | None:
+    """Require proof of the current login credential for password accounts.
+
+    Load-bearing under credential authentication, not just for sessions: a
+    stolen ``messages:write`` OAuth2 token must not be enough on its own to
+    re-key someone's account. Enroll/Rewrap/Reset all re-derive or replace key
+    material, so each of them demands the account password as a second factor
+    the token itself never carries.
+
+    Args:
+        user: The requesting ``User``.
+        data: The parsed JSON body, which must carry ``current_password``.
+
+    Returns:
+        A 403 response when the proof is missing or wrong, else None. Accounts
+        with no usable password (OAuth-only) have no proof to give and pass.
+    """
+    if not user.has_usable_password():
+        return None
+    current_password = data.get("current_password", "")
+    if not isinstance(current_password, str) or not user.check_password(current_password):
+        return Response({"error": "Current password is incorrect."}, status=403)
+    return None
+
+
+class E2EELoginParamsView(APIView):
     """GET (anonymous): report how an identifier's account authenticates.
 
     Enrolled accounts get ``mode: "derived"`` plus their real Argon2id salt;
@@ -81,7 +157,20 @@ class E2EELoginParamsView(View):
     window (the login form already reveals unverified accounts).
     """
 
-    def get(self, request: HttpRequest) -> HttpResponse:
+    #: Anonymous by design - this answers a question the login form must ask
+    #: *before* anyone is authenticated.
+    authentication_classes: ClassVar[list] = []
+    permission_classes = [AllowAny]
+    #: Unthrottled, as it was as a plain Django view. Inheriting DRF's default
+    #: ``AnonRateThrottle`` (60/minute, keyed per IP) would newly rate-limit
+    #: the *login* flow, since every login attempt calls this first - a shared
+    #: office or CGNAT egress IP would start failing to log in. Enumeration is
+    #: already handled by the decoy salts rather than by rate limiting.
+    throttle_classes: ClassVar[list] = []
+    renderer_classes = [JSONRenderer]
+
+    @extend_schema(exclude=True)
+    def get(self, request: Request) -> Response:
         """Return the auth mode and salt for one login identifier.
 
         Args:
@@ -91,13 +180,13 @@ class E2EELoginParamsView(View):
         Returns:
             JSON ``{mode, auth_salt}``.
         """
-        identifier = request.GET.get("identifier", "").strip()
+        identifier = request.query_params.get("identifier", "").strip()
         if not identifier or len(identifier) > 254:
-            return HttpResponseBadRequest("identifier is required")
-        return JsonResponse(login_params_for_identifier(identifier))
+            return Response({"error": "identifier is required"}, status=400)
+        return Response(login_params_for_identifier(identifier))
 
 
-class E2EEEnrollView(LoginRequiredMixin, View):
+class E2EEEnrollView(DualAuthJsonView):
     """POST: store a freshly generated key bundle (and optionally rotate to derived auth).
 
     Password accounts include ``auth_key``/``auth_salt`` (plus
@@ -106,7 +195,14 @@ class E2EEEnrollView(LoginRequiredMixin, View):
     never reaches the server again. OAuth-only accounts omit all three.
     """
 
-    def post(self, request: HttpRequest) -> HttpResponse:
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(
+        description=("Publishes the caller's key bundle. Requires `current_password` on accounts that have one, even when authenticating with an OAuth2 token - the token alone must never be sufficient to replace an account's key material."),
+    )
+    def post(self, request: Request) -> Response:
         """Create the caller's key bundle.
 
         Args:
@@ -120,16 +216,16 @@ class E2EEEnrollView(LoginRequiredMixin, View):
             proof; 409 when a bundle already exists.
         """
         profile = _get_profile(request)
-        # profile.user is a concrete User (LoginRequiredMixin guarantees an
+        # profile.user is a concrete User (the permission classes guarantee an
         # authenticated request); use it for the password operations below so
         # the types stay narrow.
         user = profile.user
         data = _json_body(request)
         if data is None:
-            return HttpResponseBadRequest("Malformed JSON body")
+            return Response({"error": "Malformed JSON body"}, status=400)
 
         if MessagingKeyBundle.objects.for_profile(profile).exists():
-            return JsonResponse({"error": "A key bundle already exists for this account."}, status=409)
+            return Response({"error": "A key bundle already exists for this account."}, status=409)
 
         public_key = data.get("public_key", "")
         recovery_wrapped = data.get("recovery_wrapped_secret", "")
@@ -139,34 +235,34 @@ class E2EEEnrollView(LoginRequiredMixin, View):
         auth_salt = data.get("auth_salt", "")
 
         if not valid_blob(public_key, MAX_PUBLIC_KEY_LENGTH):
-            return HttpResponseBadRequest("Invalid public_key")
+            return Response({"error": "Invalid public_key"}, status=400)
         if not valid_blob(recovery_wrapped, MAX_WRAPPED_SECRET_LENGTH):
-            return HttpResponseBadRequest("Invalid recovery_wrapped_secret")
+            return Response({"error": "Invalid recovery_wrapped_secret"}, status=400)
         if not valid_blob(password_wrapped, MAX_WRAPPED_SECRET_LENGTH, required=False):
-            return HttpResponseBadRequest("Invalid password_wrapped_secret")
+            return Response({"error": "Invalid password_wrapped_secret"}, status=400)
         if not valid_blob(password_wrap_salt, MAX_SALT_LENGTH, required=False):
-            return HttpResponseBadRequest("Invalid password_wrap_salt")
+            return Response({"error": "Invalid password_wrap_salt"}, status=400)
         if bool(password_wrapped) != bool(password_wrap_salt):
-            return HttpResponseBadRequest("password_wrapped_secret and password_wrap_salt must be provided together")
+            return Response({"error": "password_wrapped_secret and password_wrap_salt must be provided together"}, status=400)
+
+        proof_error = _require_current_password_proof(user, data)
+        if proof_error is not None:
+            return proof_error
 
         rotate_auth = bool(auth_key)
         if rotate_auth:
             if not valid_blob(auth_key, MAX_SALT_LENGTH + 64) or not valid_blob(auth_salt, MAX_SALT_LENGTH):
-                return HttpResponseBadRequest("Invalid auth_key/auth_salt")
-            # Rotating the login credential requires proof the caller knows the
-            # current password - a hijacked session must not be able to lock
-            # the real owner out.
-            current_password = data.get("current_password", "")
-            if not user.has_usable_password() or not user.check_password(current_password):
-                return JsonResponse({"error": "Current password is incorrect."}, status=403)
+                return Response({"error": "Invalid auth_key/auth_salt"}, status=400)
+            if not user.has_usable_password():
+                return Response({"error": "Current password is incorrect."}, status=403)
 
         try:
             kdf_opslimit = int(data.get("kdf_opslimit", 0))
             kdf_memlimit = int(data.get("kdf_memlimit", 0))
         except (TypeError, ValueError):
-            return HttpResponseBadRequest("Invalid kdf parameters")
+            return Response({"error": "Invalid kdf parameters"}, status=400)
         if kdf_opslimit <= 0 or kdf_memlimit <= 0:
-            return HttpResponseBadRequest("Invalid kdf parameters")
+            return Response({"error": "Invalid kdf parameters"}, status=400)
 
         with transaction.atomic():
             try:
@@ -180,21 +276,31 @@ class E2EEEnrollView(LoginRequiredMixin, View):
                     kdf_memlimit=kdf_memlimit,
                 )
             except IntegrityError:
-                return JsonResponse({"error": "A key bundle already exists for this account."}, status=409)
+                return Response({"error": "A key bundle already exists for this account."}, status=409)
             if rotate_auth:
                 AccountKdf.objects.set_auth_salt(user, auth_salt)
                 user.set_password(auth_key)
                 user.save(update_fields=["password"])
-                update_session_auth_hash(request, user)
+                # Only meaningful for a browser session, whose auth hash would
+                # otherwise be invalidated by the password change and log the
+                # user straight out. A credential-authenticated caller has no
+                # session at all, and calling this unguarded would *create* an
+                # empty one for a client that will never send the cookie back.
+                if request.session.session_key:
+                    update_session_auth_hash(request, user)
 
         logger.info("E2EE enrollment for profile %s (derived auth: %s)", profile.pk, rotate_auth)
-        return JsonResponse({"version": bundle.version, "profile_slug": profile.ensure_slug()}, status=201)
+        return Response({"version": bundle.version, "profile_slug": profile.ensure_slug()}, status=201)
 
 
-class E2EEOwnKeysView(LoginRequiredMixin, View):
+class E2EEOwnKeysView(DualAuthJsonView):
     """GET: return the caller's full key bundle (wrapped blobs included)."""
 
-    def get(self, request: HttpRequest) -> HttpResponse:
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
+    }
+
+    def get(self, request: Request) -> Response:
         """Return the caller's bundle, or an "enrolled: false" body when not enrolled.
 
         Not being enrolled yet is the common, expected state for most accounts
@@ -214,8 +320,8 @@ class E2EEOwnKeysView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         bundle = MessagingKeyBundle.objects.for_profile(profile).first()
         if bundle is None:
-            return JsonResponse({"enrolled": False})
-        return JsonResponse(
+            return Response({"enrolled": False})
+        return Response(
             {
                 "enrolled": True,
                 "public_key": bundle.public_key,
@@ -231,10 +337,14 @@ class E2EEOwnKeysView(LoginRequiredMixin, View):
         )
 
 
-class E2EEPartnerKeyView(LoginRequiredMixin, View):
+class E2EEPartnerKeyView(DualAuthJsonView):
     """GET: return a conversation partner's public key (and nothing else)."""
 
-    def get(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
+    }
+
+    def get(self, request: Request, profile_slug: str) -> Response:
         """Return the partner's public key when a DM relationship is permitted.
 
         Args:
@@ -248,19 +358,24 @@ class E2EEPartnerKeyView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         partner = get_object_or_404(Profile.objects.select_related("user"), slug=profile_slug)
         if partner.pk == profile.pk:
-            return HttpResponseBadRequest("Use the own-keys endpoint for your own bundle")
+            return Response({"error": "Use the own-keys endpoint for your own bundle"}, status=400)
         if not can_direct_message(profile, partner) and not can_direct_message(partner, profile):
-            return JsonResponse({"error": "Not found."}, status=404)
+            return Response({"error": "Not found."}, status=404)
         bundle = MessagingKeyBundle.objects.for_profile(partner).first()
         if bundle is None:
-            return JsonResponse({"error": "Not found."}, status=404)
-        return JsonResponse({"public_key": bundle.public_key, "version": bundle.version})
+            return Response({"error": "Not found."}, status=404)
+        return Response({"public_key": bundle.public_key, "version": bundle.version})
 
 
-class E2EEConversationKeyView(LoginRequiredMixin, View):
+class E2EEConversationKeyView(DualAuthJsonView):
     """GET/POST the wrapped conversation key(s) shared with one partner."""
 
-    def get(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    def get(self, request: Request, profile_slug: str) -> Response:
         """Return the caller's wrapped copy of every key version for this pair.
 
         Args:
@@ -282,14 +397,14 @@ class E2EEConversationKeyView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         partner = get_object_or_404(Profile, slug=profile_slug)
         if partner.pk == profile.pk:
-            return HttpResponseBadRequest("No self-conversations")
+            return Response({"error": "No self-conversations"}, status=400)
         rows = list(ConversationKey.objects.between(profile, partner))
         if not rows and not can_direct_message(profile, partner) and not can_direct_message(partner, profile):
             raise Http404
         keys = [{"version": row.version, "wrapped_key": row.wrapped_for(profile.pk)} for row in rows]
-        return JsonResponse({"keys": keys, "latest": rows[-1].version if rows else 0})
+        return Response({"keys": keys, "latest": rows[-1].version if rows else 0})
 
-    def post(self, request: HttpRequest, profile_slug: str) -> HttpResponse:
+    def post(self, request: Request, profile_slug: str) -> Response:
         """Store the next conversation-key version for this pair.
 
         The creating client generates the random key and seals it to both
@@ -309,31 +424,31 @@ class E2EEConversationKeyView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         partner = get_object_or_404(Profile, slug=profile_slug)
         if partner.pk == profile.pk:
-            return HttpResponseBadRequest("No self-conversations")
+            return Response({"error": "No self-conversations"}, status=400)
         if not can_direct_message(profile, partner) and not can_direct_message(partner, profile):
-            return JsonResponse({"error": "Not found."}, status=404)
+            return Response({"error": "Not found."}, status=404)
         data = _json_body(request)
         if data is None:
-            return HttpResponseBadRequest("Malformed JSON body")
+            return Response({"error": "Malformed JSON body"}, status=400)
 
         wrapped_for_me = data.get("wrapped_for_me", "")
         wrapped_for_partner = data.get("wrapped_for_partner", "")
         if not valid_blob(wrapped_for_me, MAX_WRAPPED_CONVERSATION_KEY_LENGTH) or not valid_blob(wrapped_for_partner, MAX_WRAPPED_CONVERSATION_KEY_LENGTH):
-            return HttpResponseBadRequest("Invalid wrapped key blobs")
+            return Response({"error": "Invalid wrapped key blobs"}, status=400)
         wrapped_for_low, wrapped_for_high = (wrapped_for_me, wrapped_for_partner) if profile.pk < partner.pk else (wrapped_for_partner, wrapped_for_me)
         low, high = ConversationKey.canonical_pair(profile, partner)
 
         if not MessagingKeyBundle.objects.for_profile(profile).exists() or not MessagingKeyBundle.objects.for_profile(partner).exists():
-            return JsonResponse({"error": "Both participants must be enrolled."}, status=409)
+            return Response({"error": "Both participants must be enrolled."}, status=409)
 
         latest = ConversationKey.objects.between(profile, partner).order_by("-version").first()
         expected_version = (latest.version if latest else 0) + 1
         try:
             requested_version = int(data.get("version", 0))
         except (TypeError, ValueError):
-            return HttpResponseBadRequest("Invalid version")
+            return Response({"error": "Invalid version"}, status=400)
         if requested_version != expected_version:
-            return JsonResponse({"error": f"Expected version {expected_version}.", "expected": expected_version}, status=409)
+            return Response({"error": f"Expected version {expected_version}.", "expected": expected_version}, status=409)
 
         try:
             with transaction.atomic():
@@ -348,11 +463,11 @@ class E2EEConversationKeyView(LoginRequiredMixin, View):
         except IntegrityError:
             # Lost the race - the concurrent creator's key is canonical.
             row = get_object_or_404(ConversationKey, profile_low=low, profile_high=high, version=requested_version)
-            return JsonResponse({"version": row.version, "wrapped_key": row.wrapped_for(profile.pk)}, status=200)
-        return JsonResponse({"version": row.version, "wrapped_key": row.wrapped_for(profile.pk)}, status=201)
+            return Response({"version": row.version, "wrapped_key": row.wrapped_for(profile.pk)}, status=200)
+        return Response({"version": row.version, "wrapped_key": row.wrapped_for(profile.pk)}, status=201)
 
 
-class E2EERewrapView(LoginRequiredMixin, View):
+class E2EERewrapView(DualAuthJsonView):
     """POST: replace wrapped private-key copies (same key, new wrapping).
 
     Used after a password reset (re-wrap under the new password, clearing the
@@ -360,7 +475,18 @@ class E2EERewrapView(LoginRequiredMixin, View):
     never changes here - only which secrets can unwrap it.
     """
 
-    def post(self, request: HttpRequest) -> HttpResponse:
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(
+        description=(
+            "Re-wraps the caller's private key under new secrets. Any rewrap - password, recovery, or both - "
+            "requires `current_password` on password-backed accounts, even for OAuth2 callers; see the enroll "
+            "endpoint for the rationale. Accounts with no usable password (OAuth-only) have no proof to give."
+        ),
+    )
+    def post(self, request: Request) -> Response:
         """Update wrapped copies on the caller's bundle.
 
         Args:
@@ -374,24 +500,40 @@ class E2EERewrapView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         bundle = MessagingKeyBundle.objects.for_profile(profile).first()
         if bundle is None:
-            return JsonResponse({"error": "Not enrolled."}, status=404)
+            return Response({"error": "Not enrolled."}, status=404)
         data = _json_body(request)
         if data is None:
-            return HttpResponseBadRequest("Malformed JSON body")
+            return Response({"error": "Malformed JSON body"}, status=400)
 
         password_wrapped = data.get("password_wrapped_secret", "")
         password_wrap_salt = data.get("password_wrap_salt", "")
         recovery_wrapped = data.get("recovery_wrapped_secret", "")
         if not valid_blob(password_wrapped, MAX_WRAPPED_SECRET_LENGTH, required=False):
-            return HttpResponseBadRequest("Invalid password_wrapped_secret")
+            return Response({"error": "Invalid password_wrapped_secret"}, status=400)
         if not valid_blob(password_wrap_salt, MAX_SALT_LENGTH, required=False):
-            return HttpResponseBadRequest("Invalid password_wrap_salt")
+            return Response({"error": "Invalid password_wrap_salt"}, status=400)
         if not valid_blob(recovery_wrapped, MAX_WRAPPED_SECRET_LENGTH, required=False):
-            return HttpResponseBadRequest("Invalid recovery_wrapped_secret")
+            return Response({"error": "Invalid recovery_wrapped_secret"}, status=400)
         if bool(password_wrapped) != bool(password_wrap_salt):
-            return HttpResponseBadRequest("password_wrapped_secret and password_wrap_salt must be provided together")
+            return Response({"error": "password_wrapped_secret and password_wrap_salt must be provided together"}, status=400)
         if not password_wrapped and not recovery_wrapped:
-            return HttpResponseBadRequest("Nothing to update")
+            return Response({"error": "Nothing to update"}, status=400)
+        # Proof is required for *either* wrapped copy, not just the password
+        # one. Gating it on `password_wrapped` alone left the recovery-only
+        # rewrap unauthenticated beyond the bearer token: a stolen
+        # `messages:write` credential could post a `recovery_wrapped_secret`
+        # by itself and overwrite the victim's recovery-wrapped private key
+        # without knowing their password. The private key is unrecoverable
+        # once its last valid wrapping is replaced, so that is a silent,
+        # permanent destruction of the account's messages - the exact outcome
+        # the password proof on the other branch exists to prevent, reachable
+        # by simply omitting a field.
+        # Unconditional: the guard above already established that at least one
+        # wrapped copy is being replaced. (OAuth-only accounts have no password
+        # to prove and pass through - see the helper.)
+        proof_error = _require_current_password_proof(profile.user, data)
+        if proof_error is not None:
+            return proof_error
 
         update_fields = ["updated"]
         if password_wrapped:
@@ -403,10 +545,10 @@ class E2EERewrapView(LoginRequiredMixin, View):
             bundle.recovery_wrapped_secret = recovery_wrapped
             update_fields.append("recovery_wrapped_secret")
         bundle.save(update_fields=update_fields)
-        return JsonResponse({"ok": True})
+        return Response({"ok": True})
 
 
-class E2EEGroupKeyView(LoginRequiredMixin, View):
+class E2EEGroupKeyView(DualAuthJsonView):
     """GET/POST the wrapped group-key versions for one group chat.
 
     GET returns only the caller's own envelopes (one per version they were a
@@ -419,7 +561,12 @@ class E2EEGroupKeyView(LoginRequiredMixin, View):
     set covers the active membership exactly and stores blobs it cannot open.
     """
 
-    def _resolve(self, request: HttpRequest, group_uuid) -> tuple[Profile, Any, Any] | None:
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    def _resolve(self, request: Request, group_uuid: UUID) -> tuple[Profile, Any, Any] | None:
         """Resolve the caller's profile, the group, and their active membership.
 
         Args:
@@ -441,7 +588,17 @@ class E2EEGroupKeyView(LoginRequiredMixin, View):
             return None
         return profile, group, membership
 
-    def get(self, request: HttpRequest, group_uuid) -> HttpResponse:
+    @extend_schema(
+        description=(
+            "Returns the caller's own group-key envelopes plus the rotation state.\n\n"
+            "`members[].id` is an **opaque per-(group, member) token**, never a profile slug - it exists "
+            "precisely so this payload cannot reveal the identity of members whose profile visibility masks "
+            "them. Clients MUST round-trip these `id` values verbatim as the keys of the `wrapped` object "
+            "they POST back. A payload keyed by profile slugs (or by anything else) will not match the "
+            "server's recomputed token set and is rejected with 409; refetch this endpoint and retry."
+        ),
+    )
+    def get(self, request: Request, group_uuid: UUID) -> Response:
         """Return the caller's envelopes and the group's rotation state.
 
         Args:
@@ -450,15 +607,19 @@ class E2EEGroupKeyView(LoginRequiredMixin, View):
 
         Returns:
             JSON ``{keys, latest, needs_rotation, members}`` - ``members`` is
-            a ``[{slug, public_key}]`` list when every active member is
-            enrolled (so the caller can rotate), else null; 404 for
+            a ``[{id, public_key}]`` list when every active member is enrolled
+            (so the caller can rotate), else null. ``id`` is an opaque
+            per-(group, member) token (see ``services.e2ee.group_member_token``)
+            - never a slug, which would hand every member the real identity of
+            members whose ``profile_visibility`` masks them elsewhere. 404 for
             non-members and unknown groups.
         """
         from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope, MessagingKeyBundle
+        from urbanlens.dashboard.services.e2ee import group_member_token
 
         resolved = self._resolve(request, group_uuid)
         if resolved is None:
-            return JsonResponse({"error": "Not found."}, status=404)
+            return Response({"error": "Not found."}, status=404)
         profile, group, _membership = resolved
 
         key_rows = list(GroupKey.objects.for_group(group).order_by("version"))
@@ -477,16 +638,25 @@ class E2EEGroupKeyView(LoginRequiredMixin, View):
 
         members = None
         if all_enrolled:
-            members = [{"slug": member.ensure_slug(), "public_key": bundles[member.pk].public_key} for member in member_profiles]
-        return JsonResponse({"keys": keys, "latest": latest, "needs_rotation": needs_rotation, "members": members})
+            members = [{"id": group_member_token(group.uuid, member.pk), "public_key": bundles[member.pk].public_key} for member in member_profiles]
+        return Response({"keys": keys, "latest": latest, "needs_rotation": needs_rotation, "members": members})
 
-    def post(self, request: HttpRequest, group_uuid) -> HttpResponse:
+    @extend_schema(
+        description=(
+            "Stores the next group-key version.\n\n"
+            "`wrapped` must be keyed by the opaque `members[].id` tokens returned by GET on this same "
+            "endpoint, round-tripped verbatim, and must cover the group's current active membership exactly. "
+            "Any other key set - notably profile slugs - is rejected with 409."
+        ),
+    )
+    def post(self, request: Request, group_uuid: UUID) -> Response:
         """Store the next group-key version.
 
         Args:
             request: JSON body with ``version`` and ``wrapped`` (a mapping of
-                member profile slug to that member's sealed blob; must cover
-                the active membership exactly).
+                each member's opaque rotation token - the ``id`` the GET
+                response issued - to that member's sealed blob; must cover the
+                active membership exactly).
             group_uuid: UUID of the group chat.
 
         Returns:
@@ -494,52 +664,57 @@ class E2EEGroupKeyView(LoginRequiredMixin, View):
             winner's envelope when racing; 400/404/409 on invalid input.
         """
         from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope, MessagingKeyBundle
+        from urbanlens.dashboard.services.e2ee import group_member_token
 
         resolved = self._resolve(request, group_uuid)
         if resolved is None:
-            return JsonResponse({"error": "Not found."}, status=404)
+            return Response({"error": "Not found."}, status=404)
         profile, group, _membership = resolved
         data = _json_body(request)
         if data is None:
-            return HttpResponseBadRequest("Malformed JSON body")
+            return Response({"error": "Malformed JSON body"}, status=400)
 
         wrapped = data.get("wrapped")
         if not isinstance(wrapped, dict) or not wrapped:
-            return HttpResponseBadRequest("Invalid wrapped envelopes")
+            return Response({"error": "Invalid wrapped envelopes"}, status=400)
 
-        members_by_slug = {membership.profile.ensure_slug(): membership.profile for membership in group.active_memberships().select_related("profile", "profile__user")}
-        if set(wrapped) != set(members_by_slug):
-            return JsonResponse({"error": "Envelopes must cover the group's current members exactly."}, status=409)
+        # Keyed by opaque per-(group, member) tokens, recomputed here rather
+        # than decoded - the client just round-trips the ids the GET response
+        # issued. A stale client still keying by slug gets the same 409 as any
+        # other membership mismatch and retries after refetching.
+        members_by_token = {group_member_token(group.uuid, membership.profile_id): membership.profile for membership in group.active_memberships().select_related("profile", "profile__user")}
+        if set(wrapped) != set(members_by_token):
+            return Response({"error": "Envelopes must cover the group's current members exactly."}, status=409)
         for blob in wrapped.values():
             if not valid_blob(blob, MAX_WRAPPED_CONVERSATION_KEY_LENGTH):
-                return HttpResponseBadRequest("Invalid wrapped envelopes")
-        enrolled_count = MessagingKeyBundle.objects.for_profiles(members_by_slug.values()).count()
-        if enrolled_count != len(members_by_slug):
-            return JsonResponse({"error": "Every member must be enrolled before the group can encrypt."}, status=409)
+                return Response({"error": "Invalid wrapped envelopes"}, status=400)
+        enrolled_count = MessagingKeyBundle.objects.for_profiles(members_by_token.values()).count()
+        if enrolled_count != len(members_by_token):
+            return Response({"error": "Every member must be enrolled before the group can encrypt."}, status=409)
 
         latest = GroupKey.objects.for_group(group).order_by("-version").first()
         expected_version = (latest.version if latest else 0) + 1
         try:
             requested_version = int(data.get("version", 0))
         except (TypeError, ValueError):
-            return HttpResponseBadRequest("Invalid version")
+            return Response({"error": "Invalid version"}, status=400)
         if requested_version != expected_version:
-            return JsonResponse({"error": f"Expected version {expected_version}.", "expected": expected_version}, status=409)
+            return Response({"error": f"Expected version {expected_version}.", "expected": expected_version}, status=409)
 
         try:
             with transaction.atomic():
                 key_row = GroupKey.objects.create(group=group, version=requested_version, created_by=profile)
                 GroupKeyEnvelope.objects.bulk_create(
-                    [GroupKeyEnvelope(key=key_row, profile=member, wrapped_key=wrapped[slug]) for slug, member in members_by_slug.items()],
+                    [GroupKeyEnvelope(key=key_row, profile=member, wrapped_key=wrapped[token]) for token, member in members_by_token.items()],
                 )
         except IntegrityError:
             # Lost the race - the concurrent creator's key is canonical.
             winner = get_object_or_404(GroupKey, group=group, version=requested_version)
             envelope = GroupKeyEnvelope.objects.filter(key=winner, profile=profile).first()
             if envelope is None:
-                return JsonResponse({"error": "No envelope for this member."}, status=409)
-            return JsonResponse({"version": winner.version, "wrapped_key": envelope.wrapped_key}, status=200)
-        return JsonResponse({"version": key_row.version, "wrapped_key": wrapped[profile.ensure_slug()]}, status=201)
+                return Response({"error": "No envelope for this member."}, status=409)
+            return Response({"version": winner.version, "wrapped_key": envelope.wrapped_key}, status=200)
+        return Response({"version": key_row.version, "wrapped_key": wrapped[group_member_token(group.uuid, profile.pk)]}, status=201)
 
 
 class E2EEChangePasswordView(LoginRequiredMixin, View):
@@ -557,6 +732,21 @@ class E2EEChangePasswordView(LoginRequiredMixin, View):
     under the new password and sends ``password_wrapped_secret``/
     ``password_wrap_salt`` along; otherwise any existing password-wrapped
     copy is flagged stale (the old password is gone).
+
+    Note:
+        **Deliberately NOT converted to a dual-auth endpoint**, unlike every
+        other view in this module. This is the one endpoint here that calls
+        ``user.set_password()`` against the account's *login* credential, so
+        exposing it to credential authentication would let a scoped messaging
+        token (``messages:write`` - granted for the ability to send chat
+        messages) rotate the password of the account that issued it. That is
+        account takeover, and it converts the compromise of a single narrow,
+        revocable token into the permanent loss of the whole account. Changing
+        a login password is a first-party, session-and-CSRF-protected action
+        that must require the browser's own authenticated session; a mobile
+        client needing this should send the user through the web flow. Keep
+        this a ``LoginRequiredMixin``/``View``: it is session-only by design,
+        not by omission.
     """
 
     def post(self, request: HttpRequest) -> HttpResponse:
@@ -619,7 +809,7 @@ class E2EEChangePasswordView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True, "had_password": had_password})
 
 
-class E2EERewrapAllView(LoginRequiredMixin, View):
+class E2EERewrapAllView(DualAuthJsonView):
     """GET: every wrapped key copy addressed to the caller, for bulk re-wrap.
 
     Used by the reset flow when the client still holds (or can unlock) the
@@ -630,7 +820,11 @@ class E2EERewrapAllView(LoginRequiredMixin, View):
     round trips.
     """
 
-    def get(self, request: HttpRequest) -> HttpResponse:
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
+    }
+
+    def get(self, request: Request) -> Response:
         """List the caller's sealed conversation-key copies and group envelopes.
 
         Args:
@@ -646,11 +840,11 @@ class E2EERewrapAllView(LoginRequiredMixin, View):
 
         profile = _get_profile(request)
         if not MessagingKeyBundle.objects.for_profile(profile).exists():
-            return JsonResponse({"error": "Not enrolled."}, status=404)
+            return Response({"error": "Not enrolled."}, status=404)
 
         conversation_keys = [{"id": row.pk, "wrapped_key": row.wrapped_for(profile.pk)} for row in ConversationKey.objects.filter(Q(profile_low=profile) | Q(profile_high=profile))]
         group_envelopes = [{"id": envelope.pk, "wrapped_key": envelope.wrapped_key} for envelope in GroupKeyEnvelope.objects.filter(profile=profile)]
-        return JsonResponse({"conversation_keys": conversation_keys, "group_envelopes": group_envelopes})
+        return Response({"conversation_keys": conversation_keys, "group_envelopes": group_envelopes})
 
 
 #: Upper bound on rewrapped-entry lists accepted by the reset endpoint. Far
@@ -685,7 +879,7 @@ def _parse_rewrap_entries(raw: Any) -> dict[int, str] | None:
     return entries
 
 
-class E2EEResetView(LoginRequiredMixin, View):
+class E2EEResetView(DualAuthJsonView):
     """POST: replace the caller's keypair entirely (last resort).
 
     When the client still holds the old private key it submits re-sealed
@@ -696,7 +890,18 @@ class E2EEResetView(LoginRequiredMixin, View):
     versions are retained for them). Requires a typed confirmation string.
     """
 
-    def post(self, request: HttpRequest) -> HttpResponse:
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    @extend_schema(
+        description=(
+            'Replaces the caller\'s keypair. Requires both the literal `confirm: "RESET"` string and, on '
+            "accounts that have a password, `current_password` - a `messages:write` token alone must never "
+            "be able to re-key an account and lock its owner out of their own history."
+        ),
+    )
+    def post(self, request: Request) -> Response:
         """Replace the caller's key bundle with brand-new key material.
 
         Args:
@@ -721,28 +926,31 @@ class E2EEResetView(LoginRequiredMixin, View):
         profile = _get_profile(request)
         bundle = MessagingKeyBundle.objects.for_profile(profile).first()
         if bundle is None:
-            return JsonResponse({"error": "Not enrolled."}, status=404)
+            return Response({"error": "Not enrolled."}, status=404)
         data = _json_body(request)
         if data is None:
-            return HttpResponseBadRequest("Malformed JSON body")
+            return Response({"error": "Malformed JSON body"}, status=400)
         if data.get("confirm") != RESET_CONFIRMATION:
-            return HttpResponseBadRequest("Missing confirmation")
+            return Response({"error": "Missing confirmation"}, status=400)
+        proof_error = _require_current_password_proof(profile.user, data)
+        if proof_error is not None:
+            return proof_error
 
         public_key = data.get("public_key", "")
         recovery_wrapped = data.get("recovery_wrapped_secret", "")
         password_wrapped = data.get("password_wrapped_secret", "")
         password_wrap_salt = data.get("password_wrap_salt", "")
         if not valid_blob(public_key, MAX_PUBLIC_KEY_LENGTH) or not valid_blob(recovery_wrapped, MAX_WRAPPED_SECRET_LENGTH):
-            return HttpResponseBadRequest("Invalid key material")
+            return Response({"error": "Invalid key material"}, status=400)
         if not valid_blob(password_wrapped, MAX_WRAPPED_SECRET_LENGTH, required=False) or not valid_blob(password_wrap_salt, MAX_SALT_LENGTH, required=False):
-            return HttpResponseBadRequest("Invalid key material")
+            return Response({"error": "Invalid key material"}, status=400)
         if bool(password_wrapped) != bool(password_wrap_salt):
-            return HttpResponseBadRequest("password_wrapped_secret and password_wrap_salt must be provided together")
+            return Response({"error": "password_wrapped_secret and password_wrap_salt must be provided together"}, status=400)
 
         rewrapped_conversations = _parse_rewrap_entries(data.get("rewrapped_conversation_keys"))
         rewrapped_envelopes = _parse_rewrap_entries(data.get("rewrapped_group_envelopes"))
         if rewrapped_conversations is None or rewrapped_envelopes is None:
-            return HttpResponseBadRequest("Invalid rewrapped key entries")
+            return Response({"error": "Invalid rewrapped key entries"}, status=400)
 
         # Resolve every submitted id to a row the caller actually owns BEFORE
         # writing anything - a single foreign/unknown id rejects the whole
@@ -753,12 +961,12 @@ class E2EEResetView(LoginRequiredMixin, View):
                 ConversationKey.objects.filter(Q(profile_low=profile) | Q(profile_high=profile), pk__in=rewrapped_conversations),
             )
             if len(conversation_rows) != len(rewrapped_conversations):
-                return HttpResponseBadRequest("Unknown conversation key id")
+                return Response({"error": "Unknown conversation key id"}, status=400)
         envelope_rows = []
         if rewrapped_envelopes:
             envelope_rows = list(GroupKeyEnvelope.objects.filter(profile=profile, pk__in=rewrapped_envelopes))
             if len(envelope_rows) != len(rewrapped_envelopes):
-                return HttpResponseBadRequest("Unknown group envelope id")
+                return Response({"error": "Unknown group envelope id"}, status=400)
 
         with transaction.atomic():
             # Only ever the caller's own side of each pair - the partner's
@@ -794,4 +1002,4 @@ class E2EEResetView(LoginRequiredMixin, View):
 
         rewrapped_count = len(conversation_rows) + len(envelope_rows)
         logger.info("E2EE key reset for profile %s (now v%s, %s key copies re-wrapped)", profile.pk, bundle.version, rewrapped_count)
-        return JsonResponse({"version": bundle.version, "rewrapped": rewrapped_count})
+        return Response({"version": bundle.version, "rewrapped": rewrapped_count})

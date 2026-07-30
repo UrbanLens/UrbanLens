@@ -1458,8 +1458,20 @@ class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
         )
 
 
-class CeleryTaskStatusView(LoginRequiredMixin, View):
-    """Return normalized Celery task progress for polling progress bars."""
+class CeleryTaskStatusView(_AdminPermissionMixin, View):
+    """Return normalized Celery task progress for polling progress bars.
+
+    Celery's result backend has no per-task owner field to check a requester
+    against (see ``services/celery.TaskProgress`` - it's just state/progress
+    counters, not tied to a user id), so a bare ``LoginRequiredMixin`` here
+    would let any authenticated user poll any task's progress/result by
+    task_id, cross-account. The only current producer of task ids for this
+    endpoint (``BackupStartView`` in ``controllers/tools.py``) already
+    requires ``dashboard.view_site_admin`` to enqueue a task in the first
+    place, so gating this view behind the same permission (rather than a
+    per-task ownership check that the result backend can't support without a
+    schema change) closes the same hole for the endpoint that reads it back.
+    """
 
     def get(self, request, task_id: str):
         from urbanlens.dashboard.services.celery import get_task_progress

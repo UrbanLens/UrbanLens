@@ -28,6 +28,7 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource
 from urbanlens.dashboard.services.locations.name_resolution import NameProvider
@@ -266,6 +267,15 @@ class EpaEchoNearbyPanelSource(CoordinateGatedInfoPanelSource):
     section_id = "epa-echo-section"
     icon = "factory"
     title = "EPA Regulated Facilities"
+    # The subscription gate as a fact about the source rather than only as an
+    # entry in a controller's tab dict: any surface that serves this panel -
+    # the web tab strip, the external API, whatever comes next - can now check
+    # the same field instead of each keeping its own list and eventually
+    # disagreeing about which panels are gated. Its sibling
+    # EpaEchoDetailPanelSource deliberately has no required_feature: an
+    # exact-site compliance card is the integration's primary purpose and is
+    # shown to everyone. See PinController._NEARBY_RESEARCH_TABS.
+    required_feature: ClassVar[SiteFeature | None] = SiteFeature.NEARBY_RESEARCH
 
     def fetch(self, pin: Pin) -> None:
         """Fetch and cache nearby-facility + exact-site data (see module docstring)."""

@@ -21851,6 +21851,28 @@ https://github.com/browserify/crypto-browserify`);
     await removeByPrefix(`group:${selfSlug}:`);
   }
 
+  // src/urbanlens/dashboard/frontend/ts/shared/dialogs.ts
+  async function confirmAction(options) {
+    if (window.confirmDialog) {
+      return window.confirmDialog(options);
+    }
+    return window.confirm(options.message ?? "Are you sure?");
+  }
+  var toast = {
+    success(message) {
+      window.toastr.success(message);
+    },
+    error(message) {
+      window.toastr.error(message);
+    },
+    warning(message) {
+      window.toastr.warning(message);
+    },
+    info(message) {
+      window.toastr.info(message);
+    }
+  };
+
   // src/urbanlens/dashboard/frontend/ts/shared/e2ee-client.ts
   var config = null;
   function init(cfg) {
@@ -21900,6 +21922,10 @@ https://github.com/browserify/crypto-browserify`);
       const authSalt = randomSalt();
       body.auth_key = bytesToB64(deriveKey(options.password, authSalt));
       body.auth_salt = authSalt;
+    }
+    if (options.currentPasswordProof) {
+      body.current_password = options.currentPasswordProof;
+    } else if (options.rotateAuth && options.password) {
       body.current_password = options.password;
     }
     const response = await postJson(cfg().urls.enroll, body);
@@ -21956,26 +21982,26 @@ https://github.com/browserify/crypto-browserify`);
     const destination = loginResponse.url;
     try {
       if (params.mode === "legacy") {
-        const result = await enroll({ password, rotateAuth: true });
+        const result = await enroll({ password, rotateAuth: true, currentPasswordProof: credential });
         if (result) {
           await showRecoveryDialog(result.recoveryDisplay);
         }
       } else {
-        await unlockAfterDerivedLogin(password);
+        await unlockAfterDerivedLogin(password, credential);
       }
     } catch (error) {
       console.error("E2EE post-login key handling failed", error);
     }
     window.location.assign(destination);
   }
-  async function unlockAfterDerivedLogin(password) {
+  async function unlockAfterDerivedLogin(password, currentPasswordProof) {
     const keysResponse = await fetch(cfg().urls.keys, { credentials: "same-origin" });
     if (!keysResponse.ok) {
       return;
     }
     const bundle = await keysResponse.json();
     if (!bundle.enrolled) {
-      const result = await enroll({ password, rotateAuth: false });
+      const result = await enroll({ password, rotateAuth: false, currentPasswordProof });
       if (result) {
         await showRecoveryDialog(result.recoveryDisplay);
       }
@@ -21994,11 +22020,34 @@ https://github.com/browserify/crypto-browserify`);
       const wrapSalt = randomSalt();
       await postJson(cfg().urls.rewrap, {
         password_wrapped_secret: wrapSecretKey(cached.privateKey, deriveKey(password, wrapSalt, bundle.kdf_opslimit, bundle.kdf_memlimit)),
-        password_wrap_salt: wrapSalt
+        password_wrap_salt: wrapSalt,
+        current_password: currentPasswordProof
       });
     }
   }
-  var MIN_PASSWORD_LENGTH = 8;
+  var MIN_PASSWORD_LENGTH = 12;
+  async function serverPolicyErrors(password, username, email) {
+    const url = cfg().urls.validatePassword;
+    if (!url) {
+      return [];
+    }
+    try {
+      const response = await postJson(url, { password, username, email });
+      if (!response.ok) {
+        return [];
+      }
+      const payload = await response.json();
+      if (payload.valid === false) {
+        return payload.errors && payload.errors.length ? payload.errors : ["This password doesn't meet the password policy."];
+      }
+    } catch {}
+    return [];
+  }
+  function reportPolicyErrors(input, errors) {
+    input.setCustomValidity(errors.join(" "));
+    input.reportValidity();
+    input.addEventListener("input", () => input.setCustomValidity(""), { once: true });
+  }
   function wireSignupForm(form) {
     form.addEventListener("submit", (event) => {
       if (form.dataset.e2eeReady === "1") {
@@ -22021,9 +22070,14 @@ https://github.com/browserify/crypto-browserify`);
       return;
     }
     if (password1.value.length < MIN_PASSWORD_LENGTH || /^\d+$/.test(password1.value)) {
-      password1.setCustomValidity(`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`);
-      password1.reportValidity();
-      password1.addEventListener("input", () => password1.setCustomValidity(""), { once: true });
+      reportPolicyErrors(password1, [`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`]);
+      return;
+    }
+    const username = form.elements.namedItem("username")?.value ?? "";
+    const email = form.elements.namedItem("email")?.value ?? "";
+    const policyErrors = await serverPolicyErrors(password1.value, username, email);
+    if (policyErrors.length) {
+      reportPolicyErrors(password1, policyErrors);
       return;
     }
     await cryptoReady();
@@ -22067,9 +22121,12 @@ https://github.com/browserify/crypto-browserify`);
       return;
     }
     if (password1.value.length < MIN_PASSWORD_LENGTH || /^\d+$/.test(password1.value)) {
-      password1.setCustomValidity(`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`);
-      password1.reportValidity();
-      password1.addEventListener("input", () => password1.setCustomValidity(""), { once: true });
+      reportPolicyErrors(password1, [`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`]);
+      return;
+    }
+    const policyErrors = await serverPolicyErrors(password1.value, "", "");
+    if (policyErrors.length) {
+      reportPolicyErrors(password1, policyErrors);
       return;
     }
     await cryptoReady();
@@ -22097,8 +22154,7 @@ https://github.com/browserify/crypto-browserify`);
     return true;
   }
   function notifyEnrolled() {
-    const toastr = window.toastr;
-    toastr?.info?.("Your direct messages are now end-to-end encrypted. Save your recovery key from Settings → Direct Messages.", "Encryption enabled");
+    window.toastr.info("Your direct messages are now end-to-end encrypted. Save your recovery key from Settings → Direct Messages.", "Encryption enabled");
   }
   async function getUnlockState() {
     const selfSlug = cfg().selfSlug;
@@ -22245,6 +22301,10 @@ https://github.com/browserify/crypto-browserify`);
     if (newPassword.length < MIN_PASSWORD_LENGTH || /^\d+$/.test(newPassword)) {
       return { ok: false, error: `Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.` };
     }
+    const policyErrors = await serverPolicyErrors(newPassword, identifier, "");
+    if (policyErrors.length) {
+      return { ok: false, error: policyErrors.join(" ") };
+    }
     await cryptoReady();
     let currentSecret = currentPassword;
     if (currentPassword) {
@@ -22280,6 +22340,21 @@ https://github.com/browserify/crypto-browserify`);
       return { ok: false, error: "Your current password is incorrect." };
     }
     return { ok: false, error: "Could not change your password. Please try again." };
+  }
+  async function currentPasswordProof(password) {
+    const identifier = cfg().loginIdentifier;
+    if (!identifier) {
+      return password;
+    }
+    const paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
+    if (!paramsResponse.ok) {
+      return password;
+    }
+    const params = await paramsResponse.json();
+    if (params.mode === "derived") {
+      return bytesToB64(deriveKey(password, params.auth_salt));
+    }
+    return password;
   }
   async function regenerateRecoveryKey() {
     await cryptoReady();
@@ -22330,6 +22405,7 @@ https://github.com/browserify/crypto-browserify`);
       const wrapSalt = randomSalt();
       body.password_wrapped_secret = wrapSecretKey(identity.privateKey, deriveKey(password, wrapSalt));
       body.password_wrap_salt = wrapSalt;
+      body.current_password = await currentPasswordProof(password);
     }
     if (oldPrivateKey !== null && cfg().urls.rewrapAll) {
       const rewrapResponse = await fetch(cfg().urls.rewrapAll, { credentials: "same-origin" });
@@ -22441,11 +22517,10 @@ https://github.com/browserify/crypto-browserify`);
           errorEl.hidden = false;
           return;
         }
-        const toastr = window.toastr;
         if (result.rewrapped > 0) {
-          toastr?.success?.("Your keys were reset and your message history was re-encrypted - everything stays readable.");
+          toast.success("Your keys were reset and your message history was re-encrypted - everything stays readable.");
         } else if (!result.preserved) {
-          toastr?.warning?.("Your keys were reset. Previously encrypted messages are no longer readable on this account.");
+          toast.warning("Your keys were reset. Previously encrypted messages are no longer readable on this account.");
         }
         close(result.recoveryDisplay);
       } catch {
@@ -22583,7 +22658,7 @@ https://github.com/browserify/crypto-browserify`);
     const key = generateConversationKey();
     const wrapped = {};
     for (const member of payload.members) {
-      wrapped[member.slug] = sealToPublicKey(key, member.public_key);
+      wrapped[member.id] = sealToPublicKey(key, member.public_key);
     }
     const version = payload.latest + 1;
     const response = await postJson(groupKeyUrl(groupUuid), { version, wrapped });
@@ -22658,6 +22733,33 @@ https://github.com/browserify/crypto-browserify`);
       return null;
     }
     return decryptMessage(ciphertext, nonce, key);
+  }
+  async function decryptSafetyArchive(sealedKeyB64, ciphertextB64, nonceB64) {
+    await cryptoReady();
+    let identity = await requireIdentity();
+    if (identity === null) {
+      const unlocked = await showUnlockDialog();
+      if (!unlocked) {
+        return null;
+      }
+      identity = await requireIdentity();
+    }
+    if (identity === null) {
+      return null;
+    }
+    const symmetricKey = unseal(sealedKeyB64, identity.publicKey, identity.privateKey);
+    if (symmetricKey === null) {
+      return null;
+    }
+    const json = decryptMessage(ciphertextB64, nonceB64, symmetricKey);
+    if (json === null) {
+      return null;
+    }
+    try {
+      return JSON.parse(json);
+    } catch {
+      return null;
+    }
   }
   async function decryptDom(root, partnerSlug) {
     const nodes = Array.from(root.querySelectorAll("[data-e2ee-ct]"));
@@ -22758,6 +22860,7 @@ Keep this somewhere safe - it can unlock your encrypted message history on any d
     encryptForGroup,
     decryptFromGroup,
     decryptDom,
+    decryptSafetyArchive,
     showRecoveryDialog,
     showResetDialog
   };

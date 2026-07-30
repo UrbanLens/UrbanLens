@@ -202,6 +202,10 @@
         }
     }
 
+	&--card {
+		background: var(--ul-grey-0);
+	}
+
 	&.is-loading {
 		opacity: .78;
 		pointer-events: none;

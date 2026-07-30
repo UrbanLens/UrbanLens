@@ -21,8 +21,14 @@ from urbanlens.dashboard.models.notifications.queryset import NotificationManage
 logger = logging.getLogger(__name__)
 
 
-class NotificationLog(abstract.DashboardModel):
-    """Records a notification sent to a specific user profile."""
+class NotificationLog(abstract.FrontendDashboardModel):
+    """Records a notification sent to a specific user profile.
+
+    Extends ``FrontendDashboardModel`` (rather than ``DashboardModel``) purely
+    for its ``uuid``: the external API addresses a notification by uuid, and
+    exposing the sequential integer pk instead would leak both site-wide
+    notification volume and a trivially walkable neighbour space.
+    """
 
     status = models.CharField(max_length=17, choices=Status.choices, default=Status.UNREAD)
     importance = models.CharField(max_length=17, choices=Importance.choices, default=Importance.LOWEST)
@@ -106,7 +112,7 @@ class NotificationLog(abstract.DashboardModel):
             return "declined"
         return None
 
-    class Meta(abstract.DashboardModel.Meta):
+    class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_notifications"
         get_latest_by = "updated"
         indexes = [
@@ -173,6 +179,13 @@ class NotificationPreference(abstract.DashboardModel):
     wiki_safety_checkin = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.BOTH)
     wiki_safety_checkin_whatsapp = models.BooleanField(default=False)
     wiki_safety_checkin_sms = models.BooleanField(default=False)
+
+    # Defaults to BOTH for the same reason as wiki_safety_checkin above - a partner invite
+    # is a request to take on real safety responsibility for someone else, so it shouldn't
+    # depend on the invitee happening to be logged in to notice it.
+    safety_checkin_partner_invite = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.BOTH)
+    safety_checkin_partner_invite_whatsapp = models.BooleanField(default=False)
+    safety_checkin_partner_invite_sms = models.BooleanField(default=False)
 
     profile = models.OneToOneField(
         "dashboard.Profile",

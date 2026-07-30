@@ -27,7 +27,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
 from urbanlens.dashboard.models.notifications.model import NotificationPreference
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
+from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityRSVP, TripMembership
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.locations.naming import _MEANINGLESS_NAME_PHRASES
@@ -561,6 +561,19 @@ class TripActivityCompletionTests(TestCase):
         self.client.post(self._complete_url(), data={"completed_date": "2026-06-01"})
 
         self.assertFalse(VisitSuggestion.objects.filter(suggested_to=maybe_member).exists())
+
+    def test_activity_rsvp_override_controls_visit_suggestion(self) -> None:
+        attending = baker.make("auth.User").profile
+        skipping = baker.make("auth.User").profile
+        attending_membership = TripMembership.objects.create(trip=self.trip, profile=attending, rsvp=TripMembership.RSVP_NO)
+        skipping_membership = TripMembership.objects.create(trip=self.trip, profile=skipping, rsvp=TripMembership.RSVP_YES)
+        TripActivityRSVP.objects.create(activity=self.activity, membership=attending_membership, rsvp=TripMembership.RSVP_YES)
+        TripActivityRSVP.objects.create(activity=self.activity, membership=skipping_membership, rsvp=TripMembership.RSVP_NO)
+
+        self.client.post(self._complete_url(), data={"completed_date": "2026-06-01"})
+
+        self.assertTrue(VisitSuggestion.objects.filter(suggested_to=attending, trip_activity=self.activity).exists())
+        self.assertFalse(VisitSuggestion.objects.filter(suggested_to=skipping).exists())
 
     def test_completion_succeeds_even_without_resolvable_coordinates(self) -> None:
         self.activity.location = None

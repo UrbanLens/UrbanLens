@@ -46,7 +46,7 @@ so it's always available by the time this script runs - no typeof guard needed.
     {# .map-bottom-controls) live here as plain icon buttons, same as on the pin #}
     {# detail / Location wiki maps - only rendered when markup is enabled.       #}
     {% if not readonly and markup_json_url or not readonly and markup_map_create_url %}
-    {% map_toolbar "markup_line,markup_arrow,markup_text,markup_square,markup_circle,markup_polygon,screenshot" panel_id="safety-map-buttons" %}
+    {% map_toolbar "markup_line,markup_freehand,markup_arrow,markup_text,markup_square,markup_circle,markup_polygon,screenshot" panel_id="safety-map-buttons" %}
     {% else %}
     {% map_toolbar "screenshot" panel_id="safety-map-buttons" %}
     {% endif %}

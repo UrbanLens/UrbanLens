@@ -11,6 +11,7 @@ from datetime import datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, NamedTuple
 
+from defusedxml.ElementTree import fromstring as parse_xml_defused
 import gpxpy
 import gpxpy.gpx
 
@@ -135,8 +136,20 @@ def gpx_tracks_to_routes(file_contents: bytes, user_profile: Profile, source_fil
     Raises:
         gpxpy.gpx.GPXException: If the file is not valid GPX.
         UnicodeDecodeError: If the file is not UTF-8 text.
+        defusedxml.ElementTree.ParseError: If the file is not well-formed XML.
+        ValueError: If the XML attempts a forbidden DTD/entity-expansion/
+            external-entity reference (an XXE attempt).
     """
     text = file_contents.decode("utf-8")
+
+    # See gpx.py's gpx_to_dict for why this pre-parse exists: gpxpy has no way
+    # to accept a hardened parser, so defusedxml validates the same text first
+    # purely to reject XXE-style payloads (DTDs/entity expansion/external
+    # entity references) before gpxpy ever builds its own (unhardened) tree
+    # from it. The parsed tree here is discarded - gpxpy still does the real,
+    # GPX-aware parse immediately below.
+    parse_xml_defused(text)
+
     gpx = gpxpy.parse(text)
 
     parsed: list[ParsedRoute] = []

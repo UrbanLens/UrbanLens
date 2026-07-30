@@ -30,7 +30,7 @@ WIKI_SYNC_SOURCE = "wiki_sync"
 #: LocationCache sources whose result quality depends on the name/aliases
 #: available for the location - a new alias may surface a Wikipedia article
 #: (or images on one) that couldn't be matched under the previous name set.
-#: See docs/prompts/completed.md's "Wikipedia article images not reliably
+#: "Wikipedia article images not reliably
 #: reaching Media section" entry for the report this addresses.
 _ALIAS_SENSITIVE_CACHE_SOURCES = ("wikipedia", "wikimedia", "wikipedia_media")
 

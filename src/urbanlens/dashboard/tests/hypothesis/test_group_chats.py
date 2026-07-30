@@ -44,6 +44,7 @@ from urbanlens.dashboard.services.group_chats import (
     group_thread_page,
     remove_group_member,
     rename_group_chat,
+    serialize_group_message,
     share_pin_in_group_message,
     unread_group_conversation_count,
 )
@@ -265,6 +266,42 @@ class CreateGroupMessageTests(TestCase):
         self.assertIsNone(message.tombstone_text_for(self.creator.pk))
 
 
+class GroupMessageLiveIdentityPrivacyTests(TestCase):
+    """serialize_group_message must not leak a masked sender's real identity.
+
+    Regression: the name was already resolved through resolve_visible_identity,
+    but ``sender_slug`` was still copied from the raw sender unconditionally -
+    so a viewer who couldn't see the masked sender's profile could still read
+    their real slug directly off the live WebSocket payload.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.viewer = _profile()
+        self.hidden_sender = _profile()
+        Profile.objects.filter(pk=self.hidden_sender.pk).update(profile_visibility=VisibilityChoice.NO_ONE)
+        self.hidden_sender.refresh_from_db()
+        self.group = create_group_chat(self.viewer, "Crew", [self.hidden_sender])
+
+    def test_serializer_masks_hidden_sender_name_and_slug_for_viewer(self) -> None:
+        message = create_group_message(self.hidden_sender, self.group, "Found something")
+
+        payload = serialize_group_message(message, viewer=self.viewer)
+
+        self.assertEqual(payload["sender_name"], "Member")
+        self.assertEqual(payload["sender_slug"], "")
+        self.assertNotEqual(payload["sender_name"], self.hidden_sender.username)
+        self.assertNotEqual(payload["sender_slug"], self.hidden_sender.slug)
+
+    def test_serializer_keeps_real_identity_for_the_senders_own_view(self) -> None:
+        message = create_group_message(self.hidden_sender, self.group, "Found something")
+
+        payload = serialize_group_message(message, viewer=self.hidden_sender)
+
+        self.assertEqual(payload["sender_name"], self.hidden_sender.username)
+        self.assertEqual(payload["sender_slug"], self.hidden_sender.slug)
+
+
 class GroupPinShareTests(TestCase):
     """Sharing a pin into a group creates one PinShare per connected member."""
 
@@ -433,7 +470,10 @@ class GroupEndpointTests(TestCase):
         self.assertEqual(self.group.name, "Renamed")
 
     def test_remove_member_endpoint(self) -> None:
-        response = self.client.post(self._url("messages.group.members.remove"), {"profile_slug": self.member.slug})
+        # profile_id, not slug: the endpoint deliberately refuses slugs, since
+        # a slug in the request body would leak a masked member's identity
+        # (see GroupRemoveMemberView's comment).
+        response = self.client.post(self._url("messages.group.members.remove"), {"profile_id": self.member.pk})
         self.assertEqual(response.status_code, 200)
         self.assertIsNone(self.group.membership_for(self.member))
 
@@ -468,6 +508,11 @@ class GroupKeyEndpointTests(TestCase):
     def _post(self, payload: dict) -> object:
         return self.client.post(self.url, json.dumps(payload), content_type="application/json")
 
+    def _token(self, profile) -> str:
+        from urbanlens.dashboard.services.e2ee import group_member_token
+
+        return group_member_token(self.group.uuid, profile.pk)
+
     def test_non_member_404(self) -> None:
         outsider = _profile()
         self.client.force_login(outsider.user)
@@ -483,19 +528,44 @@ class GroupKeyEndpointTests(TestCase):
 
         _enroll(self.member)
         payload = json.loads(self.client.get(self.url).content)
-        self.assertEqual({m["slug"] for m in payload["members"]}, {self.creator.slug, self.member.slug})
+        self.assertEqual({m["id"] for m in payload["members"]}, {self._token(self.creator), self._token(self.member)})
         self.assertTrue(group_e2ee_ready(self.group))
+
+    def test_rotation_payload_never_contains_member_slugs(self) -> None:
+        """The whole point of the opaque tokens (docs/PROBLEMS.md PR #111
+        finding): fetching the rotation payload must not reveal the real slug
+        of any member - their profile_visibility may mask them elsewhere."""
+        _enroll(self.creator)
+        _enroll(self.member)
+        content = self.client.get(self.url).content.decode()
+        self.assertNotIn(self.member.slug, content)
+        self.assertNotIn(self.creator.slug, content)
+
+    def test_member_tokens_differ_between_groups(self) -> None:
+        """Tokens are group-scoped, so they can't correlate a member across groups."""
+        other_group = create_group_chat(self.creator, "Other", [self.member])
+        from urbanlens.dashboard.services.e2ee import group_member_token
+
+        self.assertNotEqual(group_member_token(self.group.uuid, self.member.pk), group_member_token(other_group.uuid, self.member.pk))
 
     def test_post_requires_exact_member_coverage(self) -> None:
         _enroll(self.creator)
         _enroll(self.member)
-        response = self._post({"version": 1, "wrapped": {self.creator.slug: _blob()}})
+        response = self._post({"version": 1, "wrapped": {self._token(self.creator): _blob()}})
         self.assertEqual(response.status_code, 409)
+
+    def test_post_keyed_by_slugs_is_rejected(self) -> None:
+        """A stale client still keying by slug gets a 409, never a partial write."""
+        _enroll(self.creator)
+        _enroll(self.member)
+        wrapped = {self.creator.slug: _blob(), self.member.slug: _blob()}
+        self.assertEqual(self._post({"version": 1, "wrapped": wrapped}).status_code, 409)
+        self.assertEqual(GroupKey.objects.filter(group=self.group).count(), 0)
 
     def test_post_creates_version_and_get_returns_own_envelope(self) -> None:
         _enroll(self.creator)
         _enroll(self.member)
-        wrapped = {self.creator.slug: _blob(b"\x0a" * 48), self.member.slug: _blob(b"\x0b" * 48)}
+        wrapped = {self._token(self.creator): _blob(b"\x0a" * 48), self._token(self.member): _blob(b"\x0b" * 48)}
         response = self._post({"version": 1, "wrapped": wrapped})
         self.assertEqual(response.status_code, 201)
         self.assertEqual(GroupKey.objects.filter(group=self.group).count(), 1)
@@ -505,18 +575,18 @@ class GroupKeyEndpointTests(TestCase):
         self.assertEqual(payload["latest"], 1)
         self.assertFalse(payload["needs_rotation"])
         self.assertEqual(len(payload["keys"]), 1)
-        self.assertEqual(payload["keys"][0]["wrapped_key"], wrapped[self.creator.slug])
+        self.assertEqual(payload["keys"][0]["wrapped_key"], wrapped[self._token(self.creator)])
 
     def test_post_wrong_version_409(self) -> None:
         _enroll(self.creator)
         _enroll(self.member)
-        wrapped = {self.creator.slug: _blob(), self.member.slug: _blob()}
+        wrapped = {self._token(self.creator): _blob(), self._token(self.member): _blob()}
         self.assertEqual(self._post({"version": 5, "wrapped": wrapped}).status_code, 409)
 
     def test_membership_change_flags_rotation_and_hides_prior_envelopes(self) -> None:
         _enroll(self.creator)
         _enroll(self.member)
-        wrapped = {self.creator.slug: _blob(), self.member.slug: _blob()}
+        wrapped = {self._token(self.creator): _blob(), self._token(self.member): _blob()}
         self._post({"version": 1, "wrapped": wrapped})
 
         newcomer = _profile()

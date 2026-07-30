@@ -61,7 +61,7 @@ Context:
                 hx-post="{% url 'pin.buildings.import' pin.slug %}"
                 hx-swap="none"
                 hx-indicator="#parcel-buildings-import-spinner"
-                hx-confirm="Add {{ unpinned_count }} sub pin{{ unpinned_count|pluralize }} to this property, one per building?">
+                hx-confirm="Add {{ unpinned_count }} child pin{{ unpinned_count|pluralize }} to this property, one per building?">
             <i class="material-symbols-outlined">add_location_alt</i>
             Add pins for {{ unpinned_count }} unpinned building{{ unpinned_count|pluralize }}
         </button>

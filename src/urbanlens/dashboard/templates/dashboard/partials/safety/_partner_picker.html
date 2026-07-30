@@ -1,0 +1,67 @@
+{% comment %}
+Safety check-in partner list + invite-by-username form (owner-only editing; an
+accepted partner sees the same list read-only via detail.html's viewer_is_partner
+gate). Unlike the emergency-contact picker, a partner must be an existing account
+(looked up by username, no friendship required - mirrors Trip's add-member flow)
+and must accept before they show as anything but "Invited".
+
+Expects: checkin, partners (queryset/list of SafetyCheckinPartner), and
+optionally error (an invite-rejection message from the last POST) and
+viewer_is_partner (hides the invite form/remove buttons - a partner sees
+this list read-only; only the owner manages it).
+{% endcomment %}
+<div class="safety-partner-picker card" id="safety-partner-picker" data-role="partner-picker">
+    <div class="card-header">
+        <i class="material-symbols-outlined">shield_person</i>
+        <h3>Partners</h3>
+    </div>
+
+    <div class="card__body">
+        <p class="form-hint">
+            Partners can see this check-in's full plan before it's missed, watch for live
+            location updates, and mark you safe themselves.
+        </p>
+
+        {% if partners %}
+        <ul class="safety-partner-list">
+            {% for partner in partners %}
+            <li class="safety-partner-list-item">
+                {% if partner.profile.avatar %}
+                <img class="safety-partner-avatar" src="{{ partner.profile.avatar.url }}" alt="">
+                {% else %}
+                <span class="safety-partner-avatar safety-partner-avatar--placeholder">{{ partner.profile.username|first|upper }}</span>
+                {% endif %}
+                <span class="safety-partner-name">{{ partner.profile.username }}</span>
+                <span class="safety-badge {% if partner.status == 'accepted' %}safety-label--success{% else %}safety-label--warning{% endif %}">
+                    {{ partner.get_status_display }}
+                </span>
+                {% if not viewer_is_partner %}
+                <button type="button" class="safety-partner-remove" title="Remove {{ partner.profile.username }}"
+                        aria-label="Remove {{ partner.profile.username }}"
+                        hx-post="{% url 'safety.checkin.partners.remove' checkin.slug|default:checkin.uuid partner.pk %}"
+                        hx-target="#safety-partner-picker" hx-swap="outerHTML"
+                        hx-confirm="Remove {{ partner.profile.username }} as a partner on this check-in?">
+                    <i class="material-symbols-outlined">close</i>
+                </button>
+                {% endif %}
+            </li>
+            {% endfor %}
+        </ul>
+        {% else %}
+        <p class="safety-partner-list-empty form-hint">No partners yet.</p>
+        {% endif %}
+
+        {% if not viewer_is_partner %}
+        {% if error %}<p class="form-error">{{ error }}</p>{% endif %}
+
+        <form class="safety-partner-invite-form"
+              hx-post="{% url 'safety.checkin.partners' checkin.slug|default:checkin.uuid %}"
+              hx-target="#safety-partner-picker" hx-swap="outerHTML">
+            <input type="text" name="username" placeholder="Invite by username" autocomplete="off">
+            <button type="submit" class="btn btn--ghost btn--sm">
+                <i class="material-symbols-outlined">person_add</i> Invite
+            </button>
+        </form>
+        {% endif %}
+    </div>
+</div>

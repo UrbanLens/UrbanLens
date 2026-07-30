@@ -40,18 +40,27 @@ _EXECUTOR = ThreadPoolExecutor(max_workers=64, thread_name_prefix="ext-api-deadl
 
 
 def call_with_deadline[T](func: Callable[[], T], *, timeout: float, default: T, name: str | None = None) -> T:
-    """Run ``func`` with a hard wall-clock deadline, returning ``default`` on timeout.
+    """Run ``func`` with a hard wall-clock deadline, returning ``default`` only on timeout.
+
+    Any exception ``func`` itself raises propagates to the caller unchanged
+    (it is not swallowed here) - only a timeout is translated into
+    ``default``. Callers that want a graceful degrade for their own
+    exceptions must catch those explicitly, same as if they'd called
+    ``func()`` directly.
 
     Args:
         func: Zero-argument callable to run (wrap a gateway call in a lambda).
         timeout: Maximum seconds to wait for ``func`` to complete.
-        default: Value to return if ``func`` exceeds ``timeout`` or raises.
+        default: Value to return if ``func`` exceeds ``timeout``.
         name: Short label (e.g. the gateway's service key) used in log
             messages, so a timeout in production identifies which provider
             was slow instead of logging anonymously.
 
     Returns:
-        The result of ``func``, or ``default`` when it times out or errors.
+        The result of ``func``, or ``default`` when it times out.
+
+    Raises:
+        Exception: Whatever ``func`` itself raises (other than a timeout).
     """
     label = name or getattr(func, "__qualname__", repr(func))
 
@@ -79,7 +88,4 @@ def call_with_deadline[T](func: Callable[[], T], *, timeout: float, default: T, 
             logger.warning("External call %r timed out after %.0fs without ever starting -- deadline executor saturated", label, timeout)
         else:
             logger.warning("External call %r exceeded %.0fs deadline -- abandoning it in the background", label, timeout)
-        return default
-    except Exception:
-        logger.exception("External call %r raised inside deadline wrapper", label)
         return default

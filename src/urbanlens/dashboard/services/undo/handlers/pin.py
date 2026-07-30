@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 # Fields restored verbatim on undo. Deliberately excludes uuid/slug/created/updated
 # (regenerated fresh by Pin.save()) and the location/profile/wiki/parent_pin FKs
@@ -43,6 +50,13 @@ _RESTORABLE_FIELDS = (
 )
 
 
+#: Registry key for this handler. Exposed as a module-level constant so call
+#: sites can import it (``from ...handlers.pin import MODEL_LABEL``) instead
+#: of hand-typing ``"pin"`` - a typo in a hand-typed string only fails at
+#: runtime via ``get_handler``'s ``ValueError``.
+MODEL_LABEL = "pin"
+
+
 @register
 class PinUndoHandler(UndoHandler):
     """Restores a pin's own fields, hierarchy position, and labels - not its cascade children.
@@ -51,10 +65,10 @@ class PinUndoHandler(UndoHandler):
     are gone the instant the pin is deleted and are not restored.
     """
 
-    model_label = "pin"
+    model_label = MODEL_LABEL
 
     @classmethod
-    def serialize(cls, instances: list[Pin]) -> list[dict[str, Any]]:
+    def serialize(cls, instances: Sequence[Pin]) -> list[dict[str, Any]]:
         return [cls._serialize_one(pin) for pin in instances]
 
     @classmethod
@@ -72,7 +86,7 @@ class PinUndoHandler(UndoHandler):
         }
 
     @classmethod
-    def describe(cls, instances: list[Pin]) -> str:
+    def describe(cls, instances: Sequence[Pin]) -> str:
         return describe_batch("Pin", "pins", [p.effective_name for p in instances])
 
     @classmethod
@@ -81,7 +95,29 @@ class PinUndoHandler(UndoHandler):
 
         Parent/child relationships within the restored batch are relinked in
         a second pass once every pin has a new pk to relink against.
+
+        Raises:
+            UndoExpiredError: If the profile, location, wiki, or any label this
+                batch referenced was independently deleted during the retention
+                window, since recreating the row would otherwise fail with an
+                uncaught IntegrityError.
         """
+        # Deferred import: services.undo.service imports services.undo.handlers
+        # (which imports this module) before UndoExpiredError is defined there.
+        from urbanlens.dashboard.services.undo.service import UndoExpiredError
+
+        for entry in payload:
+            if not Profile.objects.filter(pk=entry["profile_id"]).exists():
+                raise UndoExpiredError("The profile that owned this pin no longer exists.")
+            if not Location.objects.filter(pk=entry["location_id"]).exists():
+                raise UndoExpiredError("The location this pin pointed at no longer exists.")
+            wiki_id = entry["wiki_id"]
+            if wiki_id is not None and not Wiki.objects.filter(pk=wiki_id).exists():
+                raise UndoExpiredError("The wiki this pin was linked to no longer exists.")
+            label_ids = entry["label_ids"]
+            if label_ids and Label.objects.filter(pk__in=label_ids).count() != len(set(label_ids)):
+                raise UndoExpiredError("One of the labels on this pin no longer exists.")
+
         old_to_new: dict[int, Pin] = {}
         restored: list[Pin] = []
         for entry in payload:
@@ -101,7 +137,7 @@ class PinUndoHandler(UndoHandler):
                     pin.parent_pin = old_to_new[old_parent_pk]
                     pin.save(update_fields=["parent_pin"])
                 else:
-                    # The parent wasn't part of this deletion (a sub pin was
+                    # The parent wasn't part of this deletion (a child pin was
                     # deleted on its own) - reattach to it if it still exists.
                     surviving_parent = Pin.objects.filter(pk=old_parent_pk, profile_id=entry["profile_id"]).first()
                     if surviving_parent is not None:

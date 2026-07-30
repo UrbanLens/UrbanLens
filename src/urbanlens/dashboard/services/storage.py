@@ -12,9 +12,11 @@ Central place for everything the storage-quota feature needs:
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 import logging
 from typing import TYPE_CHECKING
 
+from django.core.cache import cache
 from django.db.models import Sum
 from django.template.defaultfilters import filesizeformat
 
@@ -22,9 +24,17 @@ from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions.model import active_subscription_roles
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
+
+# How long a per-profile upload lock is held before it auto-expires, in
+# seconds. Long enough to cover a check-then-create quota sequence (including
+# image processing/checksumming before the DB insert), short enough that a
+# crashed request doesn't wedge the profile's uploads for long.
+_UPLOAD_LOCK_TIMEOUT_SECONDS = 30
 
 GIB = 1024**3
 
@@ -120,6 +130,53 @@ def quota_error_for_upload(profile: Profile, upload_size: int | None) -> str | N
     if used + max(upload_size or 0, 0) <= quota:
         return None
     return f"This upload would exceed your storage quota ({filesizeformat(used)} of {filesizeformat(quota)} used). Delete some photos or lower your image size in Settings → Storage."
+
+
+@contextmanager
+def per_profile_upload_lock(profile: Profile, timeout: int = _UPLOAD_LOCK_TIMEOUT_SECONDS) -> Iterator[bool]:
+    """Serialize one profile's uploads just long enough to make quota checks atomic.
+
+    :func:`quota_error_for_upload` reads current usage and the caller then
+    creates a new ``Image`` row afterwards - with no locking, N concurrent
+    uploads from the same profile can each pass the check before any of them
+    commits, letting the profile blow past its quota by up to N files. This
+    is a pragmatic fix (a short-lived cache lock) rather than true DB-level
+    atomicity, which would need a dedicated running-total column.
+
+    Wrap the check-then-create sequence in a call site with:
+
+    .. code-block:: python
+
+        with per_profile_upload_lock(profile) as locked:
+            quota_error = quota_error_for_upload(profile, image_file.size)
+            ...
+            Image.objects.create(...)
+
+    If the lock can't be acquired promptly (e.g. another upload from the same
+    profile is already mid-flight), the check proceeds anyway rather than
+    blocking the request - a missed lock only re-opens the original race for
+    that one request, it never hangs the upload.
+
+    Args:
+        profile: The uploading profile; the lock is scoped to this profile
+            only, so other users' uploads are never blocked.
+        timeout: Seconds before the lock auto-expires, in case a crashed
+            request never reaches the ``finally`` release.
+
+    Yields:
+        True when the lock was acquired and will be released on exit, False
+        when it could not be acquired within a short retry window (a warning
+        is logged and the caller should proceed without the extra safety net).
+    """
+    key = f"upload-quota-lock:{profile.pk}"
+    acquired = cache.add(key, value=True, timeout=timeout)
+    if not acquired:
+        logger.warning("Could not acquire upload quota lock for profile %s; proceeding without it.", profile.pk)
+    try:
+        yield acquired
+    finally:
+        if acquired:
+            cache.delete(key)
 
 
 def max_upload_file_size_bytes() -> int:

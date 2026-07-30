@@ -4,11 +4,11 @@ from __future__ import annotations
 import contextlib
 import logging
 import math
-from math import atan2, cos, radians, sin, sqrt
 from typing import TYPE_CHECKING, Self
 
 from django.contrib.gis.db.models.functions import Distance
 from django.contrib.gis.measure import D
+from django.db import IntegrityError
 from django.db.models import Count, Exists, F, OuterRef, Q
 from django.utils import timezone
 
@@ -88,22 +88,33 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
     def never_visited(self):
         return self.filter(last_visited__isnull=True)
 
+    def visited(self) -> Self:
+        """Return pins marked visited, however that was recorded.
+
+        A pin counts as "visited" when it either has a ``last_visited``
+        timestamp or carries the profile's "Visited" status label - the same
+        predicate used inline by ``visited_without_record`` and
+        ``filter_by_criteria``'s ``has_visits`` filter, named here so other
+        callers (e.g. Consensus's eligibility rule - only visited pins'
+        wikis are ever surfaced as rounds) can build on it directly instead
+        of re-deriving the ``Q``.
+        """
+        visited_q = Q(last_visited__isnull=False) | Q(labels__name="Visited", labels__kind="status")
+        return self.filter(visited_q).distinct()
+
     def visited_without_record(self) -> Self:
         """Return top-level pins marked visited that have no dated PinVisit record.
 
-        A pin counts as "visited" when it either has a ``last_visited`` timestamp
-        or carries the profile's "Visited" status label - mirroring the
-        ``has_visits`` filter used elsewhere. Such a pin can still lack any
-        ``PinVisit`` row (e.g. imported pins, or a status set by hand), leaving a
-        gap the Memories page surfaces so the user can log a concrete, dated visit.
-        Pins the user dismissed from that queue are excluded.
+        Such a pin can still lack any ``PinVisit`` row (e.g. imported pins, or a
+        status set by hand), leaving a gap the Memories page surfaces so the user
+        can log a concrete, dated visit. Pins the user dismissed from that queue
+        are excluded.
 
         Returns:
             Distinct top-level pins that are marked visited but have zero rows in
             their ``visit_history``.
         """
-        visited_q = Q(last_visited__isnull=False) | Q(labels__name="Visited", labels__kind="status")
-        return self.root_pins().filter(visited_q).filter(visit_history__isnull=True).exclude(unlogged_visit_dismissed=True).distinct()
+        return self.root_pins().visited().filter(visit_history__isnull=True).exclude(unlogged_visit_dismissed=True).distinct()
 
     def not_visited_this_year(self):
         return self.filter(last_visited__year__lt=timezone.now().year)
@@ -146,6 +157,23 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
     def by_updated_year(self, year):
         return self.filter(updated__year=year)
 
+    def modified_since(self, since) -> Self:
+        """Return pins created or edited at or after ``since``.
+
+        ``updated`` is ``auto_now``, so any save - create or edit - moves a pin
+        into this window. Deletions never appear here; delta-sync callers pair
+        this with ``PinTombstone.objects.deleted_since`` to learn about those.
+        Rides the ``idxdb_profile_update`` index when combined with a profile
+        filter.
+
+        Args:
+            since: Inclusive lower bound on the last-modified time.
+
+        Returns:
+            This queryset filtered to pins modified at or after ``since``.
+        """
+        return self.filter(updated__gte=since)
+
     def near_point(self, point: Point, radius_km: float) -> Self:
         """Return root pins whose location falls within ``radius_km`` of ``point``, closest first.
 
@@ -184,20 +212,6 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         bbox = Polygon.from_bbox((west, south, east, north))
         bbox.srid = 4326
         return self.filter(location__point__within=bbox)
-
-    def nearby_pins(self, latitude, longitude, radius):
-
-        R = 6371  # radius of the Earth in km
-        lat1 = radians(latitude)
-        lon1 = radians(longitude)
-        lat2 = radians(F("location__latitude"))
-        lon2 = radians(F("location__longitude"))
-        dlon = lon2 - lon1
-        dlat = lat2 - lat1
-        a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
-        c = 2 * atan2(sqrt(a), sqrt(1 - a))
-        distance = R * c
-        return self.filter(distance__lte=distance)
 
     def by_tag(self, tag_id: int) -> Self:
         """Filter pins that have this tag or any of its descendant tags."""
@@ -560,7 +574,16 @@ class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
         if existing_pin is not None:
             return existing_pin, False
 
-        pin = self.create(location=location, profile=profile, **defaults)
+        try:
+            pin = self.create(location=location, profile=profile, **defaults)
+        except IntegrityError:
+            # A concurrent request created this profile's pin at this Location between
+            # the existence check above and this insert (db_pin_unique_location_per_profile)
+            # - return that row instead of letting the race surface as an unhandled 500.
+            existing_pin = self.filter(location=location, profile=profile).order_by(F("parent_pin_id").asc(nulls_first=True)).first()
+            if existing_pin is not None:
+                return existing_pin, False
+            raise
 
         # Return the new pin and True for 'created'
         return pin, True

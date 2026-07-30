@@ -50,14 +50,14 @@ class PinSendToWikiView(LoginRequiredMixin, View):
 
         uuids = [u for u in request.POST.getlist("child_pin_uuids") if u]
         if not uuids:
-            return HttpResponse("No sub pins selected.", status=400)
+            return HttpResponse("No child pins selected.", status=400)
         children = list(pin.detail_pins.filter(uuid__in=uuids).select_related("location"))
         if not children:
-            return _toast(HttpResponse("", status=200), "info", "Nothing to send - selection no longer matches any sub pin.")
+            return _toast(HttpResponse("", status=200), "info", "Nothing to send - selection no longer matches any child pin.")
 
         created = pin_wiki_sync.send_pins_to_wiki(pin, children, pin.profile)
         if created == 0:
-            message = _no_wiki_or_up_to_date_message(pin, up_to_date_text="Every selected sub pin is already on the wiki.")
+            message = _no_wiki_or_up_to_date_message(pin, up_to_date_text="Every selected child pin is already on the wiki.")
             return _toast(HttpResponse("", status=200), "info", message)
         return _toast(HttpResponse("", status=200), "success", f"Added {created} marker{'s' if created != 1 else ''} to the community wiki.")
 
@@ -70,6 +70,6 @@ class PinPullFromWikiView(LoginRequiredMixin, View):
 
         created = pin_wiki_sync.pull_children_from_wiki(pin)
         if created == 0:
-            message = _no_wiki_or_up_to_date_message(pin, up_to_date_text="You already have a sub pin for everything on the wiki.")
+            message = _no_wiki_or_up_to_date_message(pin, up_to_date_text="You already have a child pin for everything on the wiki.")
             return _toast(HttpResponse("", status=200), "info", message)
-        return _toast(HttpResponse("", status=200), "success", f"Added {created} sub pin{'s' if created != 1 else ''} from the community wiki.", refresh=True)
+        return _toast(HttpResponse("", status=200), "success", f"Added {created} child pin{'s' if created != 1 else ''} from the community wiki.", refresh=True)

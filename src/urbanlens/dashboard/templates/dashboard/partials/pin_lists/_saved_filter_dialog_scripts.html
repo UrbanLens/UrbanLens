@@ -139,100 +139,77 @@ Context:
         if (form) form.dispatchEvent(new Event('change', { bubbles: true }));
     }
 
-    // -- Saved filter label pickers (include/exclude) -------------------------
-    function _sfEscHtml(s) {
-        const div = document.createElement('div');
-        div.textContent = s || '';
-        return div.innerHTML;
-    }
+    // -- Saved filter label picker (rich include/exclude + formula) ----------
+    // The same shared engine (ts/shared/label-picker.ts, installed globally by
+    // core.js) that drives the main map's filter sidebar, targeting the sf-*
+    // markup in _saved_filter_label_picker.html. On every change it serializes
+    // structured groups into the form's label_groups hidden input (which the
+    // create/edit endpoints already parse via SearchForm.parse_label_groups)
+    // AND mirrors the flat include/exclude id sets into hidden tags/
+    // exclude_tags checkboxes for the legacy fields.
+    window.initSavedFilterLabelPickers = function () {
+        const root = document.getElementById('sf-label-picker');
+        // The dialog body is re-swapped by HTMX on every open, so a fresh root
+        // (without the init marker) appears each time; the marker only guards
+        // against double-init on the always-visible detail page.
+        if (!root || root.dataset.pickerInit === '1') return;
+        root.dataset.pickerInit = '1';
 
-    function _sfMakeLabelPicker(fieldName) {
-        const root = document.querySelector('.saved-filter-label-picker[data-field-name="' + fieldName + '"]');
-        const chipsEl = document.getElementById('sf-label-chips-' + fieldName);
-        const searchEl = document.getElementById('sf-label-search-' + fieldName);
-        const suggEl = document.getElementById('sf-label-suggestions-' + fieldName);
-        const catalogEl = document.getElementById('sf-label-catalog-' + fieldName);
-        if (!root || !chipsEl || !searchEl || !suggEl || !catalogEl) return;
-
-        const candidates = [];
-        let selected = [];
-        catalogEl.querySelectorAll('[data-id]').forEach((el) => {
-            const item = { id: el.dataset.id, name: el.dataset.name, icon: el.dataset.icon, color: el.dataset.color };
-            candidates.push(item);
-            if (el.dataset.selected === '1') selected.push(item);
+        const picker = window.UrbanLensLabelPicker.createFilterPicker({
+            els: {
+                list: document.getElementById('sf-label-list'),
+                selected: document.getElementById('sf-label-selected'),
+                colIncl: document.getElementById('sf-label-col-incl'),
+                colExcl: document.getElementById('sf-label-col-excl'),
+                inclChips: document.getElementById('sf-label-incl-chips'),
+                exclChips: document.getElementById('sf-label-excl-chips'),
+                modeBtn: document.getElementById('sf-incl-mode-btn'),
+                groupsInput: document.getElementById('sf-label-groups'),
+                formulaBar: document.getElementById('sf-label-formula'),
+                formulaSuggestions: document.getElementById('sf-formula-suggestions'),
+                formulaErrors: document.getElementById('sf-formula-errors'),
+                formulaDisplay: document.getElementById('sf-formula-display'),
+                formulaDisplayText: document.getElementById('sf-formula-display-text'),
+                formulaDisplayClear: document.getElementById('sf-formula-display-clear'),
+            },
+            // Bubbling change reaches the form listeners (name suggestion, the
+            // detail page's live preview) exactly like the old picker's did.
+            onChange: () => root.dispatchEvent(new Event('change', { bubbles: true })),
+            onSerialize: (inclIds, exclIds) => {
+                root.querySelectorAll('input[data-sf-label-input]').forEach((el) => el.remove());
+                const addHidden = (name, id) => {
+                    const input = document.createElement('input');
+                    input.type = 'checkbox';
+                    input.hidden = true;
+                    input.checked = true;
+                    input.name = name;
+                    input.value = id;
+                    input.dataset.sfLabelInput = '1';
+                    root.appendChild(input);
+                };
+                inclIds.forEach((id) => addHidden('tags', id));
+                exclIds.forEach((id) => addHidden('exclude_tags', id));
+            },
         });
 
-        function syncHiddenInputs() {
-            root.querySelectorAll('input[data-sf-label-input]').forEach((el) => el.remove());
-            selected.forEach((item) => {
-                const input = document.createElement('input');
-                input.type = 'checkbox';
-                input.hidden = true;
-                input.checked = true;
-                input.name = fieldName;
-                input.value = item.id;
-                input.dataset.sfLabelInput = '1';
-                root.appendChild(input);
+        // Initial state: the filter's stored structured groups when present
+        // (round-trips formulas the old flat pickers had to discard with a
+        // warning), else the flat include/exclude sets stamped onto the
+        // available-label buttons by the template.
+        let groups = null;
+        try { groups = JSON.parse(root.dataset.initialGroups || 'null'); } catch (e) { /* malformed stored groups - start empty */ }
+        if (!Array.isArray(groups) || !groups.length) {
+            const incl = [];
+            const excl = [];
+            root.querySelectorAll('.fp-label-avail').forEach((btn) => {
+                if (btn.dataset.selectedMode === 'incl') incl.push(Number(btn.dataset.labelId));
+                else if (btn.dataset.selectedMode === 'excl') excl.push(Number(btn.dataset.labelId));
             });
+            groups = [];
+            if (incl.length) groups.push({ op: 'and', ids: incl });
+            if (excl.length) groups.push({ op: 'not', ids: excl });
         }
-
-        function notifyChanged() {
-            root.dispatchEvent(new Event('change', { bubbles: true }));
-        }
-
-        function renderChips() {
-            chipsEl.innerHTML = '';
-            selected.forEach((item) => {
-                const chip = document.createElement('span');
-                chip.className = 'apdlg-label-chip-item';
-                if (item.color) chip.style.setProperty('--tag-color', item.color);
-                const iconHtml = item.icon ? `<span class="apdlg-chip-icon">${_sfEscHtml(item.icon)}</span>` : '';
-                chip.innerHTML = `${iconHtml}<span class="apdlg-chip-name">${_sfEscHtml(item.name)}</span><button type="button" class="apdlg-chip-remove" aria-label="Remove">x</button>`;
-                chip.querySelector('.apdlg-chip-remove').addEventListener('click', () => {
-                    selected = selected.filter((s) => s.id !== item.id);
-                    renderChips();
-                    notifyChanged();
-                });
-                chipsEl.appendChild(chip);
-            });
-            syncHiddenInputs();
-        }
-
-        function renderSuggestions(query) {
-            const q = (query || '').toLowerCase().trim();
-            const selectedIds = new Set(selected.map((s) => s.id));
-            const matches = candidates.filter((c) => !selectedIds.has(c.id) && (!q || c.name.toLowerCase().includes(q))).slice(0, 12);
-            if (!matches.length) { suggEl.hidden = true; suggEl.innerHTML = ''; return; }
-            suggEl.innerHTML = '';
-            matches.forEach((item) => {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'apdlg-label-sugg-item';
-                const iconHtml = item.icon ? `<span class="apdlg-sugg-icon">${_sfEscHtml(item.icon)}</span>` : '';
-                btn.innerHTML = `${iconHtml}<span class="apdlg-sugg-name">${_sfEscHtml(item.name)}</span>`;
-                btn.addEventListener('click', () => {
-                    selected.push(item);
-                    renderChips();
-                    searchEl.value = '';
-                    suggEl.hidden = true;
-                    searchEl.focus();
-                    notifyChanged();
-                });
-                suggEl.appendChild(btn);
-            });
-            suggEl.hidden = false;
-        }
-
-        searchEl.addEventListener('input', () => renderSuggestions(searchEl.value));
-        searchEl.addEventListener('focus', () => renderSuggestions(searchEl.value));
-        searchEl.addEventListener('blur', () => setTimeout(() => { suggEl.hidden = true; }, 150));
-
-        renderChips();
-    }
-
-    window.initSavedFilterLabelPickers = function () {
-        _sfMakeLabelPicker('tags');
-        _sfMakeLabelPicker('exclude_tags');
+        if (groups.length) picker.applyGroups(groups);
     };
 
     // -- Saved filter name auto-suggestion ------------------------------------

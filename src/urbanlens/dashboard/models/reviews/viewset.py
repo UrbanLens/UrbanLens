@@ -2,18 +2,31 @@ from __future__ import annotations
 
 import logging
 
-from rest_framework import status, viewsets
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.response import Response
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.reviews.serializer import ReviewSerializer
+from urbanlens.dashboard.services.reviews import upsert_review
 
 logger = logging.getLogger(__name__)
 
 
-class ReviewViewSet(viewsets.ModelViewSet):
+class ReviewViewSet(mixins.UpdateModelMixin, mixins.DestroyModelMixin, viewsets.GenericViewSet):
+    """Review endpoints.
+
+    Only ``create_or_update`` (bound directly via ``as_view`` in
+    ``dashboard/urls.py``) is actually routed - this viewset is never
+    registered with the DRF router, so ``list``/``create``/``retrieve``
+    are never reachable. The base class only mixes in ``update``/``destroy``
+    (used by :meth:`update`/:meth:`destroy` below, kept in case they're
+    wired up later) rather than the full ``ModelViewSet``, which previously
+    exposed an unrouted, broken ``create()`` that violated the
+    ``unique_together`` constraint by saving twice.
+    """
+
     serializer_class = ReviewSerializer
     basename = "reviews"
 
@@ -21,29 +34,6 @@ class ReviewViewSet(viewsets.ModelViewSet):
         if not self.request:
             return Review.objects.none()
         return Review.objects.all().filter(profile__user=self.request.user)
-
-    def create(self, request, pin_id, *args, **kwargs):
-        logger.info("Create request initiated by user %s", request.user.id)
-        data = request.data
-        data["profile"] = request.user.profile
-        data["pin"] = pin_id
-        # Check if the review already exists for the given pin and profile
-        review, created = Review.objects.get_or_create(
-            profile=request.user.profile,
-            pin_id=pin_id,
-            defaults=data,
-        )
-        if not created:
-            for key, value in data.items():
-                setattr(review, key, value)
-            review.save()
-            serializer = self.get_serializer(review)
-        else:
-            serializer = self.get_serializer(data=data)
-            serializer.is_valid(raise_exception=True)
-            self.perform_create(serializer)
-        logger.info("Review created with id %s", serializer.data["id"])
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
     @action(detail=True, methods=["patch"], url_path="create_or_update", url_name="create_or_update")
     def create_or_update(self, request, pk=None):
@@ -61,22 +51,20 @@ class ReviewViewSet(viewsets.ModelViewSet):
             # ids cannot be enumerated by probing this endpoint.
             return Response({"detail": "Pin not found."}, status=status.HTTP_400_BAD_REQUEST)
 
+        # Validate first, then delegate the upsert to services.reviews so this
+        # and the external API share one implementation of the
+        # one-rating-per-(profile, pin) rule.
         review = Review.objects.for_pair(profile, pin).first()
-        if review is None:
-            serializer = self.get_serializer(data=request.data)
-            serializer.is_valid(raise_exception=True)
-            serializer.save(profile=profile, pin=pin)
-            created = True
-        else:
-            serializer = self.get_serializer(review, data=request.data, partial=True)
-            serializer.is_valid(raise_exception=True)
-            serializer.save()
-            created = False
+        serializer = self.get_serializer(review, data=request.data, partial=True) if review is not None else self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-        return Response(serializer.data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
+        # `rating` is optional on a partial update, in which case the existing
+        # value stands - preserving the pre-refactor no-op behavior rather than
+        # blowing up on a missing key.
+        rating = serializer.validated_data.get("rating", review.rating if review is not None else None)
+        review, created = upsert_review(profile, pin, rating)
 
-    def perform_create(self, serializer):
-        serializer.save(profile=self.request.user.profile)
+        return Response(self.get_serializer(review).data, status=status.HTTP_201_CREATED if created else status.HTTP_200_OK)
 
     def update(self, request, *args, **kwargs):
         logger.info("Update request initiated by user %s", request.user.id)

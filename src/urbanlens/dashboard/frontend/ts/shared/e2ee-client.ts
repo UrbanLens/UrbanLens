@@ -27,6 +27,7 @@ import {
 } from "./e2ee-crypto";
 import type { CachedIdentity } from "./e2ee-store";
 import { clearProfileKeys, getConversationKey, getGroupKey, getIdentity, putConversationKey, putGroupKey, putIdentity } from "./e2ee-store";
+import { toast } from "./dialogs";
 
 /** Endpoint URLs, provided by templates via {% url %} (see init()). */
 export interface E2EEUrls {
@@ -49,6 +50,10 @@ export interface E2EEUrls {
     /** POST target for password change/set. Optional; only the settings and
      * set-password pages wire it. */
     changePassword?: string;
+    /** POST target running a raw password through AUTH_PASSWORD_VALIDATORS
+     * before the credential is derived (see serverPolicyErrors). Optional;
+     * pages without it skip the server-side policy check. */
+    validatePassword?: string;
     /** The login form's POST target, for the fetch-based login flow. */
     login: string;
     /** FAQ entry explaining encryption/recovery keys in plain language, shown
@@ -61,6 +66,8 @@ export interface E2EEConfig {
     urls: E2EEUrls;
     /** The signed-in user's profile slug; null on anonymous pages. */
     selfSlug: string | null;
+    /** Username/email identifier for deriving current-auth proofs on signed-in pages. */
+    loginIdentifier?: string;
 }
 
 let config: E2EEConfig | null = null;
@@ -136,6 +143,8 @@ interface EnrollOptions {
     password?: string;
     /** Rotate the login credential to derived mode (password accounts). */
     rotateAuth?: boolean;
+    /** Credential that Django's current password hash verifies. */
+    currentPasswordProof?: string;
 }
 
 interface EnrollResult {
@@ -170,6 +179,10 @@ export async function enroll(options: EnrollOptions): Promise<EnrollResult | nul
         const authSalt = randomSalt();
         body.auth_key = bytesToB64(deriveKey(options.password, authSalt));
         body.auth_salt = authSalt;
+    }
+    if (options.currentPasswordProof) {
+        body.current_password = options.currentPasswordProof;
+    } else if (options.rotateAuth && options.password) {
         body.current_password = options.password;
     }
     const response = await postJson(cfg().urls.enroll, body);
@@ -255,12 +268,12 @@ async function runLoginFlow(form: HTMLFormElement): Promise<void> {
     const destination = loginResponse.url;
     try {
         if (params.mode === "legacy") {
-            const result = await enroll({ password, rotateAuth: true });
+            const result = await enroll({ password, rotateAuth: true, currentPasswordProof: credential });
             if (result) {
                 await showRecoveryDialog(result.recoveryDisplay);
             }
         } else {
-            await unlockAfterDerivedLogin(password);
+            await unlockAfterDerivedLogin(password, credential);
         }
     } catch (error) {
         // Key handling must never block getting the user into the app.
@@ -274,7 +287,7 @@ async function runLoginFlow(form: HTMLFormElement): Promise<void> {
  *
  * @param password - The raw password, still in memory from the login form.
  */
-async function unlockAfterDerivedLogin(password: string): Promise<void> {
+async function unlockAfterDerivedLogin(password: string, currentPasswordProof: string): Promise<void> {
     const keysResponse = await fetch(cfg().urls.keys, { credentials: "same-origin" });
     if (!keysResponse.ok) {
         return;
@@ -283,7 +296,7 @@ async function unlockAfterDerivedLogin(password: string): Promise<void> {
     if (!bundle.enrolled) {
         // AccountKdf exists (signup created it) but no bundle yet - finish
         // enrollment now that we're authenticated.
-        const result = await enroll({ password, rotateAuth: false });
+        const result = await enroll({ password, rotateAuth: false, currentPasswordProof });
         if (result) {
             await showRecoveryDialog(result.recoveryDisplay);
         }
@@ -307,6 +320,7 @@ async function unlockAfterDerivedLogin(password: string): Promise<void> {
         await postJson(cfg().urls.rewrap, {
             password_wrapped_secret: wrapSecretKey(cached.privateKey, deriveKey(password, wrapSalt, bundle.kdf_opslimit, bundle.kdf_memlimit)),
             password_wrap_salt: wrapSalt,
+            current_password: currentPasswordProof,
         });
     }
     // Otherwise this device stays locked; the messages page offers the
@@ -317,9 +331,55 @@ async function unlockAfterDerivedLogin(password: string): Promise<void> {
 // Signup / password-reset form wiring
 // ---------------------------------------------------------------------------
 
-/** Django's default minimum password length, enforced client-side because the
- * server only ever sees the derived credential (which always "looks strong"). */
-const MIN_PASSWORD_LENGTH = 8;
+/** The configured MinimumLengthValidator floor (settings/base.py), enforced
+ * client-side because the server only ever sees the derived credential (which
+ * always "looks strong"). The full validator chain (complexity,
+ * common-password, HIBP breach check) additionally runs server-side via the
+ * validate-password endpoint - see serverPolicyErrors(). */
+const MIN_PASSWORD_LENGTH = 12;
+
+/**
+ * Run the raw password through the server's configured validator chain.
+ *
+ * The one deliberate raw-password transmission in the derived-auth design:
+ * without it, none of AUTH_PASSWORD_VALIDATORS ever sees the real password
+ * (the derived credential always "looks strong"). Sent once over HTTPS,
+ * validated in memory server-side, never stored or logged.
+ *
+ * @param password - The candidate raw password.
+ * @param username - The username typed into the form ("" when unknown), for
+ *   the similarity validator.
+ * @param email - The email typed into the form ("" when unknown).
+ * @returns Policy-violation messages; empty when the password passes, when
+ *   the endpoint isn't wired on this page, or when the check can't be
+ *   reached (fail open - the MIN_PASSWORD_LENGTH floor still applies).
+ */
+async function serverPolicyErrors(password: string, username: string, email: string): Promise<string[]> {
+    const url = cfg().urls.validatePassword;
+    if (!url) {
+        return [];
+    }
+    try {
+        const response = await postJson(url, { password, username, email });
+        if (!response.ok) {
+            return [];
+        }
+        const payload = (await response.json()) as { valid?: boolean; errors?: string[] };
+        if (payload.valid === false) {
+            return payload.errors && payload.errors.length ? payload.errors : ["This password doesn't meet the password policy."];
+        }
+    } catch {
+        // Network failure - fall through to fail-open.
+    }
+    return [];
+}
+
+/** Show policy errors on a password input as a native validation message. */
+function reportPolicyErrors(input: HTMLInputElement, errors: string[]): void {
+    input.setCustomValidity(errors.join(" "));
+    input.reportValidity();
+    input.addEventListener("input", () => input.setCustomValidity(""), { once: true });
+}
 
 /**
  * Wire the signup form: derive the login credential before submit so the raw
@@ -353,9 +413,14 @@ async function prepareSignupSubmit(form: HTMLFormElement): Promise<void> {
         return;
     }
     if (password1.value.length < MIN_PASSWORD_LENGTH || /^\d+$/.test(password1.value)) {
-        password1.setCustomValidity(`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`);
-        password1.reportValidity();
-        password1.addEventListener("input", () => password1.setCustomValidity(""), { once: true });
+        reportPolicyErrors(password1, [`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`]);
+        return;
+    }
+    const username = (form.elements.namedItem("username") as HTMLInputElement | null)?.value ?? "";
+    const email = (form.elements.namedItem("email") as HTMLInputElement | null)?.value ?? "";
+    const policyErrors = await serverPolicyErrors(password1.value, username, email);
+    if (policyErrors.length) {
+        reportPolicyErrors(password1, policyErrors);
         return;
     }
     await cryptoReady();
@@ -414,9 +479,14 @@ async function prepareResetSubmit(form: HTMLFormElement): Promise<void> {
         return;
     }
     if (password1.value.length < MIN_PASSWORD_LENGTH || /^\d+$/.test(password1.value)) {
-        password1.setCustomValidity(`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`);
-        password1.reportValidity();
-        password1.addEventListener("input", () => password1.setCustomValidity(""), { once: true });
+        reportPolicyErrors(password1, [`Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.`]);
+        return;
+    }
+    // The reset form carries no username/email fields; the similarity check
+    // simply has nothing extra to compare against here.
+    const policyErrors = await serverPolicyErrors(password1.value, "", "");
+    if (policyErrors.length) {
+        reportPolicyErrors(password1, policyErrors);
         return;
     }
     await cryptoReady();
@@ -460,8 +530,7 @@ export async function enrollOauthIfNeeded(): Promise<boolean> {
 }
 
 function notifyEnrolled(): void {
-    const toastr = (window as { toastr?: { info?: (msg: string, title?: string) => void } }).toastr;
-    toastr?.info?.("Your direct messages are now end-to-end encrypted. Save your recovery key from Settings → Direct Messages.", "Encryption enabled");
+    window.toastr.info("Your direct messages are now end-to-end encrypted. Save your recovery key from Settings → Direct Messages.", "Encryption enabled");
 }
 
 // ---------------------------------------------------------------------------
@@ -684,6 +753,10 @@ export async function changePassword(currentPassword: string, newPassword: strin
     if (newPassword.length < MIN_PASSWORD_LENGTH || /^\d+$/.test(newPassword)) {
         return { ok: false, error: `Use at least ${MIN_PASSWORD_LENGTH} characters, not all numbers.` };
     }
+    const policyErrors = await serverPolicyErrors(newPassword, identifier, "");
+    if (policyErrors.length) {
+        return { ok: false, error: policyErrors.join(" ") };
+    }
     await cryptoReady();
 
     let currentSecret = currentPassword;
@@ -724,6 +797,22 @@ export async function changePassword(currentPassword: string, newPassword: strin
         return { ok: false, error: "Your current password is incorrect." };
     }
     return { ok: false, error: "Could not change your password. Please try again." };
+}
+
+async function currentPasswordProof(password: string): Promise<string> {
+    const identifier = cfg().loginIdentifier;
+    if (!identifier) {
+        return password;
+    }
+    const paramsResponse = await fetch(`${cfg().urls.loginParams}?identifier=${encodeURIComponent(identifier)}`, { credentials: "same-origin" });
+    if (!paramsResponse.ok) {
+        return password;
+    }
+    const params = (await paramsResponse.json()) as LoginParams;
+    if (params.mode === "derived") {
+        return bytesToB64(deriveKey(password, params.auth_salt));
+    }
+    return password;
 }
 
 /**
@@ -822,6 +911,7 @@ export async function resetKeys(password?: string): Promise<ResetResult | null> 
         const wrapSalt = randomSalt();
         body.password_wrapped_secret = wrapSecretKey(identity.privateKey, deriveKey(password, wrapSalt));
         body.password_wrap_salt = wrapSalt;
+        body.current_password = await currentPasswordProof(password);
     }
 
     // Re-encrypt history: unseal every wrapped key copy with the OLD key and
@@ -959,11 +1049,10 @@ async function buildResetDialog(hasPassword: boolean, resolve: (value: string | 
                 errorEl.hidden = false;
                 return;
             }
-            const toastr = (window as { toastr?: { success?: (msg: string) => void; warning?: (msg: string) => void } }).toastr;
             if (result.rewrapped > 0) {
-                toastr?.success?.("Your keys were reset and your message history was re-encrypted - everything stays readable.");
+                toast.success("Your keys were reset and your message history was re-encrypted - everything stays readable.");
             } else if (!result.preserved) {
-                toastr?.warning?.("Your keys were reset. Previously encrypted messages are no longer readable on this account.");
+                toast.warning("Your keys were reset. Previously encrypted messages are no longer readable on this account.");
             }
             close(result.recoveryDisplay);
         } catch {
@@ -1092,7 +1181,12 @@ interface GroupKeysPayload {
     keys: { version: number; wrapped_key: string }[];
     latest: number;
     needs_rotation: boolean;
-    members: { slug: string; public_key: string }[] | null;
+    /** One entry per active member when all are enrolled, else null. `id` is
+     * an opaque per-(group, member) rotation token - deliberately not a slug,
+     * which would reveal masked members' identities (see the server's
+     * group_member_token). It is round-tripped verbatim as the `wrapped` key
+     * when posting a new version. */
+    members: { id: string; public_key: string }[] | null;
 }
 
 function groupKeyUrl(groupUuid: string): string {
@@ -1175,7 +1269,7 @@ async function createGroupKeyVersion(
     const key = generateConversationKey();
     const wrapped: Record<string, string> = {};
     for (const member of payload.members) {
-        wrapped[member.slug] = sealToPublicKey(key, member.public_key);
+        wrapped[member.id] = sealToPublicKey(key, member.public_key);
     }
     const version = payload.latest + 1;
     const response = await postJson(groupKeyUrl(groupUuid), { version, wrapped });
@@ -1297,6 +1391,50 @@ export async function decryptFromPartner(partnerSlug: string, ciphertext: string
         return null;
     }
     return decryptMessage(ciphertext, nonce, key);
+}
+
+/**
+ * Decrypt a safety check-in's archived record (services.safety.archive_checkin).
+ *
+ * Unlike a conversation key, the per-checkin symmetric key was sealed once,
+ * server-side, to only the owner's own public key - there is no partner/group
+ * to resolve, so this just unseals it with the caller's own identity, then
+ * opens the payload with the two primitives every other decrypt path here
+ * already uses. Prompts to unlock the device first if the identity isn't
+ * cached yet - the archive may be opened long after the check-in itself.
+ *
+ * @param sealedKeyB64 - The archive's sealed per-checkin key (SafetyCheckinArchive.sealed_key).
+ * @param ciphertextB64 - The encrypted JSON payload (SafetyCheckinArchive.ciphertext).
+ * @param nonceB64 - The nonce for `ciphertextB64` (SafetyCheckinArchive.nonce).
+ * @returns The decrypted payload (title, plan_details, resolved_by_label, etc.), or
+ *   null if this device can't unlock or the blobs don't match this identity.
+ */
+export async function decryptSafetyArchive(sealedKeyB64: string, ciphertextB64: string, nonceB64: string): Promise<Record<string, unknown> | null> {
+    await cryptoReady();
+    let identity = await requireIdentity();
+    if (identity === null) {
+        const unlocked = await showUnlockDialog();
+        if (!unlocked) {
+            return null;
+        }
+        identity = await requireIdentity();
+    }
+    if (identity === null) {
+        return null;
+    }
+    const symmetricKey = unseal(sealedKeyB64, identity.publicKey, identity.privateKey);
+    if (symmetricKey === null) {
+        return null;
+    }
+    const json = decryptMessage(ciphertextB64, nonceB64, symmetricKey);
+    if (json === null) {
+        return null;
+    }
+    try {
+        return JSON.parse(json) as Record<string, unknown>;
+    } catch {
+        return null;
+    }
 }
 
 /**

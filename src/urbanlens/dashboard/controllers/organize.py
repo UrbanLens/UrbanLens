@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User as AuthUser
+from django.db import transaction
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import render
 from django.views import View
@@ -131,11 +132,24 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
         Expects JSON body: {"items": [{"id": 1}, {"id": 2}, ...]} in display order
         (first item gets the highest order value).
 
+        Only labels the requester *owns* are reordered. ``Label.order`` is a
+        single shared column, and ``visible_to`` deliberately spans both a
+        profile's own labels and the site-wide global ones - so validating
+        against it and then writing without re-scoping meant every user's drag
+        rewrote the ordering of shared labels for **everyone on the site**. Any
+        global in the submission is skipped and named in ``skipped_global_ids``
+        so the client can render those rows as position-locked rather than
+        silently losing the user's gesture. Per-profile ordering of globals
+        would need an ``order`` column on ``LabelCustomization``; until that
+        exists, refusing is the only correct answer.
+
         Args:
             request: The HTTP request with JSON body.
 
         Returns:
-            JSON response with ok=True on success.
+            JSON response with ok=True, the number of labels reordered, and the
+            ids skipped because they are global (and therefore not the
+            requester's to reorder).
         """
         try:
             data = json.loads(request.body)
@@ -147,13 +161,25 @@ class OrganizePrioritySaveView(LoginRequiredMixin, View):
             return JsonResponse({"error": "No items provided"}, status=400)
 
         profile = request.user.profile
-        visible_ids = set(
-            Label.objects.visible_to(profile).filter(id__in=item_ids).values_list("id", flat=True),
-        )
-        total = len(item_ids)
-        for i, item_id in enumerate(item_ids):
-            if item_id not in visible_ids:
-                continue
-            Label.objects.filter(id=item_id).update(order=total - i)
+        # for_profile, not visible_to: the latter includes globals by design.
+        owned_ids = set(Label.objects.for_profile(profile).filter(id__in=item_ids).values_list("id", flat=True))
 
-        return JsonResponse({"ok": True})
+        total = len(item_ids)
+        reordered: list[Label] = []
+        skipped_global_ids: list[int] = []
+        for index, item_id in enumerate(item_ids):
+            if item_id not in owned_ids:
+                # Either global, or someone else's, or nonexistent - the three
+                # are deliberately not distinguished in the response.
+                skipped_global_ids.append(item_id)
+                continue
+            reordered.append(Label(id=item_id, order=total - index))
+
+        if reordered:
+            # One statement instead of N, inside a transaction: a partial
+            # reorder is worse than none, since the user sees an arrangement
+            # that was never what they dragged.
+            with transaction.atomic():
+                Label.objects.bulk_update(reordered, ["order"])
+
+        return JsonResponse({"ok": True, "reordered": len(reordered), "skipped_global_ids": skipped_global_ids})

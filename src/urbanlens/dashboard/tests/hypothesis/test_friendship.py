@@ -6,7 +6,11 @@ Friendship transitions follow strict rules:
   ignore  → IGNORED     (re-request blocked)
   remove  → REMOVED     (re-request allowed)
   block   → BLOCKED     (re-request blocked)
-  mute    → MUTED       (re-request blocked)
+
+Mute is deliberately absent from that list: it is not a transition. It sets
+``Friendship.muted`` and leaves ``status`` untouched, because muting an
+accepted friend must not stop them being a friend. See
+``test_friendship_mute_flag`` for that behaviour and the bug it replaced.
 
 NOTE: Friendship.between() calls QuerySet.get() and raises DoesNotExist when
 no friendship exists between two profiles.  The tests here use
@@ -111,7 +115,18 @@ class FriendshipTransitionTests(TestCase):
 
 
 class FriendshipBlockMuteTests(TestCase):
-    """block() and mute() classmethods create new friendship rows when none exist."""
+    """block() creates a new friendship row when none exists; mute() only flips a flag.
+
+    The asymmetry is the point. Blocking must work against a stranger - that
+    is what blocking is for - so it invents the row. Muting must not: it is a
+    notification preference about a relationship you already have, and the
+    classmethod that used to conjure a ``Muted`` row for a stranger both
+    invented a relationship out of nothing and (because ``Muted`` was a
+    status) permanently blocked the pair from ever exchanging a friend
+    request. Mute is now :meth:`Friendship.mute`, an instance method that
+    writes one boolean; see ``test_friendship_mute_flag`` for its full
+    behaviour.
+    """
 
     profile_a: Profile
     profile_b: Profile
@@ -127,18 +142,27 @@ class FriendshipBlockMuteTests(TestCase):
         f.refresh_from_db()  # type: ignore[union-attr]
         self.assertEqual(f.status, FriendshipStatus.BLOCKED)  # type: ignore[union-attr]
 
-    def test_mute_creates_muted_friendship(self) -> None:
-        f = Friendship.mute(self.profile_a, self.profile_b)
-        self.assertIsNotNone(f)
-        f.refresh_from_db()  # type: ignore[union-attr]
-        self.assertEqual(f.status, FriendshipStatus.MUTED)  # type: ignore[union-attr]
+    def test_mute_sets_the_flag_and_leaves_the_status_alone(self) -> None:
+        friendship = _make_requested(self.profile_a, self.profile_b)
+        friendship.accept()
+
+        friendship.mute()
+
+        friendship.refresh_from_db()
+        self.assertTrue(friendship.muted)
+        self.assertEqual(friendship.status, FriendshipStatus.ACCEPTED)
+
+    def test_mute_does_not_block_re_request(self) -> None:
+        """Muting is not a rejection, so it must not close the re-request door."""
+        friendship = _make_requested(self.profile_a, self.profile_b)
+        friendship.decline()
+        friendship.mute()
+
+        friendship.refresh_from_db()
+        self.assertTrue(FriendshipStatus.can_request(friendship.status))
 
     def test_block_blocks_re_request(self) -> None:
         f = Friendship.block(self.profile_a, self.profile_b)
-        self.assertFalse(FriendshipStatus.can_request(f.status))  # type: ignore[union-attr]
-
-    def test_mute_blocks_re_request(self) -> None:
-        f = Friendship.mute(self.profile_a, self.profile_b)
         self.assertFalse(FriendshipStatus.can_request(f.status))  # type: ignore[union-attr]
 
     def test_block_existing_friendship_updates_status(self) -> None:

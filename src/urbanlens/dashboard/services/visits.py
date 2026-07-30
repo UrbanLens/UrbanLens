@@ -24,6 +24,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.markup.model import MarkupMap
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.models.trips.model import TripActivity
@@ -526,6 +527,69 @@ def sync_last_visited(pin: Pin) -> None:
     latest = pin.visit_history.order_by("-visited_at").values_list("visited_at", flat=True).first()
     pin.last_visited = latest
     pin.save(update_fields=["last_visited", "updated"])
+
+
+class VisitLoggingDisabledError(Exception):
+    """The profile has turned visit-history tracking off.
+
+    The message is safe to surface to the caller.
+    """
+
+    def __init__(self, message: str = "Visit logging is turned off - enable it in Settings to log a visit.") -> None:
+        self.safe_message = message
+        super().__init__(message)
+
+
+def create_manual_visit(pin: Pin, *, visited_at: datetime.datetime, notes: str | None = None, markup_map: MarkupMap | None = None) -> PinVisit:
+    """Log a user-entered visit to a pin, with the same side effects the web form has.
+
+    Deliberately narrower than what ``controllers.visits.VisitHistoryView.post``
+    does: participants and photo uploads stay that controller's concern (they
+    come from multipart form fields it owns), while the parts every caller must
+    get right - the tracking gate, the source marking, and the two derived-state
+    updates - live here.
+
+    Args:
+        pin: The pin that was visited.
+        visited_at: When the visit happened.
+        notes: Optional free-text notes about the visit.
+        markup_map: An already-materialized map snapshot to attach. Only the
+            web form supplies one; external clients submit no map data.
+
+    Returns:
+        The created visit.
+
+    Raises:
+        VisitLoggingDisabledError: The pin owner has ``track_pin_visits`` off.
+            Fails loudly rather than silently discarding the visit, so a sync
+            client can tell a rejected write from an accepted one instead of
+            retrying it forever.
+    """
+    if not visit_logging_allowed(pin.profile):
+        raise VisitLoggingDisabledError
+
+    visit = PinVisit.objects.create(pin=pin, visited_at=visited_at, notes=notes, source=VisitSource.MANUAL, markup_map=markup_map)
+    sync_last_visited(pin)
+    add_visited_status(pin)
+    return visit
+
+
+def delete_visit(visit: PinVisit) -> None:
+    """Delete one visit and any map snapshot it owned, then re-derive last_visited.
+
+    The visit's ``markup_map`` is deleted alongside it rather than orphaned:
+    the FK is ``SET_NULL``, so a plain visit delete would leave the snapshot
+    behind with nothing referencing it.
+
+    Args:
+        visit: The visit to delete.
+    """
+    pin = visit.pin
+    markup_map = visit.markup_map
+    visit.delete()
+    if markup_map is not None:
+        markup_map.delete()
+    sync_last_visited(pin)
 
 
 def _pin_contains_point(pin: Pin, point: GEOSPoint) -> bool:

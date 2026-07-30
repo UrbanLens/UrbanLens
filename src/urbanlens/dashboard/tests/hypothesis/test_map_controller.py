@@ -27,6 +27,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionOrigin
 from urbanlens.dashboard.models.profile.model import MapCenterMode, Profile
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
@@ -196,17 +197,30 @@ class ViewMapContextTests(TestCase):
         resp = self.client.get(_MAP_URL)
         self.assertNotContains(resp, 'id="addr-search-history"')
 
+
+class RootPinCountQueryTests(TestCase):
+    """MapController.view_map's ``pin_count`` is computed as
+    ``Pin.objects.filter(profile=profile).root_pins().count()`` - verify that
+    query returns exactly the number of root pins created, for arbitrary N.
+
+    Kept in its own class, entirely separate from any Django test-client
+    usage: per this repo's CLAUDE.md, hypothesis's per-example DB flush (via
+    hypothesis.extra.django's _pre_setup/_post_teardown) doesn't interact
+    safely with self.client's session state. See test_safety_partners.py's
+    IsOwnerOrAcceptedPartnerHypothesisTests (and its sibling
+    IsOwnerOrAcceptedPartnerTests) for the same split applied there: a
+    @given-decorated pure-logic test in its own class, with any view-level
+    smoke test living as a plain (non-@given) method elsewhere - here, that's
+    ViewMapContextTests.test_pin_count_reflects_actual_root_pin_count above.
+    """
+
     @given(n=st.integers(min_value=0, max_value=6))
     @_db_settings
-    def test_pin_count_equals_root_pin_count_for_n_pins(self, n: int) -> None:
-        # hypothesis.extra.django flushes the DB session between examples via
-        # _pre_setup/_post_teardown even though setUp data survives in the outer
-        # class transaction.  Re-login here so each example has a valid session.
-        self.client.force_login(self.user)
+    def test_root_pin_count_matches_created_count(self, n: int) -> None:
+        profile = baker.make(User).profile
         for _ in range(n):
-            baker.make(Pin, profile=self.profile, parent_pin=None)
-        resp = self.client.get(_MAP_URL)
-        self.assertEqual(resp.context["pin_count"], n)
+            baker.make(Pin, profile=profile, parent_pin=None)
+        self.assertEqual(Pin.objects.filter(profile=profile).root_pins().count(), n)
 
 
 class ShowPinCountTests(TestCase):
@@ -299,3 +313,50 @@ class MapPinsMetaTests(TestCase):
         self.client.logout()
         resp = self.client.get(_MAP_META_URL)
         self.assertIn(resp.status_code, (301, 302))
+
+
+class PinSuggestionsIntroDialogTests(TestCase):
+    """The new-user "suggested pins near you" dialog shows at most once, and only
+    once there's actually a pending suggestion to point at - see
+    Profile.map_pin_suggestions_intro_seen and MapController.view_map."""
+
+    def setUp(self) -> None:
+        self.user: User = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def _add_pending_suggestion(self) -> None:
+        location = baker.make(Location, latitude=40.0, longitude=-74.0)
+        PinSuggestion.objects.create(
+            profile=self.profile,
+            pin=None,
+            latitude=40.0,
+            longitude=-74.0,
+            origin=PinSuggestionOrigin.COMMUNITY,
+            suggested_name=location.display_name or "Test Place",
+        )
+
+    def test_hidden_for_a_new_user_with_no_pending_suggestions(self) -> None:
+        resp = self.client.get(_MAP_URL)
+        self.assertFalse(resp.context["show_pin_suggestions_intro"])
+        self.profile.refresh_from_db()
+        self.assertFalse(self.profile.map_pin_suggestions_intro_seen)
+
+    def test_shown_once_for_a_new_user_with_a_pending_suggestion(self) -> None:
+        self._add_pending_suggestion()
+
+        first_resp = self.client.get(_MAP_URL)
+        self.assertTrue(first_resp.context["show_pin_suggestions_intro"])
+        self.profile.refresh_from_db()
+        self.assertTrue(self.profile.map_pin_suggestions_intro_seen)
+
+        second_resp = self.client.get(_MAP_URL)
+        self.assertFalse(second_resp.context["show_pin_suggestions_intro"])
+
+    def test_never_shown_for_a_profile_already_marked_seen(self) -> None:
+        self._add_pending_suggestion()
+        self.profile.map_pin_suggestions_intro_seen = True
+        self.profile.save(update_fields=["map_pin_suggestions_intro_seen"])
+
+        resp = self.client.get(_MAP_URL)
+        self.assertFalse(resp.context["show_pin_suggestions_intro"])

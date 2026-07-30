@@ -165,6 +165,20 @@ class LookupParcelErrorResponseTests(SimpleTestCase):
             gateway.lookup_parcel(42.65, -73.75)
         self.assertEqual(ctx.exception.links, {})
 
+    def test_top_level_uuid_is_included_in_the_payload(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body={"uuid": "3fae2b1c-0000-0000-0000-000000000000", "record_payload": {"owner_name": ["Jane Smith"]}})
+        gateway = _gateway(session)
+        payload = gateway.lookup_parcel(42.65, -73.75)
+        self.assertEqual(payload["uuid"], "3fae2b1c-0000-0000-0000-000000000000")
+
+    def test_missing_top_level_uuid_leaves_payload_without_one(self) -> None:
+        session = MagicMock()
+        session.get.return_value = _response(200, json_body={"record_payload": {"owner_name": ["Jane Smith"]}})
+        gateway = _gateway(session)
+        payload = gateway.lookup_parcel(42.65, -73.75)
+        self.assertNotIn("uuid", payload)
+
     def test_unexpected_status_code_raises_source_error(self) -> None:
         session = MagicMock()
         session.get.return_value = _response(500, text="internal server error")

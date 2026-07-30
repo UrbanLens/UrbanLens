@@ -1,6 +1,6 @@
 """Tests for aggregating a pin's notes (private Comments) across its child pins.
 
-Mirrors the page-wide "show sub pin details" toggle already applied to the
+Mirrors the page-wide "show child pin details" toggle already applied to the
 map, photo gallery, and visit history: a note left on a child pin must not be
 invisible from the parent's own Notes tab just because it lives on a nested
 row. Posting and deleting still always act on the exact pin/comment in the
@@ -56,7 +56,7 @@ class PinCommentsAggregationTests(TestCase):
         self.assertContains(response, reverse("pin.details", kwargs={"pin_slug": self.child.slug}))
 
     def test_the_parents_own_note_is_never_labelled(self) -> None:
-        """Only aggregated child notes get the 'written on the sub pin' chip - one chip
+        """Only aggregated child notes get the 'written on the child pin' chip - one chip
         total, for the one child note, never for the parent's own."""
         response = self.client.get(reverse("pin.comments", kwargs={"pin_slug": self.parent.slug}), {"children": "1"})
         self.assertEqual(response.content.decode().count("comment-child-chip"), 1)

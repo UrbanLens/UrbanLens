@@ -59,7 +59,7 @@ class PanelRenderContextTests(SimpleTestCase):
         self.assertEqual(ctx["chips"], ["Manual lookup required"])
         self.assertTrue(any(entry["href"] == "https://example.gov/assessor" for entry in ctx["meta"]))
 
-    def test_available_record_shows_owner_and_chips(self) -> None:
+    def test_available_record_shows_the_owner_and_no_chips_when_nothing_notable(self) -> None:
         data = {
             "available": True,
             "situs_address": "123 Main St",
@@ -72,14 +72,11 @@ class PanelRenderContextTests(SimpleTestCase):
             "assessed_value": None,
             "market_value": None,
             "tax_history": [],
-            "source": {"tier": 1, "provider": "ArcGIS REST", "url": "https://example.gov"},
-            "confidence": 0.7,
         }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
         self.assertEqual(ctx["heading_name"], "Jane Smith")
-        self.assertIn("Tier 1", ctx["chips"])
-        self.assertIn("70% confidence", ctx["chips"])
+        self.assertEqual(ctx["chips"], [])
 
     def test_delinquent_tax_history_adds_a_chip(self) -> None:
         data = {
@@ -94,8 +91,6 @@ class PanelRenderContextTests(SimpleTestCase):
             "assessed_value": None,
             "market_value": None,
             "tax_history": [{"year": 2024, "delinquent": True}],
-            "source": {"tier": 1, "provider": "ArcGIS REST", "url": ""},
-            "confidence": 0.7,
         }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
@@ -114,8 +109,6 @@ class PanelRenderContextTests(SimpleTestCase):
             "assessed_value": None,
             "market_value": None,
             "tax_history": [],
-            "source": {"tier": 1, "provider": "ArcGIS REST", "url": ""},
-            "confidence": 0.7,
         }
         data.update(overrides)
         return data
@@ -270,11 +263,20 @@ class FetchPayloadTransientErrorTests(TestCase):
 
         from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
 
-        self.location.address = "123 Main St"
+        # Location.address is a read-only property composed from the component
+        # fields; assigning to it (as this test used to) raises AttributeError.
+        # Set the components and let it compose, then assert on that value
+        # rather than a hard-coded string, so the test stays about pass-through
+        # instead of pinning the composition format.
+        self.location.street_number = "123"
+        self.location.route = "Main St"
+        expected_address = self.location.address
+        self.assertIsNotNone(expected_address)
+
         with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
             mock_gateway_cls.return_value.lookup_parcel.return_value = {}
             _fetch_payload(self.location, 42.65, -73.75)
-        mock_gateway_cls.return_value.lookup_parcel.assert_called_once_with(42.65, -73.75, situs_address="123 Main St")
+        mock_gateway_cls.return_value.lookup_parcel.assert_called_once_with(42.65, -73.75, situs_address=expected_address)
 
 
 class WriteOfficialOwnersAndSalesTests(TestCase):

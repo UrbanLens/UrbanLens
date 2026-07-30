@@ -12,6 +12,7 @@ from django.db.models.fields import BooleanField, CharField
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.fields import EncryptedTextField
 from urbanlens.dashboard.models.site_settings.meta import (
+    DEFAULT_ANTHROPIC_MODEL,
     DEFAULT_CLOUDFLARE_MODEL,
     DEFAULT_OPENAI_MODEL,
     AiProviderChoice,
@@ -88,6 +89,13 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(0), MaxValueValidator(1_000)],
     )
 
+    max_safety_checkin_partners = IntegerField(
+        default=5,
+        help_text="Maximum number of partners a user may add to one safety check-in. Set to 0 for unlimited.",
+        verbose_name="Max partners per safety check-in",
+        validators=[MinValueValidator(0), MaxValueValidator(20)],
+    )
+
     # Chernobyl Exclusion Zone ≈ 2,600 km².  Used as a sanity cap on how large
     # a user-drawn bounding box for a location can be.
     max_bbox_area_km2 = FloatField(
@@ -125,6 +133,12 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Cloudflare Workers AI model name. Only used when provider is Cloudflare.",
         verbose_name="Cloudflare model",
     )
+    anthropic_model = CharField(
+        max_length=100,
+        default=DEFAULT_ANTHROPIC_MODEL,
+        help_text="Anthropic (Claude) model name (e.g. claude-haiku-4-5, claude-sonnet-5). Only used when provider is Anthropic.",
+        verbose_name="Anthropic model",
+    )
 
     # --- AI - Feature toggles ---
 
@@ -156,6 +170,50 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Maximum AI link-extraction runs each user may start per day, bounding per-user token spend.",
         verbose_name="Link extraction daily limit (per user)",
         validators=[MinValueValidator(0), MaxValueValidator(1000)],
+    )
+    ai_article_expansion_enabled = BooleanField(
+        default=True,
+        help_text=(
+            "Allow the link-extraction pipeline to ask a writing assistant for new plain-text "
+            "paragraphs to append to the pin article (and the location wiki article when one "
+            "exists). Every draft still passes through article safety moderation before it is saved; "
+            "when this toggle is off, field extraction still runs and article expansion is skipped."
+        ),
+        verbose_name="Article expansion from links",
+    )
+    ai_article_safety_enabled = BooleanField(
+        default=True,
+        help_text=(
+            "Allow AI to judge article text drafted from a linked page for appropriateness and "
+            "safety-related implications (entry methods, trespass how-tos, harassment, etc.) before "
+            "it is appended. When off, article expansion is skipped entirely — moderation is never bypassed."
+        ),
+        verbose_name="Article expansion safety review",
+    )
+    ai_trip_suggestions_enabled = BooleanField(
+        default=True,
+        help_text="Allow AI to suggest pins worth adding to a trip and a drive/weather/vote-aware activity order. Only ever sees pins every trip member already has and members' external-sharing preferences are honored.",
+        verbose_name="Trip suggestions",
+    )
+    ai_trivia_moderation_enabled = BooleanField(
+        default=True,
+        help_text="Allow AI to classify user-submitted and AI-generated Trivia questions for person/bullying/in-group content before they enter rotation. When off, user submissions are held in pending review indefinitely and AI question generation is skipped entirely (moderation is never bypassed).",
+        verbose_name="Trivia question moderation",
+    )
+    ai_trivia_generation_enabled = BooleanField(
+        default=True,
+        help_text="Allow AI to generate candidate Trivia questions from wiki articles with substantial content. Every generated question still passes through the same moderation classifier before entering rotation.",
+        verbose_name="Trivia question generation",
+    )
+    ai_trivia_answer_check_enabled = BooleanField(
+        default=True,
+        help_text="Allow AI to judge a Trivia answer that doesn't exact-match as possibly correct but differently phrased. Only ever consulted on a normalized-string mismatch; users without the AI subscription feature always fall back to exact match only.",
+        verbose_name="Trivia AI answer checking",
+    )
+    ai_trivia_wiki_incorporation_enabled = BooleanField(
+        default=True,
+        help_text="Allow AI to draft a plain-text paragraph folding a well-upvoted user-submitted Trivia question into its location's wiki article. Every draft still passes through the same article safety moderation as link-based article expansion before it is appended; when off, well-upvoted questions are simply never considered (moderation is never bypassed).",
+        verbose_name="Trivia wiki incorporation",
     )
 
     # --- Storage quotas & upload processing ---
@@ -364,6 +422,20 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(1), MaxValueValidator(365)],
     )
 
+    # --- Boundary layer ---
+
+    boundary_cache_days = IntegerField(
+        default=60,
+        help_text=(
+            "How many days to cache a location's generated property/building boundary before refreshing it in the "
+            "background (REData, Overpass, Overture, Microsoft, Google). Parcel geometry rarely changes, and REData "
+            "already caches upstream, so a long cache avoids unnecessary provider calls. A stale boundary is still "
+            "served immediately while the refresh runs in the background."
+        ),
+        verbose_name="Boundary cache (days)",
+        validators=[MinValueValidator(1), MaxValueValidator(365)],
+    )
+
     # --- Database backups ---
 
     backup_enabled = BooleanField(
@@ -565,6 +637,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(backup_retention__gte=1), name="backup_retention_gte_1"),
             CheckConstraint(condition=Q(google_places_cache_days__gte=1), name="google_places_cache_days_gte_1"),
             CheckConstraint(condition=Q(external_data_cache_days__gte=1), name="external_data_cache_days_gte_1"),
+            CheckConstraint(condition=Q(boundary_cache_days__gte=1), name="boundary_cache_days_gte_1"),
             CheckConstraint(condition=Q(storage_quota_gb__gte=0), name="storage_quota_gb_gte_0"),
             CheckConstraint(condition=Q(email_limit_per_hour__gte=0), name="email_limit_per_hour_gte_0"),
             CheckConstraint(condition=Q(email_limit_per_day__gte=0), name="email_limit_per_day_gte_0"),
@@ -578,4 +651,5 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(max_friends_per_user__gte=0), name="max_friends_per_user_gte_0"),
             CheckConstraint(condition=Q(max_group_chat_members__gte=0), name="max_group_chat_members_gte_0"),
             CheckConstraint(condition=Q(max_safety_checkin_contacts__gte=0), name="max_safety_checkin_contacts_gte_0"),
+            CheckConstraint(condition=Q(max_safety_checkin_partners__gte=0), name="max_safety_checkin_partners_gte_0"),
         ]

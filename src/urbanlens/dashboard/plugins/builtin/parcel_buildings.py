@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
-from urbanlens.dashboard.services.external_data import LocationCachePanelSource
+from urbanlens.dashboard.services.external_data import LocationCachePanelSource, PanelApiKind
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 
 if TYPE_CHECKING:
@@ -142,9 +142,15 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None)
 
     Returns:
         One row per building, sorted by building number then name, each with
-        ``name``, ``building_number``, ``year_built``, ``source_label``,
-        ``latitude``, ``longitude``, ``child_name``, and ``child_url`` - the
-        last two empty when this building has no marker yet.
+        ``name``, ``building_number``, ``year_built``, ``source``,
+        ``source_label``, ``latitude``, ``longitude``, ``geometry``,
+        ``has_geometry``, ``child_name``, ``child_uuid``, and ``child_url`` -
+        the child fields empty/None when this building has no marker yet.
+
+        ``child_*`` are deliberately marker-neutral rather than ``child_pin_*``:
+        the wiki view passes child *wikis* here, so naming them for pins would
+        be a lie on one of the two callers. The external API renames them to
+        ``child_pin_*`` at its own boundary, where they really are pins.
     """
     from urbanlens.dashboard.services.pin_restructure import match_marker
 
@@ -157,20 +163,53 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None)
             # the same pin would otherwise claim several neighbouring
             # footprints and leave real ones looking unpinned.
             unmatched.remove(child)
+        geometry = building_footprint_geojson(building)
         rows.append(
             {
                 "name": building.get("name") or "",
                 "building_number": building.get("building_number") or "",
                 "year_built": building.get("year_built") or "",
+                "source": building.get("source") or "",
                 "source_label": SOURCE_LABELS.get(building.get("source") or "", ""),
                 "latitude": building.get("latitude"),
                 "longitude": building.get("longitude"),
+                "geometry": geometry,
+                "has_geometry": geometry is not None,
                 "child_name": _marker_name(child) if child is not None else "",
+                "child_uuid": str(child.uuid) if child is not None and getattr(child, "uuid", None) else "",
                 "child_url": (url_for(child) if url_for is not None else "") if child is not None else "",
             },
         )
 
     return sorted(rows, key=_row_sort_key)
+
+
+def building_footprint_geojson(building: dict[str, Any]) -> dict[str, Any] | None:
+    """A building record's real footprint geometry, if it has one.
+
+    REData always returns a ``geometry`` for a building, but degrades to a bare
+    GeoJSON ``Point`` when the county's layer carried no outline - and a Point
+    is exactly the ``latitude``/``longitude`` already on the record, so keeping
+    it would double a hundred-building payload's size to say nothing. Overpass
+    records (the OSM fallback) carry no geometry at all. Both cases collapse to
+    None, which is what makes ``has_geometry`` a usable "can I draw this
+    outline?" flag rather than a "did the provider send a geometry key?" one.
+
+    Named ``..._geojson`` to stay distinct from
+    ``services.pin_restructure.building_footprint``, which answers the same
+    question for the marker-matching code but returns a parsed *shapely* shape
+    (and rejects non-areal geometry) rather than the raw GeoJSON a client wants.
+
+    Args:
+        building: One cached building record.
+
+    Returns:
+        The GeoJSON geometry dict for a real outline, or None.
+    """
+    geometry = building.get("geometry")
+    if not isinstance(geometry, dict) or geometry.get("type") == "Point":
+        return None
+    return geometry
 
 
 def _marker_name(marker) -> str:
@@ -208,6 +247,14 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
     section_id = "parcel-buildings-section"
     icon = "apartment"
     title = "Buildings on this Property"
+    # Its own read shape, because neither of the uniform ones fits: a building
+    # row is a place with coordinates, a footprint, and a link to the child pin
+    # covering it - which is neither an information card nor a media item. This
+    # is also where a separately-requested "list a pin's buildings" endpoint
+    # ended up: it would have been the same query, the same authorization, and
+    # the same cache row as this panel, so folding it in here means one thing
+    # to keep correct instead of two that must agree.
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.BUILDINGS})
 
     def gate(self, pin: Pin) -> bool:
         """Only for a root pin with coordinates - a child pin has no sub-buildings."""
@@ -222,6 +269,68 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
         location = pin.location
         payload = fetch_parcel_buildings(location)
         LocationCache.set(location, self.cache_source, payload, query_key=f"{float(location.latitude or 0):.5f},{float(location.longitude or 0):.5f}")
+
+    def api_payload(self, pin: Pin) -> dict[str, Any] | None:
+        """Every building on the pin's parcel, each paired with its child pin.
+
+        The child-pin pairing is the part a client cannot compute for itself:
+        deciding whether an existing marker already "covers" a footprint is a
+        geometry-then-nearest-centroid contest (see
+        ``services.pin_restructure.match_marker``), and a client guessing at it
+        would offer to create duplicate pins for buildings that are already
+        pinned. It is resolved server-side through the very same
+        :func:`building_rows` the web panel renders, so both surfaces agree on
+        which buildings are still unpinned.
+
+        ``geometry`` carries a real outline only when the provider supplied one
+        (see :func:`building_footprint`); ``has_geometry`` says so without the
+        client having to inspect it. A client drawing markers reads
+        ``latitude``/``longitude`` and can ignore the geometry entirely.
+
+        Args:
+            pin: The pin whose parcel is being read. Its direct children are
+                the markers matched against - a child pin nested deeper is not
+                a candidate, matching what the web panel offers to create.
+
+        Returns:
+            ``{"buildings": [...], "provider": ..., "unpinned_count": ...}``,
+            or None when nothing has landed yet, the gate rejects this pin (a
+            child pin has no sub-buildings), or the parcel has no buildings.
+        """
+        if not self.gate(pin):
+            return None
+        data = self.cached_data(pin)
+        if data is None:
+            return None
+        buildings = data.get("buildings") or []
+        if not buildings:
+            return None
+
+        rows = building_rows(buildings, list(pin.detail_pins.select_related("location")))
+        return {
+            PanelApiKind.BUILDINGS.value: [
+                {
+                    "name": row["name"],
+                    "building_number": row["building_number"],
+                    "year_built": row["year_built"],
+                    "source": row["source"],
+                    "source_label": row["source_label"],
+                    "latitude": row["latitude"],
+                    "longitude": row["longitude"],
+                    "has_geometry": row["has_geometry"],
+                    "geometry": row["geometry"],
+                    # Renamed from building_rows' marker-neutral child_* keys:
+                    # on this surface the children really are pins, and a uuid
+                    # (not the slug the web panel links by) is what the mobile
+                    # pin endpoints address a pin with.
+                    "child_pin_uuid": row["child_uuid"] or None,
+                    "child_pin_name": row["child_name"] or None,
+                }
+                for row in rows
+            ],
+            "provider": data.get("provider") or "",
+            "unpinned_count": sum(1 for row in rows if not row["child_name"]),
+        }
 
 
 class ParcelBuildingsEnrichmentSource(LocationCacheEnrichmentSource):

@@ -4,6 +4,17 @@ from urbanlens.UrbanLens.settings.base import *  # noqa: F403
 
 TESTING = True
 
+# Django's default PBKDF2 hasher runs ~1.2M iterations per call, which is the
+# point in production and pure overhead in tests - every baked User, every
+# generate_api_key, and every authenticate_api_key pays it. It was not merely
+# slow: ApiKeyWebSocketAuthTests.test_valid_api_key_authenticates_an_anonymous_socket
+# hashed inside the connection handshake and blew past WebsocketCommunicator's
+# 1-second default connect timeout, failing as an opaque asyncio TimeoutError.
+# (Its OAuth2 sibling passed throughout - that path is a plain indexed lookup
+# with no hashing, which is what made the failure look consumer-specific.)
+# Test-only: base.py keeps the real hashers for every other environment.
+PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
+
 # No clamd daemon runs in the test environment - tests that exercise the
 # malware-rejection path (services.malware_scan) mock it explicitly; every
 # other upload test should hit the "clean" no-op path instead of a 503 from

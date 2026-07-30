@@ -26,7 +26,7 @@ from django.db.models.fields import BooleanField, CharField, DateField, DateTime
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.abstract.choices import TextChoices
+from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, TextChoices
 from urbanlens.dashboard.models.pin.queryset import PinManager
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
@@ -83,8 +83,10 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     priority, and the marker coordinates.
     """
 
-    # True when ``name`` was explicitly typed by the user. External API naming
-    # refreshes may replace placeholder/auto-generated labels only while this is False.
+    # True when the owner explicitly renamed the pin after creation. Names
+    # supplied by creation/import pipelines are not protected: they may be
+    # parser fallbacks such as raw coordinates. External naming refreshes may
+    # replace placeholder/auto-generated labels only while this is False.
     name_is_user_provided = BooleanField(
         default=False,
         help_text="Prevents external API name refreshes from overwriting a user-entered pin name.",
@@ -112,6 +114,17 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     pin_type_is_user_provided = BooleanField(
         default=False,
         help_text="Prevents automatic building/parcel classification from overwriting a user-chosen pin type.",
+    )
+    # Whether this pin is indoors, outdoors, or both (e.g. a building with an
+    # outdoor courtyard). Left unset (None) until something actually
+    # classifies it - groundwork for a future feature, not yet surfaced in
+    # any UI.
+    indoor_outdoor = CharField(
+        max_length=10,
+        choices=IndoorOutdoor.choices,
+        null=True,
+        blank=True,
+        help_text="Whether this pin's location is inside, outside, or both; unset when not yet classified.",
     )
     # Set when the owner declines this pin's restructure suggestion (create
     # child pins for the buildings here / nest the top-level pins that fall
@@ -488,7 +501,11 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         """Label supplying the map icon, when the icon is inherited from a label."""
         if self.custom_icon or self.icon:
             return None
-        for label in self.labels.exclude(kind="user").order_by("-order"):
+        # Secondary sort by name matches services.map_pins.payload._ordered_location_labels'
+        # tie-break - without it, two labels sharing the same `order` on one pin could pick
+        # a different "winning" icon here than the map marker resolves to.
+        labels = sorted((label for label in self.labels.exclude(kind="user")), key=lambda label: (-label.order, label.name or ""))
+        for label in labels:
             if label.custom_icon and not label.icon_is_overridden:
                 return label
             if label.effective_icon:
@@ -691,14 +708,19 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     @property
     def effective_latitude(self) -> float:
-        """Pin marker latitude."""
-        # TODO: Delete this.
+        """Pin marker latitude, as a float.
+
+        Not a pure duplicate of the inherited ``AddressableModel.latitude`` - that
+        property returns a ``Decimal``, while this returns ``float`` for the ~160
+        call sites (JSON payloads, distance math, templates) that expect one. Keep
+        both rather than pushing a ``float()`` cast onto every caller.
+        """
         return float(self.location.latitude)
 
     @property
     def effective_longitude(self) -> float:
-        """Pin marker longitude."""
-        # TODO: Delete this.
+        """Pin marker longitude, as a float. See ``effective_latitude`` for why this exists
+        alongside the inherited ``AddressableModel.longitude``."""
         return float(self.location.longitude)
 
     @property
@@ -742,25 +764,37 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # ------------------------------------------------------------------
 
     def change_category(self, category_id: int) -> None:
-        # TODO: Assess codebase, but this is probably deprecated since the addition of Labels more generically.
+        """Replace this pin's category label with the one identified by ``category_id``.
 
+        Args:
+            category_id: Primary key of the category-kind Label to assign.
+        """
         from urbanlens.dashboard.models.labels.model import Label
 
         category = Label.objects.get(id=category_id, kind="category")
         self.labels.remove(*self.labels.filter(kind="category"))
         self.labels.add(category)
-        self.save()
+        # No self.save() needed: M2M .add()/.remove() persist immediately. Calling save()
+        # here would needlessly re-fire the full post_save signal chain (Redis map-cache
+        # refresh, wiki-stat sync) for a change those signals already handle via m2m_changed.
 
-    def add_category(self, category_name: str, save: bool = True) -> Label | None:
+    def add_category(self, category_name: str) -> Label | None:
+        """Attach a category label (creating it if needed) to this pin.
+
+        Args:
+            category_name: Name of the category-kind Label to look up or create.
+
+        Returns:
+            The attached Label, or None if the lookup/creation failed.
+        """
         from urbanlens.dashboard.models.labels.model import Label
 
         category_name = category_name.lower()
         try:
             category, _ = Label.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
             if category:
+                # No self.save() needed - see change_category's comment above.
                 self.labels.add(category)
-                if save:
-                    self.save()
                 return category
         except DatabaseError as e:
             logger.exception("failed to add category %s to pin -> %s", category_name, e)

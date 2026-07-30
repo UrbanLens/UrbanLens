@@ -22,6 +22,11 @@
 @use 'page-tabs';
 @use 'article';
 @use 'ai_extractions';
+@use 'assistant';
+@use 'spotguessr';
+@use 'trivia';
+@use 'consensus';
+@use 'games';
 @use 'pin-detail';
 @use 'tags';
 @use 'icon-picker';
@@ -53,6 +58,7 @@
 @use 'memories';
 @use 'pin_select_map';
 @use 'pin_suggestions';
+@use 'pin_merge_suggestions';
 @use 'messages';
 @use 'search';
 @use 'e2ee';

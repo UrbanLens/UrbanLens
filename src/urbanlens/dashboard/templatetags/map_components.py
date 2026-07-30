@@ -514,6 +514,21 @@ register_map_tool(
 )
 register_map_tool(
     MapToolSpec(
+        key="markup_freehand",
+        icon="gesture",
+        aria_label="Draw freehand",
+        tooltip="Draw freehand",
+        tooltip_pos="below",
+        button_id="markup-freehand-button",
+        # Stored as a regular "line" markup item (see markup-engine.ts's
+        # onMouseDown "freehand" branch) - it's just a multi-point line sampled
+        # continuously along the drag instead of click-per-vertex, so it needs
+        # no dedicated backend markup_type, serializer, or export handling.
+        onclick="startMarkupDraw('freehand')",
+    )
+)
+register_map_tool(
+    MapToolSpec(
         key="markup_text",
         icon="title",
         aria_label="Add a text label",

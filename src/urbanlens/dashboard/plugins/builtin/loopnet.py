@@ -3,9 +3,11 @@
 Retrieval lives entirely in REData (the standalone service that already owns
 property records for this app - see ``plugins.builtin.property_records``):
 ``RedataGateway.lookup_parcel_uuid`` resolves the pin's address to a parcel,
-then ``lookup_listings`` returns REData's cached LoopNet data for it (REData
-never scrapes LoopNet inline with the request - see its own docs). Listing
-photos are exposed to the pin's Media gallery via :meth:`LoopnetPanelSource.media_items`,
+then ``lookup_listings`` returns REData's cached LoopNet data for it - never
+fetched live inline with the request, so a cache miss can mean "not yet
+fetched" rather than "nothing available"; see ``lookup_listings``'s own
+docstring for the ``refresh_queued`` flag this implies. Listing photos are
+exposed to the pin's Media gallery via :meth:`LoopnetPanelSource.media_items`,
 streamed through :class:`~urbanlens.dashboard.controllers.pin.PinLoopnetPhotoView`
 so REData's API key never reaches the browser (the same reasoning as every
 other authenticated media proxy in this app, e.g. Immich's thumbnail view).
@@ -17,7 +19,7 @@ import logging
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import GalleryMediaSource
+from urbanlens.dashboard.services.external_data import GalleryMediaSource, PanelApiKind
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -35,6 +37,13 @@ class LoopnetPanelSource(GalleryMediaSource):
     section_id = "loopnet-section"
     icon = "business_center"
     title = "LoopNet Listings"
+    # Deliberately not exposed on the external API: commercial listing data
+    # sourced through REData's licensed LoopNet access, plus its photos only
+    # resolve through the session-authenticated PinLoopnetPhotoView proxy - an
+    # external credential couldn't load them anyway. Opt back in only after
+    # REData's redistribution terms and an equivalent external-API proxy have
+    # both been reviewed.
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
 
     @staticmethod
     def address(pin: Pin) -> str:

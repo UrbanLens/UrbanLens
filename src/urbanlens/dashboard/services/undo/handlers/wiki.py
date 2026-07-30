@@ -4,10 +4,16 @@ root wiki by its creator before anyone else has viewed it; see Wiki.can_be_delet
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 _RESTORABLE_FIELDS = (
     "name",
@@ -56,6 +62,13 @@ def with_wiki_descendants(wikis: list[Wiki]) -> list[Wiki]:
     return list(Wiki.objects.filter(pk__in=all_ids))
 
 
+#: Registry key for this handler. Exposed as a module-level constant so call
+#: sites can import it (``from ...handlers.wiki import MODEL_LABEL``) instead
+#: of hand-typing ``"wiki"`` - a typo in a hand-typed string only fails at
+#: runtime via ``get_handler``'s ``ValueError``.
+MODEL_LABEL = "wiki"
+
+
 @register
 class WikiUndoHandler(UndoHandler):
     """Restores a wiki's own fields, hierarchy position, and labels - not its cascade children.
@@ -64,10 +77,10 @@ class WikiUndoHandler(UndoHandler):
     wiki is deleted and are not restored.
     """
 
-    model_label = "wiki"
+    model_label = MODEL_LABEL
 
     @classmethod
-    def serialize(cls, instances: list[Wiki]) -> list[dict[str, Any]]:
+    def serialize(cls, instances: Sequence[Wiki]) -> list[dict[str, Any]]:
         return [cls._serialize_one(wiki) for wiki in instances]
 
     @classmethod
@@ -83,12 +96,33 @@ class WikiUndoHandler(UndoHandler):
         }
 
     @classmethod
-    def describe(cls, instances: list[Wiki]) -> str:
+    def describe(cls, instances: Sequence[Wiki]) -> str:
         return describe_batch("Wiki", "wiki pages", [w.name for w in instances])
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Wiki]:
-        """Recreate wikis with fresh pks/uuids/slugs, relinking hierarchy and labels."""
+        """Recreate wikis with fresh pks/uuids/slugs, relinking hierarchy and labels.
+
+        Raises:
+            UndoExpiredError: If the location, creator profile, or any label
+                this batch referenced was independently deleted during the
+                retention window, since recreating the row would otherwise
+                fail with an uncaught IntegrityError.
+        """
+        # Deferred import: services.undo.service imports services.undo.handlers
+        # (which imports this module) before UndoExpiredError is defined there.
+        from urbanlens.dashboard.services.undo.service import UndoExpiredError
+
+        for entry in payload:
+            if not Location.objects.filter(pk=entry["location_id"]).exists():
+                raise UndoExpiredError("The location this wiki page described no longer exists.")
+            created_by_id = entry.get("created_by_id")
+            if created_by_id is not None and not Profile.objects.filter(pk=created_by_id).exists():
+                raise UndoExpiredError("The profile that created this wiki page no longer exists.")
+            label_ids = entry["label_ids"]
+            if label_ids and Label.objects.filter(pk__in=label_ids).count() != len(set(label_ids)):
+                raise UndoExpiredError("One of the labels on this wiki page no longer exists.")
+
         old_to_new: dict[int, Wiki] = {}
         restored: list[Wiki] = []
         for entry in payload:

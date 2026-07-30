@@ -30,7 +30,7 @@ from django.views import View
 from urbanlens.dashboard.models.article.model import Article, ArticleRevision
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.articles import diff_revisions, get_article, render_article, save_article
+from urbanlens.dashboard.services.articles import ArticleConflictError, diff_revisions, get_article, render_article, restore_revision, save_article_checked
 from urbanlens.dashboard.services.text_limits import MAX_ARTICLE_LENGTH, text_length_error
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
@@ -217,10 +217,19 @@ class ArticleSaveView(ArticleViewBase):
             return self.toast(response, "error", length_error)
 
         # Conflict check: someone else saved while this editor was open. The
-        # client keeps the user's text so nothing is lost.
-        latest = scope.article.revisions.order_by("-created").first() if scope.article else None
+        # client keeps the user's text so nothing is lost. Shared with the
+        # external API via services.articles.save_article_checked.
         base_revision_id = int(base_revision_raw) if base_revision_raw.isdigit() else None
-        if latest is not None and latest.id != base_revision_id:
+        try:
+            _article, revision = save_article_checked(
+                editor=scope.profile,
+                content=content,
+                edit_summary=edit_summary,
+                base_revision_id=base_revision_id,
+                pin=scope.pin,
+                wiki=scope.wiki,
+            )
+        except ArticleConflictError:
             response = HttpResponse(status=409)
             response["HX-Reswap"] = "none"
             return self.toast(
@@ -228,14 +237,6 @@ class ArticleSaveView(ArticleViewBase):
                 "error",
                 "This article changed while you were editing. Open History to review the other edit, then copy your text and try again.",
             )
-
-        _article, revision = save_article(
-            editor=scope.profile,
-            content=content,
-            edit_summary=edit_summary,
-            pin=scope.pin,
-            wiki=scope.wiki,
-        )
         scope.article = get_article(pin=scope.pin, wiki=scope.wiki)
         message = "Article saved." if revision else "No changes to save."
         response = self.render_panel(request, scope)
@@ -281,28 +282,29 @@ class ArticleImageUploadView(ArticleViewBase):
 
         from urbanlens.dashboard.models.images.model import Image, MediaKind
         from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
-        from urbanlens.dashboard.services.storage import quota_error_for_upload
+        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
 
         upload_error = image_upload_error(image_file, MediaKind.PHOTO)
         if upload_error:
             message, status = upload_error
             return JsonResponse({"error": message}, status=status)
 
-        quota_error = quota_error_for_upload(scope.profile, image_file.size)
-        if quota_error:
-            return JsonResponse({"error": quota_error}, status=413)
-
         checksum = compute_checksum(image_file)
         location = scope.location or (scope.pin.location if scope.pin else None)
-        img = Image.objects.create(
-            image=image_file,
-            pin=scope.pin,
-            wiki=scope.wiki,
-            location=location,
-            profile=scope.profile,
-            checksum=checksum,
-            file_size=image_file.size,
-        )
+        with per_profile_upload_lock(scope.profile):
+            quota_error = quota_error_for_upload(scope.profile, image_file.size)
+            if quota_error:
+                return JsonResponse({"error": quota_error}, status=413)
+
+            img = Image.objects.create(
+                image=image_file,
+                pin=scope.pin,
+                wiki=scope.wiki,
+                location=location,
+                profile=scope.profile,
+                checksum=checksum,
+                file_size=image_file.size,
+            )
 
         from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
@@ -386,14 +388,7 @@ class ArticleRestoreView(ArticleViewBase):
         if scope.article is None:
             raise Http404
         revision = get_object_or_404(ArticleRevision, id=kwargs["revision_id"], article=scope.article)
-        _article, new_revision = save_article(
-            editor=scope.profile,
-            content=revision.content,
-            edit_summary=f"Restored version from {revision.created:%b %d, %Y %H:%M}",
-            pin=scope.pin,
-            wiki=scope.wiki,
-            restored_from=revision,
-        )
+        _article, new_revision = restore_revision(scope_article=scope.article, revision=revision, editor=scope.profile)
         scope.article = get_article(pin=scope.pin, wiki=scope.wiki)
         revisions = list(scope.article.revisions.select_related("editor__user", "restored_from").order_by("-created")) if scope.article else []
         response = render(

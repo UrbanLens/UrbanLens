@@ -175,7 +175,7 @@
     color: var(--ul-grey-4);
 }
 
-// Chip linking an aggregated note back to the sub pin it was written on -
+// Chip linking an aggregated note back to the child pin it was written on -
 // same shape as _pin-detail.scss's .visit-child-chip for the same reason.
 .comment-child-chip {
     display: inline-flex;
@@ -838,15 +838,10 @@
     &[hidden] { display: none; }
 }
 
-// _switchComposerTab (base.html) hides #comment-map-composer-save while on
-// the "Choose Existing" tab (picking an item attaches and closes the dialog
-// immediately - there's nothing left to "Save"). Same root cause as the
-// panels above: .btn's own `display: inline-flex` (_mixins.scss's
-// btn-base mixin, shared by every button on the site) otherwise beats the
-// browser's default `[hidden] { display: none }`. Scoped to this one button
-// rather than fixing `.btn` globally, since that mixin is used everywhere
-// and a sitewide change is out of scope for this dialog's fix.
-#comment-map-composer-save[hidden] { display: none; }
+// _switchComposerTab (base.html) hides #comment-map-composer-save while on the
+// "Choose Existing" tab; the btn-base mixin itself now carries the
+// `&[hidden] { display: none }` guard (see _mixins.scss), so no scoped
+// override is needed here anymore.
 
 .cmc-existing-search {
     max-width: none;

@@ -23,7 +23,9 @@ from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.visit_invites import resolve_suggest_participant_ids, sync_external_participants
 from urbanlens.dashboard.services.visits import (
     add_visited_status,
+    create_manual_visit,
     create_visit_suggestion,
+    delete_visit,
     sync_last_visited,
     visit_logging_allowed,
 )
@@ -75,7 +77,7 @@ def _visit_dialog_context(pin: Pin, visit: PinVisit | None = None) -> dict[str, 
 def _render_visit_history(request: HttpRequest, pin: Pin) -> HttpResponse:
     """Render the visit history panel for a pin, paginated newest-first.
 
-    With ``?children=1`` (the pin page's "show sub pin details" toggle) the
+    With ``?children=1`` (the pin page's "show child pin details" toggle) the
     panel also lists visits logged on the pin's child pins (any depth), each
     labelled with the child pin it belongs to.
 
@@ -151,45 +153,49 @@ def _sync_visit_photos(request: HttpRequest, pin: Pin, visit: PinVisit) -> bool:
     from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.celery import safely_enqueue_task
     from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
-    from urbanlens.dashboard.services.storage import quota_error_for_upload
+    from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
     from urbanlens.dashboard.tasks import process_image_upload
 
     owner_gallery = Image.objects.filter(pin=pin, profile=pin.profile)
 
     uploaded_pks: list[int] = []
     reattached_pks: list[int] = []
-    for image_file in request.FILES.getlist("photos"):
-        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
-        if upload_error:
-            # Same "skip this file, keep processing the rest" treatment as the
-            # quota-exceeded case below - one bad file in a multi-file visit
-            # upload shouldn't block the others.
-            message, _status = upload_error
-            messages.warning(request, message)
-            continue
-        checksum = compute_checksum(image_file)
-        existing = owner_gallery.filter(checksum=checksum).first()
-        if existing is not None:
-            # Same file already in this pin's gallery - link it instead of
-            # storing a second copy.
-            reattached_pks.append(existing.pk)
-            continue
-        quota_error = quota_error_for_upload(pin.profile, image_file.size)
-        if quota_error:
-            # Linking existing photos is still fine - only new files need space.
-            messages.warning(request, quota_error)
-            continue
-        img = Image.objects.create(
-            image=image_file,
-            pin=pin,
-            location=pin.location,
-            profile=pin.profile,
-            visit=visit,
-            checksum=checksum,
-            file_size=image_file.size,
-        )
-        safely_enqueue_task(process_image_upload, img.pk)
-        uploaded_pks.append(img.pk)
+    # One lock for the whole multi-file batch: quota is rechecked per file below (each
+    # upload counts against the running total), and the lock also protects against a
+    # concurrent upload elsewhere (another tab, the gallery page) racing this same profile.
+    with per_profile_upload_lock(pin.profile):
+        for image_file in request.FILES.getlist("photos"):
+            upload_error = image_upload_error(image_file, MediaKind.PHOTO)
+            if upload_error:
+                # Same "skip this file, keep processing the rest" treatment as the
+                # quota-exceeded case below - one bad file in a multi-file visit
+                # upload shouldn't block the others.
+                message, _status = upload_error
+                messages.warning(request, message)
+                continue
+            checksum = compute_checksum(image_file)
+            existing = owner_gallery.filter(checksum=checksum).first()
+            if existing is not None:
+                # Same file already in this pin's gallery - link it instead of
+                # storing a second copy.
+                reattached_pks.append(existing.pk)
+                continue
+            quota_error = quota_error_for_upload(pin.profile, image_file.size)
+            if quota_error:
+                # Linking existing photos is still fine - only new files need space.
+                messages.warning(request, quota_error)
+                continue
+            img = Image.objects.create(
+                image=image_file,
+                pin=pin,
+                location=pin.location,
+                profile=pin.profile,
+                visit=visit,
+                checksum=checksum,
+                file_size=image_file.size,
+            )
+            safely_enqueue_task(process_image_upload, img.pk)
+            uploaded_pks.append(img.pk)
 
     selected_ids = {int(pid) for pid in request.POST.getlist("existing_photo_ids") if pid.strip().isdigit()}
     attach_ids = selected_ids | set(reattached_pks)
@@ -285,15 +291,15 @@ class VisitHistoryView(LoginRequiredMixin, View):
 
         notes = request.POST.get("notes", "").strip() or None
         map_data = parse_map_data(request)
-        visit = PinVisit.objects.create(
-            pin=pin,
+        # The tracking gate is re-checked inside create_manual_visit; the
+        # explicit check above stays so a disabled-logging request is refused
+        # before the date is even parsed (403 rather than a confusing 400).
+        visit = create_manual_visit(
+            pin,
             visited_at=visited_at,
             notes=notes,
-            source=VisitSource.MANUAL,
             markup_map=materialize_markup_map(pin.profile, map_data, context=pin),
         )
-        sync_last_visited(pin)
-        add_visited_status(pin)
 
         uploaded_new = _sync_visit_photos(request, pin, visit)
 
@@ -430,10 +436,6 @@ class VisitDeleteView(LoginRequiredMixin, View):
             pin__profile__user=request.user,
         )
         pin = visit.pin
-        markup_map = visit.markup_map
-        visit.delete()
-        if markup_map is not None:
-            markup_map.delete()
-        sync_last_visited(pin)
+        delete_visit(visit)
 
         return _render_visit_history(request, pin)

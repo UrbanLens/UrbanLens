@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
-from urbanlens.dashboard.services.api_keys import authenticate_api_key, record_api_key_usage
+from urbanlens.dashboard.services.api_keys import KEY_LABEL, authenticate_api_key, record_api_key_usage
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -40,19 +40,23 @@ class ApiKeyAuthentication(BaseAuthentication):
 
         Returns:
             ``(user, api_key)`` on success; ``None`` when no bearer token was
-            presented at all (letting other authenticators, or anonymous
-            access, take over).
+            presented at all, or the token isn't ``ulk_``-labeled (letting
+            other authenticators - notably OAuth2 access tokens, which share
+            the ``Bearer`` scheme - or anonymous access take over).
 
         Raises:
-            AuthenticationFailed: A bearer token was presented but doesn't
-                resolve to an active key.
+            AuthenticationFailed: A ``ulk_``-labeled bearer token was
+                presented but doesn't resolve to an active key.
         """
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith(f"{self.keyword} "):
             return None
 
         raw_key = auth_header[len(self.keyword) + 1 :].strip()
-        if not raw_key:
+        if not raw_key.startswith(f"{KEY_LABEL}_"):
+            # Not an API key at all - claim nothing, so a non-ulk bearer token
+            # (an OAuth2 access token) isn't falsely rejected here before its
+            # own authenticator gets a look.
             return None
 
         api_key = authenticate_api_key(raw_key)

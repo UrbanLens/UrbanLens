@@ -202,7 +202,7 @@ class PinBulkMergeViewTests(TestCase):
         self.assertEqual(self.grandchild.parent_pin_id, self.target.pk)
 
     def test_a_child_pin_can_be_used_as_a_merge_target(self) -> None:
-        """Picking a sub pin as the merge target promotes it to top-level first."""
+        """Picking a child pin as the merge target promotes it to top-level first."""
         response = self._merge(str(self.grandchild.uuid), [str(self.source_b.uuid)])
         self.assertEqual(response.status_code, 200)
         self.grandchild.refresh_from_db()

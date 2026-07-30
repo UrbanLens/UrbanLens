@@ -70,6 +70,7 @@ class TripQuerySet(abstract.DashboardQuerySet):
                 activity_count=Count("activities", distinct=True),
                 member_count=Count("memberships", distinct=True),
                 comment_count=Count("comments", distinct=True),
+                pin_count=Count("activities__pin", distinct=True, filter=Q(activities__pin__isnull=False)),
             )
             .prefetch_related(
                 Prefetch(

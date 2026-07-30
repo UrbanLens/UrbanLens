@@ -4,13 +4,13 @@ No database access - these are pure logic tests.
 """
 from __future__ import annotations
 
-from hypothesis import assume, given, settings
-from hypothesis import strategies as st
+from hypothesis import assume, given, settings, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.models.abstract.choices import SecurityLevel, TextChoices
+from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, SecurityLevel, TextChoices
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType
-from urbanlens.dashboard.models.pin.model import PinType
+from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.tests.hypothesis.strategies import (
     friendship_status,
     invalid_security_level,
@@ -122,6 +122,37 @@ class PinTypeTests(SimpleTestCase):
     def test_location_marker_is_default_value(self) -> None:
         """The LOCATION_MARKER variant should correspond to the 'location' value."""
         self.assertEqual(PinType.LOCATION_MARKER.value, "location")
+
+
+class IndoorOutdoorTests(SimpleTestCase):
+    """IndoorOutdoor covers the inside/outside/both vocabulary shared by Pin and Wiki."""
+
+    @given(st.sampled_from(list(IndoorOutdoor.values)))
+    @settings(max_examples=200)
+    def test_all_values_are_valid(self, value: str) -> None:
+        """Every member value must be recognised as valid."""
+        self.assertTrue(IndoorOutdoor.valid(value))
+
+    @given(st.sampled_from(list(IndoorOutdoor)))
+    @settings(max_examples=200)
+    def test_every_member_has_a_label(self, member: IndoorOutdoor) -> None:
+        """Every member must have a human-readable display label."""
+        self.assertTrue(member.label)
+
+    def test_exactly_three_choices(self) -> None:
+        """Only inside/outside/both exist - no separate 'unknown' member; unset is modeled as None."""
+        self.assertEqual(set(IndoorOutdoor.values), {"inside", "outside", "both"})
+
+    @given(st.sampled_from([Pin, Wiki]))
+    @settings(max_examples=10)
+    def test_model_field_accepts_every_choice_and_defaults_unset(self, model: type[Pin | Wiki]) -> None:
+        """Pin.indoor_outdoor and Wiki.indoor_outdoor accept all three choices and default to None (unclassified)."""
+        field = model._meta.get_field("indoor_outdoor")
+        self.assertTrue(field.null, f"{model.__name__}.indoor_outdoor must be null=True (unclassified by default)")
+        self.assertTrue(field.blank, f"{model.__name__}.indoor_outdoor must be blank=True")
+        self.assertIsNone(field.get_default(), f"{model.__name__}.indoor_outdoor must default to None, not a guessed value")
+        choice_values = {value for value, _ in field.choices}
+        self.assertEqual(choice_values, set(IndoorOutdoor.values))
 
 
 class FriendshipStatusPredicateTests(SimpleTestCase):

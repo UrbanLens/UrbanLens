@@ -1,7 +1,7 @@
 """Tests for the iNaturalist panel's render_context().
 
 Regression coverage for linking to specific observations/area instead of
-iNaturalist's homepage - see docs/prompts/completed.md.
+iNaturalist's homepage -.
 """
 
 from __future__ import annotations

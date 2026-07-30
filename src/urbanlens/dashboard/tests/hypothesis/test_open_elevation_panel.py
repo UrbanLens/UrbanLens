@@ -1,7 +1,7 @@
 """Tests for the Open-Elevation panel's render_context() and fetch().
 
 Covers the "Elevation" pin-detail info panel added to the previously
-UI-less Open-Elevation plugin - see docs/prompts/completed.md.
+UI-less Open-Elevation plugin -.
 """
 
 from __future__ import annotations

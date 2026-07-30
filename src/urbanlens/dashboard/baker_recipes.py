@@ -156,7 +156,7 @@ pin: Recipe[Pin] = Recipe(
     parent_pin=None,
 )
 
-# A pin nested under another pin (detail/sub-pin).
+# A pin nested under another pin (detail/child-pin).
 detail_pin: Recipe[Pin] = Recipe(
     "dashboard.Pin",
     profile=_make_profile,

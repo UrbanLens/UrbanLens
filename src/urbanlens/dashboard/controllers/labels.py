@@ -38,6 +38,9 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
+from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
+from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
+from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -283,9 +286,9 @@ def _queryset_for_kind(kind: str, profile: Profile) -> QuerySet[Label]:
     if kind == KIND_STATUS:
         return Label.objects.statuses().for_profile(profile).ordered().with_pin_counts()
     if kind == KIND_USER:
-        return Label.objects.user_labels().visible_to(profile).ordered()
+        return Label.objects.user_labels().visible_to(profile).ordered().with_pin_counts()
     if kind == KIND_MEDIA:
-        return Label.objects.media().visible_to(profile).ordered()
+        return Label.objects.media().visible_to(profile).ordered().with_pin_counts()
     msg = f"Unsupported label kind: {kind}"
     raise ValueError(msg)
 
@@ -301,6 +304,27 @@ def _parent_candidates(profile: Profile, kind: str, exclude_id: int | None = Non
     if exclude_id is not None:
         qs = qs.exclude(id=exclude_id)
     return qs
+
+
+def _would_create_cycle(label: Label, proposed_parent_id: int) -> bool:
+    """Return True if adding ``proposed_parent_id`` as a parent of ``label`` would create a cycle.
+
+    Thin wrapper kept for this module's many call sites (which check one
+    candidate at a time, in both the parent and the child direction). The
+    implementation now lives in ``services.labels.hierarchy`` so the external
+    API's label write paths can enforce the same guard - see that module for
+    why an unguarded ``parents`` write is a denial-of-service vector.
+
+    Args:
+        label: The label that would receive ``proposed_parent_id`` as a parent
+            (or, when checking a child assignment, the label being added as a
+            child - see call sites, which check both directions).
+        proposed_parent_id: Primary key of the label proposed as a parent.
+
+    Returns:
+        True if the assignment would make ``label`` its own ancestor.
+    """
+    return would_create_cycle(label, [proposed_parent_id])
 
 
 def _rows_ctx(kind: str, profile: Profile, can_edit_global: bool = False, extra: dict | None = None) -> dict:
@@ -469,7 +493,14 @@ def _apply_kind_conversion(label: Label, new_kind: str, profile: Profile) -> boo
     if new_kind not in _ORGANIZE_KINDS or new_kind == label.kind:
         return False
     label.kind = new_kind
-    if new_kind == KIND_STATUS:
+    if new_kind in (KIND_STATUS, KIND_CATEGORY):
+        # Category, like Status, is always profile-scoped: _queryset_for_kind()
+        # looks categories up via .for_profile() (exact match, no global
+        # fallback), so a converted label left with profile=None would vanish
+        # from every Organize > Categories listing and become permanently
+        # un-editable (_can_modify_label() requires a non-None profile for
+        # any non-tag kind). Assign it to the requesting profile, matching how
+        # category labels are always created with a profile in LabelCreateView.
         label.profile = profile
     elif new_kind == KIND_TAG and label.profile is None:
         pass
@@ -557,13 +588,15 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
         )
         if parent_ids:
             valid_parents = _parent_candidates(profile, self.kind).filter(id__in=parent_ids).exclude(id=label.id)
-            label.parents.set(valid_parents)
+            safe_parent_ids = [p.id for p in valid_parents if not _would_create_cycle(label, p.id)]
+            label.parents.set(safe_parent_ids)
 
         child_ids = request.POST.getlist("child_ids")
         if child_ids:
             valid_children = _parent_candidates(profile, self.kind).filter(id__in=child_ids).exclude(id=label.id)
             for child in valid_children:
-                child.parents.add(label)
+                if not _would_create_cycle(child, label.id):
+                    child.parents.add(label)
 
         extra = {cfg.new_id_key: label.id} if cfg.new_id_key else None
         if request.headers.get("Accept") == "application/json":
@@ -701,11 +734,13 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         else:
             parent_ids = request.POST.getlist("parent_ids")
             valid_parents = _parent_candidates(profile, self.kind).filter(id__in=parent_ids).exclude(id=label_id)
-            label.parents.set(valid_parents)
+            safe_parent_ids = [p.id for p in valid_parents if not _would_create_cycle(label, p.id)]
+            label.parents.set(safe_parent_ids)
 
             child_ids = request.POST.getlist("child_ids")
             valid_children = _parent_candidates(profile, self.kind).filter(id__in=child_ids).exclude(id=label_id)
-            label.children.set(valid_children)
+            safe_child_ids = [c.id for c in valid_children if not _would_create_cycle(c, label_id)]
+            label.children.set(safe_child_ids)
 
         response = _render_rows(request, self.kind, profile)
         if kind_changed:
@@ -798,12 +833,11 @@ class LabelMergeView(_LabelKindMixin, LoginRequiredMixin, View):
             return HttpResponse(f"Target {cfg.singular_title.lower()} is required.", status=400)
 
         target = get_object_or_404(_queryset_for_kind(self.kind, profile), id=target_id)
-        if target.id == source.id:
-            return HttpResponse(f"Cannot merge a {cfg.singular_title.lower()} into itself.", status=400)
 
-        target.pins.add(*source.pins.all())
-        target.wikis.add(*source.wikis.all())
-        source.delete()
+        try:
+            merge_labels(target=target, sources=[source], profile=profile)
+        except LabelMergeError as exc:
+            return HttpResponse(exc.safe_message, status=400)
 
         return _render_rows(request, self.kind, profile)
 
@@ -846,30 +880,14 @@ class LabelMultiMergeView(_LabelKindMixin, LoginRequiredMixin, View):
                 is_protected=False,
             ).exclude(id=target_id)
 
-        if not sources.exists():
+        source_list = list(sources)
+        if not source_list:
             return HttpResponse(f"No valid source {self.kind}s.", status=400)
 
-        if self.kind == KIND_USER:
-            from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAssignment
-
-            for source in sources:
-                for assignment in ProfileLabelAssignment.objects.filter(label=source):
-                    ProfileLabelAssignment.objects.get_or_create(
-                        author=assignment.author,
-                        subject=assignment.subject,
-                        label=target,
-                    )
-                source.delete()
-        elif self.kind == KIND_MEDIA:
-            for source in sources:
-                target.images.add(*source.images.all())
-                source.delete()
-        else:
-            for source in sources:
-                target.pins.add(*source.pins.all())
-                if self.kind == KIND_CATEGORY:
-                    target.wikis.add(*source.wikis.all())
-                source.delete()
+        try:
+            merge_labels(target=target, sources=source_list, profile=profile)
+        except LabelMergeError as exc:
+            return HttpResponse(exc.safe_message, status=400)
 
         return _render_rows(request, self.kind, profile)
 
@@ -924,14 +942,21 @@ class LabelBulkEditView(_LabelKindMixin, LoginRequiredMixin, View):
             Pin.objects.filter(profile=profile, labels__in=changed_labels).update(updated=timezone.now())
 
         if payload["add_parent_ids"]:
-            valid_parents = list(Label.objects.visible_to(profile).filter(id__in=payload["add_parent_ids"]))
+            # Scoped via _parent_candidates() (not a raw Label.objects.visible_to()
+            # query) so this bulk path enforces the same KIND_USER/KIND_MEDIA
+            # isolation as single create/edit.
+            valid_parents = list(_parent_candidates(profile, self.kind).filter(id__in=payload["add_parent_ids"]))
             for label in labels:
-                label.parents.add(*[p for p in valid_parents if p.id != label.id])
+                safe_parents = [p for p in valid_parents if p.id != label.id and not _would_create_cycle(label, p.id)]
+                if safe_parents:
+                    label.parents.add(*safe_parents)
 
         if payload["add_child_ids"]:
-            valid_children = list(Label.objects.visible_to(profile).filter(id__in=payload["add_child_ids"]))
+            valid_children = list(_parent_candidates(profile, self.kind).filter(id__in=payload["add_child_ids"]))
             for child in valid_children:
-                child.parents.add(*[b for b in labels if b.id != child.id])
+                safe_labels = [b for b in labels if b.id != child.id and not _would_create_cycle(child, b.id)]
+                if safe_labels:
+                    child.parents.add(*safe_labels)
 
         return _render_rows(request, self.kind, profile)
 
@@ -975,7 +1000,10 @@ class LabelBulkConvertView(_LabelKindMixin, LoginRequiredMixin, View):
         labels = list(Label.objects.filter(id__in=ids, profile=profile, kind=self.kind))
         if self.kind == KIND_STATUS:
             labels = [label for label in labels if not label.is_protected]
-        valid_parents = list(Label.objects.visible_to(profile).filter(id__in=payload["add_parent_ids"])) if payload["add_parent_ids"] else []
+        # Scoped via _parent_candidates() (not a raw Label.objects.visible_to()
+        # query) so this bulk path enforces the same KIND_USER/KIND_MEDIA
+        # isolation as single create/edit.
+        valid_parents = list(_parent_candidates(profile, self.kind).filter(id__in=payload["add_parent_ids"])) if payload["add_parent_ids"] else []
         for label in labels:
             _apply_bulk_fields(label, payload)
             label.kind = new_kind
@@ -984,7 +1012,9 @@ class LabelBulkConvertView(_LabelKindMixin, LoginRequiredMixin, View):
             label.parents.clear()
             label.save()
             if valid_parents:
-                label.parents.add(*[p for p in valid_parents if p.id != label.id])
+                safe_parents = [p for p in valid_parents if p.id != label.id and not _would_create_cycle(label, p.id)]
+                if safe_parents:
+                    label.parents.add(*safe_parents)
 
         if labels:
             # See LabelBulkEditView.post - the client's pin cache only refetches
@@ -993,9 +1023,11 @@ class LabelBulkConvertView(_LabelKindMixin, LoginRequiredMixin, View):
             Pin.objects.filter(profile=profile, labels__in=labels).update(updated=timezone.now())
 
         if payload["add_child_ids"]:
-            valid_children = list(Label.objects.visible_to(profile).filter(id__in=payload["add_child_ids"]))
+            valid_children = list(_parent_candidates(profile, self.kind).filter(id__in=payload["add_child_ids"]))
             for child in valid_children:
-                child.parents.add(*[b for b in labels if b.id != child.id])
+                safe_labels = [b for b in labels if b.id != child.id and not _would_create_cycle(child, b.id)]
+                if safe_labels:
+                    child.parents.add(*safe_labels)
 
         return _render_rows(request, self.kind, profile)
 
@@ -1040,27 +1072,20 @@ class LabelCustomizeView(_LabelKindMixin, LoginRequiredMixin, View):
             return edit_view.post(request, label_id=label_id, label_kind=kwargs.get("label_kind"))
 
         profile = _request_profile(request)
-        from urbanlens.dashboard.models.labels.customization import LabelCustomization
 
+        # Both branches nudge Pin.updated for this profile's pins - a
+        # customization changes how they render on the map without touching
+        # any Pin row, so the map cache's freshness check needs telling.
         if request.POST.get("action") == "clear":
-            LabelCustomization.objects.filter(profile=profile, label=label).delete()
+            clear_label_customization(profile, label)
         else:
-            name = request.POST.get("name", "").strip() or None
-            icon = request.POST.get("icon") or None
-            color = request.POST.get("color") or None
-            if name is None and icon is None and color is None:
-                LabelCustomization.objects.filter(profile=profile, label=label).delete()
-            else:
-                LabelCustomization.objects.update_or_create(
-                    profile=profile,
-                    label=label,
-                    defaults={"name": name, "icon": icon, "color": color},
-                )
-
-        # See the matching comment in LabelEditView.post - a customization
-        # changes how this profile's pins render on the map without touching
-        # any Pin row, so the cache-freshness check needs a manual nudge.
-        Pin.objects.filter(profile=profile, labels=label).update(updated=timezone.now())
+            upsert_label_customization(
+                profile,
+                label,
+                name=request.POST.get("name", ""),
+                icon=request.POST.get("icon"),
+                color=request.POST.get("color"),
+            )
 
         return _render_rows(request, self.kind, profile)
 

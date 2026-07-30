@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import JsonResponse
+from django.http import HttpRequest, JsonResponse
 from django.views import View
 
 from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
@@ -21,7 +21,18 @@ class RegionBoundarySearchView(LoginRequiredMixin, View):
     drawn as an include/exclude region.
     """
 
-    def get(self, request):
+    def get(self, request: HttpRequest) -> JsonResponse:
+        """Look up polygonal boundaries matching a free-text place name.
+
+        Args:
+            request: The incoming GET request; ``q`` is the free-text place
+                name to look up.
+
+        Returns:
+            A JSON response of the form ``{"results": [{"display_name": str,
+            "geojson": dict}, ...]}``, limited to Polygon/MultiPolygon
+            candidates. Returns an empty list when ``q`` is blank.
+        """
         query = (request.GET.get("q") or "").strip()
         if not query:
             return JsonResponse({"results": []})

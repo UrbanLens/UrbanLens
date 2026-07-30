@@ -1,7 +1,7 @@
 """The wiki page must use the shared _page_hero.html component (like every
-other page) instead of its own one-off gradient banner - see docs/prompts's
-resolution note for why. Also covers the About card's link-chip row picking
-up real styling now that it's no longer scoped to only the pin details page.
+other page) instead of its own one-off gradient banner. Also covers the About
+card's link-chip row picking up real styling now that it's no longer scoped to
+only the pin details page.
 """
 
 from __future__ import annotations

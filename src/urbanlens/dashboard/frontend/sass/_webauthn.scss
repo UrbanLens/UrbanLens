@@ -28,7 +28,7 @@
 
     > i.material-symbols-outlined {
         font-size: 1.4rem;
-        color: var(--text-muted, #6b7280);
+        color: var(--ul-grey-6, #6b7280);
         flex-shrink: 0;
     }
 }
@@ -45,7 +45,7 @@
     border: 1px solid var(--ul-border, #d1d5db);
     border-radius: 7px;
     background: var(--ul-surface, #fff);
-    color: var(--text, #1f2937);
+    color: var(--ul-grey-9, #1f2937);
     font-size: .85rem;
 }
 
@@ -72,7 +72,7 @@
     display: inline-block;
     padding: .15rem .4rem;
     border-radius: 6px;
-    background: var(--ul-surface-alt, #f3f4f6);
+    background: var(--ul-surface-raised, #f3f4f6);
     font-family: ui-monospace, "SF Mono", Menlo, monospace;
     letter-spacing: .04em;
     word-break: break-all;
@@ -85,7 +85,7 @@
     margin-bottom: .85rem;
     border: 1px dashed var(--ul-border, #d1d5db);
     border-radius: 10px;
-    background: var(--ul-surface-alt, #f9fafb);
+    background: var(--ul-surface-raised, #f9fafb);
 }
 
 .backup-codes-list {

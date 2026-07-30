@@ -39,6 +39,6 @@ class WelcomeOnboardingView(LoginRequiredMixin, View):
         if form.is_valid():
             profile = form.save()
             profile.welcome_onboarding_complete = True
-            profile.save(update_fields=["welcome_onboarding_complete"])
+            profile.save(update_fields=["welcome_onboarding_complete", "updated"])
             return redirect("post_login")
         return render(request, "dashboard/pages/onboarding/welcome.html", {"form": form})

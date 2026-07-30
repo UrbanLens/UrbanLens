@@ -43,9 +43,9 @@
 
         {% if selected_child_pins %}
         {# Opened from the detail page's multi-select toolbar with a specific #}
-        {# set of sub pins already chosen - share exactly those, no checkbox. #}
+        {# set of child pins already chosen - share exactly those, no checkbox. #}
         <section class="pin-share-section">
-          <h3 class="pin-share-section-title"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Selected sub pins</h3>
+          <h3 class="pin-share-section-title"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Selected child pins</h3>
           <ul class="pin-share-bundle-list">
             {% for cp in selected_child_pins %}
             <li class="pin-share-bundle-item">
@@ -54,16 +54,16 @@
             </li>
             {% endfor %}
           </ul>
-          <p class="pin-share-section-hint">These {{ selected_child_pins|length }} sub pin{{ selected_child_pins|pluralize }} will be shared along with {{ pin.display_label }}.</p>
+          <p class="pin-share-section-hint">These {{ selected_child_pins|length }} child pin{{ selected_child_pins|pluralize }} will be shared along with {{ pin.display_label }}.</p>
         </section>
         {% elif child_pin_count %}
         <section class="pin-share-section">
           <h3 class="pin-share-section-title"><i class="material-symbols-outlined">subdirectory_arrow_right</i> Child pins</h3>
           <label class="pin-share-children-row">
             <input type="checkbox" name="include_children" value="1">
-            <span>Also share this pin's {{ child_pin_count }} sub pin{{ child_pin_count|pluralize }}</span>
+            <span>Also share this pin's {{ child_pin_count }} child pin{{ child_pin_count|pluralize }}</span>
           </label>
-          <p class="pin-share-section-hint">Each sub pin is shared too - your friend gets the whole pin hierarchy when they accept.</p>
+          <p class="pin-share-section-hint">Each child pin is shared too - your friend gets the whole pin hierarchy when they accept.</p>
         </section>
         {% endif %}
 

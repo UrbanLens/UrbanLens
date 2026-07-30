@@ -397,6 +397,54 @@
         }
     }
 
+    // Public-pin vote block: quiet strip under the ratings grid. Only
+    // renders when the eligibility engine says so (see services.public_pins);
+    // empty shells collapse to nothing.
+    .public-pin-vote {
+        &:empty,
+        &:not(:has(*)) {
+            display: none;
+        }
+
+        margin-top: .85rem;
+        padding: .75rem .85rem;
+        border-top: 1px solid var(--ul-surface-border);
+
+        .public-pin-vote__prompt {
+            display: flex;
+            flex-direction: column;
+            gap: .5rem;
+        }
+
+        .public-pin-vote__question {
+            font-size: .9rem;
+            color: var(--ul-text-secondary, inherit);
+        }
+
+        .public-pin-vote__actions {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: .5rem;
+        }
+
+        .public-pin-vote__help {
+            font-size: .8rem;
+            opacity: .75;
+        }
+
+        .public-pin-vote__badge {
+            display: inline-flex;
+            align-items: center;
+            gap: .4rem;
+            font-weight: 600;
+
+            .material-symbols-outlined {
+                font-size: 1.1rem;
+            }
+        }
+    }
+
     .wiki-stat-item {
         display: flex;
         flex-direction: column;
@@ -987,7 +1035,7 @@
         &:hover { background: rgba(15, 23, 42, .9); transform: scale(1.08); }
         &.is-active { background: var(--ul-primary-color); }
     }
-    .media-item-vote-down-btn.is-active { background: var(--ul-danger, #dc2626); }
+    .media-item-vote-down-btn.is-active { background: var(--ul-color-danger-text, #dc2626); }
 
     // Net community score chip between the up/down buttons.
     .media-item-votes {
@@ -1009,6 +1057,6 @@
         font-size: .68rem;
         font-weight: 700;
         border-radius: 999px;
-        background: var(--ul-surface-sunken, rgba(0, 0, 0, .06));
+        background: var(--ul-hover-bg, rgba(0, 0, 0, .06));
     }
 }

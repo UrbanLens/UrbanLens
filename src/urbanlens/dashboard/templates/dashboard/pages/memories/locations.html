@@ -36,6 +36,34 @@
                 <span>Select multiple</span>
             </button>
         </div>
+
+        <div class="pin-suggestions-actions">
+            <button type="button" id="pin-suggestions-accept-all-btn"
+                    class="btn btn--primary pin-suggestions-accept-all-btn{% if onboarding_flow %} is-pulsing{% endif %}"
+                    data-onboarding="{{ onboarding_flow|yesno:'1,0' }}">
+                <i class="material-symbols-outlined">done_all</i>
+                Accept all suggestions
+            </button>
+        </div>
+        {% if onboarding_flow %}
+        <div class="pin-suggestions-onboarding-banner" id="pin-suggestions-onboarding-banner" role="status">
+            <i class="material-symbols-outlined">lightbulb</i>
+            <span>You can always come back to this page to review new pin suggestions like these.</span>
+            <button type="button" class="pin-suggestions-onboarding-banner__close" aria-label="Dismiss">
+                <i class="material-symbols-outlined">close</i>
+            </button>
+        </div>
+        {% endif %}
+        {% endif %}
+
+        {% if merge_suggestions_count %}
+        <h2 class="pin-merge-suggestions-section-title">Possible duplicate pins</h2>
+        <div id="pin-merge-suggestions-wrap"
+             hx-get="{% url 'memories.locations.merge.queue' %}"
+             hx-trigger="refreshQueue from:body"
+             hx-swap="innerHTML">
+            {% include "dashboard/partials/memories/_pin_merge_suggestions_queue.html" %}
+        </div>
         {% endif %}
 
         <div id="pin-suggestions-wrap"
@@ -59,6 +87,41 @@
     var bulkUrls = { accept: '{% url "memories.locations.bulk" "accept" %}', reject: '{% url "memories.locations.bulk" "reject" %}' };
     var csrfToken = '{{ csrf_token }}';
     var isNewPinById = new Map();
+
+    // -- Accept all suggestions -----------------------------------------
+    // Reached either as a normal action on this page, or via the map's
+    // new-user onboarding dialog (data-onboarding="1") - see map/index.html
+    // and controllers.pin_suggestions.PinSuggestionAcceptAllView.
+    var acceptAllBtn = document.getElementById('pin-suggestions-accept-all-btn');
+    if (acceptAllBtn) {
+        acceptAllBtn.addEventListener('click', function () {
+            acceptAllBtn.disabled = true;
+            fetch('{% url "memories.locations.accept_all" %}', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': csrfToken },
+            })
+            .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+            .then(function (data) {
+                var n = data.processed || 0;
+                if (window.toastr) toastr.success('Accepted ' + n + ' suggestion' + (n === 1 ? '' : 's') + '.');
+                if (acceptAllBtn.dataset.onboarding === '1') {
+                    window.location.href = '{% url "map.view" %}?suggestions_imported=1';
+                    return;
+                }
+                window.location.reload();
+            })
+            .catch(function () {
+                if (window.toastr) toastr.error('Something went wrong. Please try again.');
+                acceptAllBtn.disabled = false;
+            });
+        });
+    }
+
+    var onboardingBanner = document.getElementById('pin-suggestions-onboarding-banner');
+    if (onboardingBanner) {
+        var onboardingBannerClose = onboardingBanner.querySelector('.pin-suggestions-onboarding-banner__close');
+        if (onboardingBannerClose) onboardingBannerClose.addEventListener('click', function () { onboardingBanner.remove(); });
+    }
 
     function markerIcon(item, selected) {
         var isNewPin = !!item.is_new_pin;

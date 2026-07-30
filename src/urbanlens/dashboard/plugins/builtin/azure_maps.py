@@ -10,10 +10,10 @@ wrapped by the gateways in ``services.apis.locations.azure``.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import LocationCachePanelSource
+from urbanlens.dashboard.services.external_data import LocationCachePanelSource, PanelApiKind, info_card
 from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
@@ -32,6 +32,9 @@ class AzureMapsPanelSource(LocationCachePanelSource):
     section_id = "azure-maps-section"
     icon = "travel_explore"
     title = "Azure Maps"
+    # Bespoke markup on the web, ordinary information card underneath - served
+    # through the shared INFO contract for the same reason as Nominatim's.
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO})
 
     def fetch(self, pin: Pin) -> None:
         """Reverse-geocode the pin's coordinates and cache the nearest POI, if any.
@@ -56,6 +59,47 @@ class AzureMapsPanelSource(LocationCachePanelSource):
 
         payload = {**address, "poi": poi}
         LocationCache.set(pin.location, self.cache_source, payload, query_key=f"{lat:.5f},{lng:.5f}")
+
+    def api_payload(self, pin: Pin) -> dict[str, Any] | None:
+        """The reverse-geocoded address and nearest POI as an information card, or None.
+
+        Applies ``PinController.azure_maps_info``'s own emptiness rule: with
+        neither a formatted address nor a POI the payload is coordinates
+        echoed back, which the client already has - suppressed on both
+        surfaces rather than rendered as an empty card.
+
+        Args:
+            pin: The pin whose panel is being read.
+
+        Returns:
+            ``{"info": {...}}``, or None when nothing has landed yet or
+            neither Azure call found anything.
+        """
+        data = self.cached_data(pin)
+        if not data or not (data.get("formatted_address") or data.get("poi")):
+            return None
+
+        poi = data.get("poi") or {}
+        facts: list[dict[str, str]] = []
+        if poi.get("website"):
+            facts.append({"icon": "language", "text": poi["website"], "href": poi["website"]})
+        if poi.get("phone"):
+            facts.append({"icon": "call", "text": poi["phone"], "href": f"tel:{poi['phone']}"})
+        if poi.get("distance_meters"):
+            # How far the matched POI is from the pin, which is the reader's
+            # only cue to whether it describes this place or its neighbour.
+            facts.append({"icon": "social_distance", "text": f"{float(poi['distance_meters']):.0f}m away", "href": ""})
+
+        meta = [{"label": label, "value": data[key]} for key, label in (("formatted_address", "Address"), ("admin_district", "Region"), ("country", "Country")) if data.get(key)]
+
+        return {
+            PanelApiKind.INFO.value: info_card(
+                heading_name=poi.get("name") or data.get("formatted_address"),
+                chips=poi.get("categories") or [],
+                facts=facts,
+                meta=meta,
+            ),
+        }
 
 
 class AzureMapsNameProvider(NameProvider):

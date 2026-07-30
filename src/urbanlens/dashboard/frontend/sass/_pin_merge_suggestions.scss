@@ -1,0 +1,137 @@
+// Memories > Locations - the pin-merge suggestion review queue. A different
+// card anatomy from _pin_suggestions.scss's photo-forward cards: this compares
+// two of the profile's own existing pins side by side and asks which should
+// survive, so it gets its own section/card type rather than sharing that grid.
+
+@use 'variables' as *;
+
+.pin-merge-suggestions-section-title {
+    margin: 0 0 $space-sm;
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.pin-merge-suggestions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: $space-md;
+    margin-bottom: $space-lg;
+}
+
+.pin-merge-suggestion-card {
+    @include surface;
+    padding: $space-md;
+    box-shadow: var(--ul-shadow-sm);
+    display: flex;
+    flex-direction: column;
+    gap: $space-sm;
+}
+
+.pin-merge-suggestion-card-reason {
+    margin: 0;
+    font-size: .85rem;
+    color: var(--ul-grey-7);
+}
+
+.pin-merge-suggestion-choices {
+    display: flex;
+    align-items: stretch;
+    gap: $space-sm;
+}
+
+.pin-merge-suggestion-choice {
+    flex: 1;
+    display: flex;
+    align-items: flex-start;
+    gap: $space-xs;
+    padding: $space-sm;
+    border-radius: $radius-sm;
+    border: 1px solid var(--ul-surface-raised-border);
+    cursor: pointer;
+    font-weight: normal;
+
+    &:hover {
+        background: var(--ul-hover-bg);
+    }
+
+    &.is-recommended {
+        border-color: $color-blue-500;
+    }
+
+    input[type="radio"] {
+        margin-top: .2rem;
+    }
+}
+
+.pin-merge-suggestion-choice-body {
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    min-width: 0;
+
+    strong {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+.pin-merge-suggestion-choice-meta {
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+}
+
+.pin-merge-suggestion-vs {
+    align-self: center;
+    font-size: .78rem;
+    color: var(--ul-grey-5);
+    text-transform: uppercase;
+}
+
+.pin-merge-suggestion-card-caption {
+    margin: 0;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+}
+
+.pin-merge-suggestion-conflicts {
+    display: flex;
+    flex-direction: column;
+    gap: $space-sm;
+    padding: $space-sm;
+    border-radius: $radius-sm;
+    background: rgba(255, 152, 0, .08);
+    border: 1px solid rgba(255, 152, 0, .3);
+}
+
+.pin-merge-suggestion-conflict-label {
+    margin: 0 0 .3rem;
+    font-size: .82rem;
+    font-weight: 600;
+}
+
+.pin-merge-suggestion-conflict-option {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    font-size: .82rem;
+    font-weight: normal;
+}
+
+.pin-merge-suggestion-card-warning {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    margin: 0;
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+
+    .material-symbols-outlined {
+        font-size: 16px;
+    }
+}
+
+.pin-merge-suggestion-card-actions {
+    display: flex;
+    gap: $space-sm;
+}

@@ -38,11 +38,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# Metres of latitude per degree - used to convert a circle radius back into an
-# edge coordinate when round-tripping between GeoJSON-ish geometry and the
-# client snapshot format.
-_METERS_PER_DEGREE_LAT = 111_320.0
-
 
 def _haversine_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
     """Return the great-circle distance between two points in metres.
@@ -442,11 +437,13 @@ class PinMarkup(abstract.FrontendDashboardModel):
                 shape["latlngs"] = latlngs
                 shape["label"] = self.label or ""
             elif self.markup_type == MarkupType.CIRCLE:
+                from urbanlens.dashboard.models.boundary.queryset import meters_to_lng_degrees
+
                 lng, lat = coordinates
                 radius = float(geometry.get("radius") or 0)
                 # Recreate an "edge" point due east of the centre so the
                 # two-point client circle format round-trips the radius.
-                dlng = radius / (_METERS_PER_DEGREE_LAT * max(math.cos(math.radians(lat)), 1e-6))
+                dlng = meters_to_lng_degrees(radius, lat)
                 shape["latlngs"] = [[lat, lng], [lat, lng + dlng]]
             elif self.markup_type == MarkupType.SQUARE:
                 ring = coordinates[0]

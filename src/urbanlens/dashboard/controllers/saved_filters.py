@@ -18,8 +18,9 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
 from urbanlens.dashboard.services.geo import dissolve_polygons
-from urbanlens.dashboard.services.pin_list_membership import resync_smart_list
+from urbanlens.dashboard.services.pin_list_membership import resync_lists_for_saved_filter
 from urbanlens.dashboard.services.saved_filter_cache import get_or_compute_matching_uuids
+from urbanlens.dashboard.services.undo.handlers.saved_filter import MODEL_LABEL as SAVED_FILTER_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 if TYPE_CHECKING:
@@ -145,7 +146,10 @@ def _build_filter_form_context(profile: Profile, filter_uuid) -> dict:
         "security_fields": SECURITY_FIELDS,
         "security_level_choices": SecurityLevel.choices,
         "security_values": security_values,
-        "has_label_groups": bool(saved_filter.criteria.get("label_groups")) if saved_filter else False,
+        # The rich picker seeds itself from the stored structured groups when
+        # present (formulas round-trip now - see _saved_filter_label_picker.html),
+        # falling back to the flat include/exclude sets below.
+        "initial_label_groups_json": json.dumps(saved_filter.criteria["label_groups"]) if saved_filter and saved_filter.criteria.get("label_groups") else "",
         "selected_tag_ids": initial.get("tags", []),
         "selected_exclude_tag_ids": initial.get("exclude_tags", []),
         "icon_categories": ICON_CATEGORIES,
@@ -206,10 +210,10 @@ class SavedFilterEditView(LoginRequiredMixin, View):
         saved_filter.criteria = criteria
         saved_filter.save(update_fields=["name", "icon", "criteria", "updated"])
 
-        for pin_list in saved_filter.derived_pin_lists.all():
-            pin_list.smart_filter = criteria
-            pin_list.save(update_fields=["smart_filter", "updated"])
-            resync_smart_list(pin_list)
+        # Refreshes every PinList still pointing at this filter, resolving the
+        # matching pin ids once and reusing them across all of them - see
+        # services.pin_list_membership.resync_lists_for_saved_filter.
+        resync_lists_for_saved_filter(saved_filter)
 
         return JsonResponse({"ok": True, "uuid": str(saved_filter.uuid)})
 
@@ -285,18 +289,28 @@ class SavedFilterMatchCountsView(LoginRequiredMixin, View):
             criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             base_query = base_query.filter_by_criteria(criteria)
 
+        base_uuids = {str(u) for u in base_query.values_list("uuid", flat=True)}
+
         active_ids = {v for v in request.GET.get("toolbar_filter_ids", "").split(",") if v.strip()}
         active_filters = [f for f in saved_filters if str(f.uuid) in active_ids]
 
+        # Resolve each filter's matching-uuid set exactly once up front (this
+        # is already backend-cached per filter, but was still being re-fetched
+        # and re-queried against the DB via chained .filter(uuid__in=...) for
+        # every (candidate, active) pair below - O(F^2) query construction for
+        # F saved filters). Set intersections in Python are cheap in
+        # comparison, so every pair is now just an in-memory set op.
+        matching_uuids: dict[str, set[str]] = {str(f.uuid): set(get_or_compute_matching_uuids(profile, f)) for f in saved_filters}
+
         counts: dict[str, int] = {}
         for candidate in saved_filters:
-            query = base_query
+            candidate_key = str(candidate.uuid)
+            matches = base_uuids & matching_uuids[candidate_key]
             for other in active_filters:
                 if other.uuid == candidate.uuid:
                     continue
-                query = query.filter(uuid__in=get_or_compute_matching_uuids(profile, other))
-            query = query.filter(uuid__in=get_or_compute_matching_uuids(profile, candidate))
-            counts[str(candidate.uuid)] = query.count()
+                matches &= matching_uuids[str(other.uuid)]
+            counts[candidate_key] = len(matches)
 
         return JsonResponse({"counts": counts})
 
@@ -310,7 +324,7 @@ class SavedFilterDeleteView(LoginRequiredMixin, View):
     def post(self, request, filter_uuid):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         saved_filter = get_object_or_404(SavedFilter, uuid=filter_uuid, profile=profile)
-        stash_for_undo("saved_filter", [saved_filter], profile)
+        stash_for_undo(SAVED_FILTER_MODEL_LABEL, [saved_filter], profile)
         saved_filter.delete()
         response = _render_section(request, profile)
         response["HX-Trigger"] = json.dumps({"showToast": {"level": "success", "message": "Filter deleted. Undo within 7 days from Settings → Undo History."}})

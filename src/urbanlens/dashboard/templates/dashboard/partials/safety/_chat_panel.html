@@ -100,10 +100,14 @@ JavaScript is unavailable.
             setConnected(false);
             if (ev.code === 4404) {
                 // Permanent: this connection is not (or no longer) authorized - e.g. a
-                // revoked/invalid contact token. Retrying would just loop forever while
-                // showing a misleading "Reconnecting..." message, so stop and say why.
+                // revoked/invalid contact token, or a partner whose access was just
+                // removed. Retrying would just loop forever while showing a misleading
+                // "Reconnecting..." message, so stop and say why - and disable the form,
+                // since the plain-POST fallback below would only 404 too.
                 permanentlyClosed = true;
                 if (status) { status.hidden = false; status.textContent = "You don't have access to this chat."; }
+                if (input) input.disabled = true;
+                form.querySelectorAll('button').forEach(function (btn) { btn.disabled = true; });
                 toast('error', "You don't have access to this chat.");
                 return;
             }
@@ -130,6 +134,22 @@ JavaScript is unavailable.
                 document.body.dispatchEvent(new CustomEvent('safetyStatusUpdate', { detail: msg }));
                 return;
             }
+            if (msg.type === 'location_update') {
+                // Only ever arrives on the session route (owner/accepted partner) - the
+                // live-location marker/status lives on the detail page, not this panel.
+                document.body.dispatchEvent(new CustomEvent('safetyLocationUpdate', { detail: msg }));
+                return;
+            }
+            if (msg.type === 'archive_scheduled') {
+                // The countdown display lives on the detail/community/portal pages, not this panel.
+                document.body.dispatchEvent(new CustomEvent('safetyArchiveScheduled', { detail: msg }));
+                return;
+            }
+            if (msg.type === 'checkin_archived') {
+                // The dissolve animation lives on the detail/community/portal pages, not this panel.
+                document.body.dispatchEvent(new CustomEvent('safetyCheckinArchived', { detail: msg }));
+                return;
+            }
             appendMessage(msg);
         };
     }
@@ -138,6 +158,7 @@ JavaScript is unavailable.
 
     form.addEventListener('submit', function (e) {
         e.preventDefault();
+        if (permanentlyClosed) return;
         var body = input.value.trim();
         if (!body) return;
         if (ws && ws.readyState === WebSocket.OPEN) {
@@ -145,12 +166,11 @@ JavaScript is unavailable.
             input.value = '';
             return;
         }
-        // Socket momentarily down (or permanently closed) - fall back to a plain
-        // POST so the message still has a chance to send. Unlike a bare
-        // fire-and-forget fetch, this checks the result: on failure the input is
-        // restored (so the message isn't lost) and the sender is told explicitly,
-        // since a safety check-in message silently vanishing is far worse than most
-        // other features failing quietly.
+        // Socket momentarily down - fall back to a plain POST so the message still has a
+        // chance to send. Unlike a bare fire-and-forget fetch, this checks the result: on
+        // failure the input is restored (so the message isn't lost) and the sender is
+        // told explicitly, since a safety check-in message silently vanishing is far
+        // worse than most other features failing quietly.
         var formData = new FormData(form);
         input.value = '';
         fetch(form.action, { method: 'POST', body: formData })
@@ -161,9 +181,15 @@ JavaScript is unavailable.
                     appendMessage({ sender_name: 'You', body: body, created: new Date().toISOString() });
                     return;
                 }
-                return resp.text().then(function (text) {
-                    throw new Error(text || 'Message failed to send.');
-                });
+                if (resp.status === 400) {
+                    // The only case that returns plain, safe-to-display text - see
+                    // SafetyCheckinMessageView.post (blank/too-long body, or archived).
+                    return resp.text().then(function (text) { throw new Error(text || 'Message failed to send.'); });
+                }
+                // Anything else (404 - access was revoked or the checkin/token no longer
+                // resolves) is a full Django error page, not sender-safe text - show a
+                // generic message instead of dumping raw HTML into a toast.
+                throw new Error('Message failed to send. You may no longer have access to this chat.');
             })
             .catch(function (err) {
                 input.value = body;

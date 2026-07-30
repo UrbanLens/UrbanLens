@@ -205,6 +205,7 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
                 const msgs: Record<string, string> = {
                     arrow: n >= 2 ? "Click near last point (or Enter) to finish, or drag" : n ? `${n} pt - click to add another point` : "Click to start, drag for a quick arrow",
                     line: n >= 2 ? "Click near last point (or Enter) to finish, or drag" : n ? `${n} pt - click to add another point` : "Click to start, drag for a quick line",
+                    freehand: "Click and drag to draw",
                     polygon: n >= 3 ? "Click near start (or Enter) to close" : n ? "Click to add vertices" : "Click to place first vertex",
                     circle: n ? "Click to set radius, or drag" : "Click to place center, or drag",
                     rect: n ? "Click second corner, or drag" : "Click first corner, or drag",
@@ -420,7 +421,7 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
 
     function onMouseDown(e: MouseEvent): void {
         if (!tool || e.button !== 0) return;
-        const eligible = ["circle", "rect", "arrow", "line", "text"].includes(tool);
+        const eligible = ["circle", "rect", "arrow", "line", "text", "freehand"].includes(tool);
         if (!eligible) return;
 
         const startLL = map.mouseEventToLatLng(e);
@@ -429,6 +430,16 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
         let isDragging = false;
         // For arrow/line: if we already have points placed via click, chain onto them
         const hasPoints = !!(state?.points.length && (tool === "arrow" || tool === "line"));
+
+        // Freehand samples every point along the drag path (throttled by a
+        // minimum on-screen distance between samples, to keep the point count
+        // reasonable) instead of just recording the start/end of the gesture -
+        // committed as a plain "line" (see onDrawCommit), so it needs no
+        // dedicated markup_type, storage, or rendering of its own.
+        const freehandPoints: LatLngTuple[] = [];
+        let lastSampleX = startX;
+        let lastSampleY = startY;
+        const FREEHAND_MIN_SAMPLE_PX = 4;
 
         function onMove(ev: MouseEvent): void {
             const dx = ev.clientX - startX;
@@ -458,6 +469,14 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
                 }
             } else if (tool === "text") {
                 L.rectangle(L.latLngBounds(startLL, endLL), { color: c, weight: 1, dashArray: "3 4", fillOpacity: 0.04, interactive: false }).addTo(prevLayer);
+            } else if (tool === "freehand") {
+                if (freehandPoints.length === 0) freehandPoints.push([startLL.lat, startLL.lng]);
+                if (Math.hypot(ev.clientX - lastSampleX, ev.clientY - lastSampleY) >= FREEHAND_MIN_SAMPLE_PX) {
+                    freehandPoints.push([endLL.lat, endLL.lng]);
+                    lastSampleX = ev.clientX;
+                    lastSampleY = ev.clientY;
+                }
+                L.polyline(freehandPoints, { color: c, weight: 3, opacity: 0.85, interactive: false }).addTo(prevLayer);
             }
         }
 
@@ -466,13 +485,22 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
             clearPrev();
             const dx = ev.clientX - startX;
             const dy = ev.clientY - startY;
-            if (!isDragging || Math.hypot(dx, dy) < 6) return; // too small - treat as click
+            // A freehand stroke can legitimately end near where it started (a
+            // closed squiggle) - judge it by how many points were sampled, not
+            // by net displacement like every other drag-to-draw tool below.
+            if (tool === "freehand") {
+                if (freehandPoints.length < 2) return;
+            } else if (!isDragging || Math.hypot(dx, dy) < 6) {
+                return; // too small - treat as click
+            }
             const endLL = map.mouseEventToLatLng(ev);
             // A completed drag still fires a native `click` right after this mouseup;
             // swallow it so it doesn't start a stray new point at the drag's end.
             suppressClickUntil = Date.now() + 350;
 
-            if (tool === "circle") {
+            if (tool === "freehand") {
+                commit("line", freehandPoints);
+            } else if (tool === "circle") {
                 commit("circle", [[startLL.lat, startLL.lng], [endLL.lat, endLL.lng]]);
             } else if (tool === "rect") {
                 const rectStart: LatLngTuple = state && state.points.length >= 1 ? state.points[0]! : [startLL.lat, startLL.lng];

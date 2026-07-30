@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db.models import Q
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 
@@ -20,8 +21,157 @@ if TYPE_CHECKING:
     from django.http import HttpRequest
 
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
+
+
+def _location_default_polygons(location: Location) -> list:
+    """The official boundary polygons for *location* - and only those.
+
+    Restricted to location-default ``Boundary`` rows (no owning pin, wiki, or
+    profile, and no per-provider ``source``) and to ``generated_polygon``, which
+    only the provider chain and boundary voting ever write. The user-editable
+    ``polygon`` on the same row is display-only: consulting it would let anyone
+    draw a boundary around a region and inherit every wiki inside it.
+
+    Args:
+        location: The Location whose official boundaries are wanted.
+
+    Returns:
+        Zero or more polygons - typically the property boundary plus, when
+        known, the building footprint.
+    """
+    from urbanlens.dashboard.models.boundary.model import Boundary
+
+    return list(
+        Boundary.objects.filter(location=location, pin__isnull=True, wiki__isnull=True, profile__isnull=True, source="").exclude(generated_polygon__isnull=True).values_list("generated_polygon", flat=True),
+    )
+
+
+def _point_is_at(point, location: Location) -> bool:
+    """Whether *point* resolves to *location*'s own coordinates.
+
+    Compared at the precision ``Location`` stores rather than as raw floats,
+    because that rounding is what decides which Location row a point lands on.
+
+    Args:
+        point: The point being tested.
+        location: The Location to compare against.
+
+    Returns:
+        Whether the two name the same stored coordinate pair.
+    """
+    from urbanlens.dashboard.models.location.queryset import quantize_coordinate
+
+    if location.latitude is None or location.longitude is None:
+        return False
+    return quantize_coordinate(point.y, "latitude") == location.latitude and quantize_coordinate(point.x, "longitude") == location.longitude
+
+
+def _visible_given_pins(location: Location, pins, *, extra_point=None) -> bool:
+    """Whether *location*'s wiki is visible to the owner of *pins*.
+
+    The one implementation of the visibility rule. :func:`location_visible_to`
+    passes a profile's real pins; the pin-move preview passes a hypothetical set
+    (every pin except the one being moved, plus that pin's proposed point), so
+    the preview can never drift from the rule actually enforced.
+
+    Args:
+        location: The Location whose wiki is being tested.
+        pins: A ``Pin`` queryset standing in for the viewer's pins.
+        extra_point: An additional point to treat as pinned, for previewing a
+            move before it happens.
+
+    Returns:
+        Whether that set of pins grants visibility of *location*'s wiki.
+    """
+    if pins.filter(location=location).exists():
+        return True
+
+    # A previewed move that lands on this Location's own coordinates keeps the
+    # exact-match grant above, which *pins* alone can't show because the pin
+    # being moved is deliberately excluded from it. Checked before the polygon
+    # guard below: a place whose boundary lookup found nothing (common for
+    # obscure rural spots) is reachable only by exact match, so skipping this
+    # would report a stay-put move as losing access.
+    if extra_point is not None and _point_is_at(extra_point, location):
+        return True
+
+    polygons = _location_default_polygons(location)
+    if not polygons:
+        return False
+
+    if extra_point is not None and any(polygon.contains(extra_point) for polygon in polygons):
+        return True
+
+    # The polygons are read into Python (a handful of location-default boundary
+    # rows per wiki - property plus building) but the containment test itself
+    # runs in the database, as one indexed EXISTS over the pins. Doing it in
+    # Python instead meant loading every point the profile had ever pinned on
+    # every wiki request, which grows without bound as a user's map fills up.
+    # ``ST_Within(point, polygon)`` is the same OGC predicate as GEOS's
+    # ``polygon.contains(point)``, just evaluated the other way round.
+    containment = Q()
+    for polygon in polygons:
+        containment |= Q(location__point__within=polygon)
+    return pins.exclude(location=location).filter(containment).exists()
+
+
+def wikis_hidden_by_pin_move(pin: Pin, latitude: float, longitude: float) -> list[Wiki]:
+    """Wikis the owner can see now but would lose by moving *pin* to this point.
+
+    Only wikis this pin is actually keeping visible are returned: one the owner
+    also reaches through another of their own pins is never listed, and neither
+    is one they can't see in the first place. That makes an empty result the
+    normal case, so callers can treat a non-empty one as genuinely worth
+    interrupting the user for.
+
+    Advisory only - it previews the rule rather than enforcing it. Access itself
+    is always decided by :func:`location_visible_to` at read time, so a stale or
+    slightly-off preview can never grant access, only mis-warn about it.
+
+    Args:
+        pin: The pin about to move.
+        latitude: Proposed new latitude.
+        longitude: Proposed new longitude.
+
+    Returns:
+        The affected wikis, each with its ``location`` selected. Empty when the
+        move costs the owner nothing.
+    """
+    from django.contrib.gis.geos import Point
+
+    from urbanlens.dashboard.models.boundary.model import Boundary
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    if pin.location_id is None or pin.location.point is None:
+        return []
+
+    new_point = Point(float(longitude), float(latitude), srid=4326)
+
+    # Everything this pin currently reaches: the wiki at its own Location, plus
+    # any whose official boundary contains its point. Scoped to Locations that
+    # have a wiki so this stays proportional to how many wikis exist rather than
+    # to every boundary in the database.
+    reachable_ids = {pin.location_id} | set(
+        Boundary.objects.filter(
+            pin__isnull=True,
+            wiki__isnull=True,
+            profile__isnull=True,
+            source="",
+            location__wiki__isnull=False,
+            generated_polygon__contains=pin.location.point,
+        ).values_list("location_id", flat=True),
+    )
+    candidates = list(Wiki.objects.filter(location_id__in=reachable_ids).select_related("location"))
+    if not candidates:
+        return []
+
+    profile = pin.profile
+    remaining = Pin.objects.filter(profile=profile).exclude(pk=pin.pk)
+    return [wiki for wiki in candidates if location_visible_to(wiki.location, profile) and not _visible_given_pins(wiki.location, remaining, extra_point=new_point)]
 
 
 def location_visible_to(location: Location, profile: Profile) -> bool:
@@ -47,33 +197,9 @@ def location_visible_to(location: Location, profile: Profile) -> bool:
         Whether the profile has pinned this location, or another Location
         whose point falls inside this location's own boundary.
     """
-    from urbanlens.dashboard.models.boundary.model import Boundary
     from urbanlens.dashboard.models.pin.model import Pin
 
-    if Pin.objects.filter(profile=profile, location=location).exists():
-        return True
-
-    polygons = list(
-        Boundary.objects.filter(location=location, pin__isnull=True, wiki__isnull=True, profile__isnull=True).exclude(generated_polygon__isnull=True).values_list("generated_polygon", flat=True),
-    )
-    if not polygons:
-        return False
-
-    # Python-side containment (GEOS .contains(), matching
-    # LocationQuerySet._boundary_polygon_q's proven direction) rather than a
-    # DB-side `within` lookup - `generated_polygon`/`point` are geography=True
-    # fields, and PostGIS's containment functions are geometry-native, so
-    # comparing them in Python avoids depending on an untested cross-type
-    # operator. Candidate sets here are small: a handful of location-default
-    # boundary rows per wiki, and one point per distinct pin location.
-    seen_location_ids: set[int] = set()
-    for candidate_id, point in Pin.objects.filter(profile=profile).exclude(location=location).values_list("location_id", "location__point"):
-        if point is None or candidate_id in seen_location_ids:
-            continue
-        seen_location_ids.add(candidate_id)
-        if any(polygon.contains(point) for polygon in polygons):
-            return True
-    return False
+    return _visible_given_pins(location, Pin.objects.filter(profile=profile))
 
 
 def visible_wiki_location_ids(profile: Profile) -> set[int]:
@@ -111,7 +237,10 @@ def visible_wiki_location_ids(profile: Profile) -> set[int]:
     # only generated_polygon on a Boundary with no owning pin/wiki/profile is
     # ever consulted here - never a user-editable one.
     boundary_candidates = list(
-        Boundary.objects.filter(location__wiki__isnull=False, pin__isnull=True, wiki__isnull=True, profile__isnull=True).exclude(generated_polygon__isnull=True).exclude(location_id__in=direct_ids).values_list("location_id", "generated_polygon"),
+        Boundary.objects.filter(location__wiki__isnull=False, pin__isnull=True, wiki__isnull=True, profile__isnull=True, source="")
+        .exclude(generated_polygon__isnull=True)
+        .exclude(location_id__in=direct_ids)
+        .values_list("location_id", "generated_polygon"),
     )
     if not boundary_candidates:
         return direct_ids

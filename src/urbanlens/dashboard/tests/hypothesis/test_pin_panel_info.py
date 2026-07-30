@@ -70,7 +70,7 @@ class PanelInfoDispatchTests(TestCase):
         with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
             response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "photon"]))
         self.assertEqual(response.status_code, 200)
-        fetch_task.apply_async.assert_called_once_with(args=["photon", self.pin.pk], queue="panel_fetch")
+        fetch_task.apply_async.assert_called_once_with(args=("photon", self.pin.pk), kwargs={}, queue="panel_fetch")
         self.assertContains(response, "Photon (OpenStreetMap)")
 
     def test_render_context_returning_none_yields_204(self) -> None:
@@ -246,14 +246,14 @@ class PinDetailHeroSubnavTests(TestCase):
 
     def test_condensed_panels_are_excluded_from_the_autoloading_list(self) -> None:
         """Census/iNaturalist/Seismic/EPA's nearby-list all move into the single "Regional Data"
-        tab strip (panel_tabs) instead of auto-loading as their own standalone cards. EPA's
-        exact-site detail card is a different key (epa_echo_detail) and still auto-loads
-        unconditionally."""
+        tab strip (panel_tabs), and Photon/Overture/Elevation into the "Location Data" tab
+        strip, instead of auto-loading as their own standalone cards. EPA's exact-site detail
+        card is a different key (epa_echo_detail) and still auto-loads unconditionally."""
         response = self.client.get(reverse("pin.details", args=[self.pin.slug]))
         keys = [panel.key for panel in response.context["simple_info_panels"]]
-        for condensed_key in ("census_tigerweb", "epa_echo", "inaturalist", "usgs_earthquakes"):
-            self.assertNotIn(condensed_key, keys)
-        self.assertIn("photon", keys)
+        for tabbed_key in ("census_tigerweb", "epa_echo", "inaturalist", "usgs_earthquakes", "photon", "overture_building_attributes", "open_elevation"):
+            self.assertNotIn(tabbed_key, keys)
+        self.assertIn("gdelt", keys)
         self.assertIn("epa_echo_detail", keys)
 
     def test_panel_tabs_context_has_the_expected_order_and_labels(self) -> None:

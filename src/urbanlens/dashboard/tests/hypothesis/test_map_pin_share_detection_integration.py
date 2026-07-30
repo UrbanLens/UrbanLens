@@ -16,12 +16,16 @@ Covers:
 
 from __future__ import annotations
 
+import math
+
 from django.contrib.auth.models import User
+from django.contrib.gis.geos import Point
 from django.test import override_settings
 from django.urls import reverse
+from hypothesis import given, strategies as st
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.markup.meta import MarkupType
@@ -29,7 +33,9 @@ from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
 from urbanlens.dashboard.models.markup.share import MarkupMapShare
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareOrigin, PinShareStatus
-from urbanlens.dashboard.services.map_pin_share_detection import detect_shared_pins, sync_pin_inferences
+from urbanlens.dashboard.models.profile.meta import VisibilityChoice
+from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+from urbanlens.dashboard.services.map_pin_share_detection import arrow_points_toward, detect_shared_pins, sync_pin_inferences
 from urbanlens.dashboard.services.map_sharing import clone_markup_map, share_markup_map_with_profile
 
 # Fixed test coordinates - Manhattan-ish, nowhere near a pole/antimeridian.
@@ -129,6 +135,35 @@ class DetectSharedPinsTests(_MapShareTestCase):
     def test_no_saved_viewport_matches_nothing(self) -> None:
         markup_map = MarkupMap.objects.create(profile=self.profiles["a"])
         self.assertEqual(detect_shared_pins(markup_map, self.profiles["a"]), [])
+
+
+class ArrowTailDegeneracyTests(SimpleTestCase):
+    """An arrow whose tail sits on the target points nowhere in particular.
+
+    ``bearing_degrees`` from a point to itself is not merely arbitrary, it is
+    unstable: a pin's boundary centroid lands ~1e-14 degrees off the tail
+    through ordinary float error, which used to yield a confident angle that
+    fell inside the 35-degree tolerance often enough to record DETECTED shares
+    of pins the sender never called out.
+    """
+
+    @staticmethod
+    def _arrow(coordinates: list[list[float]]) -> PinMarkup:
+        # Unsaved: arrow_points_toward only ever reads .geometry.
+        return PinMarkup(markup_type=MarkupType.ARROW, geometry={"type": "LineString", "coordinates": coordinates})
+
+    @given(heading=st.floats(min_value=0.0, max_value=359.0), jitter_x=st.floats(min_value=-1e-13, max_value=1e-13), jitter_y=st.floats(min_value=-1e-13, max_value=1e-13))
+    def test_target_on_the_tail_never_matches_whichever_way_the_arrow_points(self, heading: float, jitter_x: float, jitter_y: float) -> None:
+        head_lng = _LNG + 2.0 * math.sin(math.radians(heading))
+        head_lat = _LAT + 2.0 * math.cos(math.radians(heading))
+        arrow = self._arrow([[_LNG, _LAT], [head_lng, head_lat]])
+        target = Point(_LNG + jitter_x, _LAT + jitter_y, srid=4326)
+        self.assertFalse(arrow_points_toward(arrow, target))
+
+    def test_a_genuinely_distant_target_still_matches(self) -> None:
+        """The guard must not swallow the real case it sits next to."""
+        arrow = self._arrow([[_LNG, _LAT - 1.0], [_LNG, _LAT]])
+        self.assertTrue(arrow_points_toward(arrow, Point(_LNG, _LAT, srid=4326)))
 
 
 # -- sync_pin_inferences / MarkupMap.inferred_pins ------------------------------------
@@ -311,6 +346,24 @@ class MarkupMapShareCreateViewTests(_MapShareTestCase):
         # record a detected PinShare via the same central hook.
         self.assertTrue(PinShare.objects.filter(pin=self.pin, to_profile=self.profiles["b"], origin=PinShareOrigin.MAP_DETECTED).exists())
 
+    def test_notification_masks_hidden_sender(self) -> None:
+        """Regression: the notification text interpolated ``sender.username``
+        directly, bypassing the recipient-scoped masking every other identity
+        surface (thread renders, DM/group live payloads) already applies."""
+        _befriend(self.profiles["a"], self.profiles["b"])
+        self.users["a"].username = "hidden-sender"
+        self.users["a"].save(update_fields=["username"])
+        self.profiles["a"].profile_visibility = VisibilityChoice.NO_ONE
+        self.profiles["a"].save(update_fields=["profile_visibility"])
+        source = self._map(zoom=16)
+        self.client.force_login(self.users["a"])
+        response = self.client.post(reverse("markup_map.share.send", kwargs={"map_uuid": source.uuid}), {"profile_id": self.profiles["b"].pk})
+        self.assertEqual(response.status_code, 200)
+        notification = MarkupMapShare.objects.get(markup_map=source).notification
+        expected_name = resolve_visible_identity(self.profiles["b"], self.profiles["a"])["display_name"]
+        self.assertIn(expected_name, notification.message)
+        self.assertNotIn(self.profiles["a"].username, notification.message)
+
 
 # -- PinShareCreateView map attachment ------------------------------------------------
 
@@ -338,3 +391,17 @@ class PinShareCreateViewMapAttachmentTests(_MapShareTestCase):
         self.assertEqual(response.status_code, 200)
         share = PinShare.objects.get(pin=self.pin, to_profile=self.profiles["b"])
         self.assertEqual(share.markup_map_id, own_map.pk)
+
+    def test_notification_masks_hidden_sender(self) -> None:
+        _befriend(self.profiles["a"], self.profiles["b"])
+        self.users["a"].username = "hidden-sender"
+        self.users["a"].save(update_fields=["username"])
+        self.profiles["a"].profile_visibility = VisibilityChoice.NO_ONE
+        self.profiles["a"].save(update_fields=["profile_visibility"])
+        self.client.force_login(self.users["a"])
+        response = self.client.post(reverse("pin.share.send", kwargs={"pin_slug": self.pin.slug}), {"profile_id": self.profiles["b"].pk})
+        self.assertEqual(response.status_code, 200)
+        notification = PinShare.objects.get(pin=self.pin, to_profile=self.profiles["b"]).notification
+        expected_name = resolve_visible_identity(self.profiles["b"], self.profiles["a"])["display_name"]
+        self.assertIn(expected_name, notification.message)
+        self.assertNotIn(self.profiles["a"].username, notification.message)

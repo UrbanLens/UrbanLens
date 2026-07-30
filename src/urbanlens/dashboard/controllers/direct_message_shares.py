@@ -17,7 +17,7 @@ from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip
 from urbanlens.dashboard.services.connections import get_connections
-from urbanlens.dashboard.services.direct_message_shares import invite_to_trip_in_message, recommend_friend_in_message, share_pin_in_message
+from urbanlens.dashboard.services.direct_message_shares import ShareTargetPermissionError, ShareValidationError, invite_to_trip_in_message, recommend_friend_in_message, share_pin_in_message
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -59,10 +59,10 @@ class MessageSharePinView(LoginRequiredMixin, View):
 
         try:
             share_pin_in_message(profile, partner, pin, body, markup_map_uuid=request.POST.get("markup_map_uuid") or None)
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
-        except ValueError as exc:
-            return HttpResponseBadRequest(str(exc))
+        except ShareTargetPermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
+        except ShareValidationError as exc:
+            return HttpResponseBadRequest(exc.safe_message)
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)
@@ -275,10 +275,10 @@ class MessageShareTripView(LoginRequiredMixin, View):
 
         try:
             invite_to_trip_in_message(profile, partner, trip, body)
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
-        except ValueError as exc:
-            return HttpResponseBadRequest(str(exc))
+        except ShareTargetPermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
+        except ShareValidationError as exc:
+            return HttpResponseBadRequest(exc.safe_message)
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)
@@ -319,10 +319,10 @@ class MessageShareFriendView(LoginRequiredMixin, View):
 
         try:
             recommend_friend_in_message(profile, partner, recommended, body)
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
-        except ValueError as exc:
-            return HttpResponseBadRequest(str(exc))
+        except ShareTargetPermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
+        except ShareValidationError as exc:
+            return HttpResponseBadRequest(exc.safe_message)
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)

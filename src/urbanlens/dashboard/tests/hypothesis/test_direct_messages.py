@@ -776,8 +776,8 @@ class MessageTextAlertTests(TestCase):
         scheduled = {call.args[0].__name__ for call in mock_enqueue.call_args_list}
         self.assertNotIn("send_direct_message_text_alerts_if_unread", scheduled)
 
-    def test_alert_dispatches_per_enabled_channel_and_sets_debounce(self) -> None:
-        from urbanlens.dashboard.services.direct_messages import is_text_alert_debounced, send_message_text_alerts_now
+    def test_alert_dispatches_per_enabled_channel(self) -> None:
+        from urbanlens.dashboard.services.direct_messages import send_message_text_alerts_now
 
         self._set_toggles(whatsapp=True, sms=False)
         message = create_direct_message(self.sender, self.recipient, "hi")
@@ -788,7 +788,27 @@ class MessageTextAlertTests(TestCase):
             send_message_text_alerts_now(message)
         mock_wa.assert_called_once()
         mock_sms.assert_not_called()
-        self.assertTrue(is_text_alert_debounced(self.sender.pk, self.recipient.pk))
+
+    def test_second_message_in_same_streak_is_debounced(self) -> None:
+        """The debounce marker is claimed atomically by ``is_text_alert_debounced()``
+        itself (called from the delayed task), not by a separate ``cache.set()``
+        inside ``send_message_text_alerts_now`` - see that function's docstring for
+        why. Exercise it through the real task entry point both messages go through."""
+        from urbanlens.dashboard.tasks import send_direct_message_text_alerts_if_unread
+
+        self._set_toggles(whatsapp=True)
+        # create_direct_message schedules this very task. Under eager Celery
+        # (UL_CELERY_TASK_ALWAYS_EAGER, how this suite runs outside Docker) it
+        # would then run here - outside the patch below - and claim the
+        # debounce marker, leaving the explicit calls with nothing to do. Stub
+        # the scheduling so the two invocations under test are the only ones.
+        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+            first = create_direct_message(self.sender, self.recipient, "hi")
+            second = create_direct_message(self.sender, self.recipient, "still there?")
+        with patch("urbanlens.dashboard.services.notification_delivery.send_whatsapp") as mock_wa:
+            send_direct_message_text_alerts_if_unread(first.pk)
+            send_direct_message_text_alerts_if_unread(second.pk)
+        mock_wa.assert_called_once()
 
     def test_alert_body_never_contains_message_content(self) -> None:
         from urbanlens.dashboard.services.direct_messages import send_message_text_alerts_now

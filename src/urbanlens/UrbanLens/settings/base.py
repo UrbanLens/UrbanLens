@@ -65,6 +65,12 @@ INSTALLED_APPS = [
     "corsheaders",
     "urbanlens.dashboard.apps.DashboardConfig",
     "social_django",
+    # OAuth2/OIDC provider for native clients (mobile/desktop apps) hitting the
+    # external API - browser sessions and PAT-style ApiKeys are unaffected.
+    "oauth2_provider",
+    # OpenAPI schema generation, served only for the external API surface
+    # (see external_api.schema's preprocessing hook).
+    "drf_spectacular",
 ]
 
 # Routes the websocket protocol (see UrbanLens/asgi.py); HTTP keeps using
@@ -253,6 +259,26 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.run_scheduled_enrichment",
         "schedule": 60 * 60,
     },
+    "scheduled-trivia-generation": {
+        "task": "urbanlens.dashboard.tasks.run_scheduled_trivia_generation",
+        "schedule": 60 * 60,
+    },
+    "scheduled-trivia-wiki-incorporation": {
+        "task": "urbanlens.dashboard.tasks.run_scheduled_trivia_wiki_incorporation",
+        "schedule": 60 * 60,
+    },
+    "spotguessr-stall-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_stalled_spotguessr_sessions",
+        "schedule": 2 * 60,
+    },
+    "trivia-stall-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_stalled_trivia_sessions",
+        "schedule": 2 * 60,
+    },
+    "consensus-stall-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_stalled_consensus_sessions",
+        "schedule": 2 * 60,
+    },
     "safety-checkin-due-reminders": {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
         "schedule": 5 * 60,
@@ -263,6 +289,10 @@ CELERY_BEAT_SCHEDULE = {
     },
     "safety-checkin-escalation": {
         "task": "urbanlens.dashboard.tasks.escalate_overdue_checkins",
+        "schedule": 5 * 60,
+    },
+    "safety-checkin-archival-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_due_safety_checkin_archival",
         "schedule": 5 * 60,
     },
     "account-deletion-reminders": {
@@ -287,6 +317,17 @@ CELERY_BEAT_SCHEDULE = {
     },
     "upgrade-placeholder-pin-names": {
         "task": "urbanlens.dashboard.tasks.upgrade_placeholder_pin_names",
+        "schedule": 60 * 60,
+    },
+    # Daily is plenty: retention is measured in hundreds of days
+    # (services.pin_sync.TOMBSTONE_RETENTION), and the pins/deleted/ feed's 410
+    # full-resync signal guards clients against any pruning-induced gap.
+    "pin-tombstone-pruning": {
+        "task": "urbanlens.dashboard.tasks.prune_pin_tombstones",
+        "schedule": 24 * 60 * 60,
+    },
+    "public-pin-candidate-evaluation": {
+        "task": "urbanlens.dashboard.tasks.evaluate_public_pin_candidates",
         "schedule": 60 * 60,
     },
 }
@@ -353,6 +394,19 @@ STORAGES = {
 
 MEDIA_URL = "/media/"
 MEDIA_ROOT = os.path.join(PROJECT_ROOT, "media")
+
+# Authenticated media serving (dashboard.controllers.media.MediaGateView).
+# When nginx fronts the app (docker/staging/production), the gate view answers
+# authorized requests with an X-Accel-Redirect to the internal-only
+# /_protected_media/ location and nginx streams the file; in local dev
+# (runserver, no nginx) the view streams the file itself via FileResponse.
+# Override with UL_MEDIA_X_ACCEL if a deployment diverges from this default
+# (e.g. a development-flagged docker stack that still runs behind nginx and
+# wants the more efficient handoff).
+MEDIA_X_ACCEL = _env_bool("UL_MEDIA_X_ACCEL", not _is_dev)
+# Must match the `location /_protected_media/` block in
+# src/urbanlens/config/nginx/django.conf.
+MEDIA_X_ACCEL_PREFIX = "/_protected_media/"
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/4.2/ref/settings/#default-auto-field
@@ -501,11 +555,138 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "60/minute",
         "user": "600/minute",
-        # external_api.throttling.ApiKeyRateThrottle - per API key, not per user,
-        # so one connected app's misbehavior can't burn through a budget shared
-        # with a user's other keys.
-        "external_api_key": "120/hour",
+        # external_api.throttling - per credential, not per user, so one
+        # connected app's misbehavior can't burn through a budget shared with a
+        # user's other keys. Split by tier because an interactive sync client
+        # reads far more than it writes: a flat cap generous enough for a full
+        # resync would also be generous enough for a runaway write loop.
+        # The burst cap applies on top of both tiers, bounding a stampede
+        # without lowering the hourly ceiling.
+        "external_api_read": "1000/hour",
+        "external_api_write": "300/hour",
+        "external_api_burst": "60/minute",
+        # Credential-authenticated /media/ fetches (controllers.media). One
+        # gallery screen is dozens of files, so this is deliberately far more
+        # generous than the burst cap - but it is still a cap, so a leaked key
+        # cannot be used as an unmetered CDN.
+        "external_api_media": "2000/hour",
+        # Applied on top of the above, to the handful of endpoints whose cost
+        # is unbounded in the caller's own data rather than fixed per request
+        # (currently the smart-list resync). See
+        # external_api.throttling.ExternalApiResyncThrottle.
+        "external_api_resync": "12/hour",
+        # Autocomplete replaces (rather than adds to) the read cap for the
+        # location-search endpoints - it is charged per keystroke, so counting
+        # it against the shared read budget would let a few minutes of typing
+        # starve the client's actual syncing. Clients are still expected to
+        # debounce; the burst cap above applies here too.
+        "external_api_location_search": "1200/hour",
+        # Starting a game session runs up to 25 eligibility passes over the
+        # player's pins, an N+1 difficulty-proxy lookup across them, and a
+        # *billed* Street View call per attempt - resync-shaped cost, so it gets
+        # a resync-shaped cap rather than a share of the write budget. Generous
+        # enough for dozens of real games an hour.
+        # See external_api.throttling.GameStartThrottle.
+        "external_api_game_start": "40/hour",
+        # Global search fans one request out across every domain provider
+        # (pins, wikis, trips, photos, messages, ...), so a single call is far
+        # from a single query. Its own budget keeps a search-heavy session from
+        # starving the client's actual syncing, and vice versa.
+        "external_api_global_search": "300/hour",
+        # Calendar export talks to Google on the request path and may make one
+        # upstream call per trip activity. Tight, because the cost lands on a
+        # third party's rate limit as much as on ours.
+        "external_api_calendar": "30/hour",
+        # One assistant chat turn bills real model-provider cost and can fan
+        # out to up to 6 model round trips before it replies - resync-shaped
+        # cost, same reasoning as external_api_game_start.
+        "external_api_assistant_message": "60/hour",
+        # Live-location updates while a check-in is active are a foreground-
+        # tracking workload, not an ordinary write - the standard write cap
+        # (300/hour) dies in under an hour at one fix per 10 seconds. Its own
+        # budget accommodates that cadence without loosening the cap every
+        # other safety write shares.
+        "external_api_safety_location": "360/hour",
     },
+    # Only consulted by views whose schema is actually generated - the
+    # preprocessing hook in external_api.schema limits that to the external API.
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+# OpenAPI schema for the external API only - the internal HTMX/REST surface has
+# no public contract and is deliberately excluded (external_api.schema).
+SPECTACULAR_SETTINGS = {
+    "TITLE": "UrbanLens External API",
+    "DESCRIPTION": "Versioned API for external applications and native clients holding a user's API key or OAuth2 token.",
+    "VERSION": "v1",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "PREPROCESSING_HOOKS": ["urbanlens.dashboard.external_api.schema.preprocess_external_api_only"],
+}
+
+# OAuth2 provider (django-oauth-toolkit) - the auth path for native clients
+# (the mobile app registers as a *public* client and must use PKCE; PAT-style
+# ApiKeys remain for simple server-to-server integrations). Scope names
+# deliberately mirror dashboard.models.account.ApiKeyScope values so
+# external_api.permissions.HasApiKeyScope can enforce either credential kind
+# with the same required_scopes declarations.
+OAUTH2_PROVIDER = {
+    "PKCE_REQUIRED": True,
+    # The native app's redirect targets: its custom scheme on Android/iOS, and
+    # RFC 8252 loopback (any port - django-oauth-toolkit matches loopback IPs
+    # port-insensitively) on desktop. "https" stays for any future web client.
+    "ALLOWED_REDIRECT_URI_SCHEMES": ["https", "http", "urbanlens"],
+    # Mirrors dashboard.models.account.model.ApiKeyScope verbatim (value ->
+    # label). The duplication is unavoidable - settings load before the app
+    # registry, so this module cannot import a model - and
+    # test_external_api_scopes asserts the two stay identical.
+    "SCOPES": {
+        "profile:read": "Read your profile UUID",
+        "settings:read": "Read your account preferences",
+        "settings:write": "Change your account preferences",
+        "pins:read": "Read your pins (including deletions, for sync)",
+        "pins:write": "Create, edit, and delete your pins",
+        "lists:read": "Read your pin lists and saved filters",
+        "lists:write": "Create and modify your pin lists and saved filters",
+        "labels:read": "Read your labels",
+        "labels:write": "Create, modify, and merge your labels",
+        "visits:read": "Read your visit history",
+        "visits:write": "Log visits on your behalf",
+        "photos:read": "Read your photos, memories journal, and photo suggestions",
+        "photos:write": "Upload, label, file, vote on, and delete your photos, and act on photo suggestions",
+        "media:read": "Fetch the actual image/video/document files you may see",
+        "wiki:read": "Read community wikis you can see",
+        "wiki:write": "Edit community wikis on your behalf",
+        "trips:read": "Read your trips",
+        "trips:write": "Create and edit your trips",
+        "social:read": "Read your friends list and friend requests",
+        "social:write": "Send, accept, and manage friend relationships on your behalf",
+        "safety:read": "Read your safety check-ins and contacts",
+        "safety:write": "Start, update, and clear safety check-ins",
+        "messages:read": "Read your encrypted messages and conversation list",
+        "messages:write": "Send messages and manage your encryption keys",
+        "notifications:read": "Read your notifications and delivery preferences",
+        "notifications:write": "Mark notifications read and change delivery preferences",
+        "search:read": "Search your pins, wikis, and photos",
+        "games:read": "Read your game history, scores, and leaderboard standing",
+        "games:write": "Start games and submit guesses and answers on your behalf",
+        "push:manage": "Register and remove this device's push notifications",
+        "custom_fields:read": "Read your custom field definitions and their values",
+        "custom_fields:write": "Create, edit, and delete your custom fields and their values",
+        "undo:read": "Read your recent delete history available to undo",
+        "undo:write": "Restore a previously deleted item",
+        "panels:read": "Read pin-detail enrichment panels (boundaries and other plugin-contributed data)",
+        "assistant:write": "Chat with your AI assistant, including creating trips and trip activities it suggests",
+        "device_scans:read": "Read nearby expected devices and their signal info",
+        "device_scans:write": "Upload wireless device scan data",
+    },
+    # Deliberately NOT the full SCOPES list: a token that asked for nothing in
+    # particular gets the same minimal grant a PAT does
+    # (account.model._default_api_key_scopes). Everything else must be
+    # explicitly requested so it appears on the consent screen.
+    "DEFAULT_SCOPES": ["profile:read", "pins:read", "pins:write", "push:manage"],
+    "ACCESS_TOKEN_EXPIRE_SECONDS": 3600,
+    "REFRESH_TOKEN_EXPIRE_SECONDS": 60 * 60 * 24 * 90,
+    "ROTATE_REFRESH_TOKEN": True,
 }
 
 LOG_DIR = os.getenv("UL_LOG_DIR", os.path.join(PROJECT_ROOT, "logs"))
@@ -529,6 +710,11 @@ LOGGING = {
         "verbose": {
             "format": "{asctime} {levelname} {name} [{module}:{lineno}] {message}",
             "style": "{",
+        },
+    },
+    "filters": {
+        "health_check_access": {
+            "()": "urbanlens.UrbanLens.logging_filters.HealthCheckAccessLogFilter",
         },
     },
     "handlers": {
@@ -558,6 +744,20 @@ LOGGING = {
         "django.request": {
             "handlers": _log_handlers,
             "level": "ERROR",
+            "propagate": False,
+        },
+        # ASGI/WSGI dev-server access loggers - silence the health check
+        # probe's request line specifically, since it fires every ~30s.
+        "django.channels.server": {
+            "handlers": _log_handlers,
+            "filters": ["health_check_access"],
+            "level": "INFO",
+            "propagate": False,
+        },
+        "django.server": {
+            "handlers": _log_handlers,
+            "filters": ["health_check_access"],
+            "level": "INFO",
             "propagate": False,
         },
         "urbanlens": {

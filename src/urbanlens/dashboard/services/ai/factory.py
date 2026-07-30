@@ -17,10 +17,17 @@ _FEATURE_FIELDS: dict[str, str] = {
     "label_style_suggestions": "ai_category_suggestions_enabled",
     "document_pin_import": "ai_document_import_enabled",
     "link_extraction": "ai_link_extraction_enabled",
+    "article_expansion": "ai_article_expansion_enabled",
+    "article_safety": "ai_article_safety_enabled",
+    "trip_suggestions": "ai_trip_suggestions_enabled",
+    "trivia_moderation": "ai_trivia_moderation_enabled",
+    "trivia_generation": "ai_trivia_generation_enabled",
+    "trivia_answer_check": "ai_trivia_answer_check_enabled",
+    "trivia_wiki_incorporation": "ai_trivia_wiki_incorporation_enabled",
 }
 
 
-def get_gateway(feature: str | None = None, profile: Profile | None = None, **kwargs) -> LLMGateway | None:
+def get_gateway(feature: str | None = None, profile: Profile | None = None, provider: str | None = None, **kwargs) -> LLMGateway | None:
     """Return a configured AI gateway, or None if AI is disabled.
 
     Reads provider, model, and feature-flag state from SiteSettings so the
@@ -34,6 +41,11 @@ def get_gateway(feature: str | None = None, profile: Profile | None = None, **kw
             given, both its ``ai_enabled`` and ``external_apis_enabled``
             preferences must also be on - centralizes the per-profile check so
             individual callers don't each duplicate it.
+        provider: Optional provider override (``"openai"``, ``"cloudflare"``,
+            or ``"anthropic"``). When given, this takes precedence over the
+            site-wide ``ai_provider`` setting - used by callers that need a
+            specific provider's capabilities (e.g. the chat assistant's
+            tool-calling protocol) regardless of the site default.
         **kwargs: Extra keyword arguments forwarded to the gateway constructor
             (e.g. ``instructions``, ``formatting``).
 
@@ -60,7 +72,7 @@ def get_gateway(feature: str | None = None, profile: Profile | None = None, **kw
             logger.debug("AI feature '%s' is disabled; skipping AI call", feature)
             return None
 
-    provider = site.ai_provider
+    provider = provider or site.ai_provider
 
     if provider == "openai":
         from urbanlens.dashboard.services.ai.openai import OpenAIGateway
@@ -71,6 +83,11 @@ def get_gateway(feature: str | None = None, profile: Profile | None = None, **kw
         from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway
 
         return CloudflareGateway(model=site.cloudflare_model or None, **kwargs)
+
+    if provider == "anthropic":
+        from urbanlens.dashboard.services.ai.anthropic import AnthropicGateway
+
+        return AnthropicGateway(model=site.anthropic_model or None, **kwargs)
 
     logger.warning("Unknown AI provider '%s'; falling back to Cloudflare", provider)
     from urbanlens.dashboard.services.ai.cloudflare import CloudflareGateway

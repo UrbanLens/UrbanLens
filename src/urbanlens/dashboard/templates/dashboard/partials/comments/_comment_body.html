@@ -22,7 +22,7 @@
     <span class="comment-date">{{ comment.created|human_timesince }}</span>
     {% if include_children and context_type == "pin" and comment.pin_id != pin.id %}
     <a class="comment-child-chip" href="{% url 'pin.details' comment.pin.slug|default:comment.pin.uuid %}"
-       title="Written on the sub pin {{ comment.pin.effective_name }}">
+       title="Written on the child pin {{ comment.pin.effective_name }}">
         <i class="material-symbols-outlined">subdirectory_arrow_right</i>{{ comment.pin.effective_name }}
     </a>
     {% endif %}

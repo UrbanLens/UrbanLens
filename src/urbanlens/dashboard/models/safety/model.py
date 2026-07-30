@@ -15,12 +15,14 @@ from django.db.models import (
     DecimalField,
     DurationField,
     EmailField,
+    FloatField,
     ForeignKey,
     Index,
     IntegerField,
     Manager as DjangoManager,
     ManyToManyField,
     OneToOneField,
+    PositiveIntegerField,
     Q,
     TextField,
     UUIDField,
@@ -32,6 +34,7 @@ from urbanlens.dashboard.models.safety.queryset import (
     EmergencyContactDefaultManager,
     SafetyCheckinContactManager,
     SafetyCheckinManager,
+    SafetyCheckinPartnerManager,
     SafetyContactOptOutManager,
 )
 
@@ -212,6 +215,11 @@ class SafetyCheckin(abstract.PublicDashboardModel):
 
     Attributes:
         profile: The profile who created and owns this check-in.
+        trip: The Trip this check-in was started for, if any - a profile may
+            have at most one active check-in per (profile, trip) scope (see
+            ``services.safety.get_active_checkin``), so a general (``trip``
+            is ``None``) check-in and a trip-scoped one, or check-ins for two
+            different trips, can be active at the same time.
         title: Short display label (e.g. "Weekend hike - Eagle Ridge").
         plan_details: Free-form trip plan description.
         contact_message: Custom message shown to emergency contacts.
@@ -233,6 +241,19 @@ class SafetyCheckin(abstract.PublicDashboardModel):
             community wiki and notify users with pins there (see ``services.safety.notify_community_wiki``).
         wiki_notified_at: When the community wiki comment was posted, if at all - also makes the
             escalation-time wiki notification idempotent.
+        live_location_sharing_enabled: Whether the owner has opted into sharing their current
+            position with accepted partners (see ``services.safety.set_live_location_sharing``).
+        live_latitude: The owner's most recently shared position, if sharing is/was enabled.
+        live_longitude: The owner's most recently shared position, if sharing is/was enabled.
+        live_location_accuracy: Accuracy (meters) reported alongside ``live_latitude``/``live_longitude``.
+        live_location_updated_at: When the live position was last updated, if ever.
+        archive_scheduled_at: When ``services.safety.archive_checkin`` should encrypt and scrub
+            this check-in's PII, if it has resolved - immediately on resolution if no one but the
+            owner could ever see it, or after a 1-hour grace window otherwise (see
+            ``services.safety.schedule_checkin_archival``). ``None`` until resolved.
+        resolved_by_label: Display label of whoever concluded this check-in ("you", a partner's
+            username, or a contact's display name) - captured for the archive payload, then
+            scrubbed at archival like every other PII field on this model.
     """
 
     title = CharField(max_length=200)
@@ -254,7 +275,31 @@ class SafetyCheckin(abstract.PublicDashboardModel):
     notify_community_wiki = BooleanField(default=False)
     wiki_notified_at = DateTimeField(null=True, blank=True)
 
+    # Opt-in, owner-controlled live position feed - visible only to accepted
+    # partners (see consumers.SafetyCheckinChatConsumer), never to emergency
+    # contacts. Default off: continuous GPS is a real battery/privacy cost the
+    # owner must actively choose, not something a check-in should assume.
+    # Current point only, overwritten on each update - no history/breadcrumb
+    # trail (deliberately out of scope; see docs/designs' safety-partner plan).
+    live_location_sharing_enabled = BooleanField(default=False)
+    live_latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    live_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    live_location_accuracy = FloatField(null=True, blank=True)
+    live_location_updated_at = DateTimeField(null=True, blank=True)
+
+    # Post-resolution encryption/archival - see SafetyCheckinArchive and
+    # services.safety.schedule_checkin_archival/archive_checkin.
+    archive_scheduled_at = DateTimeField(null=True, blank=True)
+    resolved_by_label = CharField(max_length=150, blank=True, default="")
+
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="safety_checkins")
+    trip = ForeignKey(
+        "dashboard.Trip",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="safety_checkins",
+    )
     destination_location = ForeignKey(
         "dashboard.Location",
         on_delete=SET_NULL,
@@ -280,10 +325,13 @@ class SafetyCheckin(abstract.PublicDashboardModel):
 
     if TYPE_CHECKING:
         profile_id: int
+        trip_id: int | None
         destination_location_id: int | None
         markup_map_id: int | None
         contacts: DjangoManager[SafetyCheckinContact]
         messages: DjangoManager[SafetyCheckinMessage]
+        partners: DjangoManager[SafetyCheckinPartner]
+        archive: SafetyCheckinArchive | None
 
     objects = SafetyCheckinManager()
 
@@ -352,8 +400,12 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         ordering = ["-checkin_by"]
         indexes = [
             Index(fields=["uuid"], name="idxdb_sc_uuid"),
-            Index(fields=["profile", "status"], name="idxdb_sc_profile_status"),
+            Index(fields=["profile", "trip", "status"], name="idxdb_sc_profile_trip_status"),
             Index(fields=["status", "checkin_by"], name="idxdb_sc_status_by"),
+            # Backs SafetyCheckinQuerySet.due_for_archival(), polled by the 5-minute
+            # archival sweep beat task forever - without this it's a sequential scan
+            # over every check-in on every tick.
+            Index(fields=["archive_scheduled_at"], name="idxdb_sc_archive_scheduled_at"),
         ]
 
 
@@ -479,6 +531,103 @@ class SafetyContactOptOut(abstract.DashboardModel):
                 name="db_safety_contact_optout_scope_fields_match",
             ),
         ]
+
+
+class SafetyCheckinPartnerStatus(abstract.TextChoices):
+    """Lifecycle status of a SafetyCheckinPartner invite."""
+
+    INVITED = "invited", "Invited"
+    ACCEPTED = "accepted", "Accepted"
+
+
+class SafetyCheckinPartner(abstract.DashboardModel):
+    """A trusted account granted early, full visibility into one check-in, plus the
+    ability to conclude it.
+
+    Unlike a ``SafetyCheckinContact`` (notified without opting in, only once
+    overdue/escalated), a partner sees the full check-in - plan, contacts, chat,
+    and any shared live location - from the moment they accept, well before
+    anything goes wrong. Access requires ``status == ACCEPTED``: this is a real
+    safety responsibility, not a passive share, so an invite must be actively
+    accepted before any view/act access is granted (see
+    ``services.safety.is_owner_or_accepted_partner``).
+
+    Only the check-in's owner may invite a partner - unlike Trip's
+    ``allow_add_members`` permission matrix, a check-in has exactly one
+    accountable owner, so a delegated invite-permission matrix would only
+    diffuse accountability for a safety-critical role.
+    """
+
+    status = CharField(max_length=10, choices=SafetyCheckinPartnerStatus.choices, default=SafetyCheckinPartnerStatus.INVITED)
+    accepted_at = DateTimeField(null=True, blank=True)
+
+    checkin = ForeignKey(SafetyCheckin, on_delete=CASCADE, related_name="partners")
+    profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="safety_checkin_partner_roles")
+    invited_by = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="+")
+
+    if TYPE_CHECKING:
+        checkin_id: int
+        profile_id: int
+        invited_by_id: int
+
+    objects = SafetyCheckinPartnerManager()
+
+    def __str__(self) -> str:
+        """Return a human-readable description of this partner assignment.
+
+        Returns:
+            String like "<username> partner on checkin <id> (<status>)".
+        """
+        return f"{self.profile.username} partner on checkin {self.checkin_id} ({self.status})"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_safety_checkin_partners"
+        unique_together = [("checkin", "profile")]
+        indexes = [
+            Index(fields=["checkin", "status"], name="idxdb_scp_checkin_status"),
+            Index(fields=["profile", "status"], name="idxdb_scp_profile_status"),
+        ]
+
+
+class SafetyCheckinArchive(abstract.DashboardModel):
+    """The encrypted, owner-only remnant of a concluded check-in.
+
+    Created by ``services.safety.archive_checkin`` once a resolved check-in's
+    grace window elapses: the check-in's PII (plan, contacts, chat, resolution
+    details) is serialized to JSON, encrypted with a fresh random key
+    (``crypto_secretbox``), and that key is sealed (``crypto_box_seal``) to
+    only the owner's ``MessagingKeyBundle.public_key`` - after which the
+    plaintext columns on ``SafetyCheckin``/``SafetyCheckinContact``/
+    ``SafetyCheckinMessage`` are scrubbed. Sealing needs only the owner's
+    *public* key, so this can happen entirely server-side, with the owner
+    offline, exactly like ``ConversationKey``/``GroupKeyEnvelope`` already do
+    for direct messages - the server can never decrypt this row itself.
+
+    ``hasattr(checkin, "archive")`` is the sole "has this check-in been
+    archived" signal - no separate boolean flag exists on ``SafetyCheckin`` to
+    risk drifting from it.
+    """
+
+    checkin = OneToOneField(SafetyCheckin, on_delete=CASCADE, related_name="archive")
+    ciphertext = TextField()
+    nonce = CharField(max_length=64)
+    sealed_key = TextField()
+    key_bundle_version = PositiveIntegerField()
+    encrypted_at = DateTimeField(auto_now_add=True)
+
+    if TYPE_CHECKING:
+        checkin_id: int
+
+    def __str__(self) -> str:
+        """Return a human-readable description of this archive row.
+
+        Returns:
+            String like "Archive for checkin <id> (sealed v3)".
+        """
+        return f"Archive for checkin {self.checkin_id} (sealed v{self.key_bundle_version})"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_safety_checkin_archives"
 
 
 class SafetyCheckinMessage(abstract.DashboardModel):

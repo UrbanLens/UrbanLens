@@ -2,22 +2,31 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.services.undo.base import UndoHandler, describe_batch, register
 
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
 _RESTORABLE_FIELDS = ("name", "icon", "criteria", "order")
+
+#: Registry key for this handler. Exposed as a module-level constant so call
+#: sites can import it (``from ...handlers.saved_filter import MODEL_LABEL``)
+#: instead of hand-typing ``"saved_filter"`` - a typo in a hand-typed string
+#: only fails at runtime via ``get_handler``'s ``ValueError``.
+MODEL_LABEL = "saved_filter"
 
 
 @register
 class SavedFilterUndoHandler(UndoHandler):
     """Restores a saved filter's name, icon, criteria, and sidebar order."""
 
-    model_label = "saved_filter"
+    model_label = MODEL_LABEL
 
     @classmethod
-    def serialize(cls, instances: list[SavedFilter]) -> list[dict[str, Any]]:
+    def serialize(cls, instances: Sequence[SavedFilter]) -> list[dict[str, Any]]:
         return [cls._serialize_one(saved_filter) for saved_filter in instances]
 
     @classmethod
@@ -26,7 +35,7 @@ class SavedFilterUndoHandler(UndoHandler):
         return {"fields": fields, "profile_id": saved_filter.profile_id}
 
     @classmethod
-    def describe(cls, instances: list[SavedFilter]) -> str:
+    def describe(cls, instances: Sequence[SavedFilter]) -> str:
         return describe_batch("Saved filter", "saved filters", [f.name for f in instances])
 
     @classmethod

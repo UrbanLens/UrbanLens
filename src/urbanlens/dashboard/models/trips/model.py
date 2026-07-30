@@ -31,6 +31,7 @@ from urbanlens.dashboard.services.text_limits import (
 
 if TYPE_CHECKING:
     from datetime import date
+    from typing import Any
 
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -112,6 +113,17 @@ class Trip(abstract.PublicDashboardModel):
     if TYPE_CHECKING:
         creator_id: int | None
         activities: DjangoManager[TripActivity]
+        # Set by controllers.trip._annotate_viewer_membership on trips list
+        # page results - not a real field/annotation, just a per-request
+        # shortcut to the viewing profile's own membership row (or None).
+        viewer_membership: TripMembership | None
+        # Set by external_api.views._trip_detail_payload, in the same
+        # per-request-decoration spirit as viewer_membership above: the trip
+        # detail response bundles what this particular caller may do, their
+        # calendar-mirroring state, and the roster, none of which are fields.
+        viewer: dict[str, Any]
+        calendar_sync: dict[str, Any]
+        members: list[TripMembership]
 
     objects = TripManager()
 
@@ -163,6 +175,22 @@ class Trip(abstract.PublicDashboardModel):
         if start and end:
             return (end - start).days + 1
         return None
+
+    @property
+    def elapsed_day(self) -> int | None:
+        """1-indexed day number within the trip while it's active, else ``None``.
+
+        Clamped to ``duration_days`` so activities scheduled past a declared
+        ``end_date`` can't push this above the trip's own day count.
+        """
+        if self.timeline_status != "active":
+            return None
+        start = self.effective_start_date
+        duration = self.duration_days
+        if start is None or duration is None:
+            return None
+        day = (timezone.now().date() - start).days + 1
+        return max(1, min(day, duration))
 
     def _slugify_base(self) -> str:
         return self.name or str(self.uuid)
@@ -295,8 +323,8 @@ class TripMembership(abstract.DashboardModel):
     RSVP_NO = "no"
     RSVP_MAYBE = "maybe"
     RSVP_CHOICES = [
-        ("yes", "Yes"),
-        ("no", "No"),
+        ("yes", "Going"),
+        ("no", "Not Coming"),
         ("maybe", "Maybe"),
     ]
 
@@ -349,6 +377,62 @@ class TripMembership(abstract.DashboardModel):
         ]
         permissions = [
             ("remove_trip_members", "Can remove members from trips"),
+        ]
+
+
+class TripActivityRSVP(abstract.DashboardModel):
+    """A member's explicit RSVP override for one trip activity.
+
+    The absence of a row means the activity inherits the member's
+    :class:`TripMembership` RSVP. Keeping only overrides makes a later change
+    to the trip RSVP flow through automatically without overwriting deliberate
+    per-activity choices.
+    """
+
+    rsvp = CharField(max_length=20, choices=TripMembership.RSVP_CHOICES)
+    activity = ForeignKey(
+        TripActivity,
+        on_delete=CASCADE,
+        related_name="rsvps",
+    )
+    membership = ForeignKey(
+        TripMembership,
+        on_delete=CASCADE,
+        related_name="activity_rsvp_overrides",
+    )
+
+    if TYPE_CHECKING:
+        activity_id: int
+        membership_id: int
+
+    @classmethod
+    def effective_for(cls, activity: TripActivity, profile: Profile) -> str | None:
+        """Return the activity override, falling back to the trip RSVP.
+
+        Args:
+            activity: Activity whose effective response is needed.
+            profile: Trip participant whose response is needed.
+
+        Returns:
+            ``"yes"``, ``"no"``, ``"maybe"``, or ``None`` when the member
+            has responded at neither level.
+        """
+        membership = TripMembership.objects.filter(trip=activity.trip, profile=profile).first()
+        if membership is None:
+            return None
+        override = cls.objects.filter(activity=activity, membership=membership).values_list("rsvp", flat=True).first()
+        if override is not None:
+            return override
+        return membership.rsvp
+
+    def __str__(self) -> str:
+        return f"{self.membership.profile} is {self.rsvp} for {self.activity}"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_trip_activity_rsvps"
+        unique_together = [("activity", "membership")]
+        indexes = [
+            Index(fields=["activity"], name="idxdb_taar_activity"),
         ]
 
 

@@ -32,6 +32,7 @@ from urbanlens.dashboard.models.custom_fields.model import (
     CustomFieldEntity,
     CustomFieldType,
     CustomFieldValue,
+    CustomFieldValueError,
 )
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
@@ -120,8 +121,8 @@ def save_value(field: CustomField, target: Any, raw: str) -> tuple[CustomFieldVa
     value = existing or CustomFieldValue(field=field, **{target_attr: target})
     try:
         value.set_value(raw)
-    except ValueError as e:
-        return None, str(e)
+    except CustomFieldValueError as e:
+        return None, e.safe_message
     value.save()
     return value, None
 
@@ -296,6 +297,15 @@ class CustomFieldUpdateView(LoginRequiredMixin, View):
             error = "This field already has values - clear them before changing its type."
         if error is None and field.field_type == CustomFieldType.REFERENCE and definition["field_type"] == CustomFieldType.REFERENCE and definition["config"].get("ref_type") != field.reference_kind and field.values.exists():
             error = "This field already has values - clear them before changing what it references."
+        if error is None and field.field_type == CustomFieldType.SELECT and definition["field_type"] == CustomFieldType.SELECT:
+            new_options = set(definition["config"].get("choices", []))
+            if new_options != set(field.select_choices):
+                orphaned = sorted(field.values.exclude(value_text__in=new_options).values_list("value_text", flat=True).distinct())
+                if orphaned:
+                    preview = ", ".join(f"“{value}”" for value in orphaned[:5])
+                    if len(orphaned) > 5:
+                        preview += f", and {len(orphaned) - 5} more"
+                    error = f"Can't remove option(s) still in use: {preview}. Update or clear those values first."
         if error is None and name.lower() != field.name.lower() and CustomField.objects.filter(profile=profile, entity_type=field.entity_type, name__iexact=name).exclude(pk=field.pk).exists():
             error = f"You already have a “{name}” field there."
         if error is None:

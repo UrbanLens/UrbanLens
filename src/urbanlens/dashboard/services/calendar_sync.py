@@ -26,6 +26,8 @@ from urbanlens.dashboard.services.apis.calendar.google import (
 from urbanlens.dashboard.services.gateway import GatewayRequestError
 
 if TYPE_CHECKING:
+    from collections.abc import Collection
+
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
@@ -39,7 +41,7 @@ _MAX_TRIP_NAME_LENGTH = 255
 DEFAULT_ACTIVITY_EVENT_DURATION = datetime.timedelta(hours=2)
 
 
-def trip_to_event_body(trip: Trip, *, trip_url: str | None = None) -> dict[str, Any]:
+def trip_to_event_body(trip: Trip, *, trip_url: str | None = None, hidden_activity_ids: Collection[int] | None = None) -> dict[str, Any]:
     """Convert a trip into a Google Calendar all-day event payload.
 
     Trips carry dates (not times), so they map to all-day events. Google's
@@ -50,6 +52,10 @@ def trip_to_event_body(trip: Trip, *, trip_url: str | None = None) -> dict[str, 
         trip: The trip to export. Must have an effective start date.
         trip_url: Optional absolute URL of the trip page to append to the
             event description.
+        hidden_activity_ids: Ids of activities whose location the *exporting*
+            viewer may not see, from
+            :func:`~urbanlens.dashboard.services.trip_visibility.viewer_hidden_activity_ids`.
+            See :func:`_activity_location_string` for why passing this matters.
 
     Returns:
         Event resource payload for the Calendar API.
@@ -75,25 +81,44 @@ def trip_to_event_body(trip: Trip, *, trip_url: str | None = None) -> dict[str, 
         "end": {"date": (end + datetime.timedelta(days=1)).isoformat()},
         "extendedProperties": {"private": {TRIP_UUID_EVENT_PROPERTY: str(trip.uuid)}},
     }
-    location_string = _trip_location_string(trip)
+    location_string = _trip_location_string(trip, hidden_activity_ids=hidden_activity_ids)
     if location_string:
         body["location"] = location_string
     return body
 
 
-def _activity_location_string(activity: TripActivity) -> str | None:
+def _activity_location_string(activity: TripActivity, *, hidden_activity_ids: Collection[int] | None = None) -> str | None:
     """Human-readable location for an activity's calendar event.
 
-    Respects ``location_hidden`` (secret locations are never exported).
-    Prefers the linked place's address, falling back to coordinates.
+    Two independent gates decide whether a location may leave the site here,
+    and both have to be applied. ``location_hidden`` is the activity's own
+    "this one is secret" flag. *hidden_activity_ids* is the per-viewer gate
+    every other trip surface runs - the activities panel, the map, AI
+    suggestions - derived from each adder's ``trip_pin_location_visibility``
+    setting; it answers "may **this particular exporter** see where their
+    trip-mate's stop actually is".
+
+    Only the first gate used to exist here, and the consequence was worse than
+    the usual over-sharing bug: a member exporting a shared trip received, in a
+    *third party's* calendar, precisely the coordinates the trip screen had
+    refused to show them - somewhere no UrbanLens privacy setting can ever
+    reach again. Callers that operate on behalf of a viewer must therefore pass
+    *hidden_activity_ids*; :func:`export_trip_to_calendar` computes it once per
+    export and threads it through.
 
     Args:
         activity: The TripActivity to describe.
+        hidden_activity_ids: Ids of activities whose location the exporting
+            viewer may not see. None disables the per-viewer gate, which is
+            correct only for the pure-mapping callers that have no viewer at
+            all (the property tests over this module's conversion helpers).
 
     Returns:
         A location string for the event, or None when nothing shareable exists.
     """
     if activity.location_hidden:
+        return None
+    if hidden_activity_ids is not None and activity.pk in hidden_activity_ids:
         return None
     location = activity.location or (activity.pin.location if activity.pin else None)
     if location is not None and location.address:
@@ -105,15 +130,19 @@ def _activity_location_string(activity: TripActivity) -> str | None:
     return None
 
 
-def _trip_location_string(trip: Trip) -> str | None:
+def _trip_location_string(trip: Trip, *, hidden_activity_ids: Collection[int] | None = None) -> str | None:
     """Human-readable location for the trip-level calendar event.
 
     Uses the trip's first activity (by schedule, then manual order) that has a
     shareable location, so the exported all-day event points at where the trip
-    starts.
+    starts. "Shareable" includes the per-viewer gate: an activity this exporter
+    may not see the location of is skipped entirely rather than promoted to the
+    trip event, which would have leaked it under a different label.
 
     Args:
         trip: The trip being exported.
+        hidden_activity_ids: Ids of activities whose location the exporting
+            viewer may not see - see :func:`_activity_location_string`.
 
     Returns:
         A location string for the event, or None when no activity has one.
@@ -122,13 +151,13 @@ def _trip_location_string(trip: Trip) -> str | None:
         # Unsaved trips (e.g. pure-mapping property tests) have no activities.
         return None
     for activity in trip.activities.select_related("location", "pin__location"):
-        location_string = _activity_location_string(activity)
+        location_string = _activity_location_string(activity, hidden_activity_ids=hidden_activity_ids)
         if location_string:
             return location_string
     return None
 
 
-def activity_to_event_body(activity: TripActivity, *, trip_url: str | None = None) -> dict[str, Any] | None:
+def activity_to_event_body(activity: TripActivity, *, trip_url: str | None = None, hidden_activity_ids: Collection[int] | None = None) -> dict[str, Any] | None:
     """Convert one scheduled trip activity into a timed calendar event payload.
 
     Activities without a scheduled start cannot be placed on a calendar and
@@ -139,6 +168,8 @@ def activity_to_event_body(activity: TripActivity, *, trip_url: str | None = Non
         activity: The TripActivity to export (with ``trip`` loaded).
         trip_url: Optional absolute URL of the trip page to append to the
             event description.
+        hidden_activity_ids: Ids of activities whose location the exporting
+            viewer may not see - see :func:`_activity_location_string`.
 
     Returns:
         Event resource payload, or None when the activity is unscheduled.
@@ -166,7 +197,7 @@ def activity_to_event_body(activity: TripActivity, *, trip_url: str | None = Non
             },
         },
     }
-    location_string = _activity_location_string(activity)
+    location_string = _activity_location_string(activity, hidden_activity_ids=hidden_activity_ids)
     if location_string:
         body["location"] = location_string
     return body
@@ -570,17 +601,44 @@ def import_events_as_trips(account: GoogleCalendarAccount, selections: list[str 
 
         trip = Trip.objects.create(creator=profile, **kwargs)
         TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": TripMembership.RSVP_YES})
+
+        activity = _create_activity_from_event(trip, event, profile) if selection.get("create_activity", True) else None
+
+        # A *timed* imported event whose location became an activity keeps its
+        # own event-shaped link (see _sync_activity_events/activity_to_event_body),
+        # rather than the trip-level link reusing the same google_event_id.
+        # The trip-level link always maps to an *all-day* body
+        # (export_trip_to_calendar/trip_to_event_body), so if it kept this
+        # event's id, the next manual export or auto-sync push would both
+        # convert the original timed appointment into an all-day event *and*
+        # create a brand-new duplicate timed event for the activity (which
+        # would otherwise have no link of its own) - the opposite of this
+        # module's dedup guarantee. Leaving the trip-level link's
+        # google_event_id blank means the first export/push creates a fresh
+        # all-day "trip" event instead of clobbering the original one (see
+        # _upsert_event_link, which only attempts to update an existing event
+        # when the link already carries an id); already_linked() still finds
+        # this event via the activity-level link created below.
+        timed_import = activity is not None and activity.scheduled_at is not None
         TripCalendarLink.objects.create(
             trip=trip,
             profile=profile,
             google_calendar_id=account.calendar_id,
-            google_event_id=event_id,
+            google_event_id="" if timed_import else event_id,
             direction=CalendarSyncDirection.IMPORTED,
             last_synced=timezone.now(),
             auto_sync=bool(selection.get("auto_sync")),
         )
-        if selection.get("create_activity", True):
-            _create_activity_from_event(trip, event, profile)
+        if timed_import:
+            TripCalendarLink.objects.create(
+                trip=trip,
+                activity=activity,
+                profile=profile,
+                google_calendar_id=account.calendar_id,
+                google_event_id=event_id,
+                direction=CalendarSyncDirection.IMPORTED,
+                last_synced=timezone.now(),
+            )
         invited_total += _invite_participants(trip, profile, list(selection.get("invite_profile_ids") or []), skipped)
         created.append(trip)
 
@@ -641,6 +699,7 @@ def _sync_activity_events(
     trip: Trip,
     *,
     trip_url: str | None = None,
+    hidden_activity_ids: Collection[int] | None = None,
 ) -> int:
     """Mirror every scheduled activity of a trip as a timed event on the user's calendar.
 
@@ -650,11 +709,19 @@ def _sync_activity_events(
     events are cleaned up by the caller's full-removal path or simply left
     to the user - Google shows them as normal events).
 
+    An activity whose location this exporter may not see is still mirrored -
+    it is on their itinerary and they are entitled to know when it is - but
+    without its ``location`` field. Dropping the event outright would be a
+    different kind of wrong: the exporter's calendar would show a gap where
+    they are in fact committed to be somewhere.
+
     Args:
         gateway: Authenticated calendar gateway.
         account: The user's connected calendar account.
         trip: The trip whose activities to mirror.
         trip_url: Optional absolute trip URL for event descriptions.
+        hidden_activity_ids: Ids of activities whose location this account's
+            owner may not see - see :func:`_activity_location_string`.
 
     Returns:
         The number of activity events created or updated.
@@ -668,7 +735,7 @@ def _sync_activity_events(
     exported = 0
     scheduled_ids: set[int] = set()
     for activity in trip.activities.filter(scheduled_at__isnull=False).select_related("trip", "location", "pin__location"):
-        body = activity_to_event_body(activity, trip_url=trip_url)
+        body = activity_to_event_body(activity, trip_url=trip_url, hidden_activity_ids=hidden_activity_ids)
         if body is None:
             continue
         _upsert_event_link(gateway, account, body, activity_links.get(activity.pk), trip=trip, activity=activity)
@@ -684,11 +751,48 @@ def _sync_activity_events(
     return exported
 
 
+def _hidden_activity_ids_for(trip: Trip, profile: Profile) -> set[int]:
+    """Ids of *trip*'s activities whose location *profile* is not permitted to see.
+
+    The same gate ``services.trip_visibility`` applies on the activities panel,
+    the trip map, and AI suggestions, run here so an export cannot become the
+    one surface that ignores it. Loading ``added_by`` is required, not an
+    optimization: the rule is keyed on the *adder's*
+    ``trip_pin_location_visibility``, and without the join the gate would issue
+    a query per activity while evaluating it.
+
+    Args:
+        trip: The trip being exported.
+        profile: The profile whose calendar is being written.
+
+    Returns:
+        The hidden activity ids; empty when nothing is restricted.
+    """
+    from urbanlens.dashboard.services.trip_visibility import viewer_hidden_activity_ids
+
+    activities = list(trip.activities.select_related("added_by"))
+    return viewer_hidden_activity_ids(activities, profile)
+
+
 def export_trip_to_calendar(account: GoogleCalendarAccount, trip: Trip, *, trip_url: str | None = None) -> tuple[TripCalendarLink, int]:
     """Mirror a trip (all-day event) and its scheduled activities (timed events) to the user's calendar.
 
     A trip already linked for this profile updates its existing events; events
     deleted on the Google side are recreated and their links repointed.
+
+    Locations are filtered for the account's owner before anything is written.
+    A trip is a shared space, and its members' stops carry each adder's
+    ``trip_pin_location_visibility`` setting; an export that ignored it would
+    hand a member coordinates the trip screen deliberately withholds from them,
+    inside a third party's calendar where no later privacy change can reach.
+    See :func:`_activity_location_string`.
+
+    This function deliberately runs **outside** any database transaction, and
+    callers must not wrap it in one: it makes one upstream request per event,
+    so an enclosing ``atomic`` block would pin a connection for the length of
+    an unbounded third-party fan-out. It is idempotent instead - re-running it
+    updates the events it already created rather than duplicating them - which
+    is what makes a partial failure safe to simply retry.
 
     Args:
         account: The user's connected calendar account.
@@ -701,16 +805,54 @@ def export_trip_to_calendar(account: GoogleCalendarAccount, trip: Trip, *, trip_
 
     Raises:
         ValueError: When the trip has no dates to export.
+        GoogleAuthExpiredError: When Google has rejected the stored grant and
+            the connection must be re-established.
         GatewayRequestError: When a calendar write fails.
     """
     gateway = GoogleCalendarGateway(account=account)
-    body = trip_to_event_body(trip, trip_url=trip_url)
     profile = account.profile
+    hidden_activity_ids = _hidden_activity_ids_for(trip, profile)
+    body = trip_to_event_body(trip, trip_url=trip_url, hidden_activity_ids=hidden_activity_ids)
 
     trip_link = TripCalendarLink.objects.trip_level_link(trip, profile)
     trip_link = _upsert_event_link(gateway, account, body, trip_link, trip=trip)
-    activity_count = _sync_activity_events(gateway, account, trip, trip_url=trip_url)
+    activity_count = _sync_activity_events(gateway, account, trip, trip_url=trip_url, hidden_activity_ids=hidden_activity_ids)
     return trip_link, activity_count
+
+
+def trip_calendar_status(trip: Trip, profile: Profile) -> dict[str, Any]:
+    """Describe one profile's calendar mirroring of one trip.
+
+    The read model behind every "is this trip on my calendar?" payload. It is
+    a service rather than a view helper because three surfaces answer the same
+    question - the trip detail bundle, the auto-sync toggle, and the
+    export/unexport pair - and a second copy would be the one that forgets a
+    field.
+
+    ``account_email`` matters more than it looks: a user may have several
+    Google accounts, and ``connected: true`` alone does not tell them *which*
+    calendar a shared trip's itinerary is being written into. It costs nothing
+    to include - it is a column on the account row this function already has to
+    load to answer ``connected`` at all.
+
+    Args:
+        trip: The trip in question.
+        profile: The profile whose calendar is being described.
+
+    Returns:
+        Dict with ``connected``, ``linked``, ``auto_sync``, ``last_synced`` and
+        ``account_email`` keys. Two queries at most, and one when the profile
+        has no connected calendar.
+    """
+    account = GoogleCalendarAccount.objects.get_for_profile(profile)
+    link = TripCalendarLink.objects.trip_level_link(trip, profile) if account else None
+    return {
+        "connected": account is not None,
+        "linked": link is not None,
+        "auto_sync": bool(link and link.auto_sync),
+        "last_synced": link.last_synced if link else None,
+        "account_email": account.google_email if account else None,
+    }
 
 
 def remove_trip_from_calendar(account: GoogleCalendarAccount, trip: Trip) -> bool:
@@ -735,7 +877,12 @@ def remove_trip_from_calendar(account: GoogleCalendarAccount, trip: Trip) -> boo
         return False
     gateway = GoogleCalendarGateway(account=account)
     for link in links:
-        gateway.delete_event(link.google_event_id)
+        # A trip-level link created for a timed import starts with a blank
+        # google_event_id (see import_events_as_trips) until the first
+        # export/auto-sync push actually creates its all-day mirror - there's
+        # nothing on Google's side to delete yet.
+        if link.google_event_id:
+            gateway.delete_event(link.google_event_id)
         link.delete()
     return True
 
@@ -767,6 +914,11 @@ def disconnect_member_calendar_sync(trip: Trip, profile: Profile) -> None:
     if account is not None:
         gateway = GoogleCalendarGateway(account=account)
         for link in links:
+            # See remove_trip_from_calendar: a trip-level link from a timed
+            # import can still be carrying a blank google_event_id if no
+            # export/auto-sync push has happened yet.
+            if not link.google_event_id:
+                continue
             try:
                 gateway.delete_event(link.google_event_id)
             except GatewayRequestError:

@@ -3,7 +3,7 @@
 {% block page_title %}AI Link Analysis - {{ site_title|default:"UrbanLens" }}{% endblock %}
 
 {% block hero %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="auto_awesome" title="AI Link Analysis" subtitle="Everything AI has read and filled in for your pins." modifier="top" %}
+{% include "dashboard/partials/ui/_page_hero.html" with icon="auto_awesome" title="AI Link Analysis" subtitle="Everything AI has read, filled in, and expanded on your pins." modifier="top" %}
 {% endblock %}
 
 {% block content %}
@@ -60,7 +60,7 @@
     {% else %}
     <p class="ai-extractions-empty">
         Nothing here yet. On a pin's detail page, click the <i class="material-symbols-outlined" aria-hidden="true">auto_awesome</i> button
-        next to a link to have AI read the page and fill in supported pin details.
+        next to a link to have AI read the page, fill in supported pin details, and expand the pin (and wiki) article when safe.
     </p>
     {% endif %}
 

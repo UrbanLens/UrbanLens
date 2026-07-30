@@ -76,7 +76,7 @@
                     <span class="visit-source-label">{{ visit.get_source_display }}</span>
                     {% if include_children and visit.pin_id != pin.id %}
                     <a class="visit-child-chip" href="{% url 'pin.details' visit.pin.slug|default:visit.pin.uuid %}"
-                       title="Logged on the sub pin {{ visit.pin.effective_name }}">
+                       title="Logged on the child pin {{ visit.pin.effective_name }}">
                         <i class="material-symbols-outlined">subdirectory_arrow_right</i>{{ visit.pin.effective_name }}
                     </a>
                     {% endif %}

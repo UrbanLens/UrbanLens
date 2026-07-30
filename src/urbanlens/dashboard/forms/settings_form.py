@@ -1,5 +1,7 @@
 """User settings form - privacy, contact, and style preferences."""
 
+import re
+
 from django import forms
 
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
@@ -164,7 +166,7 @@ class DirectMessageSettingsForm(forms.ModelForm):
         choices=MessageRetentionChoice.choices,
         widget=forms.Select(attrs={"class": "settings-select browser-default"}),
         label="Delete My Messages After",
-        help_text="Messages you send disappear from the recipient's view this long after they've read them. You can always see your own messages.",
+        help_text="Messages you send disappear this long after the recipient has read them. They are permanently deleted, and cannot be recovered.",
     )
     allow_friend_recommendations = forms.BooleanField(
         required=False,
@@ -261,6 +263,15 @@ class StyleSettingsForm(forms.ModelForm):
             self.initial["distance_units"] = self.instance.effective_distance_units
 
 
+# Discord usernames (new pomelo system): 2-32 chars, letters/digits/underscores/dots.
+# Also allow the legacy discriminator form (e.g. "user#1234") since older accounts may
+# still show one. Mirrors DiscordHandleForm's public-facing regex in profile_form.py -
+# this is private contact info rather than a public identity claim, so it's kept
+# intentionally permissive (no discriminator-length enforcement) rather than duplicating
+# that field's exact 100-char ceiling.
+_DISCORD_USERNAME_RE = re.compile(r"^[a-zA-Z0-9._#-]{2,100}$")
+
+
 class ContactMethodsForm(forms.ModelForm):
     """Optional contact methods stored on the profile."""
 
@@ -312,6 +323,23 @@ class ContactMethodsForm(forms.ModelForm):
             "matrix_handle",
         ]
 
+    def clean_discord_username(self) -> str:
+        """Validate the Discord username against the allowed character set.
+
+        Returns:
+            The stripped handle, or an empty string when blank.
+
+        Raises:
+            forms.ValidationError: When the handle contains disallowed characters
+                or falls outside the allowed length range.
+        """
+        value = self.cleaned_data.get("discord_username", "").strip()
+        if value and not _DISCORD_USERNAME_RE.match(value):
+            raise forms.ValidationError(
+                "2-100 characters: letters, digits, underscores, dots, hyphens, or #.",
+            )
+        return value
+
 
 class MapDisplayForm(forms.ModelForm):
     """Map display and performance settings."""
@@ -340,7 +368,7 @@ class MapDisplayForm(forms.ModelForm):
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
         label="Pin Organization Suggestions",
-        help_text="When you open a property with several buildings, offer to add a sub pin for each one and to nest any of your existing pins that stand inside it.",
+        help_text="When you open a property with several buildings, offer to add a child pin for each one and to nest any of your existing pins that stand inside it.",
     )
 
     class Meta:
@@ -550,6 +578,12 @@ class HistorySettingsForm(forms.ModelForm):
         label="Live Location",
         help_text="Record visits from your live device location.",
     )
+    track_device_scans = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Device Scans",
+        help_text="Associate wireless device scans you upload (from the mobile app's scanning feature) with your account, enabling personal scan history. When off, your scans are stored anonymously.",
+    )
     generate_photo_keywords = forms.BooleanField(
         required=False,
         widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
@@ -559,7 +593,7 @@ class HistorySettingsForm(forms.ModelForm):
 
     class Meta:
         model = Profile
-        fields = ["track_pin_visits", "track_routes", "track_geolocation", "generate_photo_keywords"]
+        fields = ["track_pin_visits", "track_routes", "track_geolocation", "track_device_scans", "generate_photo_keywords"]
 
 
 class CommunitySettingsForm(forms.ModelForm):
@@ -587,6 +621,39 @@ class CommunitySettingsForm(forms.ModelForm):
     class Meta:
         model = Profile
         fields = ["community_enabled", "show_wiki_cover_photos", "auto_create_pin_article_from_wikipedia"]
+
+
+class PinSuggestionSettingsForm(forms.ModelForm):
+    """Master switch plus per-source toggles for the pin-suggestions surface (Memories -> Locations)."""
+
+    pin_suggestions_enabled = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Pin Suggestions",
+        help_text="Suggest pins based on your photos, public locations, and connected apps. Turning this off overrides every source below.",
+    )
+    suggest_public_pins = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Public Locations",
+        help_text="Occasionally suggest well-documented locations the community has voted to share with everyone. These are rare, and never include anything vulnerable.",
+    )
+    suggest_pins_from_photos = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Photo Uploads",
+        help_text="Suggest pins found by scanning your Immich library or local photo folders.",
+    )
+    suggest_pins_from_external_apis = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Connected Apps",
+        help_text="Suggest pins submitted by external apps you've connected via an API key.",
+    )
+
+    class Meta:
+        model = Profile
+        fields = ["pin_suggestions_enabled", "suggest_public_pins", "suggest_pins_from_photos", "suggest_pins_from_external_apis"]
 
 
 class WikiSyncSettingsForm(forms.ModelForm):

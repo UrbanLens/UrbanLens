@@ -205,7 +205,12 @@ class SearchProvider(ABC):
             limit: Maximum number of results to return.
 
         Returns:
-            Results ordered most relevant first.
+            Results ordered most relevant first. Every result must carry
+            ``object_slug``/``object_uuid`` as well as ``url``: the latter is a
+            web path, and the external search endpoint drops it entirely because
+            a JSON client cannot follow it. A provider that populates only
+            ``url`` therefore returns hits that mobile callers can display but
+            never open - a failure that no template test would notice.
         """
         raise NotImplementedError
 
@@ -340,6 +345,8 @@ class PinSearchProvider(SearchProvider):
                     image_url=image_url,
                     date=pin.created,
                     score=self.score_of(pin),
+                    object_slug=pin.slug or "",
+                    object_uuid=str(pin.uuid),
                 ),
             )
         return results
@@ -414,6 +421,12 @@ class PhotoSearchProvider(SearchProvider):
                     image_url=image.image.url if image.image else None,
                     date=image.taken_at or image.created,
                     score=self.score_of(image),
+                    # Photos are the one type this API addresses by uuid alone
+                    # (``photos/<uuid:image_uuid>/``); there is no photo slug to
+                    # offer, and handing back the *host* pin's slug here would
+                    # quietly turn "open this photo" into "open some pin".
+                    object_slug="",
+                    object_uuid=str(image.uuid),
                 ),
             )
         return results
@@ -452,6 +465,11 @@ class WikiSearchProvider(SearchProvider):
                     snippet=excerpt(wiki.description, parsed.terms),
                     date=wiki.updated,
                     score=self.score_of(wiki),
+                    # A wiki is addressed by its *location's* slug everywhere -
+                    # web route and ``wikis/<str:location_slug>/`` alike - so
+                    # Wiki.slug is deliberately not what goes on the wire.
+                    object_slug=location.slug,
+                    object_uuid=str(wiki.uuid),
                 ),
             )
         return results
@@ -477,15 +495,22 @@ class ArticleSearchProvider(SearchProvider):
 
         results = []
         for article in queryset[:limit]:
+            # An Article extends the plain DashboardModel, so it carries no uuid
+            # of its own and no route addresses it directly: it is always read
+            # as a sub-resource of its host (``pins/<slug>/article/``,
+            # ``wikis/<location_slug>/article/``). The host's identifiers are
+            # therefore what a client needs, and the only ones that exist.
             if article.pin is not None:
                 pin = article.pin
                 url = reverse("pin.details", kwargs={"pin_slug": pin.slug or str(pin.uuid)}) + "#tab-article"
                 title = f"Article: {pin.effective_name or 'Unnamed pin'}"
                 subtitle = "Private pin article"
+                object_slug, object_uuid = pin.slug or "", str(pin.uuid)
             elif article.wiki is not None and article.wiki.location is not None and article.wiki.location.slug:
                 url = reverse("location.wiki", kwargs={"location_slug": article.wiki.location.slug}) + "#tab-article"
                 title = f"Article: {article.wiki.name or 'Unnamed wiki'}"
                 subtitle = "Community wiki article"
+                object_slug, object_uuid = article.wiki.location.slug, str(article.wiki.uuid)
             else:
                 continue
             results.append(
@@ -497,6 +522,8 @@ class ArticleSearchProvider(SearchProvider):
                     snippet=excerpt(article.content, parsed.terms),
                     date=article.updated,
                     score=self.score_of(article),
+                    object_slug=object_slug,
+                    object_uuid=object_uuid,
                 ),
             )
         return results
@@ -539,6 +566,8 @@ class TripSearchProvider(SearchProvider):
                     snippet=excerpt(trip.description, parsed.terms),
                     date=trip.updated,
                     score=self.score_of(trip),
+                    object_slug=trip.slug or "",
+                    object_uuid=str(trip.uuid),
                 ),
             )
         return results
@@ -576,6 +605,11 @@ class VisitSearchProvider(SearchProvider):
                     snippet=excerpt(visit.notes, parsed.terms),
                     date=visit.visited_at,
                     score=self.score_of(visit),
+                    # A visit lives under its pin (``pins/<slug>/visits/``), so
+                    # the pin's slug is what a client opens; the visit's own uuid
+                    # still identifies *which* visit matched.
+                    object_slug=pin.slug or "",
+                    object_uuid=str(visit.uuid),
                 ),
             )
         return results
@@ -602,15 +636,24 @@ class DirectMessageSearchProvider(SearchProvider):
         for message in queryset[:limit]:
             other = message.recipient if message.sender_id == profile.pk else message.sender
             direction = "To" if message.sender_id == profile.pk else "From"
+            peer_slug = other.ensure_slug()
             results.append(
                 SearchResult(
                     type=self.slug,
                     title=f"{direction} {other.username}",
-                    url=reverse("messages.conversation", kwargs={"profile_slug": other.ensure_slug()}),
+                    url=reverse("messages.conversation", kwargs={"profile_slug": peer_slug}),
                     subtitle=f"{message.created:%b %d, %Y}",
                     snippet=excerpt(message.body, parsed.terms),
                     date=message.created,
                     score=self.score_of(message),
+                    # A conversation is addressed by the counterpart's profile
+                    # slug (``messages/<peer_slug>/``). DirectMessage extends the
+                    # plain DashboardModel and has no uuid of its own - its
+                    # ``client_uuid`` is the sender's offline-outbox idempotency
+                    # key, is null for anything composed on the web, and is not a
+                    # server-side identity, so it must not be passed off as one.
+                    object_slug=peer_slug,
+                    object_uuid=None,
                 ),
             )
         return results
@@ -640,6 +683,11 @@ class MarkupMapSearchProvider(SearchProvider):
                     subtitle=f"Updated {markup_map.updated:%b %d, %Y}",
                     date=markup_map.updated,
                     score=self.score_of(markup_map),
+                    # A standalone markup map has no slug and no route of its own
+                    # on either surface - the web link above is the Memories maps
+                    # index, not a per-map page - so its uuid is the only handle.
+                    object_slug="",
+                    object_uuid=str(markup_map.uuid),
                 ),
             )
 
@@ -647,17 +695,26 @@ class MarkupMapSearchProvider(SearchProvider):
         # markup maps, pin maps, or wiki maps.
         label_q = term_filter(parsed.terms, ["label"])
         markup_qs = PinMarkup.objects.for_profile(profile).exclude(label="").filter(label_q).select_related("parent_map", "parent_pin", "parent_wiki__location")
-        seen_map_ids = {result.url for result in results}
+        # Dedupes within this second loop only (by url+label) - map results
+        # from the first loop use a different URL/key shape (bare map URL,
+        # no label) and can't collide with an annotation's "url:label" key.
+        seen_map_ids: set[str] = set()
         for markup in markup_qs[: limit * 2]:
+            # An annotation is text drawn *on* something, and that host is what a
+            # client opens - there is no per-annotation route anywhere. Its own
+            # uuid still rides along so two annotations on one pin stay distinct.
             if markup.parent_pin is not None:
                 url = reverse("pin.details", kwargs={"pin_slug": markup.parent_pin.slug or str(markup.parent_pin.uuid)})
                 host = markup.parent_pin.effective_name or "a pin"
+                object_slug = markup.parent_pin.slug or ""
             elif markup.parent_wiki is not None and markup.parent_wiki.location is not None and markup.parent_wiki.location.slug:
                 url = reverse("location.wiki", kwargs={"location_slug": markup.parent_wiki.location.slug})
                 host = markup.parent_wiki.name or "a wiki"
+                object_slug = markup.parent_wiki.location.slug
             elif markup.parent_map is not None:
                 url = maps_url
                 host = markup.parent_map.title or "a markup map"
+                object_slug = ""
             else:
                 continue
             key = f"{url}:{markup.label}"
@@ -673,6 +730,8 @@ class MarkupMapSearchProvider(SearchProvider):
                     icon="format_shapes",
                     date=markup.updated,
                     score=self.score_of(markup),
+                    object_slug=object_slug,
+                    object_uuid=str(markup.uuid),
                 ),
             )
             if len(results) >= limit:
@@ -703,6 +762,8 @@ class SafetySearchProvider(SearchProvider):
                     snippet=excerpt(checkin.plan_details, parsed.terms),
                     date=checkin.checkin_by,
                     score=self.score_of(checkin),
+                    object_slug=checkin.slug or "",
+                    object_uuid=str(checkin.uuid),
                 ),
             )
         return results
@@ -733,12 +794,18 @@ class CommentSearchProvider(SearchProvider):
             .order_by("-created")
         )
         for comment in comment_qs[:limit]:
+            # Comments are read through their host's collection
+            # (``pins/<slug>/comments/``, ``wikis/<location_slug>/comments/``),
+            # so the host's slug is the addressable half; the comment's own uuid
+            # says which row in that collection matched.
             if comment.pin is not None:
                 url = reverse("pin.details", kwargs={"pin_slug": comment.pin.slug or str(comment.pin.uuid)})
                 host = comment.pin.effective_name or "a pin"
+                object_slug = comment.pin.slug or ""
             elif comment.wiki is not None and comment.wiki.location is not None and comment.wiki.location.slug:
                 url = reverse("location.wiki", kwargs={"location_slug": comment.wiki.location.slug})
                 host = comment.wiki.name or "a wiki"
+                object_slug = comment.wiki.location.slug
             else:
                 continue
             results.append(
@@ -750,6 +817,8 @@ class CommentSearchProvider(SearchProvider):
                     snippet=excerpt(comment.text, parsed.terms),
                     date=comment.created,
                     score=self.score_of(comment),
+                    object_slug=object_slug,
+                    object_uuid=str(comment.uuid),
                 ),
             )
 
@@ -764,6 +833,10 @@ class CommentSearchProvider(SearchProvider):
                     snippet=excerpt(comment.text, parsed.terms),
                     date=comment.created,
                     score=self.score_of(comment),
+                    # TripComment extends the plain DashboardModel: no uuid
+                    # exists to hand back, so only the trip's slug is offered.
+                    object_slug=comment.trip.slug or "",
+                    object_uuid=None,
                 ),
             )
         return results[:limit]

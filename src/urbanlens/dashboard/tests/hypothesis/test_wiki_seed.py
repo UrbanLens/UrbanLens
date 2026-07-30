@@ -109,7 +109,7 @@ def test_infobox_markdown_collapses_internal_whitespace() -> None:
 def test_infobox_markdown_never_produces_an_empty_table_header() -> None:
     """Regression guard: the previous GFM-table rendering's mandatory blank
     header row used to render as an empty <tr> once parsed into the article
-    editor - see docs/prompts/completed.md. A bullet list has no header row."""
+    editor -. A bullet list has no header row."""
     md = _infobox_markdown([["Established", "1900"]])
     assert "| | |" not in md  # nosec B101
 
@@ -199,7 +199,7 @@ class SeedWikiArticleFromWikipediaTests(TestCase):
 
     def test_matched_article_with_infobox_includes_the_facts_before_the_body(self) -> None:
         """Regression coverage for the "started from Wikipedia" seed missing
-        the infobox (docs/prompts/completed.md)."""
+        the infobox (docs/notes/ai/completed.md)."""
         location = _location()
         baker.make(Wiki, location=location)
         data = {**_ARTICLE_DATA, "infobox": [["Established", "1900"], ["Country", "US"]]}

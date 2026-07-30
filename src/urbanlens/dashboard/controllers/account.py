@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import smtplib
 from typing import TYPE_CHECKING
@@ -27,7 +28,7 @@ from django.urls import reverse, reverse_lazy
 from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View, generic
-from django.views.decorators.http import require_GET
+from django.views.decorators.http import require_GET, require_POST
 
 from urbanlens.dashboard.models.account import EmailVerification
 from urbanlens.dashboard.services.site_admin import should_redirect_to_site_admin
@@ -47,26 +48,97 @@ _PASSPHRASE_RATE_WINDOW = 60 * 10  # 10 minutes
 # -- Login rate limiting helpers ------------------------------------------------
 
 
-def _attempts_key(username: str) -> str:
-    """Cache key for the failed-attempt counter for a given username."""
-    return f"login_attempts:{username.strip().lower()}"
+def _attempts_key(key: str) -> str:
+    """Cache key for the failed-attempt counter for a given lockout key."""
+    return f"login_attempts:{key}"
 
 
-def _lockout_key(username: str) -> str:
-    """Cache key for the lockout flag for a given username."""
-    return f"login_lockout:{username.strip().lower()}"
+def _lockout_key(key: str) -> str:
+    """Cache key for the lockout flag for a given lockout key."""
+    return f"login_lockout:{key}"
 
 
-def _is_locked_out(username: str) -> bool:
-    """Return True if ``username`` is currently locked out."""
-    return bool(cache.get(_lockout_key(username)))
+def _is_locked_out(key: str) -> bool:
+    """Return True if ``key`` is currently locked out."""
+    return bool(cache.get(_lockout_key(key)))
 
 
-def _record_failed_attempt(username: str) -> int:
+def _resolve_login_user(identifier: str) -> User | None:
+    """Resolve a submitted login identifier to the account it would authenticate against.
+
+    Mirrors ``EmailOrUsernameModelBackend``: an exact username match first,
+    then (if the identifier looks like an email) a primary/verified-secondary/
+    normalized-email lookup via ``find_user_by_email``. Used so failed-login
+    tracking can be keyed by stable account id rather than by the raw
+    submitted string.
+
+    Args:
+        identifier: The raw "username" field value as submitted.
+
+    Returns:
+        The matching User (active or not), or None if nothing resolves.
+    """
+    identifier = identifier.strip()
+    if not identifier:
+        return None
+    user = User.objects.filter(username=identifier).first()
+    if user is not None:
+        return user
+    if "@" in identifier:
+        from urbanlens.dashboard.services.email_normalization import find_user_by_email
+
+        return find_user_by_email(identifier, active_only=False)
+    return None
+
+
+def _lockout_key_for_user(user: User) -> str:
+    """Return the stable lockout-key fragment for a resolved account."""
+    return f"uid:{user.pk}"
+
+
+def _raw_lockout_key(identifier: str) -> str:
+    """Return a normalized fallback lockout-key fragment for an unresolved identifier.
+
+    Still collapses case and (for email-shaped input) Gmail dot/plus variants,
+    so probing textual variants of an identifier that doesn't match any
+    account is rate-limited under one shared key rather than each variant
+    getting a fresh counter - it just isn't tied to a real account id.
+    """
+    from urbanlens.dashboard.services.email_normalization import normalize_email
+
+    normalized = identifier.strip().lower()
+    if "@" in normalized:
+        normalized = normalize_email(normalized)
+    return f"raw:{normalized}"
+
+
+def _lockout_key_for_identifier(identifier: str) -> str:
+    """Resolve a raw submitted login identifier to its lockout-counter key.
+
+    Rotating through equivalent-but-textually-distinct identifiers for the
+    same account (Gmail dot/plus variants, a verified secondary email) all
+    collapse onto the same counter instead of each getting its own untripped
+    one. Falls back to a normalized raw-string key when no account matches,
+    so unknown-identifier probing is still rate-limited (just under a
+    different key) - the lockout *check* itself behaves identically either
+    way, so this introduces no account-enumeration side channel.
+
+    Args:
+        identifier: The raw "username" field value as submitted.
+
+    Returns:
+        A key fragment safe to interpolate into a cache key.
+    """
+    user = _resolve_login_user(identifier)
+    return _lockout_key_for_user(user) if user is not None else _raw_lockout_key(identifier)
+
+
+def _record_failed_attempt(key: str) -> int:
     """Increment the failure counter; apply lockout when the limit is reached.
 
     Args:
-        username: The username that just failed to authenticate.
+        key: The resolved lockout key (see ``_lockout_key_for_identifier``)
+            for the identifier that just failed to authenticate.
 
     Returns:
         The updated failure count (after incrementing).
@@ -81,26 +153,27 @@ def _record_failed_attempt(username: str) -> int:
         # Rate limiting disabled.
         return 0
 
-    key = _attempts_key(username)
-    attempts: int = (cache.get(key) or 0) + 1
-    cache.set(key, attempts, timeout=lockout_seconds)
+    attempts_key = _attempts_key(key)
+    attempts: int = (cache.get(attempts_key) or 0) + 1
+    cache.set(attempts_key, attempts, timeout=lockout_seconds)
 
     if attempts >= max_attempts:
-        cache.set(_lockout_key(username), 1, timeout=lockout_seconds)
-        cache.delete(key)
-        logger.warning("Login locked out for username %r after %d failed attempts", username, attempts)
+        cache.set(_lockout_key(key), 1, timeout=lockout_seconds)
+        cache.delete(attempts_key)
+        logger.warning("Login locked out for key %r after %d failed attempts", key, attempts)
 
     return attempts
 
 
-def _clear_login_attempts(username: str) -> None:
+def _clear_login_attempts(key: str) -> None:
     """Remove failure tracking after a successful login.
 
     Args:
-        username: The username that just authenticated successfully.
+        key: The resolved lockout key (see ``_lockout_key_for_user``) for the
+            account that just authenticated successfully.
     """
-    cache.delete(_attempts_key(username))
-    cache.delete(_lockout_key(username))
+    cache.delete(_attempts_key(key))
+    cache.delete(_lockout_key(key))
 
 
 # -- Two-factor code rate limiting ------------------------------------------
@@ -374,8 +447,12 @@ class ResendVerificationView(View):
         return render(request, "registration/resend_verification.html", {"email": email})
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        email = request.POST.get("email", "").strip().lower()
-        user = User.objects.filter(email__iexact=email, is_active=False).first()
+        from urbanlens.dashboard.services.email_normalization import find_user_by_email
+
+        email = request.POST.get("email", "").strip()
+        user = find_user_by_email(email, active_only=False)
+        if user is not None and user.is_active:
+            user = None
         if user:
             # Delete old token and create a fresh one while preserving any
             # signup invite token captured before the verification resend.
@@ -621,7 +698,7 @@ class CustomLoginView(LoginView):
 
     def post(self, request, *args, **kwargs):
         username = request.POST.get("username", "").strip()
-        if username and _is_locked_out(username):
+        if username and _is_locked_out(_lockout_key_for_identifier(username)):
             from urbanlens.dashboard.models.site_settings import SiteSettings
 
             minutes = SiteSettings.get_current().login_lockout_minutes
@@ -639,9 +716,8 @@ class CustomLoginView(LoginView):
         return reverse("post_login")
 
     def form_valid(self, form: AuthenticationForm) -> HttpResponse:
-        username = form.cleaned_data.get("username", "")
-        _clear_login_attempts(username)
         user = form.get_user()
+        _clear_login_attempts(_lockout_key_for_user(user))
 
         from urbanlens.dashboard.services.two_factor import has_second_factor
 
@@ -656,10 +732,16 @@ class CustomLoginView(LoginView):
     def form_invalid(self, form: AuthenticationForm) -> HttpResponse:
         username = form.data.get("username", "").strip()
         if username:
+            # Resolve once: used both to key the lockout counter by stable
+            # account id (so equivalent identifiers for the same account share
+            # one counter) and, below, for the unverified-account hint.
+            user = _resolve_login_user(username)
+            lockout_key = _lockout_key_for_user(user) if user is not None else _raw_lockout_key(username)
+
             # Track failure and check for lockout (only when not already locked).
-            if not _is_locked_out(username):
-                _record_failed_attempt(username)
-                if _is_locked_out(username):
+            if not _is_locked_out(lockout_key):
+                _record_failed_attempt(lockout_key)
+                if _is_locked_out(lockout_key):
                     from urbanlens.dashboard.models.site_settings import SiteSettings
 
                     minutes = SiteSettings.get_current().login_lockout_minutes
@@ -667,15 +749,6 @@ class CustomLoginView(LoginView):
                         [f"Too many failed login attempts. Your account has been locked for {minutes} minute{'s' if minutes != 1 else ''}."],
                     )
                     return super().form_invalid(form)
-
-            # Check for unverified account (username or email login).
-            user: User | None = None
-            try:
-                user = User.objects.get(username=username)
-            except User.DoesNotExist:
-                from urbanlens.dashboard.services.email_normalization import find_user_by_email
-
-                user = find_user_by_email(username, active_only=False) if "@" in username else None
 
             if user is not None:
                 if not user.is_active and hasattr(user, "email_verification"):
@@ -767,7 +840,7 @@ class LoginTwoFactorOptionsView(View):
         try:
             options_json = build_authentication_options(request, user)
         except WebAuthnError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": exc.safe_message}, status=400)
         return HttpResponse(options_json, content_type="application/json")
 
 
@@ -784,7 +857,12 @@ class LoginTwoFactorVerifyView(View):
         try:
             verify_authentication(request, user, request.body.decode("utf-8"))
         except (WebAuthnError, UnicodeDecodeError) as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            if isinstance(exc, WebAuthnError):
+                message = exc.safe_message
+            else:
+                logger.warning("Passkey verification body was not valid UTF-8: %s", exc, exc_info=True)
+                message = "Invalid passkey response."
+            return JsonResponse({"error": message}, status=400)
 
         redirect_to = _complete_two_factor_login(request, user)
         return JsonResponse({"ok": True, "redirect": redirect_to})
@@ -917,9 +995,17 @@ def _coerce_invite_token(invite_token: object) -> UUID | None:
 
 
 def _collect_pending_invitations(user: User, invite_token: str | None) -> list:
-    """Return open invitations matching the user's email and/or signup invite token."""
-    from django.utils import timezone
+    """Return open invitations matching the user's email and/or signup invite token.
 
+    Deliberately does NOT filter on ``expires_at``: an invitation only ever
+    reaches ``_apply_pending_invitation`` once (``accepted_at__isnull=True``
+    already guards against reprocessing), and any ``PendingSubscriptionGrant``
+    attached to an invite is a promise that shouldn't silently evaporate just
+    because the invited user took longer than the 14-day window to verify
+    their email. The friend-connection side of an expired invite may be a bit
+    stale, but ``Friendship.request`` is a harmless no-op-ish call for that -
+    losing an unredeemed grant is the worse outcome.
+    """
     from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 
     pending_by_id: dict[int, FriendInvitation] = {}
@@ -927,7 +1013,6 @@ def _collect_pending_invitations(user: User, invite_token: str | None) -> list:
     for invitation in FriendInvitation.objects.filter(
         email__iexact=user.email,
         accepted_at__isnull=True,
-        expires_at__gt=timezone.now(),
     ).select_related("inviter"):
         pending_by_id[invitation.pk] = invitation
 
@@ -936,7 +1021,6 @@ def _collect_pending_invitations(user: User, invite_token: str | None) -> list:
             FriendInvitation.objects.filter(
                 token=invite_token,
                 accepted_at__isnull=True,
-                expires_at__gt=timezone.now(),
             )
             .select_related("inviter")
             .first()
@@ -948,15 +1032,25 @@ def _collect_pending_invitations(user: User, invite_token: str | None) -> list:
 
 
 def _apply_pending_invitation(invitation, profile) -> None:
-    """Create a friend request and notification for one pending invitation."""
+    """Create a friend request and notification for one pending invitation.
+
+    Any ``PendingSubscriptionGrant`` attached to the invitation is redeemed
+    unconditionally, even for the self-invite edge case (``invitation.inviter
+    == profile``) - only the friend-connection step (which would otherwise
+    friend a user to themselves) is skipped for that case. Redeeming the
+    grant regardless keeps a promised subscription grant from being silently
+    dropped just because the inviter and the invited signup happen to be the
+    same account.
+    """
     from urbanlens.dashboard.controllers.friendship import notify_friend_request
     from urbanlens.dashboard.models.friendship.model import Friendship
 
-    if invitation.inviter == profile:
-        return
-    friendship = Friendship.request(from_profile=invitation.inviter, to_profile=profile.pk, message=invitation.message)
-    if friendship:
-        notify_friend_request(invitation.inviter, profile, invitation.message)
+    is_self_invite = invitation.inviter == profile
+    if not is_self_invite:
+        friendship = Friendship.request(from_profile=invitation.inviter, to_profile=profile.pk, message=invitation.message)
+        if friendship:
+            notify_friend_request(invitation.inviter, profile, invitation.message)
+
     from urbanlens.dashboard.models.subscriptions import PendingSubscriptionGrant, grant_subscription
 
     for pending_grant in PendingSubscriptionGrant.objects.for_invitation(invitation):
@@ -1019,3 +1113,73 @@ def suggest_passphrases(request: HttpRequest) -> JsonResponse:
         return JsonResponse({"error": "Too many requests. Try again in a few minutes."}, status=429)
     cache.set(key, hits + 1, timeout=_PASSPHRASE_RATE_WINDOW)
     return JsonResponse({"passphrases": generate_passphrases(5)})
+
+
+_PASSWORD_CHECK_RATE_KEY = "password_policy_check:{ip}"  # noqa: S105  # nosec B105 - cache key template, not a credential
+_PASSWORD_CHECK_RATE_LIMIT = 30  # checks per IP per window
+_PASSWORD_CHECK_RATE_WINDOW = 60 * 10  # 10 minutes
+#: Hard input cap - far above any legitimate passphrase, low enough that a
+#: hostile client can't make the validator chain chew on megabytes.
+_PASSWORD_CHECK_MAX_LENGTH = 1024
+
+
+@require_POST
+def validate_password_policy(request: HttpRequest) -> JsonResponse:
+    """Run a candidate password through the configured ``AUTH_PASSWORD_VALIDATORS``.
+
+    Exists for the E2EE signup / password-reset / password-change flows: the
+    client derives the login credential from the raw password *before* submit,
+    so the credential the server authenticates always "looks strong" and the
+    configured validators (length 12, complexity, common-password, HIBP
+    breach check) would otherwise never run against the real password at all.
+    The raw password crosses HTTPS exactly once here, is validated in memory,
+    and is never stored or logged (decision 2026-07-23, docs/PROBLEMS.md -
+    option (a): a validation endpoint, rather than duplicating every
+    validator's rules in TypeScript and keeping them in sync by hand).
+
+    Anonymous by design (signup has no session yet). Rate-limited per IP
+    primarily to bound the outbound HIBP range-API calls this can trigger.
+
+    Args:
+        request: JSON body with ``password`` plus optional ``username`` and
+            ``email`` (fed to ``UserAttributeSimilarityValidator`` so
+            "password resembles your username" is caught before the account
+            exists).
+
+    Returns:
+        JSON ``{valid, errors}`` (200), 400 on a malformed body, or 429 when
+        rate-limited - callers treat any non-200 as "could not check" and
+        fail open, since the 12-char client-side floor still applies.
+    """
+    from django.contrib.auth.password_validation import validate_password
+
+    key = _PASSWORD_CHECK_RATE_KEY.format(ip=_client_ip(request))
+    hits = int(cache.get(key) or 0)
+    if hits >= _PASSWORD_CHECK_RATE_LIMIT:
+        return JsonResponse({"error": "Too many requests. Try again in a few minutes."}, status=429)
+    cache.set(key, hits + 1, timeout=_PASSWORD_CHECK_RATE_WINDOW)
+
+    try:
+        body = json.loads(request.body)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return JsonResponse({"error": "Invalid JSON body."}, status=400)
+    if not isinstance(body, dict):
+        return JsonResponse({"error": "Invalid JSON body."}, status=400)
+    password = body.get("password")
+    if not isinstance(password, str) or not password:
+        return JsonResponse({"error": "password is required."}, status=400)
+    if len(password) > _PASSWORD_CHECK_MAX_LENGTH:
+        return JsonResponse({"valid": False, "errors": ["This password is too long."]})
+
+    # An unsaved User carrying the form's identity fields is exactly what
+    # UserAttributeSimilarityValidator needs; nothing is persisted.
+    raw_username = body.get("username")
+    raw_email = body.get("email")
+    username = raw_username if isinstance(raw_username, str) else ""
+    email = raw_email if isinstance(raw_email, str) else ""
+    candidate = User(username=username[:150], email=email[:254])
+    try:
+        validate_password(password, user=candidate)
+    except ValidationError as exc:
+        return JsonResponse({"valid": False, "errors": exc.messages})
+    return JsonResponse({"valid": True, "errors": []})

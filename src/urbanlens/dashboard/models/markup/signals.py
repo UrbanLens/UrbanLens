@@ -8,6 +8,15 @@ from django.dispatch import receiver
 
 from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
 
+#: MarkupMap fields whose change can alter geometric pin-inference detection
+#: (see ``services.map_pin_share_detection.detect_shared_pins``, which only
+#: ever reads the saved viewport off the map itself - everything else it
+#: needs comes from the map's ``items``, covered by the PinMarkup receivers
+#: below). Saves that touch only other fields (title, layer/border display
+#: prefs, the explicit ``pin``/``cloned_from``/``shared_by`` links, etc.) are
+#: trivial for detection purposes and shouldn't pay for a resync.
+_GEOMETRY_RELEVANT_MAP_FIELDS = frozenset({"center_latitude", "center_longitude", "zoom"})
+
 
 def _defer_sync(markup_map_id: int) -> None:
     """Schedule a pin-inference resync for ``markup_map_id`` once the current transaction commits.
@@ -34,9 +43,18 @@ def _defer_sync(markup_map_id: int) -> None:
 
 
 @receiver(post_save, sender=MarkupMap, dispatch_uid="markup_map_sync_pin_inferences_on_save")
-def sync_pin_inferences_on_map_save(sender: type[MarkupMap], instance: MarkupMap, **kwargs) -> None:
-    """Resync detected pins whenever a map's viewport is created or updated."""
-    _defer_sync(instance.pk)
+def sync_pin_inferences_on_map_save(sender: type[MarkupMap], instance: MarkupMap, created: bool = False, update_fields=None, **kwargs) -> None:
+    """Resync detected pins whenever a map's viewport is created or changed.
+
+    Skips the (expensive, boundary-lookup-heavy) resync for saves that only
+    touch fields detection never reads - title renames, layer/border display
+    toggles, and similar - by checking ``update_fields``. When
+    ``update_fields`` isn't given (a full save), always resync: with no way
+    to know what changed, failing safe means treating it as geometry-relevant.
+    """
+    geometry_relevant = created or update_fields is None or bool(set(update_fields) & _GEOMETRY_RELEVANT_MAP_FIELDS)
+    if geometry_relevant:
+        _defer_sync(instance.pk)
 
 
 @receiver(post_save, sender=PinMarkup, dispatch_uid="pin_markup_sync_pin_inferences_on_save")

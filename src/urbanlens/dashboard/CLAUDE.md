@@ -1,0 +1,47 @@
+# dashboard/ — App-Specific Guidance
+
+Applies to `src/urbanlens/dashboard/`. 
+
+## Views & Controllers
+
+REST API endpoints use DRF ViewSets under `/rest/`. Custom actions use `@action(detail=True, methods=[...])`.
+
+Template/HTMX views use `TemplateView` or `ViewMixin` and return rendered HTML. Key controllers:
+- `maps.MapController` - Map display, pin add/edit, search
+- `pin.PinController` - Pin detail, image/weather/search integrations
+- `userprofile.ViewProfileView/EditProfileView` - Profile CRUD
+
+## URL Routing
+
+```
+dashboard/
+├-- rest/         → DRF router (ViewSets)
+├-- map/          → MapController (view, add, edit, search)
+│   └-- pin/<id>/ → PinController (detail)
+├-- profile/      → ProfileController
+└-- friendship/   → FriendController
+```
+
+User-facing objects are slug-addressed: trips are `/trips/<slug>/` (not uuid), etc.
+
+## Frontend & HTMX Philosophy
+
+**HTMX is preferred for interactivity.** Features should use HTMX (hx-get, hx-post, hx-swap, etc.) to request server-rendered HTML fragments, minimizing JavaScript. Use Typescript only when HTMX cannot accomplish the interaction. Every existing JS interaction is a candidate for HTMX refactoring.
+
+- SCSS source: `src/urbanlens/dashboard/frontend/sass/style.scss` → compile with `bun run sass`
+- Templates in `src/urbanlens/dashboard/templates/dashboard/`
+
+## API Integrations
+
+The project connects to many external APIs via service classes in `dashboard/services/`. Each service wraps one API. 
+
+External integrations are wired into the app through the plugin system: the API client stays a `Gateway` subclass in `dashboard/services/apis/`, and a small `UrbanLensPlugin` subclass (bundled ones live in `dashboard/plugins/builtin/`) declares its rate-limit defaults and contributions (pin-detail panels, imagery providers, hook callbacks). New integrations should be added as plugins; services not yet converted still register their defaults in `rate_limiter.SERVICE_REGISTRY`.
+
+When calling any API, track usage and cost per call (keep a running estimate). This is required groundwork for future cost reporting.
+
+## Gotchas
+
+- Any new pin/location share path must call `resolve_origin_share` + `record_share_exposure` to
+  keep the `LocationExposure` provenance chain intact.
+- `EncryptedTextField` derives its key from Django `SECRET_KEY` - changing it corrupts all
+  encrypted data (Immich tokens, etc.).

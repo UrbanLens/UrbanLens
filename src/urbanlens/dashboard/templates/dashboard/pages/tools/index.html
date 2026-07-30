@@ -50,6 +50,30 @@
                     The archive uses an open JSON format you can re-import later.
                 </p>
 
+                {# -- Quick single-file pin downloads (UL-382) -- #}
+                <div class="export-quick-downloads">
+                    <p class="export-format-label">Download all pins as...</p>
+                    <div class="export-quick-links">
+                        <a href="{% url 'tools.export.format' fmt='geojson' %}" class="btn btn--secondary export-quick-link" download>
+                            <i class="material-symbols-outlined">data_object</i>
+                            <span>GeoJSON</span>
+                        </a>
+                        <a href="{% url 'tools.export.format' fmt='kml' %}" class="btn btn--secondary export-quick-link" download>
+                            <i class="material-symbols-outlined">public</i>
+                            <span>KML</span>
+                        </a>
+                        <a href="{% url 'tools.export.format' fmt='gpx' %}" class="btn btn--secondary export-quick-link" download>
+                            <i class="material-symbols-outlined">route</i>
+                            <span>GPX</span>
+                        </a>
+                        <a href="{% url 'tools.export.format' fmt='csv' %}" class="btn btn--secondary export-quick-link" download>
+                            <i class="material-symbols-outlined">table</i>
+                            <span>CSV</span>
+                        </a>
+                    </div>
+                    <p class="export-quick-hint">Name, coordinates, and description only - use the full export below for a complete backup.</p>
+                </div>
+
                 <div id="export-form-wrap">
                     <form
                         hx-post="{% url 'tools.export.start' %}"
@@ -183,6 +207,21 @@
                                     <i class="material-symbols-outlined">cloud_download</i>
                                     <span>Google Takeout format
                                         <span class="export-format-hint">Also export pins as a Google Takeout-compatible CSV</span>
+                                    </span>
+                                </label>
+                            </div>
+
+                            {# -- Delivery options (UL-373) -- #}
+                            <div class="export-format-section">
+                                <p class="export-format-label">Delivery</p>
+                                <label class="export-checkbox-item export-format-item">
+                                    <span class="ul-checkbox-wrap">
+                                        <input type="checkbox" name="email_export" value="1" id="export-email-me">
+                                        <span class="ul-checkbox"></span>
+                                    </span>
+                                    <i class="material-symbols-outlined">mail</i>
+                                    <span>Email me the export when it's ready
+                                        <span class="export-format-hint">Sent to your account email - large archives arrive as a download link instead of an attachment</span>
                                     </span>
                                 </label>
                             </div>
@@ -572,6 +611,36 @@
 .export-checkbox-item .material-icons {
     font-size: 1.05rem;
     color: var(--ul-grey-5);
+}
+
+/* -- Quick single-file downloads -------------------------------------------- */
+
+.export-quick-downloads {
+    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--ul-grey-1a);
+}
+
+.export-quick-links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .5rem;
+}
+
+.export-quick-link {
+    display: inline-flex;
+    align-items: center;
+    gap: .35rem;
+}
+
+.export-quick-link .material-symbols-outlined {
+    font-size: 1.05rem;
+}
+
+.export-quick-hint {
+    font-size: .78rem;
+    color: var(--ul-grey-5);
+    margin: .5rem 0 0;
 }
 
 /* -- Format section -------------------------------------------------------- */

@@ -1,4 +1,24 @@
-"""Avatar resolution, download, and emoji-avatar generation."""
+"""Avatar resolution, download, emoji-avatar generation, and avatar writes.
+
+:class:`AvatarService` is the read/generate half - it answers "what image
+should this account have" from an OAuth payload, a Gravatar hash, or a
+generated emoji SVG. The module-level ``set_profile_avatar*`` functions are the
+*write* half, and exist because the two call sites that previously wrote
+``Profile.avatar`` did not agree with each other: the profile hero's upload
+form ran the shared ``image_upload_error`` gauntlet (size cap, magic-byte
+sniffing, antivirus) while the inline auto-save field
+(``ProfileFieldUpdateView``, ``field=avatar``) assigned the uploaded file
+straight onto the model with no checks at all - an unauthenticated-by-content
+write of arbitrary bytes into media storage, reachable by any logged-in user.
+Putting the write behind one function means a new surface (the external API's
+``PUT /profiles/{slug}/avatar/``) cannot pick the unguarded variant by
+accident, because the unguarded variant no longer exists.
+
+The gravatar path is deliberately *not* offered here as a reusable function:
+it makes an outbound HTTP fetch keyed on the account's email address, which is
+fine as an explicit button the account owner presses and is not something an
+API credential should be able to trigger on the owner's behalf.
+"""
 
 from __future__ import annotations
 
@@ -16,8 +36,48 @@ if TYPE_CHECKING:
     from typing import Any
 
     from django.contrib.auth.models import User
+    from django.core.files.uploadedfile import UploadedFile
+
+    from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
+
+#: Fallback animal when the caller names one that isn't in ``ANIMAL_EMOJIS``.
+DEFAULT_AVATAR_ANIMAL = "fox"
+
+#: Background used when a caller names no colour at all.
+DEFAULT_AVATAR_COLOR = MaterialColor.GREEN.value
+
+#: Background substituted when a caller names a colour outside
+#: ``MaterialColor``. Restricting to the palette is not cosmetic: the value is
+#: interpolated into generated SVG markup, so an arbitrary caller-supplied
+#: string there would be an injection point into a file the site then serves.
+#: Kept distinct from :data:`DEFAULT_AVATAR_COLOR` so "you sent nothing" and
+#: "you sent something we refused" stay visibly different in the result.
+UNRECOGNIZED_AVATAR_COLOR_FALLBACK = MaterialColor.GREY.value
+
+
+class AvatarUploadError(Exception):
+    """An avatar write was refused before anything was stored.
+
+    Carries the HTTP status the refusal maps to, because the underlying
+    ``services.images.image_upload_error`` already distinguishes them - 413 for
+    an over-large file, 400 for a content-type that doesn't match its bytes,
+    422 for a malware hit, 503 when the scanner itself is unreachable - and
+    collapsing them would tell a client "bad image" when the real answer is
+    "try again in a minute".
+    """
+
+    def __init__(self, message: str, status_code: int = 400) -> None:
+        """Initialize with a caller-safe message and its HTTP status.
+
+        Args:
+            message: Human-readable detail, safe to surface verbatim.
+            status_code: The HTTP status this refusal maps to.
+        """
+        super().__init__(message)
+        self.safe_message = message
+        self.status_code = status_code
 
 
 class AvatarService:
@@ -226,3 +286,99 @@ class AvatarService:
         except requests.RequestException as exc:
             logger.debug("Avatar download failed for %s: %s", url, exc)
             return None
+
+
+def set_profile_avatar(profile: Profile, uploaded_file: UploadedFile) -> Profile:
+    """Store an uploaded image as ``profile``'s avatar.
+
+    Runs the shared ``services.images.image_upload_error`` gauntlet first -
+    site-wide size cap, magic-byte content sniffing, antivirus - and stores
+    nothing at all when any check fails. The sniffing step is the one that
+    matters most here: an avatar is rendered by every page that names its
+    owner, so a file that claims to be a PNG and isn't gets the widest possible
+    distribution of anything a user can upload.
+
+    No ``Image`` row is created and no photo quota is consumed: an avatar is a
+    field on the profile, not a library item. That is why the external API
+    gates this on ``social:write`` rather than ``photos:write``.
+
+    Args:
+        profile: The profile whose avatar is being replaced.
+        uploaded_file: The submitted file.
+
+    Returns:
+        The same profile, with ``avatar`` saved.
+
+    Raises:
+        AvatarUploadError: The file failed one of the pre-storage checks. The
+            exception carries the status code that check maps to.
+    """
+    from urbanlens.dashboard.models.images.model import MediaKind
+    from urbanlens.dashboard.services.images import image_upload_error
+
+    upload_error = image_upload_error(uploaded_file, MediaKind.PHOTO)
+    if upload_error:
+        message, status_code = upload_error
+        raise AvatarUploadError(message, status_code)
+
+    profile.avatar = uploaded_file
+    profile.save(update_fields=["avatar"])
+    return profile
+
+
+def set_profile_avatar_from_emoji(profile: Profile, animal: str, color: str) -> Profile:
+    """Generate an emoji avatar and store it as ``profile``'s avatar.
+
+    Both inputs are coerced to known-good values rather than rejected, because
+    the site's own picker offers a fixed set of suggestions and a stale one
+    should still produce *an* avatar rather than an error dialog. The coercion
+    is a security boundary as well as a convenience: ``color`` is interpolated
+    directly into the generated SVG, so anything outside ``MaterialColor``
+    would be markup injection into a file the site subsequently serves.
+    Surfaces that want strict validation (the external API does, so a client
+    learns it sent a typo) validate before calling.
+
+    No ``image_upload_error`` pass here, deliberately: the bytes are generated
+    by :meth:`AvatarService.generate_emoji_svg` from a fixed template and two
+    values this function has just restricted to enum members, so there is no
+    untrusted content to sniff or scan.
+
+    Args:
+        profile: The profile whose avatar is being replaced.
+        animal: A key of :attr:`AvatarService.ANIMAL_EMOJIS`.
+        color: A ``MaterialColor`` hex value.
+
+    Returns:
+        The same profile, with the generated SVG saved to ``avatar``.
+    """
+    from django.core.files.base import ContentFile
+
+    emoji = AvatarService.ANIMAL_EMOJIS.get(animal) or AvatarService.ANIMAL_EMOJIS[DEFAULT_AVATAR_ANIMAL]
+    if (color or "").lower() not in {value.lower() for value in MaterialColor.values}:
+        color = UNRECOGNIZED_AVATAR_COLOR_FALLBACK
+
+    svg = AvatarService.generate_emoji_svg(emoji, color)
+    profile.avatar.save(f"emoji_{profile.pk}.svg", ContentFile(svg.encode("utf-8")), save=True)
+    return profile
+
+
+def clear_profile_avatar(profile: Profile) -> Profile:
+    """Remove ``profile``'s avatar, deleting the stored file.
+
+    Idempotent - clearing an already-empty avatar is a no-op rather than an
+    error, so a retried mobile DELETE stays safe.
+
+    Uses ``FieldFile.delete`` rather than assigning ``None``, so the underlying
+    file leaves storage too. Leaving it behind would keep a previous avatar
+    fetchable by anyone who had ever seen its URL, which is precisely what a
+    user removing their avatar is asking not to happen.
+
+    Args:
+        profile: The profile whose avatar is being cleared.
+
+    Returns:
+        The same profile, with ``avatar`` empty.
+    """
+    if profile.avatar:
+        profile.avatar.delete(save=True)
+    return profile

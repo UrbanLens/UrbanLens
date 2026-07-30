@@ -40,9 +40,12 @@ class GooglePlacesGateway(Gateway):
 
     # Places API (New) bills fields by SKU tier - id/displayName/location/types/
     # shortFormattedAddress are Essentials/Pro tier, but rating and
-    # userRatingCount are "Enterprise + Atmosphere" tier, billed extra
-    # regardless of whether the caller actually uses them:
-    # https://developers.google.com/maps/documentation/places/web-service/legacy/place-data-fields#atmosphere
+    # userRatingCount are Enterprise tier, billed extra regardless of whether
+    # the caller actually uses them. Phone numbers (nationalPhoneNumber/
+    # internationalPhoneNumber) and websiteUri are in this SAME Enterprise
+    # tier as rating/userRatingCount, not a cheaper one - don't add them to
+    # this default mask under the assumption they're cheap:
+    # https://developers.google.com/maps/documentation/places/web-service/place-details
     # Only requested by default here because callers that display ratings
     # (the map's nearby-landmarks search) need it - callers that don't should
     # pass a narrower field_mask (see find_nearest_place_id below).
@@ -64,7 +67,7 @@ class GooglePlacesGateway(Gateway):
                 :attr:`_DEFAULT_SEARCH_NEARBY_FIELD_MASK` (includes the
                 billed-extra rating/userRatingCount fields) - pass a narrower
                 mask when the caller only needs e.g. the place id, to avoid
-                paying for Atmosphere-tier data that goes unused.
+                paying for Enterprise-tier data that goes unused.
 
         Returns:
             List of place dicts, shaped per the requested field_mask.
@@ -100,8 +103,10 @@ class GooglePlacesGateway(Gateway):
             fields: Explicit list of Place Details fields to request -
                 required (no default): omitting ``fields`` makes this legacy
                 endpoint return every field, including higher-cost
-                Atmosphere-tier data (rating, reviews, opening_hours, ...),
-                billed accordingly whether or not the caller uses it.
+                Contact-tier data (formatted_phone_number,
+                international_phone_number, website) and Atmosphere-tier
+                data (rating, reviews, price_level, ...), billed accordingly
+                whether or not the caller uses it.
 
         Returns:
             The place details dict for the requested fields.
@@ -131,7 +136,7 @@ class GooglePlacesGateway(Gateway):
             The nearest place's id, or None when nothing was found.
         """
         # Only the id is ever used below - a minimal field_mask avoids paying
-        # for the default mask's rating/userRatingCount (Atmosphere-tier)
+        # for the default mask's rating/userRatingCount (Enterprise-tier)
         # fields, which this per-pin lookup (see GoogleMapsPhotosPanelSource)
         # has no use for.
         results = self.search_nearby(latitude, longitude, radius=radius, max_results=1, field_mask="places.id")

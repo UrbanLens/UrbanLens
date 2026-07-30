@@ -337,7 +337,7 @@ ul:not(.browser-default) > li {
 // .help-import-toc-nav) sets its own background/height/color, but they rely on
 // this baseline for the properties they don't re-declare.
 nav {
-    color: var(--ul-text-4);
+    color: var(--ul-button-text, #fff);
     background-color: #ee6e73;
     width: 100%;
     height: 56px;
@@ -381,6 +381,9 @@ span.badge {
 // checkmark via ::before/::after. Pages that want the native control visible instead
 // opt out with their own higher-specificity override (see _nav.scss, _trips.scss,
 // _pin-detail.scss, _tags.scss) - those overrides are unaffected by this rule.
+// .ul-switch__track (the design-system toggle switch, see _components.scss) draws
+// its own pill/knob visual and must always be excluded here too - otherwise this
+// legacy box decorator bleeds through underneath every .ul-switch, current or future.
 [type="radio"]:not(:checked),
 [type="radio"]:checked {
     position: absolute;
@@ -469,7 +472,7 @@ span.badge {
     pointer-events: none;
 }
 
-[type="checkbox"] + span:not(.lever) {
+[type="checkbox"] + span:not(.lever):not(.ul-switch__track) {
     position: relative;
     padding-left: 35px;
     cursor: pointer;
@@ -483,8 +486,8 @@ span.badge {
     user-select: none;
 }
 
-[type="checkbox"] + span:not(.lever):before,
-[type="checkbox"] + span:not(.lever):after {
+[type="checkbox"] + span:not(.lever):not(.ul-switch__track):before,
+[type="checkbox"] + span:not(.lever):not(.ul-switch__track):after {
     content: '';
     position: absolute;
     top: 0;
@@ -499,18 +502,18 @@ span.badge {
     transition: .2s;
 }
 
-[type="checkbox"] + span:not(.lever):after {
+[type="checkbox"] + span:not(.lever):not(.ul-switch__track):after {
     border: 0;
     -webkit-transform: scale(0);
     transform: scale(0);
 }
 
-[type="checkbox"]:not(:checked):disabled + span:not(.lever):before {
+[type="checkbox"]:not(:checked):disabled + span:not(.lever):not(.ul-switch__track):before {
     border: none;
     background-color: rgba(0, 0, 0, 0.42);
 }
 
-[type="checkbox"]:checked + span:not(.lever):before {
+[type="checkbox"]:checked + span:not(.lever):not(.ul-switch__track):before {
     top: -4px;
     left: -5px;
     width: 12px;
@@ -527,12 +530,12 @@ span.badge {
     transform-origin: 100% 100%;
 }
 
-[type="checkbox"]:checked:disabled + span:before {
+[type="checkbox"]:checked:disabled + span:not(.lever):not(.ul-switch__track):before {
     border-right: 2px solid rgba(0, 0, 0, 0.42);
     border-bottom: 2px solid rgba(0, 0, 0, 0.42);
 }
 
-[type="checkbox"]:indeterminate + span:not(.lever):before {
+[type="checkbox"]:indeterminate + span:not(.lever):not(.ul-switch__track):before {
     top: -11px;
     left: -12px;
     width: 10px;
@@ -549,7 +552,7 @@ span.badge {
     transform-origin: 100% 100%;
 }
 
-[type="checkbox"]:indeterminate:disabled + span:not(.lever):before {
+[type="checkbox"]:indeterminate:disabled + span:not(.lever):not(.ul-switch__track):before {
     border-right: 2px solid rgba(0, 0, 0, 0.42);
     background-color: transparent;
 }

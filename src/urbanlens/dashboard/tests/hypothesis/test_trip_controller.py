@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import re
 from unittest.mock import patch
 
 from django.template.loader import render_to_string
@@ -29,7 +30,30 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityVote, TripMembership
+from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityRSVP, TripActivityVote, TripMembership
+
+#: A rendered CSRF token: exactly 64 characters from Django's 62-character
+#: alphabet. ``{% csrf_token %}`` re-masks the same secret on every call, so a
+#: page embeds several *different* strings (the hidden input, base.html's
+#: ``var csrftoken``, the JS config blob) and two renders never match
+#: byte-for-byte. Matching on the shape covers all of them at once.
+_CSRF_TOKEN_RE = re.compile(rb"(?<![A-Za-z0-9])[A-Za-z0-9]{64}(?![A-Za-z0-9])")
+
+
+def _without_csrf_tokens(content: bytes) -> bytes:
+    """Blank out per-request CSRF tokens so two responses can be compared.
+
+    The masking is random per render and reveals nothing about the page, so
+    normalizing it is what makes an "these two responses are identical" check
+    meaningful rather than flaky.
+
+    Args:
+        content: A rendered response body.
+
+    Returns:
+        The body with every CSRF-token-shaped run replaced by a constant.
+    """
+    return _CSRF_TOKEN_RE.sub(b"REDACTED", content)
 
 
 def _make_trip(creator_profile: Profile, **kwargs) -> Trip:
@@ -78,6 +102,118 @@ class TripListPartialTests(TestCase):
         self.assertIn("Jul 4, 2026 - Jul 6, 2026", html)
         self.assertIn("3 days", html)
 
+    def test_ongoing_multi_day_trip_shows_day_indicator(self):
+        today = timezone.now().date()
+        trip = _make_trip(self.profile, start_date=today - datetime.timedelta(days=2), end_date=today + datetime.timedelta(days=5))
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertIn("Day 3 of 8", html)
+        self.assertIn("trip-card-status--ongoing", html)
+
+    def test_single_day_active_trip_does_not_show_day_indicator(self):
+        today = timezone.now().date()
+        trip = _make_trip(self.profile, start_date=today, end_date=today)
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertNotIn("trip-card-status--ongoing", html)
+        self.assertIn("In progress", html)
+
+    def test_upcoming_multi_day_trip_does_not_show_day_indicator(self):
+        today = timezone.now().date()
+        trip = _make_trip(self.profile, start_date=today + datetime.timedelta(days=3), end_date=today + datetime.timedelta(days=10))
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertNotIn("trip-card-status--ongoing", html)
+        self.assertIn("Upcoming", html)
+
+    def test_rsvp_list_shows_member_chip(self):
+        trip = _make_trip(self.profile)  # creator membership defaults to rsvp="yes"
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertIn("trip-card-rsvp-row", html)
+        self.assertIn("trip-member-rsvp--yes", html)
+        self.assertIn("Going", html)
+
+    def test_pin_count_stat_renders_when_annotated(self):
+        trip = _make_trip(self.profile)
+        trip.pin_count = 3
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertIn("3 pins", html)
+
+    def test_pin_count_stat_hidden_when_zero(self):
+        trip = _make_trip(self.profile)
+        trip.pin_count = 0
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertNotIn(" pin", html)
+
+    def test_start_checkin_button_shown_for_joined_members(self):
+        trip = _make_trip(self.profile)
+        trip.viewer_membership = TripMembership.objects.get(trip=trip, profile=self.profile)
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertIn("Start a check-in", html)
+        self.assertIn(f"{reverse('safety.checkin.create')}?trip={trip.slug}", html)
+
+    def test_start_checkin_button_hidden_without_membership(self):
+        trip = _make_trip(self.profile)
+        # trip.viewer_membership deliberately left unset, as it would be for
+        # a viewer whose membership row doesn't exist (shouldn't happen on
+        # the real list page, which only shows the viewer's own trips, but
+        # covers the template's gating logic in isolation).
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertNotIn("Start a check-in", html)
+
+    def test_open_itinerary_button_always_present(self):
+        trip = _make_trip(self.profile)
+
+        html = render_to_string("dashboard/partials/trips/trip_list_partial.html", {"trips": [trip], "profile": self.profile})
+
+        self.assertIn("Open itinerary", html)
+
+
+class TripListViewTests(TestCase):
+    """GET /trips/list/ - end-to-end wiring of pin_count/viewer_membership through the real view."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = baker.make("auth.User")
+        self.client = Client()
+        self.client.force_login(self.user)
+        self.profile = self.user.profile
+
+    def test_start_checkin_button_appears_for_a_joined_trip(self):
+        trip = _make_trip(self.profile)
+
+        response = self.client.get(reverse("trips.list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Start a check-in")
+        self.assertContains(response, f"{reverse('safety.checkin.create')}?trip={trip.slug}")
+
+    def test_pin_count_reflects_activity_pins(self):
+        trip = _make_trip(self.profile)
+        pin = baker.make("dashboard.Pin", profile=self.profile)
+        other_pin = baker.make("dashboard.Pin", profile=self.profile)
+        TripActivity.objects.create(trip=trip, added_by=self.profile, title="Stop 1", pin=pin)
+        TripActivity.objects.create(trip=trip, added_by=self.profile, title="Stop 2", pin=other_pin)
+        TripActivity.objects.create(trip=trip, added_by=self.profile, title="Stop 3", pin=pin)
+        TripActivity.objects.create(trip=trip, added_by=self.profile, title="No pin")
+
+        response = self.client.get(reverse("trips.list"))
+
+        self.assertContains(response, "2 pins")
+
 
 class TripCreateViewTests(TestCase):
     """POST /trips/create/ - creates a trip and returns the list partial."""
@@ -109,13 +245,23 @@ class TripCreateViewTests(TestCase):
             TripMembership.objects.filter(trip=trip, profile=self.profile).exists(),
         )
 
-    def test_post_without_name_returns_400(self):
+    def test_post_without_name_generates_a_placeholder(self):
+        """A blank name is accepted and gets a generated one (UL-360).
+
+        This test previously asserted a 400, which stopped being true when the
+        name became optional so a "just start planning" flow needn't invent a
+        title up front - it had been failing ever since. The behavior itself
+        now lives in ``services.trip_crud.create_trip``.
+        """
+        before = set(Trip.objects.values_list("pk", flat=True))
         resp = self.client.post(
             reverse("trips.create"),
             data=json.dumps({"name": ""}),
             content_type="application/json",
         )
-        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.status_code, 200)
+        created = Trip.objects.exclude(pk__in=before).get()
+        self.assertTrue(created.name.strip())
 
     def test_post_with_form_data_also_works(self):
         resp = self.client.post(reverse("trips.create"), data={"name": "Form Trip"})
@@ -206,11 +352,24 @@ class TripDetailViewTests(TestCase):
         resp = client.get(self._url())
         self.assertEqual(resp.status_code, 200)
 
-    def test_outsider_gets_403(self):
+    def test_outsider_gets_404_indistinguishable_from_a_missing_trip(self):
+        """Someone else's trip must look exactly like one that doesn't exist.
+
+        This used to be a 403 while a missing slug was a 404, so the status
+        code alone let anyone enumerate valid private trip slugs - despite both
+        rendering the same "not found" page specifically to prevent that. See
+        ``services.trip_access.get_trip_for_viewer``.
+        """
         client = Client()
         client.force_login(self.outsider_user)
-        resp = client.get(self._url())
-        self.assertEqual(resp.status_code, 403)
+        forbidden = client.get(self._url())
+        missing = client.get(reverse("trips.detail", kwargs={"trip_slug": "no-such-trip-slug"}))
+        self.assertEqual(forbidden.status_code, 404)
+        self.assertEqual(missing.status_code, 404)
+        # Django masks the CSRF token afresh per render, so the values differ
+        # between any two responses - including two identical ones. They leak
+        # nothing about the trip; everything else must match exactly.
+        self.assertEqual(_without_csrf_tokens(forbidden.content), _without_csrf_tokens(missing.content))
 
     def test_nonexistent_trip_returns_404(self):
         client = Client()
@@ -429,12 +588,17 @@ class TripActivitiesViewTests(TestCase):
         )
         self.assertEqual(resp.status_code, 403)
 
-    def test_outsider_gets_403(self):
+    def test_outsider_gets_404(self):
+        """A non-member is told the trip does not exist, not that it's forbidden.
+
+        See TripDetailViewTests.test_outsider_gets_404_indistinguishable_from_a_missing_trip
+        for why the old 403 was an enumeration leak.
+        """
         outsider = baker.make("auth.User")
         client = Client()
         client.force_login(outsider)
         resp = client.get(self._url())
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 404)
 
     def test_post_pin_only_uses_pin_name_in_panel(self):
         from urbanlens.dashboard.models.location.model import Location
@@ -839,6 +1003,76 @@ class TripMemberRSVPViewTests(TestCase):
         self.assertIsNone(m.rsvp)
 
 
+class TripActivityRSVPViewTests(TestCase):
+    """POST an activity RSVP override and fall back to the trip RSVP by default."""
+
+    def setUp(self):
+        super().setUp()
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+        self.trip = _make_trip(self.profile)
+        self.activity = TripActivity.objects.create(trip=self.trip, added_by=self.profile, title="First stop")
+        self.client = Client()
+        self.client.force_login(self.user)
+
+    def _url(self):
+        return reverse(
+            "trips.activity.rsvp",
+            kwargs={"trip_slug": self.trip.slug, "activity_id": self.activity.id},
+        )
+
+    def test_activity_inherits_trip_rsvp_without_an_override(self):
+        self.assertEqual(TripActivityRSVP.effective_for(self.activity, self.profile), TripMembership.RSVP_YES)
+
+    def test_set_activity_override(self):
+        response = self.client.post(self._url(), {"rsvp": "no"})
+
+        self.assertEqual(response.status_code, 200)
+        override = TripActivityRSVP.objects.get(activity=self.activity, membership__profile=self.profile)
+        self.assertEqual(override.rsvp, TripMembership.RSVP_NO)
+        self.assertEqual(TripActivityRSVP.effective_for(self.activity, self.profile), TripMembership.RSVP_NO)
+        self.assertContains(response, "Not coming")
+        self.assertContains(response, "Overrides trip RSVP")
+
+    def test_clear_activity_override_restores_inheritance(self):
+        TripActivityRSVP.objects.create(
+            activity=self.activity,
+            membership=TripMembership.objects.get(trip=self.trip, profile=self.profile),
+            rsvp=TripMembership.RSVP_NO,
+        )
+
+        response = self.client.post(self._url(), {"rsvp": ""})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(TripActivityRSVP.objects.filter(activity=self.activity, membership__profile=self.profile).exists())
+        self.assertEqual(TripActivityRSVP.effective_for(self.activity, self.profile), TripMembership.RSVP_YES)
+        self.assertContains(response, "From trip RSVP")
+
+    def test_trip_rsvp_changes_inherited_activities_but_preserves_overrides(self):
+        other_activity = TripActivity.objects.create(trip=self.trip, added_by=self.profile, title="Second stop")
+        TripActivityRSVP.objects.create(
+            activity=self.activity,
+            membership=TripMembership.objects.get(trip=self.trip, profile=self.profile),
+            rsvp=TripMembership.RSVP_NO,
+        )
+
+        response = self.client.post(
+            reverse("trips.rsvp", kwargs={"trip_slug": self.trip.slug}),
+            {"rsvp": "maybe"},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(TripActivityRSVP.effective_for(self.activity, self.profile), TripMembership.RSVP_NO)
+        self.assertEqual(TripActivityRSVP.effective_for(other_activity, self.profile), TripMembership.RSVP_MAYBE)
+        self.assertContains(response, 'id="trip-activities-panel"')
+
+    def test_invalid_activity_rsvp_is_rejected(self):
+        response = self.client.post(self._url(), {"rsvp": "absolutely"})
+
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(TripActivityRSVP.objects.filter(activity=self.activity, membership__profile=self.profile).exists())
+
+
 class TripLeaveViewTests(TestCase):
     """DELETE /trips/<slug>/leave/ - member exits trip."""
 
@@ -856,6 +1090,9 @@ class TripLeaveViewTests(TestCase):
         return reverse("trips.leave", kwargs={"trip_slug": self.trip.slug})
 
     def test_member_can_leave(self):
+        activity = TripActivity.objects.create(trip=self.trip, added_by=self.creator, title="Stop")
+        membership = TripMembership.objects.get(trip=self.trip, profile=self.member)
+        TripActivityRSVP.objects.create(activity=activity, membership=membership, rsvp=TripMembership.RSVP_YES)
         client = Client()
         client.force_login(self.member_user)
         resp = client.delete(self._url())
@@ -863,6 +1100,7 @@ class TripLeaveViewTests(TestCase):
         self.assertFalse(
             TripMembership.objects.filter(trip=self.trip, profile=self.member).exists(),
         )
+        self.assertFalse(TripActivityRSVP.objects.filter(activity=activity).exists())
 
     def test_creator_cannot_leave(self):
         client = Client()

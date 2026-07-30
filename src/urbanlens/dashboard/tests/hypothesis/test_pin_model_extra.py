@@ -30,7 +30,24 @@ class PinEffectiveColorTests(SimpleTestCase):
         return pin
 
     def _mock_labels(self, mock_labels: MagicMock, labels: list[MagicMock]) -> None:
-        mock_labels.exclude.return_value.order_by.return_value = iter(labels)
+        """Stand in for ``labels.exclude(kind="user")``.
+
+        The stub sits on ``exclude`` itself because ``icon_source_label`` sorts
+        in Python (``sorted(...)``) instead of calling ``.order_by()``. Stubbing
+        ``exclude().order_by()`` therefore left the real call iterating a bare
+        MagicMock, which yields nothing: every expects-a-colour case here saw
+        None, and every expects-None case passed without exercising anything.
+
+        ``order``/``name`` are set explicitly so that sort has real values to
+        compare - left as MagicMocks the multi-label cases would sort by
+        whatever MagicMock's comparison operators happen to do - and are chosen
+        so list position is the winning order, which is what these tests mean by
+        "first label wins".
+        """
+        for index, label in enumerate(labels):
+            label.order = -index
+            label.name = f"label-{index}"
+        mock_labels.exclude.return_value = list(labels)
 
     @patch.object(Pin, "labels")
     def test_returns_none_when_no_tags(self, mock_labels: MagicMock) -> None:

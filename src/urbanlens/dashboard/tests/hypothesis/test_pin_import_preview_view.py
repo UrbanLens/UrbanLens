@@ -1,7 +1,7 @@
 """Tests for PinController.parse_for_preview - the import wizard's file-parsing step.
 
 Covers the suggested list/category name ("stem") derived from each uploaded
-file - see docs/prompts/completed.md for the bug this guards against: a KMZ
+file - for the bug this guards against: a KMZ
 is just a ZIP wrapping a single "doc.kml" (Google's own fixed internal
 filename, from Google Takeout/My Maps exports), so using that inner name
 unconditionally always produced the same generic "doc" suggestion regardless
