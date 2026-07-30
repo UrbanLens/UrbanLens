@@ -356,6 +356,19 @@ def _at_most_one_of(columns: tuple[str, ...]) -> Q:
     return condition
 
 
+class CustomFieldValueError(ValueError):
+    """A raw value could not be parsed/stored for a custom field.
+
+    ``safe_message`` is safe to surface directly to the caller - every raise
+    site either uses a static string or echoes back the value the caller
+    itself submitted.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
+
+
 class CustomFieldValue(abstract.DashboardModel):
     """The value of one custom field on one target object.
 
@@ -572,7 +585,7 @@ class CustomFieldValue(abstract.DashboardModel):
         """
         raw = (raw or "").strip()
         if not raw:
-            raise ValueError("Empty value - delete the row instead of storing a blank.")
+            raise CustomFieldValueError("Empty value - delete the row instead of storing a blank.")
 
         field_type = self.field.field_type
         self.value_text = ""
@@ -587,17 +600,17 @@ class CustomFieldValue(abstract.DashboardModel):
             try:
                 self.value_number = Decimal(raw)
             except InvalidOperation as e:
-                raise ValueError(f"{raw!r} is not a valid number.") from e
+                raise CustomFieldValueError(f"{raw!r} is not a valid number.") from e
         elif field_type == CustomFieldType.DATE:
             try:
                 self.value_date = datetime.strptime(raw, "%Y-%m-%d").date()
             except ValueError as e:
-                raise ValueError(f"{raw!r} is not a valid date (expected YYYY-MM-DD).") from e
+                raise CustomFieldValueError(f"{raw!r} is not a valid date (expected YYYY-MM-DD).") from e
         elif field_type == CustomFieldType.TIME:
             try:
                 self.value_time = time.fromisoformat(raw)
             except ValueError as e:
-                raise ValueError(f"{raw!r} is not a valid time (expected HH:MM).") from e
+                raise CustomFieldValueError(f"{raw!r} is not a valid time (expected HH:MM).") from e
         elif field_type == CustomFieldType.CHECKBOX:
             lowered = raw.lower()
             if lowered in ("1", "true", "on", "yes", "checked"):
@@ -605,18 +618,18 @@ class CustomFieldValue(abstract.DashboardModel):
             elif lowered in ("0", "false", "off", "no", "unchecked"):
                 self.value_boolean = False
             else:
-                raise ValueError(f"{raw!r} is not a valid checkbox value.")
+                raise CustomFieldValueError(f"{raw!r} is not a valid checkbox value.")
         elif field_type == CustomFieldType.SELECT:
             choices = self.field.select_choices
             if raw not in choices:
-                raise ValueError(f"{raw!r} is not one of this field's options.")
+                raise CustomFieldValueError(f"{raw!r} is not one of this field's options.")
             self.value_text = raw
         elif field_type == CustomFieldType.URL:
             candidate = raw if "://" in raw else f"https://{raw}"
             try:
                 URLValidator(schemes=["http", "https"])(candidate)
             except ValidationError as e:
-                raise ValueError(f"{raw!r} is not a valid link.") from e
+                raise CustomFieldValueError(f"{raw!r} is not a valid link.") from e
             self.value_text = candidate
         elif field_type == CustomFieldType.REFERENCE:
             from urbanlens.dashboard.services.custom_field_references import resolve_reference
@@ -624,10 +637,10 @@ class CustomFieldValue(abstract.DashboardModel):
             kind = self.field.reference_kind
             ref_field = self.REF_FIELD_BY_KIND.get(kind)
             if ref_field is None:
-                raise ValueError("This reference field has no target kind configured.")
+                raise CustomFieldValueError("This reference field has no target kind configured.")
             target = resolve_reference(kind, raw, self.field.profile)
             if target is None:
-                raise ValueError("That item wasn't found (or you can't reference it).")
+                raise CustomFieldValueError("That item wasn't found (or you can't reference it).")
             setattr(self, ref_field, target)
         else:
             self.value_text = raw

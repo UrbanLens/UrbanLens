@@ -32,6 +32,7 @@ from urbanlens.dashboard.models.custom_fields.model import (
     CustomFieldEntity,
     CustomFieldType,
     CustomFieldValue,
+    CustomFieldValueError,
 )
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
@@ -120,8 +121,8 @@ def save_value(field: CustomField, target: Any, raw: str) -> tuple[CustomFieldVa
     value = existing or CustomFieldValue(field=field, **{target_attr: target})
     try:
         value.set_value(raw)
-    except ValueError as e:
-        return None, str(e)
+    except CustomFieldValueError as e:
+        return None, e.safe_message
     value.save()
     return value, None
 
