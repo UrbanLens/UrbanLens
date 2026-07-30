@@ -104,7 +104,7 @@ from urbanlens.dashboard.services.comments import (
     top_level_comment_queryset,
     visible_comment_tree,
 )
-from urbanlens.dashboard.services.geo import geometry_to_geojson, parse_multipolygon_geojson
+from urbanlens.dashboard.services.geo import InvalidPolygonGeoJSONError, geometry_to_geojson, parse_multipolygon_geojson
 from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, schedule_location_boundary_generation
 from urbanlens.dashboard.services.reviews import clear_review, upsert_review
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
@@ -575,8 +575,8 @@ class WikiBoundaryApiView(WikiApiView):
         if polygon_geojson:
             try:
                 geom = parse_multipolygon_geojson(polygon_geojson)
-            except (TypeError, ValueError) as exc:
-                return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            except InvalidPolygonGeoJSONError as exc:
+                return Response({"error": exc.safe_message}, status=400)
 
             from urbanlens.dashboard.models.site_settings import SiteSettings
 
@@ -1053,7 +1053,7 @@ class _CommentListMixin(PaginatedListMixin):
         try:
             comment = create_comment(profile=profile, pin=pin, wiki=wiki, text=data["text"], parent=parent)
         except CommentValidationError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
 
         # The freshly created comment never passes through visible_comment_tree,
         # so its mentions are resolved here without the gate that call would

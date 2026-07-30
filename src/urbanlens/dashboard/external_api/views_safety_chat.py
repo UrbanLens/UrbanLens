@@ -60,6 +60,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin
 from urbanlens.dashboard.services.safety import (
     CheckinArchivedError,
+    SafetyValidationError,
     accept_checkin_partner_invite,
     decline_checkin_partner_invite,
     get_partner_role,
@@ -168,12 +169,10 @@ class SafetyCheckinMessagesView(SafetyCheckinViewerScopedView, PaginatedListMixi
             # check-in's plaintext is simply already sealed into its encrypted
             # archive. A client must be able to tell this from a 400 so it can
             # retire the conversation instead of asking the user to retype.
-            return Response({"error": str(exc)}, status=409)  # lgtm[py/stack-trace-exposure]
-        except ValueError as exc:
-            # Anything the serializer's bounds did not already catch. The
-            # service's messages are developer-authored constants, so echoing
-            # them is safe.
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=409)
+        except SafetyValidationError as exc:
+            # Anything the serializer's bounds did not already catch.
+            return Response({"error": exc.safe_message}, status=400)
 
         return Response(SafetyCheckinMessageSerializer(message, context={"viewer": viewer}).data, status=201)
 

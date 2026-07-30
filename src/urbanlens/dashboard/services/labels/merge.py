@@ -49,7 +49,11 @@ logger = logging.getLogger(__name__)
 
 
 class LabelMergeError(Exception):
-    """A merge was refused. The message is safe to show a caller verbatim."""
+    """A merge was refused. ``safe_message`` is safe to show a caller verbatim."""
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 @dataclass(frozen=True)

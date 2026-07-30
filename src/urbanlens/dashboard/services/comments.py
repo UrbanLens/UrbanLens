@@ -50,7 +50,14 @@ ALLOWED_EMOJIS = {"👍", "👎", "❤️", "😂", "😮", "😢", "🔥", "�
 
 
 class CommentValidationError(ValueError):
-    """A comment could not be created as submitted."""
+    """A comment could not be created as submitted.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 @dataclass(slots=True)

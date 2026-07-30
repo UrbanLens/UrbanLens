@@ -101,7 +101,14 @@ _PLACEHOLDER_NAMES = frozenset({"untitled", "unknown", "unnamed", "new location"
 
 
 class PublicVoteError(Exception):
-    """A ballot was refused (not eligible, not open, or bad input)."""
+    """A ballot was refused (not eligible, not open, or bad input).
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 def is_meaningful_name(name: str | None) -> bool:

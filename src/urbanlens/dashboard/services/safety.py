@@ -53,6 +53,18 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+class SafetyValidationError(ValueError):
+    """A check-in action could not be applied as submitted.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
+
+
 # (contact_profile, email, name) - contact_profile wins when both are given.
 ContactInput = tuple["Profile | None", "str | None", str]
 
@@ -644,19 +656,19 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
     try:
         user = User.objects.get(username__iexact=username)
     except User.DoesNotExist:
-        raise ValueError(f'No user found with username "{username}".') from None
+        raise SafetyValidationError(f'No user found with username "{username}".') from None
     invitee, _ = Profile.objects.get_or_create(user=user)
 
     if invitee.pk == checkin.profile_id:
-        raise ValueError("You can't add yourself as a partner on your own check-in.")
+        raise SafetyValidationError("You can't add yourself as a partner on your own check-in.")
     if Profile.are_blocked(inviter, invitee):
-        raise ValueError("This user isn't accepting invitations from you.")
+        raise SafetyValidationError("This user isn't accepting invitations from you.")
     if checkin.partners.filter(profile=invitee).exists():
-        raise ValueError(f"{invitee.username} has already been invited.")
+        raise SafetyValidationError(f"{invitee.username} has already been invited.")
 
     max_partners = SiteSettings.get_current().max_safety_checkin_partners
     if max_partners > 0 and checkin.partners.count() >= max_partners:
-        raise ValueError(f"A check-in can have at most {max_partners} partners.")
+        raise SafetyValidationError(f"A check-in can have at most {max_partners} partners.")
 
     try:
         partner = SafetyCheckinPartner.objects.create(checkin=checkin, profile=invitee, invited_by=inviter)
@@ -664,7 +676,7 @@ def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username
         # The .exists() check above isn't atomic against the unique_together
         # constraint - a double-submitted invite can race past it and only get
         # caught here. Same outcome as losing the .exists() check normally.
-        raise ValueError(f"{invitee.username} has already been invited.") from None
+        raise SafetyValidationError(f"{invitee.username} has already been invited.") from None
     _notify_checkin_partner_invite(partner)
     return partner
 
@@ -887,7 +899,7 @@ def update_live_location(checkin: SafetyCheckin, *, latitude: float, longitude: 
         .update(live_latitude=latitude, live_longitude=longitude, live_location_accuracy=accuracy, live_location_updated_at=updated_at, updated=updated_at)
     )
     if not updated:
-        raise ValueError("Live location sharing is not enabled for this check-in, or it has already concluded.")
+        raise SafetyValidationError("Live location sharing is not enabled for this check-in, or it has already concluded.")
 
     checkin.live_latitude = latitude
     checkin.live_longitude = longitude
@@ -952,7 +964,7 @@ def schedule_checkin_archival(checkin: SafetyCheckin) -> None:
     """
     resolved_at = checkin.resolved_at
     if resolved_at is None:
-        raise ValueError(f"Cannot schedule archival for checkin {checkin.pk}: resolved_at is not set.")
+        raise SafetyValidationError(f"Cannot schedule archival for checkin {checkin.pk}: resolved_at is not set.")
 
     other_viewers_exist = checkin.partners.filter(status=SafetyCheckinPartnerStatus.ACCEPTED).exists() or checkin.contacts.exists()
     archive_at = resolved_at + ARCHIVE_VIEWER_GRACE_PERIOD if other_viewers_exist else resolved_at
@@ -1327,7 +1339,13 @@ class CheckinArchivedError(ValueError):
     was well-formed, the check-in's state is simply past the point of writing.
     Subclasses ``ValueError`` so existing callers that only catch that keep
     behaving exactly as they did.
+
+    ``safe_message`` is safe to surface directly to the caller.
     """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 def apply_checkin_edit(
@@ -1730,7 +1748,7 @@ def create_checkin(
             (see ``get_active_checkin``).
     """
     if get_active_checkin(profile, trip=trip) is not None:
-        raise ValueError("You already have an active check-in. Check in or cancel it before starting a new one.")
+        raise SafetyValidationError("You already have an active check-in. Check in or cancel it before starting a new one.")
 
     checkin = SafetyCheckin.objects.create(
         profile=profile,
@@ -2109,9 +2127,9 @@ def create_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, c
         raise CheckinArchivedError("This check-in has concluded and can no longer receive messages.")
     body = body.strip()
     if not body:
-        raise ValueError("Message cannot be empty.")
+        raise SafetyValidationError("Message cannot be empty.")
     if len(body) > MAX_CHAT_MESSAGE_LENGTH:
-        raise ValueError(f"Message is too long (max {MAX_CHAT_MESSAGE_LENGTH} characters).")
+        raise SafetyValidationError(f"Message is too long (max {MAX_CHAT_MESSAGE_LENGTH} characters).")
 
     sender_profile, sender_contact = resolve_message_sender(user, contact)
     message = SafetyCheckinMessage.objects.create(checkin=checkin, sender_profile=sender_profile, sender_contact=sender_contact, body=body)

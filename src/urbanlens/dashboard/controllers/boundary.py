@@ -48,7 +48,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.external_data import schedule_panel_fetch
-from urbanlens.dashboard.services.geo import geometry_to_geojson as _geojson, parse_multipolygon_geojson as _parse_multipolygon
+from urbanlens.dashboard.services.geo import InvalidPolygonGeoJSONError, geometry_to_geojson as _geojson, parse_multipolygon_geojson as _parse_multipolygon
 from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, schedule_location_boundary_generation
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 
@@ -187,8 +187,8 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
         if polygon_geojson:
             try:
                 geom = _parse_multipolygon(polygon_geojson)
-            except (TypeError, ValueError) as exc:
-                return JsonResponse({"error": str(exc)}, status=400)
+            except InvalidPolygonGeoJSONError as exc:
+                return JsonResponse({"error": exc.safe_message}, status=400)
             row, _created = Boundary.objects.get_or_create(
                 pin=pin,
                 boundary_type=boundary_type,
@@ -254,8 +254,8 @@ class WikiBoundaryView(LoginRequiredMixin, View):
         if polygon_geojson:
             try:
                 geom = _parse_multipolygon(polygon_geojson)
-            except (TypeError, ValueError) as exc:
-                return JsonResponse({"error": str(exc)}, status=400)
+            except InvalidPolygonGeoJSONError as exc:
+                return JsonResponse({"error": exc.safe_message}, status=400)
 
             # Check area against the site-wide limit.  Project to an equal-area
             # CRS (EPSG:6933) so the area calculation is meaningful globally.

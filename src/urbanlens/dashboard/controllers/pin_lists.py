@@ -323,14 +323,14 @@ class PinListEditView(LoginRequiredMixin, View):
             rules_changed = True
 
         if "smart_boundary" in body:
-            from urbanlens.dashboard.services.geo import parse_multipolygon_geojson
+            from urbanlens.dashboard.services.geo import InvalidPolygonGeoJSONError, parse_multipolygon_geojson
 
             polygon_geojson = body.get("smart_boundary")
             if polygon_geojson:
                 try:
                     pin_list.smart_boundary = parse_multipolygon_geojson(polygon_geojson)
-                except (ValueError, TypeError) as exc:
-                    return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+                except InvalidPolygonGeoJSONError as exc:
+                    return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
             else:
                 pin_list.smart_boundary = None
             rules_changed = True

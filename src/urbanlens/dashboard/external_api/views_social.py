@@ -219,7 +219,7 @@ class ProfileAvatarView(_OwnProfileApiView):
             # Message and status both come straight from ``image_upload_error``,
             # so this endpoint speaks the same refusal vocabulary as every
             # other upload on the surface.
-            return Response({"error": str(exc)}, status=exc.status_code)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=exc.status_code)
 
         return self.profile_detail(request, profile_slug)
 
@@ -410,7 +410,7 @@ class ProfileNicknameView(_AnnotationApiView):
         try:
             set_nickname(viewer, subject, serializer.validated_data["nickname"])
         except AnnotationError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
         return self.annotations_response(viewer, subject)
 
     @extend_schema(responses={200: ProfileAnnotationsSerializer, 404: ErrorSerializer})
@@ -467,7 +467,7 @@ class ProfileTrustView(_AnnotationApiView):
         try:
             set_trust(viewer, subject, serializer.validated_data["rating"])
         except AnnotationError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
         return self.annotations_response(viewer, subject)
 
     @extend_schema(responses={200: ProfileAnnotationsSerializer, 404: ErrorSerializer})

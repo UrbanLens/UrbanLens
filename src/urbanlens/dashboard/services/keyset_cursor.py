@@ -26,7 +26,7 @@ from django.utils import timezone
 class InvalidCursorError(ValueError):
     """The supplied cursor is malformed or was never issued by this service.
 
-    The message is safe to surface to the caller.
+    ``safe_message`` is safe to surface to the caller.
     """
 
     def __init__(self, message: str = "Invalid cursor.") -> None:
@@ -35,6 +35,7 @@ class InvalidCursorError(ValueError):
         Args:
             message: Human-readable detail to surface.
         """
+        self.safe_message = message
         super().__init__(message)
 
 

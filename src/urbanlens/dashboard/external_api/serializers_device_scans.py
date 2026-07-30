@@ -55,7 +55,7 @@ class DeviceScanEntryInputSerializer(serializers.Serializer):
         try:
             return normalize_mac_address(value)
         except InvalidMacAddressError as exc:
-            raise serializers.ValidationError(str(exc)) from exc  # lgtm[py/stack-trace-exposure]
+            raise serializers.ValidationError(exc.safe_message) from exc
 
     def validate_readings(self, value: list[dict]) -> list[dict]:
         """Reject an unreasonably long route trail rather than truncating it silently."""

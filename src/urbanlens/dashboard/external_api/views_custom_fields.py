@@ -227,7 +227,7 @@ class PhotoCustomFieldValueView(ExternalApiView):
         serializer.is_valid(raise_exception=True)
         value, error = save_value(field, image, serializer.validated_data["value"])
         if error is not None:
-            return Response({"error": error}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": error}, status=400)
         if value is None:
             return Response(status=204)
         return Response(CustomFieldValueSerializer({"id": field.pk, "name": field.name, "type": field.field_type, "value": value.export_value()}).data)

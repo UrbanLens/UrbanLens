@@ -158,7 +158,7 @@ class PinAliasView(LoginRequiredMixin, View):
         try:
             create_pin_alias(pin, name=name, kind=kind)
         except AliasExistsError as exc:
-            return HttpResponse(str(exc), status=409)  # lgtm[py/stack-trace-exposure]
+            return HttpResponse(exc.safe_message, status=409)
         return _render_pin_panel(request, pin)
 
 
@@ -169,7 +169,7 @@ class PinAliasDeleteView(LoginRequiredMixin, View):
         try:
             delete_pin_alias(pin, alias)
         except AliasIsCurrentNameError as exc:
-            return HttpResponse(str(exc), status=400)  # lgtm[py/stack-trace-exposure]
+            return HttpResponse(exc.safe_message, status=400)
         return _render_pin_panel(request, pin)
 
 

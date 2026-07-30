@@ -40,6 +40,29 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+class GroupChatValidationError(ValueError):
+    """A group chat action or message could not be applied as submitted.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
+
+
+class GroupChatPermissionError(PermissionError):
+    """A group chat action was refused because of who is involved.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
+
+
 #: Maximum number of members (including the creator) a group chat may have.
 MAX_GROUP_MEMBERS = 50
 
@@ -112,18 +135,18 @@ def create_group_chat(creator: Profile, name: str, members: list[Profile]) -> Gr
     """
     name = name.strip()
     if not name:
-        raise ValueError("A group name is required.")
+        raise GroupChatValidationError("A group name is required.")
     if len(name) > MAX_GROUP_NAME_LENGTH:
-        raise ValueError(f"Group names are limited to {MAX_GROUP_NAME_LENGTH} characters.")
+        raise GroupChatValidationError(f"Group names are limited to {MAX_GROUP_NAME_LENGTH} characters.")
 
     unique_members = {member.pk: member for member in members if member.pk != creator.pk}
     if not unique_members:
-        raise ValueError("Add at least one other person to start a group.")
+        raise GroupChatValidationError("Add at least one other person to start a group.")
     if len(unique_members) + 1 > MAX_GROUP_MEMBERS:
-        raise ValueError(f"Groups are limited to {MAX_GROUP_MEMBERS} members.")
+        raise GroupChatValidationError(f"Groups are limited to {MAX_GROUP_MEMBERS} members.")
     for member in unique_members.values():
         if not can_direct_message(creator, member):
-            raise PermissionError(f"{member.username} isn't accepting messages from you.")
+            raise GroupChatPermissionError(f"{member.username} isn't accepting messages from you.")
 
     with transaction.atomic():
         group = GroupChat.objects.create(name=name, creator=creator)
@@ -198,11 +221,11 @@ def rename_group_chat(group: GroupChat, actor: Profile, name: str) -> GroupChat:
     """
     name = name.strip()
     if not name:
-        raise ValueError("A group name is required.")
+        raise GroupChatValidationError("A group name is required.")
     if len(name) > MAX_GROUP_NAME_LENGTH:
-        raise ValueError(f"Group names are limited to {MAX_GROUP_NAME_LENGTH} characters.")
+        raise GroupChatValidationError(f"Group names are limited to {MAX_GROUP_NAME_LENGTH} characters.")
     if group.membership_for(actor) is None:
-        raise PermissionError("You aren't a member of this group.")
+        raise GroupChatPermissionError("You aren't a member of this group.")
 
     group.name = name
     group.save(update_fields=["name", "updated"])
@@ -232,17 +255,17 @@ def add_group_members(group: GroupChat, actor: Profile, members: list[Profile]) 
             settings reject them.
     """
     if not group.is_manager(actor):
-        raise PermissionError("Only the group's creator can add members.")
+        raise GroupChatPermissionError("Only the group's creator can add members.")
 
     active_ids = set(group.active_memberships().values_list("profile_id", flat=True))
     to_add = {member.pk: member for member in members if member.pk not in active_ids}
     if not to_add:
         return []
     if len(active_ids) + len(to_add) > MAX_GROUP_MEMBERS:
-        raise ValueError(f"Groups are limited to {MAX_GROUP_MEMBERS} members.")
+        raise GroupChatValidationError(f"Groups are limited to {MAX_GROUP_MEMBERS} members.")
     for member in to_add.values():
         if not can_direct_message(actor, member):
-            raise PermissionError(f"{member.username} isn't accepting messages from you.")
+            raise GroupChatPermissionError(f"{member.username} isn't accepting messages from you.")
 
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
@@ -278,9 +301,9 @@ def remove_group_member(group: GroupChat, actor: Profile, target: Profile) -> No
     """
     membership = group.membership_for(target)
     if membership is None:
-        raise ValueError("They aren't a member of this group.")
+        raise GroupChatValidationError("They aren't a member of this group.")
     if actor.pk != target.pk and not group.is_manager(actor):
-        raise PermissionError("Only the group's creator can remove other members.")
+        raise GroupChatPermissionError("Only the group's creator can remove other members.")
 
     membership.end(removed_by=actor if actor.pk != target.pk else None)
     if actor.pk != target.pk:
@@ -545,20 +568,20 @@ def create_group_message(
 
     membership = group.membership_for(sender)
     if membership is None:
-        raise PermissionError("You aren't a member of this group.")
+        raise GroupChatPermissionError("You aren't a member of this group.")
 
     body = body.strip()
     if len(body) > MAX_DIRECT_MESSAGE_LENGTH:
-        raise ValueError(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
+        raise GroupChatValidationError(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
     if ciphertext:
         if body:
-            raise ValueError("A message is either plaintext or encrypted, never both.")
+            raise GroupChatValidationError("A message is either plaintext or encrypted, never both.")
         if not valid_blob(ciphertext, MAX_CIPHERTEXT_LENGTH) or not valid_blob(nonce, MAX_NONCE_LENGTH) or key_version < 1:
-            raise ValueError("Malformed encrypted message.")
+            raise GroupChatValidationError("Malformed encrypted message.")
     elif nonce or key_version:
-        raise ValueError("Malformed encrypted message.")
+        raise GroupChatValidationError("Malformed encrypted message.")
     if not body and not ciphertext:
-        raise ValueError("Message cannot be empty.")
+        raise GroupChatValidationError("Message cannot be empty.")
 
     try:
         # Nested atomic: see create_direct_message for why the idempotency
@@ -638,7 +661,7 @@ def delete_group_message(message: GroupMessage, actor: Profile) -> GroupMessage:
         PermissionError: If `actor` isn't the message's sender.
     """
     if actor.pk != message.sender_id:
-        raise PermissionError("Only the sender can delete this message.")
+        raise GroupChatPermissionError("Only the sender can delete this message.")
     if message.deleted_at is None:
         message.deleted_at = timezone.now()
         message.save(update_fields=["deleted_at", "updated"])
@@ -686,7 +709,7 @@ def toggle_group_reaction(profile: Profile, message: GroupMessage, emoji: str) -
     from urbanlens.dashboard.models.reactions.model import Reaction
 
     if message.group.membership_for(profile) is None:
-        raise PermissionError("You aren't a member of this group.")
+        raise GroupChatPermissionError("You aren't a member of this group.")
 
     existing = Reaction.objects.existing(profile, emoji, group_message=message)
     if existing is not None:

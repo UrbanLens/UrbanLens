@@ -22,6 +22,8 @@ from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.direct_messages import (
     REACTION_PICKER_EMOJIS,
+    DirectMessagePermissionError,
+    DirectMessageValidationError,
     all_conversations_for,
     build_thread_timeline,
     can_direct_message,
@@ -347,12 +349,10 @@ class ConversationSendView(LoginRequiredMixin, View):
                 markup_map_uuid=request.POST.get("markup_map_uuid") or None,
                 reply_to_id=int(reply_to_raw) if reply_to_raw.isdigit() else None,
             )
-        except ValueError as exc:
-            # create_direct_message only raises ValueError with a fixed, developer-authored
-            # message (blank/too-long body) - never a stack trace or sensitive data.
-            return HttpResponseBadRequest(str(exc))  # lgtm[py/stack-trace-exposure]
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
+        except DirectMessageValidationError as exc:
+            return HttpResponseBadRequest(exc.safe_message)
+        except DirectMessagePermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)
 
@@ -521,8 +521,8 @@ class MessageReactionToggleView(LoginRequiredMixin, View):
 
         try:
             toggle_reaction(profile, message, emoji)
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
+        except DirectMessagePermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
 
         return render(
             request,
@@ -570,8 +570,8 @@ class MessageDeleteView(LoginRequiredMixin, View):
                 delete_message_for_self(message, profile)
             else:
                 return HttpResponseBadRequest("Unknown delete scope.")
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
+        except DirectMessagePermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
 
         response = render(request, "dashboard/partials/messages/_thread.html", _thread_context(profile, partner))
         return _trigger_msg_label_refresh(response)

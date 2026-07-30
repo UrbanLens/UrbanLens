@@ -63,6 +63,18 @@ from urbanlens.dashboard.services.connections import are_connections
 from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.share_provenance import find_profile_pin_near_location, record_share_exposure, resolve_and_stamp_origin_share
 
+
+class PinSharePermissionError(PermissionError):
+    """A pin share was refused because sender and recipient aren't connected.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
+
+
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -99,7 +111,7 @@ def create_pin_share(sender: Profile, recipient: Profile, pin: Pin, *, message: 
         PermissionError: If `sender` and `recipient` aren't connected friends.
     """
     if recipient.pk == sender.pk or not are_connections(sender, recipient):
-        raise PermissionError("Pins can only be shared with connected friends.")
+        raise PinSharePermissionError("Pins can only be shared with connected friends.")
 
     already_pinned = recipient_existing_pin(recipient, pin) is not None
     share = PinShare.objects.create(

@@ -107,7 +107,7 @@ class ViewProfileView(LoginRequiredMixin, View):
             try:
                 set_profile_avatar(profile, avatar_file)
             except AvatarUploadError as exc:
-                messages.error(request, str(exc))
+                messages.error(request, exc.safe_message)
         return redirect("profile.view")
 
     def _can_view_profile(self, request: HttpRequest, profile: Profile) -> bool:
@@ -428,7 +428,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
             try:
                 set_profile_avatar(profile, file)
             except AvatarUploadError as exc:
-                return JsonResponse({"error": str(exc)}, status=exc.status_code)  # lgtm[py/stack-trace-exposure]
+                return JsonResponse({"error": exc.safe_message}, status=exc.status_code)
             return JsonResponse({"ok": True, "avatar_url": profile.avatar.url})
 
         if field == "avatar_gravatar":
@@ -1014,7 +1014,7 @@ class ProfileTrustView(LoginRequiredMixin, View):
         try:
             require_distinct(author, subject, "Cannot rate your own profile.")
         except SelfAnnotationError as exc:
-            return HttpResponse(str(exc), status=400)  # lgtm[py/stack-trace-exposure]
+            return HttpResponse(exc.safe_message, status=400)
 
         try:
             rating = int(request.POST.get("rating", 0))
@@ -1056,7 +1056,7 @@ class ProfileNicknameView(LoginRequiredMixin, View):
         try:
             require_distinct(author, subject, "Cannot nickname your own profile.")
         except SelfAnnotationError as exc:
-            return HttpResponse(str(exc), status=400)  # lgtm[py/stack-trace-exposure]
+            return HttpResponse(exc.safe_message, status=400)
 
         nickname = request.POST.get("nickname", "").strip()
         if not nickname:
@@ -1066,7 +1066,7 @@ class ProfileNicknameView(LoginRequiredMixin, View):
             try:
                 set_nickname(author, subject, nickname)
             except AnnotationError as exc:
-                return HttpResponse(str(exc), status=400)  # lgtm[py/stack-trace-exposure]
+                return HttpResponse(exc.safe_message, status=400)
 
         return _render_profile_annotation_partial(request, author, subject)
 

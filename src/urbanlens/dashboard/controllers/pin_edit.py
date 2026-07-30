@@ -402,8 +402,8 @@ class PinNotesView(LoginRequiredMixin, View):
 
         try:
             create_pin_note(pin, text=(body.get("text") or ""))
-        except ValueError as exc:
-            return HttpResponse(str(exc), status=400)  # lgtm[py/stack-trace-exposure]
+        except ValueError:
+            return HttpResponse("Note text is required.", status=400)
         notes = pin.notes.order_by("-created")
         return render(request, "dashboard/partials/pins/pin_notes_panel.html", {"pin": pin, "notes": notes})
 
@@ -494,7 +494,12 @@ class PinSwapParentView(LoginRequiredMixin, View):
         try:
             old_parent = pin.swap_with_parent()
         except ValueError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            # swap_with_parent() raises one of exactly two developer-authored
+            # literals; match on it rather than echoing exc so a future raise
+            # site added there can't smuggle unsafe text into this response.
+            if str(exc) == "This pin has no parent to swap with.":
+                return JsonResponse({"error": "This pin has no parent to swap with."}, status=400)
+            return JsonResponse({"error": "Can't complete the swap - you already have a top-level pin at this pin's own location."}, status=400)
         logger.info("User %s swapped pin %s with its parent %s", request.user.id, pin.id, old_parent.id)
         return JsonResponse({"ok": True, "new_parent_slug": pin.slug, "new_child_slug": old_parent.slug})
 

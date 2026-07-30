@@ -33,6 +33,29 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+
+class DirectMessageValidationError(ValueError):
+    """A direct message could not be created or modified as submitted.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
+
+
+class DirectMessagePermissionError(PermissionError):
+    """A direct-message action was refused because of who is involved.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
+
+
 #: Common emoji offered by the quick "add a reaction" picker on each message.
 REACTION_PICKER_EMOJIS = ["👍", "❤️", "😂", "😮", "😢", "🙏", "🔥", "🎉"]
 
@@ -738,14 +761,14 @@ def create_direct_message(
 
     body = body.strip()
     if len(body) > MAX_DIRECT_MESSAGE_LENGTH:
-        raise ValueError(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
+        raise DirectMessageValidationError(f"Message is too long (max {MAX_DIRECT_MESSAGE_LENGTH:,} characters).")
     if ciphertext:
         if body:
-            raise ValueError("A message is either plaintext or encrypted, never both.")
+            raise DirectMessageValidationError("A message is either plaintext or encrypted, never both.")
         if not valid_blob(ciphertext, MAX_CIPHERTEXT_LENGTH) or not valid_blob(nonce, MAX_NONCE_LENGTH) or key_version < 1:
-            raise ValueError("Malformed encrypted message.")
+            raise DirectMessageValidationError("Malformed encrypted message.")
     elif nonce or key_version:
-        raise ValueError("Malformed encrypted message.")
+        raise DirectMessageValidationError("Malformed encrypted message.")
     # Attachments are resolved *before* the emptiness check, not after the
     # insert. The check counts image_ids as content, but the attach step below
     # filters them by ownership and un-attachedness - so a stale, foreign or
@@ -759,12 +782,12 @@ def create_direct_message(
     if image_ids:
         eligible_image_ids = list(Image.objects.filter(pk__in=image_ids, profile=sender, direct_message__isnull=True).values_list("pk", flat=True))
         if not eligible_image_ids:
-            raise ValueError("None of those attachments are available to send.")
+            raise DirectMessageValidationError("None of those attachments are available to send.")
 
     if not body and not ciphertext and not eligible_image_ids and not markup_map_uuid:
-        raise ValueError("Message cannot be empty.")
+        raise DirectMessageValidationError("Message cannot be empty.")
     if not can_direct_message(sender, recipient):
-        raise PermissionError("This user isn't accepting messages from you.")
+        raise DirectMessagePermissionError("This user isn't accepting messages from you.")
 
     from urbanlens.dashboard.models.markup.model import MarkupMap
 
@@ -917,7 +940,7 @@ def delete_message_for_everyone(message: DirectMessage, actor: Profile) -> Direc
         PermissionError: If `actor` isn't the message's sender.
     """
     if actor.pk != message.sender_id:
-        raise PermissionError("Only the sender can delete this message for everyone.")
+        raise DirectMessagePermissionError("Only the sender can delete this message for everyone.")
     if message.deleted_by_sender_at is None:
         message.deleted_by_sender_at = timezone.now()
         message.save(update_fields=["deleted_by_sender_at"])
@@ -948,7 +971,7 @@ def delete_message_for_self(message: DirectMessage, actor: Profile) -> DirectMes
         PermissionError: If `actor` isn't the message's recipient.
     """
     if actor.pk != message.recipient_id:
-        raise PermissionError("Only the recipient can remove this message from their own view.")
+        raise DirectMessagePermissionError("Only the recipient can remove this message from their own view.")
     if message.deleted_by_recipient_at is None:
         message.deleted_by_recipient_at = timezone.now()
         message.save(update_fields=["deleted_by_recipient_at"])
@@ -1028,7 +1051,7 @@ def toggle_reaction(profile: Profile, message: DirectMessage, emoji: str) -> str
     from urbanlens.dashboard.models.reactions.model import Reaction
 
     if profile.pk not in (message.sender_id, message.recipient_id):
-        raise PermissionError("You aren't part of this conversation.")
+        raise DirectMessagePermissionError("You aren't part of this conversation.")
 
     existing = Reaction.objects.existing(profile, emoji, direct_message=message)
     if existing:

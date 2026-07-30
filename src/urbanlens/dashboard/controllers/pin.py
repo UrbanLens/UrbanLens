@@ -648,7 +648,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             try:
                 coordinates = coerce_coordinates(data)
             except ValueError as exc:
-                return JsonResponse({"error": str(exc)}, status=400)
+                # coerce_coordinates() raises one of a fixed set of
+                # developer-authored literals; match rather than echo exc so a
+                # future raise site added there can't leak unsafe text here.
+                if str(exc) == "Coordinates must be finite numbers.":
+                    return JsonResponse({"error": "Coordinates must be finite numbers."}, status=400)
+                if str(exc) == "Coordinates out of range.":
+                    return JsonResponse({"error": "Coordinates out of range."}, status=400)
+                return JsonResponse({"error": "Invalid request data."}, status=400)
 
         item_key = data.get("item_key") or media_item_key(url)
         profile, _ = Profile.objects.get_or_create(user=request.user)
@@ -670,8 +677,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             try:
                 image = materialize_media_item(location=pin.location, profile=profile, source=source, url=url, page_url=page_url, caption=caption, pin=pin)
             except MaterializeError as exc:
+                # MaterializeError can embed raw requests/OSError text (e.g. a
+                # failed download), which isn't safe to return verbatim - log
+                # it server-side and surface a generic message instead.
                 logger.warning("media_relevance: failed to materialize %s: %s", url, exc)
-                response["materialize_error"] = str(exc)
+                response["materialize_error"] = "Could not save this photo."
             else:
                 response["image_id"] = image.pk
                 response["image_url"] = image.image.url
@@ -721,8 +731,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 )
                 created += 1
             except MaterializeError as exc:
+                # Same rationale as media_relevance above: don't echo exc.
                 logger.warning("media_send_to_wiki: failed to materialize %s: %s", entry.get("url"), exc)
-                errors.append(str(exc))
+                errors.append("Could not save this photo.")
             except (KeyError, TypeError, ValueError):
                 logger.warning("media_send_to_wiki: malformed item entry: %r", entry)
 

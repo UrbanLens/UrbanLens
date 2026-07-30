@@ -48,7 +48,16 @@ STALL_ROUND_TIMEOUT_MINUTES = 10
 
 
 class ConsensusError(Exception):
-    """Raised for invalid session/round/answer/vote/lobby operations."""
+    """Raised for invalid session/round/answer/vote/lobby operations.
+
+    ``safe_message`` is always safe to surface to the caller verbatim - every
+    raise site in this module passes a developer-authored string, never a
+    nested exception's text.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 def _clamp_rounds(total_rounds: int) -> int:
@@ -478,7 +487,7 @@ def submit_vote(round_: ConsensusRound, profile: Profile, chosen_answer: Consens
         try:
             vote = voting.record_vote(locked_round, profile, chosen_answer)
         except voting.ConsensusVotingError as exc:
-            raise ConsensusError(str(exc)) from None
+            raise ConsensusError(exc.safe_message) from None
 
         if ConsensusVote.objects.for_round(locked_round).count() >= joined_count:
             vote_completed_now = True

@@ -44,7 +44,7 @@ from urbanlens.dashboard.external_api.serializers import ErrorSerializer
 from urbanlens.dashboard.external_api.serializers_safety_location import SafetyCheckinLocationSerializer, SafetyCheckinLocationUpdateSerializer
 from urbanlens.dashboard.external_api.throttling import ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle, SafetyLocationThrottle
 from urbanlens.dashboard.models.account.model import ApiKeyScope
-from urbanlens.dashboard.services.safety import set_live_location_sharing, update_live_location
+from urbanlens.dashboard.services.safety import SafetyValidationError, set_live_location_sharing, update_live_location
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -116,7 +116,7 @@ class SafetyCheckinLocationView(SafetyCheckinViewerScopedView):
         if "latitude" in data:
             try:
                 update_live_location(checkin, latitude=data["latitude"], longitude=data["longitude"], accuracy=data.get("accuracy"))
-            except ValueError as exc:
-                return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            except SafetyValidationError as exc:
+                return Response({"error": exc.safe_message}, status=400)
 
         return Response(SafetyCheckinLocationSerializer(checkin).data)

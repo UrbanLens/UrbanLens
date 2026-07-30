@@ -10,6 +10,19 @@ import json
 from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, Polygon
 
 
+class InvalidPolygonGeoJSONError(ValueError):
+    """The submitted GeoJSON isn't a valid polygon/multipolygon geometry.
+
+    Deliberately never carries the underlying ``GEOSException`` text - that
+    can echo back GEOS/GDAL internals, not just a description of what the
+    caller submitted. ``safe_message`` is safe to surface directly.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
+
+
 def geometry_to_geojson(geom) -> dict | None:
     """Serialize a GEOS geometry to a GeoJSON dict, or None."""
     return json.loads(geom.geojson) if geom else None
@@ -25,17 +38,17 @@ def parse_multipolygon_geojson(polygon_geojson: dict) -> MultiPolygon:
         The parsed geometry, coerced to MultiPolygon.
 
     Raises:
-        ValueError: If the payload isn't valid polygonal GeoJSON.
-        TypeError: If the geometry is valid but not polygonal.
+        InvalidPolygonGeoJSONError: If the payload isn't valid polygonal GeoJSON,
+            or is valid but not polygonal.
     """
     try:
         geom = GEOSGeometry(json.dumps(polygon_geojson), srid=4326)
     except (GEOSException, TypeError, ValueError) as exc:
-        raise ValueError("Invalid polygon geometry") from exc
+        raise InvalidPolygonGeoJSONError("Invalid polygon geometry") from exc
     if isinstance(geom, Polygon):
         geom = MultiPolygon(geom, srid=geom.srid)
     if not isinstance(geom, MultiPolygon):
-        raise TypeError("Boundary must be a Polygon or MultiPolygon")
+        raise InvalidPolygonGeoJSONError("Boundary must be a Polygon or MultiPolygon")
     return geom
 
 

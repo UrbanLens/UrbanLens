@@ -24,6 +24,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.direct_messages import can_direct_message
 from urbanlens.dashboard.services.group_chats import (
+    GroupChatPermissionError,
+    GroupChatValidationError,
     create_group_chat,
     create_group_message,
     delete_group_message,
@@ -153,10 +155,10 @@ class GroupCreateView(LoginRequiredMixin, View):
         members = list(Profile.objects.select_related("user").filter(slug__in=slugs))
         try:
             group = create_group_chat(profile, name, members)
-        except ValueError as exc:
-            return HttpResponseBadRequest(str(exc))
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
+        except GroupChatValidationError as exc:
+            return HttpResponseBadRequest(exc.safe_message)
+        except GroupChatPermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
         return JsonResponse({"uuid": str(group.uuid), "url": reverse("messages.group", kwargs={"group_uuid": group.uuid})}, status=201)
 
 
@@ -224,10 +226,10 @@ class GroupSendView(LoginRequiredMixin, View):
                 nonce=request.POST.get("nonce", ""),
                 key_version=int(key_version_raw) if key_version_raw.isdigit() else 0,
             )
-        except ValueError as exc:
-            return HttpResponseBadRequest(str(exc))  # lgtm[py/stack-trace-exposure]
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
+        except GroupChatValidationError as exc:
+            return HttpResponseBadRequest(exc.safe_message)
+        except GroupChatPermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -314,10 +316,10 @@ class GroupRenameView(LoginRequiredMixin, View):
         group, membership = _get_group(profile, group_uuid)
         try:
             rename_group_chat(group, profile, request.POST.get("name", ""))
-        except ValueError as exc:
-            return HttpResponseBadRequest(str(exc))
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
+        except GroupChatValidationError as exc:
+            return HttpResponseBadRequest(exc.safe_message)
+        except GroupChatPermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -410,10 +412,10 @@ class GroupAddMembersView(LoginRequiredMixin, View):
             return HttpResponseBadRequest("Pick at least one person to add.")
         try:
             add_group_members(group, profile, members)
-        except ValueError as exc:
-            return HttpResponseBadRequest(str(exc))
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
+        except GroupChatValidationError as exc:
+            return HttpResponseBadRequest(exc.safe_message)
+        except GroupChatPermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -444,10 +446,10 @@ class GroupRemoveMemberView(LoginRequiredMixin, View):
         target = get_object_or_404(Profile.objects.select_related("user"), pk=profile_id_raw)
         try:
             remove_group_member(group, profile, target)
-        except ValueError as exc:
-            return HttpResponseBadRequest(str(exc))
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
+        except GroupChatValidationError as exc:
+            return HttpResponseBadRequest(exc.safe_message)
+        except GroupChatPermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -494,8 +496,8 @@ class GroupMessageDeleteView(LoginRequiredMixin, View):
         message = get_object_or_404(GroupMessage, pk=message_id, group=group)
         try:
             delete_group_message(message, profile)
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
+        except GroupChatPermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 
@@ -534,10 +536,10 @@ class GroupSharePinView(LoginRequiredMixin, View):
         body = request.POST.get("body", "").strip() or f"Check out {pin.display_label}!"
         try:
             share_pin_in_group_message(profile, group, pin, body)
-        except ValueError as exc:
-            return HttpResponseBadRequest(str(exc))
-        except PermissionError as exc:
-            return HttpResponseForbidden(str(exc))
+        except GroupChatValidationError as exc:
+            return HttpResponseBadRequest(exc.safe_message)
+        except GroupChatPermissionError as exc:
+            return HttpResponseForbidden(exc.safe_message)
         response = render(request, "dashboard/partials/messages/_group_thread.html", _group_thread_context(profile, group, membership))
         return _trigger_msg_label_refresh(response)
 

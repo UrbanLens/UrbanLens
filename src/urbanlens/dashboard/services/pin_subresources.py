@@ -50,9 +50,15 @@ _validate_link_url = URLValidator(schemes=["http", "https"])
 class PinSubResourceError(Exception):
     """Base for the recoverable failures these operations raise.
 
-    Every message is written to be safe to surface directly to the caller,
-    so views can render ``str(exc)`` without sanitizing it first.
+    Every message is written to be safe to surface directly to the caller.
+    ``safe_message`` carries it explicitly rather than relying on callers to
+    read ``str(exc)`` - a generic exception accessor invites a future
+    subclass to smuggle unsafe content in without anyone noticing.
     """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 class AliasExistsError(PinSubResourceError):

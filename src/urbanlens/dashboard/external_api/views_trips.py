@@ -39,6 +39,7 @@ Three constraints worth stating because each is easy to undo:
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.urls import reverse
@@ -85,6 +86,8 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import Trip
 
+logger = logging.getLogger(__name__)
+
 #: Machine-readable codes for the two browser-bound calendar refusals. Both are
 #: resolved by the same consent flow; they are distinguished so a client can
 #: word the prompt correctly without parsing prose.
@@ -99,6 +102,12 @@ _CONNECT_NEXT_VIEW = "trips.list"
 
 _NOT_CONNECTED_MESSAGE = "Connect your Google Calendar before exporting a trip to it."
 _REAUTHORIZATION_MESSAGE = "Your Google Calendar connection has expired. Reconnect it to keep exporting trips."
+
+#: GatewayRequestError is shared across every gateway integration (Calendar,
+#: Flickr, Immich, REData, ...); some of them build its message from an
+#: upstream response's own error text, which is not safe to return verbatim
+#: to a caller. Never surface it - log it and answer with this fixed message.
+_GATEWAY_FAILURE_MESSAGE = "Google Calendar could not be reached. Please try again shortly."
 _NOT_CONFIGURED_MESSAGE = "Google Calendar integration is not configured on this server."
 
 
@@ -224,10 +233,13 @@ class TripCalendarExportView(TripScopedApiView):
             # A deployment-level omission, not anything the caller did wrong.
             return Response({"error": _NOT_CONFIGURED_MESSAGE}, status=503)
         # Only a GatewayRequestError reaches here (the other two members of the
-        # except clause above are handled by the isinstance checks); every
-        # raise site constructs it from developer-authored, status-code-only
-        # text, never from an interpolated upstream exception/response body.
-        return Response({"error": str(exc)}, status=502)  # lgtm[py/stack-trace-exposure]
+        # except clause above are handled by the isinstance checks). Its
+        # message is not trusted, even though every raise site reachable
+        # today happens to be safe - GatewayRequestError is shared by every
+        # gateway integration, and other raise sites of it do interpolate an
+        # upstream response/exception's own text.
+        logger.warning("Google Calendar gateway request failed: %s", exc, exc_info=exc)
+        return Response({"error": _GATEWAY_FAILURE_MESSAGE}, status=502)
 
     def _status_response(self, trip: Trip, profile: Profile, extra: dict[str, Any]) -> Response:
         """Answer 200 with the refreshed status block plus this method's summary.
@@ -292,11 +304,11 @@ class TripCalendarExportView(TripScopedApiView):
             # docstring. One upstream request per event; a transaction here
             # would hold a connection for all of them.
             link, activity_count = export_trip_to_calendar(account, trip, trip_url=trip_url)
-        except ValueError as exc:
-            # trip_to_event_body's "no dates" refusal. TripError is also a
-            # ValueError, but the trip was resolved before this block, so
-            # nothing raised in here can be one.
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+        except ValueError:
+            # trip_to_event_body's "no dates" refusal, always this exact
+            # message. TripError is also a ValueError, but the trip was
+            # resolved before this block, so nothing raised in here can be one.
+            return Response({"error": "Trip has no start date or scheduled activities - set dates before exporting."}, status=400)
         except (GoogleAuthExpiredError, CalendarNotConfiguredError, GatewayRequestError) as exc:
             return self._gateway_failure(request, account, exc)
 

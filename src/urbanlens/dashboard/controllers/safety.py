@@ -30,6 +30,7 @@ from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.safety import (
     CheckinArchivedError,
     ContactInput,
+    SafetyValidationError,
     accept_checkin_partner_invite,
     apply_checkin_edit,
     attach_draft_markup_map,
@@ -588,8 +589,8 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
                 contacts=allowed_contacts,
                 notify_community_wiki="notify_community_wiki" in request.POST,
             )
-        except ValueError as exc:
-            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": str(exc)}, status=400)
+        except SafetyValidationError as exc:
+            return render(request, "dashboard/pages/safety/create.html", {**error_context, "error": exc.safe_message}, status=400)
         self._link_markup_map(request, profile, checkin)
         return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
@@ -813,8 +814,8 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             # The GET path already renders archived check-ins read-only, so reaching
             # here means a stale tab autosaved into the archival window.
             if is_xhr:
-                return JsonResponse({"ok": False, "error": str(exc)}, status=409)  # lgtm[py/stack-trace-exposure]
-            messages.error(request, str(exc))
+                return JsonResponse({"ok": False, "error": exc.safe_message}, status=409)
+            messages.error(request, exc.safe_message)
             return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
         warnings = outcome.warnings
@@ -992,8 +993,8 @@ class SafetyCheckinPartnersView(LoginRequiredMixin, View):
         else:
             try:
                 invite_checkin_partner(checkin, inviter=profile, username=username)
-            except ValueError as exc:
-                error = str(exc)
+            except SafetyValidationError as exc:
+                error = exc.safe_message
         return _render_partner_picker(request, checkin, error=error)
 
 
@@ -1173,8 +1174,8 @@ class SafetyCheckinLocationUpdateView(LoginRequiredMixin, View):
 
         try:
             update_live_location(checkin, latitude=latitude, longitude=longitude, accuracy=accuracy)
-        except ValueError as exc:
-            return HttpResponseBadRequest(str(exc))  # lgtm[py/stack-trace-exposure]
+        except SafetyValidationError as exc:
+            return HttpResponseBadRequest(exc.safe_message)
         return HttpResponse(status=204)
 
 
@@ -1638,11 +1639,9 @@ class SafetyCheckinMessageView(View):
                 # every other participant with an open socket (they'd only see it
                 # on their next manual reload).
                 post_chat_message(checkin, user=request.user, contact=contact, body=body)
-            except ValueError as exc:
-                # create_chat_message only raises ValueError with a fixed, developer-authored
-                # message (blank/too-long body) - never a stack trace or sensitive data.
+            except SafetyValidationError as exc:
                 logger.info("Safety chat HTTP fallback rejected message on checkin %s: %s", checkin.uuid, exc)
-                return HttpResponseBadRequest(str(exc))  # lgtm[py/stack-trace-exposure]
+                return HttpResponseBadRequest(exc.safe_message)
         return render(
             request,
             "dashboard/partials/safety/_chat_panel.html",

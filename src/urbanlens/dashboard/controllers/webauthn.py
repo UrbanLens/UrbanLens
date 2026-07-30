@@ -36,7 +36,7 @@ class PasskeyRegisterOptionsView(LoginRequiredMixin, View):
         try:
             options_json = build_registration_options(request, request.user)
         except WebAuthnError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": exc.safe_message}, status=400)
         return HttpResponse(options_json, content_type="application/json")
 
 
@@ -54,7 +54,7 @@ class PasskeyRegisterView(LoginRequiredMixin, View):
         try:
             credential = verify_and_save_registration(request, request.user, credential_json, name)
         except WebAuthnError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": exc.safe_message}, status=400)
         return JsonResponse({"ok": True, "name": credential.name}, status=201)
 
 

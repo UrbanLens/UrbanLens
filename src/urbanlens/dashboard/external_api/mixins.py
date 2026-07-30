@@ -36,6 +36,7 @@ boundary itself.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, ClassVar
 
 from oauth2_provider.contrib.rest_framework import OAuth2Authentication
@@ -50,6 +51,9 @@ from urbanlens.dashboard.external_api.errors import ErrorEnvelopeMixin
 from urbanlens.dashboard.external_api.permissions import HasApiKeyScope
 from urbanlens.dashboard.external_api.throttling import ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle
 from urbanlens.dashboard.models.reactions.model import Reaction
+from urbanlens.dashboard.services.comments import CommentValidationError
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -344,17 +348,23 @@ class _ReactionMixin:
         if (existing is not None) != want_present:
             try:
                 self.reaction_toggle(profile, target, emoji)
-            except ValueError as exc:
-                # Every reaction service raises a ValueError subclass for a
-                # rejected emoji (``CommentValidationError`` is one), and those
-                # messages are developer-authored constants, so echoing them is
-                # safe. Anything else - notably ``PermissionError`` from the
-                # direct-message service - is left to propagate: a caller who
-                # got past resolve_reaction_target and still is not permitted
-                # means the subclass's lookup was not scoped tightly enough,
-                # and swallowing that into a tidy 400 would hide the bug and
+            except CommentValidationError as exc:
+                # The only ValueError subclass a reaction service currently
+                # raises for a rejected emoji; its message is a
+                # developer-authored constant, so echoing it is safe. Anything
+                # else - notably ``PermissionError`` from the direct-message
+                # service - is left to propagate: a caller who got past
+                # resolve_reaction_target and still is not permitted means the
+                # subclass's lookup was not scoped tightly enough, and
+                # swallowing that into a tidy 400 would hide the bug and
                 # confirm the row exists at the same time.
-                return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+                return Response({"error": exc.safe_message}, status=400)
+            except ValueError as exc:
+                # A future reaction service wired through this mixin that
+                # raises some other ValueError subclass hasn't been audited
+                # for safe messaging yet, so its text stays server-side.
+                logger.warning("Unhandled reaction-toggle ValueError: %s", exc, exc_info=True)
+                return Response({"error": "Could not update this reaction."}, status=400)
 
         # The summary is read from the target's ``reactions`` relation, which
         # may still be holding a prefetch cache populated before the toggle;

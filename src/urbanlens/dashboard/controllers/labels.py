@@ -837,7 +837,7 @@ class LabelMergeView(_LabelKindMixin, LoginRequiredMixin, View):
         try:
             merge_labels(target=target, sources=[source], profile=profile)
         except LabelMergeError as exc:
-            return HttpResponse(str(exc), status=400)  # lgtm[py/stack-trace-exposure]
+            return HttpResponse(exc.safe_message, status=400)
 
         return _render_rows(request, self.kind, profile)
 
@@ -887,7 +887,7 @@ class LabelMultiMergeView(_LabelKindMixin, LoginRequiredMixin, View):
         try:
             merge_labels(target=target, sources=source_list, profile=profile)
         except LabelMergeError as exc:
-            return HttpResponse(str(exc), status=400)  # lgtm[py/stack-trace-exposure]
+            return HttpResponse(exc.safe_message, status=400)
 
         return _render_rows(request, self.kind, profile)
 

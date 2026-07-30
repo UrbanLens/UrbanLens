@@ -60,11 +60,12 @@ TOMBSTONE_RETENTION = timedelta(days=400)
 class InvalidSyncCursorError(ValueError):
     """The supplied cursor is not one this service issued.
 
-    The message is safe to surface to the caller.
+    ``safe_message`` is safe to surface to the caller.
     """
 
     def __init__(self) -> None:
-        super().__init__("Invalid sync cursor.")
+        self.safe_message = "Invalid sync cursor."
+        super().__init__(self.safe_message)
 
 
 class StaleDeletedSinceError(ValueError):
@@ -74,11 +75,12 @@ class StaleDeletedSinceError(ValueError):
     asking for deletions from before that floor could silently miss some -
     incremental sync is no longer trustworthy and the client must resync its
     pins from scratch (drop local rows absent from a full ``pins/`` walk).
-    The message is safe to surface to the caller.
+    ``safe_message`` is safe to surface to the caller.
     """
 
     def __init__(self) -> None:
-        super().__init__("deleted_since is older than the deletion-history retention window; do a full resync instead.")
+        self.safe_message = "deleted_since is older than the deletion-history retention window; do a full resync instead."
+        super().__init__(self.safe_message)
 
 
 @dataclass(frozen=True, slots=True)

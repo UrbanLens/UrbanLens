@@ -536,6 +536,7 @@ class VisitLoggingDisabledError(Exception):
     """
 
     def __init__(self, message: str = "Visit logging is turned off - enable it in Settings to log a visit.") -> None:
+        self.safe_message = message
         super().__init__(message)
 
 

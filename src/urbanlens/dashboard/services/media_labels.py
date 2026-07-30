@@ -38,7 +38,14 @@ MAX_MEDIA_LABEL_NAME_LENGTH = 255
 
 
 class MediaLabelError(ValueError):
-    """A media-label submission that cannot be applied (too many, blank, or over-long)."""
+    """A media-label submission that cannot be applied (too many, blank, or over-long).
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 def set_media_labels(image: Image, names: Sequence[str], profile: Profile) -> list[Label]:

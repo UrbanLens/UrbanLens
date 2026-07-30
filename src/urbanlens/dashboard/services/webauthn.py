@@ -54,7 +54,14 @@ MAX_CREDENTIALS_PER_USER = 10
 
 
 class WebAuthnError(Exception):
-    """Raised when a registration or authentication ceremony can't be completed."""
+    """Raised when a registration or authentication ceremony can't be completed.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 def _rp_id(request: HttpRequest) -> str:

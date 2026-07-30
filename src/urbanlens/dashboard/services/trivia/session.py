@@ -56,7 +56,15 @@ POINTS_FOR_CORRECT_ANSWER = 1000
 
 
 class TriviaError(Exception):
-    """Raised for invalid session/round/answer operations."""
+    """Raised for invalid session/round/answer operations.
+
+    ``safe_message`` is always safe to surface to the caller verbatim - every
+    raise site in this module passes a developer-authored string.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 @dataclass(frozen=True)

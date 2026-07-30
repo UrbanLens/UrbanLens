@@ -48,9 +48,13 @@ MAX_TRUST_RATING = 5
 class AnnotationError(ValueError):
     """An annotation could not be written.
 
-    The message is written for the end user and is safe to surface directly.
-    Callers map this to HTTP 400.
+    ``safe_message`` is written for the end user and is safe to surface
+    directly. Callers map this to HTTP 400.
     """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 class SelfAnnotationError(AnnotationError):

@@ -25,7 +25,14 @@ if TYPE_CHECKING:
 
 
 class ConsensusVotingError(Exception):
-    """Raised for invalid vote operations."""
+    """Raised for invalid vote operations.
+
+    ``safe_message`` is always safe to surface to the caller verbatim.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 @dataclass(frozen=True)

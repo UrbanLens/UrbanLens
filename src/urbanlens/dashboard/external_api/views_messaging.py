@@ -56,9 +56,11 @@ from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.group_chats.model import GroupChat, GroupMessage
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.direct_message_shares import ShareTargetNotFoundError, send_message_with_share
+from urbanlens.dashboard.services.direct_message_shares import ShareTargetNotFoundError, ShareTargetPermissionError, ShareValidationError, send_message_with_share
 from urbanlens.dashboard.services.direct_messages import (
     THREAD_PAGE_SIZE,
+    DirectMessagePermissionError,
+    DirectMessageValidationError,
     can_direct_message,
     clear_email_debounce,
     delete_message_for_everyone,
@@ -72,6 +74,8 @@ from urbanlens.dashboard.services.direct_messages import (
 )
 from urbanlens.dashboard.services.group_chats import (
     GROUP_THREAD_PAGE_SIZE,
+    GroupChatPermissionError,
+    GroupChatValidationError,
     add_group_members,
     create_group_chat,
     create_group_message,
@@ -364,11 +368,14 @@ class MessageThreadView(ExternalApiView):
                 client_uuid=client_uuid,
             )
         except ShareTargetNotFoundError as exc:
-            return Response({"error": str(exc)}, status=404)  # lgtm[py/stack-trace-exposure]
-        except PermissionError as exc:
-            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
-        except ValueError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=404)
+        except (ShareTargetPermissionError, DirectMessagePermissionError) as exc:
+            # send_message_with_share also propagates create_direct_message's
+            # own PermissionError, not just its own connected-friends check.
+            return Response({"error": exc.safe_message}, status=403)
+        except (ShareValidationError, DirectMessageValidationError) as exc:
+            # Likewise for create_direct_message's own ValueError.
+            return Response({"error": exc.safe_message}, status=400)
 
         return Response(build_direct_message_payload(message, profile), status=200 if existed else 201)
 
@@ -425,8 +432,8 @@ class MessageReactionView(ExternalApiView):
 
         try:
             action = toggle_reaction(profile, message, emoji)
-        except PermissionError as exc:
-            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
+        except DirectMessagePermissionError as exc:
+            return Response({"error": exc.safe_message}, status=403)
         return Response({"action": action, "reactions": build_direct_message_payload(message, profile)["reactions"]})
 
 
@@ -465,8 +472,8 @@ class MessageDetailView(ExternalApiView):
                 delete_message_for_everyone(message, profile)
             else:
                 delete_message_for_self(message, profile)
-        except PermissionError as exc:
-            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
+        except DirectMessagePermissionError as exc:
+            return Response({"error": exc.safe_message}, status=403)
         return Response(status=204)
 
 
@@ -557,10 +564,10 @@ class GroupsView(ExternalApiView):
 
         try:
             group = create_group_chat(profile, serializer.validated_data["name"], members)
-        except PermissionError as exc:
-            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
-        except ValueError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+        except GroupChatPermissionError as exc:
+            return Response({"error": exc.safe_message}, status=403)
+        except GroupChatValidationError as exc:
+            return Response({"error": exc.safe_message}, status=400)
 
         return Response(_group_payload(group, member_count=group.active_memberships().count(), is_muted=False), status=201)
 
@@ -602,10 +609,10 @@ class GroupDetailView(ExternalApiView):
         serializer.is_valid(raise_exception=True)
         try:
             group = rename_group_chat(group, profile, serializer.validated_data["name"])
-        except PermissionError as exc:
-            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
-        except ValueError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+        except GroupChatPermissionError as exc:
+            return Response({"error": exc.safe_message}, status=403)
+        except GroupChatValidationError as exc:
+            return Response({"error": exc.safe_message}, status=400)
 
         membership = group.membership_for(profile)
         return Response(_group_payload(group, member_count=group.active_memberships().count(), is_muted=bool(membership and membership.muted)))
@@ -653,10 +660,10 @@ class GroupMessagesView(ExternalApiView):
                 key_version=data.get("key_version") or 0,
                 client_uuid=client_uuid,
             )
-        except PermissionError as exc:
-            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
-        except ValueError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+        except GroupChatPermissionError as exc:
+            return Response({"error": exc.safe_message}, status=403)
+        except GroupChatValidationError as exc:
+            return Response({"error": exc.safe_message}, status=400)
 
         return Response(build_group_message_payload(message, profile), status=200 if existed else 201)
 
@@ -768,12 +775,12 @@ class GroupMembersView(ExternalApiView):
 
         try:
             created = add_group_members(group, profile, members)
-        except PermissionError as exc:
+        except GroupChatPermissionError as exc:
             # Still authoritative - the pre-check above is an anti-enumeration
             # measure, not a replacement for the service's own permission rule.
-            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
-        except ValueError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=403)
+        except GroupChatValidationError as exc:
+            return Response({"error": exc.safe_message}, status=400)
         return Response({"added": len(created)})
 
     @extend_schema(
@@ -817,10 +824,10 @@ class GroupMembersView(ExternalApiView):
         for target in targets:
             try:
                 remove_group_member(group, profile, target)
-            except PermissionError as exc:
-                return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
-            except ValueError as exc:
-                return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            except GroupChatPermissionError as exc:
+                return Response({"error": exc.safe_message}, status=403)
+            except GroupChatValidationError as exc:
+                return Response({"error": exc.safe_message}, status=400)
             removed += 1
         return Response({"removed": removed})
 
@@ -876,10 +883,10 @@ class GroupPinShareView(ExternalApiView):
 
         try:
             message = share_pin_in_group_message(profile, group, pin, data.get("body") or "", client_uuid=client_uuid)
-        except PermissionError as exc:
-            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
-        except ValueError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+        except GroupChatPermissionError as exc:
+            return Response({"error": exc.safe_message}, status=403)
+        except GroupChatValidationError as exc:
+            return Response({"error": exc.safe_message}, status=400)
 
         return Response(build_group_message_payload(message, profile), status=200 if existed else 201)
 
@@ -981,7 +988,7 @@ class GroupMessageDetailView(ExternalApiView):
 
         try:
             delete_group_message(message, profile)
-        except PermissionError as exc:
+        except GroupChatPermissionError as exc:
             # A deliberate 403 where the rest of this package answers 404. The
             # 404-everywhere rule exists to stop a caller learning whether a
             # row exists; here they were provably already shown it - the lookup
@@ -990,7 +997,7 @@ class GroupMessageDetailView(ExternalApiView):
             # leaks nothing they don't have. Answering 404 instead would tell a
             # client "that message is gone" for a message still sitting in
             # their thread, which reads as a sync bug.
-            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=403)
         return Response(status=204)
 
 

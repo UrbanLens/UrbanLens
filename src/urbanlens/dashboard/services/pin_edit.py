@@ -81,33 +81,48 @@ ORGANIZE_LABEL_KINDS: tuple[str, ...] = (KIND_TAG, KIND_CATEGORY, KIND_STATUS)
 class PinEditError(ValueError):
     """A submitted pin edit is self-contradictory or names a field we don't write.
 
-    The message is safe to surface directly to the caller.
+    ``safe_message`` is safe to surface directly to the caller.
     """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 class PinReparentError(ValueError):
     """The requested parent change is invalid.
 
-    The message is safe to surface directly to the caller.
+    ``safe_message`` is safe to surface directly to the caller.
     """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 class PinMoveError(ValueError):
     """The requested move can't be applied.
 
-    The message is safe to surface directly to the caller.
+    ``safe_message`` is safe to surface directly to the caller.
     """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 class PinHasChildrenError(ValueError):
     """A delete was requested without saying what to do with the pin's children.
 
     Callers should ask the user, then retry with an explicit ``children_mode``.
+
+    ``safe_message`` is safe to surface directly to the caller.
     """
 
     def __init__(self, descendant_count: int) -> None:
         self.descendant_count = descendant_count
-        super().__init__("This pin has child pins - specify children_mode='delete' or 'keep'.")
+        self.safe_message = "This pin has child pins - specify children_mode='delete' or 'keep'."
+        super().__init__(self.safe_message)
 
 
 def _normalize_text(value: Any) -> str | None:

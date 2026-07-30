@@ -95,7 +95,7 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
                 try:
                     move_pin_to_coordinates(instance, latitude, longitude)
                 except PinMoveError as exc:
-                    return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)  # lgtm[py/stack-trace-exposure]
+                    return Response({"detail": exc.safe_message}, status=status.HTTP_400_BAD_REQUEST)
 
             self.perform_update(serializer)
         logger.info("Pin with id %s updated", instance.id)

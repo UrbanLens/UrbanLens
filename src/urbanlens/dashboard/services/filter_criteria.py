@@ -189,7 +189,14 @@ def deserialize_criteria(stored: dict[str, Any], profile: Profile) -> dict[str, 
 
 
 class CriteriaOwnershipError(ValueError):
-    """Stored criteria referenced a label or custom field the profile may not use."""
+    """Stored criteria referenced a label or custom field the profile may not use.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 def referenced_label_ids(stored: dict[str, Any]) -> set[int]:

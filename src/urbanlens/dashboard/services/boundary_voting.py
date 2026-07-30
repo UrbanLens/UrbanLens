@@ -62,7 +62,14 @@ _SOURCE_PRIORITY = {
 
 
 class BoundaryVoteError(Exception):
-    """A boundary vote could not be cast (bad candidate, wrong location...)."""
+    """A boundary vote could not be cast (bad candidate, wrong location...).
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 def vote_weight(voted_at: datetime, now: datetime | None = None) -> float:

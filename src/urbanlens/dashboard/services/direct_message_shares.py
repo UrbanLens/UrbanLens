@@ -39,7 +39,35 @@ class ShareTargetNotFoundError(LookupError):
 
     Carried as its own type rather than a bare `LookupError` so an API layer
     can map it to 404 without also swallowing genuine lookup bugs.
+
+    ``safe_message`` is safe to surface directly to the caller.
     """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
+
+
+class ShareTargetPermissionError(PermissionError):
+    """A share was refused because of who the sender or target is.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
+
+
+class ShareValidationError(ValueError):
+    """A share request itself was malformed.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 def send_message_with_share(
@@ -113,7 +141,7 @@ def send_message_with_share(
 
     provided = [field for field in (shared_pin_slug, shared_trip_slug, shared_profile_slug) if field]
     if len(provided) > 1:
-        raise ValueError("A message can carry only one share.")
+        raise ShareValidationError("A message can carry only one share.")
 
     # Before anything is resolved or created: a replay must not re-run the
     # share side effects, which are not themselves idempotent.
@@ -337,9 +365,9 @@ def invite_to_trip_in_message(
     from urbanlens.dashboard.models.trips.model import TripMembership
 
     if not are_connections(sender, recipient):
-        raise PermissionError("You can only invite connected friends to a trip.")
+        raise ShareTargetPermissionError("You can only invite connected friends to a trip.")
     if not trip.memberships.filter(profile=sender).exists():
-        raise PermissionError("You aren't a member of that trip.")
+        raise ShareTargetPermissionError("You aren't a member of that trip.")
 
     # One transaction: if the message itself is refused (e.g. the recipient's
     # DM visibility rejects this sender despite the friendship), the invited
@@ -431,18 +459,18 @@ def recommend_friend_in_message(
     from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
 
     if recommended.pk in (recipient.pk, sender.pk):
-        raise PermissionError("Choose a different friend to recommend.")
+        raise ShareTargetPermissionError("Choose a different friend to recommend.")
     if recommended not in get_connections(sender):
-        raise PermissionError("You can only recommend your own connected friends.")
+        raise ShareTargetPermissionError("You can only recommend your own connected friends.")
     if not recommended.allow_friend_recommendations:
-        raise PermissionError(f"{recommended.username} doesn't allow friend recommendations.")
+        raise ShareTargetPermissionError(f"{recommended.username} doesn't allow friend recommendations.")
     if ProfileModel.are_blocked(recommended, recipient):
         # A block in either direction vetoes the recommendation - it would
         # otherwise grant the recipient temporary profile access the block
         # exists to prevent. Deliberately the same message as the opt-out
         # above, so the sender cannot distinguish "blocked" from
         # "recommendations disabled".
-        raise PermissionError(f"{recommended.username} doesn't allow friend recommendations.")
+        raise ShareTargetPermissionError(f"{recommended.username} doesn't allow friend recommendations.")
 
     from django.db import transaction
 

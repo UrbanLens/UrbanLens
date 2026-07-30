@@ -259,6 +259,7 @@ from urbanlens.dashboard.services.profile_settings import SettingsValidationErro
 from urbanlens.dashboard.services.push import PushRegistrationError, register_device, unregister_device
 from urbanlens.dashboard.services.safety import (
     CheckinArchivedError,
+    SafetyValidationError,
     apply_checkin_edit,
     attach_draft_markup_map,
     cancel_checkin,
@@ -637,7 +638,7 @@ class PinsView(ExternalApiView):
                 include_total=params.get("include_total", False),
             )
         except InvalidSyncCursorError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
 
         return Response(
             {
@@ -674,9 +675,9 @@ class PinsView(ExternalApiView):
                 name_is_user_provided=data.get("name_is_user_provided", False),
             )
         except PinCreationForbiddenError as exc:
-            return Response({"error": str(exc)}, status=403)
+            return Response({"error": exc.safe_message}, status=403)
         except PinCreationError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
 
         pin = result.pin
         parent_pin = pin.parent_pin
@@ -836,7 +837,7 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
                     # back every change already applied above.
                     reparent_pin(pin, new_parent)
         except (PinEditError, PinMoveError, PinReparentError) as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
 
         return Response(build_pin_detail(pin, request.user.profile))
 
@@ -963,13 +964,13 @@ class PinTombstonesView(ExternalApiView):
                 limit=params.get("limit"),
             )
         except InvalidSyncCursorError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
         except StaleDeletedSinceError as exc:
             # 410 Gone: tombstones this old may already be pruned, so the
             # incremental deletions feed can no longer be trusted from that
             # point. The client must full-resync (walk pins/ without
             # modified_since and drop local pins absent from the result).
-            return Response({"error": str(exc), "full_resync_required": True}, status=410)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message, "full_resync_required": True}, status=410)
 
         return Response(
             {
@@ -1008,7 +1009,7 @@ class PushDevicesView(ExternalApiView):
                 name=data.get("name", ""),
             )
         except PushRegistrationError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
 
         return Response(PushDeviceResponseSerializer(device).data, status=201)
 
@@ -1303,7 +1304,7 @@ class PhotoLabelsView(_OwnedImageMixin, ExternalApiView):
         try:
             set_media_labels(image, serializer.validated_data["labels"], profile)
         except MediaLabelError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
 
         image.refresh_from_db()
         return Response(PhotoSerializer(build_photo_payload(image, profile)).data)
@@ -1749,7 +1750,7 @@ class PinListsView(PaginatedListMixin, ExternalApiView):
             try:
                 validate_criteria_ownership(smart_filter, profile)
             except CriteriaOwnershipError as exc:
-                return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+                return Response({"error": exc.safe_message}, status=400)
 
         if PinList.objects.for_profile(profile).filter(name=data["name"]).exists():
             return Response({"error": "You already have a list with that name."}, status=400)
@@ -1840,7 +1841,7 @@ class PinListDetailView(ExternalApiView):
             try:
                 validate_criteria_ownership(pin_list.smart_filter, profile)
             except CriteriaOwnershipError as exc:
-                return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+                return Response({"error": exc.safe_message}, status=400)
 
         pin_list.save()
 
@@ -2004,7 +2005,7 @@ class SavedFiltersView(PaginatedListMixin, ExternalApiView):
         try:
             validate_criteria_ownership(criteria, profile)
         except CriteriaOwnershipError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
 
         if SavedFilter.objects.name_taken_for(profile, data["name"]):
             return Response({"error": "You already have a saved filter with that name."}, status=400)
@@ -2063,7 +2064,7 @@ class SavedFilterDetailView(ExternalApiView):
             try:
                 validate_criteria_ownership(data["criteria"], profile)
             except CriteriaOwnershipError as exc:
-                return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+                return Response({"error": exc.safe_message}, status=400)
 
         if "name" in data:
             if SavedFilter.objects.name_taken_for(profile, data["name"], exclude_pk=saved_filter.pk):
@@ -2380,7 +2381,7 @@ class LabelMergeView(ExternalApiView):
         try:
             result = merge_labels(target=target, sources=sources, profile=profile)
         except LabelMergeError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
 
         return Response(
             {
@@ -2494,7 +2495,7 @@ class PinSubResourceView[SubResourceT: Model](OwnedPinMixin, PaginatedListMixin,
         try:
             created = self.create(pin, serializer.validated_data)
         except PinSubResourceError as exc:
-            return Response({"error": str(exc)}, status=_subresource_error_status(exc))  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=_subresource_error_status(exc))
 
         return Response(self.output_serializer(created, context=self.serializer_context(pin)).data, status=201)
 
@@ -2537,7 +2538,7 @@ class PinSubResourceDetailView[SubResourceT: Model](OwnedPinMixin, ExternalApiVi
         try:
             self.perform_delete(pin, obj)
         except PinSubResourceError as exc:
-            return Response({"error": str(exc)}, status=_subresource_error_status(exc))  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=_subresource_error_status(exc))
         return Response(status=204)
 
 
@@ -2727,7 +2728,7 @@ class PinVisitsView(OwnedPinMixin, PaginatedListMixin, ExternalApiView):
         try:
             visit = create_manual_visit(pin, visited_at=data["visited_at"], notes=data.get("notes"))
         except VisitLoggingDisabledError as exc:
-            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=403)
 
         # Re-read through the same annotation the list path uses, so the created
         # row carries photo_count rather than the response shape depending on
@@ -3045,11 +3046,11 @@ class SafetyCheckinsView(SafetyCheckinScopedView, PaginatedListMixin):
                 contacts=allowed,
                 notify_community_wiki=data.get("notify_community_wiki", False),
             )
-        except ValueError as exc:
+        except SafetyValidationError as exc:
             # An already-active check-in for this scope is a state conflict, not a
             # malformed request - a mobile client must be able to tell the two
             # apart to offer "open the existing one" instead of "fix your input".
-            return Response({"error": str(exc)}, status=409)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=409)
 
         if data.get("markup_map"):
             attach_draft_markup_map(checkin, profile, str(data["markup_map"]))
@@ -3098,7 +3099,7 @@ class SafetyCheckinDetailApiView(SafetyCheckinScopedView):
         try:
             outcome = apply_checkin_edit(checkin, editor=request.user.profile, **kwargs)
         except CheckinArchivedError as exc:
-            return Response({"error": str(exc)}, status=409)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=409)
 
         # Warnings are not errors: a locked field is silently ignored, exactly as
         # the web autosave does. The client surfaces these as toasts and keeps the
@@ -3176,11 +3177,11 @@ class SafetyCheckinPartnersApiView(SafetyCheckinScopedView):
         serializer.is_valid(raise_exception=True)
         try:
             invite_checkin_partner(checkin, inviter=request.user.profile, username=serializer.validated_data["username"].strip())
-        except ValueError as exc:
+        except SafetyValidationError as exc:
             # The service's messages are already user-facing and specific
             # (unknown username, self-invite, blocked, already invited, cap
             # reached); reused verbatim so the app and the web UI say the same thing.
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
         return self._detail_response(checkin)
 
 
@@ -3522,7 +3523,7 @@ class FriendsView(ExternalApiView):
                 limit=params.get("limit") or DEFAULT_FRIEND_PAGE_SIZE,
             )
         except FriendshipActionError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
 
         return Response(
             {
@@ -3569,7 +3570,7 @@ class FriendDetailView(ExternalApiView):
         try:
             remove_friend(request.user.profile, target)
         except FriendshipNotFoundError as exc:
-            return Response({"error": str(exc)}, status=404)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=404)
         return Response(status=204)
 
 
@@ -3629,11 +3630,11 @@ class FriendActionView(ExternalApiView):
         try:
             friendship = self.service_action(actor, target)
         except FriendshipNotFoundError as exc:
-            return Response({"error": str(exc)}, status=404)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=404)
         except FriendLimitExceededError as exc:
-            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=403)
         except FriendshipActionError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
 
         return Response(_serialize_friendship(actor, friendship))
 
@@ -3728,9 +3729,9 @@ class FriendMuteView(FriendActionView):
         try:
             friendship = action(actor, target)
         except FriendshipNotFoundError as exc:
-            return Response({"error": str(exc)}, status=404)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=404)
         except FriendshipActionError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
 
         return Response(_serialize_friendship(actor, friendship))
 
@@ -3767,9 +3768,9 @@ class FriendInvitesView(ExternalApiView):
                 signup_url_builder=lambda token: request.build_absolute_uri(f"/signup/?invite={token}"),
             )
         except InviteValidationError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
         except InviteRateLimitedError as exc:
-            return Response({"error": str(exc)}, status=429)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=429)
 
         return Response({"result": "sent"})
 
@@ -4021,7 +4022,7 @@ class NotificationsView(ExternalApiView):
                 limit=params.get("limit") or DEFAULT_NOTIFICATION_PAGE_SIZE,
             )
         except InvalidNotificationCursorError as exc:
-            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
+            return Response({"error": exc.safe_message}, status=400)
 
         results = [
             {

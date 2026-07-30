@@ -76,6 +76,7 @@ class AvatarUploadError(Exception):
             status_code: The HTTP status this refusal maps to.
         """
         super().__init__(message)
+        self.safe_message = message
         self.status_code = status_code
 
 

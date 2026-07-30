@@ -44,9 +44,14 @@ logger = logging.getLogger(__name__)
 class FriendshipActionError(ValueError):
     """A friendship transition could not be applied.
 
-    The message is written for the end user and is safe to surface directly.
-    Callers map this to HTTP 400 unless a more specific subclass applies.
+    ``safe_message`` is written for the end user and is safe to surface
+    directly. Callers map this to HTTP 400 unless a more specific subclass
+    applies.
     """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 class FriendshipNotFoundError(FriendshipActionError):

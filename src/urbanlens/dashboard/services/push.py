@@ -53,8 +53,12 @@ DISPATCH_TIMEOUT_SECONDS = 5
 class PushRegistrationError(ValueError):
     """The submitted device registration is invalid.
 
-    The message is safe to surface directly to the caller.
+    ``safe_message`` is safe to surface directly to the caller.
     """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 def _validate_unifiedpush_endpoint(address: str) -> None:

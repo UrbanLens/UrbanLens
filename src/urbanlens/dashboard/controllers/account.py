@@ -840,7 +840,7 @@ class LoginTwoFactorOptionsView(View):
         try:
             options_json = build_authentication_options(request, user)
         except WebAuthnError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": exc.safe_message}, status=400)
         return HttpResponse(options_json, content_type="application/json")
 
 
@@ -857,7 +857,12 @@ class LoginTwoFactorVerifyView(View):
         try:
             verify_authentication(request, user, request.body.decode("utf-8"))
         except (WebAuthnError, UnicodeDecodeError) as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            if isinstance(exc, WebAuthnError):
+                message = exc.safe_message
+            else:
+                logger.warning("Passkey verification body was not valid UTF-8: %s", exc, exc_info=True)
+                message = "Invalid passkey response."
+            return JsonResponse({"error": message}, status=400)
 
         redirect_to = _complete_two_factor_login(request, user)
         return JsonResponse({"ok": True, "redirect": redirect_to})

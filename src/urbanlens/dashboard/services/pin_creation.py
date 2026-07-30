@@ -37,9 +37,14 @@ logger = logging.getLogger(__name__)
 class PinCreationError(ValueError):
     """Raised when the given input can't be turned into a Pin.
 
-    The message is safe to surface directly to the caller (map UI or external
-    API) - it never includes anything beyond what the caller itself submitted.
+    ``safe_message`` is safe to surface directly to the caller (map UI or
+    external API) - it never includes anything beyond what the caller itself
+    submitted.
     """
+
+    def __init__(self, message: str) -> None:
+        self.safe_message = message
+        super().__init__(message)
 
 
 class PinCreationForbiddenError(PinCreationError):
