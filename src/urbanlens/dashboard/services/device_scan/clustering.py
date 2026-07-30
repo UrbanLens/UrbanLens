@@ -173,10 +173,16 @@ def _weight_entry(entry: DeviceScanEntry, now: datetime.datetime) -> _WeightedEn
     readings = list(entry.readings.all())
     signal_values = [reading.signal_strength for reading in readings if reading.signal_strength is not None]
     avg_signal = sum(signal_values) / len(signal_values) if signal_values else None
+    # The client-submitted observation time, not row-insertion time: an
+    # offline mobile client can upload readings well after they were taken,
+    # and entry.created would then treat stale scans as fresh. Falls back to
+    # entry.created only for the edge case of a detected=True entry with no
+    # readings attached.
+    observed_at = max((reading.observed_at for reading in readings), default=entry.created)
     return _WeightedEntry(
         point=entry.location,
-        weight=weight_for_age(now - entry.created),
-        observed_at=entry.created,
+        weight=weight_for_age(now - observed_at),
+        observed_at=observed_at,
         avg_signal_strength=avg_signal,
     )
 

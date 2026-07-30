@@ -1029,7 +1029,9 @@ class AccountSettingsView(ExternalApiView):
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
         "GET": frozenset({ApiKeyScope.SETTINGS_READ}),
-        "PATCH": frozenset({ApiKeyScope.SETTINGS_WRITE}),
+        # Both scopes: the response is always the full document (see below),
+        # which a write-only credential has no business reading.
+        "PATCH": frozenset({ApiKeyScope.SETTINGS_WRITE, ApiKeyScope.SETTINGS_READ}),
     }
 
     @extend_schema(responses={200: SettingsSerializer})

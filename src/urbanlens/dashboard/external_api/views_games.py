@@ -384,7 +384,10 @@ class SpotGuessrEligiblePinsView(PaginatedListMixin, ExternalApiView):
     """
 
     required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
-        "GET": frozenset({ApiKeyScope.GAMES_READ}),
+        # Both scopes: unlike the area pre-check above, this returns each
+        # pin's label and exact coordinates - the same private location data
+        # pins:read gates everywhere else.
+        "GET": frozenset({ApiKeyScope.GAMES_READ, ApiKeyScope.PINS_READ}),
     }
 
     @extend_schema(parameters=[SpotGuessrEligiblePinsQuerySerializer], responses={200: SpotGuessrEligiblePinSerializer(many=True), 400: ErrorSerializer})

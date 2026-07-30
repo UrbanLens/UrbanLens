@@ -600,6 +600,16 @@ class SpotGuessrEligibleCountTests(_SpotGuessrApiTestCase):
 class SpotGuessrEligiblePinsTests(_SpotGuessrApiTestCase):
     """The browse feed of the caller's own pins - a read, not a play mode."""
 
+    def setUp(self) -> None:
+        """This endpoint returns pin labels/coordinates, so it needs pins:read too."""
+        super().setUp()
+        self.raw_key = self._key_with_scopes([*_GAME_SCOPES, ApiKeyScope.PINS_READ.value])
+
+    def test_needs_the_pins_scope(self) -> None:
+        games_only_key = self._key_with_scopes([ApiKeyScope.GAMES_READ.value])
+        response = self._get("external_api:games.spotguessr.eligible-pins", key=games_only_key)
+        self.assertEqual(response.status_code, 403)
+
     def test_lists_the_callers_own_pins(self) -> None:
         response = self._get("external_api:games.spotguessr.eligible-pins")
         self.assertEqual(response.status_code, 200, response.content)
