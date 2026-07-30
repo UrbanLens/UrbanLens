@@ -82,16 +82,21 @@ logger = logging.getLogger(__name__)
 #: Three groupings are not one-to-one with the domain names and are worth
 #: spelling out:
 #:
-#: - ``articles`` requires ``wiki:read``, not a scope of its own. A community
-#:   wiki article *is* wiki content, and the provider also returns private pin
-#:   articles - but those are already reachable through the wiki surface for a
-#:   caller who holds that scope, so pairing it with the narrower of the two
-#:   would be the permissive mistake, not the strict one.
+#: - ``articles`` requires **both** ``pins:read`` and ``wiki:read``.
+#:   ``ArticleSearchProvider`` returns the caller's own private pin articles
+#:   *and* community wiki articles from a single queryset - it is one provider
+#:   covering two domains, not a wiki-only one - so the section can only be
+#:   granted when the credential holds every scope whose content it might
+#:   surface. Gating on ``wiki:read`` alone would let a caller with no
+#:   ``pins:read`` read private pin-article excerpts through search.
 #: - ``maps`` requires ``pins:read``: a markup annotation is drawn on a pin, a
 #:   wiki, or a standalone map, and its label routinely names the place it
 #:   annotates.
-#: - ``comments`` requires ``pins:read`` for the same reason - a comment result
-#:   quotes text attached to a pin, wiki or trip, and the title names its host.
+#: - ``comments`` requires ``pins:read``, ``wiki:read`` **and** ``trips:read``
+#:   together, for the same one-provider-many-domains reason as ``articles``:
+#:   ``CommentSearchProvider`` quotes text from pin, wiki *and* trip comment
+#:   threads in one pass. Requiring only ``pins:read`` would let that scope
+#:   alone reach wiki and trip comment excerpts it was never granted for.
 #:
 #: Declared in ``RESULT_TYPES`` order so ``omitted_types`` comes back in a
 #: stable, documented sequence rather than whatever a set happened to hash to.
@@ -99,13 +104,13 @@ SEARCH_SECTION_SCOPES: dict[str, frozenset[ApiKeyScope]] = {
     "pins": frozenset({ApiKeyScope.SEARCH_READ, ApiKeyScope.PINS_READ}),
     "photos": frozenset({ApiKeyScope.SEARCH_READ, ApiKeyScope.PHOTOS_READ}),
     "wikis": frozenset({ApiKeyScope.SEARCH_READ, ApiKeyScope.WIKI_READ}),
-    "articles": frozenset({ApiKeyScope.SEARCH_READ, ApiKeyScope.WIKI_READ}),
+    "articles": frozenset({ApiKeyScope.SEARCH_READ, ApiKeyScope.PINS_READ, ApiKeyScope.WIKI_READ}),
     "trips": frozenset({ApiKeyScope.SEARCH_READ, ApiKeyScope.TRIPS_READ}),
     "visits": frozenset({ApiKeyScope.SEARCH_READ, ApiKeyScope.VISITS_READ}),
     "messages": frozenset({ApiKeyScope.SEARCH_READ, ApiKeyScope.MESSAGES_READ}),
     "maps": frozenset({ApiKeyScope.SEARCH_READ, ApiKeyScope.PINS_READ}),
     "safety": frozenset({ApiKeyScope.SEARCH_READ, ApiKeyScope.SAFETY_READ}),
-    "comments": frozenset({ApiKeyScope.SEARCH_READ, ApiKeyScope.PINS_READ}),
+    "comments": frozenset({ApiKeyScope.SEARCH_READ, ApiKeyScope.PINS_READ, ApiKeyScope.WIKI_READ, ApiKeyScope.TRIPS_READ}),
 }
 
 

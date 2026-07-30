@@ -443,6 +443,66 @@ class GlobalSearchScopeTests(_SearchApiTestCase):
         self.assertEqual(body["omitted_types"], [])
 
 
+class GlobalSearchCrossDomainScopeTests(_SearchApiTestCase):
+    """``articles`` and ``comments`` are each one provider spanning more than one domain.
+
+    ``ArticleSearchProvider`` returns the caller's own private pin articles
+    *and* community wiki articles from a single queryset; ``CommentSearchProvider``
+    does the same across pin, wiki and trip comment threads. Gating either
+    section on just one of the domains it touches would let that one scope
+    reach content from the others - these tests are the regression coverage
+    for that gap.
+    """
+
+    def setUp(self) -> None:
+        """Bake one pin article, one wiki (with its own article and comment), and one trip comment - all sharing a findable word."""
+        super().setUp()
+        self.pin = self._make_pin(name="Anchor Mill")
+        self.pin_article = baker.make("dashboard.Article", pin=self.pin, content="private basement blueprint notes")
+        self.wiki = baker.make("dashboard.Wiki", location=self._location(), created_by=self.profile, name="Anchor Mill Wiki")
+        self.wiki_article = baker.make("dashboard.Article", wiki=self.wiki, content="public wiki blueprint notes")
+        self.wiki_comment = baker.make("dashboard.Comment", wiki=self.wiki, profile=self.profile, text="blueprint notes in the comments")
+        self.trip = baker.make("dashboard.Trip", creator=self.profile, name="Anchor trip")
+        self.trip_comment = baker.make("dashboard.TripComment", trip=self.trip, author=self.profile, text="blueprint notes on the trip")
+
+    def test_wiki_scope_alone_does_not_reach_private_pin_articles(self) -> None:
+        """``wiki:read`` without ``pins:read`` must not open a section that includes private pin articles."""
+        raw = self._key_with_scopes([ApiKeyScope.SEARCH_READ.value, ApiKeyScope.WIKI_READ.value])
+        body = self._search(raw_key=raw, q="blueprint").json()
+        self.assertIsNone(self._group(body, "articles"))
+        self.assertIn("articles", body["omitted_types"])
+
+    def test_pins_scope_alone_does_not_reach_wiki_articles(self) -> None:
+        """``pins:read`` without ``wiki:read`` must not open a section that includes wiki articles."""
+        raw = self._key_with_scopes([ApiKeyScope.SEARCH_READ.value, ApiKeyScope.PINS_READ.value])
+        body = self._search(raw_key=raw, q="blueprint").json()
+        self.assertIsNone(self._group(body, "articles"))
+        self.assertIn("articles", body["omitted_types"])
+
+    def test_pins_and_wiki_scope_together_reach_articles(self) -> None:
+        """Holding both domain scopes is what actually opens the section."""
+        raw = self._key_with_scopes([ApiKeyScope.SEARCH_READ.value, ApiKeyScope.PINS_READ.value, ApiKeyScope.WIKI_READ.value])
+        body = self._search(raw_key=raw, q="blueprint").json()
+        self.assertIsNotNone(self._group(body, "articles"))
+        self.assertNotIn("articles", body["omitted_types"])
+
+    def test_pins_scope_alone_does_not_reach_wiki_or_trip_comments(self) -> None:
+        """``pins:read`` without ``wiki:read``/``trips:read`` must not open a section including those comments."""
+        raw = self._key_with_scopes([ApiKeyScope.SEARCH_READ.value, ApiKeyScope.PINS_READ.value])
+        body = self._search(raw_key=raw, q="blueprint").json()
+        self.assertIsNone(self._group(body, "comments"))
+        self.assertIn("comments", body["omitted_types"])
+
+    def test_every_comment_domain_scope_together_reaches_comments(self) -> None:
+        """Holding pins, wiki and trips together is what actually opens the section."""
+        raw = self._key_with_scopes(
+            [ApiKeyScope.SEARCH_READ.value, ApiKeyScope.PINS_READ.value, ApiKeyScope.WIKI_READ.value, ApiKeyScope.TRIPS_READ.value],
+        )
+        body = self._search(raw_key=raw, q="blueprint").json()
+        self.assertIsNotNone(self._group(body, "comments"))
+        self.assertNotIn("comments", body["omitted_types"])
+
+
 class GlobalSearchDirectMessageScopeTests(_SearchApiTestCase):
     """Direct messages: the boundary a bearer key must never cross.
 

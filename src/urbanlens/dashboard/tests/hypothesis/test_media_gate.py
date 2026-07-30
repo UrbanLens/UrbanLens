@@ -26,7 +26,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 
 _IMAGE_BYTES = b"fake-image-bytes-for-media-gate"
 
@@ -189,3 +189,127 @@ class MediaGateTests(TestCase):
             response = self.client.get("/media/pin_images/owned.png")
         self.assertEqual(response.status_code, 404)
         self.assertNotIn("X-Accel-Redirect", response.headers)
+
+
+class CommentImageMediaGateTests(TestCase):
+    """``comment_images/`` must also respect the comment author's ``comment_visibility``.
+
+    Host-level access (owning the pin, being able to see the wiki, being a
+    trip member) is necessary but not sufficient - the same author privacy
+    setting that hides a comment's text from ``visible_comment_tree``/
+    ``build_comment_tree`` must hide its attached image too, and must keep
+    hiding it after the author tightens the setting even if a viewer already
+    has the file's URL.
+    """
+
+    def setUp(self):
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        self._media_root = tempfile.mkdtemp(prefix="ul_media_gate_comments_")
+        self.addCleanup(shutil.rmtree, self._media_root, ignore_errors=True)
+        self._overrides = override_settings(MEDIA_ROOT=self._media_root, MEDIA_X_ACCEL=False)
+        self._overrides.enable()
+        self.addCleanup(self._overrides.disable)
+        (Path(self._media_root) / "comment_images").mkdir(parents=True)
+
+        self.owner_user = _new_user()
+        self.owner: Profile = self.owner_user.profile
+        self.author_user = _new_user()
+        self.author: Profile = self.author_user.profile
+
+        self.pin = baker.make(Pin, profile=self.owner)
+        self.wiki = baker.make(Wiki, location=self.pin.location)
+
+    def _set_comment_visibility(self, visibility: str) -> None:
+        self.author.comment_visibility = visibility
+        self.author.save(update_fields=["comment_visibility"])
+
+    def test_wiki_comment_image_hidden_when_author_restricts_to_no_one(self):
+        from urbanlens.dashboard.models.comments.model import Comment
+
+        self._set_comment_visibility(VisibilityChoice.NO_ONE)
+        self._write_media("comment_images/wiki.png")
+        baker.make(Comment, pin=None, wiki=self.wiki, profile=self.author, image="comment_images/wiki.png")
+
+        self.client.force_login(self.owner_user)
+        response = self.client.get("/media/comment_images/wiki.png")
+        self.assertEqual(response.status_code, 404, "a viewer who could see the wiki must still be denied once the author restricts comment_visibility")
+
+    def test_wiki_comment_image_visible_when_author_allows_anyone(self):
+        from urbanlens.dashboard.models.comments.model import Comment
+
+        self._set_comment_visibility(VisibilityChoice.ANYONE)
+        self._write_media("comment_images/wiki.png")
+        baker.make(Comment, pin=None, wiki=self.wiki, profile=self.author, image="comment_images/wiki.png")
+
+        self.client.force_login(self.owner_user)
+        response = self.client.get("/media/comment_images/wiki.png")
+        self.assertEqual(response.status_code, 200)
+        self._get_bytes(response)
+
+    def test_pin_comment_image_hidden_from_owner_when_author_restricts_to_no_one(self):
+        from urbanlens.dashboard.models.comments.model import Comment
+
+        self._set_comment_visibility(VisibilityChoice.NO_ONE)
+        self._write_media("comment_images/pin.png")
+        baker.make(Comment, pin=self.pin, wiki=None, profile=self.author, image="comment_images/pin.png")
+
+        self.client.force_login(self.owner_user)
+        response = self.client.get("/media/comment_images/pin.png")
+        self.assertEqual(response.status_code, 404, "the pin owner must still be denied once the comment author restricts comment_visibility")
+
+    def test_pin_comment_image_visible_to_owner_when_author_allows_anyone(self):
+        from urbanlens.dashboard.models.comments.model import Comment
+
+        self._set_comment_visibility(VisibilityChoice.ANYONE)
+        self._write_media("comment_images/pin.png")
+        baker.make(Comment, pin=self.pin, wiki=None, profile=self.author, image="comment_images/pin.png")
+
+        self.client.force_login(self.owner_user)
+        response = self.client.get("/media/comment_images/pin.png")
+        self.assertEqual(response.status_code, 200)
+        self._get_bytes(response)
+
+    def test_trip_comment_image_hidden_from_member_when_author_restricts_to_no_one(self):
+        from urbanlens.dashboard.models.trips.model import Trip, TripComment, TripMembership
+
+        self._set_comment_visibility(VisibilityChoice.NO_ONE)
+        trip = baker.make(Trip, creator=self.author)
+        TripMembership.objects.create(trip=trip, profile=self.owner)
+        self._write_media("comment_images/trip.png")
+        baker.make(TripComment, trip=trip, author=self.author, image="comment_images/trip.png")
+
+        self.client.force_login(self.owner_user)
+        response = self.client.get("/media/comment_images/trip.png")
+        self.assertEqual(response.status_code, 404, "a fellow trip member must still be denied once the author restricts comment_visibility")
+
+    def test_trip_comment_image_visible_to_member_when_author_allows_anyone(self):
+        from urbanlens.dashboard.models.trips.model import Trip, TripComment, TripMembership
+
+        self._set_comment_visibility(VisibilityChoice.ANYONE)
+        trip = baker.make(Trip, creator=self.author)
+        TripMembership.objects.create(trip=trip, profile=self.owner)
+        self._write_media("comment_images/trip.png")
+        baker.make(TripComment, trip=trip, author=self.author, image="comment_images/trip.png")
+
+        self.client.force_login(self.owner_user)
+        response = self.client.get("/media/comment_images/trip.png")
+        self.assertEqual(response.status_code, 200)
+        self._get_bytes(response)
+
+    def _write_media(self, rel_path: str, data: bytes = _IMAGE_BYTES) -> None:
+        """Write a fake media file under the temp MEDIA_ROOT."""
+        target = Path(self._media_root) / rel_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+
+    def _get_bytes(self, response) -> bytes:
+        """Materialize a (possibly streaming) response body - see MediaGateTests."""
+        if getattr(response, "streaming", False):
+            data = b"".join(response.streaming_content)
+            file_to_stream = getattr(response, "file_to_stream", None)
+            if file_to_stream is not None:
+                file_to_stream.close()
+            return data
+        return response.content

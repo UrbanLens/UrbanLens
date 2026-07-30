@@ -1603,3 +1603,17 @@ itself is generic/`Callable`-typed, rather than a real bug. Left uninvestigated 
 not touch `_STRATEGIES` or the field-strategy machinery, only Consensus's session/eligibility/vote
 services - fixing this would mean guessing at `_wiki_field_strategy`'s intended generic signature
 without the context of whoever wrote it.
+
+## 2026-07-30: `test_media_auth_mixin.py::MediaAuthResolutionTests::test_session_wins_over_a_credential_header` is flaky (PK off-by-one)
+
+Found while running the media/search/public-pins suites for an unrelated PR #126 review-comment pass
+(scoping fixes in `external_api/views_search.py`, `controllers/media.py`, `services/public_pins.py`
+- this test file was never touched). Fails both in isolation and alongside other files, non-
+deterministically off by exactly one: `AssertionError: '17' != '16'` in one run, `'194' != '193'` in
+another. The assertion is `self.assertEqual(response.content.decode(), str(self.profile.pk))` -
+comparing the profile pk baked in `setUp` against whatever pk the view actually resolved, so either
+an extra `Profile`/`User` row is being created somewhere between `setUp` and the assertion (shifting
+the auto-increment sequence out from under the hardcoded expectation), or the mixin under test is
+genuinely resolving the wrong profile. Needs a session review of `MediaAuthResolutionTests.setUp`
+and `resolve_media_profile`/`CredentialOrSessionMediaMixin` to tell which; not investigated further
+since it's unrelated to the search/media/public-pins scoping fixes this session was making.

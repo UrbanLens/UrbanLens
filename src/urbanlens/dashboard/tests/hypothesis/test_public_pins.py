@@ -347,6 +347,22 @@ class SuggestionSyncTests(TestCase):
         # Idempotent: a second run creates nothing new.
         self.assertEqual(sync_public_pin_suggestions(), 0)
 
+    def test_evaluate_backfills_suggestions_even_when_nothing_passes_this_run(self) -> None:
+        """A profile created after a location already passed must still be caught up.
+
+        ``evaluate_public_pin_candidates`` used to call ``sync_public_pin_suggestions``
+        only when ``counters["passed"]`` was nonzero for *this* run - so a location
+        that passed in an earlier beat tick never got backfilled for accounts
+        created (or opted back in) afterward, contradicting
+        ``sync_public_pin_suggestions``'s own documented "idempotent backfill ...
+        new accounts are picked up on the next beat run" contract.
+        """
+        late_joiner = Profile.objects.get(user=baker.make("auth.User"))
+        counters = evaluate_public_pin_candidates()
+        self.assertEqual(counters["passed"], 0, "the candidate was force-set to PASSED directly, not settled by this run")
+        suggestion = PinSuggestion.objects.filter(profile=late_joiner, location=self.location, origin=PinSuggestionOrigin.COMMUNITY)
+        self.assertTrue(suggestion.exists())
+
     def test_queue_hides_community_suggestions_when_toggled_off(self) -> None:
         recipient = Profile.objects.get(user=baker.make("auth.User"))
         sync_public_pin_suggestions()

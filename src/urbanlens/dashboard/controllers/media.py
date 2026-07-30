@@ -28,11 +28,16 @@ of the owning model's file field):
   conversation participants; everything else follows the same
   ``Image.objects.visible_to`` photo-visibility logic the gallery views use.
 - ``comment_images/`` - pin/wiki ``Comment`` and ``TripComment`` images.
-  The author always qualifies; pin comments are additionally visible to the
-  pin's owner (pin comment threads are owner+author scoped, see
+  The author always qualifies; everyone else is additionally gated by the
+  author's ``comment_visibility`` setting (``Profile.can_view_comments_from``)
+  on top of host membership - pin comments visible to the pin's owner (pin
+  comment threads are owner+author scoped, see
   ``controllers.comments.PinCommentsView``), wiki comments to anyone who can
   see the wiki (``services.wiki_access.location_visible_to``), and trip
-  comments to the trip's members.
+  comments to the trip's members. This mirrors the gates
+  ``services.comments.visible_comment_tree``/``services.trip_comments.build_comment_tree``
+  apply to the comment's text, so tightening the privacy setting after a
+  viewer already has the image URL revokes access to the file too.
 - ``avatars/`` - profile avatars render site-wide next to usernames, so any
   authenticated user may fetch them.
 - ``pin_custom_icons/`` / ``label_icons/`` - map/label icon decorations;
@@ -263,13 +268,19 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
         from urbanlens.dashboard.models.trips.model import TripComment, TripMembership
         from urbanlens.dashboard.services.wiki_access import location_visible_to
 
-        comment = Comment.objects.filter(image=rel_path).select_related("pin", "wiki__location").first()
+        comment = Comment.objects.filter(image=rel_path).select_related("pin", "wiki__location", "profile").first()
         if comment is not None:
             if comment.profile_id == profile.pk:
                 return True
             if comment.pending_scan:
                 # Not yet cleared by the malware scan - author-only until then,
                 # mirroring controllers.comments._build_context.
+                return False
+            if not profile.can_view_comments_from(comment.profile):
+                # The author's comment_visibility setting hides the comment
+                # itself from this viewer (see services.comments.visible_comment_tree
+                # gate 1) - the attachment must be hidden right along with it,
+                # not just from the rendered thread.
                 return False
             if comment.pin is not None:
                 # Pin comment threads are visible only on the owner's own pin
@@ -280,11 +291,13 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
                 return location_visible_to(comment.wiki.location, profile)
             return False
 
-        trip_comment = TripComment.objects.filter(image=rel_path).first()
+        trip_comment = TripComment.objects.filter(image=rel_path).select_related("author").first()
         if trip_comment is not None:
             if trip_comment.author_id == profile.pk:
                 return True
             if trip_comment.pending_scan:
+                return False
+            if trip_comment.author is not None and not profile.can_view_comments_from(trip_comment.author):
                 return False
             return TripMembership.objects.filter(trip_id=trip_comment.trip_id, profile=profile).exists()
 

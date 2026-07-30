@@ -322,8 +322,11 @@ def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str
         counters["passed"] += 1
         logger.info("Location %s voted public (%s yes / %s total)", candidate.location_id, tally.yes, tally.total)
 
-    if counters["passed"]:
-        sync_public_pin_suggestions()
+    # Unconditional, not gated on counters["passed"]: a location that passed
+    # in some earlier run still needs backfilling for profiles created (or
+    # opted back in) since then, and this idempotent scan is the only thing
+    # that ever catches those up - see sync_public_pin_suggestions's docstring.
+    sync_public_pin_suggestions()
 
     return counters
 
