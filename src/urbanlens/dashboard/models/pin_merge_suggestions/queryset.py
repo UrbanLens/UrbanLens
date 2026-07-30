@@ -109,11 +109,7 @@ class PinMergeSuggestionManager(abstract.DashboardManager.from_queryset(PinMerge
         """
         from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestionStatus
 
-        existing = (
-            self.filter(profile=profile, status=PinMergeSuggestionStatus.PENDING)
-            .filter((Q(pin_a=pin_a) & Q(pin_b=pin_b)) | (Q(pin_a=pin_b) & Q(pin_b=pin_a)))
-            .first()
-        )
+        existing = self.filter(profile=profile, status=PinMergeSuggestionStatus.PENDING).filter((Q(pin_a=pin_a) & Q(pin_b=pin_b)) | (Q(pin_a=pin_b) & Q(pin_b=pin_a))).first()
         if existing is not None:
             return existing
         return self.create(

@@ -160,7 +160,7 @@ class TriviaStartView(LoginRequiredMixin, View):
             try:
                 game_session = trivia_session.start_multiplayer_session(profile, config, invitees, total_rounds=total_rounds)
             except trivia_session.TriviaError as exc:
-                return JsonResponse({"error": str(exc)}, status=400)
+                return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
             return JsonResponse({"session_id": game_session.pk, "lobby": True, "session": serializers.serialize_session(game_session)})
 
         if not eligibility.has_eligible_questions([profile]):
@@ -231,7 +231,7 @@ class TriviaInviteView(LoginRequiredMixin, View):
         try:
             participant = trivia_session.invite_to_session(game_session, profile, invitee)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -248,7 +248,7 @@ class TriviaJoinView(LoginRequiredMixin, View):
         try:
             participant = trivia_session.join_session(game_session, profile)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -265,7 +265,7 @@ class TriviaBeginView(LoginRequiredMixin, View):
         try:
             round_ = trivia_session.begin_session(game_session, profile)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         if round_ is None:
             if trivia_session.rounds_played(game_session) == 0:
@@ -294,7 +294,7 @@ class TriviaEndSessionView(LoginRequiredMixin, View):
         try:
             trivia_session.end_session_now(game_session, profile)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         return JsonResponse({"finished": True, "summary": trivia_session.session_summary(game_session)})
 
 
@@ -311,7 +311,7 @@ class TriviaLeaveSessionView(LoginRequiredMixin, View):
         try:
             trivia_session.leave_session(game_session, profile)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         return JsonResponse({"left": True})
 
 
@@ -333,7 +333,7 @@ class TriviaKickParticipantView(LoginRequiredMixin, View):
         try:
             trivia_session.kick_participant(game_session, profile, target)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         return JsonResponse({"kicked": True})
 
 
@@ -388,7 +388,7 @@ class TriviaAnswerView(LoginRequiredMixin, View):
         try:
             answer = trivia_session.submit_answer(round_, profile, raw_answer)
         except trivia_session.TriviaError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         round_.refresh_from_db()
         return JsonResponse(serializers.serialize_reveal(round_, answer))

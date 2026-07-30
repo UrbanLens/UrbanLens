@@ -144,7 +144,7 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
             response["X-Accel-Redirect"] = settings.MEDIA_X_ACCEL_PREFIX + quote(rel_path)
             return response
 
-        return FileResponse(full_path.open("rb"))
+        return FileResponse(full_path.open("rb"))  # lgtm[py/path-injection] -- already traversal-checked by _resolve_media_path below
 
     def _resolve_media_path(self, path: str) -> tuple[str, Path]:
         """Resolve the requested path and verify it stays inside ``MEDIA_ROOT``.
@@ -165,7 +165,7 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
 
         media_root = Path(settings.MEDIA_ROOT).resolve()
         try:
-            full_path = (media_root / path).resolve()
+            full_path = (media_root / path).resolve()  # lgtm[py/path-injection] -- checked against media_root just below, before any use
         except (OSError, ValueError) as exc:
             raise Http404 from exc
 
@@ -173,7 +173,7 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
             logger.warning("Blocked media path traversal attempt: %r", path)
             raise Http404
 
-        if not full_path.is_file():
+        if not full_path.is_file():  # lgtm[py/path-injection] -- reached only after the is_relative_to(media_root) check above
             raise Http404
 
         return full_path.relative_to(media_root).as_posix(), full_path

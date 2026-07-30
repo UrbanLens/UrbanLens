@@ -108,11 +108,7 @@ def viewer_hidden_activity_ids(activities: list[TripActivity], viewer: Profile) 
         IDs of activities whose location this viewer may not see.
     """
     hidden = {act.id for act in activities if act.location_hidden}
-    sensitive = [
-        act
-        for act in activities
-        if not act.location_hidden and act.added_by_id and act.added_by_id != viewer.id and act.added_by and act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE and act.location_id
-    ]
+    sensitive = [act for act in activities if not act.location_hidden and act.added_by_id and act.added_by_id != viewer.id and act.added_by and act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE and act.location_id]
     if sensitive:
         apply_trip_visibility_filter(sensitive, viewer, hidden)
     return hidden

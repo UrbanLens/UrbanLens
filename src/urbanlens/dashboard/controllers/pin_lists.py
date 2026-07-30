@@ -441,11 +441,7 @@ class PinListAddPinsView(LoginRequiredMixin, View):
 
         response = _render_items_panel(request, pin_list)
         if result.skipped_over_cap:
-            message = (
-                f"This list is already at the maximum of {result.max_pins} pins."
-                if result.added == 0
-                else f"Only added {result.added} pin(s) - this list is capped at {result.max_pins} pins."
-            )
+            message = f"This list is already at the maximum of {result.max_pins} pins." if result.added == 0 else f"Only added {result.added} pin(s) - this list is capped at {result.max_pins} pins."
             response = _show_toast(response, message, level="warning")
         return response
 

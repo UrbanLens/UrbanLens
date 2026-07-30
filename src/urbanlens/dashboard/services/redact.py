@@ -31,7 +31,7 @@ def _fingerprint(value: str) -> str:
     password-hashing-grade iteration counts. A keyed HMAC still makes the fingerprint
     non-reversible and non-forgeable without the key, which is all this needs.
     """
-    digest = hmac.new(_REDACTION_SALT, value.encode("utf-8"), hashlib.sha256).digest()
+    digest = hmac.new(_REDACTION_SALT, value.encode("utf-8"), hashlib.sha256).digest()  # lgtm[py/weak-sensitive-data-hashing]
     return digest.hex()[:8]
 
 

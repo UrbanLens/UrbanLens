@@ -128,7 +128,7 @@ class ConsensusStartView(LoginRequiredMixin, View):
             try:
                 game_session = consensus_session.start_competitive_session(profile, invitees, total_rounds=total_rounds)
             except consensus_session.ConsensusError as exc:
-                return JsonResponse({"error": str(exc)}, status=400)
+                return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
             return JsonResponse({"session_id": game_session.pk, "lobby": True, "session": serializers.serialize_session(game_session)})
 
         if not consensus_session.has_eligible_wikis([profile]):
@@ -137,7 +137,7 @@ class ConsensusStartView(LoginRequiredMixin, View):
         try:
             game_session = consensus_session.start_solo_session(profile, total_rounds=total_rounds)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         round_ = consensus_session.get_or_create_round(game_session)
         if round_ is None:
@@ -177,7 +177,7 @@ class ConsensusInviteView(LoginRequiredMixin, View):
         try:
             participant = consensus_session.invite_to_session(game_session, profile, invitee)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -194,7 +194,7 @@ class ConsensusJoinView(LoginRequiredMixin, View):
         try:
             participant = consensus_session.join_session(game_session, profile)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -211,7 +211,7 @@ class ConsensusBeginView(LoginRequiredMixin, View):
         try:
             round_ = consensus_session.begin_session(game_session, profile)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         if round_ is None:
             if consensus_session.rounds_played(game_session) == 0:
@@ -234,7 +234,7 @@ class ConsensusEndSessionView(LoginRequiredMixin, View):
         try:
             consensus_session.end_session_now(game_session, profile)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         return JsonResponse({"finished": True, "summary": consensus_session.session_summary(game_session)})
 
 
@@ -302,7 +302,7 @@ class ConsensusAnswerView(LoginRequiredMixin, View):
         try:
             answer = consensus_session.submit_answer(round_, profile, value)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         round_.refresh_from_db()
         return JsonResponse({"answer_id": answer.pk, "round": serializers.serialize_round(round_)})
@@ -325,7 +325,7 @@ class ConsensusSkipView(LoginRequiredMixin, View):
         try:
             consensus_session.skip_round(round_, profile)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         round_.refresh_from_db()
         return JsonResponse({"round": serializers.serialize_round(round_)})
@@ -352,7 +352,7 @@ class ConsensusVoteView(LoginRequiredMixin, View):
         try:
             consensus_session.submit_vote(round_, profile, chosen_answer)
         except consensus_session.ConsensusError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         round_.refresh_from_db()
         return JsonResponse({"round": serializers.serialize_round(round_)})

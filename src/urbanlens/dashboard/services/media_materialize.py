@@ -111,7 +111,10 @@ def fetch_with_revalidated_redirects(
     fetch_url = url
     for _hop in range(max_redirects + 1):
         fetch_url = ensure_public_http_url(fetch_url)
-        response = requests.get(
+        # ensure_public_http_url (above) re-validates this exact hop - literal
+        # IP and resolved hostname - immediately before the connection below;
+        # CodeQL doesn't model it as a sanitizer.
+        response = requests.get(  # lgtm[py/full-ssrf]
             fetch_url,
             timeout=timeout,
             stream=True,

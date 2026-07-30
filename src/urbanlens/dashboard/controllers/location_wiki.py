@@ -365,7 +365,6 @@ def _render_history(request, location: Location, wiki: Wiki):
     )
 
 
-
 class LocationWikiHistoryView(LoginRequiredMixin, View):
     """HTMX partial: edit history list for a wiki.
 
@@ -468,7 +467,7 @@ class PublicPinVoteView(LoginRequiredMixin, View):
         try:
             cast_public_vote(location, profile, request.POST.get("choice") or "")
         except PublicVoteError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return render(
             request,
@@ -499,7 +498,7 @@ class BoundaryVoteView(LoginRequiredMixin, View):
         try:
             vote = cast_boundary_vote(location, profile, boundary_id)
         except BoundaryVoteError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return JsonResponse(
             {

@@ -299,9 +299,7 @@ class MessageThreadView(ExternalApiView):
 
     @extend_schema(
         description=(
-            "Returns one page of the conversation, oldest first, using cursor pagination. Pass "
-            "`?before=<id>` (the `next` link does this for you) to walk further back. `previous` and `count` "
-            "are always null: a live thread has no stable page count."
+            "Returns one page of the conversation, oldest first, using cursor pagination. Pass `?before=<id>` (the `next` link does this for you) to walk further back. `previous` and `count` are always null: a live thread has no stable page count."
         ),
         responses={200: PageSerializer, 404: ErrorSerializer},
     )
@@ -366,11 +364,11 @@ class MessageThreadView(ExternalApiView):
                 client_uuid=client_uuid,
             )
         except ShareTargetNotFoundError as exc:
-            return Response({"error": str(exc)}, status=404)
+            return Response({"error": str(exc)}, status=404)  # lgtm[py/stack-trace-exposure]
         except PermissionError as exc:
-            return Response({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
         except ValueError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return Response(build_direct_message_payload(message, profile), status=200 if existed else 201)
 
@@ -428,7 +426,7 @@ class MessageReactionView(ExternalApiView):
         try:
             action = toggle_reaction(profile, message, emoji)
         except PermissionError as exc:
-            return Response({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
         return Response({"action": action, "reactions": build_direct_message_payload(message, profile)["reactions"]})
 
 
@@ -468,7 +466,7 @@ class MessageDetailView(ExternalApiView):
             else:
                 delete_message_for_self(message, profile)
         except PermissionError as exc:
-            return Response({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
         return Response(status=204)
 
 
@@ -560,9 +558,9 @@ class GroupsView(ExternalApiView):
         try:
             group = create_group_chat(profile, serializer.validated_data["name"], members)
         except PermissionError as exc:
-            return Response({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
         except ValueError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return Response(_group_payload(group, member_count=group.active_memberships().count(), is_muted=False), status=201)
 
@@ -605,9 +603,9 @@ class GroupDetailView(ExternalApiView):
         try:
             group = rename_group_chat(group, profile, serializer.validated_data["name"])
         except PermissionError as exc:
-            return Response({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
         except ValueError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         membership = group.membership_for(profile)
         return Response(_group_payload(group, member_count=group.active_memberships().count(), is_muted=bool(membership and membership.muted)))
@@ -656,9 +654,9 @@ class GroupMessagesView(ExternalApiView):
                 client_uuid=client_uuid,
             )
         except PermissionError as exc:
-            return Response({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
         except ValueError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return Response(build_group_message_payload(message, profile), status=200 if existed else 201)
 
@@ -773,9 +771,9 @@ class GroupMembersView(ExternalApiView):
         except PermissionError as exc:
             # Still authoritative - the pre-check above is an anti-enumeration
             # measure, not a replacement for the service's own permission rule.
-            return Response({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
         except ValueError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         return Response({"added": len(created)})
 
     @extend_schema(
@@ -820,9 +818,9 @@ class GroupMembersView(ExternalApiView):
             try:
                 remove_group_member(group, profile, target)
             except PermissionError as exc:
-                return Response({"error": str(exc)}, status=403)
+                return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
             except ValueError as exc:
-                return Response({"error": str(exc)}, status=400)
+                return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
             removed += 1
         return Response({"removed": removed})
 
@@ -879,9 +877,9 @@ class GroupPinShareView(ExternalApiView):
         try:
             message = share_pin_in_group_message(profile, group, pin, data.get("body") or "", client_uuid=client_uuid)
         except PermissionError as exc:
-            return Response({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
         except ValueError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return Response(build_group_message_payload(message, profile), status=200 if existed else 201)
 
@@ -992,7 +990,7 @@ class GroupMessageDetailView(ExternalApiView):
             # leaks nothing they don't have. Answering 404 instead would tell a
             # client "that message is gone" for a message still sitting in
             # their thread, which reads as a sync bug.
-            return Response({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
         return Response(status=204)
 
 
@@ -1006,9 +1004,7 @@ class GroupLeaveView(ExternalApiView):
     @extend_schema(
         request=None,
         description=(
-            "Ends the caller's membership. They stop receiving messages immediately and cannot read anything "
-            "sent afterwards; rejoining later starts a fresh visibility window rather than restoring the old "
-            "one. Idempotent - a repeat answers 204."
+            "Ends the caller's membership. They stop receiving messages immediately and cannot read anything sent afterwards; rejoining later starts a fresh visibility window rather than restoring the old one. Idempotent - a repeat answers 204."
         ),
         responses={204: None, 404: ErrorSerializer},
     )

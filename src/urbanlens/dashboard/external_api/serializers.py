@@ -495,7 +495,7 @@ PinSecurityUpdateSerializer = type(
             "    Every field is optional and an omitted one is left alone, so a client\n"
             '    that only learned the gate is now locked can send ``{"locked":\n'
             '    "everywhere"}`` without restating the other seven. None of them accept\n'
-            "    null: ``unknown`` is this model's own representation of \"not known\",\n"
+            '    null: ``unknown`` is this model\'s own representation of "not known",\n'
             "    and the columns are non-nullable, so clearing an indicator means\n"
             "    setting it back to ``unknown``.\n    "
         ),
@@ -1410,6 +1410,8 @@ class LabelMergeResponseSerializer(serializers.Serializer):
     target = LabelSerializer(read_only=True)
     merged_uuids = serializers.ListField(child=serializers.UUIDField(), read_only=True)
     pins_moved = serializers.IntegerField(read_only=True)
+
+
 class SafetyCheckinContactSerializer(serializers.Serializer):
     """One emergency contact on a check-in (read-only).
 
@@ -2442,6 +2444,8 @@ class JournalResponseSerializer(serializers.Serializer):
     #: distinguish an empty feed from an under-scoped one and prompt for
     #: re-authorization rather than rendering a permanently blank timeline.
     omitted_sources = serializers.ListField(child=serializers.CharField(), read_only=True)
+
+
 # -- Trips ---------------------------------------------------------------------
 #
 # Every serializer below reads either a model instance or one of the plain dicts
@@ -2790,10 +2794,7 @@ class TripCommentSerializer(serializers.Serializer):
         """Aggregate reactions with a per-caller ``reacted`` flag."""
         viewer = self.context.get("viewer")
         viewer_id = viewer.id if viewer else None
-        return [
-            {"emoji": emoji, "count": data["count"], "reacted": viewer_id in data["reacted_by"]}
-            for emoji, data in sorted(row["reactions"].items())
-        ]
+        return [{"emoji": emoji, "count": data["count"], "reacted": viewer_id in data["reacted_by"]} for emoji, data in sorted(row["reactions"].items())]
 
     def get_replies(self, row) -> list[dict]:
         """Serialize this comment's visible replies (never nested further)."""

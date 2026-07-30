@@ -107,6 +107,7 @@ def _trip_error_response(exc: TripError) -> HttpResponse:
     status = next((code for cls, code in _TRIP_ERROR_STATUS.items() if isinstance(exc, cls)), 400)
     return HttpResponse(message, status=status)
 
+
 #: Valid `sort`/`dir` query params for the trips list page (see `TripListView`/`TripCreateView`).
 TRIP_LIST_SORT_CHOICES = ("start_date", "updated")
 TRIP_LIST_DIRECTION_CHOICES = ("asc", "desc")
@@ -278,7 +279,6 @@ def _render_members_panel(request: HttpRequest, trip: Trip, profile: Profile) ->
             "can_add_members": _can_perform(profile, trip, trip.allow_add_members),
         },
     )
-
 
 
 def _activities_panel_html(request: HttpRequest, trip: Trip, profile: Profile, *, oob: bool = False) -> str:

@@ -48,12 +48,7 @@ def pending_merge_suggestions(profile: Profile) -> QuerySet[PinMergeSuggestion]:
         Newest-first queryset of pending rows, with both pins (and their
         locations) selected in one query.
     """
-    return (
-        PinMergeSuggestion.objects.for_profile(profile)
-        .pending()
-        .select_related("pin_a", "pin_a__location", "pin_b", "pin_b__location", "suggested_survivor")
-        .order_by("-created")
-    )
+    return PinMergeSuggestion.objects.for_profile(profile).pending().select_related("pin_a", "pin_a__location", "pin_b", "pin_b__location", "suggested_survivor").order_by("-created")
 
 
 def merge_suggestion_cards(suggestions: Iterable[PinMergeSuggestion]) -> list[dict[str, Any]]:

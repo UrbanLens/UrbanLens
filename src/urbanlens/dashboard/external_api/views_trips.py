@@ -223,7 +223,11 @@ class TripCalendarExportView(TripScopedApiView):
         if isinstance(exc, CalendarNotConfiguredError):
             # A deployment-level omission, not anything the caller did wrong.
             return Response({"error": _NOT_CONFIGURED_MESSAGE}, status=503)
-        return Response({"error": str(exc)}, status=502)
+        # Only a GatewayRequestError reaches here (the other two members of the
+        # except clause above are handled by the isinstance checks); every
+        # raise site constructs it from developer-authored, status-code-only
+        # text, never from an interpolated upstream exception/response body.
+        return Response({"error": str(exc)}, status=502)  # lgtm[py/stack-trace-exposure]
 
     def _status_response(self, trip: Trip, profile: Profile, extra: dict[str, Any]) -> Response:
         """Answer 200 with the refreshed status block plus this method's summary.
@@ -292,7 +296,7 @@ class TripCalendarExportView(TripScopedApiView):
             # trip_to_event_body's "no dates" refusal. TripError is also a
             # ValueError, but the trip was resolved before this block, so
             # nothing raised in here can be one.
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         except (GoogleAuthExpiredError, CalendarNotConfiguredError, GatewayRequestError) as exc:
             return self._gateway_failure(request, account, exc)
 

@@ -69,9 +69,7 @@ def pick_next_round_content(profiles: Iterable[Profile], *, exclude_wiki_ids: It
         return None
 
     pool = list(
-        eligibility.eligible_wikis(profiles[0], exclude_wiki_ids=exclude_wiki_ids)
-        if len(profiles) == 1
-        else eligibility.eligible_wikis_for_all(profiles, exclude_wiki_ids=exclude_wiki_ids),
+        eligibility.eligible_wikis(profiles[0], exclude_wiki_ids=exclude_wiki_ids) if len(profiles) == 1 else eligibility.eligible_wikis_for_all(profiles, exclude_wiki_ids=exclude_wiki_ids),
     )
     if not pool:
         return None

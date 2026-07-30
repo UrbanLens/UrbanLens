@@ -364,4 +364,3 @@ class PartneredCheckinListResponseSerializer(serializers.Serializer):
     next = serializers.CharField(read_only=True, allow_null=True)
     previous = serializers.CharField(read_only=True, allow_null=True)
     results = PartneredCheckinSummarySerializer(many=True, read_only=True)
-

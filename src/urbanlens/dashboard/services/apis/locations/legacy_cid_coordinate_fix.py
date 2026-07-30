@@ -318,13 +318,7 @@ def _match_by_coordinate_name(profile: Profile, name: str) -> Pin | None:
             return verbatim
 
     # Same place, written differently ("42.1234, -73.5678" vs 42°07'24"N ...).
-    candidates = (
-        _legacy_pins(profile)
-        .filter(Q(name__iregex=_COORDINATE_NAME_HINT) | Q(aliases__name__iregex=_COORDINATE_NAME_HINT))
-        .distinct()
-        .prefetch_related("aliases")
-        .order_by("created")[:_MAX_CROSS_FORMAT_CANDIDATES]
-    )
+    candidates = _legacy_pins(profile).filter(Q(name__iregex=_COORDINATE_NAME_HINT) | Q(aliases__name__iregex=_COORDINATE_NAME_HINT)).distinct().prefetch_related("aliases").order_by("created")[:_MAX_CROSS_FORMAT_CANDIDATES]
     for candidate in candidates:
         names = [candidate.name, *(alias.name for alias in candidate.aliases.all())]
         if any(_same_coordinates(parse_coordinate_name(candidate_name), target) for candidate_name in names):

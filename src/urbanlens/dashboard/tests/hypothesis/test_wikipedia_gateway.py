@@ -145,7 +145,7 @@ class GetArticleMediaTests(SimpleTestCase):
 
     This exists specifically because a Wikimedia Commons text search (see
     WikimediaGateway) can miss images that are only reachable through an
-    in-body gallery and aren't independently discoverable by name - 
+    in-body gallery and aren't independently discoverable by name -
     "Wikipedia article images not reliably reaching Media section" entry.
     """
 

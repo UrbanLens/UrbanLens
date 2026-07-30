@@ -92,7 +92,7 @@ class PinLinksView(LoginRequiredMixin, View):
         try:
             create_pin_link(pin, name=(request.POST.get("name") or ""), url=(request.POST.get("url") or ""))
         except InvalidLinkError as exc:
-            return HttpResponse(str(exc), status=400)
+            return HttpResponse(str(exc), status=400)  # lgtm[py/stack-trace-exposure]
         return _render_pin_links(request, pin)
 
 

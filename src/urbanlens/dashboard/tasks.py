@@ -1241,11 +1241,7 @@ def resolve_deferred_pin_locations(
         importance=Importance.MEDIUM,
         notification_type=NotificationType.PIN_IMPORT_COMPLETE,
         title=f"Finished placing {created_count + exists_count} pin(s)",
-        message=(
-            f"{created_count} created · {exists_count} existed · {skipped_count} skipped"
-            + (f" ({unresolved} could not be located)" if unresolved else "")
-            + f" — resolved via {provider_label}."
-        ),
+        message=(f"{created_count} created · {exists_count} existed · {skipped_count} skipped" + (f" ({unresolved} could not be located)" if unresolved else "") + f" — resolved via {provider_label}."),
         url=reverse("map.view"),
     )
     update_task_progress(self, current=total, total=total, message="Done.")

@@ -523,4 +523,3 @@ class PinnedLocationsJsonView(LoginRequiredMixin, View):
             if not q or q in name.lower():
                 results.append({"uuid": str(pin.location.uuid), "name": name})
         return HttpResponse(json.dumps(results), content_type="application/json")
-

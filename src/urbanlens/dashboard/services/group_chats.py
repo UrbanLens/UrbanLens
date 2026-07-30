@@ -609,9 +609,7 @@ def broadcast_group_message(message: GroupMessage) -> None:
     # otherwise re-run this same exists() query once per member.
     has_share = message.shares.exists()
 
-    deliveries = [
-        (direct_message_group_name(membership.profile_id), serialize_group_message(message, viewer=membership.profile, has_share=has_share)) for membership in members
-    ]
+    deliveries = [(direct_message_group_name(membership.profile_id), serialize_group_message(message, viewer=membership.profile, has_share=has_share)) for membership in members]
 
     def _send() -> None:
         layer = get_channel_layer()
@@ -837,11 +835,7 @@ def group_thread_page(membership: GroupChatMembership, *, before_id: int | None 
     # this page now summarizes reactions per message (see
     # ``external_api.serializers_messaging.build_group_message_payload``);
     # without it a 50-message page issues 50 extra queries.
-    queryset = (
-        GroupMessage.objects.visible_window(membership)
-        .select_related("sender", "sender__user")
-        .prefetch_related("shares__pin_share__pin", "shares__pin_share__pin__location", "reactions__profile")
-    )
+    queryset = GroupMessage.objects.visible_window(membership).select_related("sender", "sender__user").prefetch_related("shares__pin_share__pin", "shares__pin_share__pin__location", "reactions__profile")
     if before_id is not None:
         queryset = queryset.filter(pk__lt=before_id)
     page = list(queryset.order_by("-id")[: limit + 1])

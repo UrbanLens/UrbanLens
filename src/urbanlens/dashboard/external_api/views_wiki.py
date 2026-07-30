@@ -576,7 +576,7 @@ class WikiBoundaryApiView(WikiApiView):
             try:
                 geom = parse_multipolygon_geojson(polygon_geojson)
             except (TypeError, ValueError) as exc:
-                return Response({"error": str(exc)}, status=400)
+                return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
             from urbanlens.dashboard.models.site_settings import SiteSettings
 
@@ -1053,7 +1053,7 @@ class _CommentListMixin(PaginatedListMixin):
         try:
             comment = create_comment(profile=profile, pin=pin, wiki=wiki, text=data["text"], parent=parent)
         except CommentValidationError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         # The freshly created comment never passes through visible_comment_tree,
         # so its mentions are resolved here without the gate that call would

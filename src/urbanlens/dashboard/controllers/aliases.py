@@ -22,8 +22,17 @@ from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias, WikiAl
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, WikiAutoRemoval
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison, persist_official_aliases_for_location
-from urbanlens.dashboard.services.pin_subresources import AliasExistsError, AliasIsCurrentNameError, create_pin_alias, delete_pin_alias, promote_alias_to_name
+from urbanlens.dashboard.services.locations.naming import (
+    normalize_name_for_comparison,
+    persist_official_aliases_for_location,
+)
+from urbanlens.dashboard.services.pin_subresources import (
+    AliasExistsError,
+    AliasIsCurrentNameError,
+    create_pin_alias,
+    delete_pin_alias,
+    promote_alias_to_name,
+)
 from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
 from urbanlens.dashboard.services.wiki_aliases import promote_wiki_alias_to_name
 
@@ -149,7 +158,7 @@ class PinAliasView(LoginRequiredMixin, View):
         try:
             create_pin_alias(pin, name=name, kind=kind)
         except AliasExistsError as exc:
-            return HttpResponse(str(exc), status=409)
+            return HttpResponse(str(exc), status=409)  # lgtm[py/stack-trace-exposure]
         return _render_pin_panel(request, pin)
 
 
@@ -160,7 +169,7 @@ class PinAliasDeleteView(LoginRequiredMixin, View):
         try:
             delete_pin_alias(pin, alias)
         except AliasIsCurrentNameError as exc:
-            return HttpResponse(str(exc), status=400)
+            return HttpResponse(str(exc), status=400)  # lgtm[py/stack-trace-exposure]
         return _render_pin_panel(request, pin)
 
 

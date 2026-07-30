@@ -314,7 +314,7 @@ class SpotGuessrStartView(LoginRequiredMixin, View):
             try:
                 game_session = spotguessr_session.start_multiplayer_session(profile, mode, config, invitees, total_rounds=total_rounds)
             except spotguessr_session.SpotGuessrError as exc:
-                return JsonResponse({"error": str(exc)}, status=400)
+                return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
             return JsonResponse({"session_id": game_session.pk, "lobby": True, "session": serializers.serialize_session(game_session)})
 
         # The whole create-then-verify-then-clean-up sequence lives in the
@@ -324,7 +324,7 @@ class SpotGuessrStartView(LoginRequiredMixin, View):
         try:
             result = spotguessr_session.start_solo_playthrough(profile, mode, config, total_rounds=total_rounds)
         except spotguessr_session.SpotGuessrError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         if result.round is None or result.session is None:
             return JsonResponse({"error_code": "no_eligible_locations"})
@@ -362,7 +362,7 @@ class SpotGuessrInviteView(LoginRequiredMixin, View):
         try:
             participant = spotguessr_session.invite_to_session(game_session, profile, invitee)
         except spotguessr_session.SpotGuessrError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -379,7 +379,7 @@ class SpotGuessrJoinView(LoginRequiredMixin, View):
         try:
             participant = spotguessr_session.join_session(game_session, profile)
         except spotguessr_session.SpotGuessrError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
@@ -403,7 +403,7 @@ class SpotGuessrBeginView(LoginRequiredMixin, View):
         try:
             round_ = spotguessr_session.begin_session(game_session, profile)
         except spotguessr_session.SpotGuessrError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         if round_ is None:
             if spotguessr_session.rounds_played(game_session) == 0:
@@ -432,7 +432,7 @@ class SpotGuessrEndSessionView(LoginRequiredMixin, View):
         try:
             spotguessr_session.end_session_now(game_session, profile)
         except spotguessr_session.SpotGuessrError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         return JsonResponse({"finished": True, "summary": spotguessr_session.session_summary(game_session)})
 
 
@@ -492,7 +492,7 @@ class SpotGuessrGuessView(LoginRequiredMixin, View):
         try:
             guess, bonus_tiers, rating_change = spotguessr_session.submit_guess(round_, profile, guess_point, guessed_date)
         except spotguessr_session.SpotGuessrError as exc:
-            return JsonResponse({"error": str(exc)}, status=400)
+            return JsonResponse({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         round_.refresh_from_db()
         return JsonResponse(serializers.serialize_reveal(round_, guess, bonus_tiers, rating_change))

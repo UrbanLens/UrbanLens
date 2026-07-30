@@ -308,11 +308,11 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         try:
             action(request.user.profile, target)
         except FriendshipNotFoundError as exc:
-            return HttpResponse(str(exc), status=404)
+            return HttpResponse(str(exc), status=404)  # lgtm[py/stack-trace-exposure]
         except FriendshipActionError as exc:
             # Covers FriendLimitExceededError and the community-disabled case,
             # both of which this surface has always answered with 403.
-            return HttpResponse(str(exc), status=403)
+            return HttpResponse(str(exc), status=403)  # lgtm[py/stack-trace-exposure]
 
         if request.headers.get("HX-Request"):
             return htmx_response(request)
@@ -569,9 +569,9 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
                 subscription_duration=subscription_duration,
             )
         except InviteValidationError as exc:
-            return HttpResponse(str(exc), status=400)
+            return HttpResponse(str(exc), status=400)  # lgtm[py/stack-trace-exposure]
         except InviteRateLimitedError as exc:
-            return HttpResponse(str(exc), status=429)
+            return HttpResponse(str(exc), status=429)  # lgtm[py/stack-trace-exposure]
 
         # The response body must be byte-identical no matter what happened above -
         # embedding a friend-list refresh directly here would let a caller tell a

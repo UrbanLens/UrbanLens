@@ -142,7 +142,7 @@ def set_nickname(author: Profile, subject: Profile, nickname: str) -> ProfileNic
         AnnotationError: The nickname is blank or over
             :data:`MAX_PROFILE_NICKNAME_LENGTH`.
     """
-    require_distinct(author, subject,"Cannot nickname your own profile.")
+    require_distinct(author, subject, "Cannot nickname your own profile.")
 
     nickname = (nickname or "").strip()
     if not nickname:
@@ -190,7 +190,7 @@ def set_trust(author: Profile, subject: Profile, rating: int) -> ProfileTrust:
             ``update_or_create`` does not run them - an out-of-range value
             would otherwise be written and only fail later, if ever.
     """
-    require_distinct(author, subject,"Cannot rate your own profile.")
+    require_distinct(author, subject, "Cannot rate your own profile.")
 
     if not MIN_TRUST_RATING <= rating <= MAX_TRUST_RATING:
         raise AnnotationError(f"Trust rating must be between {MIN_TRUST_RATING} and {MAX_TRUST_RATING}.")

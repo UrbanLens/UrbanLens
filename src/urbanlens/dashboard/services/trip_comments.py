@@ -49,6 +49,7 @@ class TripCommentData(TripReplyData):
 
     replies: list[TripReplyData]
 
+
 #: The reactions a trip (or pin, or wiki) comment may carry. Re-exported from
 #: ``services.comments`` (the single source of truth for the set) so the
 #: external API's trip serializers can bound their ``emoji`` field without

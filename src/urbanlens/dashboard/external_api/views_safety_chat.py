@@ -168,12 +168,12 @@ class SafetyCheckinMessagesView(SafetyCheckinViewerScopedView, PaginatedListMixi
             # check-in's plaintext is simply already sealed into its encrypted
             # archive. A client must be able to tell this from a 400 so it can
             # retire the conversation instead of asking the user to retype.
-            return Response({"error": str(exc)}, status=409)
+            return Response({"error": str(exc)}, status=409)  # lgtm[py/stack-trace-exposure]
         except ValueError as exc:
             # Anything the serializer's bounds did not already catch. The
             # service's messages are developer-authored constants, so echoing
             # them is safe.
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return Response(SafetyCheckinMessageSerializer(message, context={"viewer": viewer}).data, status=201)
 

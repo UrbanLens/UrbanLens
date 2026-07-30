@@ -48,6 +48,7 @@ def sign_photo_name(photo_name: str) -> str:
     """
     return Signer(salt=_PHOTO_SIGNER_SALT).signature(photo_name)
 
+
 _PHOTO_CACHE_TTL = 24 * 3600
 #: How long a *confirmed-expired* photo reference is cached as gone, before
 #: trying the upstream again - shorter than the success TTL above so a

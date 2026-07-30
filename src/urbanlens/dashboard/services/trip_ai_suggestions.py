@@ -349,7 +349,7 @@ _INSTRUCTIONS = (
     '"pin_suggestions": [{"index": int, "reason": str}], "schedule": {"order": [int, ...], '
     '"reason": str}}. "index" must be one of the numbered candidate pins given (omit '
     'pin_suggestions or leave it empty if none are worth adding). "order" must be a '
-    'permutation of the existing activity ids given, in your suggested order (omit '
+    "permutation of the existing activity ids given, in your suggested order (omit "
     '"schedule" or set it to null if no reordering is useful, e.g. fewer than two '
     "activities, or the current order is already good). Keep every reason to one short, "
     "concrete sentence grounded in the data given - never invent places, ratings, dates, or "

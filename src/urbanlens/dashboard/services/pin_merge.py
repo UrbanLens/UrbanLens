@@ -277,9 +277,7 @@ def _merge_shares(survivor: Pin, loser: Pin) -> None:
     survivor_pending = set(PinShare.objects.filter(pin=survivor, status=PinShareStatus.PENDING).values_list("to_profile_id", flat=True))
     survivor_detected = set(PinShare.objects.filter(pin=survivor, origin=PinShareOrigin.MAP_DETECTED).values_list("to_profile_id", flat=True))
     for share in list(PinShare.objects.filter(pin=loser)):
-        is_duplicate = (share.status == PinShareStatus.PENDING and share.to_profile_id in survivor_pending) or (
-            share.origin == PinShareOrigin.MAP_DETECTED and share.to_profile_id in survivor_detected
-        )
+        is_duplicate = (share.status == PinShareStatus.PENDING and share.to_profile_id in survivor_pending) or (share.origin == PinShareOrigin.MAP_DETECTED and share.to_profile_id in survivor_detected)
         if is_duplicate:
             share.delete()
             continue

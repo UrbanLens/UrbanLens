@@ -427,7 +427,7 @@ def resolve_contact_inputs(owner: Profile, entries: Sequence[Mapping[str, str]])
         if username:
             connection = connections_by_username.get(username.lower())
             if connection is None:
-                rejected.append(f'"{username}" isn\'t one of your connections and can\'t be added as an emergency contact.')
+                rejected.append(f"\"{username}\" isn't one of your connections and can't be added as an emergency contact.")
                 continue
             inputs.append((connection, None, connection.username))
             continue
@@ -587,10 +587,7 @@ def list_partnered_checkins(profile: Profile) -> SafetyCheckinQuerySet:
         # the filter matched and make partner_count permanently 1 (the caller's
         # own row) on every result. Annotating first forces a second, unfiltered
         # join, so the counts describe the check-in rather than the query.
-        SafetyCheckin.objects.annotate(contact_count=Count("contacts", distinct=True), partner_count=Count("partners", distinct=True))
-        .partnered_with(profile)
-        .select_related("profile", "trip", "archive")
-        .order_by("-checkin_by", "-pk")
+        SafetyCheckin.objects.annotate(contact_count=Count("contacts", distinct=True), partner_count=Count("partners", distinct=True)).partnered_with(profile).select_related("profile", "trip", "archive").order_by("-checkin_by", "-pk")
     )
 
 
@@ -1063,10 +1060,7 @@ def _build_archive_payload(checkin: SafetyCheckin) -> dict:
         "resolved_at": checkin.resolved_at.isoformat() if checkin.resolved_at else None,
         "contacts": [{"display_name": contact.display_name, "email": contact.email} for contact in checkin.contacts.select_related("contact_profile").all()],
         "partners": [partner.profile.username for partner in checkin.partners.select_related("profile").all()],
-        "messages": [
-            {"sender_name": message.sender_name, "body": message.body, "created": message.created.isoformat()}
-            for message in checkin.messages.select_related("sender_profile", "sender_contact").all()
-        ],
+        "messages": [{"sender_name": message.sender_name, "body": message.body, "created": message.created.isoformat()} for message in checkin.messages.select_related("sender_profile", "sender_contact").all()],
     }
 
 
@@ -1964,11 +1958,15 @@ def _resolve_as_found_safe(checkin: SafetyCheckin, *, resolved_by_label: str, ex
     # pass an in-memory `is_resolved` check and double-notify everyone/double-schedule
     # archival. Only the row matching the WHERE clause at UPDATE time - i.e. still
     # unresolved - gets touched; the loser's `updated` count is 0.
-    updated = SafetyCheckin.objects.filter(pk=checkin.pk).exclude(status__in=SafetyCheckinStatus.resolved_statuses()).update(
-        status=SafetyCheckinStatus.FOUND_SAFE,
-        resolved_at=resolved_at,
-        resolved_by_label=resolved_by_label,
-        updated=resolved_at,
+    updated = (
+        SafetyCheckin.objects.filter(pk=checkin.pk)
+        .exclude(status__in=SafetyCheckinStatus.resolved_statuses())
+        .update(
+            status=SafetyCheckinStatus.FOUND_SAFE,
+            resolved_at=resolved_at,
+            resolved_by_label=resolved_by_label,
+            updated=resolved_at,
+        )
     )
     if not updated:
         return False

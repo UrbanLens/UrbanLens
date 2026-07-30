@@ -300,7 +300,9 @@ function urlFor(template: string, sessionIdValue?: number, roundIdValue?: number
 
 async function postForm(url: string, data: Record<string, string> | URLSearchParams): Promise<any> {
     const body = data instanceof URLSearchParams ? data : new URLSearchParams(data);
-    const response = await fetch(url, {
+    // url is always urlFor(urls.<name>, ...) - a same-origin, server-rendered path
+    // template with only numeric ids substituted, never an arbitrary/external url.
+    const response = await fetch(url, {  // lgtm[js/request-forgery]
         method: "POST",
         headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
         body,
@@ -890,7 +892,9 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
         nameHeading.hidden = true;
         pinSearchWrap.hidden = false;
         photo.hidden = false;
-        photo.src = (round.mode === "street_view" ? round.street_view_image : round.image_url) ?? "";
+        // street_view_image is a server-built data: URI (services.spotguessr.street_view);
+        // image_url is a Django ImageField storage path. Neither is user-typed.
+        photo.src = (round.mode === "street_view" ? round.street_view_image : round.image_url) ?? ""; // lgtm[js/xss,js/client-side-unvalidated-url-redirection]
     }
 
     el("sg-date-field").hidden = !state.dateGuessingEnabled;
@@ -989,7 +993,8 @@ function renderScoreCard(data: ScoreCardData, rank?: number, animatePoints = fal
         if (data.avatarUrl) {
             const img = document.createElement("img");
             img.className = "friend-avatar-sm";
-            img.src = data.avatarUrl;
+            // data.avatarUrl is Profile.avatar.url (Django storage path), not user-typed.
+            img.src = data.avatarUrl; // lgtm[js/xss,js/client-side-unvalidated-url-redirection]
             img.alt = data.username;
             avatarWrap.appendChild(img);
         } else {

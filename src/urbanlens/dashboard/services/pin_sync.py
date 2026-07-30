@@ -208,9 +208,7 @@ def serialize_sync_pin(service: MapPinPayloadService, pin: Pin) -> dict[str, Any
     # without re-deriving it - and it cannot be added to the map payload itself
     # without forcing a frontend cache-version bump. Labels are already
     # prefetched by prepare_queryset, so this adds no query.
-    payload["tags"] = [
-        {"id": label.id, "name": label.name, "color": label.effective_color, "icon": label.effective_icon, "kind": label.kind} for label in service.display_labels(pin)
-    ]
+    payload["tags"] = [{"id": label.id, "name": label.name, "color": label.effective_color, "icon": label.effective_icon, "kind": label.kind} for label in service.display_labels(pin)]
     parent = pin.parent_pin
     payload["parent_uuid"] = str(parent.uuid) if parent is not None else None
     payload["created"] = pin.created.isoformat()

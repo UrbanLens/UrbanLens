@@ -151,7 +151,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
         try:
             location = resolve_child_pin_location(parent.profile, lat, lon)
         except PinCreationError as exc:
-            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+            return JsonResponse({"ok": False, "error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         detail_name = body.get("name") or None
         pin_type, pin_type_chosen = _requested_pin_type(body)
@@ -204,7 +204,7 @@ class DetailPinEditView(LoginRequiredMixin, View):
             try:
                 new_location = resolve_child_pin_location(detail_pin.profile, new_latitude, new_longitude, exclude_pin=detail_pin)
             except PinCreationError as exc:
-                return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+                return JsonResponse({"ok": False, "error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         for field, value in {
             "name": body.get("name") or None,
@@ -353,7 +353,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
         try:
             child_location = _location_for_child_wiki(lat, lon)
         except ChildWikiLocationError as exc:
-            return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+            return JsonResponse({"ok": False, "error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         child_name = body.get("name") or wiki.name
         pin_type, pin_type_chosen = _requested_pin_type(body)
@@ -411,7 +411,7 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
             try:
                 new_location = _location_for_child_wiki(new_latitude, new_longitude, exclude_wiki=child_wiki)
             except ChildWikiLocationError as exc:
-                return JsonResponse({"ok": False, "error": str(exc)}, status=400)
+                return JsonResponse({"ok": False, "error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         # Style/content fields update silently (no WikiEdit) - same reasoning
         # as personal detail pins: these autosave on every panel change, and a

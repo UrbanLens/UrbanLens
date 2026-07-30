@@ -236,7 +236,9 @@ function urlFor(template: string, sessionIdValue?: number, roundIdValue?: number
 
 async function postForm(url: string, data: Record<string, string> | URLSearchParams): Promise<any> {
     const body = data instanceof URLSearchParams ? data : new URLSearchParams(data);
-    const response = await fetch(url, {
+    // url is always urlFor(urls.<name>, ...) - a same-origin, server-rendered path
+    // template with only numeric ids substituted, never an arbitrary/external url.
+    const response = await fetch(url, {  // lgtm[js/request-forgery]
         method: "POST",
         headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
         body,
@@ -575,7 +577,9 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
 
     const photo = el<HTMLImageElement>("cs-round-photo");
     if (round.field_kind === FIELD_KIND.PHOTO_COORDINATES && round.image_url) {
-        photo.src = round.image_url;
+        // round.image_url is a Django ImageField storage path (Image.image.url), never
+        // a user-typed value - see services.consensus.serializers.serialize_round.
+        photo.src = round.image_url; // lgtm[js/xss,js/client-side-unvalidated-url-redirection]
         photo.hidden = false;
     } else {
         photo.hidden = true;
@@ -659,7 +663,8 @@ async function uploadPhoto(): Promise<void> {
     }
     const formData = new FormData();
     formData.append("image", file);
-    const response = await fetch(urlFor(urls.photo, state.sessionId, state.currentRoundId), {
+    // Same-origin urlFor(...) path template - see postForm's note above.
+    const response = await fetch(urlFor(urls.photo, state.sessionId, state.currentRoundId), {  // lgtm[js/request-forgery]
         method: "POST",
         headers: { "X-CSRFToken": getCsrfToken() },
         body: formData,
@@ -736,7 +741,8 @@ function renderResultsList(answers: RevealAnswer[]): void {
         if (answer.avatar_url) {
             const img = document.createElement("img");
             img.className = "friend-avatar-sm";
-            img.src = answer.avatar_url;
+            // answer.avatar_url is Profile.avatar.url (Django storage path), not user-typed.
+            img.src = answer.avatar_url; // lgtm[js/xss,js/client-side-unvalidated-url-redirection]
             img.alt = answer.username;
             avatarWrap.appendChild(img);
         } else {

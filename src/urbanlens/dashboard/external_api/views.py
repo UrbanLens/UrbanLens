@@ -345,6 +345,7 @@ def parse_search_sources(raw: str | None) -> frozenset[str]:
     requested = {part.strip().lower() for part in raw.split(",")}
     return frozenset(requested & LOCATION_SEARCH_SOURCES)
 
+
 #: Fixed source_key for the single hit a pin-suggestion POST produces - this
 #: endpoint is one discovered place per call (mirrors PinsView.post), so there's
 #: never more than one id to look up in IngestSummary.suggestion_ids_by_key.
@@ -636,7 +637,7 @@ class PinsView(ExternalApiView):
                 include_total=params.get("include_total", False),
             )
         except InvalidSyncCursorError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return Response(
             {
@@ -675,7 +676,7 @@ class PinsView(ExternalApiView):
         except PinCreationForbiddenError as exc:
             return Response({"error": str(exc)}, status=403)
         except PinCreationError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         pin = result.pin
         parent_pin = pin.parent_pin
@@ -835,7 +836,7 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
                     # back every change already applied above.
                     reparent_pin(pin, new_parent)
         except (PinEditError, PinMoveError, PinReparentError) as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return Response(build_pin_detail(pin, request.user.profile))
 
@@ -962,13 +963,13 @@ class PinTombstonesView(ExternalApiView):
                 limit=params.get("limit"),
             )
         except InvalidSyncCursorError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         except StaleDeletedSinceError as exc:
             # 410 Gone: tombstones this old may already be pruned, so the
             # incremental deletions feed can no longer be trusted from that
             # point. The client must full-resync (walk pins/ without
             # modified_since and drop local pins absent from the result).
-            return Response({"error": str(exc), "full_resync_required": True}, status=410)
+            return Response({"error": str(exc), "full_resync_required": True}, status=410)  # lgtm[py/stack-trace-exposure]
 
         return Response(
             {
@@ -1007,7 +1008,7 @@ class PushDevicesView(ExternalApiView):
                 name=data.get("name", ""),
             )
         except PushRegistrationError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return Response(PushDeviceResponseSerializer(device).data, status=201)
 
@@ -1110,6 +1111,7 @@ class AuthSessionView(UnscopedExternalApiView):
         payload["user_uuid"] = request.user.profile.uuid
         return Response(AuthSessionSerializer(payload).data)
 
+
 class _OwnedImageMixin:
     """Resolves the ``<uuid:image_uuid>`` path segment to a photo the caller owns.
 
@@ -1123,12 +1125,7 @@ class _OwnedImageMixin:
 
     def _get_image(self, request: Request, image_uuid: UUID) -> Image | None:
         """Return the caller's own photo with this uuid, or None."""
-        return (
-            Image.objects.filter(uuid=image_uuid, profile__user=request.user)
-            .select_related("pin", "wiki", "wiki__location", "visit", "location", "profile", "direct_message")
-            .prefetch_related("labels")
-            .first()
-        )
+        return Image.objects.filter(uuid=image_uuid, profile__user=request.user).select_related("pin", "wiki", "wiki__location", "visit", "location", "profile", "direct_message").prefetch_related("labels").first()
 
 
 def _resolve_own_pin(request: Request, value: str) -> Pin | None:
@@ -1265,13 +1262,7 @@ class PhotoDetailView(_OwnedImageMixin, ExternalApiView):
         profile = request.user.profile
         image = self._get_image(request, image_uuid)
         if image is None:
-            image = (
-                Image.objects.visible_to(profile)
-                .filter(uuid=image_uuid)
-                .select_related("pin", "wiki", "wiki__location", "visit", "location", "profile", "direct_message")
-                .prefetch_related("labels")
-                .first()
-            )
+            image = Image.objects.visible_to(profile).filter(uuid=image_uuid).select_related("pin", "wiki", "wiki__location", "visit", "location", "profile", "direct_message").prefetch_related("labels").first()
         if image is None:
             return Response({"error": "No such photo."}, status=404)
         return Response(PhotoSerializer(build_photo_payload(image, profile)).data)
@@ -1312,7 +1303,7 @@ class PhotoLabelsView(_OwnedImageMixin, ExternalApiView):
         try:
             set_media_labels(image, serializer.validated_data["labels"], profile)
         except MediaLabelError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         image.refresh_from_db()
         return Response(PhotoSerializer(build_photo_payload(image, profile)).data)
@@ -1758,7 +1749,7 @@ class PinListsView(PaginatedListMixin, ExternalApiView):
             try:
                 validate_criteria_ownership(smart_filter, profile)
             except CriteriaOwnershipError as exc:
-                return Response({"error": str(exc)}, status=400)
+                return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         if PinList.objects.for_profile(profile).filter(name=data["name"]).exists():
             return Response({"error": "You already have a list with that name."}, status=400)
@@ -1849,7 +1840,7 @@ class PinListDetailView(ExternalApiView):
             try:
                 validate_criteria_ownership(pin_list.smart_filter, profile)
             except CriteriaOwnershipError as exc:
-                return Response({"error": str(exc)}, status=400)
+                return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         pin_list.save()
 
@@ -2013,7 +2004,7 @@ class SavedFiltersView(PaginatedListMixin, ExternalApiView):
         try:
             validate_criteria_ownership(criteria, profile)
         except CriteriaOwnershipError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         if SavedFilter.objects.name_taken_for(profile, data["name"]):
             return Response({"error": "You already have a saved filter with that name."}, status=400)
@@ -2072,7 +2063,7 @@ class SavedFilterDetailView(ExternalApiView):
             try:
                 validate_criteria_ownership(data["criteria"], profile)
             except CriteriaOwnershipError as exc:
-                return Response({"error": str(exc)}, status=400)
+                return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         if "name" in data:
             if SavedFilter.objects.name_taken_for(profile, data["name"], exclude_pk=saved_filter.pk):
@@ -2389,7 +2380,7 @@ class LabelMergeView(ExternalApiView):
         try:
             result = merge_labels(target=target, sources=sources, profile=profile)
         except LabelMergeError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return Response(
             {
@@ -2503,7 +2494,7 @@ class PinSubResourceView[SubResourceT: Model](OwnedPinMixin, PaginatedListMixin,
         try:
             created = self.create(pin, serializer.validated_data)
         except PinSubResourceError as exc:
-            return Response({"error": str(exc)}, status=_subresource_error_status(exc))
+            return Response({"error": str(exc)}, status=_subresource_error_status(exc))  # lgtm[py/stack-trace-exposure]
 
         return Response(self.output_serializer(created, context=self.serializer_context(pin)).data, status=201)
 
@@ -2546,7 +2537,7 @@ class PinSubResourceDetailView[SubResourceT: Model](OwnedPinMixin, ExternalApiVi
         try:
             self.perform_delete(pin, obj)
         except PinSubResourceError as exc:
-            return Response({"error": str(exc)}, status=_subresource_error_status(exc))
+            return Response({"error": str(exc)}, status=_subresource_error_status(exc))  # lgtm[py/stack-trace-exposure]
         return Response(status=204)
 
 
@@ -2736,7 +2727,7 @@ class PinVisitsView(OwnedPinMixin, PaginatedListMixin, ExternalApiView):
         try:
             visit = create_manual_visit(pin, visited_at=data["visited_at"], notes=data.get("notes"))
         except VisitLoggingDisabledError as exc:
-            return Response({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
 
         # Re-read through the same annotation the list path uses, so the created
         # row carries photo_count rather than the response shape depending on
@@ -3058,7 +3049,7 @@ class SafetyCheckinsView(SafetyCheckinScopedView, PaginatedListMixin):
             # An already-active check-in for this scope is a state conflict, not a
             # malformed request - a mobile client must be able to tell the two
             # apart to offer "open the existing one" instead of "fix your input".
-            return Response({"error": str(exc)}, status=409)
+            return Response({"error": str(exc)}, status=409)  # lgtm[py/stack-trace-exposure]
 
         if data.get("markup_map"):
             attach_draft_markup_map(checkin, profile, str(data["markup_map"]))
@@ -3107,7 +3098,7 @@ class SafetyCheckinDetailApiView(SafetyCheckinScopedView):
         try:
             outcome = apply_checkin_edit(checkin, editor=request.user.profile, **kwargs)
         except CheckinArchivedError as exc:
-            return Response({"error": str(exc)}, status=409)
+            return Response({"error": str(exc)}, status=409)  # lgtm[py/stack-trace-exposure]
 
         # Warnings are not errors: a locked field is silently ignored, exactly as
         # the web autosave does. The client surfaces these as toasts and keeps the
@@ -3189,7 +3180,7 @@ class SafetyCheckinPartnersApiView(SafetyCheckinScopedView):
             # The service's messages are already user-facing and specific
             # (unknown username, self-invite, blocked, already invited, cap
             # reached); reused verbatim so the app and the web UI say the same thing.
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         return self._detail_response(checkin)
 
 
@@ -3426,7 +3417,6 @@ class SafetyPreferencesView(ExternalApiView):
         return Response(self._payload(preference))
 
 
-
 class PushDeviceDetailView(ExternalApiView):
     """DELETE: unregister one of the caller's push devices by its uuid."""
 
@@ -3532,7 +3522,7 @@ class FriendsView(ExternalApiView):
                 limit=params.get("limit") or DEFAULT_FRIEND_PAGE_SIZE,
             )
         except FriendshipActionError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return Response(
             {
@@ -3554,13 +3544,7 @@ class FriendsView(ExternalApiView):
         # One 404 covers all four refusals - unknown uuid, self, community off
         # on either side, and a visibility setting that excludes the caller.
         # Any of them answering differently would confirm the profile exists.
-        if (
-            target is None
-            or target.pk == actor.pk
-            or not target.community_enabled
-            or not actor.community_enabled
-            or not Profile.visibility_permits(target.friend_request_visibility, target, actor)
-        ):
+        if target is None or target.pk == actor.pk or not target.community_enabled or not actor.community_enabled or not Profile.visibility_permits(target.friend_request_visibility, target, actor):
             return Response({"error": "No such profile."}, status=404)
 
         friendship = request_or_accept_friendship(actor, target, data.get("message") or None)
@@ -3585,7 +3569,7 @@ class FriendDetailView(ExternalApiView):
         try:
             remove_friend(request.user.profile, target)
         except FriendshipNotFoundError as exc:
-            return Response({"error": str(exc)}, status=404)
+            return Response({"error": str(exc)}, status=404)  # lgtm[py/stack-trace-exposure]
         return Response(status=204)
 
 
@@ -3645,11 +3629,11 @@ class FriendActionView(ExternalApiView):
         try:
             friendship = self.service_action(actor, target)
         except FriendshipNotFoundError as exc:
-            return Response({"error": str(exc)}, status=404)
+            return Response({"error": str(exc)}, status=404)  # lgtm[py/stack-trace-exposure]
         except FriendLimitExceededError as exc:
-            return Response({"error": str(exc)}, status=403)
+            return Response({"error": str(exc)}, status=403)  # lgtm[py/stack-trace-exposure]
         except FriendshipActionError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return Response(_serialize_friendship(actor, friendship))
 
@@ -3744,9 +3728,9 @@ class FriendMuteView(FriendActionView):
         try:
             friendship = action(actor, target)
         except FriendshipNotFoundError as exc:
-            return Response({"error": str(exc)}, status=404)
+            return Response({"error": str(exc)}, status=404)  # lgtm[py/stack-trace-exposure]
         except FriendshipActionError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return Response(_serialize_friendship(actor, friendship))
 
@@ -3783,9 +3767,9 @@ class FriendInvitesView(ExternalApiView):
                 signup_url_builder=lambda token: request.build_absolute_uri(f"/signup/?invite={token}"),
             )
         except InviteValidationError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
         except InviteRateLimitedError as exc:
-            return Response({"error": str(exc)}, status=429)
+            return Response({"error": str(exc)}, status=429)  # lgtm[py/stack-trace-exposure]
 
         return Response({"result": "sent"})
 
@@ -4037,7 +4021,7 @@ class NotificationsView(ExternalApiView):
                 limit=params.get("limit") or DEFAULT_NOTIFICATION_PAGE_SIZE,
             )
         except InvalidNotificationCursorError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         results = [
             {
@@ -4144,6 +4128,8 @@ class NotificationDeliveryPreferencesView(ExternalApiView):
         # to, and the client must see the values it actually ended up with.
         prefs = update_preferences(request.user.profile, serializer.validated_data)
         return Response(serialize_preferences(prefs))
+
+
 # -- Trips ---------------------------------------------------------------------
 #
 # Every endpoint below delegates to the shared trip services

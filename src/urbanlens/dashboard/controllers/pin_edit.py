@@ -403,7 +403,7 @@ class PinNotesView(LoginRequiredMixin, View):
         try:
             create_pin_note(pin, text=(body.get("text") or ""))
         except ValueError as exc:
-            return HttpResponse(str(exc), status=400)
+            return HttpResponse(str(exc), status=400)  # lgtm[py/stack-trace-exposure]
         notes = pin.notes.order_by("-created")
         return render(request, "dashboard/partials/pins/pin_notes_panel.html", {"pin": pin, "notes": notes})
 

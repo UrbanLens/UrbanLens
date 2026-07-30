@@ -200,11 +200,7 @@ class E2EEEnrollView(DualAuthJsonView):
     }
 
     @extend_schema(
-        description=(
-            "Publishes the caller's key bundle. Requires `current_password` on accounts that have one, "
-            "even when authenticating with an OAuth2 token - the token alone must never be sufficient to "
-            "replace an account's key material."
-        ),
+        description=("Publishes the caller's key bundle. Requires `current_password` on accounts that have one, even when authenticating with an OAuth2 token - the token alone must never be sufficient to replace an account's key material."),
     )
     def post(self, request: Request) -> Response:
         """Create the caller's key bundle.
@@ -900,7 +896,7 @@ class E2EEResetView(DualAuthJsonView):
 
     @extend_schema(
         description=(
-            "Replaces the caller's keypair. Requires both the literal `confirm: \"RESET\"` string and, on "
+            'Replaces the caller\'s keypair. Requires both the literal `confirm: "RESET"` string and, on '
             "accounts that have a password, `current_password` - a `messages:write` token alone must never "
             "be able to re-key an account and lock its owner out of their own history."
         ),

@@ -755,11 +755,7 @@ def run_extraction(extraction: LinkExtraction) -> None:
     extraction.results = results
     # Field proposals (even skipped) still count as a non-empty run; article
     # skip/reject rows alone must not flip EMPTY → SUCCESS.
-    extraction.status = (
-        LinkExtractionStatus.SUCCESS
-        if field_results or any(row.get("applied") for row in article_results)
-        else LinkExtractionStatus.EMPTY
-    )
+    extraction.status = LinkExtractionStatus.SUCCESS if field_results or any(row.get("applied") for row in article_results) else LinkExtractionStatus.EMPTY
     extraction.save(update_fields=["results", "status", "updated"])
     _notify_extraction_complete(extraction)
 
@@ -780,9 +776,7 @@ def _notify_extraction_complete(extraction: LinkExtraction) -> None:
     elif extraction.status == LinkExtractionStatus.EMPTY:
         message = f"The link for {extraction.pin.effective_name} was read, but nothing usable was found on the page."
     else:
-        field_applied = sum(
-            1 for row in extraction.results_rows if row.get("applied") and not str(row.get("key", "")).startswith("article_")
-        )
+        field_applied = sum(1 for row in extraction.results_rows if row.get("applied") and not str(row.get("key", "")).startswith("article_"))
         article_applied = sum(1 for row in extraction.results_rows if row.get("applied") and str(row.get("key", "")).startswith("article_"))
         parts = [f"{field_applied} field(s) updated"]
         if article_applied:

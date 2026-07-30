@@ -488,7 +488,7 @@ class SpotGuessrSessionsView(PaginatedListMixin, ExternalApiView):
         try:
             result = spotguessr_session.start_solo_playthrough(profile, data["mode"], config, total_rounds=total_rounds)
         except spotguessr_session.SpotGuessrError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         if result.round is None or result.session is None:
             return Response(
@@ -584,7 +584,7 @@ class SpotGuessrRoundView(SpotGuessrSessionScopedView):
         try:
             round_ = spotguessr_session.get_or_create_round(session)
         except spotguessr_session.SpotGuessrError as exc:
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         if round_ is None:
             if spotguessr_session.rounds_played(session) == 0:
@@ -642,7 +642,7 @@ class SpotGuessrGuessView(SpotGuessrSessionScopedView):
         except spotguessr_session.SpotGuessrError as exc:
             # Covers the duplicate guess (the unique constraint, caught under
             # the row lock) and "you never joined this session".
-            return Response({"error": str(exc)}, status=400)
+            return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         round_.refresh_from_db()
         return Response(build_reveal_payload(round_, guess, list(bonus_tiers), rating_change))

@@ -382,9 +382,7 @@ def expand_articles_from_page(extraction: LinkExtraction, page_text: str) -> lis
                 _result_row(key="article_pin", label="Pin article", value=preview, applied=False, note=note),
             ]
             if wiki is not None:
-                rows.append(
-                    _result_row(key="article_wiki", label="Wiki article", value=preview, applied=False, note=note)
-                )
+                rows.append(_result_row(key="article_wiki", label="Wiki article", value=preview, applied=False, note=note))
             return rows
 
         rows = []
@@ -403,9 +401,7 @@ def expand_articles_from_page(extraction: LinkExtraction, page_text: str) -> lis
                 new_text=new_text,
                 wiki=wiki,
             )
-            rows.append(
-                _result_row(key="article_wiki", label="Wiki article", value=preview, applied=applied_w, note=note_w)
-            )
+            rows.append(_result_row(key="article_wiki", label="Wiki article", value=preview, applied=applied_w, note=note_w))
         return rows
     except Exception:
         logger.exception("Article expansion failed for extraction %s", getattr(extraction, "pk", None))

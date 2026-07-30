@@ -354,7 +354,7 @@ class _ReactionMixin:
                 # means the subclass's lookup was not scoped tightly enough,
                 # and swallowing that into a tidy 400 would hide the bug and
                 # confirm the row exists at the same time.
-                return Response({"error": str(exc)}, status=400)
+                return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         # The summary is read from the target's ``reactions`` relation, which
         # may still be holding a prefetch cache populated before the toggle;

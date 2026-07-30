@@ -122,7 +122,9 @@ function urlFor(template: string, sessionIdValue?: number, roundIdValue?: number
 }
 
 async function postForm(url: string, data: Record<string, string>): Promise<any> {
-    const response = await fetch(url, {
+    // url is always urlFor(urls.<name>, ...) - a same-origin, server-rendered path
+    // template with only numeric ids substituted, never an arbitrary/external url.
+    const response = await fetch(url, {  // lgtm[js/request-forgery]
         method: "POST",
         headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams(data),
@@ -131,7 +133,8 @@ async function postForm(url: string, data: Record<string, string>): Promise<any>
 }
 
 async function getJson(url: string): Promise<any> {
-    const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
+    // Same-origin urlFor(...) path template - see postForm's note above.
+    const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });  // lgtm[js/request-forgery]
     return response.json();
 }
 
@@ -336,7 +339,8 @@ async function beginGame(): Promise<void> {
 function connectSessionSocket(): void {
     if (ws || sessionId === null) return;
     const proto = location.protocol === "https:" ? "wss://" : "ws://";
-    ws = new WebSocket(`${proto}${location.host}/ws/trivia/session/${sessionId}/`);
+    // Built entirely from the current page's own location - always same-origin.
+    ws = new WebSocket(`${proto}${location.host}/ws/trivia/session/${sessionId}/`);  // lgtm[js/request-forgery]
     ws.addEventListener("message", (event) => {
         try {
             handleSocketMessage(JSON.parse(event.data));

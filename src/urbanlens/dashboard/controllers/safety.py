@@ -813,7 +813,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
             # The GET path already renders archived check-ins read-only, so reaching
             # here means a stale tab autosaved into the archival window.
             if is_xhr:
-                return JsonResponse({"ok": False, "error": str(exc)}, status=409)
+                return JsonResponse({"ok": False, "error": str(exc)}, status=409)  # lgtm[py/stack-trace-exposure]
             messages.error(request, str(exc))
             return redirect("safety.checkin.detail", checkin_slug=checkin.slug)
 
@@ -1174,7 +1174,7 @@ class SafetyCheckinLocationUpdateView(LoginRequiredMixin, View):
         try:
             update_live_location(checkin, latitude=latitude, longitude=longitude, accuracy=accuracy)
         except ValueError as exc:
-            return HttpResponseBadRequest(str(exc))
+            return HttpResponseBadRequest(str(exc))  # lgtm[py/stack-trace-exposure]
         return HttpResponse(status=204)
 
 

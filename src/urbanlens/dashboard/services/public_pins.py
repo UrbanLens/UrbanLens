@@ -157,10 +157,7 @@ def _eligible_location_ids(now: datetime, config: PublicPinConfig) -> set[int]:
     """
     floor = pinned_by_floor(_active_user_count(now, config), config)
 
-    public_coords = [
-        (float(lat), float(lon))
-        for lat, lon in PublicPinCandidate.objects.passed().values_list("location__latitude", "location__longitude")
-    ]
+    public_coords = [(float(lat), float(lon)) for lat, lon in PublicPinCandidate.objects.passed().values_list("location__latitude", "location__longitude")]
 
     # Distinct counts are safe against join fan-out; averages are not, so the
     # vulnerability composite and article length come from separate queries.
@@ -217,21 +214,11 @@ def _eligible_location_ids(now: datetime, config: PublicPinConfig) -> set[int]:
     wiki_ids = [row["wiki__id"] for row in survivors]
 
     vuln_ok: set[int] = set()
-    for agg in (
-        WikiStatVote.objects.filter(wiki_id__in=wiki_ids, field=WikiStatField.VULNERABILITY)
-        .values("wiki_id")
-        .annotate(avg=Avg("value"), cnt=Count("id"))
-    ):
+    for agg in WikiStatVote.objects.filter(wiki_id__in=wiki_ids, field=WikiStatField.VULNERABILITY).values("wiki_id").annotate(avg=Avg("value"), cnt=Count("id")):
         if agg["cnt"] >= config.min_vuln_votes and agg["avg"] is not None and agg["avg"] < config.max_vuln_avg:
             vuln_ok.add(agg["wiki_id"])
 
-    article_ok = {
-        wiki_id
-        for wiki_id, length in Article.objects.filter(wiki_id__in=wiki_ids)
-        .annotate(content_len=Length("content"))
-        .values_list("wiki_id", "content_len")
-        if (length or 0) >= config.min_article_chars
-    }
+    article_ok = {wiki_id for wiki_id, length in Article.objects.filter(wiki_id__in=wiki_ids).annotate(content_len=Length("content")).values_list("wiki_id", "content_len") if (length or 0) >= config.min_article_chars}
 
     survivors = [row for row in survivors if row["wiki__id"] in vuln_ok and row["wiki__id"] in article_ok]
 
@@ -305,10 +292,7 @@ def evaluate_public_pin_candidates(config: PublicPinConfig = CONFIG) -> dict[str
 
     # Settle open votes. Newly-passed locations join the region-exclusion set
     # immediately, so two candidates in one region can't both pass in a run.
-    passed_coords = [
-        (float(lat), float(lon))
-        for lat, lon in PublicPinCandidate.objects.passed().values_list("location__latitude", "location__longitude")
-    ]
+    passed_coords = [(float(lat), float(lon)) for lat, lon in PublicPinCandidate.objects.passed().values_list("location__latitude", "location__longitude")]
     for candidate in PublicPinCandidate.objects.with_status(PublicPinCandidateStatus.OPEN).select_related("location"):
         if _check_hard_fail(candidate, now, config):
             counters["rejected"] += 1
@@ -355,11 +339,7 @@ def sync_public_pin_suggestions() -> int:
         wiki = location.wiki
         already_suggested = set(PinSuggestion.objects.filter(location=location).values_list("profile_id", flat=True))
         has_pin = set(Pin.objects.filter(location=location, parent_pin__isnull=True).values_list("profile_id", flat=True))
-        recipients = (
-            Profile.objects.filter(community_enabled=True, pin_suggestions_enabled=True, suggest_public_pins=True)
-            .exclude(id__in=already_suggested | has_pin)
-            .values_list("id", flat=True)
-        )
+        recipients = Profile.objects.filter(community_enabled=True, pin_suggestions_enabled=True, suggest_public_pins=True).exclude(id__in=already_suggested | has_pin).values_list("id", flat=True)
         new_rows = [
             PinSuggestion(
                 profile_id=profile_id,

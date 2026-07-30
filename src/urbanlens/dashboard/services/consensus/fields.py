@@ -60,6 +60,7 @@ def haversine_distance_meters(a: Point, b: Point) -> float:
     haversine = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
     return 2 * _EARTH_RADIUS_METERS * math.asin(math.sqrt(haversine))
 
+
 #: A wiki with fewer aliases than this is still worth suggesting more for -
 #: aliases are additive, so "missing" here means "could use another," not
 #: "has none at all."

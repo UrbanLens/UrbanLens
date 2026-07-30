@@ -55,10 +55,7 @@ def recompute_estimated_coordinates(image_id: int) -> None:
     # either way at this scale: per-photo guess volume is small, so fetching
     # full Point objects and reading coordinates in Python costs nothing
     # extra worth optimizing away.
-    points = [
-        (point.y, point.x)
-        for point in PhotoCoordinateGuess.objects.filter(image_id=image_id, is_correct=True).values_list("guess_point", flat=True)
-    ]
+    points = [(point.y, point.x) for point in PhotoCoordinateGuess.objects.filter(image_id=image_id, is_correct=True).values_list("guess_point", flat=True)]
     if len(points) < MIN_GUESSES_FOR_ESTIMATE:
         return
 

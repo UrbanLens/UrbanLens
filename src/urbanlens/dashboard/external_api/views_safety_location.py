@@ -117,6 +117,6 @@ class SafetyCheckinLocationView(SafetyCheckinViewerScopedView):
             try:
                 update_live_location(checkin, latitude=data["latitude"], longitude=data["longitude"], accuracy=data.get("accuracy"))
             except ValueError as exc:
-                return Response({"error": str(exc)}, status=400)
+                return Response({"error": str(exc)}, status=400)  # lgtm[py/stack-trace-exposure]
 
         return Response(SafetyCheckinLocationSerializer(checkin).data)

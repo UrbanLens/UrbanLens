@@ -102,11 +102,6 @@ class NearbyDeviceMarkersView(ExternalApiView):
         point = Point(params["longitude"], params["latitude"], srid=4326)
         visible_location_ids = visible_wiki_location_ids(request.user.profile)
 
-        markers = (
-            WikiDeviceMarker.objects.visible()
-            .near(point, params["radius_meters"])
-            .filter(wiki__location_id__in=visible_location_ids)
-            .select_related("device", "wiki__location")
-        )
+        markers = WikiDeviceMarker.objects.visible().near(point, params["radius_meters"]).filter(wiki__location_id__in=visible_location_ids).select_related("device", "wiki__location")
 
         return Response(NearbyDeviceMarkersResponseSerializer({"markers": list(markers)}).data)
