@@ -19,7 +19,7 @@ import logging
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import GalleryMediaSource
+from urbanlens.dashboard.services.external_data import GalleryMediaSource, PanelApiKind
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -37,6 +37,13 @@ class LoopnetPanelSource(GalleryMediaSource):
     section_id = "loopnet-section"
     icon = "business_center"
     title = "LoopNet Listings"
+    # Deliberately not exposed on the external API: commercial listing data
+    # sourced through REData's licensed LoopNet access, plus its photos only
+    # resolve through the session-authenticated PinLoopnetPhotoView proxy - an
+    # external credential couldn't load them anyway. Opt back in only after
+    # REData's redistribution terms and an equivalent external-API proxy have
+    # both been reviewed.
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
 
     @staticmethod
     def address(pin: Pin) -> str:

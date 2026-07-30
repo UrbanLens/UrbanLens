@@ -33,11 +33,11 @@ so only rendering branches on scope.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
-from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource, GalleryMediaSource
+from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource, GalleryMediaSource, PanelApiKind
 from urbanlens.dashboard.services.geo_boundary import state_boundary
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 
@@ -111,6 +111,13 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
     icon = "account_balance"
     title = "NY Historic Preservation (CRIS)"
     geo_boundary: ClassVar[GeoBoundary | None] = state_boundary("NY")
+    # The one source that is honestly both shapes, and the reason api_kinds is
+    # a set rather than a single value: the same cached CRIS record is an
+    # eligibility/address card *and* the survey photos and scanned inventory
+    # forms attached to it. Declared explicitly because Python's MRO would
+    # otherwise silently pick InfoPanelSource's {INFO} (it comes first in the
+    # bases) and drop the media half without any error to notice.
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO, PanelApiKind.MEDIA})
 
     def fetch(self, pin: Pin) -> None:
         """Find the nearest CRIS "building" resource and cache its info + attachments."""
@@ -279,6 +286,40 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
                 image_proxy_url = reverse("pin.cris.extracted_image", args=[resource_uuid, attachment_id, image_id])
                 items.append(MediaItem(url=image_proxy_url, thumb_url=image_proxy_url, caption=caption, source="NY Historic Preservation (CRIS)"))
         return items
+
+    def api_payload(self, pin: Pin) -> dict[str, Any] | None:
+        """The CRIS record as both an information card and its attachments.
+
+        Neither inherited ``api_payload`` would do on its own - ``InfoPanelSource``'s
+        would drop the attachments and ``GalleryMediaSource``'s would drop the
+        eligibility card - so this composes both from the *one* cached row
+        rather than reading it twice.
+
+        The media URLs are the same in-app proxy routes ``media_items``
+        already builds (``pin.cris.attachment`` / ``pin.cris.extracted_image``),
+        so REData's API key stays server-side here exactly as it does on the
+        web. They are relative paths; a native client resolves them against its
+        API base URL.
+
+        Args:
+            pin: The pin whose panel is being read. ``render_context`` branches
+                on it - a parcel-scope pin gets the historic-district record
+                rather than an arbitrary building from the same lookup.
+
+        Returns:
+            ``{"info": ..., "media": [...]}`` with ``info`` possibly None (a
+            location inside a historic district but with no surveyed building
+            of its own still has attachments worth serving), or None when
+            nothing has landed yet or the record yields neither.
+        """
+        data = self.cached_data(pin)
+        if data is None:
+            return None
+        card = self.api_info(pin, data)
+        media = self.api_media(data)
+        if card is None and not media:
+            return None
+        return {PanelApiKind.INFO.value: card, PanelApiKind.MEDIA.value: media}
 
 
 class CrisBuildingEnrichmentSource(LocationCacheEnrichmentSource):

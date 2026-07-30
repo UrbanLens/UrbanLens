@@ -11,6 +11,7 @@ both now share ``services.pin_edit``.
 
 from __future__ import annotations
 
+from urllib.parse import urlencode
 from uuid import uuid4
 
 from django.contrib.auth.models import User
@@ -20,6 +21,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.links.model import PinLink
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.pin_tombstone import PinTombstone
@@ -108,8 +110,11 @@ class PinDetailGetTests(TestCase):
     def test_aliases_are_included(self) -> None:
         PinAlias.objects.create(pin=self.pin, name="Old Name")
         body = self._get(self.pin).json()
-        self.assertEqual([a["name"] for a in body["aliases"]], ["Old Name"])
-        self.assertEqual(body["alias_count"], 1)
+        # Pin.save() auto-ensures an alias for the pin's own current name (see
+        # models.pin.model.Pin.save), so "Old Mill" - this pin's name - is
+        # already present alongside the explicitly-added "Old Name".
+        self.assertEqual([a["name"] for a in body["aliases"]], ["Old Mill", "Old Name"])
+        self.assertEqual(body["alias_count"], 2)
 
     def test_links_are_included(self) -> None:
         PinLink.objects.create(pin=self.pin, name="Article", url="https://example.com/article")
@@ -135,9 +140,38 @@ class PinDetailGetTests(TestCase):
         body = self._get(self.pin).json()
         self.assertEqual(body["custom_fields"], [])
 
+    def test_address_components_default_to_null(self) -> None:
+        body = self._get(self.pin).json()
+        self.assertIsNone(body["city"])
+        self.assertIsNone(body["state"])
+        self.assertIsNone(body["county"])
+        self.assertIsNone(body["zipcode"])
+
+    def test_address_components_are_read_from_the_pins_location(self) -> None:
+        # city/state/county are Python properties aliasing locality/
+        # administrative_area_level_1/administrative_area_level_2 - a bulk
+        # .update() has to target the real field names.
+        Location.objects.filter(pk=self.pin.location_id).update(
+            locality="Troy",
+            administrative_area_level_1="NY",
+            administrative_area_level_2="Rensselaer",
+            country="US",
+            zipcode="12180",
+        )
+        body = self._get(self.pin).json()
+        self.assertEqual(body["city"], "Troy")
+        self.assertEqual(body["state"], "NY")
+        self.assertEqual(body["county"], "Rensselaer")
+        self.assertEqual(body["country"], "US")
+        self.assertEqual(body["zipcode"], "12180")
+
     def test_child_pin_reports_its_parent_uuid(self) -> None:
-        child = create_pin_for_profile(self.profile, name="Entrance", latitude=42.5001, longitude=-73.5001).pin
-        Pin.objects.filter(pk=child.pk).update(parent_pin=self.pin)
+        # A child pin is exempt from db_pin_unique_location_per_profile once
+        # parent_pin is set at creation - build it directly rather than via
+        # create_pin_for_profile, whose fuzzy Location dedup would otherwise
+        # resolve this nearby point onto the parent's own Location and reject
+        # the create as a duplicate top-level pin.
+        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance")
         body = self._get(child).json()
         self.assertEqual(body["parent_uuid"], str(self.pin.uuid))
 
@@ -232,8 +266,7 @@ class PinDetailPatchTests(TestCase):
         self.assertEqual(self.pin.parent_pin_id, new_parent.pk)
 
     def test_reparenting_under_a_descendant_is_rejected_as_a_cycle(self) -> None:
-        child = create_pin_for_profile(self.profile, name="Entrance", latitude=42.5001, longitude=-73.5001).pin
-        Pin.objects.filter(pk=child.pk).update(parent_pin=self.pin)
+        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance")
         response = self._patch(self.pin, {"parent_id": str(child.uuid)})
         self.assertEqual(response.status_code, 400)
         self.assertIn("circular", response.json()["error"])
@@ -248,8 +281,7 @@ class PinDetailPatchTests(TestCase):
 
     def test_a_rejected_reparent_rolls_back_other_fields_in_the_same_patch(self) -> None:
         """A single PATCH is all-or-nothing: an invalid parent_id must not leave a partial rename applied."""
-        child = create_pin_for_profile(self.profile, name="Entrance", latitude=42.5001, longitude=-73.5001).pin
-        Pin.objects.filter(pk=child.pk).update(parent_pin=self.pin)
+        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance")
         response = self._patch(self.pin, {"name": "Should Not Stick", "parent_id": str(child.uuid)})
         self.assertEqual(response.status_code, 400)
         self.pin.refresh_from_db()
@@ -274,7 +306,11 @@ class PinDetailDeleteTests(TestCase):
         self.pin = create_pin_for_profile(self.profile, name="Doomed", latitude=42.5, longitude=-73.5).pin
 
     def _delete(self, pin: Pin, **params):
-        return self.client.delete(_url(pin), data=params, **_bearer(self.raw_key))
+        # PinDetailView.delete() reads ``children`` from request.query_params -
+        # the test client's `data=` on delete() serializes to the request body,
+        # not the query string, so it must be appended to the URL directly.
+        url = f"{_url(pin)}?{urlencode(params)}" if params else _url(pin)
+        return self.client.delete(url, **_bearer(self.raw_key))
 
     def test_requires_pins_write_scope(self) -> None:
         ApiKey.objects.filter(user=self.user).update(scopes=[ApiKeyScope.PINS_READ.value])
@@ -300,8 +336,7 @@ class PinDetailDeleteTests(TestCase):
         self.assertTrue(Pin.objects.filter(pk=other_pin.pk).exists())
 
     def test_pin_with_children_requires_a_decision(self) -> None:
-        child = create_pin_for_profile(self.profile, name="Entrance", latitude=42.5001, longitude=-73.5001).pin
-        Pin.objects.filter(pk=child.pk).update(parent_pin=self.pin)
+        baker.make("dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance")
         response = self._delete(self.pin)
         self.assertEqual(response.status_code, 409)
         body = response.json()
@@ -310,15 +345,13 @@ class PinDetailDeleteTests(TestCase):
         self.assertTrue(Pin.objects.filter(pk=self.pin.pk).exists())
 
     def test_children_delete_removes_the_whole_subtree(self) -> None:
-        child = create_pin_for_profile(self.profile, name="Entrance", latitude=42.5001, longitude=-73.5001).pin
-        Pin.objects.filter(pk=child.pk).update(parent_pin=self.pin)
+        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance")
         response = self._delete(self.pin, children="delete")
         self.assertEqual(response.status_code, 204)
         self.assertFalse(Pin.objects.filter(pk__in=[self.pin.pk, child.pk]).exists())
 
     def test_children_keep_promotes_them_to_top_level(self) -> None:
-        child = create_pin_for_profile(self.profile, name="Entrance", latitude=42.5001, longitude=-73.5001).pin
-        Pin.objects.filter(pk=child.pk).update(parent_pin=self.pin)
+        child = baker.make("dashboard.Pin", profile=self.profile, location=self.pin.location, parent_pin=self.pin, name="Entrance")
         response = self._delete(self.pin, children="keep")
         self.assertEqual(response.status_code, 204)
         child.refresh_from_db()

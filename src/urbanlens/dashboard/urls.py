@@ -1106,9 +1106,19 @@ urlpatterns = [
                     name="friend.block",
                 ),
                 path(
+                    "unblock/<int:profile_id>",
+                    friendship.FriendController.as_view({"post": "unblock_friend"}),
+                    name="friend.unblock",
+                ),
+                path(
                     "mute/<int:profile_id>",
                     friendship.FriendController.as_view({"post": "mute_friend"}),
                     name="friend.mute",
+                ),
+                path(
+                    "unmute/<int:profile_id>",
+                    friendship.FriendController.as_view({"post": "unmute_friend"}),
+                    name="friend.unmute",
                 ),
                 path(
                     "respond/<int:from_profile_id>/",

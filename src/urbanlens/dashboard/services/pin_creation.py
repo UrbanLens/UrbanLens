@@ -24,6 +24,7 @@ from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from decimal import Decimal
     from uuid import UUID
 
     from django.core.files.uploadedfile import UploadedFile
@@ -47,6 +48,55 @@ class PinCreationForbiddenError(PinCreationError):
     Distinct from plain :class:`PinCreationError` so HTTP-facing callers can
     map it to 403 rather than 400 without inspecting the message text.
     """
+
+
+def resolve_child_pin_location(
+    profile: Profile,
+    latitude: float | str | Decimal,
+    longitude: float | str | Decimal,
+    *,
+    exclude_pin: Pin | None = None,
+    defaults: dict | None = None,
+) -> Location:
+    """Resolve the Location a child (detail) pin sits at, refusing an exact overlap.
+
+    A child pin records its own precise coordinates near its parent, so - unlike
+    a top-level pin - this never applies the fuzzy proximity radius, which would
+    collapse a door, a window, and a sign on one building onto the parent's own
+    Location. It resolves through ``Location.objects.get_exact_or_create``, which
+    matches on stored coordinate identity.
+
+    Two of one profile's pins may never occupy the exact same point: perfectly
+    stacked markers can't be told apart or clicked through on a map, and the
+    pair is nearly always one place the user meant to record once. Top-level
+    pins get this from ``db_pin_unique_location_per_profile``; child pins are
+    deliberately exempt from that constraint - they must be able to share a
+    parcel with their parent and siblings - so the narrower exact-point rule is
+    enforced here instead.
+
+    Args:
+        profile: Owner of the child pin being placed or moved.
+        latitude: Submitted latitude.
+        longitude: Submitted longitude.
+        exclude_pin: A pin to ignore when looking for an overlap - the pin being
+            moved, so re-submitting its current point stays a no-op instead of
+            colliding with itself.
+        defaults: Field defaults used only when creating a new Location.
+
+    Returns:
+        The Location at exactly these coordinates, created if it didn't exist.
+
+    Raises:
+        PinCreationError: This profile already has another pin at that point.
+    """
+    location, _created = Location.objects.get_exact_or_create(latitude, longitude, defaults=defaults)
+
+    overlapping = Pin.objects.filter(profile=profile, location=location)
+    if exclude_pin is not None and exclude_pin.pk is not None:
+        overlapping = overlapping.exclude(pk=exclude_pin.pk)
+    if overlapping.exists():
+        raise PinCreationError("You already have a pin at these exact coordinates. Place it slightly apart to keep both.")
+    return location
 
 
 @dataclass(slots=True)
@@ -81,6 +131,8 @@ def create_pin_for_profile(
     google_place_id: str | None = None,
     place_canonical_name: str | None = None,
     client_uuid: UUID | None = None,
+    parent_id: UUID | None = None,
+    name_is_user_provided: bool = False,
 ) -> PinCreationResult:
     """Create a Pin for a profile from raw, untrusted-shaped input.
 
@@ -116,6 +168,20 @@ def create_pin_for_profile(
             returned (``result.created`` False) instead of creating a duplicate.
             The external API's offline-outbox clients retry creates until
             acknowledged, so the same submission may legitimately arrive twice.
+        parent_id: An existing pin of this profile's to create this one as a
+            child (detail pin) of. When given, the Location is resolved by
+            :func:`resolve_child_pin_location` - an exact-coordinate match
+            instead of the default fuzzy dedup radius, since a detail pin's
+            whole point is to sit at its own precise coordinates near its
+            parent, which the fuzzy radius would otherwise collapse onto the
+            parent's own Location. A child pin is exempt from the
+            one-root-pin-per-location rule, but not from the narrower rule that
+            no two of a profile's pins may share an exact point.
+        name_is_user_provided: Whether ``name`` was deliberately typed by the
+            owner, rather than produced by a parser/importer. True protects it
+            from the automatic name-upgrade sweep
+            (:func:`tasks.upgrade_placeholder_pin_names`) exactly as an
+            explicit rename does. Ignored when ``name`` is blank.
 
     Returns:
         The created (or, for an idempotent replay, existing) pin plus every
@@ -124,8 +190,10 @@ def create_pin_for_profile(
     Raises:
         PinCreationError: Neither coordinates nor a usable address were given,
             the address couldn't be geocoded, ``client_uuid`` is already used
-            by a pin that isn't this profile's, or the profile already has a
-            pin at this exact location.
+            by a pin that isn't this profile's, ``parent_id`` doesn't match
+            one of this profile's own pins, the profile already has a
+            top-level pin at this exact location, or (for a child pin) it
+            already has any pin at this exact point.
         PinCreationForbiddenError: An address needed geocoding but external lookups
             are turned off for this profile.
     """
@@ -133,6 +201,12 @@ def create_pin_for_profile(
         existing = Pin.objects.filter(profile=profile, uuid=client_uuid).select_related("location").first()
         if existing is not None:
             return PinCreationResult(pin=existing, all_locations=[existing.location], created=False)
+
+    new_parent: Pin | None = None
+    if parent_id is not None:
+        new_parent = Pin.objects.filter(uuid=parent_id, profile=profile).first()
+        if new_parent is None:
+            raise PinCreationError("No such pin to set as parent.")
     # An unset coordinate arrives as None or "" (e.g. the map's blank hidden
     # input) - normalize both to None so the checks below can use `is None`
     # without treating a valid 0/0.0 coordinate (equator, prime meridian) as missing.
@@ -153,10 +227,15 @@ def create_pin_for_profile(
     lat_f = float(latitude)
     lon_f = float(longitude)
 
-    # Fuzzy 50m-radius dedup (not exact-coordinate get_or_create): GPS jitter between two
-    # drops at the same real place must consolidate onto the same Location, matching every
-    # other Location-resolution path in the app (viewset.py, detail_pins.py, import_data.py).
-    location, _ = Location.objects.get_nearby_or_create(lat_f, lon_f, defaults={"official_name": place_canonical_name})
+    if new_parent is not None:
+        # A child pin keeps its own exact point (and may not stack on another of
+        # this profile's pins) - see resolve_child_pin_location.
+        location = resolve_child_pin_location(profile, lat_f, lon_f, defaults={"official_name": place_canonical_name})
+    else:
+        # Fuzzy 50m-radius dedup (not exact-coordinate get_or_create): GPS jitter between two
+        # drops at the same real place must consolidate onto the same Location, matching every
+        # other top-level Location-resolution path in the app (viewset.py, import_data.py).
+        location, _ = Location.objects.get_nearby_or_create(lat_f, lon_f, threshold_meters=50, defaults={"official_name": place_canonical_name})
 
     # Locations whose bounding box also covers this point - when more than one
     # matches, the caller offers the user a choice (see below).
@@ -166,13 +245,14 @@ def create_pin_for_profile(
 
     create_kwargs: dict = {
         "name": name,
-        # Creation/import is not an explicit rename.  In particular, file and
-        # offline-client imports commonly put a coordinate or another parser
-        # fallback in ``name``.  Marking every non-empty value as user-provided
-        # made that placeholder permanently outrank names discovered later.
-        # The flag is set by the rename endpoints when the owner deliberately
-        # changes the name.
-        "name_is_user_provided": False,
+        # Defaults to False because a create is not inherently a rename: file
+        # and offline-client imports commonly put a coordinate or another
+        # parser fallback in ``name``, and marking every non-empty value as
+        # user-provided made that placeholder permanently outrank names
+        # discovered later.  Callers that *know* a human typed the name (the
+        # map's add-pin dialog) pass True, which is the same thing the rename
+        # endpoints record.
+        "name_is_user_provided": name_is_user_provided and bool((name or "").strip()),
         "location": location,
         # Link to the place's community wiki when one already exists; wikis
         # are only ever created explicitly from the pin page.
@@ -181,6 +261,7 @@ def create_pin_for_profile(
         "custom_icon": custom_icon,
         "color": color,
         "profile": profile,
+        "parent_pin": new_parent,
     }
     if description is not None and description.strip():
         create_kwargs["description"] = description

@@ -14,8 +14,15 @@ other users are interested in a location. Instead the UI shows:
 from __future__ import annotations
 
 import secrets
+from typing import TYPE_CHECKING, Any
 
 from django.core.cache import cache
+
+if TYPE_CHECKING:
+    from datetime import date
+
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.wiki.model import Wiki
 
 # Below this many distinct users, no number is shown at all.
 MIN_VISIBLE_PIN_COUNT = 3
@@ -53,3 +60,59 @@ def approximate_pin_count(wiki_id: int, exact_count: int) -> dict[str, object]:
         value = max(MIN_VISIBLE_PIN_COUNT, exact_count + offset)
         cache.set(key, value, _FUZZ_CACHE_TIMEOUT)
     return {"is_low": False, "value": value}
+
+
+def _first_of_month(value: date) -> date:
+    """Truncate a date to the first day of its month.
+
+    Args:
+        value: The date to truncate.
+
+    Returns:
+        The same year and month with ``day`` set to 1.
+    """
+    return value.replace(day=1)
+
+
+def wiki_community_summary(wiki: Wiki, location: Location) -> dict[str, Any]:
+    """Summarize a wiki's community footprint without leaking who pinned it when.
+
+    Counts only root pins (never detail pins) and only distinct profiles, then
+    runs the total through :func:`approximate_pin_count`.
+
+    ``first_pinned`` gets two protections that the count already had but the
+    date did not:
+
+    - It is truncated to the 1st of the month, because a day-precision "first
+      pinned" is a timestamp of one identifiable person's activity.
+    - It is suppressed entirely (``None``) whenever ``pin_count_low`` is true.
+      With one or two pinners, "first pinned" *is* "when that specific person
+      pinned it" - publishing it defeats the whole point of hiding the count.
+
+    Args:
+        wiki: The wiki being summarized (its pk keys the count's fuzz cache).
+        location: The wiki's Location, which owns the pins being counted.
+
+    Returns:
+        Dict with ``pin_count_low`` (bool), ``pin_count_approx`` (int, or None
+        when low), ``first_pinned`` (``date`` truncated to the 1st, or None),
+        and ``first_pinned_precision`` (always ``"month"``, so a client never
+        renders the value as an exact day).
+    """
+    root_pins = location.pins.filter(parent_pin__isnull=True)
+    exact_count = root_pins.values("profile").distinct().count()
+    approximate = approximate_pin_count(wiki.pk, exact_count)
+    is_low = bool(approximate["is_low"])
+
+    first_pinned: date | None = None
+    if not is_low:
+        earliest = root_pins.order_by("created").values_list("created", flat=True).first()
+        if earliest is not None:
+            first_pinned = _first_of_month(earliest.date())
+
+    return {
+        "pin_count_low": is_low,
+        "pin_count_approx": None if is_low else approximate["value"],
+        "first_pinned": first_pinned,
+        "first_pinned_precision": "month",
+    }

@@ -31,6 +31,7 @@ from urbanlens.dashboard.services.text_limits import (
 
 if TYPE_CHECKING:
     from datetime import date
+    from typing import Any
 
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -116,6 +117,13 @@ class Trip(abstract.PublicDashboardModel):
         # page results - not a real field/annotation, just a per-request
         # shortcut to the viewing profile's own membership row (or None).
         viewer_membership: TripMembership | None
+        # Set by external_api.views._trip_detail_payload, in the same
+        # per-request-decoration spirit as viewer_membership above: the trip
+        # detail response bundles what this particular caller may do, their
+        # calendar-mirroring state, and the roster, none of which are fields.
+        viewer: dict[str, Any]
+        calendar_sync: dict[str, Any]
+        members: list[TripMembership]
 
     objects = TripManager()
 

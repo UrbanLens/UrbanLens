@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import re
 from unittest.mock import patch
 
 from django.template.loader import render_to_string
@@ -30,6 +31,29 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityRSVP, TripActivityVote, TripMembership
+
+#: A rendered CSRF token: exactly 64 characters from Django's 62-character
+#: alphabet. ``{% csrf_token %}`` re-masks the same secret on every call, so a
+#: page embeds several *different* strings (the hidden input, base.html's
+#: ``var csrftoken``, the JS config blob) and two renders never match
+#: byte-for-byte. Matching on the shape covers all of them at once.
+_CSRF_TOKEN_RE = re.compile(rb"(?<![A-Za-z0-9])[A-Za-z0-9]{64}(?![A-Za-z0-9])")
+
+
+def _without_csrf_tokens(content: bytes) -> bytes:
+    """Blank out per-request CSRF tokens so two responses can be compared.
+
+    The masking is random per render and reveals nothing about the page, so
+    normalizing it is what makes an "these two responses are identical" check
+    meaningful rather than flaky.
+
+    Args:
+        content: A rendered response body.
+
+    Returns:
+        The body with every CSRF-token-shaped run replaced by a constant.
+    """
+    return _CSRF_TOKEN_RE.sub(b"REDACTED", content)
 
 
 def _make_trip(creator_profile: Profile, **kwargs) -> Trip:
@@ -221,13 +245,23 @@ class TripCreateViewTests(TestCase):
             TripMembership.objects.filter(trip=trip, profile=self.profile).exists(),
         )
 
-    def test_post_without_name_returns_400(self):
+    def test_post_without_name_generates_a_placeholder(self):
+        """A blank name is accepted and gets a generated one (UL-360).
+
+        This test previously asserted a 400, which stopped being true when the
+        name became optional so a "just start planning" flow needn't invent a
+        title up front - it had been failing ever since. The behavior itself
+        now lives in ``services.trip_crud.create_trip``.
+        """
+        before = set(Trip.objects.values_list("pk", flat=True))
         resp = self.client.post(
             reverse("trips.create"),
             data=json.dumps({"name": ""}),
             content_type="application/json",
         )
-        self.assertEqual(resp.status_code, 400)
+        self.assertEqual(resp.status_code, 200)
+        created = Trip.objects.exclude(pk__in=before).get()
+        self.assertTrue(created.name.strip())
 
     def test_post_with_form_data_also_works(self):
         resp = self.client.post(reverse("trips.create"), data={"name": "Form Trip"})
@@ -318,11 +352,24 @@ class TripDetailViewTests(TestCase):
         resp = client.get(self._url())
         self.assertEqual(resp.status_code, 200)
 
-    def test_outsider_gets_403(self):
+    def test_outsider_gets_404_indistinguishable_from_a_missing_trip(self):
+        """Someone else's trip must look exactly like one that doesn't exist.
+
+        This used to be a 403 while a missing slug was a 404, so the status
+        code alone let anyone enumerate valid private trip slugs - despite both
+        rendering the same "not found" page specifically to prevent that. See
+        ``services.trip_access.get_trip_for_viewer``.
+        """
         client = Client()
         client.force_login(self.outsider_user)
-        resp = client.get(self._url())
-        self.assertEqual(resp.status_code, 403)
+        forbidden = client.get(self._url())
+        missing = client.get(reverse("trips.detail", kwargs={"trip_slug": "no-such-trip-slug"}))
+        self.assertEqual(forbidden.status_code, 404)
+        self.assertEqual(missing.status_code, 404)
+        # Django masks the CSRF token afresh per render, so the values differ
+        # between any two responses - including two identical ones. They leak
+        # nothing about the trip; everything else must match exactly.
+        self.assertEqual(_without_csrf_tokens(forbidden.content), _without_csrf_tokens(missing.content))
 
     def test_nonexistent_trip_returns_404(self):
         client = Client()
@@ -541,12 +588,17 @@ class TripActivitiesViewTests(TestCase):
         )
         self.assertEqual(resp.status_code, 403)
 
-    def test_outsider_gets_403(self):
+    def test_outsider_gets_404(self):
+        """A non-member is told the trip does not exist, not that it's forbidden.
+
+        See TripDetailViewTests.test_outsider_gets_404_indistinguishable_from_a_missing_trip
+        for why the old 403 was an enumeration leak.
+        """
         outsider = baker.make("auth.User")
         client = Client()
         client.force_login(outsider)
         resp = client.get(self._url())
-        self.assertEqual(resp.status_code, 403)
+        self.assertEqual(resp.status_code, 404)
 
     def test_post_pin_only_uses_pin_name_in_panel(self):
         from urbanlens.dashboard.models.location.model import Location

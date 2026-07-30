@@ -23,16 +23,18 @@ from typing import TYPE_CHECKING, Any
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from django.core.cache import cache
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
-from urbanlens.dashboard.services.direct_messages import can_direct_message, direct_message_group_name
+from urbanlens.dashboard.services.direct_messages import can_direct_message, direct_message_group_name, reaction_summary
 from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
+    from uuid import UUID
+
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -505,6 +507,7 @@ def create_group_message(
     ciphertext: str = "",
     nonce: str = "",
     key_version: int = 0,
+    client_uuid: UUID | None = None,
     defer_broadcast: bool = False,
 ) -> GroupMessage:
     """Validate, persist, broadcast, and notify for one new group message.
@@ -517,6 +520,10 @@ def create_group_message(
             under the group key. Mutually exclusive with ``body``.
         nonce: Base64 nonce for ``ciphertext`` (required with it).
         key_version: ``GroupKey.version`` that encrypted this message.
+        client_uuid: Caller-generated idempotency key. When a message from this
+            sender already carries it, that message is returned untouched
+            instead of a duplicate being created (see
+            ``services.direct_messages.create_direct_message``).
         defer_broadcast: When True, skip the live push - the caller attaches
             shares first and then calls ``broadcast_group_message``.
 
@@ -528,6 +535,13 @@ def create_group_message(
         PermissionError: When `sender` isn't an active member.
     """
     from urbanlens.dashboard.services.e2ee import MAX_CIPHERTEXT_LENGTH, MAX_NONCE_LENGTH, valid_blob
+
+    # Idempotent replay - see create_direct_message for why this precedes both
+    # validation and the membership check.
+    if client_uuid is not None:
+        replayed = GroupMessage.objects.filter(sender=sender, client_uuid=client_uuid).first()
+        if replayed is not None:
+            return replayed
 
     membership = group.membership_for(sender)
     if membership is None:
@@ -546,14 +560,24 @@ def create_group_message(
     if not body and not ciphertext:
         raise ValueError("Message cannot be empty.")
 
-    message = GroupMessage.objects.create(
-        group=group,
-        sender=sender,
-        body=body,
-        ciphertext=ciphertext,
-        nonce=nonce,
-        key_version=key_version,
-    )
+    try:
+        # Nested atomic: see create_direct_message for why the idempotency
+        # race must not escape into an enclosing transaction.
+        with transaction.atomic():
+            message = GroupMessage.objects.create(
+                group=group,
+                sender=sender,
+                body=body,
+                ciphertext=ciphertext,
+                nonce=nonce,
+                key_version=key_version,
+                client_uuid=client_uuid,
+            )
+    except IntegrityError:
+        replayed = GroupMessage.objects.filter(sender=sender, client_uuid=client_uuid).first() if client_uuid is not None else None
+        if replayed is None:
+            raise
+        return replayed
     # Sending is reading: the sender's own read mark advances with their message.
     GroupMessage.objects.mark_read(membership)
 
@@ -630,6 +654,96 @@ def delete_group_message(message: GroupMessage, actor: Profile) -> GroupMessage:
     return message
 
 
+def toggle_group_reaction(profile: Profile, message: GroupMessage, emoji: str) -> str:
+    """Add or remove `profile`'s reaction of `emoji` on one group message.
+
+    The group analogue of ``services.direct_messages.toggle_reaction``, and
+    deliberately the same shape: one ``Reaction`` row per (profile, emoji,
+    host), a live push so every open tab updates without a refetch, and the
+    string ``"added"``/``"removed"`` so a caller can report what it did.
+
+    The membership guard is on *active* membership specifically, not on "was
+    ever in this group". A removed member still has their membership row (it
+    records the visibility window they had - see ``GroupChatMembership``), and
+    ``GroupMessage`` rows they once saw are still in the table, so a check that
+    merely looked for a row would let somebody who was removed from a group
+    keep reacting into it. ``membership_for`` only ever returns an active
+    stint, which is why it is the thing asked here.
+
+    Args:
+        profile: The reacting profile - must be an active member of the group.
+        message: The group message being reacted to.
+        emoji: The emoji character(s) to toggle. Render-safety is the caller's
+            responsibility (``is_safe_reaction_emoji``), exactly as for 1:1
+            reactions - reactions are relayed verbatim into other members'
+            clients.
+
+    Returns:
+        ``"added"`` or ``"removed"``.
+
+    Raises:
+        PermissionError: When `profile` has no active membership in the
+            message's group.
+    """
+    from urbanlens.dashboard.models.reactions.model import Reaction
+
+    if message.group.membership_for(profile) is None:
+        raise PermissionError("You aren't a member of this group.")
+
+    existing = Reaction.objects.existing(profile, emoji, group_message=message)
+    if existing is not None:
+        existing.delete()
+        action = "removed"
+    else:
+        Reaction.objects.create(profile=profile, group_message=message, emoji=emoji)
+        action = "added"
+
+    # Fanned out through the same per-member channel groups every other group
+    # event uses, so a web client with the thread open sees the reaction land
+    # without polling. The summary carries no identity beyond profile slugs
+    # that a member of the group can already read off the member list, so -
+    # unlike a message payload - one shared payload is correct for everyone.
+    _broadcast_group_event(
+        message.group,
+        {
+            "type": "group_reaction",
+            "group_uuid": str(message.group.uuid),
+            "message_id": message.pk,
+            "reactions": reaction_summary(message),
+        },
+    )
+    return action
+
+
+def set_group_muted(membership: GroupChatMembership, *, muted: bool) -> bool:
+    """Put one member's group mute flag into the requested state, idempotently.
+
+    Declarative rather than a toggle for the same reason as
+    ``services.direct_messages.set_conversation_muted``: a retried request on a
+    flaky link must not invert the state its first, unacknowledged attempt
+    already applied.
+
+    Muting is **notification-only** (see ``_notify_group_message``, which is the
+    single place the flag is read): the group keeps appearing in the
+    conversation list, keeps accruing unread counts, and keeps delivering
+    messages.
+
+    Args:
+        membership: The caller's own active membership row.
+        muted: The desired end state.
+
+    Returns:
+        The resulting mute state, always ``muted``.
+    """
+    membership.muted = muted
+    # update_fields is load-bearing, not a micro-optimization: this same row
+    # also carries left_at/removed_by, and a full save() would write back the
+    # in-memory (stale) copies of those, resurrecting a membership that a
+    # concurrent removal had just ended.
+    membership.save(update_fields=["muted", "updated"])
+    return muted
+
+
 def _revoke_pin_share(pin_share) -> None:
     """Reject a still-pending PinShare when its group message is deleted.
 
@@ -643,7 +757,7 @@ def _revoke_pin_share(pin_share) -> None:
         pin_share.save(update_fields=["status"])
 
 
-def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body: str) -> GroupMessage:
+def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body: str, *, client_uuid: UUID | None = None) -> GroupMessage:
     """Share `pin` into `group` - one full PinShare per member, plus the chat message.
 
     Every active member (other than the sender) gets their own ``PinShare``
@@ -654,15 +768,26 @@ def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body
     is per recipient); they still see the message and card, just without an
     accept action.
 
+    **Retries must be idempotent here more than anywhere else.** One call fans
+    out to every member, so a mobile client that retries a share whose response
+    it never received would otherwise duplicate the message *and* every
+    member's ``PinShare``, ``LocationExposure`` and notification - the damage
+    scales with group size, and the exposure rows are the provenance chain
+    ``resolve_origin_share`` walks, so duplicates corrupt more than the inbox.
+    A repeat carrying a ``client_uuid`` already seen returns the original
+    message untouched.
+
     Args:
         sender: The sharing profile (must own the pin and be an active member).
         group: The group receiving the share.
         pin: The pin being shared.
         body: Message text accompanying the share (may be blank; a default
             "shared a pin" text is used so the message isn't empty).
+        client_uuid: Caller-generated idempotency key for offline-outbox
+            retries. None disables replay detection.
 
     Returns:
-        The newly created GroupMessage.
+        The newly created GroupMessage, or the existing one on replay.
 
     Raises:
         PermissionError: When `sender` isn't an active member.
@@ -670,7 +795,14 @@ def share_pin_in_group_message(sender: Profile, group: GroupChat, pin: Pin, body
     """
     from urbanlens.dashboard.services.pin_sharing import create_pin_share
 
-    message = create_group_message(sender, group, body or f"Shared {pin.display_label}", defer_broadcast=True)
+    if client_uuid is not None:
+        # Checked before any fan-out: create_group_message would itself replay,
+        # but only after create_pin_share had already run for every member.
+        existing = GroupMessage.objects.filter(sender=sender, group=group, client_uuid=client_uuid).first()
+        if existing is not None:
+            return existing
+
+    message = create_group_message(sender, group, body or f"Shared {pin.display_label}", defer_broadcast=True, client_uuid=client_uuid)
     for membership in group.active_memberships().exclude(profile_id=sender.pk).select_related("profile", "profile__user"):
         try:
             pin_share = create_pin_share(sender, membership.profile, pin)
@@ -701,7 +833,15 @@ def group_thread_page(membership: GroupChatMembership, *, before_id: int | None 
         ``(messages, has_more_older)``: messages oldest-first;
         ``has_more_older`` is True when older visible messages remain.
     """
-    queryset = GroupMessage.objects.visible_window(membership).select_related("sender", "sender__user").prefetch_related("shares__pin_share__pin", "shares__pin_share__pin__location")
+    # "reactions__profile" joins the prefetch list because every renderer of
+    # this page now summarizes reactions per message (see
+    # ``external_api.serializers_messaging.build_group_message_payload``);
+    # without it a 50-message page issues 50 extra queries.
+    queryset = (
+        GroupMessage.objects.visible_window(membership)
+        .select_related("sender", "sender__user")
+        .prefetch_related("shares__pin_share__pin", "shares__pin_share__pin__location", "reactions__profile")
+    )
     if before_id is not None:
         queryset = queryset.filter(pk__lt=before_id)
     page = list(queryset.order_by("-id")[: limit + 1])

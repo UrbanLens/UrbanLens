@@ -555,10 +555,58 @@ REST_FRAMEWORK = {
     "DEFAULT_THROTTLE_RATES": {
         "anon": "60/minute",
         "user": "600/minute",
-        # external_api.throttling.ApiKeyRateThrottle - per API key, not per user,
-        # so one connected app's misbehavior can't burn through a budget shared
-        # with a user's other keys.
-        "external_api_key": "120/hour",
+        # external_api.throttling - per credential, not per user, so one
+        # connected app's misbehavior can't burn through a budget shared with a
+        # user's other keys. Split by tier because an interactive sync client
+        # reads far more than it writes: a flat cap generous enough for a full
+        # resync would also be generous enough for a runaway write loop.
+        # The burst cap applies on top of both tiers, bounding a stampede
+        # without lowering the hourly ceiling.
+        "external_api_read": "1000/hour",
+        "external_api_write": "300/hour",
+        "external_api_burst": "60/minute",
+        # Credential-authenticated /media/ fetches (controllers.media). One
+        # gallery screen is dozens of files, so this is deliberately far more
+        # generous than the burst cap - but it is still a cap, so a leaked key
+        # cannot be used as an unmetered CDN.
+        "external_api_media": "2000/hour",
+        # Applied on top of the above, to the handful of endpoints whose cost
+        # is unbounded in the caller's own data rather than fixed per request
+        # (currently the smart-list resync). See
+        # external_api.throttling.ExternalApiResyncThrottle.
+        "external_api_resync": "12/hour",
+        # Autocomplete replaces (rather than adds to) the read cap for the
+        # location-search endpoints - it is charged per keystroke, so counting
+        # it against the shared read budget would let a few minutes of typing
+        # starve the client's actual syncing. Clients are still expected to
+        # debounce; the burst cap above applies here too.
+        "external_api_location_search": "1200/hour",
+        # Starting a game session runs up to 25 eligibility passes over the
+        # player's pins, an N+1 difficulty-proxy lookup across them, and a
+        # *billed* Street View call per attempt - resync-shaped cost, so it gets
+        # a resync-shaped cap rather than a share of the write budget. Generous
+        # enough for dozens of real games an hour.
+        # See external_api.throttling.GameStartThrottle.
+        "external_api_game_start": "40/hour",
+        # Global search fans one request out across every domain provider
+        # (pins, wikis, trips, photos, messages, ...), so a single call is far
+        # from a single query. Its own budget keeps a search-heavy session from
+        # starving the client's actual syncing, and vice versa.
+        "external_api_global_search": "300/hour",
+        # Calendar export talks to Google on the request path and may make one
+        # upstream call per trip activity. Tight, because the cost lands on a
+        # third party's rate limit as much as on ours.
+        "external_api_calendar": "30/hour",
+        # One assistant chat turn bills real model-provider cost and can fan
+        # out to up to 6 model round trips before it replies - resync-shaped
+        # cost, same reasoning as external_api_game_start.
+        "external_api_assistant_message": "60/hour",
+        # Live-location updates while a check-in is active are a foreground-
+        # tracking workload, not an ordinary write - the standard write cap
+        # (300/hour) dies in under an hour at one fix per 10 seconds. Its own
+        # budget accommodates that cadence without loosening the cap every
+        # other safety write shares.
+        "external_api_safety_location": "360/hour",
     },
     # Only consulted by views whose schema is actually generated - the
     # preprocessing hook in external_api.schema limits that to the external API.
@@ -587,12 +635,54 @@ OAUTH2_PROVIDER = {
     # RFC 8252 loopback (any port - django-oauth-toolkit matches loopback IPs
     # port-insensitively) on desktop. "https" stays for any future web client.
     "ALLOWED_REDIRECT_URI_SCHEMES": ["https", "http", "urbanlens"],
+    # Mirrors dashboard.models.account.model.ApiKeyScope verbatim (value ->
+    # label). The duplication is unavoidable - settings load before the app
+    # registry, so this module cannot import a model - and
+    # test_external_api_scopes asserts the two stay identical.
     "SCOPES": {
         "profile:read": "Read your profile UUID",
+        "settings:read": "Read your account preferences",
+        "settings:write": "Change your account preferences",
         "pins:read": "Read your pins (including deletions, for sync)",
-        "pins:write": "Create or suggest pins on your behalf",
+        "pins:write": "Create, edit, and delete your pins",
+        "lists:read": "Read your pin lists and saved filters",
+        "lists:write": "Create and modify your pin lists and saved filters",
+        "labels:read": "Read your labels",
+        "labels:write": "Create, modify, and merge your labels",
+        "visits:read": "Read your visit history",
+        "visits:write": "Log visits on your behalf",
+        "photos:read": "Read your photos, memories journal, and photo suggestions",
+        "photos:write": "Upload, label, file, vote on, and delete your photos, and act on photo suggestions",
+        "media:read": "Fetch the actual image/video/document files you may see",
+        "wiki:read": "Read community wikis you can see",
+        "wiki:write": "Edit community wikis on your behalf",
+        "trips:read": "Read your trips",
+        "trips:write": "Create and edit your trips",
+        "social:read": "Read your friends list and friend requests",
+        "social:write": "Send, accept, and manage friend relationships on your behalf",
+        "safety:read": "Read your safety check-ins and contacts",
+        "safety:write": "Start, update, and clear safety check-ins",
+        "messages:read": "Read your encrypted messages and conversation list",
+        "messages:write": "Send messages and manage your encryption keys",
+        "notifications:read": "Read your notifications and delivery preferences",
+        "notifications:write": "Mark notifications read and change delivery preferences",
+        "search:read": "Search your pins, wikis, and photos",
+        "games:read": "Read your game history, scores, and leaderboard standing",
+        "games:write": "Start games and submit guesses and answers on your behalf",
         "push:manage": "Register and remove this device's push notifications",
+        "custom_fields:read": "Read your custom field definitions and their values",
+        "custom_fields:write": "Create, edit, and delete your custom fields and their values",
+        "undo:read": "Read your recent delete history available to undo",
+        "undo:write": "Restore a previously deleted item",
+        "panels:read": "Read pin-detail enrichment panels (boundaries and other plugin-contributed data)",
+        "assistant:write": "Chat with your AI assistant, including creating trips and trip activities it suggests",
+        "device_scans:read": "Read nearby expected devices and their signal info",
+        "device_scans:write": "Upload wireless device scan data",
     },
+    # Deliberately NOT the full SCOPES list: a token that asked for nothing in
+    # particular gets the same minimal grant a PAT does
+    # (account.model._default_api_key_scopes). Everything else must be
+    # explicitly requested so it appears on the consent screen.
     "DEFAULT_SCOPES": ["profile:read", "pins:read", "pins:write", "push:manage"],
     "ACCESS_TOKEN_EXPIRE_SECONDS": 3600,
     "REFRESH_TOKEN_EXPIRE_SECONDS": 60 * 60 * 24 * 90,

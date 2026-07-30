@@ -24,7 +24,7 @@ from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.map_snapshot import materialize_markup_map
 from urbanlens.dashboard.services.pin_list_markup import build_list_markup_snapshot
-from urbanlens.dashboard.services.pin_list_membership import resync_smart_list
+from urbanlens.dashboard.services.pin_list_membership import add_pins_to_list, reorder_list_items, resync_smart_list
 from urbanlens.dashboard.services.pin_list_trip import copy_list_pins_to_trip
 from urbanlens.dashboard.services.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH, text_length_error
 
@@ -423,6 +423,10 @@ class PinListAddPinsView(LoginRequiredMixin, View):
             criteria["exclude_regions"] = search_form.parse_region_geojson("exclude_regions")
             pins = list(Pin.objects.filter(profile=profile).root_pins().filter_by_criteria(criteria))
 
+        # Counted here rather than left to add_pins_to_list because the
+        # confirmation handshake below has to happen *before* anything is
+        # written - the service dedupes against the same set again, which is
+        # idempotent and costs one query.
         existing_pin_ids = set(pin_list.items.values_list("pin_id", flat=True))
         new_pins = [pin for pin in pins if pin.pk not in existing_pin_ids]
 
@@ -433,24 +437,16 @@ class PinListAddPinsView(LoginRequiredMixin, View):
         if len(new_pins) > _BULK_ADD_CONFIRM_THRESHOLD and not confirmed:
             return JsonResponse({"confirm_required": True, "count": len(new_pins)}, status=409)
 
-        base_order = pin_list.items.count()
+        result = add_pins_to_list(pin_list, new_pins)
 
-        max_pins = SiteSettings.get_current().max_pins_per_list
-        truncated = False
-        if max_pins > 0:
-            remaining = max(0, max_pins - base_order)
-            if remaining <= 0:
-                return _show_toast(_render_items_panel(request, pin_list), f"This list is already at the maximum of {max_pins} pins.", level="warning")
-            if len(new_pins) > remaining:
-                new_pins = new_pins[:remaining]
-                truncated = True
-
-        PinListItem.objects.bulk_create(
-            [PinListItem(pin_list=pin_list, pin=pin, order=base_order + i, added_via=PinListItem.ADDED_MANUAL) for i, pin in enumerate(new_pins)],
-        )
         response = _render_items_panel(request, pin_list)
-        if truncated:
-            response = _show_toast(response, f"Only added {len(new_pins)} pin(s) - this list is capped at {max_pins} pins.", level="warning")
+        if result.skipped_over_cap:
+            message = (
+                f"This list is already at the maximum of {result.max_pins} pins."
+                if result.added == 0
+                else f"Only added {result.added} pin(s) - this list is capped at {result.max_pins} pins."
+            )
+            response = _show_toast(response, message, level="warning")
         return response
 
 
@@ -479,17 +475,7 @@ class PinListReorderView(LoginRequiredMixin, View):
         body = _parse_body(request)
 
         item_ids = [int(entry["id"]) for entry in body.get("items", []) if str(entry.get("id", "")).isdigit()]
-        items_by_id = {item.pk: item for item in PinListItem.objects.for_list(pin_list).filter(pk__in=item_ids)}
-
-        updated = []
-        for order, item_id in enumerate(item_ids):
-            item = items_by_id.get(item_id)
-            if item is None:
-                continue
-            item.order = order
-            updated.append(item)
-        if updated:
-            PinListItem.objects.bulk_update(updated, ["order"])
+        reorder_list_items(pin_list, item_ids)
         return HttpResponse(status=200)
 
 
@@ -519,7 +505,7 @@ class PinListAddToTripView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
-        from urbanlens.dashboard.controllers.trip import _trip_or_403
+        from urbanlens.dashboard.controllers.trip import trip_or_not_found
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
@@ -528,7 +514,7 @@ class PinListAddToTripView(LoginRequiredMixin, View):
         trip_slug = body.get("trip_slug")
         if not trip_slug:
             return HttpResponse("A trip is required.", status=400)
-        result = _trip_or_403(request, trip_slug, profile)
+        result = trip_or_not_found(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
             return result
         trip = result

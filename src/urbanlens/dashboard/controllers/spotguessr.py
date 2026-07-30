@@ -34,12 +34,16 @@ from urbanlens.dashboard.models.spotguessr.model import (
     GameSession,
     GameSessionParticipant,
     Guess,
-    PlayerModeRating,
     SpotGuessrMode,
-    SpotGuessrPreference,
 )
 from urbanlens.dashboard.services.connections import get_connections
-from urbanlens.dashboard.services.spotguessr import chat as spotguessr_chat, eligibility as spotguessr_eligibility, relevance as spotguessr_relevance, serializers, session as spotguessr_session
+from urbanlens.dashboard.services.spotguessr import (
+    chat as spotguessr_chat,
+    overview as spotguessr_overview,
+    relevance as spotguessr_relevance,
+    serializers,
+    session as spotguessr_session,
+)
 from urbanlens.dashboard.services.spotguessr.social import visible_friend_ratings
 
 logger = logging.getLogger(__name__)
@@ -202,12 +206,14 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest) -> HttpResponse:
         profile = _current_profile(request)
-        preference, _ = SpotGuessrPreference.objects.get_or_create(profile=profile)
+        preference = spotguessr_overview.get_preference(profile)
         # Whichever mode the player most recently played, not hardcoded to
         # Photos - a rating for a Named Place/Street View-only player was
         # updating correctly all along, the homepage chip just never looked
         # at the right row (see docs/PROBLEMS.md/git history for the report).
-        own_rating = PlayerModeRating.objects.filter(profile=profile).order_by("-last_played_at").first()
+        # Shared with the external API's overview endpoint via
+        # ``services.spotguessr.overview`` so the two can't answer differently.
+        own_rating = spotguessr_overview.most_recent_rating(profile)
 
         # An invite notification links here with ?session=<id> (there's no
         # dedicated per-session page - this single-page view holds all
@@ -248,7 +254,7 @@ class SpotGuessrSettingsView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest) -> HttpResponse:
         profile = _current_profile(request)
-        preference, _ = SpotGuessrPreference.objects.get_or_create(profile=profile)
+        preference = spotguessr_overview.get_preference(profile)
         preference.show_ratings_to_friends = request.POST.get("show_ratings_to_friends") == "on"
         preference.save(update_fields=["show_ratings_to_friends", "updated"])
         return JsonResponse({"show_ratings_to_friends": preference.show_ratings_to_friends})
@@ -301,9 +307,7 @@ class SpotGuessrStartView(LoginRequiredMixin, View):
 
         invite_ids = [pid for pid in request.POST.getlist("invite_profile_ids") if pid]
 
-        preference, _ = SpotGuessrPreference.objects.get_or_create(profile=profile)
-        preference.last_config = config.to_dict()
-        preference.save(update_fields=["last_config", "updated"])
+        spotguessr_overview.remember_last_config(profile, config)
 
         if invite_ids:
             invitees = list(Profile.objects.filter(pk__in=invite_ids))
@@ -313,31 +317,19 @@ class SpotGuessrStartView(LoginRequiredMixin, View):
                 return JsonResponse({"error": str(exc)}, status=400)
             return JsonResponse({"session_id": game_session.pk, "lobby": True, "session": serializers.serialize_session(game_session)})
 
-        if not spotguessr_eligibility.has_eligible_locations([profile], require_visited_by_all=config.require_visited_all, geo_bounds=config.geo_bounds):
-            return JsonResponse({"error_code": "no_eligible_locations"})
-
+        # The whole create-then-verify-then-clean-up sequence lives in the
+        # service (``start_solo_playthrough``) so the external API runs the
+        # identical one rather than a second copy that could drift into leaving
+        # unplayable ACTIVE sessions behind.
         try:
-            game_session = spotguessr_session.start_solo_session(profile, mode, config, total_rounds=total_rounds)
+            result = spotguessr_session.start_solo_playthrough(profile, mode, config, total_rounds=total_rounds)
         except spotguessr_session.SpotGuessrError as exc:
             return JsonResponse({"error": str(exc)}, status=400)
 
-        round_ = spotguessr_session.get_or_create_round(game_session)
-        if round_ is None:
-            # The pre-check above only ruled out "no location is pinned by
-            # everyone at all" - reaching None here means every eligible
-            # location was tried and failed to yield a playable round (e.g.
-            # no usable photo/name/imagery), a rarer failure that only
-            # surfaces once generation is attempted. This is the exact same
-            # "nothing playable" condition SpotGuessrBeginView/RoundView
-            # report as `no_eligible_locations` (rounds_played == 0,
-            # necessarily true for a session that was just created) - report
-            # it identically here instead of a fake "Game over! 0 pts"
-            # completed summary, which read as a real (if confusing) result
-            # rather than "nothing was actually playable."
-            spotguessr_session.complete_session(game_session)
+        if result.round is None or result.session is None:
             return JsonResponse({"error_code": "no_eligible_locations"})
 
-        return JsonResponse({"session_id": game_session.pk, "finished": False, "round": serializers.serialize_round(round_)})
+        return JsonResponse({"session_id": result.session.pk, "finished": False, "round": serializers.serialize_round(result.round)})
 
 
 class SpotGuessrLobbyView(LoginRequiredMixin, View):

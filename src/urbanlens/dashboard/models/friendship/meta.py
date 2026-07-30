@@ -4,6 +4,20 @@ from urbanlens.dashboard.models.abstract.choices import TextChoices
 
 
 class FriendshipStatus(TextChoices):
+    """What kind of relationship two profiles have - and nothing else.
+
+    ``MUTED`` is retained but **deprecated and never written**. Mute is a
+    notification preference, not a relationship state, and it now lives on
+    ``Friendship.muted``; see that model's docstring for the data-integrity
+    bug that conflating the two caused (muting an accepted friend overwrote
+    ``ACCEPTED``, so ``Profile.are_friends`` - and therefore every visibility
+    gate in the app - stopped seeing them as friends). The value stays in the
+    enum, and in ``rejected()``, purely as defence in depth: it keeps the
+    stored wire vocabulary stable for API clients, and it means that any row
+    the data migration somehow missed still fails closed rather than being
+    treated as an unknown status.
+    """
+
     PENDING = "Pending", "Pending"
     REQUESTED = "Requested", "Requested"
     ACCEPTED = "Accepted", "Accepted"

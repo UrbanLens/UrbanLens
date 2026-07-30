@@ -101,11 +101,77 @@ class TestCase(_MessagePrefixMixin, _HypothesisMixin, test.TestCase):
     Provides additional functionality to the django unittest TestCase.
 
     - Adds a default message to all assertions.
+    - Runs ``setUp``/``tearDown`` inside hypothesis's per-example transaction
+      for ``@given`` tests (see :meth:`setup_example`).
 
     Use this for tests that need database access (model creation, ORM
     queries, the Django test client, etc). Each test runs in its own
     transaction that is rolled back afterwards.
     """
+
+    def _is_hypothesis_test(self) -> bool:
+        """
+        Whether the test method currently running is decorated with ``@given``.
+
+        Returns:
+            bool: True if hypothesis drives this test method's fixtures.
+        """
+        method = getattr(self, self._testMethodName, None)
+        return bool(getattr(method, "is_hypothesis_test", False))
+
+    # unittest's own casing; both are one-liners upstream (``self.setUp()`` /
+    # ``self.tearDown()``) and Django does not override either, so replacing
+    # rather than delegating to them is safe.
+    def _callSetUp(self) -> None:  # noqa: N802
+        """Defer ``setUp`` to :meth:`setup_example` for a ``@given`` test."""
+        if self._is_hypothesis_test():
+            return
+        self.setUp()
+
+    def _callTearDown(self) -> None:  # noqa: N802
+        """Defer ``tearDown`` to :meth:`teardown_example` for a ``@given`` test."""
+        if self._is_hypothesis_test():
+            return
+        self.tearDown()
+
+    def setup_example(self) -> None:
+        """
+        Enter hypothesis's per-example transaction, then run ``setUp`` inside it.
+
+        ``hypothesis.extra.django``'s mixin routes ``@given`` tests through
+        ``unittest.TestCase.__call__``, bypassing Django's usual
+        ``_pre_setup``/``_post_teardown`` wrapper; hypothesis calls those per
+        *example* instead, here and in :meth:`teardown_example`. ``setUp`` is
+        still called once by ``unittest``'s ``run()`` though - before the first
+        example, so outside every per-example transaction. Rows it wrote landed
+        in the class-level atomic and survived to ``tearDownClass``, leaking
+        into every later test in the class: any class mixing a row-writing
+        ``setUp`` with a ``@given`` test saw the *next* test fail on a unique
+        constraint (``RoundTripCommentsTests`` tripped
+        ``dashboard_locations_latitude_longitude_uniq`` on a second ``Location``
+        at the same coordinates).
+
+        Running it here instead puts ``setUp`` back inside the transaction that
+        gets rolled back, matching the guarantee non-hypothesis tests have.
+        """
+        super().setup_example()
+        if self._is_hypothesis_test():
+            self.setUp()
+
+    def teardown_example(self, example) -> None:
+        """
+        Run ``tearDown`` and cleanups, then roll the example's transaction back.
+
+        Cleanups are drained per example so that patchers started in ``setUp``
+        don't stack up across examples.
+
+        Args:
+            example: The example hypothesis just finished, passed through.
+        """
+        if self._is_hypothesis_test():
+            self.tearDown()
+            self.doCleanups()
+        super().teardown_example(example)
 
 
 class SimpleTestCase(_MessagePrefixMixin, _HypothesisMixin, test.SimpleTestCase):

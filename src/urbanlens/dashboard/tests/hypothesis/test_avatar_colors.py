@@ -97,9 +97,16 @@ class GroupMemberSearchAvatarColorTests(TestCase):
         self.client.force_login(self.searcher.user)
         self.candidates = []
         for n in range(4):
-            candidate = _profile()  # already ANYONE-visible, so can_direct_message needs no friendship
+            candidate = _profile()
             candidate.user.username = f"searchable-user-{n}"
             candidate.user.save(update_fields=["username"])
+            # _profile() only opens direct_message_visibility. The member search
+            # also filters through can_view_profile, and the baker default is
+            # ANYTHING_IN_COMMON - which these throwaway profiles fail, having
+            # nothing in common with the searcher. Without this the search
+            # returns zero rows and the test is asserting nothing about colors.
+            Profile.objects.filter(pk=candidate.pk).update(profile_visibility=VisibilityChoice.ANYONE)
+            candidate.refresh_from_db()
             self.candidates.append(candidate)
 
     def test_results_get_distinct_colors(self) -> None:

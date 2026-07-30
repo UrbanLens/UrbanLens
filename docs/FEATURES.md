@@ -1,7 +1,7 @@
 # UrbanLens Features
 
 A feature inventory of what UrbanLens currently supports, generated from a codebase audit
-(2026-07-11, last verified/expanded 2026-07-18). This is a snapshot, not a promise — see `TODO.md` for what's planned or partially
+(2026-07-11, last verified/expanded 2026-07-29). This is a snapshot, not a promise — see `TODO.md` for what's planned or partially
 built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 
 ## Mapping & Pins
@@ -218,6 +218,28 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
   view attached maps, and chat in real time
 - Live two-way WebSocket chat between check-in owner and emergency contacts
 - Reusable saved emergency contacts, per-contact opt-out, auto-delete retention policy
+
+## Device Scanning
+
+- Mobile app feature: scans for nearby wireless (Wi-Fi/Bluetooth) devices while a user walks a
+  route, to help them notice a camera, sensor, or tracker they didn't expect. Uploads MAC address,
+  signal-strength samples along the route, an estimated location, and an optional device-type guess
+  through a single external-API endpoint (`device_scans:write`); a background task classifies the
+  device (trusting the client's own guess, otherwise a small MAC-OUI/name heuristic) and, for
+  camera/sensor/tracker types, updates a fuzzy map marker on every wiki (including child wikis)
+  whose boundary contains the reported coordinates.
+- Markers start as an imprecise area and get more precise automatically as more scans corroborate
+  the same location, weighted toward recent activity over old; a device that appears to move shows
+  up as two separate markers until the stale one ages out. The app can query which devices/signal
+  strengths are already expected nearby (`device_scans:read`) and report back when an expected
+  device wasn't detected, which — after a few consecutive misses — flips the marker to "presumed
+  removed."
+- Attribution to the uploader's account is a privacy preference (`track_device_scans`, Settings →
+  History, default on) independent of authentication, which is always required; turning it off
+  stores the same scan data anonymously instead of skipping it.
+- **Individual scans are never retrievable through any API** — only the cumulative, unattributed
+  marker per (device, wiki) is ever readable, and only for wikis the caller has already discovered.
+- No manual marker-placement UI yet; markers are maintained entirely by the background pipeline.
 
 ## Social Layer
 

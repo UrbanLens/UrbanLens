@@ -17,6 +17,8 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
+from urbanlens.dashboard.services.pin_edit import SECURITY_EDIT_FIELDS, apply_pin_edits
+from urbanlens.dashboard.services.pin_subresources import create_pin_note, delete_pin_note
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 
 logger = logging.getLogger(__name__)
@@ -222,35 +224,43 @@ class PinEditView(LoginRequiredMixin, View):
 
         from datetime import date, datetime
 
-        # Scalar fields. Star-rating widgets and other quick-edit controls submit
-        # only the one field they changed, so any field absent from the body must
-        # fall back to the pin's current value - never silently clear it.
-        name = (body.get("name") or "").strip() or None if "name" in body else pin.name
-        description = (body.get("description") or "").strip() or None if "description" in body else pin.description
-        length_error = text_length_error(description, MAX_PIN_DESCRIPTION_LENGTH, "Description")
-        if length_error:
-            return HttpResponse(length_error, status=400)
-        pin_type = body.get("pin_type") or pin.pin_type
-        priority_raw = body.get("priority")
-        rating_raw = body.get("rating")
-        vulnerability_raw = body.get("vulnerability")
-        danger_raw = body.get("danger")
-        last_visited_raw = (body.get("last_visited") or "").strip() or None
+        # Star-rating widgets and other quick-edit controls submit only the one
+        # field they changed, so anything absent from the body must be left
+        # alone rather than rewritten with its current value. `edits` therefore
+        # collects *only* what this request actually submitted, and
+        # ``services.pin_edit.apply_pin_edits`` writes exactly that much.
+        edits: dict[str, object] = {}
 
-        try:
-            if priority_raw is not None and str(priority_raw).strip():
-                p = int(priority_raw)
-                priority = p if 0 <= p <= 5 else pin.priority
-            else:
-                priority = pin.priority
-        except (TypeError, ValueError):
-            priority = pin.priority
+        if "name" in body:
+            edits["name"] = body.get("name")
+        if "description" in body:
+            description = (body.get("description") or "").strip() or None
+            length_error = text_length_error(description, MAX_PIN_DESCRIPTION_LENGTH, "Description")
+            if length_error:
+                return HttpResponse(length_error, status=400)
+            edits["description"] = description
+
+        # A browser form is a lenient caller: an out-of-range or unparseable
+        # value means a stale/hand-edited control, and dropping that one field
+        # is friendlier than failing the whole dialog. (The JSON API is strict
+        # instead and answers 400 - see external_api.serializers.PinUpdateSerializer.)
+        for stat_field in ("priority", "vulnerability", "danger"):
+            raw = body.get(stat_field)
+            if raw is None or not str(raw).strip():
+                continue
+            try:
+                parsed = int(raw)
+            except (TypeError, ValueError):
+                continue
+            if 0 <= parsed <= 5:
+                edits[stat_field] = parsed
 
         # clear_rating distinguishes "explicitly submitted 0" (delete the
         # Review row) from "field untouched, pin.rating just defaults to 0
         # because no Review exists yet" (nothing to do) - collapsing both
         # into rating=0 would either silently no-op a real clear request, or
         # issue a pointless delete query on every unrelated quick-edit.
+        rating_raw = body.get("rating")
         clear_rating = False
         try:
             if rating_raw is not None and str(rating_raw).strip():
@@ -264,26 +274,9 @@ class PinEditView(LoginRequiredMixin, View):
         except (TypeError, ValueError):
             rating = pin.rating
 
-        try:
-            if vulnerability_raw is not None and str(vulnerability_raw).strip():
-                v = int(vulnerability_raw)
-                vulnerability = v if 0 <= v <= 5 else pin.vulnerability
-            else:
-                vulnerability = pin.vulnerability
-        except (TypeError, ValueError):
-            vulnerability = pin.vulnerability
-
-        try:
-            if danger_raw is not None and str(danger_raw).strip():
-                d = int(danger_raw)
-                danger = d if 0 <= d <= 5 else pin.danger
-            else:
-                danger = pin.danger
-        except (TypeError, ValueError):
-            danger = pin.danger
-
-        last_visited = None
+        last_visited_raw = (body.get("last_visited") or "").strip() or None
         if last_visited_raw:
+            last_visited = None
             for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d"):
                 try:
                     last_visited = datetime.strptime(last_visited_raw, fmt)
@@ -298,16 +291,18 @@ class PinEditView(LoginRequiredMixin, View):
                     return HttpResponse("Last visited date must be in the past.", status=400)
                 if lv_date < min_date:
                     return HttpResponse("Last visited date must be within the last 100 years.", status=400)
+                edits["last_visited"] = last_visited
 
-        # Security indicators
-        valid_security = {v for v, _ in SecurityLevel.choices}
-        security_fields = ["fences", "alarms", "cameras", "security", "signs", "vps", "plywood", "locked"]
-        security_values = {}
-        for sf in security_fields:
-            raw = body.get(sf, "")
-            security_values[sf] = raw if raw in valid_security else getattr(pin, sf)
+        # Security indicators. Anything not a recognized SecurityLevel is
+        # treated as "not submitted" - same leniency as the stat fields above.
+        valid_security = {value for value, _label in SecurityLevel.choices}
+        for security_field in SECURITY_EDIT_FIELDS:
+            raw = body.get(security_field, "")
+            if raw in valid_security:
+                edits[security_field] = raw
 
-        # Abandonment dates
+        # Abandonment dates. Present-but-unparseable clears the field, matching
+        # the date input's own "clear" behavior (it posts an empty string).
         def _parse_date(raw: str) -> date | None:
             raw = (raw or "").strip()
             if not raw:
@@ -317,55 +312,15 @@ class PinEditView(LoginRequiredMixin, View):
             except ValueError:
                 return None
 
-        date_built = _parse_date(body.get("date_built", "")) if "date_built" in body else pin.date_built
-        date_abandoned = _parse_date(body.get("date_abandoned", "")) if "date_abandoned" in body else pin.date_abandoned
-        date_last_active = _parse_date(body.get("date_last_active", "")) if "date_last_active" in body else pin.date_last_active
+        for date_field in ("date_built", "date_abandoned", "date_last_active"):
+            if date_field in body:
+                edits[date_field] = _parse_date(body.get(date_field, ""))
 
-        # Validate choices
-        valid_types = {v for v, _ in PinType.choices}
-        if pin_type not in valid_types:
-            pin_type = pin.pin_type
+        valid_types = {value for value, _label in PinType.choices}
+        if body.get("pin_type") in valid_types:
+            edits["pin_type"] = body["pin_type"]
 
-        next_name = (name or "").strip()
-
-        pin.name = name
-        pin.name_is_user_provided = bool(next_name)
-        pin.description = description
-        pin.pin_type = pin_type
-        pin.priority = priority
-        pin.vulnerability = vulnerability
-        pin.danger = danger
-        if last_visited is not None:
-            pin.last_visited = last_visited
-        for sf, val in security_values.items():
-            setattr(pin, sf, val)
-        pin.date_built = date_built
-        pin.date_abandoned = date_abandoned
-        pin.date_last_active = date_last_active
-        pin.save(
-            update_fields=[
-                "name",
-                "name_is_user_provided",
-                "description",
-                "pin_type",
-                "priority",
-                "vulnerability",
-                "danger",
-                "last_visited",
-                "fences",
-                "alarms",
-                "cameras",
-                "security",
-                "signs",
-                "vps",
-                "plywood",
-                "locked",
-                "date_built",
-                "date_abandoned",
-                "date_last_active",
-                "updated",
-            ]
-        )
+        apply_pin_edits(pin, edits)
 
         # rating lives on the Review model (one review per user per pin)
         if rating and 1 <= rating <= 5:
@@ -445,11 +400,10 @@ class PinNotesView(LoginRequiredMixin, View):
         except (json.JSONDecodeError, ValueError):
             body = request.POST.dict()
 
-        text = (body.get("text") or "").strip()
-        if not text:
-            return HttpResponse("Note text is required.", status=400)
-
-        PinNote.objects.create(pin=pin, text=text)
+        try:
+            create_pin_note(pin, text=(body.get("text") or ""))
+        except ValueError as exc:
+            return HttpResponse(str(exc), status=400)
         notes = pin.notes.order_by("-created")
         return render(request, "dashboard/partials/pins/pin_notes_panel.html", {"pin": pin, "notes": notes})
 
@@ -466,7 +420,7 @@ class PinNoteDeleteView(LoginRequiredMixin, View):
             return result
         pin = result
         note = get_object_or_404(PinNote, id=note_id, pin=pin)
-        note.delete()
+        delete_pin_note(note)
         return HttpResponse("", status=200)
 
 

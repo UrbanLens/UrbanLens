@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, CheckConstraint, DateTimeField, F, ForeignKey, Index, PositiveIntegerField, Q, TextField
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, CheckConstraint, DateTimeField, F, ForeignKey, Index, PositiveIntegerField, Q, TextField, UniqueConstraint, UUIDField
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
@@ -94,6 +94,17 @@ class DirectMessage(abstract.DashboardModel):
     # deleted, so the message can keep showing "map removed" instead of
     # silently losing all trace that one was ever here.
     map_removed = BooleanField(default=False)
+
+    # Caller-generated idempotency key, mirroring the pin-create flow's
+    # client_uuid (see services.pin_creation.create_pin_for_profile). A mobile
+    # client stamps a message at compose time and retries the same send until
+    # it is acknowledged; without this, a reply sent over a flaky connection
+    # gets delivered two or three times, which is far worse in a conversation
+    # than a duplicate pin is on a map. Nullable because every message sent
+    # from the web composer and every message predating this field has none,
+    # and uniqueness is scoped per sender rather than globally so two clients
+    # can never collide by both generating the same uuid (see Meta below).
+    client_uuid = UUIDField(null=True, blank=True, editable=False)
 
     if TYPE_CHECKING:
         sender_id: int
@@ -203,5 +214,17 @@ class DirectMessage(abstract.DashboardModel):
             CheckConstraint(
                 condition=Q(body="") | Q(ciphertext=""),
                 name="db_dm_body_xor_ciphertext",
+            ),
+            # Idempotency is per sender, not global: two clients generating the
+            # same uuid must not collide, and a sender replaying their own send
+            # must resolve to their own earlier message. Conditional so the
+            # many rows with no client_uuid (web composer, pre-existing
+            # history) are exempt - in Postgres a plain unique index would
+            # already allow repeated NULLs, but stating the condition keeps the
+            # intent explicit and portable.
+            UniqueConstraint(
+                fields=["sender", "client_uuid"],
+                condition=Q(client_uuid__isnull=False),
+                name="db_dm_unique_client_uuid_per_sender",
             ),
         ]

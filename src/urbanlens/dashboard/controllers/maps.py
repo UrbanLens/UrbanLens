@@ -289,6 +289,11 @@ class MapController(LoginRequiredMixin, GenericViewSet):
                     category_ids=category_ids,
                     google_place_id=google_place_id,
                     place_canonical_name=place_canonical_name,
+                    # Typed into the add-pin dialog by hand, so it is a
+                    # deliberate name and must outrank later automatic
+                    # discovery - unlike an importer's parser fallback, which
+                    # is why create_pin_for_profile defaults this to False.
+                    name_is_user_provided=bool((name or "").strip()),
                 )
             except PinCreationForbiddenError as e:
                 return HttpResponse(f"Error: {e}", status=403)

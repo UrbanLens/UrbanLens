@@ -424,6 +424,16 @@
 
                 <div class="settings-field">
                     <label class="settings-toggle-row">
+                        {{ history_form.track_device_scans }}
+                        <span class="settings-toggle-label">
+                            <strong>{{ history_form.track_device_scans.label }}</strong>
+                            <span class="settings-help">{{ history_form.track_device_scans.help_text }}</span>
+                        </span>
+                    </label>
+                </div>
+
+                <div class="settings-field">
+                    <label class="settings-toggle-row">
                         {{ history_form.generate_photo_keywords }}
                         <span class="settings-toggle-label">
                             <strong>{{ history_form.generate_photo_keywords.label }}</strong>

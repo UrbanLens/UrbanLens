@@ -11,14 +11,13 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.db.models import Q
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
-from django.urls import NoReverseMatch, reverse
 from django.views import View
 
 from urbanlens.dashboard.models.comments.model import Comment
-from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
-from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
+from urbanlens.dashboard.services.comment_notifications import notify_reply
+from urbanlens.dashboard.services.comments import ALLOWED_EMOJIS, CommentValidationError, toggle_reaction, top_level_comment_queryset, visible_comment_tree
 from urbanlens.dashboard.services.map_snapshot import (
     _sanitize_markup_color,
     _sanitize_markup_shapes,
@@ -29,6 +28,7 @@ from urbanlens.dashboard.services.map_snapshot import (
 from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
 from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
+from urbanlens.dashboard.services.trip_comments import ALLOWED_COMMENT_EMOJIS
 from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
 
 # Re-exported so existing imports (e.g. tests) keep resolving from this module.
@@ -36,7 +36,9 @@ __all__ = ["_parse_map_data", "_sanitize_markup_color", "_sanitize_markup_shapes
 
 logger = logging.getLogger(__name__)
 
-_ALLOWED_EMOJIS = {"👍", "👎", "❤️", "😂", "😮", "😢", "🔥", "🏚️"}
+# Canonical definition now lives in services.comments, shared with the external
+# API. Aliased here so existing importers (controllers.trip) keep resolving it.
+_ALLOWED_EMOJIS = ALLOWED_EMOJIS
 _COMMENTS_PAGE_SIZE = 8
 
 
@@ -165,23 +167,12 @@ def _render_comments(request, context: dict) -> HttpResponse:
 
 
 def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra) -> dict:
-    pinned = viewer_pinned_uuids(profile)
-    top_level_qs = (
-        comments_qs.filter(parent__isnull=True)
-        .select_related("profile__user", "markup_map", "pin", "pin__location")
-        .prefetch_related(
-            "reactions__profile",
-            "replies__reactions__profile",
-            "replies__profile__user",
-            # comment.map_data derives its snapshot from the markup map's items.
-            "markup_map__items",
-            "replies__markup_map__items",
-        )
-    )
+    top_level_qs = top_level_comment_queryset(comments_qs)
     # Default to the last page so the most recent activity (comments are
     # ordered oldest-to-newest) is what a viewer sees without paging back.
     page_obj = get_page(request, top_level_qs, _COMMENTS_PAGE_SIZE, default_last=True)
     top_level = list(page_obj.object_list)
+
     # Collect all unique commenter profiles so we can check photo visibility once.
     all_commenters: set[Profile] = set()
     for c in top_level:
@@ -189,72 +180,34 @@ def _build_context(comments_qs, profile: Profile, request: HttpRequest, **extra)
         all_commenters.update(r.profile for r in c.replies.all())
     # Set of profile IDs whose images should be blurred for this viewer.
     blurred_profiles: set[int] = {p.pk for p in all_commenters if p != profile and not profile.can_view_photos_from(p)}
-    # Cache can_view_comments_from per unique commenter (mirrors blurred_profiles
-    # above) rather than recomputing it once per comment/reply below - each call
-    # runs up to 3 extra query pairs, redundant when the same author appears
-    # across multiple comments/replies in the same thread.
-    comment_visibility_cache: dict[int, bool] = {p.pk: profile.can_view_comments_from(p) for p in all_commenters}
 
-    # A comment's content is already all-or-nothing gated below by
-    # can_view_comments_from (comment_visibility) - but once it passes that
-    # gate, the author's own name/avatar weren't separately masked per their
-    # profile_visibility (docs/PROBLEMS.md gap). Wiki/trip comments can have
-    # many different authors a viewer might not otherwise have standing to
-    # see; pin comments are always self-authored (the pin owner is the only
-    # possible viewer), so this is a no-op there (resolve_visible_identity
-    # never masks a profile from itself).
-    from urbanlens.dashboard.services.identity_visibility import mask_profile_references
+    # Every visibility decision - comment-visibility, pending-scan, the @loc
+    # mention gate, and author-identity masking - lives in this one call, shared
+    # with the external API so the two surfaces cannot drift apart on it.
+    visible = visible_comment_tree(top_level, profile)
 
-    author_refs: list[Profile] = []
-    for c in top_level:
-        author_refs.append(c.profile)
-        author_refs.extend(r.profile for r in c.replies.all())
-    mask_profile_references(profile, author_refs)
-
-    rendered = []
-    for c in top_level:
-        if not comment_visibility_cache[c.profile_id]:
-            continue
-        # A newly-uploaded image is scanned asynchronously (tasks.scan_comment_image) -
-        # until that clears pending_scan, the comment stays visible only to
-        # its own author, never to any other viewer (see
-        # controllers.comments.start_comment_image_scan).
-        if c.pending_scan and c.profile != profile:
-            continue
-        html = render_comment_text(c.text, pinned)
-        if html is None:
-            continue
-        replies_rendered = []
-        for r in c.replies.all():
-            if not comment_visibility_cache[r.profile_id]:
-                continue
-            if r.pending_scan and r.profile != profile:
-                continue
-            r_html = render_comment_text(r.text, pinned)
-            if r_html is None:
-                continue
-            replies_rendered.append(
+    rendered = [
+        {
+            "comment": item.comment,
+            "rendered_text": item.rendered_text,
+            "reactions": _aggregate_reactions(item.comment.reactions.all()),
+            "replies": [
                 {
-                    "comment": r,
-                    "rendered_text": r_html,
-                    "reactions": _aggregate_reactions(r.reactions.all()),
-                },
-            )
-        rendered.append(
-            {
-                "comment": c,
-                "rendered_text": html,
-                "reactions": _aggregate_reactions(c.reactions.all()),
-                "replies": replies_rendered,
-                # A reply whose parent was deleted also has parent=None, so it
-                # queries identically to a genuine top-level comment (see
-                # top_level_qs above) - this distinguishes the two so the
-                # template can render a "[Original comment deleted]"
-                # placeholder above it instead of showing it as if it had
-                # always stood on its own (UL-219).
-                "parent_was_deleted": c.parent_deleted,
-            },
-        )
+                    "comment": reply.comment,
+                    "rendered_text": reply.rendered_text,
+                    "reactions": _aggregate_reactions(reply.comment.reactions.all()),
+                }
+                for reply in item.replies
+            ],
+            # A reply whose parent was deleted also has parent=None, so it
+            # queries identically to a genuine top-level comment - this
+            # distinguishes the two so the template can render an "[Original
+            # comment deleted]" placeholder above it instead of showing it as
+            # if it had always stood on its own (UL-219).
+            "parent_was_deleted": item.parent_was_deleted,
+        }
+        for item in visible
+    ]
     return {
         "rendered_comments": rendered,
         "page_obj": page_obj,
@@ -345,7 +298,7 @@ class PinCommentsView(LoginRequiredMixin, View):
         elif existing_image_id:
             attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
-            _notify_reply(profile, parent, reply=comment)
+            notify_reply(profile, parent, reply=comment)
         ctx = _pin_comments_context(pin, profile, request)
         return _render_comments(request, ctx)
 
@@ -419,7 +372,7 @@ class WikiCommentsView(LoginRequiredMixin, View):
         elif existing_image_id:
             attach_existing_comment_image(comment, existing_image_id, profile)
         if parent and parent.profile != profile:
-            _notify_reply(profile, parent, reply=comment)
+            notify_reply(profile, parent, reply=comment)
         ctx = _build_context(wiki.comments.all(), profile, request, wiki=wiki, location=wiki.location, context_type="wiki")
         return _render_comments(request, ctx)
 
@@ -468,15 +421,15 @@ class CommentReactionView(LoginRequiredMixin, View):
         # comment_visibility privacy setting.
         if not profile.can_view_comments_from(comment.profile):
             raise Http404
-        emoji = request.POST.get("emoji", "")
-        if emoji not in _ALLOWED_EMOJIS:
+        # The add/remove/notify sequence lives in the service, not here. It used
+        # to be hand-rolled in this view as well, and the two copies agreeing was
+        # a coincidence: fixing a missing notification on the service side (the
+        # external API reacted without ever notifying the author) left this copy
+        # untouched, and only the panel's copy happened to already be correct.
+        try:
+            toggle_reaction(profile, comment, request.POST.get("emoji", ""))
+        except CommentValidationError:
             return HttpResponse("Invalid emoji.", status=400)
-        reaction = Reaction.objects.existing(profile, emoji, comment=comment)
-        if reaction:
-            reaction.delete()
-        else:
-            Reaction.objects.create(profile=profile, emoji=emoji, comment=comment)
-            _notify_reaction(profile, comment)
         return _render_reaction_row(request, comment, profile)
 
 
@@ -484,27 +437,23 @@ class TripCommentReactionView(LoginRequiredMixin, View):
     """POST /trips/<slug>/comments/<int>/react/  - toggle reaction on a TripComment."""
 
     def post(self, request, trip_slug, comment_id):
-        from urbanlens.dashboard.models.trips.model import Trip, TripComment
+        from urbanlens.dashboard.services.trip_access import get_trip_for_viewer
+        from urbanlens.dashboard.services.trip_comments import get_comment, set_comment_reaction
+        from urbanlens.dashboard.services.trip_errors import TripError, TripNotFoundError, TripPermissionError
 
         profile = _profile(request)
-        trip = get_object_or_404(Trip, slug=trip_slug)
-        if not (trip.creator == profile or trip.profiles.filter(pk=profile.pk).exists()):
-            return HttpResponse("Forbidden", status=403)
-        comment = get_object_or_404(TripComment, id=comment_id, trip=trip)
-        # Same gate the panel render applies (and CommentReactionView enforces
-        # for pin/wiki comments): a comment the author's comment_visibility
-        # hides from this viewer can't be discovered or reacted to by id.
-        if comment.author is not None and not profile.can_view_comments_from(comment.author):
-            raise Http404
-        emoji = request.POST.get("emoji", "")
-        if emoji not in _ALLOWED_EMOJIS:
-            return HttpResponse("Invalid emoji.", status=400)
-        reaction = Reaction.objects.existing(profile, emoji, trip_comment=comment)
-        if reaction:
-            reaction.delete()
-        else:
-            Reaction.objects.create(profile=profile, emoji=emoji, trip_comment=comment)
-            _notify_reaction(profile, comment)
+        try:
+            trip = get_trip_for_viewer(trip_slug, profile)
+            comment = get_comment(trip, comment_id)
+            emoji = request.POST.get("emoji", "")
+            # The panel keeps its toggle UX; the service takes an explicit target
+            # state so a retried API call can't silently undo itself.
+            already = Reaction.objects.existing(profile, emoji, trip_comment=comment) is not None if emoji in ALLOWED_COMMENT_EMOJIS else False
+            set_comment_reaction(comment, profile, emoji, reacted=not already)
+        except TripNotFoundError as exc:
+            raise Http404(exc.message) from exc
+        except TripError as exc:
+            return HttpResponse(exc.message, status=403 if isinstance(exc, TripPermissionError) else 400)
         return _render_trip_reaction_row(request, comment, profile)
 
 
@@ -575,60 +524,3 @@ class PinnedLocationsJsonView(LoginRequiredMixin, View):
                 results.append({"uuid": str(pin.location.uuid), "name": name})
         return HttpResponse(json.dumps(results), content_type="application/json")
 
-
-# -- Notification helpers ------------------------------------------------------
-
-
-def _comment_url(comment) -> str:
-    """Return the page URL (with anchor) for a comment or trip comment."""
-    anchor = f"#comment-{comment.id}"
-    try:
-        if hasattr(comment, "trip_id") and comment.trip_id:
-            return reverse("trips.detail", kwargs={"trip_slug": comment.trip.slug}) + anchor
-        if hasattr(comment, "pin_id") and comment.pin_id:
-            return reverse("pin.details", kwargs={"pin_slug": comment.pin.slug or str(comment.pin.uuid)}) + anchor
-        if hasattr(comment, "wiki_id") and comment.wiki_id and comment.wiki.location_id:
-            return reverse("location.wiki", kwargs={"location_slug": comment.wiki.location.slug or str(comment.wiki.location.uuid)}) + anchor
-    except NoReverseMatch:
-        logger.warning("Could not build comment URL for comment %s", comment.id)
-    return ""
-
-
-def _notify_reply(actor: Profile, parent_comment, reply=None) -> None:
-    recipient = parent_comment.profile if hasattr(parent_comment, "profile") else parent_comment.author
-    if recipient is None or recipient == actor:
-        return
-    try:
-        pref = recipient.notification_preferences.comment_reply
-    except AttributeError:
-        pref = DeliveryPreference.SITE
-    if pref == DeliveryPreference.NONE:
-        return
-    url = _comment_url(reply or parent_comment)
-    NotificationLog.objects.create(
-        profile=recipient,
-        notification_type=NotificationType.COMMENT_REPLY,
-        title=f"{actor.username} replied to your comment",
-        message=f"@{actor.username} replied to your comment.",
-        url=url,
-    )
-
-
-def _notify_reaction(actor: Profile, comment) -> None:
-    recipient = comment.profile if hasattr(comment, "profile") else comment.author
-    if recipient is None or recipient == actor:
-        return
-    try:
-        pref = recipient.notification_preferences.comment_liked
-    except AttributeError:
-        pref = DeliveryPreference.SITE
-    if pref == DeliveryPreference.NONE:
-        return
-    url = _comment_url(comment)
-    NotificationLog.objects.create(
-        profile=recipient,
-        notification_type=NotificationType.COMMENT_LIKED,
-        title=f"{actor.username} reacted to your comment",
-        message=f"@{actor.username} reacted to your comment.",
-        url=url,
-    )

@@ -1242,6 +1242,16 @@
         gap: .3rem;
     }
 
+    // Stands in for the un-consented image. The markup deliberately carries no
+    // image URL (see _message_items.html), so this has to supply the shape the
+    // blurred <img> used to occupy.
+    &__placeholder {
+        display: grid;
+        place-items: center;
+        background: rgba(255, 255, 255, .14);
+        color: rgba(255, 255, 255, .7);
+    }
+
     &__prompt {
         margin: 0;
     }

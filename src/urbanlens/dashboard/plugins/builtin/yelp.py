@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import GalleryMediaSource
+from urbanlens.dashboard.services.external_data import GalleryMediaSource, PanelApiKind
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
@@ -27,6 +27,12 @@ class YelpPanelSource(GalleryMediaSource):
     section_id = "yelp-section"
     icon = "storefront"
     title = "Yelp"
+    # Deliberately not exposed on the external API: the Yelp Fusion API's
+    # terms restrict redistributing its data beyond direct display to the
+    # user who triggered the lookup - serving it through our own bearer-key
+    # API is a redistribution question that hasn't been reviewed against
+    # those terms.
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
 
     def gate(self, pin: Pin) -> bool:
         """Requires a configured API key and coordinates or an address to search on."""

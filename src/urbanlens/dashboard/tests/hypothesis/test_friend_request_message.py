@@ -14,6 +14,7 @@ from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import VisibilityChoice
+from urbanlens.dashboard.tests.hypothesis.test_friend_invite_privacy import make_invitable_user
 
 
 class DirectFriendRequestMessageTests(TestCase):
@@ -58,7 +59,10 @@ class EmailInviteMessageTests(TestCase):
         self.url = reverse("friend.invite_email")
 
     def test_message_is_stored_on_the_friendship_for_an_existing_user(self) -> None:
-        target = baker.make(User, username="realuser", email="target@example.com", is_active=True)
+        # Open to friend requests, or invite_by_email's visibility gate refuses
+        # and there is no Friendship to carry the message - see
+        # test_friend_invite_privacy.make_invitable_user.
+        target = make_invitable_user(username="realuser", email="target@example.com", is_active=True)
 
         self.client.post(self.url, {"email": target.email, "message": "Join me on UrbanLens!"})
 

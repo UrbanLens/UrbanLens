@@ -263,11 +263,20 @@ class FetchPayloadTransientErrorTests(TestCase):
 
         from urbanlens.dashboard.plugins.builtin.property_records import _fetch_payload
 
-        self.location.address = "123 Main St"
+        # Location.address is a read-only property composed from the component
+        # fields; assigning to it (as this test used to) raises AttributeError.
+        # Set the components and let it compose, then assert on that value
+        # rather than a hard-coded string, so the test stays about pass-through
+        # instead of pinning the composition format.
+        self.location.street_number = "123"
+        self.location.route = "Main St"
+        expected_address = self.location.address
+        self.assertIsNotNone(expected_address)
+
         with mock.patch(self._PATCH_TARGET) as mock_gateway_cls:
             mock_gateway_cls.return_value.lookup_parcel.return_value = {}
             _fetch_payload(self.location, 42.65, -73.75)
-        mock_gateway_cls.return_value.lookup_parcel.assert_called_once_with(42.65, -73.75, situs_address="123 Main St")
+        mock_gateway_cls.return_value.lookup_parcel.assert_called_once_with(42.65, -73.75, situs_address=expected_address)
 
 
 class WriteOfficialOwnersAndSalesTests(TestCase):

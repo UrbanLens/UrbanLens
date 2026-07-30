@@ -15,6 +15,39 @@ from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import VisibilityChoice
 
 
+def make_invitable_user(**kwargs) -> User:
+    """Bake a user who accepts friend requests from anyone.
+
+    ``friend_request_visibility`` defaults to ``ANYONE``, so this is a no-op
+    against a freshly baked profile today - but it makes each test's
+    dependency on that setting explicit rather than incidental, and keeps
+    these tests correct if the default (or model_bakery's field-generation
+    behavior) ever changes again.
+
+    ``services.friendship.invite_by_email`` runs the same
+    ``Profile.visibility_permits`` evaluator ``request_friend`` does - a
+    deliberate fix, since the bare ``!= NO_ONE`` check it replaced let anyone
+    who knew an address bypass a restricted visibility setting entirely. A
+    target with a *non-default* visibility (``FRIENDS`` and stricter, or the
+    old ``ANYTHING_IN_COMMON`` default) would refuse a freshly baked inviter,
+    since they share no pin/friend/trip.
+
+    Tests below that are about *invite mechanics* (does the email match, does
+    the widget leak the target) use this so the gate isn't what they trip on.
+    Tests about the *gate itself* set the visibility they mean explicitly.
+
+    Args:
+        **kwargs: Passed through to ``baker.make(User, ...)``.
+
+    Returns:
+        The baked user, with friend requests open to anyone.
+    """
+    user = baker.make(User, **kwargs)
+    user.profile.friend_request_visibility = VisibilityChoice.ANYONE
+    user.profile.save(update_fields=["friend_request_visibility"])
+    return user
+
+
 class InviteByEmailPrivacyTests(TestCase):
     """Registered vs. unregistered emails must produce an identical response."""
 
@@ -40,7 +73,8 @@ class InviteByEmailPrivacyTests(TestCase):
         self.assertNotIn(b"secretusername", response.content)
 
     def test_response_identical_regardless_of_target_friend_request_visibility(self) -> None:
-        open_target = baker.make(User, username="openuser", email="open@example.com", is_active=True)
+        # This test is about the gate, so both ends are set explicitly.
+        open_target = make_invitable_user(username="openuser", email="open@example.com", is_active=True)
         closed_target = baker.make(User, username="closeduser", email="closed@example.com", is_active=True)
         closed_target.profile.friend_request_visibility = VisibilityChoice.NO_ONE
         closed_target.profile.save(update_fields=["friend_request_visibility"])
@@ -56,7 +90,7 @@ class InviteByEmailPrivacyTests(TestCase):
         self.assertFalse(Friendship.objects.filter(from_profile=self.inviter.profile, to_profile=closed_target.profile).exists())
 
     def test_existing_user_actually_receives_friend_request(self) -> None:
-        target = baker.make(User, username="realuser", email="target@example.com", is_active=True)
+        target = make_invitable_user(username="realuser", email="target@example.com", is_active=True)
 
         self.client.post(self.url, {"email": target.email})
 
@@ -69,7 +103,7 @@ class InviteByEmailPrivacyTests(TestCase):
         self.assertTrue(FriendInvitation.objects.filter(inviter=self.inviter.profile, email="brandnew@example.com").exists())
 
     def test_gmail_variant_of_existing_email_is_matched(self) -> None:
-        target = baker.make(User, username="realuser", email="jakesmith@gmail.com", is_active=True)
+        target = make_invitable_user(username="realuser", email="jakesmith@gmail.com", is_active=True)
 
         self.client.post(self.url, {"email": "Jake.Smith+invite@gmail.com"})
 
@@ -110,7 +144,7 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
         return reverse("friend.page_widget", kwargs={"profile_id": (user or self.inviter).profile.id})
 
     def test_registered_target_identity_is_hidden_in_the_pending_widget(self) -> None:
-        target = baker.make(User, username="secretusername", email="target@example.com", is_active=True)
+        target = make_invitable_user(username="secretusername", email="target@example.com", is_active=True)
         self.client.post(reverse("friend.invite_email"), {"email": target.email})
 
         response = self.client.get(self._widget_url())
@@ -134,7 +168,7 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
 
     @patch("django.core.mail.EmailMultiAlternatives.send")
     def test_registered_and_unregistered_pending_entries_render_identically(self, mock_send) -> None:
-        target = baker.make(User, username="realuser2", email="target2@example.com", is_active=True)
+        target = make_invitable_user(username="realuser2", email="target2@example.com", is_active=True)
         self.client.post(reverse("friend.invite_email"), {"email": target.email})
         registered_response = self.client.get(self._widget_url()).content
 
@@ -180,7 +214,7 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
         (and, worse, the target's profile id). Both kinds must share the one
         opaque cancel_pending URL shape and neither legacy URL may appear.
         """
-        target = baker.make(User, username="urlleaktarget", email="urlleak@example.com", is_active=True)
+        target = make_invitable_user(username="urlleaktarget", email="urlleak@example.com", is_active=True)
         self.client.post(reverse("friend.invite_email"), {"email": target.email})
         self.client.post(reverse("friend.invite_email"), {"email": "urlleak-unmatched@example.com"})
 
@@ -198,7 +232,7 @@ class OutgoingRequestWidgetPrivacyTests(TestCase):
         otherwise leak the kind of any card via its position."""
         import re
 
-        target = baker.make(User, username="structuretarget", email="structure@example.com", is_active=True)
+        target = make_invitable_user(username="structuretarget", email="structure@example.com", is_active=True)
         self.client.post(reverse("friend.invite_email"), {"email": target.email})
         matched_only = self.client.get(self._widget_url()).content.decode()
 

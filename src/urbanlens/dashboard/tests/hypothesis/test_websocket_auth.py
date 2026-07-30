@@ -1,5 +1,12 @@
 """Tests for ApiKeyAuthMiddleware - PAT/OAuth2 fallback auth for Channels sockets.
 
+Covers *authentication* only - whether a ``?key=`` credential resolves to a
+user at all. What that credential is then allowed to reach is a separate
+concern, tested in ``test_websocket_credential_scopes.py``; the credentials
+minted here are given ``notifications:read`` purely so the consumer used as a
+test harness (``UserNotificationConsumer``) lets a successfully authenticated
+connection through to the assertion being made.
+
 Uses TransactionTestCase, same as test_safety_chat.py, since consumers touch
 the database from a background thread via ``database_sync_to_async``.
 """
@@ -17,7 +24,7 @@ from model_bakery import baker
 from oauth2_provider.models import get_access_token_model, get_application_model
 
 from urbanlens.dashboard.consumers import UserNotificationConsumer
-from urbanlens.dashboard.models.account.model import ApiKey
+from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.services.api_keys import generate_api_key
 from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddleware
 
@@ -34,6 +41,20 @@ def _run(coro):
     return async_to_sync(_wrap)()
 
 
+def _notification_key(user) -> tuple[ApiKey, str]:
+    """Issue a key scoped for ``ws/notifications/`` - see this module's docstring.
+
+    Args:
+        user: The account the key belongs to.
+
+    Returns:
+        Tuple of (the ``ApiKey`` row, its one-time plaintext).
+    """
+    api_key, raw_key = generate_api_key(user, "Mobile app")
+    ApiKey.objects.filter(pk=api_key.pk).update(scopes=[ApiKeyScope.NOTIFICATIONS_READ.value])
+    return api_key, raw_key
+
+
 @override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)
 class ApiKeyWebSocketAuthTests(TransactionTestCase):
     """A ``?key=`` query param authenticates a socket exactly like a session would."""
@@ -48,7 +69,7 @@ class ApiKeyWebSocketAuthTests(TransactionTestCase):
         return comm
 
     def test_valid_api_key_authenticates_an_anonymous_socket(self) -> None:
-        _api_key, raw_key = generate_api_key(self.user, "Mobile app")
+        _api_key, raw_key = _notification_key(self.user)
 
         async def _test():
             comm = self._communicator(f"/ws/notifications/?key={raw_key}")
@@ -77,7 +98,7 @@ class ApiKeyWebSocketAuthTests(TransactionTestCase):
         _run(_test())
 
     def test_revoked_key_is_rejected(self) -> None:
-        api_key, raw_key = generate_api_key(self.user, "Mobile app")
+        api_key, raw_key = _notification_key(self.user)
         ApiKey.objects.filter(pk=api_key.pk).update(revoked_at=api_key.created)
 
         async def _test():
@@ -134,7 +155,7 @@ class ApiKeyWebSocketAuthTests(TransactionTestCase):
             application=application,
             token="tok-notifications",
             expires=timezone.now() + timedelta(hours=1),
-            scope="profile:read",
+            scope="notifications:read",
         )
 
         async def _test():

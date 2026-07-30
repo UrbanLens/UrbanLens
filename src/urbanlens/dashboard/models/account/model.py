@@ -164,21 +164,99 @@ class BackupCode(DashboardModel):
 
 
 class ApiKeyScope(TextChoices):
-    """Capabilities an ``ApiKey`` can grant to the external application holding it."""
+    """Capabilities a credential can grant to the external application holding it.
+
+    The single source of truth for the external API's scope vocabulary, shared
+    by both credential kinds (PAT-style :class:`ApiKey` rows and
+    django-oauth-toolkit access tokens). Names are *domain*-shaped
+    (``<domain>:<action>``) rather than endpoint-shaped so a domain can grow
+    new endpoints without minting new scopes - a user who consented to
+    "read your trips" does not need to re-consent when a trip-stops endpoint
+    ships.
+
+    ``OAUTH2_PROVIDER["SCOPES"]`` in ``settings/base.py`` mirrors this list
+    verbatim (value -> label). The duplication is unavoidable: settings are
+    imported before the app registry is populated, so they cannot import a
+    model module. ``test_external_api_scopes`` asserts the two stay identical,
+    so the mirror cannot silently drift.
+
+    Declaring a scope before the endpoints it guards exist is deliberate and
+    harmless: a scope only ever *permits*, so an unused one grants access to
+    nothing. Fixing the vocabulary up front lets the consent screen, the
+    generated client, and the domain implementations that follow all agree on
+    the same names from day one.
+    """
 
     PROFILE_READ = "profile:read", "Read your profile UUID"
+    SETTINGS_READ = "settings:read", "Read your account preferences"
+    SETTINGS_WRITE = "settings:write", "Change your account preferences"
     PINS_READ = "pins:read", "Read your pins (including deletions, for sync)"
-    PINS_WRITE = "pins:write", "Create or suggest pins on your behalf"
+    PINS_WRITE = "pins:write", "Create, edit, and delete your pins"
+    LISTS_READ = "lists:read", "Read your pin lists and saved filters"
+    LISTS_WRITE = "lists:write", "Create and modify your pin lists and saved filters"
+    LABELS_READ = "labels:read", "Read your labels"
+    LABELS_WRITE = "labels:write", "Create, modify, and merge your labels"
+    VISITS_READ = "visits:read", "Read your visit history"
+    VISITS_WRITE = "visits:write", "Log visits on your behalf"
+    PHOTOS_READ = "photos:read", "Read your photos, memories journal, and photo suggestions"
+    PHOTOS_WRITE = "photos:write", "Upload, label, file, vote on, and delete your photos, and act on photo suggestions"
+    MEDIA_READ = "media:read", "Fetch the actual image/video/document files you may see"
+    WIKI_READ = "wiki:read", "Read community wikis you can see"
+    WIKI_WRITE = "wiki:write", "Edit community wikis on your behalf"
+    TRIPS_READ = "trips:read", "Read your trips"
+    TRIPS_WRITE = "trips:write", "Create and edit your trips"
+    SOCIAL_READ = "social:read", "Read your friends list and friend requests"
+    SOCIAL_WRITE = "social:write", "Send, accept, and manage friend relationships on your behalf"
+    SAFETY_READ = "safety:read", "Read your safety check-ins and contacts"
+    SAFETY_WRITE = "safety:write", "Start, update, and clear safety check-ins"
+    MESSAGES_READ = "messages:read", "Read your encrypted messages and conversation list"
+    MESSAGES_WRITE = "messages:write", "Send messages and manage your encryption keys"
+    NOTIFICATIONS_READ = "notifications:read", "Read your notifications and delivery preferences"
+    NOTIFICATIONS_WRITE = "notifications:write", "Mark notifications read and change delivery preferences"
+    SEARCH_READ = "search:read", "Search your pins, wikis, and photos"
+    # Covers every built-in game (SpotGuessr today, Trivia and Consensus next):
+    # one domain, because a player who consented to "play games as you" should
+    # not have to re-consent when a second game ships. Split into the usual
+    # read/write pair rather than a single "games:play" specifically because
+    # ``external_api.throttling.request_tier`` derives the rate-limit tier from
+    # the ``:read``/``:write``/``:manage`` suffix - a lone "games:play" would
+    # end in neither, so round-starting and guess-submitting POSTs (which run
+    # photo selection, scoring, and leaderboard updates) would be classified as
+    # reads and charged against the deliberately loose hourly read budget sized
+    # for a mobile client's bulk sync.
+    GAMES_READ = "games:read", "Read your game history, scores, and leaderboard standing"
+    GAMES_WRITE = "games:write", "Start games and submit guesses and answers on your behalf"
     PUSH_MANAGE = "push:manage", "Register and remove this device's push notifications"
+    CUSTOM_FIELDS_READ = "custom_fields:read", "Read your custom field definitions and their values"
+    CUSTOM_FIELDS_WRITE = "custom_fields:write", "Create, edit, and delete your custom fields and their values"
+    UNDO_READ = "undo:read", "Read your recent delete history available to undo"
+    UNDO_WRITE = "undo:write", "Restore a previously deleted item"
+    PANELS_READ = "panels:read", "Read pin-detail enrichment panels (boundaries and other plugin-contributed data)"
+    ASSISTANT_WRITE = "assistant:write", "Chat with your AI assistant, including creating trips and trip activities it suggests"
+    DEVICE_SCANS_READ = "device_scans:read", "Read nearby expected devices and their signal info"
+    DEVICE_SCANS_WRITE = "device_scans:write", "Upload wireless device scan data"
 
 
 def _default_api_key_scopes() -> list[str]:
-    """The fixed grant every new key gets - there is no scope picker yet.
+    """The fixed grant every new PAT-style key gets - there is no scope picker yet.
+
+    Deliberately *not* widened when :class:`ApiKeyScope` grew the full
+    domain vocabulary, and deliberately not backfilled onto existing rows by a
+    data migration. Silently expanding every already-issued key's grant to
+    cover messages, safety check-ins, photos and the rest would hand
+    integrations a reach their owner never consented to - a privilege
+    escalation, not a convenience. The new scopes are opt-in only: reachable
+    today through OAuth2, where the consent screen enumerates exactly what is
+    being requested, and through this function once a scope-picker UI exists
+    for personal access tokens.
 
     Kept as a real per-row field (rather than an implicit "all keys can do
-    everything" assumption) so a future scope-picker UI only has to change
-    what gets written here; ``external_api.permissions`` already checks
-    per-key scopes rather than trusting the mere existence of a valid key.
+    everything" assumption) so that future UI only has to change what gets
+    written here; ``external_api.permissions`` already checks per-key scopes
+    rather than trusting the mere existence of a valid key.
+
+    Returns:
+        The four scope values every newly issued API key is granted.
     """
     return [ApiKeyScope.PROFILE_READ.value, ApiKeyScope.PINS_READ.value, ApiKeyScope.PINS_WRITE.value, ApiKeyScope.PUSH_MANAGE.value]
 

@@ -205,12 +205,22 @@ class Location(abstract.PublicDashboardModel):
 
     @cid.setter
     def cid(self, value: int | Decimal | None) -> None:
-        """Store a Google Maps CID on the shared cache row for these coordinates."""
+        """Store a Google Maps CID on the shared cache row for these coordinates.
+
+        Deliberately does **not** resolve a place name for these coordinates
+        while doing so. ``set_cid_for_entity`` defaults to
+        ``fetch_if_missing=True``, which made this plain-looking attribute
+        assignment issue a live Google call - the same class of hidden
+        synchronous request that ``place_name`` above is cache-only to avoid.
+        A caller that genuinely wants the lookup should say so by calling
+        ``GooglePlaceService().set_cid_for_entity(...)`` itself, where the cost
+        is visible at the call site.
+        """
         from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 
         if value is None:
             return
-        GooglePlaceService().set_cid_for_entity(self, value)
+        GooglePlaceService().set_cid_for_entity(self, value, fetch_if_missing=False)
 
     @property
     def place_name(self) -> str | None:

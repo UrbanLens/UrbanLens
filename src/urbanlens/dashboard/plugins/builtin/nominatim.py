@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
-from urbanlens.dashboard.services.external_data import LocationCachePanelSource
+from urbanlens.dashboard.services.external_data import LocationCachePanelSource, PanelApiKind, info_card
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
@@ -16,6 +16,36 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.external_data import PanelSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
+
+#: Cached keys that make the panel worth showing at all. A reverse-geocode that
+#: matched only an address (no name, no tags) tells a viewer nothing they can't
+#: already see on the pin itself, so both surfaces suppress it entirely rather
+#: than render an empty card. Kept in step with ``PinController.nominatim_info``'s
+#: own list - see this module's ``api_payload``.
+_USEFUL_FIELDS = ("website", "phone", "email", "opening_hours", "operator", "wikipedia", "wikidata", "image", "extra_details", "kind_label")
+
+
+def wikipedia_url(tag_value: str) -> str:
+    """Turn OSM's ``wikipedia`` tag into a real article URL.
+
+    The tag is conventionally ``"<lang>:<Article Title>"`` (``"de:Kölner Dom"``),
+    but plenty of entries carry a bare title with no language prefix; those are
+    English by convention. Returning the wrong host for either form produces a
+    dead link, which is worse than no link at all - hence the explicit split
+    rather than blind concatenation.
+
+    Args:
+        tag_value: The raw OSM ``wikipedia`` tag value.
+
+    Returns:
+        The article URL, or ``""`` when the tag is empty.
+    """
+    if not tag_value:
+        return ""
+    language, separator, title = tag_value.partition(":")
+    if not separator:
+        return f"https://en.wikipedia.org/wiki/{tag_value}"
+    return f"https://{language}.wikipedia.org/wiki/{title}"
 
 
 class _SemicolonSplitNameProvider(LocationCacheNameProvider):
@@ -52,6 +82,11 @@ class NominatimPanelSource(LocationCachePanelSource):
     # - not a duplicate query against one provider. A bare "OpenStreetMap"
     # title here was ambiguous next to Photon's own title.
     title = "Nominatim"
+    # Bespoke markup on the web (its own quick-facts row, wiki chips, hero
+    # image), but the underlying data is a plain information card - so the API
+    # serves it through the shared INFO contract instead of a Nominatim-shaped
+    # response every client would have to special-case.
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO})
 
     def fetch(self, pin: Pin) -> None:
         """Reverse-geocode the pin's coordinates and cache the place metadata.
@@ -84,6 +119,58 @@ class NominatimPanelSource(LocationCachePanelSource):
 
         if place and place.get("osm_url"):
             self._add_osm_link(pin, location, place["osm_url"])
+
+    def api_payload(self, pin: Pin) -> dict[str, Any] | None:
+        """The reverse-geocoded OSM place metadata as an information card, or None.
+
+        Applies the same emptiness rule as ``PinController.nominatim_info``
+        (see :data:`_USEFUL_FIELDS`): a coordinate-only result is suppressed on
+        both surfaces, so a client never has to decide for itself whether a
+        card carrying nothing but an address is worth drawing.
+
+        Args:
+            pin: The pin whose panel is being read.
+
+        Returns:
+            ``{"info": {...}}``, or None when nothing has landed yet or the
+            geocode found no metadata worth showing.
+        """
+        data = self.cached_data(pin)
+        if not data or not any(data.get(field) for field in _USEFUL_FIELDS):
+            return None
+
+        # Icons match pin_nominatim.html's own quick-facts row, so the two
+        # surfaces read as the same panel rather than as two designs.
+        facts: list[dict[str, str]] = []
+        if data.get("website"):
+            facts.append({"icon": "language", "text": data["website"], "href": data["website"]})
+        if data.get("phone"):
+            facts.append({"icon": "call", "text": data["phone"], "href": f"tel:{data['phone']}"})
+        if data.get("email"):
+            facts.append({"icon": "mail", "text": data["email"], "href": f"mailto:{data['email']}"})
+        # Opening hours and operator are prose, not addresses - no href.
+        for key, icon in (("opening_hours", "schedule"), ("operator", "apartment")):
+            if data.get(key):
+                facts.append({"icon": icon, "text": data[key], "href": ""})
+
+        meta = list(data.get("extra_details") or [])
+        if data.get("wikipedia"):
+            meta.append({"label": "Wikipedia", "value": data["wikipedia"], "href": wikipedia_url(data["wikipedia"])})
+        if data.get("wikidata"):
+            meta.append({"label": "Wikidata", "value": data["wikidata"], "href": f"https://www.wikidata.org/wiki/{data['wikidata']}"})
+
+        osm_url = data.get("osm_url") or ""
+        return {
+            PanelApiKind.INFO.value: info_card(
+                heading_name=data.get("name"),
+                chips=[data.get("kind_label")],
+                facts=facts,
+                meta=meta,
+                header_link={"url": osm_url, "label": "Open on OpenStreetMap"} if osm_url else None,
+                footer_link={"url": osm_url, "label": "View on OpenStreetMap"} if osm_url else None,
+                image_url=data.get("image"),
+            ),
+        }
 
     @staticmethod
     def _add_osm_link(pin: Pin, location: Location, osm_url: str) -> None:

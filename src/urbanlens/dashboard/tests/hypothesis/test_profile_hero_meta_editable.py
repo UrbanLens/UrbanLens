@@ -14,12 +14,34 @@ Covers:
 
 from __future__ import annotations
 
+import re
+
 from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
+
+_SCRIPT_RE = re.compile(r"<script\b.*?</script>", re.DOTALL | re.IGNORECASE)
+
+
+def _rendered_markup(response) -> str:
+    """The response body with ``<script>`` blocks removed.
+
+    The hero's click-to-edit wiring script names every class and placeholder it
+    manipulates - including building ``>Add when you started exploring...<`` as
+    a string literal - so it matches any "is this placeholder on the page"
+    check on every render, whatever the profile actually contains. Dropping the
+    scripts leaves the markup, which is what these tests are about.
+
+    Args:
+        response: A rendered test-client response.
+
+    Returns:
+        The decoded body with script blocks stripped.
+    """
+    return _SCRIPT_RE.sub("", response.content.decode())
 
 
 class ProfileHeroMetaEditableRenderingTests(TestCase):
@@ -50,7 +72,7 @@ class ProfileHeroMetaEditableRenderingTests(TestCase):
         # name (also present, inertly, in the wiring script's own
         # querySelector('.profile-area--editable') call on every render).
         self.assertNotContains(response, "data-raw-area")
-        self.assertNotContains(response, "Add your area...")
+        self.assertNotIn("Add your area...", _rendered_markup(response))
 
     def test_started_exploring_editable_markup_shown_with_a_value(self) -> None:
         self.profile.started_exploring = "2015-06-01"
@@ -62,7 +84,7 @@ class ProfileHeroMetaEditableRenderingTests(TestCase):
     def test_started_exploring_hidden_with_no_value_yet(self) -> None:
         response = self._get_own()
         self.assertNotContains(response, "data-raw-started-exploring")
-        self.assertNotContains(response, "Add when you started exploring...")
+        self.assertNotIn("Add when you started exploring...", _rendered_markup(response))
 
     def test_other_viewer_sees_plain_area_not_editable(self) -> None:
         self.profile.area = "Rochester, NY"
@@ -73,12 +95,7 @@ class ProfileHeroMetaEditableRenderingTests(TestCase):
 
         response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
         self.assertContains(response, "Rochester, NY")
-        # The wiring script's `querySelector('.profile-area--editable')`
-        # legitimately contains this class name as inert text on every render
-        # (see the bio precedent's identical caveat) - check the actual
-        # rendered element's class list, not just "does this string appear
-        # anywhere in the page source".
-        self.assertNotContains(response, 'profile-meta-item profile-area--editable"')
+        self.assertNotIn("profile-area--editable", _rendered_markup(response))
 
     def test_other_viewer_with_no_area_sees_nothing_not_a_placeholder(self) -> None:
         self.profile.profile_visibility = VisibilityChoice.ANYONE
@@ -87,10 +104,7 @@ class ProfileHeroMetaEditableRenderingTests(TestCase):
         self.client.force_login(other)
 
         response = self.client.get(reverse("profile.view_user", kwargs={"profile_slug": self.profile.slug or self.profile.ensure_slug()}))
-        # Same caveat: the wiring script hardcodes 'Add your area...' as its
-        # revert-to-placeholder fallback string, present in every render
-        # regardless of viewer - check for the text as actual element content.
-        self.assertNotContains(response, ">Add your area...<")
+        self.assertNotIn("Add your area...", _rendered_markup(response))
 
     def test_edit_profile_page_keeps_the_plain_form_field_not_the_inline_editor(self) -> None:
         """The hero body is shared with Edit Profile, which already has a real

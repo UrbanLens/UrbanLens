@@ -797,8 +797,14 @@ class MessageTextAlertTests(TestCase):
         from urbanlens.dashboard.tasks import send_direct_message_text_alerts_if_unread
 
         self._set_toggles(whatsapp=True)
-        first = create_direct_message(self.sender, self.recipient, "hi")
-        second = create_direct_message(self.sender, self.recipient, "still there?")
+        # create_direct_message schedules this very task. Under eager Celery
+        # (UL_CELERY_TASK_ALWAYS_EAGER, how this suite runs outside Docker) it
+        # would then run here - outside the patch below - and claim the
+        # debounce marker, leaving the explicit calls with nothing to do. Stub
+        # the scheduling so the two invocations under test are the only ones.
+        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+            first = create_direct_message(self.sender, self.recipient, "hi")
+            second = create_direct_message(self.sender, self.recipient, "still there?")
         with patch("urbanlens.dashboard.services.notification_delivery.send_whatsapp") as mock_wa:
             send_direct_message_text_alerts_if_unread(first.pk)
             send_direct_message_text_alerts_if_unread(second.pk)

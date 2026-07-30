@@ -15,7 +15,7 @@ from django.db.models import Q
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.enrichment import EnrichmentSource
-from urbanlens.dashboard.services.external_data import GalleryMediaSource
+from urbanlens.dashboard.services.external_data import GalleryMediaSource, PanelApiKind
 from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
 
@@ -39,6 +39,11 @@ class GoogleMapsPhotosPanelSource(GalleryMediaSource):
     cache_source = "google_maps_photos"
     icon = "photo_camera"
     title = "Google Maps"
+    # Deliberately not exposed on the external API: Google's Places API terms
+    # restrict redistributing photo data, and the photos only resolve through
+    # the session-authenticated GoogleMapsPhotoProxyView anyway - an external
+    # credential couldn't load them even if the metadata were exposed.
+    api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset()
 
     def gate(self, pin: Pin) -> bool:
         """Requires a configured API key (Google or REData) and coordinates."""

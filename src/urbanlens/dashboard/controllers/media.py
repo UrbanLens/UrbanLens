@@ -12,6 +12,13 @@ authorizes them against the owning row for the requested file, and then either:
   so nginx streams the bytes efficiently and picks the Content-Type itself.
 - **Local dev / no nginx**: streams the file directly with ``FileResponse``.
 
+*Authentication* - "a logged-in session, or a bearer credential holding
+``media:read``" - is not implemented here: it lives in
+:class:`~urbanlens.dashboard.controllers.media_auth.CredentialOrSessionMediaMixin`,
+because the panel image proxy and the SpotGuessr round image need the identical
+rule and a second copy of it would drift open. This module owns only the
+*authorization* half below, which is specific to files under ``MEDIA_ROOT``.
+
 Authorization is derived from the first path segment (the ``upload_to`` prefix
 of the owning model's file field):
 
@@ -44,49 +51,85 @@ from typing import TYPE_CHECKING
 from urllib.parse import quote
 
 from django.conf import settings
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.http import FileResponse, Http404, HttpResponse
 from django.views import View
 
+from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin, MediaThrottledError
+
 if TYPE_CHECKING:
     from django.http import HttpRequest
+    from django.http.response import HttpResponseBase
 
     from urbanlens.dashboard.models.profile.model import Profile
 
 logger = logging.getLogger(__name__)
 
+#: Re-exported so ``controllers.media.MediaThrottledError`` keeps resolving for
+#: anything that imported it from here before the session/credential resolution
+#: moved to ``controllers.media_auth`` (where the panel image proxy and the
+#: SpotGuessr round image share it). Listed explicitly because it is otherwise
+#: an unused import as far as a linter is concerned.
+__all__ = ["MediaGateView", "MediaThrottledError"]
 
-class MediaGateView(LoginRequiredMixin, View):
+
+class MediaGateView(CredentialOrSessionMediaMixin, View):
     """Authenticate and authorize a request for one file under ``MEDIA_ROOT``.
 
-    Anonymous requests are redirected to the login page (``LoginRequiredMixin``).
+    Accepts either a logged-in session (the browser case) or an external API
+    credential holding the ``media:read`` scope (the native/mobile client
+    case) - that half is
+    :class:`~urbanlens.dashboard.controllers.media_auth.CredentialOrSessionMediaMixin`,
+    shared with the other byte-serving views. A credential is resolved only as
+    far as *which profile is asking*; it then walks the byte-for-byte identical
+    authorization policy in :meth:`_authorized`, so holding a key can never
+    reach a file the same person couldn't reach while logged in.
+
+    Anonymous browser requests are redirected to the login page. An
+    API-shaped request (one carrying an ``Authorization`` header) that fails
+    to authenticate gets 404 instead, since redirecting an API client to an
+    HTML login form is useless and the redirect itself would confirm the
+    path exists.
+
     Authorization failures raise ``Http404`` rather than 403, deliberately
     indistinguishable from a file that doesn't exist - the same no-oracle
     policy the wiki access gate follows, so probing media URLs can't confirm
     that a particular file exists but belongs to someone else.
     """
 
-    def get(self, request: HttpRequest, path: str) -> HttpResponse:
+    def get(self, request: HttpRequest, path: str) -> HttpResponseBase:
         """Serve (or hand off to nginx) one media file the requester may see.
 
         Args:
-            request: The current, authenticated request.
+            request: The current request, carrying either a session or an
+                external API credential.
             path: The requested path relative to ``MEDIA_ROOT``, straight from
                 the URL (untrusted - may attempt traversal).
 
         Returns:
             An ``X-Accel-Redirect`` response when nginx fronts the app,
-            otherwise a ``FileResponse`` streaming the file.
+            otherwise a ``FileResponse`` streaming the file. A login redirect
+            for an anonymous browser request, or 429 when a credential
+            exceeded its media budget.
 
         Raises:
             Http404: The path escapes ``MEDIA_ROOT``, the file doesn't exist,
                 or the requester isn't authorized to see it.
         """
+        # Resolved before the path is touched: _resolve_media_path raises 404
+        # for a nonexistent file, so running it first would let an
+        # unauthenticated caller distinguish real paths from invented ones.
+        # This view has no cheaper pre-check to run ahead of authentication,
+        # so it calls the mixin as its very first statement.
+        try:
+            profile = self.resolve_media_profile(request)
+        except MediaThrottledError:
+            return self.media_throttled_response()
+
+        if profile is None:
+            return self.media_auth_failure_response(request)
+
         rel_path, full_path = self._resolve_media_path(path)
 
-        from urbanlens.dashboard.models.profile.model import Profile
-
-        profile, _ = Profile.objects.get_or_create(user=request.user)
         if not self._authorized(profile, rel_path):
             logger.info("Denied media request for %s by profile %s", rel_path, profile.pk)
             raise Http404

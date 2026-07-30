@@ -207,8 +207,8 @@ def pull_children_from_wiki(parent_pin: Pin) -> int:
     Returns:
         How many child pins were created.
     """
-    from urbanlens.dashboard.controllers.detail_pins import _location_for_coords
     from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.pin_creation import PinCreationError, resolve_child_pin_location
 
     wiki = Wiki.objects.get_for_location(parent_pin.location)
     if wiki is None:
@@ -227,6 +227,16 @@ def pull_children_from_wiki(parent_pin: Pin) -> int:
             if existing is not None:
                 unmatched_pins.remove(existing)
                 continue
+            try:
+                location = resolve_child_pin_location(parent_pin.profile, cw.latitude, cw.longitude)
+            except PinCreationError:
+                # The owner already has a pin on that exact point, so this child
+                # wiki is in fact already covered - _find_existing_match just
+                # didn't recognise it (no building match, and further apart than
+                # its proximity threshold). Skip it rather than aborting the
+                # whole pull.
+                logger.debug("pull_children_from_wiki: child wiki %s already pinned at its exact point", cw.pk)
+                continue
             new_pin = Pin.objects.create(
                 name=cw.name,
                 name_is_user_provided=False,
@@ -234,7 +244,7 @@ def pull_children_from_wiki(parent_pin: Pin) -> int:
                 pin_type_is_user_provided=cw.pin_type_is_user_provided,
                 parent_pin=parent_pin,
                 profile=parent_pin.profile,
-                location=_location_for_coords(cw.latitude, cw.longitude),
+                location=location,
                 wiki=wiki,
             )
             created += 1

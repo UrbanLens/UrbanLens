@@ -4,6 +4,538 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
 to pick up without re-discovering the problem from scratch.
 
+## 2026-07-28: `Friendship.muted` is shared by both profiles, not per-viewer
+
+There is exactly one `Friendship` row per pair - `QuerySet.between()` matches either direction
+and `Friendship.request()` reuses whatever row already exists - so the `muted` boolean added in
+migration `0020_friendship_muted_flag` is a property of the *relationship*, not of one side of
+it. If A mutes B, B's own view of that relationship also reads `muted=True`.
+
+This is inherited unchanged from the `status='Muted'` encoding it replaces (a status column is
+just as shared), so nothing regressed - but the new flag makes it much easier to surface the
+value in a UI or API as "people I have muted", which would be wrong. The correctly shaped
+precedent is `DirectMessageMute`, keyed on `(viewer, sender)`.
+
+Fix is either two columns (`from_profile_muted` / `to_profile_muted`, set according to which
+side of the row the actor is on) or a small `FriendshipMute(viewer, target)` model alongside
+`DirectMessageMute`. Two columns is the cheaper change and keeps the single-row invariant that
+`between()`/`request()`/`unique_together` all depend on. Deliberately not done in the schema
+pass that introduced the flag: the brief was one boolean plus the data repair, and widening it
+to a directional pair would have changed the shape the API batch was told to expect.
+
+## 2026-07-28: `Friendship.muted` is stored but nothing reads it - muting a friend silences nothing
+
+Noted while splitting mute off `Friendship.status` (migration
+`0020_friendship_muted_flag`). The bug that split fixed was that muting **un-friended** people;
+what it did *not* fix is that friendship-mute has never actually suppressed anything. Grep for
+`muted` across `services/notifications.py`, `services/notification_delivery.py`,
+`services/notification_text_alerts.py` and `services/notification_center.py`: no hit. The two
+mute features that do work are unrelated models - `DirectMessageMute` (per-sender DM mute) and
+`GroupChatMembership.muted` (per-group mute) - and neither consults `Friendship`.
+
+So the profile page's Mute button, and the external API's `POST /friends/{uuid}/mute/`, both
+record a preference that no delivery path honours: the muter still receives friend-request,
+friend-accepted, pin-share, trip-invite and safety notifications from that profile. Repro: mute
+an accepted friend from their profile page, have them share a pin with you -> the notification
+still arrives, and `NotificationLog` still has an unread row.
+
+Fix is to make `Friendship.muted` an input to notification delivery in the same place
+`NotificationLog` rows are created from a `source_profile` - most cleanly a single
+`is_muted_by(recipient, source)` helper in `services/friendship.py` that
+`services/notifications.py` consults, so the check cannot be forgotten per notification type.
+Deliberately left out of the schema change: wiring a new suppression rule into every
+notification producer is a behaviour change of its own size, and the external API's `is_muted`
+surface (Batch S) needs the flag to exist first.
+
+## 2026-07-28: Satellite/street-view imagery render path re-runs the full provider chain even when "ready"
+
+`services/external_data.py`'s `SlidesPanelSource` (base of `SatellitePanelSource`/street-view
+equivalent) tracks readiness with a summary marker (`is_ready`, `ready_key`) set after a background
+warm-up pass, separate from each provider's own 24h slide cache (`SLIDES_READY_TTL_SECONDS`,
+line ~108). The class docstring (line ~875) confirms "the Celery warm-up task and the request-path
+render share this exact function" - `collect()` runs the same per-provider gateway chain
+(`collect_satellite_slides`/`collect_street_view_slides`) on the request thread regardless of
+whether `is_ready` is true, rather than reading a fully-materialized result. In practice this is
+usually cheap (each provider serves from its own warm cache), but there's no short-circuit: a
+request landing in the gap where the summary marker has lapsed but not yet re-warmed pays the full
+provider-chain latency inline on the request thread instead of getting a fast placeholder.
+
+Fix would be to have `render`/`api_payload` read a materialized slide list when `is_ready` is true
+instead of re-invoking `collect()`, reserving the shared function for the warm-up task alone. Not
+investigated further - flagged while auditing `docs/notes/mobile_app_notes.md`'s claim (D8) that
+this was already logged here, which it wasn't until now.
+
+## RESOLVED 2026-07-28 (documented judgement call): restoring legacy `status='Muted'` friendships
+
+Migration `0020_friendship_muted_flag` has to guess what a `status='Muted'` row was *before* it
+was muted, because the old encoding overwrote the previous status and stored it nowhere. It
+restores those rows to `Accepted` with `muted=True`. That is a judgement call and is recorded
+here so a future audit does not have to re-derive it:
+
+- The only user-reachable mute path is `FriendController.mute_friend` ->
+  `services.friendship.mute_profile`, and the only template rendering that URL
+  (`partials/profile/_profile_hero_body.html`) emits the Mute button **exclusively** inside its
+  `friendship_status == 'accepted'` branch. So every mute a real user performed started from
+  `Accepted`, which makes the restore faithful rather than a widening of access.
+- `Friendship.mute()` (a classmethod that created a `Muted` row for two strangers) could have
+  produced non-accepted rows, but `git log -S "Friendship.mute"` over
+  `controllers/`, `services/` and `external_api/` returns nothing across the whole history - it
+  was only ever called by its own unit test. It is deleted in this change.
+- The external API's `FriendMuteView` *can* mute a non-accepted row, but it exists only on the
+  unreleased `feature/external-api-mobile-v2` branch that introduces this migration, so no
+  deployed database can hold a row it wrote.
+
+If any of those three assumptions turns out to be false for a given deployment, the affected
+rows are ones where two profiles are now treated as accepted friends when they previously were
+not. Auditing that is a single query: `Friendship.objects.filter(muted=True, status='Accepted')`
+with `created`/`updated` predating the deploy of `0020`.
+
+## FIXED 2026-07-28: Google Calendar export leaked trip-mates' hidden coordinates
+
+**Severity: privacy, cross-user, and irreversible once it fired** - the data went to a third
+party (Google), where no later UrbanLens privacy change can reach it.
+
+`services/calendar_sync.py::_activity_location_string` honoured only `TripActivity.location_hidden`
+and ignored the adder's `Profile.trip_pin_location_visibility` gate that every other trip surface
+applies via `services/trip_visibility.py::viewer_hidden_activity_ids` (the activities panel, the
+trip map, AI trip suggestions). A trip is a shared space, so exporting one wrote **other members'**
+coordinates - precisely the ones the trip screen deliberately withholds from the exporter - into
+the exporter's Google Calendar, as the `location` field of both the all-day trip event
+(`trip_to_event_body` -> `_trip_location_string`) and the per-activity timed events
+(`activity_to_event_body`).
+
+Repro (pre-fix): two profiles on one trip; the adder sets `trip_pin_location_visibility = no_one`
+and adds an activity with a `Location`; the other member exports the trip
+(`POST /dashboard/trips/<slug>/calendar/export/`, or the external API's
+`POST /trips/<slug>/calendar/`, or any auto-sync push via `push_auto_synced_trip_changes`) ->
+the event body carries the address. The trip screen shows that same member no coordinates at all.
+
+Fixed by making `export_trip_to_calendar` compute the viewer's hidden-activity set once
+(`_hidden_activity_ids_for`, which runs the shared `viewer_hidden_activity_ids` for
+`account.profile`) and thread it through `trip_to_event_body`, `_trip_location_string`,
+`_sync_activity_events` and `activity_to_event_body`. A hidden activity still gets its event -
+the exporter is committed to be somewhere and a gap in their calendar would be its own bug -
+just without a `location`. Regression coverage:
+`tests/hypothesis/test_external_api_trip_calendar.py::ExportRespectsAdderVisibilityTests`.
+
+Left open deliberately: the pure-mapping helpers still accept `hidden_activity_ids=None`
+("no viewer gate"), which is correct for the property tests that call them with unsaved trips
+but means a *new* caller that forgets to pass it reintroduces the leak. Worth revisiting as a
+required argument once no caller needs the viewerless form.
+
+## OPEN 2026-07-28: 16 pre-existing failures outside every prior sweep's `-k` filter
+
+Every sweep so far this session used a `-k` keyword filter scoped to pin/wiki/location/friend/
+external-API territory. A full unfiltered run (`pytest src/urbanlens/dashboard/tests`, no `-k`,
+~70 minutes) surfaces a different, previously-unswept **16 failed, 7990 passed, 2 xfailed**. None
+of the 16 files were touched by anything in this session (last-commit dates 2026-07-22 through
+2026-07-25, `git log -1` per file) or relate to pins/wikis/locations/friends/the external API -
+this is a fresh, disjoint backlog, not a regression from today's work. **Only triaged, not fixed.**
+
+Two entries from the raw 18-failure sweep output are not real and should be discarded outright if
+re-seen: `test_zzz_client_probe_tmp.py` was a throwaway file created and deleted mid-session for an
+unrelated probe (see the `@given`+`self.client` CLAUDE.md entry) - the long-running sweep's
+collection phase had already imported it before the delete, so it ran from memory once, near the
+end of the ~70-minute run, off a module that no longer exists on disk. And
+`test_spotguessr_geo_bonus.py::BonusPointsForGuessTests::test_geocode_failure_earns_nothing_without_raising`
+is order-dependent pollution from the full run - it **passes standalone**, unlike the 16 below,
+which were re-verified to fail in isolation too (`16 failed, 1 passed` re-running just this set).
+
+Root-caused from a `--tb=short` capture, not yet fixed:
+
+1. **Not a bug - a run that crossed midnight.** `test_global_search_parser.py::
+   ParseQueryStructureTests::test_this_year_ends_today` failed with
+   `datetime.date(2026, 7, 28) != datetime.date(2026, 7, 27)` - the assertion computed "today" at
+   two different points ~70 minutes apart in a suite run that happened to straddle midnight. Not
+   reproducible on demand; would pass on any run that doesn't cross a day boundary mid-execution.
+2. **Unmocked live network calls** (the same class of bug fixed repeatedly earlier in this file):
+   `test_loopnet.py::FetchTests::test_unconfigured_gateway_gracefully_persists_empty` and
+   `test_trip_ai_suggestions.py::ApplySuggestedOrderViewTests::test_valid_permutation_applies` both
+   raised `RuntimeError: External network access is disabled during tests` against real IPs
+   (`10.2.0.214`, `5.148.170.168`). Check whether each is "test forgot to patch, sibling tests
+   show the pattern" (most likely, per every prior instance of this bug this session) or a
+   genuine missing gate in the view/service.
+3. **Test-only bug.** `test_redata_cid_gateway.py::RedataCidGatewayResolveCidsTests::
+   test_non_200_raises_gateway_request_error` - `TypeError: 'Mock' object is not subscriptable`.
+   The mock response object isn't shaped to support whatever subscript the code under test uses;
+   compare against a sibling test in the same file that mocks correctly.
+4. **Possibly Windows-specific.** `test_backup_services.py::BackupFilesTests::
+   test_returns_only_files_sorted_by_mtime_descending` (`[] != [WindowsPath(...new.sql),
+   WindowsPath(...old.sql)]`) and `CollectBackupStatsTests::test_collects_count_latest_size_and_settings`
+   (`0 != 2`) both show the service finding zero files where the test created two - the service's
+   discovery glob/pattern likely doesn't match on Windows path separators, or looks in a path this
+   test's temp dir isn't under. Worth checking whether this fails in Docker/CI too before assuming
+   Windows-only.
+5. **Possibly a real permission bug, worth prioritizing.** `test_trip_ai_suggestions.py::
+   TripAiSuggestionsViewTests::test_non_member_is_rejected` got `404` where it expected `403` - on
+   its face this reads like the uniform-404 privacy pattern used elsewhere in this codebase
+   (wiki discovery, trip detail - see the resolved trip-controller entry above), in which case the
+   test is stale and the code is behaving correctly. But it could also be a plain "wrong pin/trip
+   ownership lookup" bug that happens to 404 for the wrong reason. Read `TripAiSuggestionsView`
+   before assuming either way.
+6. **Hypothesis-found edge case, may be a real off-by-one.**
+   `test_searxng_image_query.py::AssembleImageQueryTests::test_group_count_matches_present_components`
+   failed on `aliases=['0'], area=['(']` with `4 != 3` - a generated alias/area combination made
+   the query-group count disagree with the number of query components actually present. Worth a
+   look at `assemble_image_query`'s group-counting logic directly rather than reverse-engineering
+   it from the failing example.
+7. **Assertion mismatches not yet read in detail** - each needs its own traceback before triage:
+   `test_avatar_colors.py::GroupMemberSearchAvatarColorTests::test_results_get_distinct_colors`
+   (`0 != 4`), `test_dm_search.py::SearchDirectMessagesTests::
+   test_date_range_phrase_filters_by_created` (`[] != [1]`),
+   `test_global_search_engine.py::PhotoSearchTests::test_finds_photo_by_generated_keyword`
+   (expected string not found in an empty result list),
+   `test_media_own_photos_preview.py::PhotosMediaPreviewTests::` both
+   `test_own_photo_tile_carries_image_id_and_coordinates` and
+   `test_own_photo_tile_without_coordinates_renders_empty_lat_lng` (`204 != 200` - both in the
+   same class, worth checking whether one shared fixture broke both),
+   `test_settings_tos_accepted_display.py::SettingsTosAcceptedDisplayTests::
+   test_shows_the_acceptance_date_when_recorded` ("Mar 4, 2025" not found in the rendered page -
+   possibly the same CSRF-token/date-formatting class of stale-assertion bug fixed elsewhere in
+   this file), and `test_trivia_stall.py::ForceRevealRoundTests::` both
+   `test_a_partial_answer_is_revealed_and_only_the_answerer_is_rated` (`'active' !=
+   TriviaSessionStatus.COMPLETED`) and `test_advances_to_the_next_round_when_more_remain`
+   (`1 != 2`) - both in the same class, likely one shared root cause in the force-reveal flow.
+
+Reproduce with (no `-k` filter, so the full ~70-minute runtime applies):
+```
+pytest src/urbanlens/dashboard/tests -q --reuse-db --tb=short
+```
+Re-running just the 16 test IDs above in one invocation reproduces all of them in ~5 minutes.
+
+## OPEN 2026-07-27: ~46 pre-existing test failures on `feature/external-api-mobile-v2` (baseline-verified)
+
+A broad sweep (`-k "pin or wiki or location or boundary or import or share or detail or merge or
+restructure or undo or map"`) over `src/urbanlens/dashboard/tests` gives **46 failed, 3484 passed**.
+None are regressions from the Place-consolidation phase-0 work: the four files whose failures
+could plausibly have been caused by it were run with that change set `git stash`ed and again with
+it applied, giving **byte-identical results both ways (12 failed, 117 passed, same test IDs)**.
+
+**33 of the 46 are now FIXED** (2026-07-27, same session). Two patterns dominate:
+*tests that depend on ambient machine state or on an implementation shape that has since changed*
+(1-6, 11-14 below - they pass on a bare CI box with no credentials and fail on a dev box that has
+them, or vice versa), and *test-harness behavior leaking into the thing under test* (7-8). Only two
+of the 33 turned out to be product bugs (9-10).
+
+Fixed:
+
+1. `test_legacy_cid_coordinate_fix.py::RepairLegacyPinCoordinatesTests` (7) - the helper's
+   `location.cid = ...` goes through `Location.cid`'s setter, which calls `GooglePlaceService`
+   with `fetch_if_missing=True` and hits REData's nearby-places search live. Now calls
+   `set_cid_for_entity(..., fetch_if_missing=False)`, the service's own bulk-path flag. **Note the
+   sharp edge that caused this: assigning a plain model attribute performs synchronous network
+   I/O.** Worth revisiting on its own merits.
+2. `test_websocket_auth.py` (1) - not a consumer bug at all. Tests ran Django's default PBKDF2
+   (~1.2M iterations) because nothing overrode `PASSWORD_HASHERS`; hashing inside the connection
+   handshake exceeded `WebsocketCommunicator.connect()`'s 1-second default. `settings/test.py` now
+   sets MD5, which also speeds up every test that bakes a User.
+3. `test_pin_redata_media_proxy.py` (2) - asserted "unconfigured gateway returns 404 not 500" while
+   *assuming* the machine had no REData credentials. With credentials present the gateway built
+   fine, made a real call, and died on a DB write from a `SimpleTestCase`. Now forces the
+   unconfigured state by patching `__post_init__`.
+4. `test_flickr_album_import.py` (1) - same shape: every sibling patches `flickr_is_configured`,
+   this one didn't, so it saw "not configured" and never reached the blank-URL branch.
+5. `test_property_records_plugin.py` (1) - assigned to `Location.address`, which is a read-only
+   composed property; now sets the component fields.
+6. `test_pin_model_extra.py::PinEffectiveColorTests` (2) - test/implementation drift.
+   `icon_source_label()` sorts in Python via `sorted(self.labels.exclude(kind="user"))` and no
+   longer calls `.order_by()`, but the mock still stubbed `exclude().order_by()`. The real call
+   iterated a bare MagicMock and got nothing, so the expects-a-colour cases failed and the
+   expects-None cases passed **without exercising anything**.
+
+**A further 19 across ten files are now also FIXED** (2026-07-27, same session). That set was
+previously listed here as "genuine failures reproducible in isolation" - **that label was wrong for
+more than half of them**, and the correction is the useful part. Those ten files now give
+**344 passed, 0 failed**. Two systemic causes accounted for twelve:
+
+7. **`@given` + a row-writing `setUp` leaked rows across an entire test class** (10 failures:
+   `RoundTripCommentsTests` 8, `ArbitraryChainDepthPropertyTests` 2). `hypothesis.extra.django`'s
+   mixin routes `@given` tests through `unittest.TestCase.__call__`, bypassing Django's
+   `_pre_setup`/`_post_teardown` wrapper; hypothesis instead calls those per *example*. `setUp` is
+   still called once by `unittest`'s `run()` - before the first example, so **outside every
+   per-example transaction**. Its rows landed in the class-level atomic and survived to
+   `tearDownClass`, so the *next* test in the class died in its own `setUp` on
+   `dashboard_locations_latitude_longitude_uniq`. Fixed once for the whole repo in
+   `core/tests/testcase.py`: `TestCase` now defers `setUp`/`tearDown` (and drains cleanups) into
+   `setup_example`/`teardown_example`. **Any class mixing a `@given` test with a row-writing
+   `setUp` was affected**, which is most of `tests/hypothesis/`.
+8. **`UL_CELERY_TASK_ALWAYS_EAGER=True` turns "dispatched to a worker" into "ran inline"** (2
+   failures). Needed for local non-Docker pytest, but it silently invalidates any test asserting
+   that a request *didn't* do background work.
+   - `test_direct_messages.py::...::test_second_message_in_same_streak_is_debounced` -
+     `create_direct_message` schedules the alert task, which ran eagerly *outside* the test's patch
+     and claimed the debounce marker, so both explicit calls were no-ops.
+   - `test_location_place_name_lazy.py::...::test_page_render_never_calls_the_live_resolver` - the
+     view correctly dispatches `resolve_location_place_name`; eager mode then resolved *during the
+     request*, which is exactly what the test forbids. It was **order-dependent, not
+     isolation-clean**: it passed when the whole file ran (the preceding class masked it) and
+     failed when run alone.
+   Both now stub `safely_enqueue_task` so they measure the request path, which is the actual claim.
+
+Two were **real product bugs**, both fixed:
+
+9. `services/map_pin_share_detection.arrow_points_toward` returned a garbage answer when a pin sat
+   on an arrow's tail. The boundary centroid lands ~1e-14 degrees off the tail through ordinary
+   float error, and `bearing_degrees` turns that ~1-nanometre displacement into a confident angle -
+   measured at `106.29` vs the arrow's own `89.36`, inside the 35-degree tolerance. An arrow drawn
+   *from* a pin and pointing away therefore recorded a **DETECTED `PinShare` the sender never
+   intended**. Now guarded by `_DEGENERATE_TAIL_SEPARATION_DEGREES` (1e-7, far below the 1e-6
+   coordinate storage precision), with a property test over arrow headings.
+10. Creating a pin through the map's add-pin dialog never set `name_is_user_provided`, so a
+    hand-typed name was eligible for the `tasks.upgrade_placeholder_pin_names` sweep that clears
+    non-user-provided names - despite that task's own docstring defining the flag as "a user
+    actually typed something". `create_pin_for_profile` now takes an explicit
+    `name_is_user_provided` (default False, preserving importer/offline-sync semantics) and
+    `maps.post_add_pin` passes it. **Left deliberately unchanged:** the external API's pin-create
+    still defaults to False, so a name typed in the mobile app is not protected until edited -
+    inconsistent with its own PATCH path (`external_api/views.py:746`), and worth a decision.
+
+The remaining five were test bugs of one shape: **substring assertions against a whole page, where
+the string also appears inside the page's own inline `<script>`**.
+
+11. `test_pin_edit_controller.py::PinDescriptionEditableTests` (2) - asserted description *markup*
+    against the full page, but `#pin-overview` is `hx-get`-loaded, so the markup is only in the
+    partial. Both classes' docstrings already documented this split. The assertions moved to
+    `PinOverviewEditableDescriptionTests`, which renders the partial. Note
+    `assertNotIn("pin-description--empty", full_page)` could **never** pass - the click-to-edit
+    script toggles that class by name.
+12. `test_profile_hero_meta_editable.py` (2) - same thing; the wiring script builds
+    `>Add when you started exploring...</span>` as a string literal, so even the `>...<` idiom the
+    file already used elsewhere was insufficient. Now strips `<script>` blocks and asserts against
+    the markup.
+13. `test_trip_controller.py::...::test_outsider_gets_404_indistinguishable_from_a_missing_trip` -
+    compared two responses byte-for-byte including the CSRF token. Django re-masks the token per
+    call, so a page holds several *different* strings for one secret and no two renders ever match.
+    Now normalizes token-shaped runs before comparing.
+14. `test_pin_media_endpoints.py` (1) - a bare `mock.Mock()` has a truthy `is_redirect`, sending
+    `fetch_with_revalidated_redirects` down its redirect branch and handing `urljoin` a Mock
+    (`TypeError` -> 500). The sibling `test_media_materialize._ok_response` sets it correctly. Also
+    removed the test's real-DNS dependency.
+
+15. **`test_external_api_wiki_oracle.py::WikiDiscoveryOracleTests` was 429ing, not 404ing** (12
+    SUBFAILEDs). An earlier revision of this file claimed it "passes cleanly in isolation" -
+    **that was wrong**; it fails alone too. The class walks all 24 `WIKI_ROUTES` once per
+    invisibility case over a single credential (72 requests), which blows past
+    `ExternalApiBurstThrottle`, so the tail of the list came back **429 instead of 404**. The four
+    routes at the end of `WIKI_ROUTES` are the comment writes, which is why the failures looked
+    suspiciously like a comments-specific security hole. It was not one: all three cases returned
+    429 *identically*, so the anti-enumeration property held throughout. `setUp` now calls
+    `disable_throttling(self)`.
+
+    **The part worth keeping:** because those four routes never got past the throttle, the oracle
+    guarantee for `POST comments/`, `DELETE comments/1/` and both reaction routes was **silently
+    unverified** - the test looked like it covered them and did not. It now genuinely does, and
+    they pass. When a sub-resource is appended to `WIKI_ROUTES`, check it is actually reached.
+
+Measured on `-k "external_api or api_key"` (2026-07-27): **59 failed / 668 passed** before this
+session's fixes, **12 failed / 715 passed** once causes 7-8 landed, and **715 passed / 435 subtests
+passed / 0 failed** once 15 did. Note the original 59-failure figure was only partially itemized at
+the time: the capture had been truncated by a `Select-Object` filter, so ~45 of those were never
+inspected individually; they stopped failing across causes 7-8.
+
+Still open:
+
+- The friend-invite privacy cluster documented below (7).
+
+Reproduce a baseline cheaply with `pytest <files> -q --reuse-db` after `git stash`, rather than
+re-running the whole 41-minute sweep. Set `UL_TEST_DB_NAME` to something unique per agent and
+`UL_CELERY_TASK_ALWAYS_EAGER=True` (see cause 8 for what that costs you).
+
+## RESOLVED 2026-07-27: `test_websocket_auth.py::test_valid_api_key_authenticates_an_anonymous_socket` times out
+
+Was `asyncio.CancelledError -> TimeoutError` (asgiref/timeout.py:108), and was **confirmed
+pre-existing** by stashing the Place-consolidation change set (identical `1 failed, 6 passed`
+both ways).
+
+The asymmetry that made it look consumer-specific - the structurally identical OAuth2 sibling
+passed - was the actual clue, just not in the direction first guessed. It was not a
+`database_sync_to_async` deadlock. Nothing in the project overrode `PASSWORD_HASHERS`, so tests
+ran Django's default PBKDF2 at ~1.2M iterations; `authenticate_api_key`'s `check_password` ran
+*inside the WebSocket handshake* and blew past `WebsocketCommunicator.connect()`'s 1-second
+default timeout. The OAuth2 path is a plain indexed token lookup with no hashing, so it never
+came close.
+
+Fixed by setting `PASSWORD_HASHERS = ["...MD5PasswordHasher"]` in `settings/test.py` (test-only;
+base.py keeps the real hashers everywhere else). Speeds up every test that bakes a User as a
+side benefit.
+
+## RESOLVED 2026-07-27: `get_nearby_or_create(threshold_meters=0)` could 500 on sub-precision coordinate collisions
+
+`Location.latitude`/`longitude` are `DecimalField(max_digits=9, decimal_places=6)`, so the
+database rounds to 6dp on insert - but `Location.save()` builds the PostGIS `point` from the raw
+unrounded float (`models/location/model.py:426-429`). Two coordinates that differ only below 6dp
+therefore round to the *same* stored (latitude, longitude) while their stored points sit ~1cm
+apart.
+
+With `threshold_meters=0` (`models/location/queryset.py:117-161`) that combination is
+unreachable-by-lookup but blocked-on-insert: the `point__distance_lte=(point, D(m=0))` probe
+misses the existing row, the insert then trips the `(latitude, longitude)` unique constraint, and
+the `IntegrityError` handler re-runs the *same* zero-distance probe, misses again, and re-raises -
+surfacing as a 500.
+
+Repro: call it twice with e.g. `42.00000014` then `42.00000006` (same longitude).
+
+Fixed by `Location.objects.get_exact_or_create` (`models/location/queryset.py`), which matches on
+the stored coordinates - what the unique constraint actually enforces - rather than a
+zero-distance geometry probe. Every exact-coordinate caller now goes through it:
+`pin_creation.resolve_child_pin_location`, `pin_edit.move_pin_to_coordinates`, and
+`detail_pins._location_for_child_wiki`.
+
+Two adjacent bugs surfaced while fixing it, both also fixed:
+
+- `_location_for_child_wiki` handled "a wiki already owns this Location" by inserting a **second
+  Location at the same coordinates**, which the `(latitude, longitude)` unique constraint refuses
+  outright - a guaranteed 500 whenever a user dropped a child wiki marker on a point that already
+  had one. It now raises `ChildWikiLocationError`, surfaced as a 400 ("place it slightly apart"),
+  matching the child-pin rule. The child-wiki *move* path excludes the wiki being moved, so a
+  stay-put drag is still a no-op.
+- `move_pin_to_coordinates` let a root pin move onto a Location where the owner already had
+  another root pin, which violates `db_pin_unique_location_per_profile` and surfaced as an
+  unhandled `IntegrityError`. It now raises `PinMoveError` (400 on both the internal and external
+  endpoints). Child pins are deliberately unaffected - sharing a parcel is their purpose.
+
+## RESOLVED 2026-07-27: assigning `Location.cid` performed a synchronous Google lookup
+
+`Location.cid`'s setter (`models/location/model.py`) called
+`GooglePlaceService().set_cid_for_entity(self, value)` and took that method's
+`fetch_if_missing=True` default, so `location.cid = 123` - an assignment that reads like setting a
+field - issued a live Google call to resolve a place name for the coordinates. This is what made
+`test_legacy_cid_coordinate_fix.py` hit the network (see cause 1 in the big entry above); the test
+was fixed at the time, the setter was not.
+
+The setter now passes `fetch_if_missing=False`, matching `place_name`'s documented cache-only
+stance a few lines above it. Callers that genuinely want the lookup should call the service
+directly, where the cost is visible.
+
+Worth knowing: **every** production caller of `set_cid_for_entity` (`services/apis/locations/
+google/maps.py:240,769`) already passed `fetch_if_missing=False` explicitly. The setter was the
+only code path anywhere taking the blocking default, so that default currently has no users. It
+is left as-is - flipping it is a wider API decision - but a future caller relying on it should
+know it is a trap rather than a considered default.
+
+## RESOLVED 2026-07-27: nine pre-existing friend-invite / pin-sync test failures on `feature/external-api-mobile-v2`
+
+**Resolved.** The open question below - "is the gate right, or do the tests encode a real product
+requirement?" - was settled in favour of the gate, on three pieces of evidence: the code comment
+documents it as a deliberate fix, `request_friend` runs the same evaluator (so exempting the email
+path would reintroduce exactly the asymmetry the fix closed), and the bypass it replaced is
+recorded as a vulnerability further down this file. Knowing someone's email address is not a
+secret worth overriding their stated preference for.
+
+So the eight friend-invite tests were stale. They now use a `make_invitable_user` helper
+(`test_friend_invite_privacy.py`) that opts the *target* into `ANYONE`, keeping each test on its
+actual subject; `test_response_identical_regardless_of_target_friend_request_visibility` sets both
+ends explicitly since it is the one test genuinely about the gate. **29 passed.**
+
+The ninth, `PinSyncViewTests::test_child_pins_are_served_with_their_parent_uuid`, was fixed
+independently by the child-pin location work (`resolve_child_pin_location` /
+`get_exact_or_create`) - its `PinCreationError: You already have a pin at this location.` was that
+exact bug. **10 passed.**
+
+**RESOLVED 2026-07-28**: the "invite a friend by email is a no-op for two already-registered
+users" consequence flagged above was decided in favour of option (b) - soften the default.
+`friend_request_visibility`'s default is now `ANYONE` rather than `ANYTHING_IN_COMMON`
+(`models/profile/model.py`, migration `0018_alter_friend_request_visibility_default.py`), on the
+reasoning that having an account should never make a user *harder* to reach by friend request than
+not having one - which is what the stricter default did, since `invite_by_email`'s
+unregistered-address branch always sends the invitation unconditionally. The migration backfills
+existing profiles still at the old default (not ones a user deliberately changed) - see the
+migration's own comment for the reasoning, mirrored from the `welcome_onboarding_complete`
+precedent in `0002`/`0003`. `test_anything_in_common.py::VisibilityDefaultsTests` updated to match
+(every other `ANYTHING_IN_COMMON`-by-default field is unaffected - this was scoped to
+`friend_request_visibility` only). 205 passed across every suite touching this setting.
+
+## Historical detail from the original 2026-07-26 report
+
+Found while building the external-API social domain. **Not caused by that work** - verified by
+reverting `controllers/friendship.py` and `controllers/notifications.py` to `f529b0f4` and
+re-running the identical selection: 9 failures before the change, and the same 9 after.
+
+```
+test_friend_invite_privacy.py::InviteByEmailPrivacyTests::test_existing_user_actually_receives_friend_request
+test_friend_invite_privacy.py::InviteByEmailPrivacyTests::test_gmail_variant_of_existing_email_is_matched
+test_friend_invite_privacy.py::InviteByEmailPrivacyTests::test_response_identical_regardless_of_target_friend_request_visibility
+test_friend_invite_privacy.py::OutgoingRequestWidgetPrivacyTests::test_pending_cards_are_structurally_identical_across_kinds
+test_friend_invite_privacy.py::OutgoingRequestWidgetPrivacyTests::test_pending_cards_carry_no_type_revealing_urls_or_ids
+test_friend_invite_privacy.py::OutgoingRequestWidgetPrivacyTests::test_registered_and_unregistered_pending_entries_render_identically
+test_friend_invite_privacy.py::OutgoingRequestWidgetPrivacyTests::test_registered_target_identity_is_hidden_in_the_pending_widget
+test_friend_request_message.py::EmailInviteMessageTests::test_message_is_stored_on_the_friendship_for_an_existing_user
+test_external_api.py::PinSyncViewTests::test_child_pins_are_served_with_their_parent_uuid
+```
+
+The eight friend-invite ones share a likely root cause: the invite path now gates the
+registered-account branch on `Profile.visibility_permits(to_profile.friend_request_visibility,
+to_profile, inviter)` (a deliberate security fix - a bare `!= NO_ONE` check previously let
+anyone who knew an address bypass a restricted visibility setting). `friend_request_visibility`
+defaults to `ANYTHING_IN_COMMON`, and a freshly-baked target profile has no pin/friend/trip in
+common with the inviter, so the gate now correctly refuses - but these tests still assert that a
+`Friendship` row *is* created. The tests appear to predate the gate and were never updated;
+they need to set the target's `friend_request_visibility` to `ANYONE` (or establish something in
+common) in setUp.
+
+`PinSyncViewTests::test_child_pins_are_served_with_their_parent_uuid` is unrelated and fails
+with `PinCreationError: You already have a pin at this location.` - it looks like the test
+creates two pins at coordinates that resolve to the same `Location`.
+
+Whoever picks this up should confirm the intended behaviour before editing the assertions:
+if the gate is right, the tests are stale; if the tests encode a real product requirement
+("an emailed invite should reach anyone regardless of their visibility setting"), then the
+gate needs a documented exception instead.
+
+## OPEN 2026-07-26: WhatsApp/SMS alerts never fire for safety check-in partner invites
+
+`services/notification_text_alerts.py:114-115` derives the preference column name from the
+notification's own type:
+
+```python
+prefix = notification.notification_type
+return bool(getattr(prefs, f"{prefix}_whatsapp", False)), bool(getattr(prefs, f"{prefix}_sms", False))
+```
+
+That works for 11 of the 12 preference stems, but **not** for the safety-check-in partner
+invite. `NotificationType.SAFETY_CHECKIN_PARTNER_INVITE` has the value
+`"safety_ci_partner_invite"` (`models/notifications/meta/type.py:26`), while the
+`NotificationPreference` columns are named `safety_checkin_partner_invite`,
+`safety_checkin_partner_invite_whatsapp`, `safety_checkin_partner_invite_sms`
+(`models/notifications/model.py:180-182`). The lookup therefore misses, and the
+`getattr(..., False)` default silently reports "user does not want text alerts" - so a user
+who explicitly enabled WhatsApp/SMS for partner invites never receives them, with no error
+anywhere.
+
+Note the same mismatch does *not* affect `wiki_safety_checkin`, whose type value and column
+name do agree.
+
+Fix is a rename on one side plus a migration (and a check for any other consumer deriving
+field names from type values). Deliberately not done as a drive-by during the external-API
+social/notifications build, since it changes either a stored enum value or three column names.
+
+Guarded meanwhile by
+`tests/hypothesis/test_external_api_notifications.py::NotificationPreferenceCoverageTests::test_one_preference_stem_does_not_match_its_notification_type`,
+which asserts the mismatch explicitly so that fixing it fails loudly rather than silently
+changing the external API's preference field names.
+
+## OPEN 2026-07-26: FCM push transport is registered but never dispatched
+
+`services/push.py` accepts and stores FCM device registrations, but only the UnifiedPush
+transport actually dispatches; FCM rows are skipped at send time until a Play-flavor client
+exists (see that module's docstring). This is server-side dispatch infrastructure requiring a
+Google service-account credential - it is *not* a missing external-API endpoint, and
+`push-devices/` already registers such devices correctly. Recorded here because the gap was
+previously documented only in a module docstring, so a user registering an FCM device today
+gets silence rather than an error.
+
+## OPEN 2026-07-26: notification "friend accepted" loses its source_profile on one path
+
+`services/friendship.py::accept_friend_request` (ported verbatim from the old
+`FriendController.accept_friend`) creates the `FRIEND_ACCEPTED` notification **without**
+`source_profile`, whereas `request_or_accept_friendship` and
+`FriendController.friend_request_respond` both set it. The external API's
+`NotificationSerializer` exposes `source_profile`, so a mobile client sees a null actor for
+notifications produced by that one path and cannot link back to the profile. Left as-is
+during the extraction to keep the refactor behaviour-preserving; setting
+`source_profile=actor` there is almost certainly correct but should be done with a test that
+pins the intended behaviour on all three paths.
+
 **Status as of 2026-07-23 (cleanup)**: all fully-resolved entries have been removed from this
 file - resolution details live in git history (this file's prior revisions) and
 `docs/notes/ai/completed.md`. Recently closed, for orientation: the whole PR #111 cluster
@@ -177,13 +709,13 @@ same response. `services/ai/cloudflare.py`'s parser correctly does *not* self-ca
 other two are a regression rather than by design. Every assistant-chat, document-import, vision-keyword,
 and auto-tag cost/token estimate for Anthropic and OpenAI is currently ~2x actual.
 
-**Friend-request-visibility bypass via the email-invite path.**
-`controllers/friendship.py:666` (`invite_by_email`) only checks
-`to_profile.friend_request_visibility != VisibilityChoice.NO_ONE` for a matched existing account,
-unlike `request_friend` (line 317) which runs the full `Profile.visibility_permits` evaluator. A
-profile restricted to `FRIENDS`/`COMMON_PIN`/`COMMON_FRIEND`/`COMMON_TRIP`/`ANYTHING_IN_COMMON`
-(anything short of `NO_ONE`) can still be friend-requested by any stranger who knows their email.
-Only the `NO_ONE` case has test coverage (`test_friend_invite_privacy.py`).
+**~~Friend-request-visibility bypass via the email-invite path.~~ FIXED - this entry was stale
+(verified 2026-07-27).** It described `invite_by_email` checking only
+`to_profile.friend_request_visibility != VisibilityChoice.NO_ONE`. That logic has since moved out
+of the controller into `services/friendship.py:invite_by_email`, which runs the full
+`Profile.visibility_permits` evaluator - the same one `request_friend` uses. The non-`NO_ONE`
+cases this entry correctly flagged as untested are now covered; see the resolved friend-invite
+entry above, including the UX consequence the fix carries.
 
 **`common_pin_count` is shown regardless of its own visibility gate.**
 `controllers/userprofile.py:157-158` + `templates/pages/profile/index.html:66-77` — the *count* of
@@ -827,3 +1359,247 @@ already reset between tests.
   Protocol's `CSS.getMatchedStylesForNode` (via a Playwright CDP session) to see which rule a
   live page actually applied if a rendered value looks unexpectedly stale. (This applies to the
   public dev/staging/prod deployments, not the local docker-compose stack described above.)
+
+
+## Messaging / external API (noted 2026-07-26, during the mobile v2 messaging API build)
+
+- **WebSocket credential auth does no per-scope check.** `ApiKeyAuthMiddleware` (see
+  `src/urbanlens/dashboard/websocket_auth.py` and its use in `UrbanLens/asgi.py`) authenticates
+  a WebSocket connection from any valid, unrevoked credential and then grants blanket access -
+  it never consults the connection's scopes. So a token issued with, say, only `pins:read`
+  can still open `ws/messages/` and `ws/notifications/` and receive live direct-message and
+  notification payloads, which is precisely the data `OAUTH2_ONLY_SCOPES` restricts to
+  user-consented OAuth2 tokens on the HTTP side. The HTTP messaging endpoints added in
+  `external_api/views_messaging.py` enforce `messages:read`/`messages:write` correctly; the
+  socket path is the remaining hole, and it currently undercuts that enforcement because the
+  same data is reachable over the socket without the scope.
+  **Deliberately not fixed in that pass** (scope control - it touches three consumers and
+  their tests, and a mistake there disconnects working *web* clients, whose session auth flows
+  through the same middleware). **Fix shape**: give each consumer a required-scope declaration
+  and have the middleware/consumer `close()` with a 4403-style code when a credential-authed
+  connection lacks it, leaving session-authed connections (`request.auth is None`) untouched -
+  the same session-or-credential split `external_api/mixins.py:IsSessionAuthenticated` already
+  draws for HTTP. Needs tests for: scoped token accepted, under-scoped token rejected, session
+  unaffected, PAT rejected outright on messaging sockets.
+
+- **Markup-map attachments bypass share provenance.** Attaching a `MarkupMap` to a direct
+  message (`create_direct_message(markup_map_uuid=...)`, and the `send_message_with_share`
+  path in `services/direct_message_shares.py` when no `shared_pin_id` accompanies it) records
+  **no `LocationExposure`**, even though a markup map can depict pin locations and therefore
+  can disclose them to the recipient. Sharing the *pin* correctly stamps the chain via
+  `create_pin_share` -> `resolve_and_stamp_origin_share` + `record_share_exposure`; attaching a
+  map that draws the same place does not, so the location's re-share history silently has a
+  hole in it. **Not a regression** - the web composer has always behaved this way and the new
+  API endpoint merely matches it, which is why it was documented rather than changed
+  mid-build. **Fix shape**: on attach, resolve the `MarkupMap`'s items to the pins/locations
+  they reference and record an exposure per distinct location, reusing `record_share_exposure`
+  rather than inventing a second provenance path. Decide first whether a hand-drawn annotation
+  with no linked pin should count (probably yes if it carries coordinates).
+
+- **Three pre-existing mypy errors surface whenever anything type-checks the external API's view
+  module** (found 2026-07-26 while adding the lists/labels external endpoints; none are caused by
+  that work, and all three live in files it does not touch):
+  - `dashboard/models/boundary/queryset.py:87` - `"GEOSGeometry" has no attribute "exterior_ring"`
+    in `buffer_point_by_meters`. `Point.buffer()` is typed as returning the `GEOSGeometry` base
+    class, but the code relies on the result actually being a `Polygon`. Wants a narrowing
+    `assert isinstance(circle, Polygon)` (or a typed helper) rather than a `cast` - the runtime
+    assumption is genuinely unchecked today.
+  - `dashboard/forms/search.py:176` - `resolve_reference(...)` is handed `self.profile`, typed
+    `Profile | None`, where a non-optional `Profile` is expected. Either `SearchForm.profile`
+    should be non-optional or this branch needs an explicit None guard; as written, a form built
+    without a profile would fail here at runtime.
+  - `dashboard/controllers/trip.py:481` - `existing_ids.add(trip.creator_id)` where `creator_id`
+    is `int | None`, so a trip with no creator would insert `None` into a `set[int]`.
+
+  All three look like real latent bugs rather than annotation noise, which is why they are logged
+  here instead of silenced. They don't fail today because mypy isn't run across these paths
+  together - they only appear once `external_api/views.py` pulls them into one type-check graph.
+
+- **Pin-detail's `wiki_slug` was unusable for navigating to a wiki (FIXED in this pass).**
+  `services/pin_detail.py::build_pin_detail` set `payload["wiki_slug"] = wiki.slug`, which reads
+  naturally as "the slug to fetch this pin's wiki with". It isn't. Every wiki-scoped route
+  resolves through `services.wiki_access.resolve_visible_wiki`, which takes a **Location**
+  slug/uuid - and `Wiki.slug` is an independent `SlugField` on an unrelated model with its own
+  value. A client that followed `wiki_slug` to `GET /wikis/{location_slug}/` therefore got a 404
+  for a wiki it could plainly see. Fixed by adding `location_slug` (from
+  `location.ensure_slug()`) to the payload and to `PinDetailSerializer`; `wiki_slug` is retained
+  but documented as informational-only. Regression test:
+  `tests/hypothesis/test_external_api_pin_detail_location_slug.py`.
+
+- **The internal wiki edit view silently discards invalid input (NOT fixed - deliberate).**
+  `controllers/location_wiki.py::LocationWikiEditView.post` iterates the editable fields and
+  `continue`s past (a) a security value not in `SecurityLevel.choices` and (b) a date that fails
+  `datetime.strptime(raw, "%Y-%m-%d")`. The user is told `{"ok": True}` and the field simply
+  never changes, with no error surfaced anywhere - a submitted-but-dropped edit is
+  indistinguishable from a successful one. The shared `services/wiki_edits.py::apply_wiki_edit`
+  extracted in this pass takes a `strict` flag: the external API passes `strict=True` and gets a
+  hard rejection, while the internal path keeps `strict=False` to preserve existing HTMX
+  behavior. The internal path should be migrated to strict (with proper field-level error
+  rendering in the About card) as a follow-up - it needs UI work, which is why it was left alone
+  here rather than changed blind.
+
+- **A wiki's "First pinned" date leaked past the low-pin-count privacy fuzz (FIXED).**
+  `approximate_pin_count` deliberately refuses to show a number until at least
+  `MIN_VISIBLE_PIN_COUNT` (3) distinct users have pinned a place, but the Community card showed
+  "First pinned <Mon YYYY>" *unconditionally*. With only one or two pinners, that month is
+  effectively "when this specific person pinned it" - exactly what the count fuzzing exists to
+  hide. (The template already rendered `|date:"M Y"`, so the day was never displayed; the leak
+  was the missing low-count suppression, and the fact that day-precision sat in the template
+  context at all.) Fixed by `services/community_counts.py::wiki_community_summary`, which
+  truncates `first_pinned` to the 1st of its month and returns `None` whenever `pin_count_low`
+  is true. Both `LocationWikiView` and the external API now read that one function, and
+  `wiki.html` renders the pre-truncated date rather than reaching into a Pin instance.
+
+- **`MapController.resolve_place` does not honor the `external_apis_enabled` profile toggle**
+  (`src/urbanlens/dashboard/controllers/maps.py:384-408`). Its sibling
+  `autocomplete_places` (same file, line ~361) *does* check
+  `request.user.profile.external_apis_enabled` and returns `{"disabled": true}` when the user
+  has turned external lookups off - but `resolve_place`, which is called the moment the user
+  *selects* one of those suggestions, checks only whether an API key/REData is configured. So a
+  user who has opted out of external API calls still triggers a Google Places **Details** call
+  (billable, and a privacy leak of what they searched for) on selection. Repro: set
+  `Profile.external_apis_enabled = False`, GET
+  `/dashboard/map/resolve-place/?place_id=<any>` -> still hits the provider. Fix: add the same
+  `if not request.user.profile.external_apis_enabled: return ... 403` guard the external API's
+  `PlaceResolveView` now applies
+  (`src/urbanlens/dashboard/external_api/views.py`, `PlaceResolveView.get`). Noted while
+  building the external `locations/resolve/` endpoint, which deliberately does *not* reproduce
+  the omission; the internal path was left alone to keep that change out of an already large
+  API-surface commit.
+
+- **`test_spotguessr_geo_bonus.BonusPointsForGuessTests::test_geocode_failure_earns_nothing_without_raising`
+  fails on a polluted cache, not on the code under test**
+  (`src/urbanlens/dashboard/tests/hypothesis/test_spotguessr_geo_bonus.py:102-108`). The test
+  patches `NominatimGateway` to return `None` and expects a 0-point bonus, but gets 750 (all
+  three tiers). `services/spotguessr/geo_bonus.py::_reverse_geocode_admin_cached` memoizes the
+  reverse-geocode result in the Django cache keyed by *rounded* coordinates, and the earlier
+  tests in the same class populate that key with a matching admin dict - so the patched gateway
+  is never called and the failure branch is never exercised. Reproduces with the file run
+  alone (`pytest src/urbanlens/dashboard/tests/hypothesis/test_spotguessr_geo_bonus.py`), so it
+  is not a cross-file interaction. Pre-existing: neither `geo_bonus.py` nor its test has been
+  touched. Fix is a `cache.clear()` in that class's `setUp` (and arguably a project-wide
+  `LocMemCache` reset between tests, since any cache-backed service has this hazard). Noted
+  while building the external SpotGuessr API; left alone because the file belongs to another
+  work stream.
+
+- **The inbox list serializes each conversation's last message with no reaction/share
+  prefetch** (`src/urbanlens/dashboard/services/direct_messages.py::conversations_for`,
+  `src/urbanlens/dashboard/services/group_chats.py::group_conversations_for`). Each row's
+  `last_message` is rendered through `build_direct_message_payload` /
+  `build_group_message_payload`, which read `message.reactions.all()` (and, for groups,
+  `message.share_for(viewer)`), so a page of N conversations issues ~2N extra queries. Both
+  builders are correct; the missing piece is a prefetch on the *selected* last messages.
+  It cannot simply be added to the existing queries: `group_conversations_for` scans every
+  visible message across every group in order to pick the newest per group, so prefetching
+  there would pull reactions for the whole history rather than for the N rows actually
+  rendered. The fix is a second, id-bounded `prefetch_related_objects()` call over the
+  already-selected `last_message` instances. Pre-existing on the 1:1 side; noted while adding
+  reactions/`pin_share_id` to the group payload (`external_api/serializers_messaging.py`),
+  which gave the group side the same shape. The thread endpoints - where a page is 50 messages
+  rather than 1 - already prefetch, so this is an inbox-only cost.
+
+- **`test_avatar_colors.GroupMemberSearchAvatarColorTests::test_results_get_distinct_colors`
+  returns 0 results where it expects 4**
+  (`src/urbanlens/dashboard/tests/hypothesis/test_avatar_colors.py:105-111`). The test creates
+  four ANYONE-visible profiles named `searchable-user-<n>` and expects
+  `GET messages.group.member_search?q=searchable-user` to return all four;
+  `response.context["results"]` is empty. The candidate filter in
+  `controllers/group_chats.GroupMemberSearchView` (and the `can_direct_message` gate it leans
+  on in `services/direct_messages.py`) is the place to look - the test sets
+  `user.username` directly with `save(update_fields=["username"])`, so a search that reads a
+  denormalized/`Profile`-side name would match nothing. Both of those modules carry
+  uncommitted edits from another work stream, and nothing in the social/avatar/annotation
+  change this was found under touches conversation membership or direct-message gating.
+  Noted while running `test_avatar_colors.py` as a regression check for the avatar-write
+  extraction (`services/avatar.py::set_profile_avatar`); left alone as it belongs to the
+  messaging work stream.
+
+- **Blocked `Friendship` rows created before `block_profile` started normalizing direction may
+  record the wrong blocker** (`src/urbanlens/dashboard/services/friendship.py::block_profile`).
+  `Friendship` has no "blocked_by" column, so `from_profile` is the only record of who blocked
+  whom, and `block_profile` used to reuse whichever row already joined the pair - a block
+  placed on an inbound friend request therefore left the *blocked* party as `from_profile`.
+  It now re-points the row so `from_profile` is always the blocker, which fixes every block
+  placed from here on, but existing rows carry no signal that could be used to repair them:
+  a data migration would have to guess. Impact on a legacy row is bounded and inverted from
+  the original P0 - the true blocker gets a 404 from `unblock_profile`/`remove_friend` and
+  must re-block to normalize the row, and the blocked party can lift it. Worth a one-off
+  audit query (`Friendship.objects.filter(status="Blocked", created__lt=<deploy>)`) rather
+  than an automated migration.
+
+## 2026-07-28: `test_loopnet.py::FetchTests::test_unconfigured_gateway_gracefully_persists_empty` makes a real outbound connection on this machine
+
+Noted while running the full test suite as a regression check after adding `api_kinds =
+frozenset()` to five plugins' `PanelSource` subclasses (an unrelated change - see Part 6 of
+`docs/notes/mobile_app_notes.md`). This test's own docstring says it expects `RedataGateway()` to
+raise `ValueError` because it's *unconfigured* in the test environment, and only mocks
+`LocationCache.set`. On this machine it instead reaches all the way into `requests` and attempts a
+real TCP connection to `10.2.0.214:443`, which the test sandbox's `LocalhostOnlyNetwork` guard
+correctly blocks (`src/urbanlens/core/testing_network.py`) - so the symptom here is a hard failure
+rather than the silent false-negative the test is nominally guarding against.
+
+Root cause confirmed: this checkout's `.env` sets `UL_REDATA_API_URL=https://redata.urbanlens.org`
+(a real, working REData instance, `resolve`d to `10.2.0.214` here) plus `UL_REDATA_API_KEY` -
+legitimate for this developer's normal workflow against the real service, but Pydantic's
+`app.py` settings load `.env` unconditionally, so it also configures `RedataGateway` under
+`pytest`/`UL_ENVIRONMENT=test`. The test's own name ("unconfigured gateway") only holds on a
+checkout with no REData credentials in `.env` at all; on this one it isn't unconfigured, so
+`fetch()` proceeds past the `ValueError` branch straight into a real HTTP call, which the test
+sandbox's `LocalhostOnlyNetwork` guard (`src/urbanlens/core/testing_network.py`) then correctly
+blocks. Not fixed here - out of scope for the change that surfaced it (`git diff` confirms
+`plugins/builtin/loopnet.py`'s only edit was the additive `api_kinds` class attribute, nowhere
+near `fetch()` or `RedataGateway`) - but the test should mock/patch the gateway (or settings
+should force REData unconfigured under `UL_ENVIRONMENT=test` the way `settings/_gdal_windows.py`
+scopes its own local-only behavior) rather than depending on `.env` being REData-credential-free.
+
+## 2026-07-28: `_StoredRangeValidationMixin._resolve_range` fails mypy (`serializers.py:2741`) - RESOLVED
+
+**Resolved 2026-07-28** by the session that owned the in-progress work (the PR #124 Codex-review
+pass). Diagnosis below was correct, including that a `cast` was the wrong answer. The fix was to
+make the mixin a real `serializers.Serializer` subclass rather than a bare mixin over `object`:
+its only correct use *is* as part of a serializer (it reads `self.context` and chains through
+`super().validate()`), so the base list is the honest place to say so, and it types `context` and
+`validate` together. It declares no fields, so `_declared_fields` is unaffected.
+
+A `TYPE_CHECKING`-conditional base (`_Base = Serializer if TYPE_CHECKING else object`) was tried
+first and rejected by mypy - `Variable ... is not valid as a type [valid-type]` - in both the
+conditional-expression and statement-level `if`/`else` forms. Worth knowing before reaching for
+that idiom here again.
+
+Original report follows.
+
+
+Noted while running `mypy` on `external_api/serializers.py` as a regression check after the
+memories-journal/safety-maps pagination-envelope fix and the OAuth consent screen (unrelated
+changes - see Part 7 of `docs/notes/mobile_app_notes.md`). `git diff` confirms neither of those
+touched `_StoredRangeValidationMixin`, `TripUpdateSerializer`, or `TripActivityUpdateSerializer` -
+this is uncommitted, in-progress work on trip/activity range validation, presumably from a
+concurrent session on this same checkout (per `CLAUDE.local.md`'s note that multiple agents may be
+working simultaneously).
+
+`_resolve_range` reads `self.context.get("instance")`, but the mixin is a plain class (not a
+`serializers.Serializer` subclass) - mypy has no way to know `self` will actually be a `Serializer`
+at the point it's mixed in via `class TripUpdateSerializer(_StoredRangeValidationMixin,
+serializers.Serializer)`. The fix is a type hint at the mixin boundary (e.g. a `Protocol` with a
+`context: dict` attribute, or having the mixin only ever appear via a small typed base), not a
+`cast`. Left alone rather than fixed here, since it belongs to a feature this pass didn't touch and
+guessing at its intended shape risks colliding with whoever is actively editing it.
+
+## 2026-07-28: `services/consensus/fields.py` - 9 pre-existing `[has-type]` mypy errors
+
+Found while running a full `mypy src/urbanlens/dashboard` sweep as part of the external-API P2
+parity-polish pass's Phase 8 prep (Games polish - SpotGuessr/Trivia/Consensus). Not caused by this
+pass - nothing in this session touches `services/consensus/fields.py`, and `git log` shows it
+predates this branch's work (Consensus was built 2026-07-25, per a separate session).
+
+All nine errors are `Cannot determine type of "<field>"  [has-type]` on lines 315/316 (`name`),
+322/323 (`description`), 329/330 (`indoor_outdoor`), 338/339/339 (`pin_type`,
+`pin_type_is_user_provided`) - each inside a lambda (`current_value=lambda w: w.name`, etc.) passed
+as a keyword argument to `_wiki_field_strategy(...)` while building the `_STRATEGIES` dict. `w` is a
+`Wiki` instance and every one of these is an ordinary model field, so this isn't an obviously wrong
+runtime assumption the way the boundary/queryset.py and forms/search.py entries above are - it looks
+like a mypy inference limitation on the lambda's implicit parameter type when `_wiki_field_strategy`
+itself is generic/`Callable`-typed, rather than a real bug. Left uninvestigated because Phase 8 does
+not touch `_STRATEGIES` or the field-strategy machinery, only Consensus's session/eligibility/vote
+services - fixing this would mean guessing at `_wiki_field_strategy`'s intended generic signature
+without the context of whoever wrote it.

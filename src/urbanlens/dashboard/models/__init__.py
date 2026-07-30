@@ -29,6 +29,18 @@ from urbanlens.dashboard.models.consensus import (
     ConsensusVote,
 )
 from urbanlens.dashboard.models.custom_fields import CustomField, CustomFieldEntity, CustomFieldType, CustomFieldValue
+from urbanlens.dashboard.models.device_scan import (
+    SECURITY_RELEVANT_TYPES,
+    DeviceScanEntry,
+    DeviceScanUpload,
+    DeviceSignalReading,
+    DeviceType,
+    DeviceTypeSource,
+    MarkerStatus,
+    ScannedDevice,
+    ScanUploadStatus,
+    WikiDeviceMarker,
+)
 from urbanlens.dashboard.models.direct_messages import (
     DirectMessage,
     DirectMessageImagePermission,

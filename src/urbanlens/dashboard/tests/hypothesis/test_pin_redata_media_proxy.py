@@ -59,8 +59,19 @@ class PinLoopnetPhotoViewTests(SimpleTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_unconfigured_gateway_returns_404_not_500(self) -> None:
-        """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured."""
-        with patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None):
+        """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
+
+        The unconfigured state is forced rather than assumed: this previously
+        relied on the machine running the tests having no REData credentials,
+        so on a dev box that does have them the gateway constructed happily,
+        went on to make a real call, and died on a DB write from a
+        SimpleTestCase - a 500, which is precisely what this test exists to
+        rule out.
+        """
+        with (
+            patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
+            patch.object(RedataGateway, "__post_init__", side_effect=ValueError("REData is not configured")),
+        ):
             response = self.client.get(reverse("pin.loopnet.photo", args=["listing-1", 1]))
         self.assertEqual(response.status_code, 404)
 
@@ -91,6 +102,11 @@ class PinCrisAttachmentViewTests(SimpleTestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_unconfigured_gateway_returns_404_not_500(self) -> None:
-        with patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None):
+        """The unconfigured state is forced, not assumed - see the matching
+        Loopnet test for why relying on ambient credentials broke this."""
+        with (
+            patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
+            patch.object(RedataGateway, "__post_init__", side_effect=ValueError("REData is not configured")),
+        ):
             response = self.client.get(reverse("pin.cris.attachment", args=["res-1", 5]))
         self.assertEqual(response.status_code, 404)

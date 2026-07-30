@@ -1,9 +1,28 @@
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
+from typing import TYPE_CHECKING, Any
 
 from channels.db import database_sync_to_async
 from channels.generic.websocket import AsyncWebsocketConsumer
+
+from urbanlens.dashboard.websocket_auth import CREDENTIAL_SCOPE_KEY
+
+if TYPE_CHECKING:
+    # CredentialScopeMixin calls self.scope/self.close/self.send, which every
+    # class it is mixed into inherits from AsyncWebsocketConsumer. Declaring that
+    # base for the type checker only is what makes those calls check out without
+    # a cast or a blanket ignore, while keeping the runtime MRO a plain mixin
+    # (`class Consumer(CredentialScopeMixin, AsyncWebsocketConsumer)`) rather
+    # than a second inheritance path into the consumer machinery.
+    class _CredentialScopeBase(AsyncWebsocketConsumer): ...
+
+else:
+
+    class _CredentialScopeBase: ...
+
 
 logger = logging.getLogger(__name__)
 
@@ -13,29 +32,186 @@ logger = logging.getLogger(__name__)
 # enough not to add meaningful DB load for what's normally a no-op check.
 _PARTNER_REVALIDATION_INTERVAL_SECONDS = 60
 
+# How often a credential-authenticated connection re-checks that its ApiKey/OAuth2
+# token is still valid. Revoking a credential has to actually stop delivery, not just
+# block the next HTTP call: a WebSocket authenticates once, at connect(), so without a
+# periodic re-check a user who revokes a leaked key would watch it keep streaming their
+# notifications and messages until the process restarts. Session connections never run
+# this loop at all (they have no credential to revoke), so it costs the web client
+# nothing.
+_CREDENTIAL_REVALIDATION_INTERVAL_SECONDS = 60
 
-class UserNotificationConsumer(AsyncWebsocketConsumer):
+#: Sent back when a credential-authenticated connection tries to write with a
+#: read-only grant. A frame-level error rather than a close, matching how these
+#: consumers already report a message that failed to save: closing would put the
+#: client into a reconnect loop over a condition that retrying cannot fix.
+_INSUFFICIENT_SCOPE_DETAIL = "This credential isn't allowed to send here. Reconnect with a credential granting the matching write scope."
+
+
+def _credential_is_still_valid(credential: Any) -> bool:
+    """Re-read *credential* from the database and report whether it can still authenticate.
+
+    Both credential kinds are checked the way their own HTTP authenticator
+    would check them on a fresh request, because that is the guarantee being
+    reproduced - a socket must not outlive the authority that opened it:
+
+    - a PAT-style ``ApiKey`` is revoked in place, by stamping ``revoked_at``
+      (``services.api_keys.revoke_api_key``), so a stamped row is dead;
+    - a django-oauth-toolkit ``AccessToken`` is revoked by *deleting* the row,
+      and separately stops working when it expires, so a missing row or an
+      expired one is dead.
+
+    Args:
+        credential: The ``ApiKey``/``AccessToken`` resolved at connect time, or
+            None for a session-authenticated connection.
+
+    Returns:
+        True when the connection may continue - including for None, since a
+        session connection has no credential to revoke and its own separate
+        checks (if any) are unaffected by this one.
+    """
+    if credential is None:
+        return True
+    refreshed = type(credential).objects.filter(pk=credential.pk).first()
+    if refreshed is None:
+        return False
+    if getattr(refreshed, "revoked_at", None) is not None:
+        return False
+    is_expired = getattr(refreshed, "is_expired", None)
+    return not (callable(is_expired) and is_expired())
+
+
+class CredentialScopeMixin(_CredentialScopeBase):
+    """Applies the external API's per-credential scope rules to a WebSocket consumer.
+
+    Over HTTP, resolving an ``ApiKey``/OAuth2 token is only step one: every
+    ``external_api`` view then runs
+    :class:`~urbanlens.dashboard.external_api.permissions.HasApiKeyScope`, so a
+    credential reaches only the domains its grant names. ``ApiKeyAuthMiddleware``
+    gave sockets step one; this mixin gives them step two, using the *same*
+    ``credential_grants`` function rather than a parallel implementation - a
+    second copy of a scope check is a second thing that can silently become the
+    more permissive one.
+
+    Everything here keys off ``scope["api_credential"]``. A browser-session
+    connection has None there and every method below is a no-op for it, which
+    is the whole point: this must not change the web client's behavior in any
+    way. It is the identical discriminator
+    ``external_api.mixins.IsSessionAuthenticated`` uses on the HTTP side
+    (``request.auth is None`` means "a session, not a credential").
+    """
+
+    @property
+    def credential(self) -> Any:
+        """The ``ApiKey``/``AccessToken`` that opened this connection, or None for a session.
+
+        Read via ``scope.get`` so a consumer instantiated without
+        ``ApiKeyAuthMiddleware`` in the stack (unit tests, any future ASGI
+        entrypoint) degrades to the session path instead of raising KeyError
+        and killing the socket.
+        """
+        return self.scope.get(CREDENTIAL_SCOPE_KEY)
+
+    def credential_allows(self, *scopes: str) -> bool:
+        """Whether this connection may exercise *scopes*.
+
+        Args:
+            *scopes: The :class:`~urbanlens.dashboard.models.account.model.ApiKeyScope`
+                values required for the operation being attempted.
+
+        Returns:
+            True for a session connection (no credential, nothing to restrict)
+            and for a credential granting every requested scope; False
+            otherwise. Note that ``credential_grants`` independently refuses
+            ``OAUTH2_ONLY_SCOPES`` to PAT-kind credentials, which is what keeps
+            a ``ulk_`` key out of ``ws/messages/``.
+        """
+        from urbanlens.dashboard.external_api.permissions import credential_grants
+
+        credential = self.credential
+        if credential is None:
+            return True
+        # No database access happens here - an ApiKey's ``scopes`` list and an
+        # AccessToken's ``scope`` string are both already loaded on the instance
+        # the middleware resolved - so this is safe to call from the event loop
+        # without a database_sync_to_async hop on every inbound frame.
+        return credential_grants(credential, scopes)
+
+    def start_credential_revalidation(self) -> None:
+        """Begin periodically re-checking that this connection's credential is still valid.
+
+        A no-op for session connections. Call once, after ``accept()``; pair it
+        with :meth:`stop_credential_revalidation` in ``disconnect()`` so the
+        task doesn't outlive the socket.
+        """
+        if self.credential is None:
+            return
+        self._credential_revalidation_task = asyncio.create_task(self._revalidate_credential_periodically())
+
+    def stop_credential_revalidation(self) -> None:
+        """Cancel the revalidation task, if one was ever started."""
+        task = getattr(self, "_credential_revalidation_task", None)
+        if task is not None:
+            task.cancel()
+
+    async def _revalidate_credential_periodically(self) -> None:
+        """Close this connection with 4404 as soon as its credential stops being valid."""
+        try:
+            while True:
+                await asyncio.sleep(_CREDENTIAL_REVALIDATION_INTERVAL_SECONDS)
+                if not await self._credential_still_valid():
+                    logger.info("Closing socket %s: its credential was revoked or expired", type(self).__name__)
+                    await self.close(code=4404)
+                    return
+        except asyncio.CancelledError:
+            pass
+
+    @database_sync_to_async
+    def _credential_still_valid(self) -> bool:
+        """Re-read this connection's credential from the database - see :func:`_credential_is_still_valid`."""
+        return _credential_is_still_valid(self.credential)
+
+
+class UserNotificationConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     """Pushes on-site notifications to a logged-in user's open tabs as they are created.
 
     Mounted at ``ws/notifications/``. Authentication comes from the session
-    cookie via Channels' ``AuthMiddlewareStack``; each connection joins the
+    cookie via Channels' ``AuthMiddlewareStack``, or from a ``?key=``
+    credential via ``ApiKeyAuthMiddleware``; each connection joins the
     per-profile group produced by
     ``urbanlens.dashboard.models.notifications.signals.notification_group_name``,
     which the ``NotificationLog`` post_save signal broadcasts to.
 
+    A credential-authenticated connection additionally has to hold
+    ``notifications:read``, the same scope the HTTP notification endpoints
+    require - this socket is a live feed of the very same data, so letting any
+    valid bearer token subscribe would make the scope meaningless. Session
+    connections are unaffected (see :class:`CredentialScopeMixin`).
+
     The socket is strictly server → client: incoming frames are ignored, and
-    marking notifications read stays on the existing HTMX endpoints.
+    marking notifications read stays on the existing HTMX endpoints. There is
+    therefore no write scope to check.
 
     Close codes on ``connect()`` failure (mirroring ``SafetyCheckinChatConsumer``):
 
-    - ``4404``: the session is unauthenticated - permanent, retrying won't help.
+    - ``4404``: the session is unauthenticated, or the credential doesn't grant
+      ``notifications:read`` - permanent, retrying won't help.
     - ``4500``: an unexpected server-side error - transient, safe to retry.
     """
 
     async def connect(self):
-        """Authenticate the session and join the profile's notification group."""
+        """Authenticate the session or credential, check scope, and join the profile's notification group."""
+        from urbanlens.dashboard.models.account.model import ApiKeyScope
+
         user = self.scope.get("user")
         if user is None or not user.is_authenticated:
+            await self.close(code=4404)
+            return
+
+        # Checked before any group is joined, so a scope-refused connection never
+        # becomes a member that a broadcast could reach even briefly.
+        if not self.credential_allows(ApiKeyScope.NOTIFICATIONS_READ):
+            logger.info("Notification socket rejected: credential lacks notifications:read (user %s)", getattr(user, "pk", None))
             await self.close(code=4404)
             return
 
@@ -46,6 +222,7 @@ class UserNotificationConsumer(AsyncWebsocketConsumer):
             self.group_name = notification_group_name(profile_id)
             await self.channel_layer.group_add(self.group_name, self.channel_name)
             await self.accept()
+            self.start_credential_revalidation()
         except Exception:
             logger.exception("Notification socket connect failed for user %s", getattr(user, "pk", None))
             # Leave the group again if group_add succeeded but a later step (accept()) then
@@ -59,7 +236,8 @@ class UserNotificationConsumer(AsyncWebsocketConsumer):
             await self.close(code=4500)
 
     async def disconnect(self, close_code):
-        """Leave the notification group, if we ever joined one."""
+        """Leave the notification group, if we ever joined one, and stop re-validating the credential."""
+        self.stop_credential_revalidation()
         if hasattr(self, "group_name"):
             try:
                 await self.channel_layer.group_discard(self.group_name, self.channel_name)
@@ -95,11 +273,22 @@ class UserNotificationConsumer(AsyncWebsocketConsumer):
         return profile.pk
 
 
-class DirectMessageConsumer(AsyncWebsocketConsumer):
+class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     """Real-time direct-message channel for a logged-in user.
 
     Mounted at ``ws/messages/``. Authentication comes from the session cookie
-    via Channels' ``AuthMiddlewareStack``. Each connection joins the
+    via Channels' ``AuthMiddlewareStack``, or from a ``?key=`` credential via
+    ``ApiKeyAuthMiddleware`` - in which case ``messages:read`` is required to
+    connect and ``messages:write`` to send. Those two scopes are in
+    ``external_api.permissions.OAUTH2_ONLY_SCOPES``, so ``credential_grants``
+    refuses them outright to a PAT-style ``ulk_`` key regardless of what its
+    ``scopes`` list says: a long-lived bearer secret that tends to end up in CI
+    configs and screenshots must not be a path into someone's DMs, and this
+    socket is a live feed of exactly that. Before the check existed, a PAT could
+    open this socket and route straight around the boundary every HTTP messaging
+    route enforces.
+
+    Each connection joins the
     per-profile group from ``services.direct_messages.direct_message_group_name``;
     ``create_direct_message`` broadcasts every new message to both the sender's
     and the recipient's groups, so all of either party's open tabs update at once.
@@ -112,14 +301,24 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
     Close codes on ``connect()`` failure (same contract as
     ``SafetyCheckinChatConsumer``, which the frontend reconnect logic branches on):
 
-    - ``4404``: the session is unauthenticated - permanent, retrying won't help.
+    - ``4404``: the session is unauthenticated, or the credential doesn't grant
+      ``messages:read`` - permanent, retrying won't help.
     - ``4500``: an unexpected server-side error - transient, safe to retry.
     """
 
     async def connect(self):
-        """Authenticate the session, join the profile's direct-message group, and mark them online."""
+        """Authenticate the session or credential, check scope, join the profile's group, and mark them online."""
+        from urbanlens.dashboard.models.account.model import ApiKeyScope
+
         user = self.scope.get("user")
         if user is None or not user.is_authenticated:
+            await self.close(code=4404)
+            return
+
+        # Checked before any group is joined, so a scope-refused connection never
+        # becomes a member that an incoming message could be delivered to.
+        if not self.credential_allows(ApiKeyScope.MESSAGES_READ):
+            logger.info("Direct message socket rejected: credential lacks messages:read (user %s)", getattr(user, "pk", None))
             await self.close(code=4404)
             return
 
@@ -130,6 +329,7 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
             self.group_name = direct_message_group_name(self.profile_id)
             await self.channel_layer.group_add(self.group_name, self.channel_name)
             await self.accept()
+            self.start_credential_revalidation()
             await database_sync_to_async(mark_profile_online)(self.profile_id)
         except Exception:
             logger.exception("Direct message socket connect failed for user %s", getattr(user, "pk", None))
@@ -144,7 +344,8 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
             await self.close(code=4500)
 
     async def disconnect(self, close_code):
-        """Leave the direct-message group and mark one fewer live connection, if we ever joined."""
+        """Leave the direct-message group, mark one fewer live connection, and stop re-validating the credential."""
+        self.stop_credential_revalidation()
         if hasattr(self, "group_name"):
             try:
                 await self.channel_layer.group_discard(self.group_name, self.channel_name)
@@ -174,7 +375,16 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
                 so accepting (and ignoring) it here keeps a stray binary frame
                 from raising an uncaught ``TypeError`` that would kill the connection.
         """
+        from urbanlens.dashboard.models.account.model import ApiKeyScope
+
         if text_data is None:
+            return
+        # Every frame this socket accepts mutates something on the sender's
+        # behalf - sending a message, broadcasting a typing indicator, marking a
+        # thread read - so messages:write gates the whole method rather than only
+        # the message branch. A messages:read credential is a listen-only grant.
+        if not self.credential_allows(ApiKeyScope.MESSAGES_WRITE):
+            await self.send(text_data=json.dumps({"type": "error", "detail": _INSUFFICIENT_SCOPE_DETAIL}))
             return
         try:
             data = json.loads(text_data)
@@ -360,7 +570,7 @@ class DirectMessageConsumer(AsyncWebsocketConsumer):
         )
 
 
-class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
+class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     """Real-time chat for a safety check-in, shared by the owner, every accepted partner, and every emergency contact.
 
     Mounted under two routes (see ``dashboard/routing.py``):
@@ -368,10 +578,20 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
     - ``ws/safety/checkin/<uuid:checkin_uuid>/chat/`` - session route, requires
       an authenticated session belonging to the check-in's owner or an accepted
       ``SafetyCheckinPartner`` (populated by Channels' ``AuthMiddlewareStack``
-      from the session cookie; see ``services.safety.is_owner_or_accepted_partner``).
+      from the session cookie; see ``services.safety.is_owner_or_accepted_partner``),
+      or the same identity established by a ``?key=`` credential through
+      ``ApiKeyAuthMiddleware``. A credential additionally needs ``safety:read``
+      to join and ``safety:write`` to send - being the check-in's owner is not
+      by itself enough, exactly as it isn't on the HTTP safety endpoints. A
+      ``pins:read``-only key must not be able to read someone's check-in chat
+      just because it happens to belong to that someone.
     - ``ws/safety/contact/<uuid:token>/chat/`` - contact route, authorized by
       the token alone (mirrors ``SafetyCheckinMessageView._resolve`` - a
-      contact identified only by email has no account to log into).
+      contact identified only by email has no account to log into). No scope
+      check applies here, ever: authority on this route comes from the
+      magic-link token, not from a credential, and a contact opening their
+      portal has no credential to check. A ``?key=`` that happens to ride along
+      on this route is irrelevant to whether the connection is allowed.
 
     Everyone connected for a given check-in - the owner, its accepted
     partners, and all of its contacts - joins the same channel group, so a
@@ -384,8 +604,9 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
     Close codes used on ``connect()`` failure (the frontend branches on these
     to decide whether to keep retrying):
 
-    - ``4404``: the check-in/contact/token doesn't resolve, or the owner
-      route was hit while unauthenticated - permanent, retrying won't help.
+    - ``4404``: the check-in/contact/token doesn't resolve, the owner
+      route was hit while unauthenticated, or the credential doesn't grant
+      ``safety:read`` - permanent, retrying won't help.
     - ``4500``: an unexpected server-side error - transient, safe to retry.
 
     Incoming frames that fail to save are answered with
@@ -395,8 +616,10 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
     """
 
     async def connect(self):
-        """Resolve the check-in (and, on the contact route, the authorizing contact), then join its group."""
+        """Resolve the check-in (and, on the contact route, the authorizing contact), check scope, then join its group."""
         from django.core.exceptions import ObjectDoesNotExist
+
+        from urbanlens.dashboard.models.account.model import ApiKeyScope
 
         kwargs = self.scope["url_route"]["kwargs"]
         try:
@@ -408,6 +631,17 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
         except Exception:
             logger.exception("Safety chat connect failed unexpectedly: %s", kwargs)
             await self.close(code=4500)
+            return
+
+        # Scope only ever restricts the session route. On the contact route the
+        # token *is* the authorization (self.contact is set), and the connecting
+        # party is typically an emergency contact with no account at all - making
+        # them prove a scope would break the portal for the exact people it exists
+        # to reach. Ordered after _resolve() because that is what tells the two
+        # routes apart.
+        if self.contact is None and not self.credential_allows(ApiKeyScope.SAFETY_READ):
+            logger.info("Safety chat connection rejected: credential lacks safety:read (checkin %s)", self.checkin.pk)
+            await self.close(code=4404)
             return
 
         from urbanlens.dashboard.services.safety import safety_checkin_group_name, safety_checkin_location_group_name
@@ -449,6 +683,14 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
             # self-healing path. The token/contact route never joins the location group and
             # its access can't be revoked mid-connection (a magic link is either valid or
             # it isn't), so it doesn't need this.
+            #
+            # This same loop also carries the credential re-check for a ?key=
+            # connection (_is_still_authorized consults _credential_is_still_valid),
+            # which is why this consumer never calls
+            # CredentialScopeMixin.start_credential_revalidation - doing both would
+            # run two timers against the same connection for the same purpose. Only
+            # the session route can carry a credential that matters here anyway: the
+            # contact route is authorized by its token, not by a credential.
             self._revalidation_task = asyncio.create_task(self._revalidate_access_periodically())
 
     async def disconnect(self, close_code):
@@ -485,17 +727,27 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
 
     @database_sync_to_async
     def _is_still_authorized(self):
-        """Re-check owner-or-accepted-partner status fresh from the DB.
+        """Re-check owner-or-accepted-partner status - and credential validity - fresh from the DB.
 
         Returns:
-            True if this connection's profile is still the owner or an accepted
-            partner on this checkin; False if the checkin is gone or access was
+            True if this connection may continue: its credential (when it has
+            one) is still unrevoked and unexpired, *and* its profile is still
+            the owner or an accepted partner on this checkin. False if the
+            checkin is gone, partner access was revoked, or the credential was
             revoked since connect() (or since the last periodic check).
+
+            The credential arm matters on its own: a WebSocket authenticates
+            once, at connect(), so revoking a leaked key would otherwise block
+            only the next HTTP call while its already-open socket kept
+            streaming this check-in's chat - and, for a partner, its live
+            location - indefinitely.
         """
         from urbanlens.dashboard.models.profile.model import Profile
         from urbanlens.dashboard.models.safety.model import SafetyCheckin
         from urbanlens.dashboard.services.safety import is_owner_or_accepted_partner
 
+        if not _credential_is_still_valid(self.credential):
+            return False
         checkin = SafetyCheckin.objects.filter(pk=self.checkin.pk).first()
         if checkin is None:
             return False
@@ -517,7 +769,18 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
                 ignoring) it keeps a stray binary frame from raising an uncaught
                 ``TypeError`` that would kill the connection.
         """
+        from urbanlens.dashboard.models.account.model import ApiKeyScope
+
         if text_data is None:
+            return
+        # safety:read is a listen-only grant on the session route. The contact
+        # route is exempt for the same reason connect() exempts it: its authority
+        # is the magic-link token, not a credential, and an emergency contact
+        # opening their portal in a browser that happens to hold an unrelated
+        # ``?key=`` must not be silenced by that key's scopes. _create_message()
+        # below still applies every content and archival rule to whatever they send.
+        if self.contact is None and not self.credential_allows(ApiKeyScope.SAFETY_WRITE):
+            await self.send(text_data=json.dumps({"type": "error", "detail": _INSUFFICIENT_SCOPE_DETAIL}))
             return
         try:
             data = json.loads(text_data)
@@ -695,7 +958,7 @@ class SafetyCheckinChatConsumer(AsyncWebsocketConsumer):
         }
 
 
-class _ParticipantSessionConsumer(AsyncWebsocketConsumer):
+class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     """Shared real-time sync for one participant-based game session.
 
     Both ``GameSessionConsumer`` (SpotGuessr) and ``TriviaSessionConsumer``
@@ -717,11 +980,22 @@ class _ParticipantSessionConsumer(AsyncWebsocketConsumer):
     a game session (participants already see each other by name on the
     scoreboard).
 
+    A credential-authenticated connection additionally has to hold
+    ``games:read`` to connect and ``games:write`` to send a chat frame - the
+    same scopes the HTTP game endpoints require, because this socket carries
+    the identical data (live round payloads, reveals, the scoreboard) and
+    accepts a write on the user's behalf. Before that check existed, a
+    credential granting nothing but ``pins:read`` could open
+    ``ws/spotguessr/session/<id>/`` (or the Trivia/Consensus equivalents) and
+    both read and post, routing straight around the boundary every HTTP route
+    enforces. Session connections are unaffected (see
+    :class:`CredentialScopeMixin`), so the web client's behavior is unchanged.
+
     Close codes on ``connect()`` failure (same convention as every other
-    consumer here): ``4404`` permanent (unauthenticated, or not a
-    participant of this session - never distinguished, so a session
-    someone isn't part of doesn't even reveal that it exists), ``4500``
-    transient/retryable.
+    consumer here): ``4404`` permanent (unauthenticated, not a participant of
+    this session, or a credential without ``games:read`` - never
+    distinguished, so a session someone isn't part of doesn't even reveal that
+    it exists), ``4500`` transient/retryable.
     """
 
     #: Overridden per subclass, purely for log messages (e.g. "SpotGuessr", "Trivia").
@@ -740,10 +1014,21 @@ class _ParticipantSessionConsumer(AsyncWebsocketConsumer):
         raise NotImplementedError
 
     async def connect(self):
-        """Verify the connecting profile is a participant (any status) of this session, then join its group."""
+        """Verify the connecting profile is a scoped participant (any status) of this session, then join its group."""
+        from urbanlens.dashboard.models.account.model import ApiKeyScope
+
         session_id = self.scope["url_route"]["kwargs"].get("session_id")
         user = self.scope.get("user")
         if user is None or not user.is_authenticated:
+            await self.close(code=4404)
+            return
+
+        # Checked before the participant lookup and before any group is joined,
+        # so a scope-refused connection never becomes a member a broadcast could
+        # reach even briefly - and never gets to distinguish a real session from
+        # an invented one by how long the refusal takes.
+        if not self.credential_allows(ApiKeyScope.GAMES_READ):
+            logger.info("%s socket rejected: credential lacks games:read (user %s)", self.game_label, getattr(user, "pk", None))
             await self.close(code=4404)
             return
 
@@ -763,6 +1048,7 @@ class _ParticipantSessionConsumer(AsyncWebsocketConsumer):
         try:
             await self.channel_layer.group_add(self.group_name, self.channel_name)
             await self.accept()
+            self.start_credential_revalidation()
         except Exception:
             logger.exception("%s socket failed to join group for session %s", self.game_label, session_id)
             # Leave the group again if group_add succeeded but accept() then failed -
@@ -775,7 +1061,8 @@ class _ParticipantSessionConsumer(AsyncWebsocketConsumer):
             await self.close(code=4500)
 
     async def disconnect(self, close_code):
-        """Leave the session's group, if we ever joined one."""
+        """Leave the session's group, if we ever joined one, and stop re-validating the credential."""
+        self.stop_credential_revalidation()
         if hasattr(self, "group_name"):
             try:
                 await self.channel_layer.group_discard(self.group_name, self.channel_name)
@@ -793,7 +1080,17 @@ class _ParticipantSessionConsumer(AsyncWebsocketConsumer):
                 ignoring) it keeps a stray binary frame from raising an uncaught
                 ``TypeError`` that would kill the connection.
         """
+        from urbanlens.dashboard.models.account.model import ApiKeyScope
+
         if text_data is None:
+            return
+        # Every frame this socket accepts writes something on the sender's
+        # behalf, so games:write gates the whole method: a games:read credential
+        # is a listen-only grant. Reported as an error frame rather than a close,
+        # matching DirectMessageConsumer - closing would put the client into a
+        # reconnect loop over a condition retrying cannot fix.
+        if not self.credential_allows(ApiKeyScope.GAMES_WRITE):
+            await self.send(text_data=json.dumps({"type": "error", "detail": _INSUFFICIENT_SCOPE_DETAIL}))
             return
         try:
             data = json.loads(text_data)

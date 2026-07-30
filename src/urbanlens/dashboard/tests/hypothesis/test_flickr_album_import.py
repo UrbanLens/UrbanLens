@@ -161,7 +161,12 @@ class PinFlickrAlbumLookupViewTests(TestCase):
         self.pin = baker.make_recipe("dashboard.pin", profile=self.profile)
 
     def test_blank_url_shows_an_error(self) -> None:
-        response = self.client.post(reverse("pin.flickr_album.lookup", args=[self.pin.slug]), {"album_url": ""})
+        """Configured state is forced, like every sibling test here: the view
+        checks configuration first, so on a server without Flickr credentials
+        this saw "not configured" and never reached the blank-URL branch it is
+        meant to cover."""
+        with mock.patch("urbanlens.dashboard.controllers.flickr.flickr_is_configured", return_value=True):
+            response = self.client.post(reverse("pin.flickr_album.lookup", args=[self.pin.slug]), {"album_url": ""})
         self.assertContains(response, "Paste a Flickr album URL")
 
     def test_not_configured_shows_an_error(self) -> None:

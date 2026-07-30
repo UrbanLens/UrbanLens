@@ -227,6 +227,12 @@ class GroupMessage(abstract.DashboardModel):
     # Sender-initiated delete-for-everyone: tombstoned for all members.
     deleted_at = DateTimeField(null=True, blank=True)
 
+    # Caller-generated idempotency key - see DirectMessage.client_uuid for the
+    # full rationale. Scoped per sender rather than per group: a sender's own
+    # retry is what needs to collapse, and scoping to the group would let one
+    # client's uuid collide with another's inside the same conversation.
+    client_uuid = UUIDField(null=True, blank=True, editable=False)
+
     if TYPE_CHECKING:
         group_id: int
         sender_id: int
@@ -302,6 +308,13 @@ class GroupMessage(abstract.DashboardModel):
             CheckConstraint(
                 condition=Q(body="") | Q(ciphertext=""),
                 name="db_gmsg_body_xor_ciphertext",
+            ),
+            # Per sender, conditional on being set - see the matching
+            # constraint on DirectMessage for why.
+            UniqueConstraint(
+                fields=["sender", "client_uuid"],
+                condition=Q(client_uuid__isnull=False),
+                name="db_gmsg_unique_client_uuid_per_sender",
             ),
         ]
 

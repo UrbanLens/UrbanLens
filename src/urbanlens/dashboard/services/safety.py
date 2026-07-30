@@ -2,14 +2,17 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import timedelta
 import logging
 import smtplib
 from typing import TYPE_CHECKING
 
 from django.conf import settings
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.mail import EmailMultiAlternatives
 from django.db import IntegrityError, transaction
+from django.db.models import Count
 from django.template.loader import render_to_string
 from django.urls import reverse
 from django.utils import timezone
@@ -36,7 +39,7 @@ from urbanlens.dashboard.services.notification_delivery import send_sms, send_wh
 from urbanlens.dashboard.services.visits import create_visit_suggestion
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable
+    from collections.abc import Iterable, Mapping, Sequence
     import datetime
     from decimal import Decimal
 
@@ -44,7 +47,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.markup.model import MarkupMap
-    from urbanlens.dashboard.models.safety.queryset import SafetyCheckinQuerySet
+    from urbanlens.dashboard.models.safety.queryset import SafetyCheckinPartnerQuerySet, SafetyCheckinQuerySet
     from urbanlens.dashboard.models.trips.model import Trip
     from urbanlens.dashboard.models.wiki.model import Wiki
 
@@ -386,6 +389,55 @@ def validate_notifiable_contacts(
     return allowed, rejected
 
 
+def resolve_contact_inputs(owner: Profile, entries: Sequence[Mapping[str, str]]) -> tuple[list[ContactInput], list[str]]:
+    """Resolve JSON contact entries into ``ContactInput`` tuples, rejecting unusable ones.
+
+    The JSON analogue of ``controllers.safety._parse_contacts_from_post``, which
+    parses the same two contact kinds out of an HTML form. Each entry is either
+    ``{"username": ...}`` (an existing account) or ``{"email": ..., "name": ...}``
+    (someone with no account here).
+
+    A ``username`` **must** name one of the owner's existing connections, exactly
+    as the form flow requires - it validates submitted friend ids against
+    ``get_connections`` and silently drops anything else. Without that rule an API
+    key could nominate an arbitrary account as its owner's emergency contact, and
+    that account would then be emailed and notified during a real escalation: an
+    unsolicited-contact vector, and one the victim never opted into. Rejections
+    are returned rather than raised so the caller decides whether they are fatal
+    (creation) or advisory (editing).
+
+    Args:
+        owner: The profile these contacts are being resolved for.
+        entries: Submitted contact entries, already field-validated by
+            ``SafetyContactInputSerializer`` (exactly one of username/email each).
+
+    Returns:
+        ``(inputs, rejection_messages)`` - the inputs are *not* yet checked for
+        opt-outs, duplicates, or the per-check-in cap. Pass them through
+        :func:`validate_notifiable_contacts` for that.
+    """
+    from urbanlens.dashboard.services.connections import get_connections
+
+    connections_by_username = {connection.username.lower(): connection for connection in get_connections(owner)}
+    inputs: list[ContactInput] = []
+    rejected: list[str] = []
+
+    for entry in entries:
+        username = (entry.get("username") or "").strip()
+        if username:
+            connection = connections_by_username.get(username.lower())
+            if connection is None:
+                rejected.append(f'"{username}" isn\'t one of your connections and can\'t be added as an emergency contact.')
+                continue
+            inputs.append((connection, None, connection.username))
+            continue
+        email = (entry.get("email") or "").strip().lower()
+        if email:
+            inputs.append((None, email, (entry.get("name") or "").strip()))
+
+    return inputs, rejected
+
+
 def record_contact_opt_out(contact: SafetyCheckinContact, scope: SafetyContactOptOutScope) -> None:
     """Record that a contact no longer wants certain safety check-in notifications.
 
@@ -417,6 +469,29 @@ def _optout_urls(contact: SafetyCheckinContact) -> dict[str, str]:
     return {f"optout_{scope.value}_url": _absolute_url(reverse("safety.contact.optout", kwargs={"token": contact.token, "scope": scope.value})) for scope in SafetyContactOptOutScope}
 
 
+def is_accepted_partner(checkin: SafetyCheckin, profile: Profile) -> bool:
+    """Whether ``profile`` is a partner on ``checkin`` who has actually accepted.
+
+    The one place the ``status == ACCEPTED`` clause is written. Every caller that
+    needs "is this person a watcher on this check-in" goes through here rather
+    than writing ``checkin.partners.filter(profile=...)`` inline, because the
+    inline version is wrong in a way that reads as correct: a
+    ``SafetyCheckinPartner`` row exists from the moment the invite is *sent*, so
+    a status-less membership test admits someone who was merely offered the role
+    and never took it - or who may never even have seen the offer - to the plan,
+    the chat, and the live position of where another person physically is right
+    now. Declining deletes the row, so only the INVITED case needs excluding.
+
+    Args:
+        checkin: The check-in being accessed.
+        profile: The requesting profile.
+
+    Returns:
+        True if ``profile`` holds an ACCEPTED SafetyCheckinPartner row on ``checkin``.
+    """
+    return checkin.partners.filter(profile=profile, status=SafetyCheckinPartnerStatus.ACCEPTED).exists()
+
+
 def is_owner_or_accepted_partner(checkin: SafetyCheckin, profile: Profile) -> bool:
     """Whether ``profile`` may view the full check-in and act as its owner would.
 
@@ -429,7 +504,120 @@ def is_owner_or_accepted_partner(checkin: SafetyCheckin, profile: Profile) -> bo
     """
     if checkin.profile_id == profile.pk:
         return True
-    return checkin.partners.filter(profile=profile, status=SafetyCheckinPartnerStatus.ACCEPTED).exists()
+    return is_accepted_partner(checkin, profile)
+
+
+def get_partner_role(profile: Profile, checkin_uuid: str) -> SafetyCheckinPartner | None:
+    """Return ``profile``'s own partner row on the check-in with this uuid, if any.
+
+    The queryset is deliberately ``(checkin__uuid=..., profile=profile)`` and
+    nothing else. Both halves are load-bearing:
+
+    * ``profile=profile`` is what stops this being an enumeration oracle. A
+      caller may only ever address *their own* invitation, so a check-in
+      someone else was invited to is indistinguishable from one that does not
+      exist. Widening this to "the invite with this id" would let any caller
+      walk other people's partner invitations, and an invitation names both a
+      check-in and the person out on it.
+    * **No status filter.** An accept must be repeatable (a retried mobile
+      request must not 404 after the first one succeeded), and a decline on an
+      already-ACCEPTED row is a legitimate *resignation*, not an error. Filtering
+      to INVITED here would turn both into 404s that mean something entirely
+      different from "no such invitation" - and callers cannot tell the two
+      apart from the outside.
+
+    Args:
+        profile: The caller - only their own partner row is reachable.
+        checkin_uuid: The check-in's uuid, as captured from a URL.
+
+    Returns:
+        The caller's partner row, or None when there is no such row, the uuid
+        names no check-in, or the value is not a well-formed uuid at all.
+        Callers answer None with a 404, never a 403.
+    """
+    try:
+        return SafetyCheckinPartner.objects.filter(checkin__uuid=checkin_uuid, profile=profile).select_related("checkin", "checkin__profile", "invited_by").first()
+    except (DjangoValidationError, ValueError):
+        # Comparing a non-uuid string against a UUIDField raises rather than
+        # simply not matching, so a client typo would otherwise be a 500.
+        return None
+
+
+def list_pending_partner_invites(profile: Profile) -> SafetyCheckinPartnerQuerySet:
+    """Return the invitations awaiting ``profile``'s answer.
+
+    Shared by the safety overview page and the external API's invite listing so
+    the two cannot disagree about what counts as "pending" - an ACCEPTED row is
+    a standing role, not an invitation, and must not reappear in a list whose
+    only actions are accept and decline.
+
+    Args:
+        profile: The invitee.
+
+    Returns:
+        Queryset of the profile's INVITED partner rows, newest invitation first.
+        The ordering is total (``-created`` then ``-pk``) because these are
+        paged over: ``created`` alone ties whenever an owner invites the same
+        person to two check-ins in the same instant, and an unstable sort drops
+        or repeats rows across page boundaries.
+    """
+    return SafetyCheckinPartner.objects.filter(profile=profile, status=SafetyCheckinPartnerStatus.INVITED).select_related("checkin", "checkin__profile", "invited_by").order_by("-created", "-pk")
+
+
+def list_partnered_checkins(profile: Profile) -> SafetyCheckinQuerySet:
+    """Return the check-ins ``profile`` watches as an accepted partner.
+
+    Args:
+        profile: The watching profile.
+
+    Returns:
+        Queryset of other profiles' check-ins where ``profile`` has an ACCEPTED
+        partner row, newest deadline first, annotated with ``contact_count`` and
+        ``partner_count``. ``partnered_with`` itself is deliberately left
+        unordered (it is composed into several different surfaces); the total
+        ``-checkin_by``/``-pk`` ordering is applied here because every consumer
+        of this helper pages over the result, and ``checkin_by`` alone ties
+        whenever one person schedules two check-ins for the same moment.
+    """
+    return (
+        # The annotations MUST come before partnered_with's filter, not after.
+        # partnered_with filters on the multi-valued `partners` relation, and
+        # Django reuses a single join when a filter follows an annotation over
+        # the same relation - which would constrain the aggregate to the rows
+        # the filter matched and make partner_count permanently 1 (the caller's
+        # own row) on every result. Annotating first forces a second, unfiltered
+        # join, so the counts describe the check-in rather than the query.
+        SafetyCheckin.objects.annotate(contact_count=Count("contacts", distinct=True), partner_count=Count("partners", distinct=True))
+        .partnered_with(profile)
+        .select_related("profile", "trip", "archive")
+        .order_by("-checkin_by", "-pk")
+    )
+
+
+def get_partnered_checkin(profile: Profile, checkin_uuid: str) -> SafetyCheckin | None:
+    """Return the check-in with this uuid, if ``profile`` is an accepted partner on it.
+
+    Addressed by uuid rather than slug on purpose: a check-in's slug is only
+    unique *per owner* (see ``controllers.safety._get_checkin_as_partner``, which
+    has to swallow ``MultipleObjectsReturned`` for exactly this reason), so a
+    slug cannot safely identify another person's check-in. The partner-facing
+    surface therefore never accepts one.
+
+    Args:
+        profile: The requesting partner.
+        checkin_uuid: The check-in's uuid, as captured from a URL.
+
+    Returns:
+        The check-in, or None when it does not exist, the caller is not an
+        ACCEPTED partner on it, or the caller owns it - the owner-scoped
+        endpoints are where an owner addresses their own check-in, and letting
+        the partner surface answer for them would mean an owner could reach a
+        partner-only write (mark-safe-as-partner) on their own check-in.
+    """
+    try:
+        return list_partnered_checkins(profile).filter(uuid=checkin_uuid).first()
+    except (DjangoValidationError, ValueError):
+        return None
 
 
 def invite_checkin_partner(checkin: SafetyCheckin, *, inviter: Profile, username: str) -> SafetyCheckinPartner:
@@ -522,12 +710,31 @@ def accept_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
 
 
 def decline_checkin_partner_invite(partner: SafetyCheckinPartner) -> None:
-    """Decline a pending partner invite.
+    """Decline a partner invite, or resign a partnership already accepted.
+
+    Both cases delete the same row, but only the second one has any live access
+    to take away, so the revocation broadcast is conditional on the row having
+    been ACCEPTED.
+
+    Why it is needed at all: ``SafetyCheckinChatConsumer`` checks "may this
+    profile watch this check-in?" once, at ``connect()`` time, and then holds
+    the socket open - which is why the owner-initiated
+    :func:`remove_checkin_partner` broadcasts. Declining used to be reachable
+    only from the web overview page, which renders a Decline button solely for
+    INVITED rows, and an invitee has no socket to revoke; the external API's
+    decline endpoint deliberately applies no status filter (see
+    :func:`get_partner_role`), so an ACCEPTED partner can now reach this as a
+    resignation. Without the broadcast that partner keeps streaming chat,
+    status and live-position frames for as long as their tab stays open - a
+    partner who resigned still watching where someone physically is.
 
     Args:
-        partner: The invite being declined.
+        partner: The invite (or accepted partnership) being given up.
     """
+    checkin, profile_id, was_accepted = partner.checkin, partner.profile_id, partner.status == SafetyCheckinPartnerStatus.ACCEPTED
     partner.delete()
+    if was_accepted:
+        _broadcast_partner_access_revoked(checkin, profile_id)
 
 
 def remove_checkin_partner(partner: SafetyCheckinPartner) -> None:
@@ -1091,6 +1298,275 @@ def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:
     checkin.save(update_fields=["plan_update_notified_at", "updated"])
 
 
+@dataclass(frozen=True)
+class CheckinEditOutcome:
+    """What :func:`apply_checkin_edit` actually did, for the caller to report back.
+
+    Attributes:
+        warnings: User-facing messages about submitted fields that were *not*
+            applied because they were locked, plus any contact rejections. These
+            are advisory, never errors - a locked field is silently ignored, and
+            the edit as a whole still succeeds.
+        plan_changed: Whether the plan text or destination coordinates actually
+            changed (and so may have triggered a re-notification).
+        contacts_replaced: Whether the contact list was reconciled this call.
+    """
+
+    warnings: list[str]
+    plan_changed: bool
+    contacts_replaced: bool
+
+
+class CheckinArchivedError(ValueError):
+    """Raised when a write targets a check-in that archival has closed to writes.
+
+    Covers both halves of the archival boundary, which are deliberately at
+    slightly different points: :func:`apply_checkin_edit` refuses as soon as
+    archival is *scheduled* (the grace window is exactly when a retrying client
+    is most likely to autosave plaintext back onto a row about to be scrubbed),
+    while :func:`create_chat_message` refuses once the encrypted archive
+    actually exists (the window itself is there so participants can post a final
+    message).
+
+    Distinct from the plain ``ValueError`` other lifecycle helpers raise so a
+    caller can map it to a 409 Conflict rather than a generic 400 - the request
+    was well-formed, the check-in's state is simply past the point of writing.
+    Subclasses ``ValueError`` so existing callers that only catch that keep
+    behaving exactly as they did.
+    """
+
+
+def apply_checkin_edit(
+    checkin: SafetyCheckin,
+    *,
+    editor: Profile,
+    title: str | None = None,
+    plan_details: str | None = None,
+    contact_message: str | None = None,
+    destination: tuple[float | None, float | None] | None = None,
+    notify_community_wiki: bool | None = None,
+    contacts: list[ContactInput] | None = None,
+    update_summary: str = "updated their trip plan or destination",
+) -> CheckinEditOutcome:
+    """Apply a partial edit to a check-in, honoring the field locks and archival state.
+
+    The single shared implementation of the check-in autosave semantics, used by
+    both the detail page's XHR autosave and the external API's PATCH so the two
+    can never drift:
+
+    * **Trip plan and destination stay editable at any time.** Changing either
+      once contacts have been notified (``contacts_locked``) re-notifies them,
+      debounced by :func:`notify_contacts_of_update`'s own cooldown.
+    * **Title freezes once ``contacts_locked``** - contacts were told to watch
+      for something under that name.
+    * **Message, contact list, and the community-wiki flag freeze once
+      ``notifications_locked``.**
+
+    A locked field that is nonetheless submitted is *ignored with a warning*, not
+    rejected: the web UI disables those inputs, so a submission reaching here is
+    either a bypass attempt or a stale tab, and neither should cost the user the
+    rest of an otherwise valid edit.
+
+    Every parameter defaults to ``None`` meaning **"not submitted, leave
+    untouched"**, which is why none of them carry a substantive default. That
+    distinction has to survive intact from a PATCH serializer's
+    ``validated_data`` key-presence: giving, say, ``title`` a default of ``""``
+    would make an absent title indistinguishable from an explicit clear, and
+    would both fabricate spurious lock warnings and silently blank fields the
+    client never mentioned. ``destination=(None, None)`` is how a caller
+    explicitly clears both coordinates.
+
+    Args:
+        checkin: The check-in being edited. Refreshed in place before returning,
+            so the caller can serialize it directly.
+        editor: The profile performing the edit - the check-in's owner. Used to
+            scope contact validation.
+        title: New title, or None to leave it alone.
+        plan_details: New plan text, or None to leave it alone.
+        contact_message: New contact-facing message, or None to leave it alone.
+        destination: ``(latitude, longitude)`` to set, or None to leave both
+            alone. ``(None, None)`` explicitly clears both.
+        notify_community_wiki: New wiki-notify flag, or None to leave it alone.
+        contacts: Replacement contact list, or None to leave it alone. Should
+            already have been through :func:`validate_notifiable_contacts`.
+        update_summary: Short description of the change, for the re-notification.
+
+    Returns:
+        A :class:`CheckinEditOutcome` describing warnings and what changed.
+
+    Raises:
+        CheckinArchivedError: If the check-in is already scheduled for archival.
+    """
+    warnings: list[str] = []
+    plan_changed = False
+    contacts_replaced = False
+
+    with transaction.atomic():
+        # Re-fetch under a row lock before reading a single lock flag. The flags
+        # are derived from `escalated_at`/`status`, which the escalation beat task
+        # flips from another process entirely - and that task holds no lock of its
+        # own (see docs/PROBLEMS.md on the un-locked 5-minute check-in beats). Read
+        # off the caller's already-loaded instance instead, and an edit that began
+        # while the check-in was unlocked can commit a new title, message, or
+        # contact list *after* escalation has emailed the old ones - rewriting
+        # exactly the details real emergency contacts were just told to act on.
+        # Holding the lock across the read-decide-write turns that check-and-set
+        # into an atomic one.
+        locked = SafetyCheckin.objects.select_for_update().get(pk=checkin.pk)
+
+        # Refuse outright once archival is scheduled. At that point the check-in is
+        # resolved and its plaintext PII is either already sealed into an encrypted
+        # SafetyCheckinArchive and scrubbed from the row (see _scrub_checkin_pii),
+        # or about to be. Writing fresh plaintext back onto a scrubbed row would
+        # restore precisely the data archival exists to remove - permanently, and
+        # outside the encrypted archive, where it is no longer sealed to the
+        # owner's key. Deliberately stricter than editing "until archived": the
+        # grace window between scheduling and archival is exactly when a
+        # slow/retried client is most likely to autosave into the gap.
+        if locked.archive_scheduled_at is not None:
+            raise CheckinArchivedError("This check-in has been archived and can no longer be edited.")
+
+        update_fields: list[str] = ["updated"]
+
+        if plan_details is not None:
+            new_plan = plan_details.strip()
+            if new_plan != locked.plan_details:
+                locked.plan_details = new_plan
+                plan_changed = True
+            update_fields.append("plan_details")
+
+        if destination is not None:
+            new_lat, new_lng = destination
+            old_lat = float(locked.destination_latitude) if locked.destination_latitude is not None else None
+            old_lng = float(locked.destination_longitude) if locked.destination_longitude is not None else None
+            if new_lat != old_lat or new_lng != old_lng:
+                locked.destination_latitude = new_lat
+                locked.destination_longitude = new_lng
+                plan_changed = True
+            update_fields += ["destination_latitude", "destination_longitude"]
+
+        if title is not None:
+            if locked.contacts_locked:
+                if title.strip() != locked.title:
+                    warnings.append("Title is locked and can't be changed once contacts have been notified.")
+            else:
+                locked.title = title.strip() or locked.title
+                update_fields.append("title")
+
+        notifications_locked = locked.notifications_locked
+
+        if contact_message is not None:
+            if notifications_locked:
+                if contact_message.strip() != locked.contact_message:
+                    warnings.append("Message is locked and can't be changed once contacts have been notified or you've checked in.")
+            else:
+                locked.contact_message = contact_message.strip()
+                update_fields.append("contact_message")
+
+        if notify_community_wiki is not None:
+            if notifications_locked:
+                if notify_community_wiki != locked.notify_community_wiki:
+                    warnings.append("Community wiki notification is locked and can't be changed once contacts have been notified or you've checked in.")
+            else:
+                locked.notify_community_wiki = notify_community_wiki
+                update_fields.append("notify_community_wiki")
+
+        if contacts is not None:
+            if notifications_locked:
+                # Only warn when the submission would actually have changed something.
+                # The detail page re-posts the whole (disabled, unchanged) contact
+                # picker on every autosave, so warning on mere presence would put a
+                # spurious "contacts are locked" toast on every keystroke.
+                existing = list(locked.contacts.all())
+                current_identities = {(contact.contact_profile_id, normalize_email(contact.email) if contact.email else None) for contact in existing}
+                submitted_identities: set[tuple[int | None, str | None]] = set()
+                for contact_profile, email, _name in contacts:
+                    resolved_profile, resolved_email = _resolve_contact(contact_profile, email)
+                    submitted_identities.add((resolved_profile.pk if resolved_profile else None, normalize_email(resolved_email) if resolved_email else None))
+                if submitted_identities != current_identities:
+                    warnings.append("Contacts are locked and can't be changed once they've been notified or you've checked in.")
+            else:
+                allowed, rejected = validate_notifiable_contacts(editor, contacts, checkin=locked)
+                set_checkin_contacts(locked, allowed)
+                warnings.extend(rejected)
+                contacts_replaced = True
+
+        locked.save(update_fields=update_fields)
+
+        # Deferred to commit so a rollback further up can never leave real
+        # emergency contacts holding an email about an edit that was undone. The
+        # cooldown/debounce inside notify_contacts_of_update is untouched and
+        # still applies - this only changes *when* it is consulted.
+        if plan_changed and locked.contacts_locked:
+            transaction.on_commit(lambda: notify_contacts_of_update(locked, update_summary))
+
+    checkin.refresh_from_db()
+    return CheckinEditOutcome(warnings=warnings, plan_changed=plan_changed, contacts_replaced=contacts_replaced)
+
+
+def delete_checkin(checkin: SafetyCheckin, actor: Profile) -> None:
+    """Resolve (if needed) and permanently delete a check-in, staging an Undo entry first.
+
+    Mirrors ``controllers.safety.SafetyCheckinDeleteView.post``. An unresolved
+    check-in is routed through :func:`check_in` first so that flow's side effects
+    (resolving it, raising a visit suggestion) happen before the row disappears,
+    rather than the check-in silently vanishing out from under an in-progress
+    escalation.
+
+    The Undo stash is not optional: deletion is otherwise unrecoverable, and this
+    is the same 7-day Undo History entry the web flow creates.
+
+    Args:
+        checkin: The check-in to delete.
+        actor: The profile performing the deletion (the owner) - owns the Undo entry.
+    """
+    from urbanlens.dashboard.services.undo.handlers.safety_checkin import MODEL_LABEL as SAFETY_CHECKIN_MODEL_LABEL
+    from urbanlens.dashboard.services.undo.service import stash_for_undo
+
+    if not checkin.is_resolved:
+        check_in(checkin, actor)
+    stash_for_undo(SAFETY_CHECKIN_MODEL_LABEL, [checkin], actor)
+    checkin.delete()
+
+
+def attach_draft_markup_map(checkin: SafetyCheckin, profile: Profile, map_uuid: str) -> bool:
+    """Attach a draft MarkupMap drawn before the check-in existed, as its route map.
+
+    Lifted from ``controllers.safety.SafetyCheckinCreateView._link_markup_map``:
+    the creation page lazily creates a standalone map the moment the user starts
+    drawing, then hands its uuid over once the check-in is saved.
+
+    Only the caller's own *unattached* maps qualify. A stale, foreign, or
+    malformed uuid is logged and ignored rather than failing the whole check-in -
+    the check-in itself is the safety-critical artifact, and losing some route
+    scribble is not worth refusing to create it.
+
+    Args:
+        checkin: The freshly created check-in.
+        profile: The check-in owner, who must also own the map.
+        map_uuid: The draft map's uuid.
+
+    Returns:
+        True if a map was attached, False if the uuid was ignored.
+    """
+    from django.core.exceptions import ValidationError
+
+    from urbanlens.dashboard.models.markup.model import MarkupMap
+
+    if not map_uuid:
+        return False
+    try:
+        markup_map = MarkupMap.objects.for_profile(profile).unattached().filter(uuid=map_uuid).first()
+    except (ValidationError, ValueError):
+        markup_map = None
+    if markup_map is None:
+        logger.warning("Ignoring markup_map %r on check-in create: not an unattached map owned by profile %s", map_uuid, profile.pk)
+        return False
+    checkin.markup_map = markup_map
+    checkin.save(update_fields=["markup_map"])
+    return True
+
+
 def find_community_wiki(latitude: float | Decimal | None, longitude: float | Decimal | None) -> Wiki | None:
     """Return the community Wiki covering a destination point, if one already exists.
 
@@ -1620,14 +2096,19 @@ def create_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, c
         The newly created SafetyCheckinMessage.
 
     Raises:
-        ValueError: If ``body`` is blank or exceeds ``MAX_CHAT_MESSAGE_LENGTH``,
-            or the check-in has already been archived. Both callers (the
-            WebSocket consumer and the no-JS HTTP fallback) catch this and
-            surface it to the sender - a safety check-in chat failing
-            silently is worse than most other features failing silently.
+        CheckinArchivedError: If the check-in has already been archived. A
+            ``ValueError`` subclass, so the WebSocket consumer and the no-JS
+            HTTP fallback keep catching it exactly as before; it is raised
+            distinctly so a REST caller can answer 409 Conflict (the request was
+            well-formed, the check-in is simply past the point of writing)
+            rather than folding it into the 400 a blank body earns.
+        ValueError: If ``body`` is blank or exceeds ``MAX_CHAT_MESSAGE_LENGTH``.
+            Callers catch this and surface it to the sender - a safety check-in
+            chat failing silently is worse than most other features failing
+            silently.
     """
     if hasattr(checkin, "archive"):
-        raise ValueError("This check-in has concluded and can no longer receive messages.")
+        raise CheckinArchivedError("This check-in has concluded and can no longer receive messages.")
     body = body.strip()
     if not body:
         raise ValueError("Message cannot be empty.")
@@ -1682,6 +2163,43 @@ def broadcast_chat_message(checkin: SafetyCheckin, message: SafetyCheckinMessage
         )
     except Exception:
         logger.exception("Failed to broadcast chat message for checkin %s", checkin.pk)
+
+
+def post_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, contact: SafetyCheckinContact | None, body: str) -> SafetyCheckinMessage:
+    """Send a chat message on a check-in: persist it *and* deliver it live.
+
+    The single "send" operation for every non-socket caller. Creating a message
+    without broadcasting it is a silent half-failure that nothing errors on:
+    the row is saved, the sender's own view refreshes and looks fine, and the
+    message is simply invisible in real time to every other participant with an
+    open socket - the owner, the accepted partners, and the emergency contacts
+    sitting on the portal - until they happen to reload. On a feature whose
+    entire purpose is telling people where someone is while it still matters,
+    that is the worst possible failure mode, and it is one a caller can
+    introduce just by forgetting a line. Pairing the two here means no caller
+    can.
+
+    ``SafetyCheckinChatConsumer`` is the one deliberate non-caller: it already
+    holds the group it would broadcast to and sends the serialized frame itself
+    as part of its receive loop.
+
+    Args:
+        checkin: The check-in the message belongs to.
+        user: The requesting Django user (see ``resolve_message_sender``).
+        contact: The SafetyCheckinContact authorizing this request, or None when
+            the sender is the owner or an accepted partner.
+        body: Message text.
+
+    Returns:
+        The newly created, already-broadcast SafetyCheckinMessage.
+
+    Raises:
+        CheckinArchivedError: The check-in has been archived - see :func:`create_chat_message`.
+        ValueError: ``body`` is blank or too long - see :func:`create_chat_message`.
+    """
+    message = create_chat_message(checkin, user=user, contact=contact, body=body)
+    broadcast_chat_message(checkin, message)
+    return message
 
 
 def _broadcast_status_update(checkin: SafetyCheckin) -> None:

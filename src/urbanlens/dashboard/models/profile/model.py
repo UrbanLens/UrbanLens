@@ -144,10 +144,16 @@ class Profile(abstract.PublicDashboardModel):
         choices=VisibilityChoice.choices,
         default=VisibilityChoice.ANYTHING_IN_COMMON,
     )
+    # ANYONE, not ANYTHING_IN_COMMON: invite_by_email's unregistered-address
+    # branch always sends the invitation, unconditionally - so a stricter
+    # default here would make having an account *harder* to reach by friend
+    # request than not having one, which is backwards. The migration that
+    # changed this default backfills existing rows that were still at the old
+    # default, on the same reasoning as welcome_onboarding_complete above.
     friend_request_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,
-        default=VisibilityChoice.ANYTHING_IN_COMMON,
+        default=VisibilityChoice.ANYONE,
     )
     photo_upload_visibility = CharField(
         max_length=20,
@@ -401,6 +407,10 @@ class Profile(abstract.PublicDashboardModel):
     track_pin_visits = BooleanField(default=True, help_text="Log visits to your pins from journal entries, imports, and photo tagging.")
     track_routes = BooleanField(default=True, help_text="Save imported GPS routes/tracks.")
     track_geolocation = BooleanField(default=True, help_text="Record visits from your live device location.")
+    track_device_scans = BooleanField(
+        default=True,
+        help_text="Associate wireless device scans you upload with your account (enables personal scan history). When off, your scans are stored anonymously.",
+    )
 
     # When False: your pins are forced private, your profile and privacy
     # settings are locked to the most restrictive option, and you cannot send

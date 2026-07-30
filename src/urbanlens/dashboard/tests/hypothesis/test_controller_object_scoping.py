@@ -235,5 +235,12 @@ class TripCommentReactionMembershipTests(TestCase):
         self.assertEqual(self._react().status_code, 200)
 
     def test_non_member_cannot_react(self) -> None:
+        """A non-member is told the trip does not exist, rather than refused.
+
+        This answered 403 until the trip lookup moved to
+        ``services.trip_access.get_trip_for_viewer``, which reports a trip the
+        viewer has no standing access to as simply not found - a 403 confirms
+        the slug is real, which is the enumeration leak that change closed.
+        """
         self.client.force_login(self.outsider)
-        self.assertEqual(self._react().status_code, 403)
+        self.assertEqual(self._react().status_code, 404)

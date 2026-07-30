@@ -62,11 +62,33 @@ class WhoAmIAuthTests(TestCase):
         response = self.client.get(self.url, **_bearer(raw_key))
         self.assertEqual(response.status_code, 401)
 
-    def test_valid_key_returns_only_the_profile_uuid(self) -> None:
+    def test_valid_key_returns_exactly_the_profile_uuid_and_slug(self) -> None:
+        """whoami serves the caller's uuid and slug - and nothing else, ever.
+
+        Asserted as an exact dict rather than field-by-field on purpose. This
+        is the narrowest profile read in the API, and the failure mode worth
+        guarding is not a missing field (a client notices that immediately) but
+        a *third* field arriving unnoticed because someone widened
+        ``WhoAmISerializer`` for convenience. An exact comparison fails the
+        moment that happens, forcing the addition to be a deliberate decision.
+        """
         _api_key, raw_key = generate_api_key(self.user, "Zapier")
         response = self.client.get(self.url, **_bearer(raw_key))
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"uuid": str(self.profile.uuid)})
+        self.profile.refresh_from_db()
+        self.assertEqual(response.json(), {"uuid": str(self.profile.uuid), "slug": self.profile.slug})
+
+    def test_whoami_backfills_a_slug_for_a_profile_created_before_slugs_existed(self) -> None:
+        """The promised slug must never come back empty - clients have no fallback path."""
+        Profile.objects.filter(pk=self.profile.pk).update(slug="")
+        _api_key, raw_key = generate_api_key(self.user, "Zapier")
+
+        response = self.client.get(self.url, **_bearer(raw_key))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["slug"])
+        self.profile.refresh_from_db()
+        self.assertEqual(response.json()["slug"], self.profile.slug)
 
     def test_key_missing_the_required_scope_is_forbidden(self) -> None:
         api_key, raw_key = generate_api_key(self.user, "Zapier")
@@ -105,6 +127,26 @@ class PinCreateViewTests(TestCase):
                 "longitude": -75.479389,
             }
         )
+        self.assertEqual(response.status_code, 201, response.content)
+        pin = Pin.objects.get(uuid=response.json()["uuid"])
+        self.assertFalse(pin.name_is_user_provided)
+
+    def test_client_can_declare_a_name_as_deliberately_typed(self) -> None:
+        """An interactive client (the mobile app's pin form) opts in explicitly.
+
+        Without this the name a user typed stayed unprotected until they
+        happened to edit it, leaving it eligible for the placeholder-name
+        upgrade sweep. The default stays False so importers and offline
+        outboxes keep the behavior the two tests above pin down.
+        """
+        response = self._post({"name": "Old Mill", "latitude": 42.5, "longitude": -73.5, "name_is_user_provided": True})
+        self.assertEqual(response.status_code, 201, response.content)
+        pin = Pin.objects.get(uuid=response.json()["uuid"])
+        self.assertTrue(pin.name_is_user_provided)
+
+    def test_declaring_a_blank_name_user_provided_is_ignored(self) -> None:
+        """The flag guards a name; with no name there is nothing to guard."""
+        response = self._post({"name": "", "latitude": 42.6, "longitude": -73.6, "name_is_user_provided": True})
         self.assertEqual(response.status_code, 201, response.content)
         pin = Pin.objects.get(uuid=response.json()["uuid"])
         self.assertFalse(pin.name_is_user_provided)
@@ -174,6 +216,31 @@ class PinCreateViewTests(TestCase):
         self.assertEqual(response.status_code, 201, response.content)
         pin = Pin.objects.get(uuid=response.json()["uuid"])
         self.assertFalse(pin.labels.exists())
+
+    def test_parent_id_creates_a_child_pin_within_the_fuzzy_dedup_radius(self) -> None:
+        """A detail pin a few meters from its parent must not be swallowed by the 50m fuzzy Location dedup."""
+        parent = Pin.objects.get(uuid=self._post({"name": "Campus", "latitude": 42.5, "longitude": -73.5}).json()["uuid"])
+        response = self._post({"name": "Entrance", "latitude": 42.5001, "longitude": -73.5001, "parent_id": str(parent.uuid)})
+        self.assertEqual(response.status_code, 201, response.content)
+        body = response.json()
+        self.assertEqual(body["parent_uuid"], str(parent.uuid))
+        child = Pin.objects.get(uuid=body["uuid"])
+        self.assertEqual(child.parent_pin_id, parent.pk)
+        self.assertNotEqual(child.location_id, parent.location_id)
+
+    def test_parent_id_for_another_profiles_pin_is_rejected(self) -> None:
+        other = baker.make(User)
+        other_pin = Pin.objects.get(
+            uuid=self.client.post(
+                reverse("external_api:pins"),
+                data={"name": "Theirs", "latitude": 1.0, "longitude": 1.0},
+                content_type="application/json",
+                **_bearer(generate_api_key(other, "Other client")[1]),
+            ).json()["uuid"]
+        )
+        response = self._post({"name": "Sneaky", "latitude": 1.0001, "longitude": 1.0001, "parent_id": str(other_pin.uuid)})
+        self.assertEqual(response.status_code, 400)
+        self.assertFalse(Pin.objects.filter(name="Sneaky").exists())
 
 
 class ApiKeyUsageLoggingTests(TestCase):
@@ -312,8 +379,12 @@ class PinSyncViewTests(TestCase):
 
     def test_child_pins_are_served_with_their_parent_uuid(self) -> None:
         parent = self._make_pin("Campus", 42.5, -73.5)
-        child = create_pin_for_profile(self.profile, name="Entrance", latitude=42.5001, longitude=-73.5001).pin
-        Pin.objects.filter(pk=child.pk).update(parent_pin=parent)
+        # A real "entrance" pin sits within the fuzzy dedup radius of its parent's
+        # Location (create_pin_for_profile now resolves nearby coordinates onto the
+        # same Location, so a second top-level create here would correctly raise
+        # PinCreationError). Build the child directly with parent_pin set - it's
+        # exempt from db_pin_unique_location_per_profile once parent_pin is non-null.
+        child = baker.make("dashboard.Pin", profile=self.profile, location=parent.location, parent_pin=parent, name="Entrance")
         by_uuid = {p["uuid"]: p for p in self._get().json()["pins"]}
         self.assertEqual(by_uuid[str(child.uuid)]["parent_uuid"], str(parent.uuid))
         self.assertIsNone(by_uuid[str(parent.uuid)]["parent_uuid"])

@@ -2395,3 +2395,52 @@ def recompute_fact_confidence(fact_id: int) -> None:
     from urbanlens.dashboard.services.facts.confidence import recompute
 
     recompute(fact_id)
+
+
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def process_device_scan_upload(self, upload_id: int) -> bool:
+    """Classify, wiki-match, and cluster one wireless device-scan upload.
+
+    Runs on the default queue - real CPU-bound geometry work, not
+    ``panel_fetch`` (same reasoning as ``classify_detail_marker``). Always
+    marks the upload PROCESSED or FAILED by the time this returns, even on an
+    unexpected error, so a stuck PENDING row always means the task never ran
+    at all rather than having failed silently mid-way.
+
+    Claims the upload by flipping PENDING -> PROCESSED atomically before doing
+    any work, so a redelivered or manually retried task for an upload that
+    already finished (or is being worked by another worker) is a no-op rather
+    than re-running ``record_absence_report`` and inflating a marker's absence
+    streak a second time for the same physical report.
+
+    Args:
+        upload_id: PK of the DeviceScanUpload to process.
+
+    Returns:
+        True when this call claimed and processed the upload (successfully or
+        not); False when it no longer exists, or was already claimed by a
+        prior run.
+    """
+    from urbanlens.dashboard.models.device_scan.model import DeviceScanUpload, ScanUploadStatus
+    from urbanlens.dashboard.services.device_scan.pipeline import process_scan_upload
+
+    claimed = DeviceScanUpload.objects.filter(pk=upload_id, status=ScanUploadStatus.PENDING).update(status=ScanUploadStatus.PROCESSED)
+    if not claimed:
+        logger.info("process_device_scan_upload: upload %s no longer exists or is not pending", upload_id)
+        return False
+
+    upload = DeviceScanUpload.objects.select_related("profile").prefetch_related("entries__device", "entries__expected_marker").filter(pk=upload_id).first()
+    if upload is None:
+        return False
+
+    update_task_progress(self, current=0, total=1, message="Processing device scan...")
+    try:
+        process_scan_upload(upload)
+    except Exception as exc:
+        logger.exception("process_device_scan_upload: failed for upload %s", upload_id)
+        DeviceScanUpload.objects.filter(pk=upload_id).update(status=ScanUploadStatus.FAILED, error=str(exc))
+        update_task_progress(self, current=1, total=1, message="Device scan processing failed")
+        return True
+
+    update_task_progress(self, current=1, total=1, message="Device scan processed")
+    return True

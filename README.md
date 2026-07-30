@@ -15,20 +15,19 @@ UrbanLens is a web mapping platform for photographers and urban explorers. It gi
 
 ## Feature Highlights
 
-- **Interactive mapping** — layered Leaflet map with a filter sidebar, boundary drawing, bulk pin operations, markup/annotation maps, and HTMX-driven panels
-- **Personal pins over shared locations** — private notes, status, priority, aliases, custom fields, and long-form per-pin articles with revision history, kept separate from the shared location record
-- **Lists & saved filters** — slug-addressed pin collections, reusable filter configurations with geographic include/exclude regions, and smart lists that resync automatically
-- **Community wikis** — opt-in, community-editable pages per location with danger/rating stat voting and edit history; visible only to users who have discovered the location
-- **Location intelligence** — on-demand and budget-aware background enrichment from dozens of sources (Wikipedia, Wikimedia Commons, Smithsonian, Library of Congress, NPS, USGS historical topo maps, EPA/census regional data, weather, satellite and street-view carousels), cached and rate-limited, extensible via a plugin system
-- **Trip planning** — multi-stop trips with friends, RSVPs, per-activity voting, comments, and two-way Google Calendar sync
-- **Photos & Memories** — galleries with EXIF/GPS extraction and dedupe, visit suggestions from unfiled photos, timeline/"on this day" retrospectives, Immich and Google Photos import
-- **Safety check-ins** — "I didn't come home" alerts that escalate to emergency contacts, with a tokenized no-login contact portal and live chat
-- **End-to-end encrypted messaging** — 1:1 and group chats with reactions, disappearing messages, message search, and pin/location sharing
-- **Social layer** — friendships, granular per-field profile visibility, reviews, and comments with mentions and reactions
-- **AI assistance** — pluggable provider gateway (OpenAI, Cloudflare, Hugging Face) for import-from-notes, auto-tagging, and structured link extraction
+- **Interactive mapping** — layered map with search and filter. Easily create markup maps to save as screenshots, and edit them later when things change.
+- **Private pins** — private notes, ratings, aliases, and custom fields. Write a whole article about a spot if you want to.
+- **Lists & saved filters** — pin collections, reusable filters, and smart lists that resync automatically
+- **Community wikis** — opt-in, community-editable pages per location with voting and edit history; visible only to users who have already discovered the location
+- **Location intelligence** — background research from dozens of sources, to help make informed decisions about each location.
+- **Trip planning** — plan trips with friends, vote on which places to go, and sync with Google Calendar
+- **Photos & Memories** — add photos, and optionally pin places you forgot based on their metadata.
+- **Safety check-ins** — "I didn't come home" alerts that escalate to emergency contacts, with live chat. Contacts never see any of your plans unless you don't check-in on time, so you can keep your activities private unless you actually need help.
+- **End-to-end encrypted messaging** — reactions, disappearing messages, search, and more. End-to-end encrypted, so your messages are only visible from your device.
+- **Social layer** — friendships, granular visibility settings, and comments with mentions and reactions
+- **AI assistance** — import pins from loose notes, auto-tagging, and update your pin data from external urls
 - **Import/export** — Google Takeout, GPX, KML/KMZ, OSM XML, Shapefile, WKT/WKB; full-account export plus scheduled backups
 - **Responsible-exploration ethos** — discovery-gated wikis and discretion by design, not public broadcasting
-
 
 
 ## Tech Stack
@@ -89,4 +88,3 @@ Contributions are welcome. Please:
 - Use Conventional Commit messages (they drive automated releases — see above).
 - Run Ruff before committing, and include tests for new functionality.
 - Open a pull request; CI will run the full quality gate automatically.
-

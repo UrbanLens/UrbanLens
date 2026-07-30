@@ -12,6 +12,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
+from urbanlens.dashboard.services.notification_center import get_preferences, mark_all_read, unread_count
 
 if TYPE_CHECKING:
     from django.http import HttpResponse
@@ -37,8 +38,18 @@ _PREF_FIELDS = [
 
 
 def _get_or_create_prefs(profile: Profile) -> NotificationPreference:
-    prefs, _ = NotificationPreference.objects.get_or_create(profile=profile)
-    return prefs
+    """Return the profile's preference row, creating the default one if absent.
+
+    Thin alias kept for this module's existing callers; the implementation
+    lives in ``services.notification_center`` so the external API shares it.
+
+    Args:
+        profile: The owner whose preferences to read.
+
+    Returns:
+        The profile's ``NotificationPreference``.
+    """
+    return get_preferences(profile)
 
 
 def _trigger_label_refresh(response: HttpResponse) -> HttpResponse:
@@ -65,13 +76,12 @@ class NotificationDropdownView(LoginRequiredMixin, View):
             for n in notifications:
                 if n.id in unread_ids:
                     n.status = Status.READ
-        unread_count = NotificationLog.objects.for_profile(profile).unread().count()
         response = render(
             request,
             "dashboard/partials/notifications/notification_dropdown.html",
             {
                 "notifications": notifications,
-                "unread_count": unread_count,
+                "unread_count": unread_count(profile),
             },
         )
         return _trigger_label_refresh(response) if unread_ids else response
@@ -103,7 +113,7 @@ class NotificationMarkAllReadView(LoginRequiredMixin, View):
 
     def post(self, request):
         profile = request.user.profile
-        NotificationLog.objects.for_profile(profile).unread().mark_read()
+        mark_all_read(profile)
         response = render(
             request,
             "dashboard/partials/notifications/notification_dropdown.html",
@@ -169,6 +179,8 @@ class NotificationUnreadCountView(LoginRequiredMixin, View):
     """GET /notifications/unread-count/ - returns the unread count label partial."""
 
     def get(self, request):
-        profile = request.user.profile
-        count = NotificationLog.objects.for_profile(profile).unread().count()
-        return render(request, "dashboard/partials/notifications/notification_label.html", {"unread_count": count})
+        return render(
+            request,
+            "dashboard/partials/notifications/notification_label.html",
+            {"unread_count": unread_count(request.user.profile)},
+        )

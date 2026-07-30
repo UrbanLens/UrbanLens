@@ -82,24 +82,45 @@ function init() {
   let mainMarkerLng = mapCenterLng;
   const mainMarker = L.marker([mapCenterLat, mapCenterLng], { draggable: !!cfg.mainMarkerOwnerUuid }).addTo(map);
   if (cfg.mainMarkerOwnerUuid) {
+    const savePosition = (lat, lng, confirmWikiLoss) => fetch(`/dashboard/rest/pins/${cfg.mainMarkerOwnerUuid}/`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+      body: JSON.stringify({
+        latitude: lat.toFixed(6),
+        longitude: lng.toFixed(6),
+        ...confirmWikiLoss ? { confirm_wiki_loss: true } : {}
+      })
+    });
     mainMarker.on("dragend", () => {
       const pos = mainMarker.getLatLng();
-      fetch(`/dashboard/rest/pins/${cfg.mainMarkerOwnerUuid}/`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
-        body: JSON.stringify({ latitude: pos.lat.toFixed(6), longitude: pos.lng.toFixed(6) })
-      }).then((r) => {
-        if (!r.ok)
-          throw new Error;
-        return r.json();
-      }).then(() => {
-        mainMarkerLat = pos.lat;
-        mainMarkerLng = pos.lng;
-        toast.success("Pin moved.");
-      }).catch(() => {
-        toast.error("Failed to save new position.");
-        mainMarker.setLatLng([mainMarkerLat, mainMarkerLng]);
-      });
+      (async () => {
+        try {
+          let response = await savePosition(pos.lat, pos.lng, false);
+          if (response.status === 409) {
+            const payload = await response.json();
+            const names = (payload.wikis ?? []).map((w) => w.name).join(", ");
+            const confirmed = await confirmAction({
+              title: "Move this pin?",
+              message: names ? `You'll no longer see the community page for ${names}. Moving the pin back inside will restore it.` : "You'll no longer see this place's community page. Moving the pin back inside will restore it.",
+              confirmLabel: "Move anyway",
+              cancelLabel: "Cancel"
+            });
+            if (!confirmed) {
+              mainMarker.setLatLng([mainMarkerLat, mainMarkerLng]);
+              return;
+            }
+            response = await savePosition(pos.lat, pos.lng, true);
+          }
+          if (!response.ok)
+            throw new Error;
+          mainMarkerLat = pos.lat;
+          mainMarkerLng = pos.lng;
+          toast.success("Pin moved.");
+        } catch {
+          toast.error("Failed to save new position.");
+          mainMarker.setLatLng([mainMarkerLat, mainMarkerLng]);
+        }
+      })();
     });
   }
   setTimeout(() => map.invalidateSize(), 300);
@@ -1220,7 +1241,7 @@ function init() {
   function fetchBoundaries(attempt) {
     fetch(boundaryApiUrl).then((r) => r.json()).then((data) => {
       applyBoundaryPayload(data);
-      if (data.pending && attempt < 30) {
+      if ((data.pending || data.refreshing) && attempt < 30) {
         setTimeout(() => fetchBoundaries(attempt + 1), 2000);
       }
     }).catch((err) => console.warn("Could not load boundaries:", err));
@@ -1330,7 +1351,7 @@ function init() {
         exitBoundaryEdit();
       if (exiting || !boundaryDrawControl)
         applyBoundaryPayload(data);
-      if (data.pending)
+      if (data.pending || data.refreshing)
         fetchBoundaries(0);
       if (!options.quiet)
         toast.success(geometry ? "Boundary saved." : "Boundary reset to the default.");

@@ -81,9 +81,16 @@ def _build_photos(location: Location, config: GameConfig) -> RoundContent | None
 
 
 def _serialize_photos(round_: GameRound, data: dict[str, Any]) -> None:
+    # Only the image itself. The photo's caption is deliberately NOT included:
+    # it is EXIF/IPTC-derived and routinely reads "Old Mill House, Troy NY",
+    # i.e. it names the answer outright. The web client never rendered it, so
+    # the leak was invisible from the UI while sitting in the JSON the whole
+    # time - and a scriptable JSON API turns that into a lookup table for the
+    # whole game. It now rides on the *reveal* payloads instead (see
+    # ``services.spotguessr.serializers.serialize_reveal``), where the answer
+    # is already public.
     if round_.image_id and round_.image is not None and round_.image.image:
         data["image_url"] = round_.image.image.url
-        data["image_caption"] = round_.image.caption
 
 
 def _build_named_place(location: Location, config: GameConfig) -> RoundContent | None:

@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
 from urbanlens.dashboard.services.geo import dissolve_polygons
-from urbanlens.dashboard.services.pin_list_membership import filter_matching_ids, resync_smart_list
+from urbanlens.dashboard.services.pin_list_membership import resync_lists_for_saved_filter
 from urbanlens.dashboard.services.saved_filter_cache import get_or_compute_matching_uuids
 from urbanlens.dashboard.services.undo.handlers.saved_filter import MODEL_LABEL as SAVED_FILTER_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
@@ -210,18 +210,10 @@ class SavedFilterEditView(LoginRequiredMixin, View):
         saved_filter.criteria = criteria
         saved_filter.save(update_fields=["name", "icon", "criteria", "updated"])
 
-        # Every derived list shares this SavedFilter's profile (PinListEditView
-        # only ever sets source_saved_filter from a profile-scoped lookup) and,
-        # as of the assignment above, now the identical freshly-saved criteria
-        # too - resolve the matching pin ids once instead of every derived
-        # list independently re-resolving the same Label/CustomField criteria.
-        shared_filter_ids: set[int] | None = None
-        for pin_list in saved_filter.derived_pin_lists.all():
-            pin_list.smart_filter = criteria
-            pin_list.save(update_fields=["smart_filter", "updated"])
-            if shared_filter_ids is None:
-                shared_filter_ids = filter_matching_ids(pin_list)
-            resync_smart_list(pin_list, filter_ids=shared_filter_ids)
+        # Refreshes every PinList still pointing at this filter, resolving the
+        # matching pin ids once and reusing them across all of them - see
+        # services.pin_list_membership.resync_lists_for_saved_filter.
+        resync_lists_for_saved_filter(saved_filter)
 
         return JsonResponse({"ok": True, "uuid": str(saved_filter.uuid)})
 
