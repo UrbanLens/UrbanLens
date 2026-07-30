@@ -203,6 +203,40 @@ def _set_pin_type(wiki: Wiki, value: Any) -> None:
     wiki.pin_type_is_user_provided = True
 
 
+# Named rather than inline lambdas: a lambda's parameter type is inferred from
+# the surrounding Callable[[Wiki], Any] annotation, which mypy fails to do
+# reliably for these module-level _STRATEGIES entries (whole-project checks
+# report "Cannot determine type of ..." even though `wiki: Wiki` here is
+# unambiguous) - see the `_set_*` functions just above, which already use this
+# same named-function style for the identical reason.
+def _current_name(wiki: Wiki) -> str:
+    return wiki.name
+
+
+def _confirmed_name(wiki: Wiki) -> str | None:
+    return wiki.name if is_meaningful_name(wiki.name) else None
+
+
+def _current_description(wiki: Wiki) -> str | None:
+    return wiki.description
+
+
+def _confirmed_description(wiki: Wiki) -> str | None:
+    return wiki.description or None
+
+
+def _current_indoor_outdoor(wiki: Wiki) -> str | None:
+    return wiki.indoor_outdoor
+
+
+def _current_pin_type(wiki: Wiki) -> str:
+    return wiki.pin_type
+
+
+def _confirmed_pin_type(wiki: Wiki) -> str | None:
+    return wiki.pin_type if wiki.pin_type_is_user_provided else None
+
+
 def _valid_indoor_outdoor_choices() -> set[str]:
     from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor
 
@@ -313,22 +347,22 @@ _STRATEGIES: dict[str, ConsensusFieldStrategy] = {
     ConsensusFieldKind.WIKI_NAME: _wiki_field_strategy(
         ConsensusFieldKind.WIKI_NAME,
         "name",
-        current_value=lambda w: w.name,
-        confirmed_value=lambda w: w.name if is_meaningful_name(w.name) else None,
+        current_value=_current_name,
+        confirmed_value=_confirmed_name,
         set_value=_set_name,
     ),
     ConsensusFieldKind.WIKI_DESCRIPTION: _wiki_field_strategy(
         ConsensusFieldKind.WIKI_DESCRIPTION,
         "description",
-        current_value=lambda w: w.description,
-        confirmed_value=lambda w: w.description or None,
+        current_value=_current_description,
+        confirmed_value=_confirmed_description,
         set_value=_set_description,
     ),
     ConsensusFieldKind.WIKI_INDOOR_OUTDOOR: _wiki_field_strategy(
         ConsensusFieldKind.WIKI_INDOOR_OUTDOOR,
         "indoor_outdoor",
-        current_value=lambda w: w.indoor_outdoor,
-        confirmed_value=lambda w: w.indoor_outdoor,
+        current_value=_current_indoor_outdoor,
+        confirmed_value=_current_indoor_outdoor,
         set_value=_set_indoor_outdoor,
         normalize=_choice_normalize,
         agrees=_choice_agrees,
@@ -336,8 +370,8 @@ _STRATEGIES: dict[str, ConsensusFieldStrategy] = {
     ConsensusFieldKind.WIKI_PIN_TYPE: _wiki_field_strategy(
         ConsensusFieldKind.WIKI_PIN_TYPE,
         "pin_type",
-        current_value=lambda w: w.pin_type,
-        confirmed_value=lambda w: w.pin_type if w.pin_type_is_user_provided else None,
+        current_value=_current_pin_type,
+        confirmed_value=_confirmed_pin_type,
         set_value=_set_pin_type,
         normalize=_choice_normalize,
         agrees=_choice_agrees,

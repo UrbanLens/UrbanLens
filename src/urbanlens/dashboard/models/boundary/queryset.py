@@ -83,6 +83,8 @@ def buffer_point_by_meters(point: Point, radius_meters: float, *, latitude: floa
     lat = latitude if latitude is not None else point.y
     lat_deg = radius_meters / METERS_PER_DEGREE_LAT
     circle = point.buffer(lat_deg)
+    if not isinstance(circle, Polygon):
+        raise TypeError(f"Buffering a point produced a {type(circle).__name__}, not a Polygon.")
     lng_scale = meters_to_lng_degrees(radius_meters, lat) / lat_deg if lat_deg else 1.0
     ring = circle.exterior_ring
     scaled_coords = [(point.x + (x - point.x) * lng_scale, y) for x, y in ring.coords]

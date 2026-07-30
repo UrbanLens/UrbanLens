@@ -173,6 +173,10 @@ class SearchForm(forms.Form):
         raw = (self.cleaned_data.get(f"cf_{cf.pk}") or "").strip()
         if not raw:
             return None
+        # clean_cf_<id> (which calls this) is only ever bound in __init__ when
+        # profile is not None - see the `if profile is None: return` guard there.
+        if self.profile is None:
+            raise forms.ValidationError("Invalid selection.")
         target = resolve_reference(cf.reference_kind, raw, self.profile)
         if target is None:
             raise forms.ValidationError("Invalid selection.")
