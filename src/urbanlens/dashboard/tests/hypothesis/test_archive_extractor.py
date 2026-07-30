@@ -194,6 +194,23 @@ class ValidateContentTypeTests(SimpleTestCase):
         data = b"Name,Lat,Lng\nMy Place,42.3601,-71.0589"
         self.assertEqual(validate_content_type("export.csv", data), "csv")
 
+    def test_csv_with_only_latitude_and_longitude_columns(self):
+        """A spreadsheet that is nothing but coordinates is a valid pin import."""
+        data = b"latitude,longitude\n42.3601,-71.0589"
+        self.assertEqual(validate_content_type("export.csv", data), "csv")
+
+    def test_csv_with_utf8_bom_and_only_latitude_longitude_columns(self):
+        """Excel's UTF-8 CSV export prefixes a BOM on the first header cell.
+
+        When that first cell is ``latitude``, the BOM used to glue itself to the
+        column name (``\\ufefflatitude``), so format sniffing missed both
+        coordinate columns and rejected the whole file. Wider CSVs that put
+        ``name`` (or anything else) before the coordinate columns still worked,
+        which made the failure look like "lat/lng-only CSVs aren't supported".
+        """
+        data = "\ufefflatitude,longitude\n42.3601,-71.0589".encode("utf-8")
+        self.assertEqual(validate_content_type("export.csv", data), "csv")
+
     def test_csv_with_only_latitude_column_returns_none(self):
         data = b"name,latitude\nMy Place,42.3601"
         self.assertIsNone(validate_content_type("export.csv", data))

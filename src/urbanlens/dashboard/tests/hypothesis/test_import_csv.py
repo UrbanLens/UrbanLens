@@ -45,6 +45,30 @@ class CsvRowIterLatLonTests(SimpleTestCase):
         self.assertAlmostEqual(pins[0]["latitude"], 1.5)
         self.assertAlmostEqual(pins[0]["longitude"], 2.5)
 
+    def test_latitude_longitude_only_columns(self):
+        """Coordinates alone are enough - name/description fall back to Unnamed/empty."""
+        csv_text = "latitude,longitude\n42.9013318,-73.3513978"
+
+        pins = list(self.gateway._csv_row_iter(csv_text, self.profile))
+
+        self.assertEqual(len(pins), 1)
+        self.assertEqual(pins[0]["name"], "Unnamed")
+        self.assertEqual(pins[0]["description"], "")
+        self.assertAlmostEqual(pins[0]["latitude"], 42.9013318)
+        self.assertAlmostEqual(pins[0]["longitude"], -73.3513978)
+        self.assertIsNone(pins[0]["cid"])
+
+    def test_utf8_bom_on_latitude_column_still_parses(self):
+        """DictReader keeps a leading BOM on the first header; strip it so the
+        latitude key still matches after Excel-style UTF-8 CSV export."""
+        csv_text = "\ufefflatitude,longitude\n1.5,2.5"
+
+        pins = list(self.gateway._csv_row_iter(csv_text, self.profile))
+
+        self.assertEqual(len(pins), 1)
+        self.assertAlmostEqual(pins[0]["latitude"], 1.5)
+        self.assertAlmostEqual(pins[0]["longitude"], 2.5)
+
     def test_url_column_takes_precedence_over_latlon_columns(self):
         # A row can theoretically have both; the Google Takeout URL is the more
         # authoritative source (it also carries the CID), so it wins.

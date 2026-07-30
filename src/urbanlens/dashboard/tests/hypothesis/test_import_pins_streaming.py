@@ -79,6 +79,65 @@ class ImportPinsStreamingCreatesPinsTests(TestCase):
         self.assertEqual(pin.latitude, 40.0)
         self.assertEqual(pin.longitude, -74.0)
 
+    def test_csv_with_only_latitude_longitude_and_utf8_bom_creates_pin(self) -> None:
+        """Excel-exported lat/lng-only CSVs (UTF-8 BOM, no name column) must import."""
+        csv_bytes = "\ufefflatitude,longitude\n40.0,-74.0\n".encode("utf-8")
+
+        events = _events(list(self.gateway.import_pins_streaming([("coords.csv", csv_bytes)], self.profile)))
+
+        complete = [event for event in events if event.get("type") == "complete"]
+        self.assertEqual(len(complete), 1, f"expected a complete event, got: {events}")
+        self.assertEqual(complete[0]["created"], 1)
+        self.assertEqual(complete[0]["skipped"], 0)
+
+        pin = Pin.objects.get(profile=self.profile)
+        self.assertEqual(pin.name, "Unnamed")
+        self.assertEqual(pin.latitude, 40.0)
+        self.assertEqual(pin.longitude, -74.0)
+
+    def test_quoted_latitude_longitude_only_csv_creates_all_pins(self) -> None:
+        """Regression: quoted lat/lng-only CSV (no name column) must import every row.
+
+        This is the shape Excel / Sheets produce for a two-column coordinates
+        export - every field quoted, header included, no other columns.
+        """
+        csv_bytes = (
+            b'"latitude","longitude"\n'
+            b'"34.0162419","-78.2885742"\n'
+            b'"34.0663120","-84.3255615"\n'
+            b'"34.0708623","-84.3310547"\n'
+            b'"34.2345124","-83.4741211"\n'
+            b'"34.5518114","-88.5607910"\n'
+            b'"34.6083452","-94.5950317"\n'
+            b'"34.7235549","-79.8486328"\n'
+            b'"34.7732038","-93.7380981"\n'
+            b'"34.9219710","-79.7607422"\n'
+            b'"35.2523481","-90.1263428"\n'
+            b'"35.4606700","-90.0384521"\n'
+            b'"35.7643435","-83.1665039"\n'
+            b'"35.9602230","-83.9135742"\n'
+            b'"35.9602230","-78.0688477"\n'
+            b'"35.9646691","-83.9080811"\n'
+            b'"35.9780062","-83.9575195"\n'
+            b'"35.9957854","-81.9799805"\n'
+            b'"35.9957854","-78.9697266"\n'
+            b'"35.9957854","-78.9038086"\n'
+            b'"35.9957854","-77.7612305"\n'
+            b'"36.0490990","-86.6601563"\n'
+        )
+        # Same bytes Excel often emits - UTF-8 BOM prefixing the first header.
+        bom_csv_bytes = b"\xef\xbb\xbf" + csv_bytes
+
+        for label, payload in (("plain", csv_bytes), ("bom", bom_csv_bytes)):
+            with self.subTest(label=label):
+                Pin.objects.filter(profile=self.profile).delete()
+                events = _events(list(self.gateway.import_pins_streaming([("coords.csv", payload)], self.profile)))
+                complete = [event for event in events if event.get("type") == "complete"]
+                self.assertEqual(len(complete), 1, f"expected a complete event, got: {events}")
+                self.assertEqual(complete[0]["created"], 21, complete[0])
+                self.assertEqual(complete[0]["skipped"], 0, complete[0])
+                self.assertEqual(Pin.objects.filter(profile=self.profile).count(), 21)
+
     def test_html_description_is_stripped_and_link_extracted(self) -> None:
         csv_bytes = (
             b'name,latitude,longitude,description\n'

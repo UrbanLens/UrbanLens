@@ -36,6 +36,7 @@ from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix impor
 from urbanlens.dashboard.services.import_formats.heuristics import (
     DEFAULT_LATITUDE_KEYS,
     DEFAULT_LONGITUDE_KEYS,
+    normalize_header_key,
     pick_latlon,
     pick_name_and_description,
 )
@@ -501,9 +502,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             dict with pin fields, or None when a row cannot be resolved to coordinates.
         """
         gateway = GoogleGeocodingGateway()
-        reader = csv.DictReader(file_contents.splitlines())
+        # utf-8-sig decode at the call site strips a file-level BOM; also guard
+        # here so a BOM left on the first header (Excel "CSV UTF-8") still
+        # matches latitude/URL column names.
+        reader = csv.DictReader(file_contents.lstrip("\ufeff").splitlines())
         for row in reader:
-            lowered_row = {str(k).strip().lower(): v for k, v in row.items() if k is not None}
+            lowered_row = {normalize_header_key(k): v for k, v in row.items() if k is not None}
             url = next((lowered_row[key] for key in _TAKEOUT_URL_COLUMN_KEYS if lowered_row.get(key)), "")
             if url:
                 try:
@@ -545,7 +549,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             # serialised into the description by the "no description column
             # found" fallback in pick_name_and_description.
             latlon_keys = {*DEFAULT_LATITUDE_KEYS, *DEFAULT_LONGITUDE_KEYS}
-            remaining = {k: v for k, v in row.items() if k is not None and k.strip().lower() not in latlon_keys}
+            remaining = {k: v for k, v in row.items() if k is not None and normalize_header_key(k) not in latlon_keys}
             name, description = pick_name_and_description(remaining)
             yield {
                 "latitude": latitude,
@@ -665,7 +669,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     parsed.append((filename, fmt, data_list, len(data_list)))
                     grand_total += len(data_list)
                 elif fmt == "csv":
-                    text = raw_bytes.decode("utf-8")
+                    text = raw_bytes.decode("utf-8-sig")
                     file_total = max(0, len(text.splitlines()) - 1)
                     parsed.append((filename, fmt, text, file_total))
                     grand_total += file_total
@@ -903,7 +907,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 elif fmt == "kml":
                     raw_pins = self.takeout_kml_to_dict(raw_bytes, user_profile)
                 elif fmt == "csv":
-                    text = raw_bytes.decode("utf-8")
+                    text = raw_bytes.decode("utf-8-sig")
                     raw_pins = [row for row in self._csv_row_iter(text, user_profile) if row is not None]
                 elif fmt == "gpx":
                     raw_pins = gpx_to_dict(raw_bytes, user_profile)

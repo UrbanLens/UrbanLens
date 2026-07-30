@@ -29,6 +29,24 @@ DEFAULT_LATITUDE_KEYS: tuple[str, ...] = ("latitude", "lat")
 DEFAULT_LONGITUDE_KEYS: tuple[str, ...] = ("longitude", "lng", "lon", "long")
 
 
+def normalize_header_key(key: Any) -> str:
+    r"""Normalize a CSV/attribute header for case-insensitive lookup.
+
+    Strips surrounding whitespace and a leading UTF-8 BOM (``\ufeff``). Excel's
+    "CSV UTF-8" export prefixes a BOM that ``csv.DictReader`` leaves glued to the
+    first column name - without stripping it, a file whose first header is
+    ``latitude`` is seen as ``\ufefflatitude`` and fails coordinate matching.
+
+    Args:
+        key: Raw header from a CSV row, GeoJSON property map, etc.
+
+    Returns:
+        Lowercased header string safe for equality checks against the
+        ``DEFAULT_*_KEYS`` tuples.
+    """
+    return str(key).strip().lstrip("\ufeff").lower()
+
+
 def pick_name_and_description(
     properties: dict[str, Any],
     *,
@@ -52,7 +70,7 @@ def pick_name_and_description(
         description is built by joining every remaining property (excluding
         whichever key supplied the name) as ``"key: value"`` pairs.
     """
-    lowered = {str(key).lower(): value for key, value in properties.items()}
+    lowered = {normalize_header_key(key): value for key, value in properties.items()}
 
     name_key = _first_matching_key(lowered, name_keys)
     name = str(lowered[name_key]).strip() if name_key else ""
@@ -86,7 +104,7 @@ def pick_latlon(
         A ``(latitude, longitude)`` float tuple, or ``None`` when either value is
         missing or cannot be parsed as a float.
     """
-    lowered = {str(key).strip().lower(): value for key, value in row.items() if key is not None}
+    lowered = {normalize_header_key(key): value for key, value in row.items() if key is not None}
 
     lat_key = _first_matching_key(lowered, lat_keys)
     lng_key = _first_matching_key(lowered, lng_keys)

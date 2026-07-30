@@ -11,7 +11,7 @@ import tarfile
 from typing import NamedTuple
 import zipfile
 
-from urbanlens.dashboard.services.import_formats.heuristics import DEFAULT_LATITUDE_KEYS, DEFAULT_LONGITUDE_KEYS
+from urbanlens.dashboard.services.import_formats.heuristics import DEFAULT_LATITUDE_KEYS, DEFAULT_LONGITUDE_KEYS, normalize_header_key
 
 logger = logging.getLogger(__name__)
 
@@ -127,8 +127,11 @@ def validate_content_type(name: str, data: bytes) -> str | None:
         return "wkb"
 
     # Binary files (those that can't decode as UTF-8) are rejected outright.
+    # utf-8-sig strips a leading BOM so Excel "CSV UTF-8" exports whose first
+    # header is ``latitude`` still sniff as CSV (plain utf-8 leaves the BOM
+    # glued to that header, and str.lstrip() does not remove \\ufeff).
     try:
-        text = data.decode("utf-8").lstrip()
+        text = data.decode("utf-8-sig").lstrip()
     except UnicodeDecodeError:
         logger.debug("Skipping non-UTF-8 file: %s", name)
         return None
@@ -197,7 +200,7 @@ def validate_content_type(name: str, data: bytes) -> str | None:
     if any(h in first_line.lower() for h in ("url", "title", "note")):
         return "csv"
 
-    columns = {column.strip().strip('"').lower() for column in first_line.split(",")}
+    columns = {normalize_header_key(column.strip('"')) for column in first_line.split(",")}
     has_latitude_column = any(key in columns for key in DEFAULT_LATITUDE_KEYS)
     has_longitude_column = any(key in columns for key in DEFAULT_LONGITUDE_KEYS)
     if has_latitude_column and has_longitude_column:
