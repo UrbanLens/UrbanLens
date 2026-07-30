@@ -108,6 +108,24 @@ def backfill_intro_seen(apps, schema_editor):
     Profile.objects.update(map_pin_suggestions_intro_seen=True)
 
 
+def backfill_notification_uuids(apps: Apps, schema_editor: BaseDatabaseSchemaEditor) -> None:
+    """Assign a distinct uuid to every existing NotificationLog row.
+
+    Django evaluates callable field defaults once when building the ADD COLUMN
+    SQL, so a plain ``AddField(..., unique=True, default=uuid.uuid4)`` would
+    stamp the same uuid onto every pre-existing row and fail the unique index.
+    See https://docs.djangoproject.com/en/stable/howto/writing-migrations/#migrations-that-add-unique-fields.
+
+    Args:
+        apps: Historical app registry for this migration state.
+        schema_editor: The active schema editor (unused; the fix is pure DML).
+    """
+    notification_log = apps.get_model("dashboard", "NotificationLog")
+    for row in notification_log.objects.filter(uuid__isnull=True).iterator():
+        row.uuid = uuid.uuid4()
+        row.save(update_fields=["uuid"])
+
+
 def create_first_party_client(apps, schema_editor) -> None:
     """Create or correct the ``urbanlens-mobile`` OAuth2 application row.
 
@@ -1647,7 +1665,19 @@ class Migration(migrations.Migration):
             model_name='groupmessage',
             constraint=models.UniqueConstraint(condition=models.Q(('client_uuid__isnull', False)), fields=('sender', 'client_uuid'), name='db_gmsg_unique_client_uuid_per_sender'),
         ),
+        # Unique uuid on a populated table: null first, backfill per-row, then
+        # tighten to NOT NULL UNIQUE. A single AddField(default=uuid.uuid4,
+        # unique=True) evaluates the default once and collides on existing rows.
         migrations.AddField(
+            model_name='notificationlog',
+            name='uuid',
+            field=models.UUIDField(default=uuid.uuid4, editable=False, null=True),
+        ),
+        migrations.RunPython(
+            code=backfill_notification_uuids,
+            reverse_code=django.db.migrations.operations.special.RunPython.noop,
+        ),
+        migrations.AlterField(
             model_name='notificationlog',
             name='uuid',
             field=models.UUIDField(default=uuid.uuid4, editable=False, unique=True),
