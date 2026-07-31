@@ -393,8 +393,10 @@ class GoogleGeocodingGateway(Gateway):
             return None, None
         return float(lat), float(lng)
 
-    def _decode_s2_cell(self, s2_hex: str) -> tuple[float | None, float | None]:
-        """Decode an S2 cell ID hex string to (latitude, longitude).
+    def _imprecise_guess_s2_cell(self, s2_hex: str) -> tuple[float | None, float | None]:
+        """Decode an S2 cell ID hex string to (latitude, longitude). This is inaccurate
+        around 30% of the time. Only use it for quick previews of likely coordinates
+        when we don't want to contact an external API to get precise ones.
 
         Args:
             s2_hex: Hex string of the S2 cell ID (without 0x prefix).
@@ -456,7 +458,7 @@ class GoogleGeocodingGateway(Gateway):
                 cid = int(feature_match.group(2), 16)
 
                 try:
-                    lat, lon = self._decode_s2_cell(s2_hex)
+                    lat, lon = self._imprecise_guess_s2_cell(s2_hex)
                     if lat is not None and lon is not None:
                         return lat, lon
                 except (ValueError, OSError) as exc:
