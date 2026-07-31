@@ -99,7 +99,7 @@ register_map_layer(
         aria_label="Street Map",
         tooltip="Street map",
         icon="map",
-        thumb="dashboard/images/map_layer_street.jpg",
+        thumb="dashboard/images/map_layer_street.webp",
         thumb_alt="Street Layer",
         button_id="street-button",
     )
@@ -112,7 +112,7 @@ register_map_layer(
         aria_label="Topography Map",
         tooltip="Terrain map (T)",
         icon="terrain",
-        thumb="dashboard/images/map_layer_topography.jpg",
+        thumb="dashboard/images/map_layer_topography.webp",
         thumb_alt="Terrain Layer",
         button_id="topography-button",
     )
@@ -125,7 +125,7 @@ register_map_layer(
         aria_label="Satellite Map",
         tooltip="Satellite map (S)",
         icon="globe",
-        thumb="dashboard/images/map_layer_satellite.jpg",
+        thumb="dashboard/images/map_layer_satellite.webp",
         thumb_alt="Satellite Imagery Layer",
         button_id="satellite-button",
     )
@@ -138,7 +138,7 @@ register_map_layer(
         aria_label="Weather overlay",
         tooltip="Weather overlay (W)",
         icon="rainy",
-        thumb="dashboard/images/map_layer_weather.jpg",
+        thumb="dashboard/images/map_layer_weather.webp",
         thumb_alt="Weather Layer",
         button_id="weather-button",
     )
@@ -151,7 +151,7 @@ register_map_layer(
         aria_label="Show or hide pins",
         tooltip="Show or hide pins (P)",
         icon="location_on",
-        thumb="dashboard/images/map_layer_pins.jpg",
+        thumb="dashboard/images/map_layer_pins.webp",
         thumb_alt="Pins Layer",
         button_id="toggle-pins-button",
     )
@@ -164,7 +164,7 @@ register_map_layer(
         aria_label="Show or hide child pins",
         tooltip="Show pins nested inside other pins",
         icon="subdirectory_arrow_right",
-        thumb="dashboard/images/map_layer_child_pins.jpg",
+        thumb="dashboard/images/map_layer_child_pins.webp",
         thumb_alt="Child Pins Layer",
         button_id="child-pins-button",
     )
@@ -177,7 +177,7 @@ register_map_layer(
         aria_label="Toggle Dark Mode",
         tooltip="Dark mode (D)",
         icon="dark_mode",
-        thumb="dashboard/images/map_layer_dark.jpg",
+        thumb="dashboard/images/map_layer_dark.webp",
         thumb_alt="Dark Mode",
         button_id="dark-mode-button",
     )
@@ -190,7 +190,7 @@ register_map_layer(
         aria_label="Toggle Geopolitical boundaries",
         tooltip="Borders layer (B)",
         icon="public",
-        thumb="dashboard/images/map_layer_borders.jpg",
+        thumb="dashboard/images/map_layer_borders.webp",
         thumb_alt="Borders Layer",
         button_id="boundaries-button",
     )
@@ -203,7 +203,7 @@ register_map_layer(
         aria_label="Toggle Places layer",
         tooltip="Places layer",
         icon="travel_explore",
-        thumb="dashboard/images/map_layer_places.jpg",
+        thumb="dashboard/images/map_layer_places.webp",
         thumb_alt="Places Layer",
         button_id="places-button",
     )
@@ -216,6 +216,7 @@ register_map_layer(
         aria_label="Toggle waterways and railways, including historic routes",
         tooltip="Active and historic waterways, railways, canals, and rail trails",
         icon="conversion_path",
+        thumb="dashboard/images/map_layer_water_rail.webp",
         thumb_alt="Waterways and Railways Layer",
         button_id="infrastructure-button",
     )
@@ -254,7 +255,7 @@ register_map_layer(
         aria_label="Show or hide the user's other nearby pins",
         tooltip="Show your other pins near this location",
         icon="share_location",
-        thumb="dashboard/images/map_layer_nearby_pins.jpg",
+        thumb="dashboard/images/map_layer_nearby_pins.webp",
         thumb_alt="Nearby Pins Layer",
         button_id="nearby-pins-button",
     )
@@ -267,7 +268,7 @@ register_map_layer(
         aria_label="Show or hide past activities",
         tooltip="Show completed/past activities on the map",
         icon="history",
-        thumb="dashboard/images/map_layer_previous_pins.jpg",
+        thumb="dashboard/images/map_layer_previous_pins.webp",
         thumb_alt="Previous Pins Layer",
         button_id="past-activities-button",
     )
