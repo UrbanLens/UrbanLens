@@ -22,7 +22,6 @@ from django.views import View
 
 from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.pagination import get_page
 from urbanlens.dashboard.services.pin_creation import PinCreationError
 from urbanlens.dashboard.services.pin_import_failures import dismiss_pin_import_failure, resolve_pin_import_failure
 
@@ -34,7 +33,6 @@ logger = logging.getLogger(__name__)
 
 _QUEUE_PARTIAL = "dashboard/partials/memories/_pin_import_failures_queue.html"
 _CARD_PARTIAL = "dashboard/partials/memories/_pin_import_failure_card.html"
-_PAGE_SIZE = 12
 
 
 def pending_pin_import_failures(profile: Profile) -> QuerySet[PinImportFailure]:
@@ -112,12 +110,15 @@ class PinImportFailureQueuePartialView(LoginRequiredMixin, View):
     """Just the import-failure queue partial, re-fetched via the ``refreshQueue`` event.
 
     GET /memories/locations/import-failures/queue/
+
+    Unpaginated, like ``pin_merge_suggestions`` - these are expected to be
+    rare (one per cid Google genuinely couldn't place), not a routine volume
+    like photo-scan suggestions.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        page_obj = get_page(request, pending_pin_import_failures(profile), _PAGE_SIZE)
-        return render(request, _QUEUE_PARTIAL, {"failures": page_obj.object_list, "page_obj": page_obj})
+        return render(request, _QUEUE_PARTIAL, {"pin_import_failures": list(pending_pin_import_failures(profile))})
 
 
 class PinImportFailureResolveView(LoginRequiredMixin, View):

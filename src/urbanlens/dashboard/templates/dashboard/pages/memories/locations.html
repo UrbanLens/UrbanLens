@@ -27,21 +27,6 @@
 <div id="locations-page" class="memories-tab-page">
 
     <div class="page-inner">
-        {% if pin_import_failures_count %}
-        <h2 class="pin-import-failures-section-title">Places Google couldn't locate</h2>
-        <p class="pin-import-failures-section-caption">
-            These were part of an import, but Google doesn't have location data for
-            them (or the lookup didn't finish). Enter an address or coordinates to
-            place them yourself, or remove them.
-        </p>
-        <div id="pin-import-failures-wrap"
-             hx-get="{% url 'memories.locations.import_failures.queue' %}"
-             hx-trigger="refreshQueue from:body"
-             hx-swap="innerHTML">
-            {% include "dashboard/partials/memories/_pin_import_failures_queue.html" %}
-        </div>
-        {% endif %}
-
         {% if pin_suggestions_count %}
         <div class="pin-select-map-wrap">
             <div id="pin-suggestions-map" class="pin-select-map" data-map-data-url="{% url 'memories.locations.map_data' %}"></div>
@@ -78,6 +63,15 @@
              hx-trigger="refreshQueue from:body"
              hx-swap="innerHTML">
             {% include "dashboard/partials/memories/_pin_merge_suggestions_queue.html" %}
+        </div>
+        {% endif %}
+
+        {% if pin_import_failures_count %}
+        <div id="pin-import-failures-wrap"
+             hx-get="{% url 'memories.locations.import_failures.queue' %}"
+             hx-trigger="refreshQueue from:body"
+             hx-swap="innerHTML">
+            {% include "dashboard/partials/memories/_pin_import_failures_queue.html" %}
         </div>
         {% endif %}
 

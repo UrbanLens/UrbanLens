@@ -56,6 +56,13 @@ def _resolve_cids_path() -> str:
     return "urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids"
 
 
+# Lone surrogates (category "Cs") and NUL are valid Python str contents but not
+# valid Postgres UTF-8 text - unrestricted st.text() reliably finds both and
+# fails at the DB layer rather than on an assertion. Same workaround as
+# test_document_pin_import.py / test_external_api_custom_fields.py.
+_db_safe_text = st.text(alphabet=st.characters(blacklist_categories=("Cs",), blacklist_characters="\x00"), max_size=50)
+
+
 class RecordPinImportFailureTests(TestCase):
     """record_pin_import_failure - creation and (profile, cid) idempotency."""
 
@@ -105,10 +112,10 @@ class RecordPinImportFailureTests(TestCase):
     @_db_settings
     @given(
         cid=st.integers(min_value=1, max_value=10**15),
-        name=st.text(max_size=50),
-        description=st.text(max_size=50),
-        second_name=st.text(max_size=50),
-        second_description=st.text(max_size=50),
+        name=_db_safe_text,
+        description=_db_safe_text,
+        second_name=_db_safe_text,
+        second_description=_db_safe_text,
     )
     def test_idempotent_for_any_cid_and_text_pair(self, cid: int, name: str, description: str, second_name: str, second_description: str) -> None:
         """No matter what varies between two calls for the same (profile, cid),
@@ -515,7 +522,12 @@ class PinImportFailureDismissViewTests(TestCase):
 
 
 class PinImportFailureQueuePartialViewTests(TestCase):
-    """GET /memories/locations/import-failures/queue/ - pending-only, paginated."""
+    """GET /memories/locations/import-failures/queue/ - pending-only, unpaginated.
+
+    Unpaginated like pin_merge_suggestions: these are expected to be rare, so
+    there's no page_obj/pagination-bar to collide with the page's own
+    pin_suggestions pagination when both are rendered together.
+    """
 
     def setUp(self) -> None:
         super().setUp()
@@ -531,26 +543,57 @@ class PinImportFailureQueuePartialViewTests(TestCase):
         response = self.client.get(reverse("memories.locations.import_failures.queue"))
 
         self.assertEqual(response.status_code, 200)
-        failures = list(response.context["failures"])
+        failures = list(response.context["pin_import_failures"])
         self.assertEqual(failures, [pending])
+        self.assertIn(f'id="pin-import-failure-card-{pending.pk}"', response.content.decode())
 
-    def test_pagination_respects_page_size_and_excludes_other_profiles(self) -> None:
+    def test_all_pending_rows_return_unpaginated_and_exclude_other_profiles(self) -> None:
         other = baker.make(User)
         PinImportFailure.objects.create(profile=other.profile, cid=999, name="Someone else's", reason=PinImportFailureReason.NO_LOCATION_FOUND)
         for i in range(13):
             PinImportFailure.objects.create(profile=self.profile, cid=1000 + i, name=f"Place {i}", reason=PinImportFailureReason.NO_LOCATION_FOUND)
 
-        first_page = self.client.get(reverse("memories.locations.import_failures.queue"))
-        self.assertEqual(len(first_page.context["failures"]), 12)
+        response = self.client.get(reverse("memories.locations.import_failures.queue"))
 
-        second_page = self.client.get(reverse("memories.locations.import_failures.queue"), {"page": 2})
-        self.assertEqual(len(second_page.context["failures"]), 1)
-
-        all_cids = {f.cid for f in first_page.context["failures"]} | {f.cid for f in second_page.context["failures"]}
+        all_cids = {f.cid for f in response.context["pin_import_failures"]}
         self.assertEqual(len(all_cids), 13)
         self.assertNotIn(999, all_cids)
 
-    def test_empty_queue_renders_the_empty_state(self) -> None:
+    def test_empty_queue_renders_no_cards(self) -> None:
         response = self.client.get(reverse("memories.locations.import_failures.queue"))
         self.assertEqual(response.status_code, 200)
-        self.assertIn("No import issues right now.", response.content.decode())
+        self.assertNotIn("pin-import-failure-card-", response.content.decode())
+
+
+class LocationsPageRendersImportFailuresTests(TestCase):
+    """GET /memories/locations/ - the full page must render pending failures inline.
+
+    Regression test: PinSuggestionQueueView.get() (controllers/pin_suggestions.py)
+    renders locations.html with a *static* {% include %} of
+    _pin_import_failures_queue.html using the same context dict as the rest of
+    the page - it must supply the same "pin_import_failures" key the partial
+    iterates over. A prior version passed "pin_import_failures"/
+    "pin_import_failures_count" only, while the partial template looked for a
+    differently-named "failures" - the section heading and empty-state both
+    still rendered (gated on the count), but the card list itself silently
+    never appeared, even though the count was correctly non-zero.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def test_pending_failure_card_appears_on_first_load(self) -> None:
+        failure = PinImportFailure.objects.create(profile=self.profile, cid=42, name="Mystery Spot", reason=PinImportFailureReason.NO_LOCATION_FOUND)
+
+        response = self.client.get(reverse("memories.locations"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(f'id="pin-import-failure-card-{failure.pk}"', response.content.decode())
+
+    def test_no_pending_failures_renders_no_wrap(self) -> None:
+        response = self.client.get(reverse("memories.locations"))
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("pin-import-failures-wrap", response.content.decode())

@@ -1,77 +1,17 @@
 // Memories > Locations - the pin-import-failure review queue: pins from an
-// import whose Google Maps CID never resolved to a location. Card anatomy is
-// its own (name/description + an address-or-coordinates form), so this gets
-// a dedicated section/card type rather than sharing _pin_suggestions.scss's
-// photo-forward grid. Reuses the global .btn, .badge, .pagination-bar,
-// .empty-state, and .form-row(--two-col) classes - only the section/card
-// layout that's genuinely new lives here.
+// import whose Google Maps CID never resolved to a location. Cards reuse
+// _pin_suggestions.scss's .pin-suggestion-card/.pin-suggestions-grid classes
+// wholesale so they blend into the same grid instead of reading as a
+// separate section - only the place-pin dialog is genuinely new here.
 
 @use 'variables' as *;
 
-.pin-import-failures-section-title {
+.pin-import-failure-place-dialog {
+    @include dialog-base(420px);
+}
+
+.pin-import-failure-dialog-caption {
     margin: 0 0 $space-sm;
-    font-size: 1rem;
-    font-weight: 600;
-}
-
-.pin-import-failures-section-caption {
-    margin: 0 0 $space-md;
     font-size: .85rem;
     color: var(--ul-grey-6);
-}
-
-.pin-import-failures-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-    gap: $space-md;
-    margin-bottom: $space-lg;
-}
-
-.pin-import-failure-card {
-    @include surface;
-    padding: $space-md;
-    box-shadow: var(--ul-shadow-sm);
-    display: flex;
-    flex-direction: column;
-    gap: $space-sm;
-
-    form {
-        display: flex;
-        flex-direction: column;
-        gap: $space-sm;
-    }
-}
-
-.pin-import-failure-card-meta {
-    display: flex;
-    align-items: center;
-}
-
-.pin-import-failure-card-name {
-    margin: 0;
-    font-size: 1rem;
-    font-weight: 600;
-}
-
-.pin-import-failure-card-description {
-    margin: 0;
-    font-size: .85rem;
-    color: var(--ul-grey-7);
-}
-
-.pin-import-failure-card-caption {
-    margin: 0;
-    font-size: .78rem;
-    color: var(--ul-grey-6);
-}
-
-.pin-import-failure-card-actions {
-    display: flex;
-    gap: $space-sm;
-}
-
-// -- Pagination ----------------------------------------------------------------
-
-.pin-import-failures-pagination {
-    justify-content: center;
 }

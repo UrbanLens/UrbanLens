@@ -2,56 +2,19 @@
 The pin-import-failure review queue - pins from an import whose Google Maps
 CID never resolved to a location. Re-fetched via the `refreshQueue` event
 after any resolve/dismiss action (on this section or the pin-suggestions/
-pin-merge-suggestions ones above it) so the section stays in sync in place.
+pin-merge-suggestions ones) so the section stays in sync in place.
 
-Pagination targets the dedicated `memories.locations.import_failures.queue`
-URL rather than `request.path` (unlike the generic `_pagination_controls.html`
-partial) since this same template is also rendered directly inside the full
-page (`memories.locations`) - a next-page click there must not swap a full
-HTML document into the wrap.
+Shares the `.pin-suggestions-grid`/`.pin-suggestion-card` classes so these
+cards blend into the same visual flow as regular pin suggestions rather than
+reading as a separate section - see locations.html.
 
 Context:
-  failures - the current page's pending PinImportFailure rows, newest first
-  page_obj - the Django Page for this slice
+  pin_import_failures - the profile's pending PinImportFailure rows, newest first
 {% endcomment %}
-{% if failures %}
-<div class="pin-import-failures-grid" id="pin-import-failures-grid">
-    {% for failure in failures %}
+{% if pin_import_failures %}
+<div class="pin-suggestions-grid" id="pin-import-failures-grid">
+    {% for failure in pin_import_failures %}
     {% include "dashboard/partials/memories/_pin_import_failure_card.html" %}
     {% endfor %}
-</div>
-{% if page_obj.paginator.num_pages > 1 %}
-<div class="pagination-bar pin-import-failures-pagination">
-    {% if page_obj.has_previous %}
-    <button type="button" class="pagination-btn"
-            hx-get="{% url 'memories.locations.import_failures.queue' %}?page={{ page_obj.previous_page_number }}"
-            hx-target="#pin-import-failures-wrap" hx-swap="innerHTML"
-            aria-label="Previous page">
-        <i class="material-symbols-outlined">chevron_left</i>
-    </button>
-    {% else %}
-    <button type="button" class="pagination-btn" disabled aria-label="Previous page">
-        <i class="material-symbols-outlined">chevron_left</i>
-    </button>
-    {% endif %}
-    <span class="pagination-label">Page {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}</span>
-    {% if page_obj.has_next %}
-    <button type="button" class="pagination-btn"
-            hx-get="{% url 'memories.locations.import_failures.queue' %}?page={{ page_obj.next_page_number }}"
-            hx-target="#pin-import-failures-wrap" hx-swap="innerHTML"
-            aria-label="Next page">
-        <i class="material-symbols-outlined">chevron_right</i>
-    </button>
-    {% else %}
-    <button type="button" class="pagination-btn" disabled aria-label="Next page">
-        <i class="material-symbols-outlined">chevron_right</i>
-    </button>
-    {% endif %}
-</div>
-{% endif %}
-{% else %}
-<div class="empty-state">
-    <i class="material-symbols-outlined">check_circle</i>
-    <p>No import issues right now.</p>
 </div>
 {% endif %}
