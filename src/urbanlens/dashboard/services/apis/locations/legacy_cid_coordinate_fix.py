@@ -48,6 +48,13 @@ pre-deselect a matching record as "already on your map" - its proximity check
 would otherwise compare against the very legacy pin this repair exists to move,
 which sits at the same wrong, S2-derived coordinates the preview itself shows.
 
+A separate, broader TEMPORARY flag lives entirely in ``google.maps``
+(``_csv_row_iter``'s ``s2_guess`` key, consumed by ``_preview_pins``): any
+previewed record whose own cid came out of the imprecise S2-cell URL pattern is
+force-selected on its own merits, even when this module finds no specific
+legacy pin to match - not every affected row still has one to find. It doesn't
+call into this module, but shares the same removal criterion below.
+
 **Remove this module together with its call sites in
 ``services.apis.locations.google.maps`` (each marked with a matching TEMPORARY
 comment) once every user has had the chance to re-import their pins.**

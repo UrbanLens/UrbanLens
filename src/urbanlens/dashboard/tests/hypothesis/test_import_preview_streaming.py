@@ -131,7 +131,8 @@ class ImportPreviewDescriptionLengthTests(TestCase):
 
 
 class ImportPreviewLegacyRepairFlagTests(TestCase):
-    """_preview_pins() flags records that would repair a pre-cutoff mis-placed pin.
+    """_preview_pins() flags records that would repair a pre-cutoff mis-placed pin,
+    or whose own coordinates are simply untrustworthy.
 
     Regression coverage for the bug where re-importing to trigger the TEMPORARY
     legacy CID coordinate repair (see services.apis.locations.legacy_cid_coordinate_fix)
@@ -140,6 +141,11 @@ class ImportPreviewLegacyRepairFlagTests(TestCase):
     pin against the user's existing pins, found that same legacy pin sitting
     right there, and pre-deselected the record - so it was never sent to the
     server-side repair at all. needs_repair tells the client to skip that check.
+
+    Also covers the broader, independent TEMPORARY condition: any record whose
+    own cid came from the imprecise S2-cell URL guess (_csv_row_iter's
+    "s2_guess") is force-selected even when no specific legacy pin match is
+    found - not every affected row still has one to find.
     """
 
     def setUp(self) -> None:
@@ -176,6 +182,20 @@ class ImportPreviewLegacyRepairFlagTests(TestCase):
 
     def test_does_not_flag_an_ordinary_pin_with_no_cid(self) -> None:
         raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Some Place", "description": ""}]
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
+
+        self.assertNotIn("needs_repair", preview[0])
+
+    def test_flags_a_record_whose_cid_came_from_the_imprecise_s2_guess(self) -> None:
+        """TEMPORARY: force-selected on its own merits - no matching legacy pin
+        needed, since not every affected row still has one to find."""
+        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Brand New Spot", "description": "", "cid": 999999, "s2_guess": True}]
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
+
+        self.assertTrue(preview[0].get("needs_repair"))
+
+    def test_does_not_flag_a_record_whose_cid_did_not_come_from_the_s2_guess(self) -> None:
+        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Brand New Spot", "description": "", "cid": 999999, "s2_guess": False}]
         preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
 
         self.assertNotIn("needs_repair", preview[0])

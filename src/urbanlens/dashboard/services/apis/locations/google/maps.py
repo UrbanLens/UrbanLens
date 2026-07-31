@@ -538,6 +538,13 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     "name": row.get("Title", "")[:255],
                     "description": (row.get("Note", "") + " " + row.get("Comment", "")).strip(),
                     "cid": cid,
+                    # TEMPORARY (see _preview_pins below): this row's cid came out of
+                    # the same !1s0x{s2_cell}:0x{cid} URL segment that
+                    # extract_coordinates_from_url decodes via the imprecise
+                    # _imprecise_guess_s2_cell() first - wrong roughly a third of
+                    # the time. Remove once every user's previously-imported data
+                    # has been repaired.
+                    "s2_guess": bool(cid_match),
                 }
                 continue
 
@@ -948,8 +955,8 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
         Returns:
             List of dicts with keys ``name``, ``lat``, ``lng``, ``description``, ``cid``,
-            and - on records the TEMPORARY legacy CID repair would apply to -
-            ``needs_repair``.
+            and - on records the TEMPORARY legacy CID repair would apply to, or
+            whose own cid came from the imprecise S2-cell URL guess - ``needs_repair``.
         """
         pins: list[dict[str, Any]] = []
         for p in raw_pins:
@@ -980,7 +987,19 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             # pin and pre-deselect the very record that would fix it. Flag it so
             # the client skips that check for this pin instead. Remove with
             # services.apis.locations.legacy_cid_coordinate_fix.
-            if preview_needs_legacy_repair(user_profile, cid=cid, name=name):
+            #
+            # Also flagged - independent of any legacy-pin match above - whenever
+            # the record's own cid came straight out of the imprecise
+            # !1s0x{s2_cell}:0x{cid} URL pattern (see _csv_row_iter's "s2_guess"
+            # and GoogleGeocodingGateway._imprecise_guess_s2_cell), which is wrong
+            # roughly a third of the time: not every affected row still has a
+            # matching legacy pin to find (the user may never have imported it
+            # before, or already fixed it), but every such row is still worth
+            # re-selecting on its own merits so it gets re-resolved rather than
+            # silently trusted. Remove this condition, and the "s2_guess" key on
+            # the CSV row parser, once every user's previously-imported data has
+            # been repaired.
+            if preview_needs_legacy_repair(user_profile, cid=cid, name=name) or p.get("s2_guess"):
                 pin["needs_repair"] = True
             # --- end TEMPORARY ----------------------------------------------------
             pins.append(pin)
