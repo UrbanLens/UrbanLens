@@ -201,6 +201,33 @@ class ImportPreviewLegacyRepairFlagTests(TestCase):
         self.assertNotIn("needs_repair", preview[0])
 
 
+class ImportPreviewMapsUrlPassthroughTests(TestCase):
+    """_preview_pins() carries a row's source Google Maps URL through to the preview
+    dict unchanged - not displayed, but re-used by a deferred REData lookup
+    (cid_resolution.resolve_cids), which resolves via the place's own URL faster
+    and more reliably than the bare cid alone. See GoogleMapsGateway._csv_row_iter.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make("auth.User").profile
+
+    def test_maps_url_is_carried_through_to_the_preview_dict(self) -> None:
+        url = "https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79"
+        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Black Point Ruins", "description": "", "cid": 0x59AC8820518A7E79, "maps_url": url}]
+
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
+
+        self.assertEqual(preview[0]["maps_url"], url)
+
+    def test_maps_url_is_none_when_the_row_had_no_url(self) -> None:
+        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Some Place", "description": ""}]
+
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
+
+        self.assertIsNone(preview[0]["maps_url"])
+
+
 class ImportPreviewDescriptionExtrasTests(TestCase):
     """HTML in a KMZ description is stripped, and any <img>/link URLs it embeds
     are turned into a Pin photo / PinLink - but only for pins the import

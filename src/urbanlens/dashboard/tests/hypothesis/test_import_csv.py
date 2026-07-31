@@ -34,6 +34,7 @@ class CsvRowIterLatLonTests(SimpleTestCase):
         self.assertAlmostEqual(pins[0]["latitude"], 42.9013318)
         self.assertAlmostEqual(pins[0]["longitude"], -73.3513978)
         self.assertIsNone(pins[0]["cid"])
+        self.assertNotIn("maps_url", pins[0])
         self.assertIs(pins[0]["profile"], self.profile)
 
     def test_lat_lng_column_aliases(self):
@@ -169,6 +170,9 @@ class CsvRowIterS2GuessFlagTests(SimpleTestCase):
         self.assertEqual(len(pins), 1)
         self.assertTrue(pins[0]["s2_guess"])
         self.assertEqual(pins[0]["cid"], 0x59AC8820518A7E79)
+        # Carried through to a deferred REData lookup (cid_resolution.resolve_cids) -
+        # resolving via the place's own URL is faster/more reliable than cid alone.
+        self.assertEqual(pins[0]["maps_url"], "https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79")
 
     def test_search_url_without_a_data_segment_is_not_flagged(self):
         csv_text = 'Title,URL\nSome Place,"https://maps.google.com/maps/search/1.0,2.0"'

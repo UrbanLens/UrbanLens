@@ -23,10 +23,12 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
 from urbanlens.dashboard.models.notifications.model import NotificationPreference
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.safety.model import SafetyCheckin
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityRSVP, TripMembership
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
@@ -505,6 +507,83 @@ class MergeVisitSuggestionTests(TestCase):
         merge_visit_suggestion(self.suggestion, self.recipient)
         self.suggestion.refresh_from_db()
         self.assertEqual(self.suggestion.status, VisitSuggestionStatus.ACCEPTED)
+
+
+# ---------------------------------------------------------------------------
+# Origin deletion: the exactly-one-origin constraint means a suggestion's
+# origin FKs can't be SET_NULL - deleting the origin must cascade to the
+# suggestion instead. Regression coverage for the bulk pin-delete crash where
+# deleting a Pin cascaded to its PinVisit, which then tried (and failed) to
+# null out origin_visit on an accepted VisitSuggestion.
+# ---------------------------------------------------------------------------
+
+class VisitSuggestionOriginCascadeTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.suggester = baker.make("auth.User").profile
+        self.recipient = baker.make("auth.User").profile
+        self.location = baker.make(Location, latitude="40.0", longitude="-74.0")
+        self.visited_at = timezone.make_aware(datetime.datetime(2026, 6, 1, 14, 0))
+
+    def _make_suggestion(self, **overrides) -> VisitSuggestion:
+        defaults = dict(
+            location=self.location,
+            latitude=40.0,
+            longitude=-74.0,
+            visited_at=self.visited_at,
+            suggested_by=self.suggester,
+            suggested_to=self.recipient,
+        )
+        defaults.update(overrides)
+        return baker.make(VisitSuggestion, **defaults)
+
+    def test_bulk_deleting_pin_with_accepted_suggestion_does_not_raise(self) -> None:
+        """Reproduces the production bug: bulk-deleting a pin whose visit had an
+        accepted VisitSuggestion raised IntegrityError against
+        db_visit_suggestion_exactly_one_origin, because origin_visit was
+        SET_NULL and the collector nulled it without clearing from_my_activity."""
+        origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
+        origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
+        suggestion = self._make_suggestion(origin_visit=origin_visit, status=VisitSuggestionStatus.ACCEPTED)
+
+        Pin.objects.filter(pk=origin_pin.pk).delete()
+
+        self.assertFalse(Pin.objects.filter(pk=origin_pin.pk).exists())
+        self.assertFalse(VisitSuggestion.objects.filter(pk=suggestion.pk).exists())
+
+    def test_deleting_origin_visit_deletes_the_suggestion(self) -> None:
+        origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
+        origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
+        suggestion = self._make_suggestion(origin_visit=origin_visit)
+
+        origin_visit.delete()
+
+        self.assertFalse(VisitSuggestion.objects.filter(pk=suggestion.pk).exists())
+
+    def test_deleting_trip_activity_deletes_the_suggestion(self) -> None:
+        trip = Trip.objects.create(name="Test Trip", creator=self.suggester)
+        activity = TripActivity.objects.create(trip=trip, added_by=self.suggester, location=self.location, title="Explore")
+        suggestion = self._make_suggestion(origin_visit=None, trip_activity=activity)
+
+        activity.delete()
+
+        self.assertFalse(VisitSuggestion.objects.filter(pk=suggestion.pk).exists())
+
+    def test_deleting_safety_checkin_deletes_the_suggestion(self) -> None:
+        checkin = baker.make(SafetyCheckin, profile=self.suggester)
+        suggestion = self._make_suggestion(origin_visit=None, safety_checkin=checkin)
+
+        checkin.delete()
+
+        self.assertFalse(VisitSuggestion.objects.filter(pk=suggestion.pk).exists())
+
+    def test_deleting_origin_image_deletes_the_suggestion(self) -> None:
+        image = baker.make(Image, profile=self.suggester)
+        suggestion = self._make_suggestion(origin_visit=None, origin_image=image)
+
+        image.delete()
+
+        self.assertFalse(VisitSuggestion.objects.filter(pk=suggestion.pk).exists())
 
 
 # ---------------------------------------------------------------------------

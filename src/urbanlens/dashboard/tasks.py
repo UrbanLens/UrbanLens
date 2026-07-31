@@ -1212,11 +1212,15 @@ def resolve_deferred_pin_locations(
     if not all_cids:
         return empty
     pin_dict_by_cid = {pin["cid"]: pin for lst in deferred_lists for pin in lst.get("pins", [])}
+    # A cid whose pin dict still carries the Google Maps URL it was parsed from
+    # (e.g. a Takeout CSV import) - passed through to REData, which resolves
+    # via a place's own URL faster and more reliably than the bare cid alone.
+    urls_by_cid = {cid: pin["maps_url"] for cid, pin in pin_dict_by_cid.items() if pin.get("maps_url")}
     total = original_total if original_total is not None else len(all_cids)
 
     update_task_progress(self, current=total - len(all_cids), total=total, message=f"Fetching precise locations for {len(all_cids)} pin(s)...")
 
-    result = resolve_cids(all_cids)
+    result = resolve_cids(all_cids, urls_by_cid=urls_by_cid)
 
     if result.auth_failed:
         logger.error("resolve_deferred_pin_locations: REData rejected the API key resolving %d cid(s) for profile %s - not retrying.", len(all_cids), profile_id)

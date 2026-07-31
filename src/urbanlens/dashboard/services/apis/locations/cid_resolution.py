@@ -30,7 +30,7 @@ import logging
 import requests
 
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
-from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway, RedataPermissionError
+from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import CidLookupEntry, RedataCidGateway, RedataPermissionError
 from urbanlens.dashboard.services.gateway import GatewayRequestError
 from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
 from urbanlens.UrbanLens.settings.app import settings
@@ -73,24 +73,31 @@ class CidResolutionResult:
     request_failed: bool = False
 
 
-def resolve_cids(cids: list[int]) -> CidResolutionResult:
+def resolve_cids(cids: list[int], urls_by_cid: dict[int, str] | None = None) -> CidResolutionResult:
     """Resolve a batch of CIDs to coordinates via whichever provider is configured.
 
     Args:
         cids: Google Maps CIDs to resolve.
+        urls_by_cid: The source Google Maps URL for any of ``cids`` that came
+            from one (e.g. a Takeout CSV import) - passed through to REData
+            when it's the configured provider, since it resolves via a place's
+            own URL faster and more reliably than the bare cid alone (see
+            ``RedataCidGateway``/``CidLookupEntry``). Ignored by the Google
+            Places fallback. Cids with no entry here are sent as plain ints.
 
     Returns:
         A :class:`CidResolutionResult` partitioning every input cid into
         resolved/unresolvable/pending.
     """
     if settings.redata_api_url and settings.redata_api_key:
-        return _resolve_via_redata(cids)
+        return _resolve_via_redata(cids, urls_by_cid)
     return _resolve_via_google(cids)
 
 
-def _resolve_via_redata(cids: list[int]) -> CidResolutionResult:
+def _resolve_via_redata(cids: list[int], urls_by_cid: dict[int, str] | None = None) -> CidResolutionResult:
+    entries = [CidLookupEntry(cid=cid, url=(urls_by_cid or {}).get(cid)) for cid in cids]
     try:
-        batch = RedataCidGateway().resolve_cids(cids)
+        batch = RedataCidGateway().resolve_cids(entries)
     except RedataPermissionError:
         logger.exception("REData rejected the API key resolving %d cid(s) - not retrying until UL_REDATA_API_KEY's scopes are fixed.", len(cids))
         return CidResolutionResult(provider=PROVIDER_REDATA, pending=list(cids), auth_failed=True)

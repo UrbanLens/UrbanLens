@@ -11,7 +11,7 @@ from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations import cid_resolution
-from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidBatchResult, RedataPermissionError
+from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import CidLookupEntry, RedataCidBatchResult, RedataPermissionError
 from urbanlens.dashboard.services.gateway import GatewayRequestError
 from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
 from urbanlens.UrbanLens.settings.app import settings
@@ -116,6 +116,18 @@ class ResolveViaRedataTests(SimpleTestCase):
         self.assertEqual(result.resolved, {1: (1.0, 2.0)})
         self.assertEqual(result.unresolvable, {2})
         self.assertEqual(result.pending, [])
+
+    def test_urls_by_cid_is_forwarded_as_cid_lookup_entries(self) -> None:
+        """A cid with a known source Google Maps URL resolves faster/more reliably at
+        REData when the URL is sent alongside it - see RedataCidGateway/CidLookupEntry."""
+        with mock.patch(
+            "urbanlens.dashboard.services.apis.locations.cid_resolution.RedataCidGateway",
+        ) as gateway_cls:
+            gateway_cls.return_value.resolve_cids.return_value = RedataCidBatchResult()
+            cid_resolution.resolve_cids([1, 2], urls_by_cid={1: "https://maps.google.com/maps/place/X"})
+
+        sent_entries = gateway_cls.return_value.resolve_cids.call_args.args[0]
+        self.assertEqual(sent_entries, [CidLookupEntry(cid=1, url="https://maps.google.com/maps/place/X"), CidLookupEntry(cid=2, url=None)])
 
     def test_still_pending_on_redatas_end_is_reported_as_pending(self) -> None:
         with mock.patch(

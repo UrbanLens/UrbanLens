@@ -538,6 +538,10 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     "name": row.get("Title", "")[:255],
                     "description": (row.get("Note", "") + " " + row.get("Comment", "")).strip(),
                     "cid": cid,
+                    # Carried through to a deferred cid lookup (see
+                    # cid_resolution.resolve_cids) - REData resolves faster and
+                    # more reliably from a place's own URL than from cid alone.
+                    "maps_url": url,
                     # TEMPORARY (see _preview_pins below): this row's cid came out of
                     # the same !1s0x{s2_cell}:0x{cid} URL segment that
                     # extract_coordinates_from_url decodes via the imprecise
@@ -738,6 +742,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                         skipped_count += 1
                     else:
                         cid = pin_data.pop("cid", None)
+                        # Preview/deferred-lookup-only bookkeeping from
+                        # _csv_row_iter, not Pin fields - left in pin_data (used
+                        # as get_nearby_or_create's **defaults below) these raise
+                        # a TypeError on every Takeout-URL CSV row.
+                        pin_data.pop("s2_guess", None)
+                        pin_data.pop("maps_url", None)
                         location = Location.objects.by_cid(cid).first() if cid is not None else None
                         if location:
                             pin_data["location"] = location
@@ -979,6 +989,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 # saved pin's description to 500 characters.
                 "description": (p.get("description") or "")[:MAX_PIN_DESCRIPTION_LENGTH],
                 "cid": cid,
+                # Also just carried through to the confirm step - not displayed -
+                # so a deferred lookup can pass it to REData. See _csv_row_iter.
+                "maps_url": p.get("maps_url"),
             }
             # --- TEMPORARY (legacy CID coordinate repair) -----------------------
             # This record's (lat, lng) may be the same S2-derived guess that
@@ -1018,7 +1031,9 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             - ``create_category`` (bool): create a ``kind="category"`` label from *stem*.
             - ``label_ids`` (list[int]): label IDs to apply to every pin in the list.
             - ``pins`` (list[dict]): dicts with ``name``, ``lat``, ``lng``,
-              ``description``, ``cid``, and ``label_ids`` (list[int]) fields.
+              ``description``, ``cid``, ``maps_url`` (the source Google Maps
+              URL, when the pin came from one - passed to REData for a more
+              reliable deferred lookup), and ``label_ids`` (list[int]) fields.
               Imports never create community wiki entries or hit external APIs;
               wikis are created explicitly by the user from the pin detail page.
 

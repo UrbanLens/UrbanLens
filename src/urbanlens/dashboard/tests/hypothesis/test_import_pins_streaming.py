@@ -161,3 +161,24 @@ class ImportPinsStreamingCreatesPinsTests(TestCase):
 
         pin = Pin.objects.get(profile=self.profile, name="Old Mill")
         self.assertEqual(len(pin.description), MAX_PIN_DESCRIPTION_LENGTH)
+
+    def test_takeout_url_row_does_not_crash_on_preview_only_dict_keys(self) -> None:
+        """_csv_row_iter() embeds "s2_guess"/"maps_url" in every Takeout-URL row for the
+        preview/deferred-lookup flow (see cid_resolution.resolve_cids) - this direct,
+        no-preview path never consumes them and must strip them before they reach
+        Pin.objects.create(**defaults), which has no such fields and would raise
+        TypeError, killing the SSE stream mid-response (the same failure mode as the
+        get_nearby_or_create profile-collision bug this file otherwise covers).
+        """
+        csv_bytes = (
+            b'Title,URL\n'
+            b'Black Point Ruins,"https://www.google.com/maps/place/Black+Point+Ruins/data=!4m2!3m1!1s0x89e5bd8b55e7f8fd:0x59ac8820518a7e79"\n'
+        )
+
+        events = _events(list(self.gateway.import_pins_streaming([("pins.csv", csv_bytes)], self.profile)))
+
+        complete = [event for event in events if event.get("type") == "complete"]
+        self.assertEqual(len(complete), 1, f"expected a complete event, got: {events}")
+        self.assertEqual(complete[0]["created"], 1, complete[0])
+        self.assertEqual(complete[0]["skipped"], 0, complete[0])
+        self.assertTrue(Pin.objects.filter(profile=self.profile, name="Black Point Ruins").exists())

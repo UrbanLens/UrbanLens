@@ -15,7 +15,7 @@ import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google import redata_cid_gateway as gw_module
-from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import RedataCidGateway, RedataPermissionError
+from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import CidLookupEntry, RedataCidGateway, RedataPermissionError
 from urbanlens.dashboard.services.gateway import GatewayRequestError
 
 
@@ -99,3 +99,32 @@ class RedataCidGatewayResolveCidsTests(SimpleTestCase):
         self.assertEqual(result.resolved, {})
         self.assertEqual(result.unresolvable, set())
         self.assertEqual(result.pending, set())
+
+    def test_entry_with_url_is_sent_as_a_cid_url_object(self) -> None:
+        """REData resolves faster/more reliably from a place's own URL than cid alone."""
+        session = mock.Mock()
+        session.post.return_value = _response(200, {"results": {}, "pending": []})
+
+        self._gateway(session).resolve_cids(
+            [CidLookupEntry(cid=1, url="https://maps.google.com/maps/place/X/data=!4m2!3m1!1s0x0:0x1")],
+        )
+
+        sent = session.post.call_args.kwargs["json"]["cids"]
+        self.assertEqual(sent, [{"cid": 1, "url": "https://maps.google.com/maps/place/X/data=!4m2!3m1!1s0x0:0x1"}])
+
+    def test_mixed_plain_and_url_entries_are_sent_in_their_own_shape(self) -> None:
+        session = mock.Mock()
+        session.post.return_value = _response(200, {"results": {}, "pending": []})
+
+        self._gateway(session).resolve_cids([1, CidLookupEntry(cid=2, url="https://maps.google.com/maps/place/Y")])
+
+        sent = session.post.call_args.kwargs["json"]["cids"]
+        self.assertEqual(sent, [1, {"cid": 2, "url": "https://maps.google.com/maps/place/Y"}])
+
+    def test_a_cid_url_entry_still_resolves_keyed_by_its_own_cid(self) -> None:
+        session = mock.Mock()
+        session.post.return_value = _response(200, {"results": {"1": {"lat": 38.456, "lng": -77.123}}, "pending": []})
+
+        result = self._gateway(session).resolve_cids([CidLookupEntry(cid=1, url="https://maps.google.com/maps/place/X")])
+
+        self.assertEqual(result.resolved, {1: (38.456, -77.123)})

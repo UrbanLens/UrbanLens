@@ -67,6 +67,18 @@ class ImportPreviewCidDeferralTests(TestCase):
         self.assertEqual(len(deferred_lists), 1)
         self.assertEqual(deferred_lists[0]["pins"][0]["cid"], 12345)
 
+    def test_deferred_pin_carries_its_source_maps_url_for_the_background_lookup(self) -> None:
+        """resolve_deferred_pin_locations passes this to REData, which resolves via a
+        place's own URL faster and more reliably than the bare cid alone."""
+        url = "https://www.google.com/maps/place/Cresson+Sanatorium/data=!4m2!3m1!1s0x0:0x3039"
+        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue:
+            self._run(
+                [{"name": "Cresson Sanatorium", "lat": 40.431072, "lng": -78.502283, "description": "", "cid": 12345, "maps_url": url}],
+            )
+
+        deferred_lists = enqueue.call_args.args[2]
+        self.assertEqual(deferred_lists[0]["pins"][0]["maps_url"], url)
+
     def test_pin_with_cached_cid_is_created_immediately_from_the_cache_not_preview_coords(self) -> None:
         """A cid already resolved by an earlier lookup (cache hit) stays on the fast path."""
         GeocodedLocation.objects.create(
