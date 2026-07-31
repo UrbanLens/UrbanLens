@@ -1120,9 +1120,8 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
 #: max_retries=None: a batch that's genuinely still resolving on REData's own
 #: end (result.pending with request_failed=False) should keep retrying
 #: indefinitely as it makes progress, but a REData outage that fails every
-#: single attempt would otherwise retry forever too, logging a traceback via
-#: the task_retry signal every time (see UrbanLens/celery.py) with no cap and
-#: no notification - unlike the auth_failed case, which already stops.
+#: single attempt would otherwise retry forever too, with no cap and no
+#: notification - unlike the auth_failed case, which already stops.
 _MAX_CONSECUTIVE_REDATA_FAILURES = 5
 
 #: How many consecutive retries may report the exact same pending cids with
@@ -1309,11 +1308,26 @@ def resolve_deferred_pin_locations(
             countdown, message = 120, "Having trouble reaching the location lookup service - retrying shortly..."
 
         update_task_progress(self, current=total - len(result.pending), total=total, message=message)
-        raise self.retry(
+        logger.info(
+            "resolve_deferred_pin_locations: %d of %d cid(s) still pending for profile %s via %s - retrying in %ds.",
+            len(result.pending),
+            len(all_cids),
+            profile_id,
+            result.provider,
+            countdown,
+        )
+        # throw=False: still waiting on REData is the expected, routine case, not an
+        # error - raising here would go through Celery's task_retry signal (see
+        # UrbanLens/celery.py), which logs a WARNING + full traceback on every single
+        # retry. Scheduling silently keeps the log free of spurious tracebacks for a
+        # batch that just hasn't resolved yet.
+        self.retry(
             args=[profile_id, remaining_lists, auto_tag, total, consecutive_request_failures, consecutive_no_progress],
             countdown=countdown,
             max_retries=None,
+            throw=False,
         )
+        return {"created": 0, "exists": 0, "skipped": 0}
 
     created_count = exists_count = skipped_count = 0
     for lst in deferred_lists:

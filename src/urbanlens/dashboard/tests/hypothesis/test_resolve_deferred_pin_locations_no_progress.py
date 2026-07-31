@@ -20,7 +20,6 @@ from __future__ import annotations
 
 from unittest import mock
 
-from celery.exceptions import Retry
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -53,12 +52,16 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
         with (
             mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=self._all_pending_result()),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            mock.patch.object(tasks.resolve_deferred_pin_locations, "retry", side_effect=Retry("retrying")) as mock_retry,
+            mock.patch.object(tasks.resolve_deferred_pin_locations, "retry") as mock_retry,
         ):
-            with self.assertRaises(Retry):
-                tasks.resolve_deferred_pin_locations(self.profile.pk, self.two_pin_lists, auto_tag=False)
+            result = tasks.resolve_deferred_pin_locations(self.profile.pk, self.two_pin_lists, auto_tag=False)
 
+        # throw=False: still-pending is the routine case, so the task returns
+        # normally (scheduling its own retry silently) instead of raising - a raised
+        # Retry would log a spurious WARNING + traceback for expected, ongoing work.
+        self.assertEqual(result, {"created": 0, "exists": 0, "skipped": 0})
         mock_retry.assert_called_once()
+        self.assertFalse(mock_retry.call_args.kwargs["throw"])
         self.assertEqual(mock_retry.call_args.kwargs["args"][-2], 0)
         self.assertEqual(mock_retry.call_args.kwargs["args"][-1], 1)
         self.assertFalse(NotificationLog.objects.filter(profile=self.profile).exists())
@@ -67,7 +70,7 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
         with (
             mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=self._all_pending_result()),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            mock.patch.object(tasks.resolve_deferred_pin_locations, "retry", side_effect=Retry("retrying")) as mock_retry,
+            mock.patch.object(tasks.resolve_deferred_pin_locations, "retry") as mock_retry,
         ):
             result = tasks.resolve_deferred_pin_locations(
                 self.profile.pk,
@@ -76,8 +79,6 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
                 consecutive_no_progress=tasks._MAX_CONSECUTIVE_NO_PROGRESS_RETRIES - 1,
             )
 
-        # A retry would have raised instead of returning - reaching this line at all
-        # (with the mock never invoked) proves the task gave up rather than retrying again.
         mock_retry.assert_not_called()
         self.assertEqual(result, {"created": 0, "exists": 0, "skipped": 2})
 
@@ -94,15 +95,14 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
         with (
             mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=partial),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            mock.patch.object(tasks.resolve_deferred_pin_locations, "retry", side_effect=Retry("retrying")) as mock_retry,
+            mock.patch.object(tasks.resolve_deferred_pin_locations, "retry") as mock_retry,
         ):
-            with self.assertRaises(Retry):
-                tasks.resolve_deferred_pin_locations(
-                    self.profile.pk,
-                    self.two_pin_lists,
-                    auto_tag=False,
-                    consecutive_no_progress=tasks._MAX_CONSECUTIVE_NO_PROGRESS_RETRIES - 1,
-                )
+            tasks.resolve_deferred_pin_locations(
+                self.profile.pk,
+                self.two_pin_lists,
+                auto_tag=False,
+                consecutive_no_progress=tasks._MAX_CONSECUTIVE_NO_PROGRESS_RETRIES - 1,
+            )
 
         mock_retry.assert_called_once()
         self.assertEqual(mock_retry.call_args.kwargs["args"][-1], 0)
