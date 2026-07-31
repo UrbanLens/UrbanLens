@@ -74,6 +74,11 @@ class ResolveViaRedataTests(SimpleTestCase):
         self.assertEqual(result.pending, [1, 2])
         self.assertEqual(result.resolved, {})
         self.assertFalse(result.auth_failed)
+        # Distinguishes "the whole batch made zero progress this attempt" from a
+        # normal response that resolved/deferred cids - see tasks.py's
+        # consecutive-failure cap, which uses this to eventually give up on a
+        # persistently unreachable REData instead of retrying forever.
+        self.assertTrue(result.request_failed)
         google_cls.assert_not_called()
 
     def test_permission_error_marks_auth_failed_and_does_not_fall_back_to_google(self) -> None:
@@ -90,6 +95,10 @@ class ResolveViaRedataTests(SimpleTestCase):
             result = cid_resolution.resolve_cids([1, 2])
 
         self.assertTrue(result.auth_failed)
+        # auth_failed is already terminal on its own (the task stops on the
+        # first occurrence) - request_failed is irrelevant here, but should
+        # still read False rather than conflating the two failure kinds.
+        self.assertFalse(result.request_failed)
         self.assertEqual(result.pending, [1, 2])
         self.assertEqual(result.resolved, {})
         google_cls.assert_not_called()
@@ -118,6 +127,10 @@ class ResolveViaRedataTests(SimpleTestCase):
         self.assertEqual(result.resolved, {})
         self.assertEqual(result.unresolvable, set())
         self.assertEqual(result.pending, [3])
+        # REData responding successfully (even with cids still pending on its
+        # own end) is real progress, unlike the request itself failing - must
+        # not count toward the consecutive-failure cap.
+        self.assertFalse(result.request_failed)
 
 
 class ResolveViaGoogleTests(SimpleTestCase):

@@ -1112,6 +1112,18 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
     return result
 
 
+#: How many consecutive whole-batch REData request failures (network error,
+#: non-200, unparseable body - see CidResolutionResult.request_failed) this
+#: task tolerates before giving up. Deliberately separate from
+#: max_retries=None: a batch that's genuinely still resolving on REData's own
+#: end (result.pending with request_failed=False) should keep retrying
+#: indefinitely as it makes progress, but a REData outage that fails every
+#: single attempt would otherwise retry forever too, logging a traceback via
+#: the task_retry signal every time (see UrbanLens/celery.py) with no cap and
+#: no notification - unlike the auth_failed case, which already stops.
+_MAX_CONSECUTIVE_REDATA_FAILURES = 5
+
+
 @shared_task(bind=True, max_retries=None)
 def resolve_deferred_pin_locations(
     self,
@@ -1119,6 +1131,7 @@ def resolve_deferred_pin_locations(
     deferred_lists: list[dict],
     auto_tag: bool = True,
     original_total: int | None = None,
+    consecutive_request_failures: int = 0,
 ) -> dict[str, int]:
     """Place pins whose Google Maps CID needed a live lookup to be accurate.
 
@@ -1144,6 +1157,12 @@ def resolve_deferred_pin_locations(
             progress reporting stays relative to the whole job, not just
             whatever's left. Defaults to this call's own pin count when unset
             (i.e. on the first, non-retry invocation).
+        consecutive_request_failures: How many retries in a row have hit a
+            whole-batch REData request failure with zero progress - see
+            ``_MAX_CONSECUTIVE_REDATA_FAILURES``. Reset to 0 by any call that
+            isn't a request failure (including one that still leaves cids
+            pending on REData's own end), so a flaky-then-recovering REData
+            never accumulates toward the cap.
 
     Returns:
         Summary counts (created/exists/skipped).
@@ -1187,6 +1206,26 @@ def resolve_deferred_pin_locations(
         update_task_progress(self, current=total, total=total, message="Failed: location lookup was denied.")
         return {"created": 0, "exists": 0, "skipped": len(all_cids)}
 
+    consecutive_request_failures = consecutive_request_failures + 1 if result.request_failed else 0
+    if consecutive_request_failures >= _MAX_CONSECUTIVE_REDATA_FAILURES:
+        logger.error(
+            "resolve_deferred_pin_locations: REData failed %d consecutive attempts resolving %d cid(s) for profile %s - giving up.",
+            consecutive_request_failures,
+            len(all_cids),
+            profile_id,
+        )
+        NotificationLog.objects.create(
+            profile=profile,
+            status=Status.UNREAD,
+            importance=Importance.HIGH,
+            notification_type=NotificationType.ERROR,
+            title="Pin import couldn't finish",
+            message=(f"{len(all_cids)} pin(s) needed a live location lookup, but the lookup service has been unreachable and won't be retried automatically. Re-import once this is fixed."),
+            url=reverse("map.view"),
+        )
+        update_task_progress(self, current=total, total=total, message="Failed: location lookup service unreachable.")
+        return {"created": 0, "exists": 0, "skipped": len(all_cids)}
+
     if result.pending:
         pending_set = set(result.pending)
         remaining_lists = []
@@ -1201,7 +1240,7 @@ def resolve_deferred_pin_locations(
             countdown, message = 120, "Having trouble reaching REData - retrying shortly..."
 
         update_task_progress(self, current=total - len(result.pending), total=total, message=message)
-        raise self.retry(args=[profile_id, remaining_lists, auto_tag, total], countdown=countdown, max_retries=None)
+        raise self.retry(args=[profile_id, remaining_lists, auto_tag, total, consecutive_request_failures], countdown=countdown, max_retries=None)
 
     created_count = exists_count = skipped_count = 0
     for lst in deferred_lists:

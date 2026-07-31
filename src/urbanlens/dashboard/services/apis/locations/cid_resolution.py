@@ -62,6 +62,15 @@ class CidResolutionResult:
     #: until the key/scope is fixed, so it should stop and surface the failure
     #: instead of looping forever.
     auth_failed: bool = False
+    #: The REData request itself failed outright (network error, non-200,
+    #: unparseable body) - also left in `pending` for its count, but this
+    #: distinguishes "the whole batch made zero progress this attempt" from a
+    #: response that resolved/deferred cids normally. Lets the caller count
+    #: *consecutive* failures across retries and eventually give up on a
+    #: persistently unreachable REData instead of retrying forever (unlike
+    #: auth_failed, a single occurrence isn't terminal on its own - a brief
+    #: network blip should still retry).
+    request_failed: bool = False
 
 
 def resolve_cids(cids: list[int]) -> CidResolutionResult:
@@ -87,7 +96,7 @@ def _resolve_via_redata(cids: list[int]) -> CidResolutionResult:
         return CidResolutionResult(provider=PROVIDER_REDATA, pending=list(cids), auth_failed=True)
     except GatewayRequestError:
         logger.warning("REData CID batch resolution failed for %d cid(s) - deferring for retry.", len(cids))
-        return CidResolutionResult(provider=PROVIDER_REDATA, pending=list(cids))
+        return CidResolutionResult(provider=PROVIDER_REDATA, pending=list(cids), request_failed=True)
 
     return CidResolutionResult(
         provider=PROVIDER_REDATA,
