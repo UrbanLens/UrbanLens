@@ -30,6 +30,7 @@ from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix impor
     LEGACY_COORDINATE_CUTOFF,
     is_legacy_location,
     parse_coordinate_name,
+    preview_needs_legacy_repair,
     repair_legacy_pin_coordinates,
 )
 
@@ -307,3 +308,73 @@ class RepairLegacyPinCoordinatesTests(TestCase):
     def test_no_cid_and_no_coordinate_name_matches_nothing(self):
         self._pin(self._location(WRONG_LATITUDE, WRONG_LONGITUDE), name="Old Tower")
         self.assertIsNone(self._repair(cid=None, name="Old Tower"))
+
+
+class PreviewNeedsLegacyRepairTests(TestCase):
+    """preview_needs_legacy_repair - the import preview's "don't dedupe this" flag.
+
+    Regression coverage for the bug where a re-import's preview step deselected
+    exactly the pins the legacy repair exists to fix: its "already on your map"
+    check compared the preview's own (still S2-guessed) coordinates against the
+    user's existing pins, found the legacy pin sitting at that same wrong spot,
+    and pre-deselected the record before it ever reached the server-side repair.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.other_user = baker.make(User)
+        self.other_profile = self.other_user.profile
+
+    def _location(self, latitude: float, longitude: float, *, legacy: bool = True) -> Location:
+        location = Location.objects.create(latitude=latitude, longitude=longitude)
+        stamp = LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        Location.objects.filter(pk=location.pk).update(created=stamp)
+        return Location.objects.get(pk=location.pk)
+
+    def _pin(self, location: Location, *, name: str = "", profile=None, legacy: bool = True) -> Pin:
+        pin = Pin.objects.create(profile=profile or self.profile, location=location, name=name)
+        stamp = LEGACY_COORDINATE_CUTOFF - timedelta(days=30) if legacy else LEGACY_COORDINATE_CUTOFF + timedelta(days=1)
+        Pin.objects.filter(pk=pin.pk).update(created=stamp)
+        return Pin.objects.get(pk=pin.pk)
+
+    def _set_cid(self, location: Location, cid: int) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+
+        GooglePlaceService().set_cid_for_entity(location, cid, fetch_if_missing=False)
+
+    def test_true_when_cid_matches_a_legacy_pin(self):
+        wrong = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        self._set_cid(wrong, 12345)
+        self._pin(wrong, name="Old Water Tower")
+
+        self.assertTrue(preview_needs_legacy_repair(self.profile, cid=12345, name="Old Water Tower"))
+
+    def test_false_when_cid_only_matches_a_post_cutoff_pin(self):
+        wrong = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        self._set_cid(wrong, 12345)
+        self._pin(wrong, name="New Water Tower", legacy=False)
+
+        self.assertFalse(preview_needs_legacy_repair(self.profile, cid=12345, name="New Water Tower"))
+
+    def test_false_when_cid_only_matches_another_profiles_pin(self):
+        wrong = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        self._set_cid(wrong, 12345)
+        self._pin(wrong, name="Their Tower", profile=self.other_profile)
+
+        self.assertFalse(preview_needs_legacy_repair(self.profile, cid=12345, name="Their Tower"))
+
+    def test_false_for_unknown_cid_and_ordinary_name(self):
+        self._pin(self._location(WRONG_LATITUDE, WRONG_LONGITUDE), name="Old Tower")
+        self.assertFalse(preview_needs_legacy_repair(self.profile, cid=999999, name="Old Tower"))
+
+    def test_true_when_name_matches_a_legacy_pin_as_a_coordinate(self):
+        wrong = self._location(WRONG_LATITUDE, WRONG_LONGITUDE)
+        self._pin(wrong, name="42.1234, -73.5678")
+
+        self.assertTrue(preview_needs_legacy_repair(self.profile, cid=None, name="42.1234, -73.5678"))
+
+    def test_false_for_an_ordinary_name_with_no_cid(self):
+        self._pin(self._location(WRONG_LATITUDE, WRONG_LONGITUDE), name="Abandoned Grain Elevator")
+        self.assertFalse(preview_needs_legacy_repair(self.profile, cid=None, name="Abandoned Grain Elevator"))

@@ -4,6 +4,7 @@ must actually be added to that label, not just create it unattached.
 """
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest import mock
 
 from model_bakery import baker
@@ -11,8 +12,11 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.links.model import PinLink
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import LEGACY_COORDINATE_CUTOFF
 from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 
 
@@ -100,19 +104,19 @@ class ImportPreviewDescriptionLengthTests(TestCase):
     def test_preview_pins_keeps_a_long_description_intact(self) -> None:
         long_description = "x" * 2000
         raw_pins = [{"latitude": 40.0, "longitude": -74.0, "name": "Old Mill", "description": long_description}]
-        preview = GoogleMapsGateway._preview_pins(raw_pins)
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
         self.assertEqual(preview[0]["description"], long_description)
 
     def test_preview_pins_clamps_at_the_real_max_length_not_500(self) -> None:
         huge_description = "x" * (MAX_PIN_DESCRIPTION_LENGTH + 1000)
         raw_pins = [{"latitude": 40.0, "longitude": -74.0, "name": "Old Mill", "description": huge_description}]
-        preview = GoogleMapsGateway._preview_pins(raw_pins)
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
         self.assertEqual(len(preview[0]["description"]), MAX_PIN_DESCRIPTION_LENGTH)
 
     def test_a_long_description_survives_the_full_preview_then_confirm_flow(self) -> None:
         long_description = "A" * 2000 + " full KMZ description text that must not be cut off."
         raw_pins = [{"latitude": 40.0, "longitude": -74.0, "name": "Old Mill", "description": long_description}]
-        preview = GoogleMapsGateway._preview_pins(raw_pins)
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
 
         list(
             self.gateway.import_preview_streaming(
@@ -124,6 +128,57 @@ class ImportPreviewDescriptionLengthTests(TestCase):
 
         pin = Pin.objects.get(profile=self.profile, name="Old Mill")
         self.assertEqual(pin.description, long_description)
+
+
+class ImportPreviewLegacyRepairFlagTests(TestCase):
+    """_preview_pins() flags records that would repair a pre-cutoff mis-placed pin.
+
+    Regression coverage for the bug where re-importing to trigger the TEMPORARY
+    legacy CID coordinate repair (see services.apis.locations.legacy_cid_coordinate_fix)
+    never worked: the preview step's client-side "already on your map" check
+    compared the same S2-derived (lat, lng) guess that originally mis-placed the
+    pin against the user's existing pins, found that same legacy pin sitting
+    right there, and pre-deselected the record - so it was never sent to the
+    server-side repair at all. needs_repair tells the client to skip that check.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.profile = baker.make("auth.User").profile
+
+    def _legacy_location(self, cid: int | None = None) -> Location:
+        location = Location.objects.create(latitude=40.0, longitude=-74.0)
+        Location.objects.filter(pk=location.pk).update(created=LEGACY_COORDINATE_CUTOFF - timedelta(days=30))
+        location = Location.objects.get(pk=location.pk)
+        if cid is not None:
+            GooglePlaceService().set_cid_for_entity(location, cid, fetch_if_missing=False)
+        return location
+
+    def _legacy_pin(self, location: Location, *, name: str = "") -> Pin:
+        pin = Pin.objects.create(profile=self.profile, location=location, name=name)
+        Pin.objects.filter(pk=pin.pk).update(created=LEGACY_COORDINATE_CUTOFF - timedelta(days=30))
+        return Pin.objects.get(pk=pin.pk)
+
+    def test_flags_a_record_whose_cid_matches_a_legacy_pin(self) -> None:
+        location = self._legacy_location(cid=12345)
+        self._legacy_pin(location, name="Old Water Tower")
+
+        raw_pins = [{"latitude": 40.0, "longitude": -74.0, "name": "Old Water Tower", "description": "", "cid": 12345}]
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
+
+        self.assertTrue(preview[0].get("needs_repair"))
+
+    def test_does_not_flag_a_record_with_no_matching_legacy_pin(self) -> None:
+        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Brand New Spot", "description": "", "cid": 999999}]
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
+
+        self.assertNotIn("needs_repair", preview[0])
+
+    def test_does_not_flag_an_ordinary_pin_with_no_cid(self) -> None:
+        raw_pins = [{"latitude": 41.0, "longitude": -75.0, "name": "Some Place", "description": ""}]
+        preview = GoogleMapsGateway._preview_pins(raw_pins, self.profile)
+
+        self.assertNotIn("needs_repair", preview[0])
 
 
 class ImportPreviewDescriptionExtrasTests(TestCase):

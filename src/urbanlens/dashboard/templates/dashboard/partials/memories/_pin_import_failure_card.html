@@ -1,0 +1,68 @@
+{% comment %}
+A single pending PinImportFailure card - a pin from an import whose Google
+Maps CID never resolved to a location. This is always a gap in Google's own
+place data, or a lookup that didn't finish in time - never a defect in the
+import itself, so the copy here must keep framing it that way. The owner can
+place the pin themselves with an address or coordinates, or remove it.
+
+Resolve and dismiss both post to their own action URL and target this card
+by id, swapping outerHTML: dismiss and a successful resolve both return an
+empty response (the card vanishes, with a toast - a "View pin" link on
+resolve - and `refreshQueue` keeps the rest of the section in sync); an error
+response (invalid coordinates, or place creation failing) re-renders this
+same card plus an error toast.
+
+Context:
+  failure - the pending PinImportFailure
+{% endcomment %}
+<article class="pin-import-failure-card" id="pin-import-failure-card-{{ failure.pk }}">
+    <div class="pin-import-failure-card-meta">
+        <span class="badge badge--muted">{{ failure.get_reason_display }}</span>
+    </div>
+
+    <h3 class="pin-import-failure-card-name">{{ failure.name|default:"Untitled place" }}</h3>
+
+    {% if failure.description %}
+    <p class="pin-import-failure-card-description">{{ failure.description|truncatewords:40 }}</p>
+    {% endif %}
+
+    <p class="pin-import-failure-card-caption">
+        Google doesn't have enough data to place this pin on the map automatically.
+        Enter an address or coordinates below to place it yourself.
+    </p>
+
+    <form hx-post="{% url 'memories.locations.import_failures.resolve' failure.pk %}"
+          hx-target="#pin-import-failure-card-{{ failure.pk }}" hx-swap="outerHTML">
+        {% csrf_token %}
+        <div class="form-row">
+            <label for="pin-import-failure-address-{{ failure.pk }}">Address</label>
+            <input type="text" id="pin-import-failure-address-{{ failure.pk }}" name="address"
+                   placeholder="123 Main St, Springfield" autocomplete="off">
+        </div>
+        <div class="form-row form-row--two-col">
+            <div>
+                <label for="pin-import-failure-latitude-{{ failure.pk }}">Latitude</label>
+                <input type="text" id="pin-import-failure-latitude-{{ failure.pk }}" name="latitude"
+                       inputmode="decimal" placeholder="40.7128" autocomplete="off">
+            </div>
+            <div>
+                <label for="pin-import-failure-longitude-{{ failure.pk }}">Longitude</label>
+                <input type="text" id="pin-import-failure-longitude-{{ failure.pk }}" name="longitude"
+                       inputmode="decimal" placeholder="-74.0060" autocomplete="off">
+            </div>
+        </div>
+
+        <div class="pin-import-failure-card-actions">
+            <button type="submit" class="btn btn--sm btn--primary">
+                <i class="material-symbols-outlined">place</i>
+                Place pin
+            </button>
+            <button type="button" class="btn btn--sm btn--ghost"
+                    hx-post="{% url 'memories.locations.import_failures.dismiss' failure.pk %}"
+                    hx-target="#pin-import-failure-card-{{ failure.pk }}" hx-swap="outerHTML">
+                <i class="material-symbols-outlined">close</i>
+                Remove
+            </button>
+        </div>
+    </form>
+</article>

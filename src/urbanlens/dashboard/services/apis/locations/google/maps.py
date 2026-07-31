@@ -32,7 +32,7 @@ from urbanlens.dashboard.services.apis.locations.google.place_info import Google
 # TEMPORARY: legacy CID coordinate repair - remove this import together with the
 # blocks it feeds (each marked with a matching TEMPORARY comment below) once
 # every user has re-imported. See legacy_cid_coordinate_fix's module docstring.
-from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import is_legacy_location, repair_legacy_pin_coordinates
+from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import is_legacy_location, preview_needs_legacy_repair, repair_legacy_pin_coordinates
 from urbanlens.dashboard.services.import_formats.heuristics import (
     DEFAULT_LATITUDE_KEYS,
     DEFAULT_LONGITUDE_KEYS,
@@ -897,7 +897,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 logger.warning("Failed to parse shapefile bundle '%s' for preview: %s", bundle.stem, exc)
                 _notify_pin_import_parse_failure("shapefile")
                 continue
-            pins = self._preview_pins(raw_pins)
+            pins = self._preview_pins(raw_pins, user_profile)
             if pins:
                 result.append({"stem": bundle.stem, "pins": pins})
 
@@ -930,22 +930,26 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 _notify_pin_import_parse_failure(fmt)
                 continue
 
-            pins = self._preview_pins(raw_pins)
+            pins = self._preview_pins(raw_pins, user_profile)
             if pins:
                 result.append({"stem": stem, "pins": pins})
 
         return result
 
     @staticmethod
-    def _preview_pins(raw_pins: Iterable[dict[str, Any] | None]) -> list[dict[str, Any]]:
+    def _preview_pins(raw_pins: Iterable[dict[str, Any] | None], user_profile: Profile) -> list[dict[str, Any]]:
         """Convert internal pin dicts into the serialisable preview shape.
 
         Args:
             raw_pins: Pin dicts as returned by any of the format parsers (``None``
                 entries, e.g. from a failed CSV row, are skipped).
+            user_profile: The profile the import is for - used only to flag
+                legacy-repair candidates, see the TEMPORARY block below.
 
         Returns:
-            List of dicts with keys ``name``, ``lat``, ``lng``, ``description``, ``cid``.
+            List of dicts with keys ``name``, ``lat``, ``lng``, ``description``, ``cid``,
+            and - on records the TEMPORARY legacy CID repair would apply to -
+            ``needs_repair``.
         """
         pins: list[dict[str, Any]] = []
         for p in raw_pins:
@@ -955,20 +959,31 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             lng = p.get("longitude")
             if lat is None or lng is None:
                 continue
-            pins.append(
-                {
-                    "name": (p.get("name") or "")[:255],
-                    "lat": float(lat),
-                    "lng": float(lng),
-                    # The preview UI never displays this - it's only carried through
-                    # so the confirm step (which re-uses this exact dict, not a fresh
-                    # parse of the file) has the real description to save. A tight
-                    # display-oriented cutoff here used to silently truncate every
-                    # saved pin's description to 500 characters.
-                    "description": (p.get("description") or "")[:MAX_PIN_DESCRIPTION_LENGTH],
-                    "cid": p.get("cid"),
-                },
-            )
+            name = (p.get("name") or "")[:255]
+            cid = p.get("cid")
+            pin: dict[str, Any] = {
+                "name": name,
+                "lat": float(lat),
+                "lng": float(lng),
+                # The preview UI never displays this - it's only carried through
+                # so the confirm step (which re-uses this exact dict, not a fresh
+                # parse of the file) has the real description to save. A tight
+                # display-oriented cutoff here used to silently truncate every
+                # saved pin's description to 500 characters.
+                "description": (p.get("description") or "")[:MAX_PIN_DESCRIPTION_LENGTH],
+                "cid": cid,
+            }
+            # --- TEMPORARY (legacy CID coordinate repair) -----------------------
+            # This record's (lat, lng) may be the same S2-derived guess that
+            # mis-placed one of this profile's own pre-cutoff pins - the client's
+            # "already on your map" proximity check would then match that legacy
+            # pin and pre-deselect the very record that would fix it. Flag it so
+            # the client skips that check for this pin instead. Remove with
+            # services.apis.locations.legacy_cid_coordinate_fix.
+            if preview_needs_legacy_repair(user_profile, cid=cid, name=name):
+                pin["needs_repair"] = True
+            # --- end TEMPORARY ----------------------------------------------------
+            pins.append(pin)
         return pins
 
     def import_preview_streaming(

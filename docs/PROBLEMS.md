@@ -1751,3 +1751,41 @@ that only increments when a retry's `result.pending` is the exact same size as t
 resolves or is confirmed unresolvable, so a batch still genuinely working through REData's queue is
 never cut off early. See tests in
 `dashboard/tests/hypothesis/test_resolve_deferred_pin_locations_no_progress.py`.
+
+### Follow-up (same day): REData's active-request fallback - first attempt was wrong, corrected after live testing
+
+The user separately asked REData to stop leaving an *actively-requested* cid stuck behind its own
+30-day staggered floor for weeks - fine for a background prewarm sweep to wait that long, not fine
+for a live caller blocked on `resolve-cids`'s response right now. First attempt (this session, same
+day): a `GoogleLegacyCidLookupGateway` calling the legacy Place Details endpoint with
+`place_id=cid:{cid}` - a real, if undocumented, convention for passing a bare Maps CID that this
+session had reason to believe still worked. Shipped with full unit-test coverage (mocked HTTP) but
+**never verified against a live Google API before being reported done** - a real gap, caught directly
+by the user rebooting both services with the new code and pasting production logs showing every
+single lookup failing with `INVALID_REQUEST`.
+
+Live testing on both REData's and UrbanLens's real production API keys (REData's `diagnose_places_api`-
+style probing plus UrbanLens's own pre-existing `manage.py diagnose_places_api` command, run live on
+jungu) confirmed this decisively: `place_id=cid:{cid}` fails with `INVALID_REQUEST`/"Invalid 'placeid'
+parameter"; the older bare `?cid=NUMBER` form (what UrbanLens's `GoogleGeocodingGateway.get_coordinates_by_cid`
+used **before** REData's scrape-based resolution existed - confirming the user's recollection that this
+used to work) now fails with `NOT_FOUND`/"The provided Place ID is no longer valid. Please refresh cached
+Place IDs..." - Google's own wording for a real, external deprecation of old-style Place ID acceptance,
+not a request-shape bug either agent could fix. Both UrbanLens's dormant fallback and REData's new one
+were affected by the same dead mechanism; UrbanLens's had simply never been exercised in production
+recently enough for anyone to notice.
+
+**Corrected fix (REData)**: no working faster official API exists for a bare, never-before-resolved
+CID - Places API (New) has no CID lookup at all. Replaced the dead paid-API gateway with a bounded,
+forced *synchronous* run of the same real headless-Chromium scrape the async Celery path already uses
+(`google_places.lookup.resolve_synchronously_for_active_request`), called directly from
+`ResolvePlaceCidsView.post()` for a cid stuck behind `needs_refresh`. Capped at exactly 1 forced scrape
+per request (`_MAX_FORCED_SCRAPES_PER_REQUEST`) with an 8-second timeout
+(`_ACTIVE_REQUEST_TIMEOUT_MS`, vs. the background path's 20s default) - REData's gunicorn config
+(`gunicorn.conf.py`) sets no explicit `timeout`, so its 30s default applies, and that browser
+navigation is fully synchronous (not gevent-cooperative), meaning it blocks the *entire* worker
+process, not just one request, for its duration; exceeding 30s would SIGKILL the worker mid-response,
+dropping the whole batch rather than just leaving one cid pending. 1 call at an 8s cap leaves
+comfortable headroom even in the worst realistic case. Removed the dead `GoogleLegacyCidLookupGateway`
+and its `google_places_legacy_cid_lookup` rate-limit entry entirely rather than leaving unreachable
+code behind.

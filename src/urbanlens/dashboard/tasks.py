@@ -1197,9 +1197,11 @@ def resolve_deferred_pin_locations(
     from urbanlens.dashboard.models.location import Location
     from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailureReason
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.apis.locations.cid_resolution import resolve_cids
     from urbanlens.dashboard.services.apis.locations.google.maps import _create_pin_from_confirmed
+    from urbanlens.dashboard.services.pin_import_failures import auto_resolve_pin_import_failure_for_cid, record_pin_import_failure
 
     empty = {"created": 0, "exists": 0, "skipped": 0}
     profile = Profile.objects.filter(pk=profile_id).first()
@@ -1210,6 +1212,7 @@ def resolve_deferred_pin_locations(
     all_cids = [pin["cid"] for lst in deferred_lists for pin in lst.get("pins", [])]
     if not all_cids:
         return empty
+    pin_dict_by_cid = {pin["cid"]: pin for lst in deferred_lists for pin in lst.get("pins", [])}
     total = original_total if original_total is not None else len(all_cids)
 
     update_task_progress(self, current=total - len(all_cids), total=total, message=f"Fetching precise locations for {len(all_cids)} pin(s)...")
@@ -1218,14 +1221,19 @@ def resolve_deferred_pin_locations(
 
     if result.auth_failed:
         logger.error("resolve_deferred_pin_locations: REData rejected the API key resolving %d cid(s) for profile %s - not retrying.", len(all_cids), profile_id)
+        for cid in all_cids:
+            record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), reason=PinImportFailureReason.LOOKUP_ERROR)
         NotificationLog.objects.create(
             profile=profile,
             status=Status.UNREAD,
             importance=Importance.HIGH,
             notification_type=NotificationType.ERROR,
             title="Pin import couldn't finish",
-            message=(f"{len(all_cids)} pin(s) needed a live location lookup that was denied by a permission error and won't be retried automatically. Re-import once this is fixed."),
-            url=reverse("map.view"),
+            message=(
+                f"{len(all_cids)} pin(s) needed a live location lookup that was denied by a permission error and won't be retried automatically. "
+                "Google doesn't have enough information to place them automatically - review them on the Locations page to enter an address or coordinates yourself."
+            ),
+            url=reverse("memories.locations"),
         )
         update_task_progress(self, current=total, total=total, message="Failed: location lookup was denied.")
         return {"created": 0, "exists": 0, "skipped": len(all_cids)}
@@ -1238,14 +1246,19 @@ def resolve_deferred_pin_locations(
             len(all_cids),
             profile_id,
         )
+        for cid in all_cids:
+            record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), reason=PinImportFailureReason.LOOKUP_ERROR)
         NotificationLog.objects.create(
             profile=profile,
             status=Status.UNREAD,
             importance=Importance.HIGH,
             notification_type=NotificationType.ERROR,
             title="Pin import couldn't finish",
-            message=(f"{len(all_cids)} pin(s) needed a live location lookup, but the lookup service has been unreachable and won't be retried automatically. Re-import once this is fixed."),
-            url=reverse("map.view"),
+            message=(
+                f"{len(all_cids)} pin(s) needed a live location lookup, but the lookup service has been unreachable and won't be retried automatically. "
+                "Google doesn't have enough information to place them automatically - review them on the Locations page to enter an address or coordinates yourself."
+            ),
+            url=reverse("memories.locations"),
         )
         update_task_progress(self, current=total, total=total, message="Failed: location lookup service unreachable.")
         return {"created": 0, "exists": 0, "skipped": len(all_cids)}
@@ -1266,14 +1279,19 @@ def resolve_deferred_pin_locations(
                 profile_id,
                 consecutive_no_progress,
             )
+            for cid in all_cids:
+                record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), reason=PinImportFailureReason.LOOKUP_STALLED)
             NotificationLog.objects.create(
                 profile=profile,
                 status=Status.UNREAD,
                 importance=Importance.HIGH,
                 notification_type=NotificationType.ERROR,
                 title="Pin import couldn't finish",
-                message=(f"{len(all_cids)} pin(s) needed a live location lookup that hasn't made progress in a while and won't be retried automatically for some time. Re-import once this is fixed."),
-                url=reverse("map.view"),
+                message=(
+                    f"{len(all_cids)} pin(s) needed a live location lookup that hasn't made progress in a while and won't be retried automatically for some time. "
+                    "Google doesn't have enough information to place them automatically - review them on the Locations page to enter an address or coordinates yourself."
+                ),
+                url=reverse("memories.locations"),
             )
             update_task_progress(self, current=total, total=total, message="Failed: location lookups stalled.")
             return {"created": 0, "exists": 0, "skipped": len(all_cids)}
@@ -1316,6 +1334,7 @@ def resolve_deferred_pin_locations(
             cid = pin_dict["cid"]
             coords = result.resolved.get(cid)
             if coords is None:
+                record_pin_import_failure(profile, cid, name=pin_dict.get("name", ""), description=pin_dict.get("description", ""), reason=PinImportFailureReason.NO_LOCATION_FOUND)
                 skipped_count += 1
                 continue
 
@@ -1334,6 +1353,7 @@ def resolve_deferred_pin_locations(
                 auto_tag=auto_tag,
             )
             if pin:
+                auto_resolve_pin_import_failure_for_cid(profile, cid, pin)
                 if created:
                     created_count += 1
                 else:
@@ -1349,8 +1369,12 @@ def resolve_deferred_pin_locations(
         importance=Importance.MEDIUM,
         notification_type=NotificationType.PIN_IMPORT_COMPLETE,
         title=f"Finished placing {created_count + exists_count} pin(s)",
-        message=(f"{created_count} created · {exists_count} existed · {skipped_count} skipped" + (f" ({unresolved} could not be located)" if unresolved else "") + f" — resolved via {provider_label}."),
-        url=reverse("map.view"),
+        message=(
+            f"{created_count} created · {exists_count} existed · {skipped_count} skipped"
+            + (f" (Google has no location data for {unresolved} of them - review them on the Locations page)" if unresolved else "")
+            + f" — resolved via {provider_label}."
+        ),
+        url=reverse("memories.locations") if unresolved else reverse("map.view"),
     )
     update_task_progress(self, current=total, total=total, message="Done.")
     return {"created": created_count, "exists": exists_count, "skipped": skipped_count}

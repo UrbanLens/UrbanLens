@@ -948,8 +948,16 @@ function renderPreview(data) {
                that page's in-memory pin store) - pre-deselecting pins that are
                already on the user's map there saves them from uploading pins
                that would just come back as "existed" anyway. On pages without
-               it (e.g. Memories), every pin is selected by default as before. */
-            var localMatch = window.findLocalPinNear ? window.findLocalPinNear(pin.lat, pin.lng) : null;
+               it (e.g. Memories), every pin is selected by default as before.
+
+               TEMPORARY (legacy CID coordinate repair): pin.needs_repair means
+               this record's (lat, lng) is the same S2-derived guess that
+               mis-placed one of this profile's own pre-cutoff pins - the pin
+               findLocalPinNear would find nearby *is* that legacy pin, not a
+               genuine duplicate, so the proximity check is skipped and this
+               record stays selected to reach the server-side repair. Remove
+               with services.apis.locations.legacy_cid_coordinate_fix. */
+            var localMatch = (!pin.needs_repair && window.findLocalPinNear) ? window.findLocalPinNear(pin.lat, pin.lng) : null;
             pin._selected = !localMatch;
             if (localMatch) alreadyOnMapCount++;
 

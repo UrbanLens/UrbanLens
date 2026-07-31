@@ -19,6 +19,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.controllers.pin_import_failures import pending_pin_import_failures
 from urbanlens.dashboard.controllers.pin_merge_suggestions import merge_suggestion_cards, pending_merge_suggestions
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
@@ -104,6 +105,7 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
         suggestions_qs = _pending_suggestions(profile)
         page_obj = get_page(request, suggestions_qs, _PAGE_SIZE)
         merge_cards = merge_suggestion_cards(pending_merge_suggestions(profile))
+        import_failures = list(pending_pin_import_failures(profile))
         return render(
             request,
             "dashboard/pages/memories/locations.html",
@@ -120,6 +122,11 @@ class PinSuggestionQueueView(LoginRequiredMixin, View):
                 # no pagination/map of their own - see merge_suggestion_cards.
                 "merge_suggestion_cards": merge_cards,
                 "merge_suggestions_count": len(merge_cards),
+                # Places Google couldn't locate during an import - see
+                # controllers.pin_import_failures. Small in number like merge
+                # suggestions, so no pagination/map of its own either.
+                "pin_import_failures": import_failures,
+                "pin_import_failures_count": len(import_failures),
                 # The map (and its attribution) only renders when there are
                 # suggestions to plot - see locations.html's {% if pin_suggestions_count %}.
                 # pin-select-map.js disables Leaflet's own on-map attribution

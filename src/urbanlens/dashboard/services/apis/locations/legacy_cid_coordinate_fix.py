@@ -43,6 +43,11 @@ instead of moving anything - see :mod:`services.pin_merge_suggestions` -
 proposing the user merge the legacy pin into the one that's already correctly
 placed, with that correct pin always preselected as the survivor.
 
+The import preview also calls :func:`preview_needs_legacy_repair` so it doesn't
+pre-deselect a matching record as "already on your map" - its proximity check
+would otherwise compare against the very legacy pin this repair exists to move,
+which sits at the same wrong, S2-derived coordinates the preview itself shows.
+
 **Remove this module together with its call sites in
 ``services.apis.locations.google.maps`` (each marked with a matching TEMPORARY
 comment) once every user has had the chance to re-import their pins.**
@@ -237,6 +242,28 @@ def repair_legacy_pin_coordinates(
 
     logger.info("Legacy coordinate repair moved pin %s to location %s.", candidate.pk, correct_location.pk)
     return candidate
+
+
+def preview_needs_legacy_repair(profile: Profile, *, cid: int | None, name: str) -> bool:
+    """Whether a previewed import record would repair one of the profile's own legacy pins.
+
+    Runs the same matching :func:`repair_legacy_pin_coordinates` uses (CID,
+    then coordinate-shaped name) without needing the corrected coordinates -
+    the import preview only needs to know a legacy pin is sitting there, not
+    yet where it belongs. Used to stop the preview's "already on your map"
+    proximity check from matching against that legacy pin's still-possibly-
+    S2-mis-placed coordinates and pre-deselecting the very record that would
+    fix it in the confirm step.
+
+    Args:
+        profile: The importing profile - only its own pins are considered.
+        cid: CID carried by the previewed record, if any.
+        name: Name carried by the previewed record.
+
+    Returns:
+        True if a matching pre-cutoff pin exists for this profile.
+    """
+    return _match_by_cid(profile, cid) is not None or _match_by_coordinate_name(profile, name) is not None
 
 
 def _in_range(latitude: float, longitude: float) -> bool:
