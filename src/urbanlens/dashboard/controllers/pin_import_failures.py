@@ -59,6 +59,10 @@ def _toast(message: str, level: str = "success", *, status: int = 200, refresh_q
         status: HTTP status code for the (otherwise empty) response.
         refresh_queue: Whether to also fire the ``refreshQueue`` htmx event.
         view_pin_url: If set, appends a "View pin" link to the toast.
+
+    Returns:
+        An empty 200 (or ``status``) response carrying the toast/refresh
+        triggers in its ``HX-Trigger`` header.
     """
     if view_pin_url:
         message += f' <a href="{view_pin_url}" class="toast-undo-btn">View pin</a>'
@@ -117,6 +121,14 @@ class PinImportFailureQueuePartialView(LoginRequiredMixin, View):
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
+        """Render the current queue of pending import failures for this profile.
+
+        Args:
+            request: The incoming GET request.
+
+        Returns:
+            The rendered queue partial.
+        """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         return render(request, _QUEUE_PARTIAL, {"pin_import_failures": list(pending_pin_import_failures(profile))})
 
@@ -133,6 +145,18 @@ class PinImportFailureResolveView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, failure_id: int) -> HttpResponse:
+        """Place a pin for this failure from the submitted address or coordinates.
+
+        Args:
+            request: The incoming POST request, carrying ``address`` and/or
+                ``latitude``/``longitude`` form fields.
+            failure_id: Primary key of the ``PinImportFailure`` being resolved.
+
+        Returns:
+            An empty toast response on success (or an already-handled
+            no-op), or a re-rendered card with an error toast when the
+            input or placement was invalid.
+        """
         failure, profile = _get_failure(request, failure_id)
         if not failure.is_actionable:
             return _toast("That entry has already been handled.", "info", refresh_queue=True)
@@ -164,6 +188,15 @@ class PinImportFailureDismissView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, failure_id: int) -> HttpResponse:
+        """Dismiss this failure without placing a pin for it.
+
+        Args:
+            request: The incoming POST request.
+            failure_id: Primary key of the ``PinImportFailure`` being dismissed.
+
+        Returns:
+            An empty toast response.
+        """
         failure, _profile = _get_failure(request, failure_id)
         if not failure.is_actionable:
             return _toast("That entry has already been handled.", "info", refresh_queue=True)

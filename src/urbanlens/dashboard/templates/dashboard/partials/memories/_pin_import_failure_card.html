@@ -53,7 +53,11 @@ Context:
         {% include "dashboard/partials/ui/_dialog_header.html" with title="Place Pin" %}
         <div class="ul-dialog-body">
             <p class="pin-import-failure-dialog-caption">
+                {% if failure.reason == "no_location_found" %}
                 Google doesn't have enough data to place this pin on the map automatically.
+                {% else %}
+                The live location lookup didn't finish for this pin - this isn't a problem with your import.
+                {% endif %}
                 Enter an address or coordinates to place it yourself.
             </p>
             <form hx-post="{% url 'memories.locations.import_failures.resolve' failure.pk %}"

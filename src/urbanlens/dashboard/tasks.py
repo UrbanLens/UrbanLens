@@ -1228,10 +1228,10 @@ def resolve_deferred_pin_locations(
             status=Status.UNREAD,
             importance=Importance.HIGH,
             notification_type=NotificationType.ERROR,
-            title="Pin import couldn't finish",
+            title="Location lookup was denied",
             message=(
                 f"{len(all_cids)} pin(s) needed a live location lookup that was denied by a permission error and won't be retried automatically. "
-                "Google doesn't have enough information to place them automatically - review them on the Locations page to enter an address or coordinates yourself."
+                "This isn't a problem with your import - review them on the Locations page to enter an address or coordinates yourself."
             ),
             url=reverse("memories.locations"),
         )
@@ -1253,10 +1253,10 @@ def resolve_deferred_pin_locations(
             status=Status.UNREAD,
             importance=Importance.HIGH,
             notification_type=NotificationType.ERROR,
-            title="Pin import couldn't finish",
+            title="Location lookup service is unavailable",
             message=(
                 f"{len(all_cids)} pin(s) needed a live location lookup, but the lookup service has been unreachable and won't be retried automatically. "
-                "Google doesn't have enough information to place them automatically - review them on the Locations page to enter an address or coordinates yourself."
+                "This isn't a problem with your import - review them on the Locations page to enter an address or coordinates yourself."
             ),
             url=reverse("memories.locations"),
         )
@@ -1286,10 +1286,10 @@ def resolve_deferred_pin_locations(
                 status=Status.UNREAD,
                 importance=Importance.HIGH,
                 notification_type=NotificationType.ERROR,
-                title="Pin import couldn't finish",
+                title="Location lookup is taking longer than expected",
                 message=(
                     f"{len(all_cids)} pin(s) needed a live location lookup that hasn't made progress in a while and won't be retried automatically for some time. "
-                    "Google doesn't have enough information to place them automatically - review them on the Locations page to enter an address or coordinates yourself."
+                    "This isn't a problem with your import - review them on the Locations page to enter an address or coordinates yourself."
                 ),
                 url=reverse("memories.locations"),
             )
@@ -1306,7 +1306,7 @@ def resolve_deferred_pin_locations(
         if result.provider == "google_places":
             countdown, message = 65, "Waiting on Google's rate limit - resuming shortly..."
         else:
-            countdown, message = 120, "Having trouble reaching REData - retrying shortly..."
+            countdown, message = 120, "Having trouble reaching the location lookup service - retrying shortly..."
 
         update_task_progress(self, current=total - len(result.pending), total=total, message=message)
         raise self.retry(
@@ -1362,7 +1362,7 @@ def resolve_deferred_pin_locations(
                 skipped_count += 1
 
     unresolved = len(result.unresolvable)
-    provider_label = "REData" if result.provider == "redata" else "Google Places"
+    logger.info("resolve_deferred_pin_locations: profile %s batch resolved via %s.", profile_id, result.provider)
     NotificationLog.objects.create(
         profile=profile,
         status=Status.UNREAD,
@@ -1372,7 +1372,7 @@ def resolve_deferred_pin_locations(
         message=(
             f"{created_count} created · {exists_count} existed · {skipped_count} skipped"
             + (f" (Google has no location data for {unresolved} of them - review them on the Locations page)" if unresolved else "")
-            + f" — resolved via {provider_label}."
+            + "."
         ),
         url=reverse("memories.locations") if unresolved else reverse("map.view"),
     )

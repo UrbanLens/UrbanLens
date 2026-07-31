@@ -20,6 +20,7 @@ Covers:
 
 from __future__ import annotations
 
+from datetime import timedelta
 import json
 from unittest import mock
 
@@ -30,10 +31,12 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
+from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure, PinImportFailureReason, PinImportFailureStatus
 from urbanlens.dashboard.services.apis.locations.cid_resolution import PROVIDER_REDATA, CidResolutionResult
+from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import LEGACY_COORDINATE_CUTOFF
 from urbanlens.dashboard.services.pin_creation import PinCreationError
 from urbanlens.dashboard.services.pin_import_failures import (
     auto_resolve_pin_import_failure_for_cid,
@@ -154,7 +157,7 @@ class ResolvePinImportFailureTests(TestCase):
     def test_resolve_via_address_success(self) -> None:
         failure = self._failure()
         with (
-            mock.patch("urbanlens.dashboard.services.pin_creation.get_pin_by_address", return_value=(40.0, -74.0)),
+            mock.patch("urbanlens.dashboard.services.pin_import_failures.get_pin_by_address", return_value=(40.0, -74.0)),
             mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
         ):
             pin = resolve_pin_import_failure(failure, self.profile, address="123 Main St, Springfield")
@@ -198,6 +201,104 @@ class ResolvePinImportFailureTests(TestCase):
         failure.refresh_from_db()
         self.assertEqual(failure.status, PinImportFailureStatus.PENDING)
         self.assertIsNone(failure.pin_id)
+
+
+class ResolvePinImportFailureLegacyRepairTests(TestCase):
+    """resolve_pin_import_failure must move a matching legacy pin, not create a new one.
+
+    TEMPORARY: mirrors test_legacy_cid_coordinate_fix.py's own coverage of
+    repair_legacy_pin_coordinates, but exercised through the manual
+    resolve-a-failure entry point specifically - a regression test for a bug
+    where the manual "Place pin" flow bypassed the repair entirely and always
+    created a second, duplicate pin instead of moving the pre-cutoff one.
+    Delete alongside the rest of legacy_cid_coordinate_fix.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+
+    def _legacy_location(self, latitude: float, longitude: float) -> Location:
+        location = Location.objects.create(latitude=latitude, longitude=longitude)
+        Location.objects.filter(pk=location.pk).update(created=LEGACY_COORDINATE_CUTOFF - timedelta(days=30))
+        return Location.objects.get(pk=location.pk)
+
+    def _legacy_pin(self, location: Location, *, name: str = "") -> Pin:
+        pin = Pin.objects.create(profile=self.profile, location=location, name=name)
+        Pin.objects.filter(pk=pin.pk).update(created=LEGACY_COORDINATE_CUTOFF - timedelta(days=30))
+        return Pin.objects.get(pk=pin.pk)
+
+    def _set_cid(self, location: Location, cid: int) -> None:
+        from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
+
+        GooglePlaceService().set_cid_for_entity(location, cid, fetch_if_missing=False)
+
+    def _failure(self, **kwargs) -> PinImportFailure:
+        defaults = {
+            "profile": self.profile,
+            "cid": 12345,
+            "name": "Old Water Tower",
+            "reason": PinImportFailureReason.NO_LOCATION_FOUND,
+        }
+        defaults.update(kwargs)
+        return PinImportFailure.objects.create(**defaults)
+
+    def test_resolve_moves_the_legacy_pin_matched_by_cid_instead_of_creating_a_new_one(self) -> None:
+        wrong = self._legacy_location(42.5, -73.5)
+        self._set_cid(wrong, 12345)
+        legacy_pin = self._legacy_pin(wrong, name="Old Water Tower")
+        failure = self._failure()
+
+        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+            pin = resolve_pin_import_failure(failure, self.profile, latitude=42.6, longitude=-73.6)
+
+        self.assertEqual(pin.pk, legacy_pin.pk)
+        self.assertEqual(Pin.objects.filter(profile=self.profile).count(), 1)
+        self.assertAlmostEqual(float(pin.location.latitude), 42.6, places=4)
+        self.assertAlmostEqual(float(pin.location.longitude), -73.6, places=4)
+
+        failure.refresh_from_db()
+        self.assertEqual(failure.status, PinImportFailureStatus.RESOLVED)
+        self.assertEqual(failure.pin_id, pin.pk)
+
+    def test_resolve_moves_the_legacy_pin_matched_by_coordinate_name(self) -> None:
+        wrong = self._legacy_location(42.5, -73.5)
+        legacy_pin = self._legacy_pin(wrong, name="42.5, -73.5")
+        # A cid that resolves to no Location at all, so _match_by_cid can't
+        # match and the coordinate-name fallback is what's actually exercised
+        # (PinImportFailure.cid is never null - every deferred pin has one).
+        failure = self._failure(cid=54321, name="42.5, -73.5")
+
+        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+            pin = resolve_pin_import_failure(failure, self.profile, latitude=42.6, longitude=-73.6)
+
+        self.assertEqual(pin.pk, legacy_pin.pk)
+        self.assertEqual(Pin.objects.filter(profile=self.profile).count(), 1)
+
+    def test_resolve_creates_a_new_pin_when_no_legacy_pin_matches(self) -> None:
+        """No pre-cutoff pin for this cid/name - the normal create path still runs."""
+        failure = self._failure(cid=99999, name="Brand New Place")
+
+        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+            pin = resolve_pin_import_failure(failure, self.profile, latitude=42.6, longitude=-73.6)
+
+        self.assertEqual(pin.name, "Brand New Place")
+        self.assertEqual(Pin.objects.filter(profile=self.profile).count(), 1)
+
+    def test_resolve_does_not_move_another_profiles_legacy_pin(self) -> None:
+        other = baker.make(User)
+        wrong = self._legacy_location(42.5, -73.5)
+        self._set_cid(wrong, 12345)
+        other_pin = Pin.objects.create(profile=other.profile, location=wrong, name="Their Tower")
+        Pin.objects.filter(pk=other_pin.pk).update(created=LEGACY_COORDINATE_CUTOFF - timedelta(days=30))
+        failure = self._failure()
+
+        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+            pin = resolve_pin_import_failure(failure, self.profile, latitude=42.6, longitude=-73.6)
+
+        self.assertNotEqual(pin.pk, other_pin.pk)
+        self.assertEqual(pin.profile_id, self.profile.pk)
 
 
 class DismissPinImportFailureTests(TestCase):

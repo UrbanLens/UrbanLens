@@ -4,6 +4,18 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
 to pick up without re-discovering the problem from scratch.
 
+## `.badge--muted` is used everywhere but never defined
+
+Found 2026-07-31 while building the PinImportFailure review queue. `_pin_suggestion_card.html`,
+`_pin_merge_suggestion_card.html`, and `_pin_import_failure_card.html` all render
+`<span class="badge badge--muted">...</span>` for their origin/reason badges, but grepping the
+SCSS source turns up only a bare `.badge` rule (a right-floated "count badge" style) - no
+`.badge--muted` modifier is defined anywhere. These badges have likely been rendering with just
+the base `.badge` look (or unstyled, depending on cascade) on every card that uses them since
+whichever of those templates shipped first. Pre-dates the import-failures feature; not fixed as
+part of it since the badges still render (just not visually "muted"), and fixing it means picking
+an actual muted color/treatment, which is a design call rather than a bug fix.
+
 ## RESOLVED 2026-07-31: gunicorn's gevent worker + `async_to_sync(channel_layer.group_send)` corrupted unrelated concurrent requests' `SynchronousOnlyOperation` check
 
 Production intermittently 500'd on completely ordinary synchronous ORM calls - the reported

@@ -25,7 +25,9 @@ from typing import TYPE_CHECKING
 from django.utils import timezone
 
 from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure, PinImportFailureReason, PinImportFailureStatus
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import repair_legacy_pin_coordinates
+from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
+from urbanlens.dashboard.services.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -75,13 +77,25 @@ def resolve_pin_import_failure(
 ) -> Pin:
     """Place a pin for a failure entry using an address or coordinates the owner supplied.
 
-    Goes through the same generic :func:`services.pin_creation.create_pin_for_profile`
-    path as a manual "add pin" - this is a one-off manual recovery action, not a
-    replay of the import pipeline, so it deliberately does not re-run
-    ``failure.name``/``failure.description`` through the importer's own
-    ``strip_html``/``extract_image_urls``/``extract_link_urls`` handling the way
-    ``tasks._create_pin_from_confirmed`` would; those already-plain strings are
-    passed through as-is.
+    TEMPORARY: before creating a new pin, this first tries
+    :func:`services.apis.locations.legacy_cid_coordinate_fix.repair_legacy_pin_coordinates`
+    - this failure's cid may belong to one of the profile's own pre-2026-07-25
+    pins that the old CID lookup mis-placed, in which case that pin is moved
+    onto the coordinates the owner just supplied (keeping its name, labels,
+    and other data) instead of a second, duplicate pin being created. This
+    mirrors ``tasks._create_pin_from_confirmed``'s own use of the same repair
+    for the automatic resolution path - manual resolution must not skip it,
+    or a legacy pin the automatic path failed to fix stays stranded forever.
+    Remove this paragraph (and the call below) together with the rest of
+    ``legacy_cid_coordinate_fix``.
+
+    Falls back to the same generic :func:`services.pin_creation.create_pin_for_profile`
+    path as a manual "add pin" when no legacy pin matched - this is a one-off
+    manual recovery action, not a replay of the import pipeline, so it
+    deliberately does not re-run ``failure.name``/``failure.description``
+    through the importer's own ``strip_html``/``extract_image_urls``/
+    ``extract_link_urls`` handling the way ``tasks._create_pin_from_confirmed``
+    would; those already-plain strings are passed through as-is.
 
     Args:
         failure: The pending failure being resolved.
@@ -91,7 +105,7 @@ def resolve_pin_import_failure(
         longitude: Marker longitude, when an address wasn't given.
 
     Returns:
-        The newly placed pin.
+        The pin that was moved (legacy repair) or newly placed.
 
     Raises:
         services.pin_creation.PinCreationError: Neither a usable address nor
@@ -99,19 +113,42 @@ def resolve_pin_import_failure(
         services.pin_creation.PinCreationForbiddenError: An address needed
             geocoding but external lookups are turned off for this profile.
     """
-    result = create_pin_for_profile(
-        profile,
-        name=failure.name or None,
-        description=failure.description or None,
-        address=address,
+    if latitude is None or longitude is None:
+        if not address:
+            raise PinCreationError("No address or lat/lon provided.")
+        if not profile.external_apis_enabled:
+            raise PinCreationForbiddenError("External lookups are turned off in your settings - drop a pin on the map instead.")
+        latitude, longitude = get_pin_by_address(address)
+        if latitude is None or longitude is None:
+            raise PinCreationError("Unable to convert address to lat/lng.")
+
+    # --- TEMPORARY (legacy CID coordinate repair) -------------------------
+    repaired = repair_legacy_pin_coordinates(
+        profile=profile,
+        cid=int(failure.cid),
+        name=failure.name,
         latitude=latitude,
         longitude=longitude,
-        name_is_user_provided=False,
     )
+    # --- end TEMPORARY ------------------------------------------------------
+
+    if repaired is not None:
+        pin = repaired
+    else:
+        result = create_pin_for_profile(
+            profile,
+            name=failure.name or None,
+            description=failure.description or None,
+            latitude=latitude,
+            longitude=longitude,
+            name_is_user_provided=False,
+        )
+        pin = result.pin
+
     failure.status = PinImportFailureStatus.RESOLVED
-    failure.pin = result.pin
+    failure.pin = pin
     failure.save(update_fields=["status", "pin", "updated"])
-    return result.pin
+    return pin
 
 
 def dismiss_pin_import_failure(failure: PinImportFailure) -> None:
