@@ -1617,3 +1617,39 @@ the auto-increment sequence out from under the hardcoded expectation), or the mi
 genuinely resolving the wrong profile. Needs a session review of `MediaAuthResolutionTests.setUp`
 and `resolve_media_profile`/`CredentialOrSessionMediaMixin` to tell which; not investigated further
 since it's unrelated to the search/media/public-pins scoping fixes this session was making.
+
+## 2026-07-30: Two Google API keys are HTTP-referrer-restricted but only ever called server-side - every request gets a 403
+
+Found from production logs: `google_images.py`'s `GoogleImageSearchGateway` (`customsearch.googleapis.com`)
+and REData's `redata_places_gateway.py` (`places.googleapis.com`) both started failing with
+`403 Requests from referer <empty> are blocked. (forbidden)`. Neither gateway sends or fakes a
+`Referer` header - `google.py`/`google_images.py` just does a plain `self.session.get(...)`, and
+REData's gateway passes its key via the `X-Goog-Api-Key` header (see
+`../REData/src/redata/parcels/services/google_places_details/gateway.py:189-193`) - both textbook-
+correct for a server-side key. The 403 is Google's API itself rejecting the request, because
+whichever key backs `settings.google_domain_restricted_api_key` (UrbanLens) and `RD_GOOGLE_MAPS_API_KEY`
+(REData) is configured in Google Cloud Console with an **HTTP referrers (websites)** application
+restriction. That restriction type only works for browser-side calls (Maps JS API, embedded widgets)
+where a real `Referer` header is present - a Celery worker calling Google's REST API directly never
+sends one, so Google always sees `<empty>` and blocks unconditionally, independent of the key being
+otherwise valid/enabled/correctly configured in env vars.
+
+Not fixable in code on either side - short of literally fabricating a `Referer` header to spoof a
+browser origin, which would be actively wrong to do. The real fix is a Google Cloud Console change:
+open each key's Credentials page and change "Application restrictions" from "HTTP referrers" to
+"IP addresses" (the production egress IP(s)) or "None", leaving "API restrictions" (which Google
+APIs the key may call) untouched. Requires Cloud Console access neither this session nor the
+REData session had. Confirm both keys - UrbanLens's Custom Search/Image Search key and REData's
+Places API (New) key may or may not be the same underlying Google Cloud project/key.
+
+## 2026-07-30: SearXNG (`search.jmann.me`) image search 403s after coming back up from an outage
+
+Same production log sweep as the entry above. `search.jmann.me` was confirmed down (DNS resolution
+failures) earlier the same evening; once the operator brought it back up, `SearxngGateway.search`/
+`search_images` started getting `403` instead. `searxng.py` never set a `User-Agent` (defaulting to
+`python-requests/x.y`, a common bot-signature block target), so a `User-Agent` header was added as a
+cheap, safe mitigation (`searxng.py`'s `_USER_AGENT` constant, set in `__post_init__`). Not confirmed
+as the actual cause - equally plausible is the instance's own `limiter.toml` bot-detection or a
+fronting WAF/CDN (e.g. Cloudflare) rule that changed when the service was brought back online. If
+403s persist after the User-Agent change, check the instance's own access/limiter logs server-side -
+this session had no access to `search.jmann.me`'s host.

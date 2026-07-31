@@ -1,6 +1,6 @@
 import {
   createMapLayers
-} from "./article-wysiwyg-f04nz5p5.js";
+} from "./article-wysiwyg-61596eaw.js";
 import {
   confirmAction,
   getCsrfToken,

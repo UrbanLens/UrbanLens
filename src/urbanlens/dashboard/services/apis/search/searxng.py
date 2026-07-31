@@ -28,6 +28,14 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: SearXNG deployments commonly sit behind bot-detection (their own
+#: ``limiter.toml`` or a fronting WAF/CDN) that blocks the default
+#: ``python-requests/x.y`` user agent as an obvious automation signature.
+#: This gateway is only ever pointed at a self-hosted or explicitly-trusted
+#: instance (see the module docstring), so identifying as a real browser
+#: here isn't evading anything the operator hasn't already agreed to serve.
+_USER_AGENT = "Mozilla/5.0 (compatible; UrbanLens/1.0; +https://urbanlens.org)"
+
 #: SearXNG image engines queried by :meth:`SearxngGateway.search_images` when
 #: the admin hasn't overridden the list via ``UL_SEARXNG_IMAGE_ENGINES``. These
 #: are the engine *names* as configured in the instance's ``settings.yml`` (the
@@ -75,6 +83,7 @@ class SearxngGateway(Gateway):
         Gateway.__post_init__(self)
         if self.base_url is None:
             object.__setattr__(self, "base_url", settings.searxng_base_url)
+        self.session.headers.setdefault("User-Agent", _USER_AGENT)
 
     def search(self, query: str, *, max_results: int = 10) -> list[dict[str, Any]]:
         """Perform a SearXNG search and return normalised result dicts.

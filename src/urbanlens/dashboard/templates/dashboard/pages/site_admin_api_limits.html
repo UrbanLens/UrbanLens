@@ -122,6 +122,11 @@
                         <input type="number" id="cp30-{{ cfg.service }}" name="calls_per_30_days"
                                value="{{ cfg.calls_per_30_days|default:'' }}" min="1" max="100000000" placeholder="∞">
                     </div>
+                    <div class="form-row">
+                        <label for="mis-{{ cfg.service }}" title="Minimum seconds required between consecutive calls, enforced independently of the budgets above">Min interval (s)</label>
+                        <input type="number" id="mis-{{ cfg.service }}" name="min_interval_seconds"
+                               value="{{ cfg.min_interval_seconds|default:'' }}" min="0" step="0.1" placeholder="none">
+                    </div>
                     <div class="form-row form-row--notes">
                         <label for="notes-{{ cfg.service }}">Notes</label>
                         <textarea id="notes-{{ cfg.service }}" name="notes" rows="2"

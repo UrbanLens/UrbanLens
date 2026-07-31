@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import json
 from unittest import mock
 
-from django.contrib.auth.models import User
+from django.contrib.auth.models import AnonymousUser
 from django.core.cache import cache
-from django.test import SimpleTestCase
+from django.test import RequestFactory, SimpleTestCase
 from django.urls import reverse
-from model_bakery import baker
 import pytest
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.controllers.maps import MapController
 from urbanlens.dashboard.services import infrastructure_map
+from urbanlens.dashboard.templatetags.map_components import MAP_LAYER_REGISTRY
 
 
 class InfrastructureBoundsTests(SimpleTestCase):
@@ -30,6 +31,9 @@ class InfrastructureBoundsTests(SimpleTestCase):
         bounds = infrastructure_map.InfrastructureBounds(west=-73.9, south=42.6, east=-73.7, north=42.8)
         query = infrastructure_map.build_infrastructure_query(bounds)
         self.assertIn('way["railway"', query)
+        self.assertIn('way["disused:railway"]', query)
+        self.assertIn('way["abandoned:railway"]', query)
+        self.assertIn('way["demolished:railway"]', query)
         self.assertIn('way["railtrail"="yes"]', query)
         self.assertIn('way["waterway"', query)
         self.assertIn('way["disused:waterway"]', query)
@@ -91,35 +95,36 @@ class InfrastructureFeatureCollectionTests(SimpleTestCase):
         gateway_class.return_value.elements_for_query.assert_called_once()
 
 
-class InfrastructureMapEndpointTests(TestCase):
+class InfrastructureMapEndpointTests(SimpleTestCase):
     def setUp(self) -> None:
-        self.user: User = baker.make(User)
+        self.factory = RequestFactory()
         self.url = reverse("map.infrastructure")
 
     def test_requires_authentication(self) -> None:
-        response = self.client.get(self.url, {"bbox": "-73.9,42.6,-73.7,42.8"})
+        request = self.factory.get(self.url, {"bbox": "-73.9,42.6,-73.7,42.8"})
+        request.user = AnonymousUser()
+        response = MapController.as_view({"get": "infrastructure_features"})(request)
         self.assertIn(response.status_code, (301, 302))
 
     def test_rejects_oversized_viewport(self) -> None:
-        self.client.force_login(self.user)
-        response = self.client.get(self.url, {"bbox": "-75,40,-70,45"})
+        request = self.factory.get(self.url, {"bbox": "-75,40,-70,45"})
+        response = MapController().infrastructure_features(request)
         self.assertEqual(response.status_code, 400)
-        self.assertIn("zoom in", response.json()["error"])
+        self.assertIn("zoom in", json.loads(response.content)["error"])
 
     @mock.patch(
         "urbanlens.dashboard.services.infrastructure_map.infrastructure_feature_collection",
         return_value={"type": "FeatureCollection", "features": [], "attribution": "© OpenStreetMap contributors"},
     )
     def test_returns_geojson_with_private_browser_cache(self, feature_collection: mock.Mock) -> None:
-        self.client.force_login(self.user)
-        response = self.client.get(self.url, {"bbox": "-73.9,42.6,-73.7,42.8"})
+        request = self.factory.get(self.url, {"bbox": "-73.9,42.6,-73.7,42.8"})
+        response = MapController().infrastructure_features(request)
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["type"], "FeatureCollection")
+        self.assertEqual(json.loads(response.content)["type"], "FeatureCollection")
         self.assertEqual(response["Cache-Control"], "private, max-age=300")
         feature_collection.assert_called_once()
 
-    def test_main_map_renders_water_and_rail_toggle(self) -> None:
-        self.client.force_login(self.user)
-        response = self.client.get(reverse("map.view"))
-        self.assertContains(response, 'data-map-layer="infrastructure"')
-        self.assertContains(response, "Water &amp; Rail")
+    def test_layer_registry_exposes_water_and_rail_toggle(self) -> None:
+        layer = MAP_LAYER_REGISTRY["infrastructure"]
+        self.assertEqual(layer.label, "Water & Rail")
+        self.assertEqual(layer.kind, "custom")

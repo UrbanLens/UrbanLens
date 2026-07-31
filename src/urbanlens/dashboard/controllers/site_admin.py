@@ -902,6 +902,12 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
         except (ValueError, TypeError):
             pass
 
+        try:
+            raw_min_interval = post_data.get("min_interval_seconds", "").strip()
+            cfg.min_interval_seconds = float(raw_min_interval) if raw_min_interval else None
+        except (ValueError, TypeError):
+            pass
+
         cfg.notes = post_data.get("notes", "").strip()
 
     def post(self, request: HttpRequest):

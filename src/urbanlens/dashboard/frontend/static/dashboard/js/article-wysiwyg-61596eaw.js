@@ -173,7 +173,15 @@ function createMapLayers(map, options = {}) {
     return parts.join(" · ");
   }
   if (opts.onAttribution) {
-    map.on("layeradd layerremove", () => opts.onAttribution(attributionText()));
+    let attributionFrame = null;
+    map.on("layeradd layerremove", () => {
+      if (attributionFrame !== null)
+        return;
+      attributionFrame = window.requestAnimationFrame(() => {
+        attributionFrame = null;
+        opts.onAttribution(attributionText());
+      });
+    });
   }
   if (opts.loadingTarget) {
     const target = opts.loadingTarget;

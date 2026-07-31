@@ -80,6 +80,9 @@ def build_infrastructure_query(bounds: InfrastructureBounds) -> str:
     return f"""[out:json][timeout:25][maxsize:67108864];
 (
   way["railway"~"^({_RAILWAY_VALUES})$"]({bbox});
+  way["disused:railway"]({bbox});
+  way["abandoned:railway"]({bbox});
+  way["demolished:railway"]({bbox});
   way["railtrail"="yes"]({bbox});
   way["waterway"~"^({_WATERWAY_VALUES})$"]({bbox});
   way["disused:waterway"]({bbox});
@@ -91,13 +94,23 @@ out tags geom qt;"""
 
 
 def _is_rail(tags: dict[str, Any]) -> bool:
-    return bool(tags.get("railway") or tags.get("railtrail") == "yes" or tags.get("historic") == "railway")
+    return bool(
+        tags.get("railway")
+        or tags.get("disused:railway")
+        or tags.get("abandoned:railway")
+        or tags.get("demolished:railway")
+        or tags.get("railtrail") == "yes"
+        or tags.get("historic") == "railway"
+    )
 
 
 def _is_historic(tags: dict[str, Any], kind: str) -> bool:
     if kind == "rail":
         return bool(
             tags.get("railway") in _HISTORIC_RAIL_VALUES
+            or tags.get("disused:railway")
+            or tags.get("abandoned:railway")
+            or tags.get("demolished:railway")
             or tags.get("railtrail") == "yes"
             or tags.get("historic") == "railway"
             or tags.get("disused") == "yes"
@@ -117,7 +130,13 @@ def _is_historic(tags: dict[str, Any], kind: str) -> bool:
 def _feature_label(tags: dict[str, Any], kind: str, historic: bool) -> tuple[str, str]:
     name = str(tags.get("name") or tags.get("official_name") or "").strip()
     if kind == "rail":
-        raw_type = str(tags.get("railway") or ("rail trail" if tags.get("railtrail") == "yes" else "railway"))
+        raw_type = str(
+            tags.get("railway")
+            or tags.get("disused:railway")
+            or tags.get("abandoned:railway")
+            or tags.get("demolished:railway")
+            or ("rail trail" if tags.get("railtrail") == "yes" else "railway")
+        )
         type_label = raw_type.replace("_", " ").title()
         fallback = f"{'Historic ' if historic else ''}{type_label}"
     else:

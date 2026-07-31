@@ -24,6 +24,7 @@ import time
 from typing import Any
 
 from django.db import transaction
+from django.utils import timezone
 
 from urbanlens.dashboard.exceptions import DashboardError
 
@@ -46,6 +47,10 @@ class ServiceDefaults:
     calls_per_minute: int | None = 20
     calls_per_day: int | None = 500
     calls_per_30_days: int | None = None
+    #: Minimum seconds required between consecutive calls, enforced
+    #: independently of the budgets above - see ApiRateLimit.min_interval_seconds's
+    #: own docstring for why a rolling-window count alone isn't equivalent.
+    min_interval_seconds: float | None = None
     usa_only: bool = False
     notes: str = ""
     #: Estimated USD cost per successful call, if confidently known from the
@@ -158,6 +163,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         display_name="OpenHistoricalMap",
         calls_per_minute=1,
         calls_per_day=500,
+        min_interval_seconds=1.0,
         notes="Free, no key required. OSM-based historic map data. Nominatim: 1 req/second hard limit.",
     ),
     "wayback_machine": ServiceDefaults(
@@ -268,6 +274,7 @@ def get_limit_config(service: str) -> Any:
                 "calls_per_minute": defaults_entry.calls_per_minute,
                 "calls_per_day": defaults_entry.calls_per_day,
                 "calls_per_30_days": defaults_entry.calls_per_30_days,
+                "min_interval_seconds": defaults_entry.min_interval_seconds,
                 "usa_only": defaults_entry.usa_only,
                 "notes": defaults_entry.notes,
             },
@@ -427,19 +434,31 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
     ``check_rate_limit`` (COUNT) and ``log_api_call`` (INSERT), called as two
     separate steps with no locking, let concurrent callers race: several
     requests can all pass the COUNT check before any of them has inserted a
-    log row, letting a burst of calls through above the configured limit -
-    this matters most for a hard per-request-per-second ToS limit like
-    Nominatim's. This function closes that gap by locking the service's
-    ``ApiRateLimit`` row (the natural one-row-per-service counter for this
-    domain) for the duration of the count check and the reservation insert,
-    via ``select_for_update()`` inside ``transaction.atomic()`` - so a second
+    log row, letting a burst of calls through above the configured limit.
+    This function closes that gap by locking the service's ``ApiRateLimit``
+    row (the natural one-row-per-service counter for this domain) for the
+    duration of the count check and the reservation insert, via
+    ``select_for_update()`` inside ``transaction.atomic()`` - so a second
     concurrent caller for the same service blocks until the first has
     committed its reservation, and then sees it in its own count.
+
+    A rolling-window budget alone still doesn't guarantee even spacing - all
+    of a generous per-minute allowance can land in the same few seconds and
+    still be "within budget". For a hard per-request spacing requirement
+    like Nominatim's 1 req/second or GDELT's 1 req/5s, ``min_interval_seconds``
+    is checked against ``last_call_at`` under the same lock, so it can't race
+    with the count check above.
 
     The lock is held only for the check-and-insert - it is released as soon
     as this function returns, well before the actual outbound network
     request happens, so concurrent calls to *different* services (or calls
     that are ultimately blocked) are never serialized by it.
+
+    The blocked/disabled branches below record their ``ApiCallLog`` row and
+    then exit the ``atomic()`` block normally rather than raising from inside
+    it - raising from inside would roll back that same transaction and take
+    the just-written log row with it, silently losing every blocked-attempt
+    record this function exists to produce.
 
     Args:
         service: The service key.
@@ -452,7 +471,8 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
 
     Raises:
         RateLimitExceededError: If the call would exceed the configured rate
-            limit. The blocked attempt is logged before raising.
+            limit, or land sooner than ``min_interval_seconds`` after the
+            last one. The blocked attempt is logged before raising.
         ServiceDisabledError: If the service is administratively disabled.
             The skipped attempt is logged before raising.
     """
@@ -466,19 +486,42 @@ def _reserve_call(service: str, *, endpoint: str = "") -> int:
     # its own creation race.
     get_limit_config(service)
 
+    to_raise: RequestCancelledError | None = None
+    entry_pk = -1
+
     with transaction.atomic():
-        ApiRateLimit.objects.select_for_update().get(service=service)
+        config = ApiRateLimit.objects.select_for_update().get(service=service)
 
-        if not check_rate_limit(service):
+        if config.min_interval_seconds is not None and config.last_call_at is not None:
+            elapsed = (timezone.now() - config.last_call_at).total_seconds()
+            if elapsed < config.min_interval_seconds:
+                logger.warning(
+                    "Minimum interval not yet elapsed for %s: %.2fs since last call (need %.2fs)",
+                    service,
+                    elapsed,
+                    config.min_interval_seconds,
+                )
+                ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=False, was_rate_limited=True)
+                to_raise = RateLimitExceededError(service)
+
+        if to_raise is None and not check_rate_limit(service):
             ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=False, was_rate_limited=True)
-            raise RateLimitExceededError(service)
+            to_raise = RateLimitExceededError(service)
 
-        if not service_is_enabled(service):
+        if to_raise is None and not service_is_enabled(service):
             ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=False, was_service_disabled=True)
-            raise ServiceDisabledError(service)
+            to_raise = ServiceDisabledError(service)
 
-        entry = ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=True)
-        return entry.pk
+        if to_raise is None:
+            entry = ApiCallLog.objects.create(service=service, endpoint=truncated_endpoint, success=True)
+            entry_pk = entry.pk
+            if config.min_interval_seconds is not None:
+                config.last_call_at = timezone.now()
+                config.save(update_fields=["last_call_at"])
+
+    if to_raise is not None:
+        raise to_raise
+    return entry_pk
 
 
 def _finalize_call(entry_pk: int, *, success: bool, response_ms: int | None = None, cost_estimate: Decimal | None = None) -> None:

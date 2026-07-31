@@ -361,7 +361,17 @@ export function createMapLayers(map: L.Map, options: MapLayersOptions = {}): Map
     }
 
     if (opts.onAttribution) {
-        map.on("layeradd layerremove", () => opts.onAttribution!(attributionText()));
+        // A vector overlay can add/remove thousands of paths in one turn.
+        // Coalesce their layer events so attribution causes one DOM update per
+        // frame instead of one update per feature.
+        let attributionFrame: number | null = null;
+        map.on("layeradd layerremove", () => {
+            if (attributionFrame !== null) return;
+            attributionFrame = window.requestAnimationFrame(() => {
+                attributionFrame = null;
+                opts.onAttribution!(attributionText());
+            });
+        });
     }
 
     // -- Tile loading visual feedback -------------------------------------------------

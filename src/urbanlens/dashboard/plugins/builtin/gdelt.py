@@ -77,7 +77,16 @@ class GdeltPlugin(UrbanLensPlugin):
                 display_name="GDELT News",
                 calls_per_minute=10,
                 calls_per_day=500,
-                notes="Free, keyless API. Be conservative - shared public infrastructure.",
+                # GDELT's own stated guidance: no more than 1 request every 5
+                # seconds per client. calls_per_minute alone doesn't guarantee
+                # that spacing (a rolling count still allows a burst within
+                # budget), hence the explicit min_interval_seconds.
+                min_interval_seconds=5.0,
+                notes=(
+                    "Free, keyless API. Be conservative - shared public infrastructure. GDELT asks "
+                    "high-traffic users to switch to the bulk Web NGrams dataset instead of the search "
+                    "APIs - see https://blog.gdeltproject.org/using-the-new-web-ngrams-dataset-to-find-relevant-coverage/"
+                ),
             ),
         }
 
