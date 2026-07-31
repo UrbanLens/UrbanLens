@@ -102,17 +102,5 @@ in context, plus the wiki/linking context used by the overview panel.
             </button>
             {% endif %}
         {% endif %}
-    {% elif pin.effective_latitude %}
-    <aside class="pin-hero-wiki-box pin-hero-wiki-box--unlinked">
-        <i class="material-symbols-outlined">link_off</i>
-        <span>Not linked to a shared location.</span>
-        <button type="button" class="btn btn--ghost btn--sm"
-                hx-get="{% url 'pin.link' pin.slug %}"
-                hx-target="#pin-location-picker"
-                hx-swap="innerHTML">
-            <i class="material-symbols-outlined">search</i> Find
-        </button>
-        <div id="pin-location-picker"></div>
-    </aside>
     {% endif %}
 </div>

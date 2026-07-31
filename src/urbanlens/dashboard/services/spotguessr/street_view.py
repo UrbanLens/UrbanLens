@@ -10,9 +10,11 @@ import logging
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
+from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.services.apis.locations.base import StreetViewSlide
 
 logger = logging.getLogger(__name__)
 
@@ -30,10 +32,23 @@ def candidate_street_view_for_location(location: Location) -> str | None:
     a round here, so any failure (no coverage, network error, rate limit)
     is swallowed and treated as "not eligible" - round generation must
     degrade to trying another location, never crash (mirrors how Photos
-    mode treats "no usable photo").
+    mode treats "no usable photo"). This is called once per candidate
+    location - up to ``session._MAX_LOCATION_ATTEMPTS`` times synchronously
+    inside the SpotGuessr start/round request - so, same as the pin-detail
+    carousel's own fetch of this method (``controllers.pin``), the call is
+    bounded by ``call_with_deadline`` rather than trusting the gateway's own
+    per-socket timeout: a slow trickle of bytes from a degraded provider can
+    keep a request handler blocked far longer than one candidate's share of
+    the request should cost.
     """
+    no_coverage: tuple[list[StreetViewSlide], bool] = ([], False)
     try:
-        slides, _from_cache = GoogleMapsGateway().get_street_view_slides(float(location.latitude), float(location.longitude), limit=1)
+        slides, _from_cache = call_with_deadline(
+            lambda: GoogleMapsGateway().get_street_view_slides(float(location.latitude), float(location.longitude), limit=1),
+            timeout=EXTERNAL_CALL_DEADLINE,
+            default=no_coverage,
+            name="google_maps.street_view",
+        )
     except Exception:
         logger.info("Street View unavailable for location=%s", location.pk, exc_info=True)
         return None

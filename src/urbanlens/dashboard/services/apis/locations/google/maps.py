@@ -445,7 +445,13 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     continue
                 return image_response.content, metadata.get("date")
 
-            if status in {"REQUEST_DENIED", "INVALID_REQUEST", "UNKNOWN_ERROR"}:
+            if status not in {"ZERO_RESULTS", "NOT_FOUND"}:
+                # Anything other than "genuinely no pano here yet" (e.g.
+                # OVER_QUERY_LIMIT, REQUEST_DENIED, INVALID_REQUEST,
+                # UNKNOWN_ERROR) is an account/request-level failure a wider
+                # radius can never fix - looping through the whole radius
+                # range would just repeat the identical failure up to
+                # (max_radius - radius) / radius_increment times per call site.
                 raise ValueError(f"Street View API error: {status}")
 
             radius += radius_increment
