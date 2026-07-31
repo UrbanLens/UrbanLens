@@ -5,9 +5,11 @@ from __future__ import annotations
 import contextlib
 from dataclasses import dataclass
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
+from asgiref.sync import async_to_sync
 from celery import shared_task
+from channels.layers import get_channel_layer
 
 from urbanlens.dashboard.services.celery import update_task_progress
 
@@ -1123,6 +1125,21 @@ def sweep_immich_library_locations(self, profile_id: int) -> dict[str, int]:
 #: no notification - unlike the auth_failed case, which already stops.
 _MAX_CONSECUTIVE_REDATA_FAILURES = 5
 
+#: How many consecutive retries may report the exact same pending cids with
+#: zero of them resolved before this task gives up on them. Distinct from
+#: _MAX_CONSECUTIVE_REDATA_FAILURES: REData's own cid-resolution cache policy
+#: (StaggeredCachePolicy, see ../REData's core.services.staggered_cache) has a
+#: hard minimum-TTL floor - once a cid has been checked at all, REData won't
+#: queue another resolution attempt for it for weeks, but keeps reporting it
+#: as "pending" (HTTP 200, no error) every time it's asked, since it's neither
+#: resolved nor confirmed unresolvable yet. Without this cap, a batch that
+#: falls into that state retries every ~120s forever even though REData is
+#: responding successfully - see docs/notes/ai/completed.md for the incident
+#: this was diagnosed from. A batch still making real progress (even one cid
+#: resolved per round) never trips this, since the counter resets whenever
+#: the pending set shrinks.
+_MAX_CONSECUTIVE_NO_PROGRESS_RETRIES = 5
+
 
 @shared_task(bind=True, max_retries=None)
 def resolve_deferred_pin_locations(
@@ -1132,6 +1149,7 @@ def resolve_deferred_pin_locations(
     auto_tag: bool = True,
     original_total: int | None = None,
     consecutive_request_failures: int = 0,
+    consecutive_no_progress: int = 0,
 ) -> dict[str, int]:
     """Place pins whose Google Maps CID needed a live lookup to be accurate.
 
@@ -1163,6 +1181,12 @@ def resolve_deferred_pin_locations(
             isn't a request failure (including one that still leaves cids
             pending on REData's own end), so a flaky-then-recovering REData
             never accumulates toward the cap.
+        consecutive_no_progress: How many retries in a row have come back
+            with the exact same cids pending and none newly resolved - see
+            ``_MAX_CONSECUTIVE_NO_PROGRESS_RETRIES``. Reset to 0 the moment
+            any cid resolves or is confirmed unresolvable, so a batch that's
+            still working its way through REData's queue never accumulates
+            toward the cap - only one that's genuinely stopped moving does.
 
     Returns:
         Summary counts (created/exists/skipped).
@@ -1227,6 +1251,33 @@ def resolve_deferred_pin_locations(
         return {"created": 0, "exists": 0, "skipped": len(all_cids)}
 
     if result.pending:
+        if result.request_failed:
+            # Already tracked by consecutive_request_failures above - a failed
+            # request trivially leaves every cid pending, which isn't the
+            # "REData responded but nothing moved" case this counter targets.
+            consecutive_no_progress = 0
+        else:
+            consecutive_no_progress = consecutive_no_progress + 1 if len(result.pending) == len(all_cids) else 0
+
+        if consecutive_no_progress >= _MAX_CONSECUTIVE_NO_PROGRESS_RETRIES:
+            logger.error(
+                "resolve_deferred_pin_locations: %d cid(s) for profile %s made no progress across %d consecutive retries - giving up.",
+                len(all_cids),
+                profile_id,
+                consecutive_no_progress,
+            )
+            NotificationLog.objects.create(
+                profile=profile,
+                status=Status.UNREAD,
+                importance=Importance.HIGH,
+                notification_type=NotificationType.ERROR,
+                title="Pin import couldn't finish",
+                message=(f"{len(all_cids)} pin(s) needed a live location lookup that hasn't made progress in a while and won't be retried automatically for some time. Re-import once this is fixed."),
+                url=reverse("map.view"),
+            )
+            update_task_progress(self, current=total, total=total, message="Failed: location lookups stalled.")
+            return {"created": 0, "exists": 0, "skipped": len(all_cids)}
+
         pending_set = set(result.pending)
         remaining_lists = []
         for lst in deferred_lists:
@@ -1240,7 +1291,11 @@ def resolve_deferred_pin_locations(
             countdown, message = 120, "Having trouble reaching REData - retrying shortly..."
 
         update_task_progress(self, current=total - len(result.pending), total=total, message=message)
-        raise self.retry(args=[profile_id, remaining_lists, auto_tag, total, consecutive_request_failures], countdown=countdown, max_retries=None)
+        raise self.retry(
+            args=[profile_id, remaining_lists, auto_tag, total, consecutive_request_failures, consecutive_no_progress],
+            countdown=countdown,
+            max_retries=None,
+        )
 
     created_count = exists_count = skipped_count = 0
     for lst in deferred_lists:
@@ -2091,6 +2146,33 @@ def send_notification_text_alerts_if_unread(notification_id: int) -> None:
     if is_text_alert_debounced(notification.profile_id, notification.notification_type):
         return
     send_notification_text_alerts_now(notification)
+
+
+@shared_task
+def broadcast_channel_group_message(group: str, message: dict[str, Any]) -> None:
+    """Deliver ``message`` to every channel in channel-layer group ``group``.
+
+    Runs the actual ``async_to_sync(channel_layer.group_send)`` call here, on
+    ``celery-worker``'s prefork pool, rather than inline in whatever gunicorn
+    gevent greenlet handled the request that triggered it - see
+    ``services.channel_broadcast`` and docs/PROBLEMS.md's gevent/asyncio entry
+    for why calling into asyncio directly from a gevent-scheduled request can
+    raise ``SynchronousOnlyOperation`` on a *different*, unrelated concurrent
+    request. Best-effort: a channel-layer failure is logged, not raised,
+    matching every caller's existing "already durably saved, live delivery is
+    a bonus" contract.
+
+    Args:
+        group: Channel-layer group name to deliver to.
+        message: JSON-serializable event dict (must include a "type" key).
+    """
+    layer = get_channel_layer()
+    if layer is None:
+        return
+    try:
+        async_to_sync(layer.group_send)(group, message)
+    except Exception:
+        logger.exception("Failed to broadcast to channel-layer group %s", group)
 
 
 @shared_task

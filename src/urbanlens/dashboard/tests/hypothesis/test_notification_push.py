@@ -3,16 +3,19 @@
 Covers:
 - notification_group_name() - group naming and channel-layer validity
 - as_push_payload()         - payload shape and message truncation
-- push_notification_to_browser() - broadcast on create, not on update; failure tolerance
+- push_notification_to_browser() - broadcast on create, not on update
+
+The actual channel-layer delivery (get_channel_layer/async_to_sync tolerance,
+Celery dispatch) now lives in services.channel_broadcast.send_group_message
+and tasks.broadcast_channel_group_message - see test_channel_broadcast.py.
 """
 
 from __future__ import annotations
 
 import re
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
@@ -67,21 +70,23 @@ class AsPushPayloadTests(SimpleTestCase):
 
 
 class PushSignalTests(TestCase):
-    """The post_save receiver broadcasts inserts (and only inserts) after commit."""
+    """The post_save receiver hands inserts (and only inserts) to send_group_message after commit.
+
+    Channel-layer/Celery delivery itself - including "no layer configured" and
+    "delivery failed" tolerance - is send_group_message's contract, covered by
+    test_channel_broadcast.py, not re-tested here.
+    """
 
     def setUp(self):
         self.user = baker.make("auth.User")
         self.profile = self.user.profile
-        self.layer = MagicMock()
-        self.layer.group_send = AsyncMock()
 
     def test_creating_notification_broadcasts_to_profile_group(self):
-        with patch.object(push_signals, "get_channel_layer", return_value=self.layer):
-            with self.captureOnCommitCallbacks(execute=True):
-                notification = baker.make(NotificationLog, profile=self.profile, title="Hi", message="Body", url="/x/")
+        with patch.object(push_signals, "send_group_message") as mock_send, self.captureOnCommitCallbacks(execute=True):
+            notification = baker.make(NotificationLog, profile=self.profile, title="Hi", message="Body", url="/x/")
 
-        self.layer.group_send.assert_awaited_once()
-        group, event = self.layer.group_send.await_args.args
+        mock_send.assert_called_once()
+        group, event = mock_send.call_args.args
         self.assertEqual(group, f"profile_notifications_{self.profile.pk}")
         self.assertEqual(event["type"], "notification.new")
         self.assertEqual(event["notification"]["id"], notification.pk)
@@ -89,35 +94,19 @@ class PushSignalTests(TestCase):
         self.assertEqual(event["notification"]["url"], "/x/")
 
     def test_updating_notification_does_not_broadcast(self):
-        with patch.object(push_signals, "get_channel_layer", return_value=self.layer):
+        with patch.object(push_signals, "send_group_message") as mock_send:
             with self.captureOnCommitCallbacks(execute=True):
                 notification = baker.make(NotificationLog, profile=self.profile)
-            self.layer.group_send.reset_mock()
+            mock_send.reset_mock()
 
             with self.captureOnCommitCallbacks(execute=True):
                 notification.title = "changed"
                 notification.save()
 
-        self.layer.group_send.assert_not_awaited()
+        mock_send.assert_not_called()
 
     def test_notification_without_profile_does_not_broadcast(self):
-        with patch.object(push_signals, "get_channel_layer", return_value=self.layer):
-            with self.captureOnCommitCallbacks(execute=True):
-                baker.make(NotificationLog, profile=None)
+        with patch.object(push_signals, "send_group_message") as mock_send, self.captureOnCommitCallbacks(execute=True):
+            baker.make(NotificationLog, profile=None)
 
-        self.layer.group_send.assert_not_awaited()
-
-    def test_channel_layer_failure_does_not_break_creation(self):
-        self.layer.group_send = AsyncMock(side_effect=RuntimeError("valkey down"))
-        with patch.object(push_signals, "get_channel_layer", return_value=self.layer):
-            with self.captureOnCommitCallbacks(execute=True):
-                notification = baker.make(NotificationLog, profile=self.profile)
-
-        self.assertTrue(NotificationLog.objects.filter(pk=notification.pk).exists())
-
-    def test_missing_channel_layer_does_not_break_creation(self):
-        with patch.object(push_signals, "get_channel_layer", return_value=None):
-            with self.captureOnCommitCallbacks(execute=True):
-                notification = baker.make(NotificationLog, profile=self.profile)
-
-        self.assertTrue(NotificationLog.objects.filter(pk=notification.pk).exists())
+        mock_send.assert_not_called()

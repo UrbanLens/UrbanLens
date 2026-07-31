@@ -9,8 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
+from urbanlens.dashboard.services.channel_broadcast import send_group_message
 
 
 def session_group_name(session_id: int) -> str:
@@ -26,7 +25,4 @@ def broadcast(session_id: int, event_type: str, payload: dict[str, Any]) -> None
     dispatched by the consumer to the matching ``round_revealed`` handler
     method.
     """
-    layer = get_channel_layer()
-    if layer is None:
-        return
-    async_to_sync(layer.group_send)(session_group_name(session_id), {"type": event_type, **payload})
+    send_group_message(session_group_name(session_id), {"type": event_type, **payload})

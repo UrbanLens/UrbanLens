@@ -4,6 +4,55 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
 to pick up without re-discovering the problem from scratch.
 
+## RESOLVED 2026-07-31: gunicorn's gevent worker + `async_to_sync(channel_layer.group_send)` corrupted unrelated concurrent requests' `SynchronousOnlyOperation` check
+
+Production intermittently 500'd on completely ordinary synchronous ORM calls - the reported
+repro was `location.pins.count()` deep in SpotGuessr's difficulty-weighting code
+(`services/spotguessr/selection.py::_proxy_difficulty_rating`), several frames from anything
+async. Even the 500 handler's own fallback render died the same way (`SiteSettings.get_current()`
+in `context_processors.py`), which was the tell that this had nothing to do with SpotGuessr.
+
+**Root cause**: `package.json`'s `start` script runs `gunicorn ... -k gevent` (see also
+`gunicorn.conf.py`, which patches psycopg2 for gevent cooperation via psycogreen). Gevent
+cooperatively schedules every in-flight request as a "greenlet," but many greenlets share exactly
+one real OS thread per worker process (`WEB_CONCURRENCY` workers, each hosting many greenlets).
+Django's `SynchronousOnlyOperation` check reads `asyncio.get_running_loop()`, and asyncio's
+"is a loop currently running" flag is tracked at the C level **per OS thread**, not per greenlet -
+gevent's monkeypatching can virtualize `threading.local` and friends for greenlets, but it cannot
+virtualize that.
+
+The codebase calls `asgiref.sync.async_to_sync(channel_layer.group_send)(...)` throughout the
+real-time layer (`services/direct_messages.py`, `services/group_chats.py`, `services/safety.py`,
+`models/notifications/signals.py`, and the game realtime modules
+`services/{spotguessr,trivia,consensus}/realtime.py`). Whenever any of those is mid-flight -
+specifically while `run_until_complete` is doing network I/O against the Valkey channel-layer
+backend, a cooperative yield point for gevent - the worker's shared OS thread is flagged "inside a
+running event loop." If gevent's hub switches to a *different*, completely unrelated greenlet
+during that window and that greenlet touches the ORM (as virtually every view does), it incorrectly
+trips `SynchronousOnlyOperation`. This is systemic: any concurrent chat message, notification, or
+game-session broadcast could poison any other in-flight request on the same gevent worker for the
+duration of the `group_send` call.
+
+**Fix**: every `async_to_sync(channel_layer.group_send)` call site now goes through
+`services.channel_broadcast.send_group_message(group, message)`, which enqueues
+`tasks.broadcast_channel_group_message` on `celery-worker`'s prefork pool (a real, separate OS
+process per slot - confirmed never gevent-patched, per `celery-worker-panels`'s `--pool=threads`
+comment and the plain default `celery-worker` command in `docker-compose.yml`) instead of calling
+`async_to_sync` inline in the request. That task performs the actual call and swallows/logs
+delivery failures, matching every caller's prior "already durably saved, live delivery is a bonus"
+contract. Regression coverage: `tests/hypothesis/test_channel_broadcast.py` (the new dispatch
+boundary and task), `tests/hypothesis/test_notification_push.py` (updated to assert
+`send_group_message` is called rather than mocking the old inline `get_channel_layer`/`group_send`
+path).
+
+Deliberately not done: switching the WSGI worker off gevent entirely, or reimplementing
+`channels_redis`'s wire protocol with a plain sync Redis client to avoid asyncio altogether - both
+were considered (see the session's discussion) but are larger architecture changes; routing through
+Celery fixes the corruption at its only real source (asyncio-in-request) with a contained diff and
+fits the codebase's existing "Celery for anything that shouldn't block the request thread"
+convention. Broadcasts now pay a small broker round-trip instead of running inline - acceptable for
+this app's near-real-time (not hard-real-time) chat/notification/game UX.
+
 ## 2026-07-28: `Friendship.muted` is shared by both profiles, not per-viewer
 
 There is exactly one `Friendship` row per pair - `QuerySet.between()` matches either direction
@@ -1653,3 +1702,52 @@ as the actual cause - equally plausible is the instance's own `limiter.toml` bot
 fronting WAF/CDN (e.g. Cloudflare) rule that changed when the service was brought back online. If
 403s persist after the User-Agent change, check the instance's own access/limiter logs server-side -
 this session had no access to `search.jmann.me`'s host.
+
+## 2026-07-31: REData's `/api/v1/parcels/lookup/` is in an OOM/WORKER-TIMEOUT crash loop on chiron
+
+Found while investigating the `resolve_deferred_pin_locations` retry-forever bug below - unrelated
+endpoint, noticed in the same gunicorn log sweep on `redata-production-app-1`. Repeated `WORKER
+TIMEOUT` followed by `SIGKILL` and worker respawn, i.e. requests to that endpoint are exhausting
+memory or wall-clock badly enough for gunicorn's own supervisor to kill the worker. Not
+investigated further - REData is a separate codebase/service another agent maintains (per
+`CLAUDE.local.md`), and this session only had read access there. Whether this crash loop
+contributed to or is independent of the CID-resolution backlog (both endpoints share the same
+gunicorn workers, so one starving the other for memory is plausible) was not determined.
+
+## 2026-07-31: Production celery worker's `.env` has `UL_REDATA_API_URL`... but check `UL_SITE_URL=staging.urbanlens.org`
+
+Noticed while inspecting `redata-production-app-1`'s environment (via scoped, non-secret-exposing
+`grep` - see below) during the CID-resolution investigation: a variable read off what's supposed to
+be the *production* UrbanLens celery worker's environment showed `UL_SITE_URL=staging.urbanlens.org`.
+That looks like a copy-paste/deploy-config leftover from a staging `.env`, which would make any
+absolute URL the production worker builds (e.g. notification deep-links via `request.build_absolute_uri`
+equivalents, `reverse()`-based URLs sent in emails/notifications) point at staging instead of
+production. Not confirmed as a real production `.env` (vs. this session misidentifying which
+container/host it was inspecting) and not fixed - purely operational (an env var value on the
+deployed host, not a code change) and outside this session's remit. Worth a human checking the
+actual production `.env` deploy config directly.
+
+## 2026-07-31: `resolve_deferred_pin_locations` retried every 120s forever against a REData cid stuck behind its own 30-day cache floor - fixed
+
+Root cause of a production incident: importing `sample_data/Google Takeout.csv` deferred ~700 cids
+to REData's `POST /places/resolve-cids/` for resolution. REData's `StaggeredCachePolicy`
+(`core.services.staggered_cache.py`, `min_ttl_hours=720` i.e. 30 days by default) has a hard floor -
+`should_refresh()` returns `False` unconditionally for any row younger than `min_ttl_hours`,
+regardless of quota utilization. `needs_refresh(place)` is just `should_refresh(place.last_checked_at)`,
+so the instant a `GooglePlace` row gets checked even once (`last_checked_at` stamped) without reaching
+the 3-attempt `confirmed_no_location` terminal state, REData will not queue another resolution attempt
+for it for weeks - but keeps reporting it as `pending` (HTTP 200, no error) on every subsequent
+`resolve-cids` call, since it's neither `resolved` nor `confirmed_no_location`. Confirmed via direct
+DB query on chiron: 441 of 723 `GooglePlace` rows stuck `resolved=False, confirmed_no_location=False`
+with zero `last_checked_at` activity for 10+ hours.
+
+UrbanLens's `resolve_deferred_pin_locations` (`dashboard/tasks.py`) treated "still pending, REData
+responded fine" as forward progress and retried every 120s with `max_retries=None` and no ceiling -
+the existing `consecutive_request_failures` cap (added in an earlier pass, commit `e7a10584`) only
+covers whole-batch *request* failures, not "REData responded successfully but nothing moved." Fixed
+by adding a second, independent `consecutive_no_progress` counter/cap (`_MAX_CONSECUTIVE_NO_PROGRESS_RETRIES`)
+that only increments when a retry's `result.pending` is the exact same size as the batch it was given
+(i.e. zero cids resolved that round) and `request_failed` is `False`; resets to 0 the moment any cid
+resolves or is confirmed unresolvable, so a batch still genuinely working through REData's queue is
+never cut off early. See tests in
+`dashboard/tests/hypothesis/test_resolve_deferred_pin_locations_no_progress.py`.

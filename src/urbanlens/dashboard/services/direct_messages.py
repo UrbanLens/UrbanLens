@@ -12,14 +12,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 from django.core.cache import cache
 from django.db import DatabaseError, IntegrityError, transaction
 from django.db.models import Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+from urbanlens.dashboard.services.channel_broadcast import send_group_message
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
@@ -156,14 +155,8 @@ def broadcast_typing_indicator(sender_id: int, recipient_slug: str) -> None:
     if not Profile.visibility_permits(sender.typing_indicator_visibility, sender, recipient):
         return
 
-    layer = get_channel_layer()
-    if layer is None:
-        return
     payload = {"type": "typing", "sender_slug": sender.slug or ""}
-    try:
-        async_to_sync(layer.group_send)(direct_message_group_name(recipient.pk), {"type": "dm.message", "message": payload})
-    except Exception:
-        logger.warning("Live push of typing indicator from profile %s to %s failed", sender_id, recipient.pk, exc_info=True)
+    send_group_message(direct_message_group_name(recipient.pk), {"type": "dm.message", "message": payload})
 
 
 def direct_message_group_name(profile_id: int) -> str:
@@ -350,14 +343,8 @@ def _broadcast_direct_message(message: DirectMessage) -> None:
     ]
 
     def _send() -> None:
-        layer = get_channel_layer()
-        if layer is None:
-            return
         for group, payload in deliveries:
-            try:
-                async_to_sync(layer.group_send)(group, {"type": "dm.message", "message": payload})
-            except Exception:
-                logger.warning("Live push of direct message %s to %s failed; it will appear on refresh", message.pk, group, exc_info=True)
+            send_group_message(group, {"type": "dm.message", "message": payload})
 
     transaction.on_commit(_send)
 
@@ -909,14 +896,8 @@ def _broadcast_message_update(payload: dict[str, Any], groups: set[str]) -> None
     """
 
     def _send() -> None:
-        layer = get_channel_layer()
-        if layer is None:
-            return
         for group in groups:
-            try:
-                async_to_sync(layer.group_send)(group, {"type": "dm.message", "message": payload})
-            except Exception:
-                logger.warning("Live push of message update to %s failed", group, exc_info=True)
+            send_group_message(group, {"type": "dm.message", "message": payload})
 
     transaction.on_commit(_send)
 
@@ -1022,14 +1003,8 @@ def _broadcast_reaction(message: DirectMessage) -> None:
     groups = {direct_message_group_name(message.sender_id), direct_message_group_name(message.recipient_id)}
 
     def _send() -> None:
-        layer = get_channel_layer()
-        if layer is None:
-            return
         for group in groups:
-            try:
-                async_to_sync(layer.group_send)(group, {"type": "dm.reaction", "message": payload})
-            except Exception:
-                logger.warning("Live push of reaction on message %s to %s failed", message.pk, group, exc_info=True)
+            send_group_message(group, {"type": "dm.reaction", "message": payload})
 
     transaction.on_commit(_send)
 

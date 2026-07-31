@@ -20,14 +20,13 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 from django.utils import timezone
 
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
+from urbanlens.dashboard.services.channel_broadcast import send_group_message
 from urbanlens.dashboard.services.direct_messages import can_direct_message, direct_message_group_name, reaction_summary
 from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
@@ -387,14 +386,8 @@ def _broadcast_group_event(group: GroupChat, payload: dict[str, Any], *, extra_p
     groups = {direct_message_group_name(profile_id) for profile_id in profile_ids}
 
     def _send() -> None:
-        layer = get_channel_layer()
-        if layer is None:
-            return
         for channel_group in groups:
-            try:
-                async_to_sync(layer.group_send)(channel_group, {"type": "dm.message", "message": payload})
-            except Exception:
-                logger.warning("Live push of group event to %s failed", channel_group, exc_info=True)
+            send_group_message(channel_group, {"type": "dm.message", "message": payload})
 
     transaction.on_commit(_send)
 
@@ -635,14 +628,8 @@ def broadcast_group_message(message: GroupMessage) -> None:
     deliveries = [(direct_message_group_name(membership.profile_id), serialize_group_message(message, viewer=membership.profile, has_share=has_share)) for membership in members]
 
     def _send() -> None:
-        layer = get_channel_layer()
-        if layer is None:
-            return
         for channel_group, payload in deliveries:
-            try:
-                async_to_sync(layer.group_send)(channel_group, {"type": "dm.message", "message": payload})
-            except Exception:
-                logger.warning("Live push of group message %s to %s failed", message.pk, channel_group, exc_info=True)
+            send_group_message(channel_group, {"type": "dm.message", "message": payload})
 
     transaction.on_commit(_send)
 

@@ -8,6 +8,10 @@ misconfigured UL_REDATA_API_URL/UL_REDATA_API_KEY) would then retry every
 120s forever, logging a WARNING + full traceback via the task_retry signal
 (see UrbanLens/celery.py) on every single attempt with no cap and no user
 notification - unlike the already-handled auth_failed case.
+
+retry()'s args list is [profile_id, remaining_lists, auto_tag, total,
+consecutive_request_failures, consecutive_no_progress] - tests index from the
+end (args[-2]/args[-1]) rather than hardcoding the full list.
 """
 
 from __future__ import annotations
@@ -50,7 +54,10 @@ class ResolveDeferredPinLocationsConsecutiveFailuresTests(TestCase):
                 tasks.resolve_deferred_pin_locations(self.profile.pk, self.deferred_lists, auto_tag=False)
 
         mock_retry.assert_called_once()
-        self.assertEqual(mock_retry.call_args.kwargs["args"][-1], 1)
+        self.assertEqual(mock_retry.call_args.kwargs["args"][-2], 1)
+        # A request failure leaves every cid pending trivially - that's already
+        # covered by the failure counter, so the no-progress counter stays at 0.
+        self.assertEqual(mock_retry.call_args.kwargs["args"][-1], 0)
         self.assertFalse(NotificationLog.objects.filter(profile=self.profile).exists())
 
     def test_exceeding_the_cap_gives_up_and_notifies_instead_of_retrying(self) -> None:
@@ -95,6 +102,5 @@ class ResolveDeferredPinLocationsConsecutiveFailuresTests(TestCase):
                 )
 
         mock_retry.assert_called_once()
-        # args = [profile_id, remaining_lists, auto_tag, total, consecutive_request_failures]
-        self.assertEqual(mock_retry.call_args.kwargs["args"][-1], 0)
+        self.assertEqual(mock_retry.call_args.kwargs["args"][-2], 0)
         self.assertFalse(NotificationLog.objects.filter(profile=self.profile).exists())

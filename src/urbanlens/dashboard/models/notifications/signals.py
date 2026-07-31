@@ -8,18 +8,14 @@ and a toast appear without a page refresh.
 
 from __future__ import annotations
 
-import logging
 from typing import Any
 
-from asgiref.sync import async_to_sync
-from channels.layers import get_channel_layer
 from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from urbanlens.dashboard.models.notifications.model import NotificationLog
-
-logger = logging.getLogger(__name__)
+from urbanlens.dashboard.services.channel_broadcast import send_group_message
 
 #: Longest message body forwarded in the live push payload. The full text stays
 #: in the database and is shown in the bell dropdown; the toast only needs a preview.
@@ -82,16 +78,7 @@ def push_notification_to_browser(sender: type[NotificationLog], instance: Notifi
     if created and instance.profile_id:
         group = notification_group_name(instance.profile_id)
         payload = as_push_payload(instance)
-
-        def _send() -> None:
-            layer = get_channel_layer()
-            if layer is not None:
-                try:
-                    async_to_sync(layer.group_send)(group, {"type": "notification.new", "notification": payload})
-                except Exception:
-                    logger.warning("Live push of notification %s to %s failed; it will appear on the next refresh", payload["id"], group, exc_info=True)
-
-        transaction.on_commit(_send)
+        transaction.on_commit(lambda: send_group_message(group, {"type": "notification.new", "notification": payload}))
 
 
 @receiver(post_save, sender=NotificationLog, dispatch_uid="notification_text_alerts")

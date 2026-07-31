@@ -34,6 +34,7 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyContactOptOutScope,
     SafetyPreference,
 )
+from urbanlens.dashboard.services.channel_broadcast import send_group_message
 from urbanlens.dashboard.services.email_normalization import normalize_email
 from urbanlens.dashboard.services.notification_delivery import send_sms, send_whatsapp
 from urbanlens.dashboard.services.visits import create_visit_suggestion
@@ -918,29 +919,20 @@ def _broadcast_live_location(checkin: SafetyCheckin) -> None:
     Args:
         checkin: The check-in whose location group should receive the update.
     """
-    try:
-        from asgiref.sync import async_to_sync
-        from channels.layers import get_channel_layer
-
-        channel_layer = get_channel_layer()
-        if channel_layer is None:
-            return
-        async_to_sync(channel_layer.group_send)(
-            safety_checkin_location_group_name(checkin.pk),
-            {
-                "type": "location.update",
-                "payload": {
-                    "type": "location_update",
-                    "sharing_enabled": checkin.live_location_sharing_enabled,
-                    "latitude": float(checkin.live_latitude) if checkin.live_latitude is not None else None,
-                    "longitude": float(checkin.live_longitude) if checkin.live_longitude is not None else None,
-                    "accuracy": checkin.live_location_accuracy,
-                    "updated_at": checkin.live_location_updated_at.isoformat() if checkin.live_location_updated_at else None,
-                },
+    send_group_message(
+        safety_checkin_location_group_name(checkin.pk),
+        {
+            "type": "location.update",
+            "payload": {
+                "type": "location_update",
+                "sharing_enabled": checkin.live_location_sharing_enabled,
+                "latitude": float(checkin.live_latitude) if checkin.live_latitude is not None else None,
+                "longitude": float(checkin.live_longitude) if checkin.live_longitude is not None else None,
+                "accuracy": checkin.live_location_accuracy,
+                "updated_at": checkin.live_location_updated_at.isoformat() if checkin.live_location_updated_at else None,
             },
-        )
-    except Exception:
-        logger.exception("Failed to broadcast live location for checkin %s", checkin.pk)
+        },
+    )
 
 
 def schedule_checkin_archival(checkin: SafetyCheckin) -> None:
@@ -1177,25 +1169,16 @@ def _broadcast_archive_scheduled(checkin: SafetyCheckin) -> None:
     Args:
         checkin: The check-in whose group should receive the countdown.
     """
-    try:
-        from asgiref.sync import async_to_sync
-        from channels.layers import get_channel_layer
-
-        channel_layer = get_channel_layer()
-        if channel_layer is None:
-            return
-        async_to_sync(channel_layer.group_send)(
-            safety_checkin_group_name(checkin.pk),
-            {
-                "type": "archive.scheduled",
-                "payload": {
-                    "type": "archive_scheduled",
-                    "archive_at": checkin.archive_scheduled_at.isoformat() if checkin.archive_scheduled_at else None,
-                },
+    send_group_message(
+        safety_checkin_group_name(checkin.pk),
+        {
+            "type": "archive.scheduled",
+            "payload": {
+                "type": "archive_scheduled",
+                "archive_at": checkin.archive_scheduled_at.isoformat() if checkin.archive_scheduled_at else None,
             },
-        )
-    except Exception:
-        logger.exception("Failed to broadcast archive schedule for checkin %s", checkin.pk)
+        },
+    )
 
 
 def _broadcast_partner_access_revoked(checkin: SafetyCheckin, profile_id: int) -> None:
@@ -1210,19 +1193,10 @@ def _broadcast_partner_access_revoked(checkin: SafetyCheckin, profile_id: int) -
         checkin: The check-in the partner was removed from.
         profile_id: PK of the removed partner's profile.
     """
-    try:
-        from asgiref.sync import async_to_sync
-        from channels.layers import get_channel_layer
-
-        channel_layer = get_channel_layer()
-        if channel_layer is None:
-            return
-        async_to_sync(channel_layer.group_send)(
-            safety_checkin_group_name(checkin.pk),
-            {"type": "partner.access_revoked", "payload": {"profile_id": profile_id}},
-        )
-    except Exception:
-        logger.exception("Failed to broadcast partner access revocation for checkin %s", checkin.pk)
+    send_group_message(
+        safety_checkin_group_name(checkin.pk),
+        {"type": "partner.access_revoked", "payload": {"profile_id": profile_id}},
+    )
 
 
 def _broadcast_checkin_archived(checkin: SafetyCheckin) -> None:
@@ -1237,19 +1211,10 @@ def _broadcast_checkin_archived(checkin: SafetyCheckin) -> None:
     Args:
         checkin: The just-archived check-in.
     """
-    try:
-        from asgiref.sync import async_to_sync
-        from channels.layers import get_channel_layer
-
-        channel_layer = get_channel_layer()
-        if channel_layer is None:
-            return
-        async_to_sync(channel_layer.group_send)(
-            safety_checkin_group_name(checkin.pk),
-            {"type": "checkin.archived", "payload": {"type": "checkin_archived"}},
-        )
-    except Exception:
-        logger.exception("Failed to broadcast archival for checkin %s", checkin.pk)
+    send_group_message(
+        safety_checkin_group_name(checkin.pk),
+        {"type": "checkin.archived", "payload": {"type": "checkin_archived"}},
+    )
 
 
 def notify_contacts_of_update(checkin: SafetyCheckin, summary: str) -> None:
@@ -2157,28 +2122,19 @@ def broadcast_chat_message(checkin: SafetyCheckin, message: SafetyCheckinMessage
         checkin: The check-in whose chat group should receive the message.
         message: The already-saved message to broadcast.
     """
-    try:
-        from asgiref.sync import async_to_sync
-        from channels.layers import get_channel_layer
-
-        channel_layer = get_channel_layer()
-        if channel_layer is None:
-            return
-        async_to_sync(channel_layer.group_send)(
-            safety_checkin_group_name(checkin.pk),
-            {
-                "type": "chat.message",
-                "message": {
-                    "type": "message",
-                    "id": message.pk,
-                    "sender_name": message.sender_name,
-                    "body": message.body,
-                    "created": message.created.isoformat(),
-                },
+    send_group_message(
+        safety_checkin_group_name(checkin.pk),
+        {
+            "type": "chat.message",
+            "message": {
+                "type": "message",
+                "id": message.pk,
+                "sender_name": message.sender_name,
+                "body": message.body,
+                "created": message.created.isoformat(),
             },
-        )
-    except Exception:
-        logger.exception("Failed to broadcast chat message for checkin %s", checkin.pk)
+        },
+    )
 
 
 def post_chat_message(checkin: SafetyCheckin, *, user: User | AnonymousUser, contact: SafetyCheckinContact | None, body: str) -> SafetyCheckinMessage:
@@ -2232,24 +2188,15 @@ def _broadcast_status_update(checkin: SafetyCheckin) -> None:
     Args:
         checkin: The check-in whose chat group should receive the update.
     """
-    try:
-        from asgiref.sync import async_to_sync
-        from channels.layers import get_channel_layer
-
-        channel_layer = get_channel_layer()
-        if channel_layer is None:
-            return
-        async_to_sync(channel_layer.group_send)(
-            safety_checkin_group_name(checkin.pk),
-            {
-                "type": "status.update",
-                "payload": {
-                    "type": "status_update",
-                    "status": checkin.status,
-                    "status_display": checkin.get_status_display(),
-                    "is_resolved": checkin.is_resolved,
-                },
+    send_group_message(
+        safety_checkin_group_name(checkin.pk),
+        {
+            "type": "status.update",
+            "payload": {
+                "type": "status_update",
+                "status": checkin.status,
+                "status_display": checkin.get_status_display(),
+                "is_resolved": checkin.is_resolved,
             },
-        )
-    except Exception:
-        logger.exception("Failed to broadcast status update for checkin %s", checkin.pk)
+        },
+    )
