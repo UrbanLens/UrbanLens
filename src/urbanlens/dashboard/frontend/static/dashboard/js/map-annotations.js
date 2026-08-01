@@ -626,6 +626,24 @@ function init() {
         openDetailPinEditDialog(entry);
       });
       actions.appendChild(editBtn);
+      const deleteBtn = document.createElement("button");
+      deleteBtn.type = "button";
+      deleteBtn.className = "delete-button";
+      deleteBtn.title = "Delete child pin";
+      deleteBtn.innerHTML = '<i class="material-symbols-outlined">delete</i>';
+      deleteBtn.addEventListener("click", async () => {
+        map.closePopup();
+        if (!await confirmAction({ title: "Delete Pin", message: `Delete "${entry.name || "this pin"}"?`, confirmLabel: "Delete" }))
+          return;
+        fetch(`${dpEditBase}${entry.uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } }).then((r) => {
+          if (!r.ok)
+            throw new Error;
+        }).then(() => {
+          toast.success("Detail pin deleted.");
+          loadDetailPins();
+        }).catch(() => toast.error("Failed to delete detail pin."));
+      });
+      actions.appendChild(deleteBtn);
     }
     return el;
   }
