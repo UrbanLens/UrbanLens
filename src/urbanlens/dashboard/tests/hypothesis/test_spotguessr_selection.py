@@ -10,6 +10,8 @@ from __future__ import annotations
 from itertools import count
 import math
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -25,6 +27,7 @@ from urbanlens.dashboard.services.spotguessr.selection import (
     MIN_LOCATION_RATING,
     _difficulty_weight,
     _proxy_difficulty_rating,
+    pick_next_location,
     target_rating_for_difficulty,
 )
 
@@ -134,3 +137,37 @@ class DifficultyWeightTests(TestCase):
         # Sanity check the blend actually moved away from both pure endpoints.
         self.assertNotAlmostEqual(expected_location_rating, proxy_rating)
         self.assertNotAlmostEqual(expected_location_rating, rating.rating)
+
+
+class PickNextLocationQueryCountTests(TestCase):
+    """Regression guard for the SpotGuessr /start/ slowness/timeouts.
+
+    ``pick_next_location`` used to call ``location.pins.count()`` and
+    ``location.images.count()`` once per candidate while computing difficulty
+    weights - O(pool size) queries, run again on every attempt of
+    ``session.get_or_create_round``'s location-retry loop (up to
+    ``_MAX_LOCATION_ATTEMPTS``). A profile with a large pin pool and few
+    photo-eligible locations could rack up thousands of round trips on a
+    single ``/start/`` request. The fixed version bulk-fetches both counts in
+    two queries regardless of pool size.
+    """
+
+    def test_query_count_stays_flat_as_the_candidate_pool_grows(self) -> None:
+        profile = _make_profile()
+        small_pool_locations = [_make_location() for _ in range(2)]
+        for location in small_pool_locations:
+            baker.make(Pin, profile=profile, location=location)
+
+        large_pool_locations = [_make_location() for _ in range(40)]
+        for location in large_pool_locations:
+            baker.make(Pin, profile=profile, location=location)
+
+        small_candidates = Location.objects.filter(pk__in=[loc.pk for loc in small_pool_locations])
+        with CaptureQueriesContext(connection) as small_pool_queries:
+            pick_next_location(small_candidates, mode=SpotGuessrMode.PHOTOS, difficulty=0.5, previous_location=None)
+
+        large_candidates = Location.objects.filter(pk__in=[loc.pk for loc in large_pool_locations])
+        with CaptureQueriesContext(connection) as large_pool_queries:
+            pick_next_location(large_candidates, mode=SpotGuessrMode.PHOTOS, difficulty=0.5, previous_location=None)
+
+        self.assertEqual(len(small_pool_queries.captured_queries), len(large_pool_queries.captured_queries))

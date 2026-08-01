@@ -2448,6 +2448,105 @@ def sweep_stalled_spotguessr_sessions() -> int:
         cache.delete(_SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY)
 
 
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def prewarm_spotguessr_round(session_id: int, sequence_index: int) -> bool:
+    """Pre-select a SpotGuessr session's next round, so it's ready the instant a player reaches it.
+
+    Queued by ``services.spotguessr.session.get_or_create_round`` right after
+    it creates the round *before* this one - by the time that round is
+    guessed and revealed, this round's location (and, for Street View mode,
+    its Google Maps imagery - see ``services.spotguessr.street_view``, whose
+    result this warms via the same lat/lng cache key) is already picked and
+    cached, so the round that actually gets created next is a cache hit
+    instead of live selection (see ``services.spotguessr.prewarm``). A no-op
+    if the session has since ended, this round already exists (a page reload
+    or another guess raced this task to it), or nothing eligible is left -
+    none of those are errors, just nothing worth prewarming anymore.
+
+    Args:
+        session_id: The session to prewarm a round for.
+        sequence_index: The round's 0-based position within the session.
+
+    Returns:
+        True if a round was prewarmed, False if there was nothing to do.
+    """
+    from urbanlens.dashboard.models.spotguessr.model import GameRound, GameSession, GameSessionStatus
+    from urbanlens.dashboard.services.spotguessr import prewarm
+    from urbanlens.dashboard.services.spotguessr.session import config_from_session, generate_round_content
+
+    try:
+        session = GameSession.objects.get(pk=session_id)
+    except GameSession.DoesNotExist:
+        return False
+    if session.status != GameSessionStatus.ACTIVE:
+        return False
+
+    existing_rounds = list(GameRound.objects.for_session(session).select_related("location"))
+    if any(round_.sequence_index == sequence_index for round_ in existing_rounds):
+        return False  # already created - a reload or another guess beat this task to it
+
+    joined_participants = list(session.participants.joined().select_related("profile"))
+    if not joined_participants:
+        return False
+    participants = [participant.profile for participant in joined_participants]
+    excluded_ids = [round_.location_id for round_ in existing_rounds]
+    previous_location = existing_rounds[-1].location if existing_rounds else None
+
+    config = config_from_session(session)
+    picked = generate_round_content(session.mode, config, participants, excluded_ids, previous_location)
+    if picked is None:
+        return False
+    location, content = picked
+    prewarm.store_for_session(session.pk, sequence_index, location, content)
+    return True
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def prewarm_spotguessr_solo_start(profile_id: int, mode: str, config_dict: dict) -> bool:
+    """Pre-select a solo player's likely first round before they've even clicked "start".
+
+    Queued from ``controllers.spotguessr.SpotGuessrHomeView`` on every visit
+    to the SpotGuessr overview page, using the player's last-used settings
+    (``SpotGuessrPreference.last_config``) and most-recently-played mode as
+    the best guess of what they'll start next. Keyed by a fingerprint of the
+    exact config (see ``services.spotguessr.prewarm``), so it's simply never
+    redeemed - not wrongly redeemed - if the player changes a setting before
+    actually starting.
+
+    Args:
+        profile_id: The player who loaded the SpotGuessr overview page.
+        mode: The guessed ``SpotGuessrMode`` they'll start.
+        config_dict: A ``GameConfig.to_dict()`` snapshot of their guessed
+            settings (unknown keys ignored, mirroring
+            ``session.config_from_session``).
+
+    Returns:
+        True if a round was prewarmed, False if there was nothing eligible.
+    """
+    import dataclasses
+
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.spotguessr import eligibility, prewarm
+    from urbanlens.dashboard.services.spotguessr.session import GameConfig, generate_round_content
+
+    try:
+        profile = Profile.objects.get(pk=profile_id)
+    except Profile.DoesNotExist:
+        return False
+
+    known_fields = {f.name for f in dataclasses.fields(GameConfig)}
+    config = GameConfig(**{key: value for key, value in config_dict.items() if key in known_fields})
+    if not eligibility.has_eligible_locations([profile], require_visited_by_all=config.require_visited_all, geo_bounds=config.geo_bounds):
+        return False
+
+    picked = generate_round_content(mode, config, [profile], [], None)
+    if picked is None:
+        return False
+    location, content = picked
+    prewarm.store_for_solo_start(profile_id, mode, config, location, content)
+    return True
+
+
 _TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:trivia:stall-sweep-lock"
 _TRIVIA_STALL_SWEEP_LOCK_TIMEOUT_SECONDS = 110  # just under the 2-minute beat interval
 

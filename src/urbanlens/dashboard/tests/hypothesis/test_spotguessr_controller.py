@@ -485,3 +485,35 @@ class SpotGuessrRoundTimeoutViewTests(TestCase):
         self.client.force_login(outsider.user)
         response = self.client.post(timeout_url)
         self.assertEqual(response.status_code, 404)
+
+
+class SpotGuessrHomeViewPrewarmTests(TestCase):
+    """Visiting the overview page should speculatively prewarm a solo player's likely round 1 - see services.spotguessr.prewarm."""
+
+    def setUp(self) -> None:
+        self.profile = _make_profile()
+        self.location = _make_location()
+        baker.make(Pin, profile=self.profile, location=self.location)
+        baker.make(Image, location=self.location, media_type=MediaKind.PHOTO, latitude=None, longitude=None, wiki=baker.make(Wiki, location=self.location))
+        self.client.force_login(self.profile.user)
+
+    def test_visiting_the_page_prewarms_round_one_for_the_default_mode(self) -> None:
+        from urbanlens.dashboard.services.spotguessr import prewarm
+
+        response = self.client.get(reverse("spotguessr"))
+
+        self.assertEqual(response.status_code, 200)
+        cached = prewarm.consume_for_solo_start(self.profile.pk, SpotGuessrMode.PHOTOS, GameConfig())
+        assert cached is not None
+        self.assertEqual(cached[0], self.location.pk)
+
+    def test_resuming_a_specific_session_does_not_trigger_the_speculative_prewarm(self) -> None:
+        from urbanlens.dashboard.services.spotguessr import prewarm
+        from urbanlens.dashboard.services.spotguessr.session import start_solo_session
+
+        session = start_solo_session(self.profile, SpotGuessrMode.PHOTOS, GameConfig(), total_rounds=3)
+
+        response = self.client.get(reverse("spotguessr"), {"session": session.pk})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(prewarm.consume_for_solo_start(self.profile.pk, SpotGuessrMode.PHOTOS, GameConfig()))

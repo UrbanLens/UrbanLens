@@ -198,6 +198,14 @@ def _mode_cards() -> list[dict[str, str]]:
     return [{"value": value, "label": label, **_MODE_CARD_META[value]} for value, label in SpotGuessrMode.choices]
 
 
+def _prewarm_solo_start(profile_id: int, mode: str, last_config: dict) -> None:
+    """Queue ``tasks.prewarm_spotguessr_solo_start`` - see ``SpotGuessrHomeView.get``'s call site."""
+    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import prewarm_spotguessr_solo_start
+
+    safely_enqueue_task(prewarm_spotguessr_solo_start, profile_id, mode, last_config)
+
+
 class SpotGuessrHomeView(LoginRequiredMixin, View):
     """The SpotGuessr overview page: own rating, friends' ratings, start-game form.
 
@@ -223,6 +231,17 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
         raw_session_id = request.GET.get("session")
         if raw_session_id and GameSessionParticipant.objects.filter(session_id=raw_session_id, profile=profile).exists():
             initial_session_id = raw_session_id
+
+        # Best-effort speculative prewarm of the round a solo player is most
+        # likely to start next (see services.spotguessr.prewarm) - skipped
+        # when this load is actually resuming a specific session, since
+        # they're not about to start a fresh one. Guessing wrong (a
+        # different mode/config, or multiplayer instead) just means the
+        # prewarm sits unused until it expires - never a correctness issue,
+        # only a missed optimization.
+        if initial_session_id is None:
+            guessed_mode = own_rating.mode if own_rating is not None else SpotGuessrMode.PHOTOS
+            _prewarm_solo_start(profile.pk, guessed_mode, preference.last_config)
 
         return render(
             request,

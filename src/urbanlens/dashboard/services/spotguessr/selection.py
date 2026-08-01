@@ -11,7 +11,10 @@ import random
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.measure import D
+from django.db.models import Count
 
+from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.spotguessr.model import DEFAULT_RATING, LocationModeRating
 
 if TYPE_CHECKING:
@@ -72,15 +75,34 @@ def pick_next_location(
         if separated:
             pool = separated
 
+    location_ids = [location.pk for location in pool]
+    # Two bulk aggregate queries instead of location.pins.count()/location.images.count()
+    # per candidate (see _proxy_difficulty_rating) - with a large pool this loop runs
+    # once per attempt of the caller's location-retry loop
+    # (session.get_or_create_round), so an O(pool size) query count there compounds
+    # into thousands of round trips and was the dominant cause of SpotGuessr /start/
+    # being slow-to-timing-out (see docs/PROBLEMS.md).
+    pin_counts = dict(Pin.objects.filter(location_id__in=location_ids).values_list("location_id").annotate(n=Count("pk")).values_list("location_id", "n"))
+    photo_counts = dict(Image.objects.filter(location_id__in=location_ids).values_list("location_id").annotate(n=Count("pk")).values_list("location_id", "n"))
+
     target_rating = target_rating_for_difficulty(difficulty)
     ratings_by_location_id = {rating.location_id: rating for rating in LocationModeRating.objects.filter(location__in=pool, mode=mode)}
-    weights = [_difficulty_weight(location, ratings_by_location_id.get(location.pk), target_rating) for location in pool]
+    weights = [
+        _difficulty_weight(
+            location,
+            ratings_by_location_id.get(location.pk),
+            target_rating,
+            pin_count=pin_counts.get(location.pk, 0),
+            photo_count=photo_counts.get(location.pk, 0),
+        )
+        for location in pool
+    ]
     if sum(weights) <= 0:
         return random.choice(pool)  # noqa: S311 # nosec: B311 - game content selection, not security-sensitive
     return random.choices(pool, weights=weights, k=1)[0]  # noqa: S311 # nosec: B311 - game content selection, not security-sensitive
 
 
-def _proxy_difficulty_rating(location: Location) -> float:
+def _proxy_difficulty_rating(location: Location, *, pin_count: int | None = None, photo_count: int | None = None) -> float:
     """Estimate a difficulty rating from proxies the database already has, before anyone's ever played it.
 
     A location with earned play history (``LocationModeRating.games_played``)
@@ -94,14 +116,27 @@ def _proxy_difficulty_rating(location: Location) -> float:
     purely for lack of data (mirroring ``_difficulty_weight``'s own "never
     excluded for lack of data" contract), only ever easier as the signal
     strengthens.
+
+    Args:
+        location: The candidate location.
+        pin_count: Pre-counted ``location.pins.count()``, when the caller has
+            already bulk-fetched it for a whole candidate pool (see
+            ``pick_next_location``) - avoids a per-location query. Falls back
+            to counting it directly here when omitted, so this stays callable
+            (and testable) with just a location.
+        photo_count: Same idea for ``location.images.count()``.
     """
-    pin_signal = min(location.pins.count() / _PROXY_PIN_SATURATION, 1.0)
-    photo_signal = min(location.images.count() / _PROXY_PHOTO_SATURATION, 1.0)
+    if pin_count is None:
+        pin_count = location.pins.count()
+    if photo_count is None:
+        photo_count = location.images.count()
+    pin_signal = min(pin_count / _PROXY_PIN_SATURATION, 1.0)
+    photo_signal = min(photo_count / _PROXY_PHOTO_SATURATION, 1.0)
     popularity = (pin_signal + photo_signal) / 2.0
     return DEFAULT_RATING - popularity * (DEFAULT_RATING - MIN_LOCATION_RATING)
 
 
-def _difficulty_weight(location: Location, rating: LocationModeRating | None, target_rating: float) -> float:
+def _difficulty_weight(location: Location, rating: LocationModeRating | None, target_rating: float, *, pin_count: int | None = None, photo_count: int | None = None) -> float:
     """Gaussian kernel weight, blending toward a proxy-seeded estimate for locations with too little game history.
 
     A location with at least ``MIN_GAMES_FOR_DIFFICULTY_WEIGHTING`` played
@@ -111,13 +146,21 @@ def _difficulty_weight(location: Location, rating: LocationModeRating | None, ta
     handoff rather than a discontinuous jump the instant the threshold is
     crossed. A location with *zero* games played uses the proxy estimate
     outright, never the flat neutral default.
+
+    Args:
+        location: The candidate location.
+        rating: This location's earned ``LocationModeRating`` for the round's
+            mode, or None if it's never been played.
+        target_rating: The difficulty slider's target rating band.
+        pin_count: See ``_proxy_difficulty_rating``.
+        photo_count: See ``_proxy_difficulty_rating``.
     """
     if rating is not None and rating.games_played >= MIN_GAMES_FOR_DIFFICULTY_WEIGHTING:
         location_rating = rating.rating
     elif rating is not None and rating.games_played:
-        proxy_rating = _proxy_difficulty_rating(location)
+        proxy_rating = _proxy_difficulty_rating(location, pin_count=pin_count, photo_count=photo_count)
         earned_weight = rating.games_played / MIN_GAMES_FOR_DIFFICULTY_WEIGHTING
         location_rating = proxy_rating * (1 - earned_weight) + rating.rating * earned_weight
     else:
-        location_rating = _proxy_difficulty_rating(location)
+        location_rating = _proxy_difficulty_rating(location, pin_count=pin_count, photo_count=photo_count)
     return math.exp(-((location_rating - target_rating) ** 2) / (2 * DIFFICULTY_BANDWIDTH**2))

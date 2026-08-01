@@ -172,6 +172,16 @@ ignored entirely in favor of the earned rating. Documentation-richness is never 
 *harder* than neutral for lack of data — only ever easier as the signal strengthens, mirroring
 the kernel's own "never excluded for lack of data" contract.
 
+**Performance (fixed 2026-07-31)**: `_proxy_difficulty_rating()` originally called
+`location.pins.count()`/`location.images.count()` per candidate, inside
+`selection.pick_next_location`, which `get_or_create_round`'s retry loop calls fresh on every
+attempt (up to `_MAX_LOCATION_ATTEMPTS`). For a profile with a large pin pool and few
+photo-eligible locations (Photos mode's `wiki__isnull=False` gate means most pins usually
+don't qualify), this was O(attempts × pool size) individual queries — the dominant cause of
+`/spotguessr/start/` sometimes taking long enough to hit nginx's upstream read timeout.
+`pick_next_location` now bulk-fetches both counts for the whole candidate pool in two
+queries, regardless of pool size (see `services.spotguessr.selection`).
+
 ## "Feels random" selection (anti-clustering)
 
 Uniform-random selection over a small, geographically clustered pin set reliably produces
@@ -531,7 +541,37 @@ same location within the cache window don't re-bill — no additional caching ad
 `named_place.candidate_name_for_location`, Street View calls
 `street_view.candidate_street_view_for_location`. All three return "nothing usable" as
 `None`/falsy and are handled identically — try the next candidate location, give up after
-`_MAX_LOCATION_ATTEMPTS`. `start_solo_session`'s Phase 1 restriction to `SpotGuessrMode.PHOTOS`
+`_MAX_LOCATION_ATTEMPTS`.
+
+### Round content prewarming (added 2026-07-31)
+
+Selection/build-round work — which, even after the difficulty-weighting fix above, still costs
+something (Street View mode's live Google Maps lookup most of all) — used to run entirely on
+the request that first needed it, normally the exact moment a player finishes the prior round.
+`services.spotguessr.prewarm` lets a background Celery task run that same selection ahead of
+time and cache the `(location, content)` result under a key `get_or_create_round` checks
+*before* generating live:
+
+- **Rounds 2+**: right after `get_or_create_round` creates round *N*, it enqueues
+  `tasks.prewarm_spotguessr_round(session_id, N + 1)` (skipped for the session's last round —
+  there's nothing to prewarm). By the time round *N* is guessed and revealed, round *N+1*'s
+  content is normally already cached, so `_advance_or_complete`'s call to
+  `get_or_create_round` is a cache hit instead of live generation.
+- **Round 1 (solo only)**: `controllers.spotguessr.SpotGuessrHomeView.get` enqueues
+  `tasks.prewarm_spotguessr_solo_start(profile_id, mode, config)` on every visit to the
+  overview page, guessing the mode/config from `most_recent_rating`/`last_config` — the same
+  values the settings form pre-fills. Keyed by a fingerprint of the full config, so a guess
+  that turns out wrong (different settings, or multiplayer instead) is simply never redeemed,
+  not wrongly redeemed. Skipped when the page load is actually resuming a specific session via
+  `?session=`.
+
+A cache miss (task hasn't finished, lost a race, evicted, or the guessed config didn't match)
+always falls back to live generation — correctness never depends on a prewarm having run; it's
+purely a latency optimization. `generate_round_content` (factored out of `get_or_create_round`)
+is the one selection routine both the live path and the prewarm tasks call, so a prewarmed
+round is chosen by identical rules to a live one.
+
+`start_solo_session`'s Phase 1 restriction to `SpotGuessrMode.PHOTOS`
 is lifted; all three modes are now startable, solo or multiplayer.
 
 **Mode registry (added post-launch).** That per-mode branch originally lived as an if/elif
