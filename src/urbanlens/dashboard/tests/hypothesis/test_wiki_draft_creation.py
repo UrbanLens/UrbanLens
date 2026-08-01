@@ -26,14 +26,22 @@ _SAFELY_ENQUEUE = "urbanlens.dashboard.services.celery.safely_enqueue_task"
 
 
 class PinSignalQueuesDraftWikiTests(TestCase):
-    """The Pin post_save signal queues ensure_draft_wiki_for_location correctly."""
+    """The Pin post_save signal queues ensure_draft_wiki_for_location correctly.
+
+    The signal enqueues on_commit (like every other Celery-enqueuing signal
+    in models.pin.signals), so a plain TestCase transaction - which rolls
+    back rather than commits - never fires it on its own; wrap the
+    pin-creating call in ``captureOnCommitCallbacks(execute=True)`` wherever
+    the enqueue matters, matching this codebase's existing convention (see
+    e.g. test_label_map_pin_cache_signal.py).
+    """
 
     def setUp(self) -> None:
         self.profile = baker.make(User).profile
 
     def test_creating_a_pin_with_a_location_enqueues_the_task(self) -> None:
         location = baker.make(Location)
-        with patch(_SAFELY_ENQUEUE) as enqueue:
+        with patch(_SAFELY_ENQUEUE) as enqueue, self.captureOnCommitCallbacks(execute=True):
             baker.make(Pin, profile=self.profile, location=location)
         from urbanlens.dashboard.tasks import ensure_draft_wiki_for_location
 
@@ -42,23 +50,28 @@ class PinSignalQueuesDraftWikiTests(TestCase):
     def test_editing_an_existing_pin_does_not_re_enqueue(self) -> None:
         location = baker.make(Location)
         pin = baker.make(Pin, profile=self.profile, location=location)
-        with patch(_SAFELY_ENQUEUE) as enqueue:
+        with patch(_SAFELY_ENQUEUE) as enqueue, self.captureOnCommitCallbacks(execute=True):
             pin.name = "Renamed"
             pin.save(update_fields=["name", "updated"])
-        self.assertFalse(any(call.args and call.args[0].__name__ == "ensure_draft_wiki_for_location" for call in enqueue.call_args_list))
+        enqueue.assert_not_called()
 
     def test_pin_with_no_location_does_not_enqueue(self) -> None:
-        with patch(_SAFELY_ENQUEUE) as enqueue:
-            baker.make(Pin, profile=self.profile, location=None)
-        self.assertFalse(any(call.args and call.args[0].__name__ == "ensure_draft_wiki_for_location" for call in enqueue.call_args_list))
+        """Pin.location is non-nullable, so this exercises the guard directly
+        against an unsaved instance rather than via an invalid fixture."""
+        from urbanlens.dashboard.models.pin.signals import ensure_draft_wiki_for_pin_location
+
+        pin = Pin(profile=self.profile)
+        with patch(_SAFELY_ENQUEUE) as enqueue, self.captureOnCommitCallbacks(execute=True):
+            ensure_draft_wiki_for_pin_location(Pin, pin, created=True)
+        enqueue.assert_not_called()
 
     def test_community_disabled_profile_does_not_enqueue(self) -> None:
         self.profile.community_enabled = False
         self.profile.save(update_fields=["community_enabled"])
         location = baker.make(Location)
-        with patch(_SAFELY_ENQUEUE) as enqueue:
+        with patch(_SAFELY_ENQUEUE) as enqueue, self.captureOnCommitCallbacks(execute=True):
             baker.make(Pin, profile=self.profile, location=location)
-        self.assertFalse(any(call.args and call.args[0].__name__ == "ensure_draft_wiki_for_location" for call in enqueue.call_args_list))
+        enqueue.assert_not_called()
 
 
 class EnsureDraftWikiForLocationTaskTests(TestCase):

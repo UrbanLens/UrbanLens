@@ -93,6 +93,11 @@ class EnrichmentSource(ABC):
         verbose_name: Human-readable name for the admin UI; defaults to key.
         service_keys: Rate-limiter service keys consumed per enriched item.
             The per-run budget is the *minimum* budget across these services.
+            Usually a fixed class attribute, but deliberately not a
+            ``ClassVar`` - a subclass whose service depends on runtime
+            configuration (e.g. dispatching to REData vs. direct Google, see
+            ``services.photo_enrichment.PlacePhotoEnrichmentSource``) may
+            override it with a ``@property`` instead.
         calls_per_item: Estimated API calls one :meth:`enrich` makes; budgets
             are divided by this so a two-call source gets half the items.
         geo_boundary: When set, candidate locations are restricted to this
@@ -104,7 +109,7 @@ class EnrichmentSource(ABC):
 
     key: ClassVar[str] = ""
     verbose_name: ClassVar[str] = ""
-    service_keys: ClassVar[tuple[str, ...]] = ()
+    service_keys: tuple[str, ...] = ()
     calls_per_item: ClassVar[int] = 1
     geo_boundary: ClassVar[GeoBoundary | None] = None
     refreshes_names: ClassVar[bool] = False

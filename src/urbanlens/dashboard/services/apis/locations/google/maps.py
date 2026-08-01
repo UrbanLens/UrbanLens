@@ -381,6 +381,27 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
             detail="High resolution - current imagery",
         )
 
+    def get_satellite_image_bytes(self, latitude: float, longitude: float) -> bytes | None:
+        """Return the raw JPEG bytes of a Google Maps Static satellite image, or None if unavailable.
+
+        Decodes the same ``data:`` URI :meth:`_generate_satellite_slides` builds for the live
+        carousel, so there is exactly one place that talks to the Static Maps API - for callers
+        (background photo enrichment) that need to persist the bytes to storage rather than embed
+        them in an HTML response.
+
+        Args:
+            latitude: WGS-84 latitude of the target location.
+            longitude: WGS-84 longitude of the target location.
+
+        Returns:
+            Raw JPEG bytes, or None when no API key is configured or the request fails.
+        """
+        slide = next(self._generate_satellite_slides(latitude, longitude), None)
+        if slide is None:
+            return None
+        _prefix, _sep, b64_data = slide.img_src.partition(",")
+        return base64.b64decode(b64_data)
+
     def get_street_view_single(
         self,
         latitude,

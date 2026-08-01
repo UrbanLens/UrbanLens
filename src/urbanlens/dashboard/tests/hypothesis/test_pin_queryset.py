@@ -327,3 +327,45 @@ class PinManagerGetNearbyOrCreateChildPinTests(TestCase):
         pin, created = Pin.objects.get_nearby_or_create(40.0, -74.0, self.profile, threshold_meters=100)
         self.assertFalse(created)
         self.assertEqual(pin.pk, root.pk)
+
+
+class PinQuerySetWithCachedPhotosTests(TestCase):
+    """with_cached_photos() - "does this pin's location already have a stored photo" lookup.
+
+    A pure DB predicate (no external API call) - see services.photo_enrichment for the
+    background job that populates these Image rows.
+    """
+
+    def setUp(self):
+        self.profile = baker.make("auth.User").profile
+
+    def test_pin_with_a_location_photo_is_included(self) -> None:
+        from urbanlens.dashboard.models.images.model import Image, MediaKind
+
+        location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
+        pin = baker.make(Pin, profile=self.profile, location=location)
+        baker.make(Image, location=location, media_type=MediaKind.PHOTO, pin=None, profile=None)
+        self.assertIn(pin, Pin.objects.with_cached_photos())
+
+    def test_pin_with_no_images_anywhere_is_excluded(self) -> None:
+        location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
+        pin = baker.make(Pin, profile=self.profile, location=location)
+        self.assertNotIn(pin, Pin.objects.with_cached_photos())
+
+    def test_a_different_locations_photo_does_not_leak_in(self) -> None:
+        from urbanlens.dashboard.models.images.model import Image, MediaKind
+
+        photographed_location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
+        baker.make(Image, location=photographed_location, media_type=MediaKind.PHOTO, pin=None, profile=None)
+
+        bare_location = baker.make("dashboard.Location", latitude="41.0", longitude="-75.0")
+        pin = baker.make(Pin, profile=self.profile, location=bare_location)
+        self.assertNotIn(pin, Pin.objects.with_cached_photos())
+
+    def test_non_photo_media_does_not_count(self) -> None:
+        from urbanlens.dashboard.models.images.model import Image, MediaKind
+
+        location = baker.make("dashboard.Location", latitude="40.0", longitude="-74.0")
+        pin = baker.make(Pin, profile=self.profile, location=location)
+        baker.make(Image, location=location, media_type=MediaKind.VIDEO, pin=None, profile=None)
+        self.assertNotIn(pin, Pin.objects.with_cached_photos())

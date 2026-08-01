@@ -34,6 +34,19 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         """Return only top-level pins (excludes personal detail pins)."""
         return self.filter(parent_pin__isnull=True)
 
+    def with_cached_photos(self) -> Self:
+        """Pins whose location already has at least one stored Photo Image.
+
+        A pure DB lookup - no external API call is made or needed. Deliberately
+        not scoped to ``wiki__isnull=False``: this answers "is there already a
+        photo to show" (pin detail display), a superset of "eligible for
+        SpotGuessr Photos mode" (that stricter wiki+relevance filter lives in
+        ``services.spotguessr.photos`` and isn't duplicated here).
+        """
+        from urbanlens.dashboard.models.images.model import Image, MediaKind
+
+        return self.filter(Exists(Image.objects.filter(location_id=OuterRef("location_id"), media_type=MediaKind.PHOTO)))
+
     def filter_by_security_indicators(self, criteria) -> Self:
         """Filter by exact match on each ``security_<field>`` criterion.
 

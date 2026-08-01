@@ -299,11 +299,18 @@ def ensure_draft_wiki_for_pin_location(sender: type[Pin], instance: Pin, created
 
     Skipped when the triggering profile has community features disabled -
     their own action shouldn't kick off community-wiki background work for a
-    location, though another profile's pin there will.
+    location, though another profile's pin there will. Queued on_commit, like
+    every other Celery-enqueuing signal in this module - a pin creation that
+    ultimately rolls back should never have queued anything.
     """
     if not created or instance.location_id is None or not instance.profile.community_enabled:
         return
-    from urbanlens.dashboard.services.celery import safely_enqueue_task
-    from urbanlens.dashboard.tasks import ensure_draft_wiki_for_location
+    location_id = instance.location_id
 
-    safely_enqueue_task(ensure_draft_wiki_for_location, instance.location_id)
+    def _run() -> None:
+        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import ensure_draft_wiki_for_location
+
+        safely_enqueue_task(ensure_draft_wiki_for_location, location_id)
+
+    transaction.on_commit(_run)

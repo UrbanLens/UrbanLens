@@ -44,6 +44,8 @@ class ImageSource(TextChoices):
     LOOPNET = "loopnet", "LoopNet"
     CRIS = "cris", "NY Historic Preservation (CRIS)"
     EXTERNAL_API = "external_api", "External app"
+    GOOGLE_STREET_VIEW = "google_street_view", "Google Street View"
+    GOOGLE_SATELLITE = "google_satellite", "Google Satellite"
 
 
 class MediaKind(TextChoices):

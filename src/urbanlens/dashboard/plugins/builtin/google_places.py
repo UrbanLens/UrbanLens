@@ -183,5 +183,7 @@ class GooglePlacesPlugin(UrbanLensPlugin):
         return [GoogleMapsPhotosPanelSource()]
 
     def get_enrichment_sources(self) -> list[EnrichmentSource]:
-        """Contribute GooglePlace linking to scheduled background enrichment."""
-        return [GooglePlaceLinkEnrichmentSource()]
+        """Contribute GooglePlace linking and photo backfill to scheduled background enrichment."""
+        from urbanlens.dashboard.services.photo_enrichment import PlacePhotoEnrichmentSource
+
+        return [GooglePlaceLinkEnrichmentSource(), PlacePhotoEnrichmentSource()]
