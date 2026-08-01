@@ -84,6 +84,7 @@ function readConfig(el: HTMLElement) {
         detailPinsJsonUrl: d.detailPinsJsonUrl || "",
         detailPinCreateUrl: d.detailPinCreateUrl || "",
         detailPinEditUrlTemplate: d.detailPinEditUrlTemplate || "",
+        detailPinsBulkEditUrl: d.detailPinsBulkEditUrl || "",
         pinShareDialogUrl: d.pinShareDialogUrl || "",
         detailPinsSendToWikiUrl: d.detailPinsSendToWikiUrl || "",
         boundaryUrl: d.boundaryUrl || "",
@@ -485,6 +486,7 @@ function init(): void {
                     .then(() => {
                         toast.success("Detail pin deleted.");
                         loadDetailPins();
+                        fetchBoundaries(0);
                     })
                     .catch(() => toast.error("Failed to delete detail pin."));
             });
@@ -808,6 +810,7 @@ function init(): void {
                     .then(() => {
                         toast.success("Detail pin deleted.");
                         loadDetailPins();
+                        fetchBoundaries(0);
                     })
                     .catch(() => toast.error("Failed to delete detail pin."));
             });
@@ -881,6 +884,7 @@ function init(): void {
                                 entry.latitude = pos.lat;
                                 entry.longitude = pos.lng;
                                 toast.success("Pin moved.");
+                                fetchBoundaries(0);
                             })
                             .catch(() => {
                                 toast.error("Failed to save new position.");
@@ -896,7 +900,7 @@ function init(): void {
             .catch((err) => console.warn("Could not load detail pins:", err));
     }
 
-    // -- Detail pin multi-select: promote or delete several child pins at once --
+    // -- Detail pin multi-select: act on several child pins at once ------------
     // Pin-only (cfg.pinSlug is empty on the wiki page, which shares this module
     // but has no reparentable Pin-backed detail pins to act on) - the button is
     // removed there. Nested entries (entry.owner_name set) are display-only and
@@ -918,7 +922,7 @@ function init(): void {
         }
         const hasSelectable = detailSelectableEntries().length > 0;
         btn.disabled = !hasSelectable;
-        btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple child pins to promote or delete" : "This pin has no child pins to select");
+        btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple child pins" : "This pin has no child pins to select");
         if (!hasSelectable && detailSelectMode) exitDetailPinSelectMode();
     }
 
@@ -968,6 +972,7 @@ function init(): void {
             n,
             n
                 ? {
+                      ...(cfg.detailPinsBulkEditUrl ? { edit: openSelectedDpBulkEditDialog } : {}),
                       promote: doPromoteSelectedDp,
                       // "Share" and "Send to wiki" are pin-only - the wiki page shares
                       // this same module for its own (community) child-wiki toolbar,
@@ -980,6 +985,103 @@ function init(): void {
                 : {},
         );
     }
+
+    function resetSelectedDpBulkEditDialog(): void {
+        document.querySelectorAll<HTMLElement>("[data-dp-bulk-picker]").forEach((picker) => {
+            delete picker.dataset.dpBulkValue;
+            picker.querySelectorAll(".dp-icon-btn--active, .dp-color-swatch--active").forEach((button) => {
+                button.classList.remove("dp-icon-btn--active", "dp-color-swatch--active");
+            });
+        });
+        for (const [kind, defaultValue] of [
+            ["bg", "80"],
+            ["border", "100"],
+        ] as const) {
+            const enabled = document.getElementById(`detail-pin-bulk-${kind}-opacity-enabled`) as HTMLInputElement | null;
+            const range = document.getElementById(`detail-pin-bulk-${kind}-opacity`) as HTMLInputElement | null;
+            if (enabled) enabled.checked = false;
+            if (range) {
+                range.value = defaultValue;
+                range.disabled = true;
+            }
+            const value = document.getElementById(`detail-pin-bulk-${kind}-opacity-value`);
+            if (value) value.textContent = defaultValue;
+        }
+    }
+
+    function openSelectedDpBulkEditDialog(): void {
+        const dialog = document.getElementById("detail-pin-bulk-edit-dialog") as HTMLDialogElement | null;
+        if (!dialog || !selectedDpUuids.size) return;
+        resetSelectedDpBulkEditDialog();
+        const title = document.getElementById("detail-pin-bulk-edit-title");
+        if (title) title.textContent = `Edit ${selectedDpUuids.size} child pin${selectedDpUuids.size === 1 ? "" : "s"}`;
+        dialog.showModal();
+    }
+
+    document.querySelectorAll<HTMLElement>("[data-dp-bulk-picker]").forEach((picker) => {
+        picker.addEventListener("click", (event) => {
+            const button = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-dp-bulk-value]");
+            if (!button || !picker.contains(button)) return;
+            picker.dataset.dpBulkValue = button.dataset.dpBulkValue ?? "";
+            picker.querySelectorAll(".dp-icon-btn, .dp-color-swatch").forEach((candidate) => {
+                candidate.classList.toggle("dp-icon-btn--active", candidate === button && candidate.classList.contains("dp-icon-btn"));
+                candidate.classList.toggle("dp-color-swatch--active", candidate === button && candidate.classList.contains("dp-color-swatch"));
+            });
+        });
+    });
+
+    for (const kind of ["bg", "border"] as const) {
+        const enabled = document.getElementById(`detail-pin-bulk-${kind}-opacity-enabled`) as HTMLInputElement | null;
+        const range = document.getElementById(`detail-pin-bulk-${kind}-opacity`) as HTMLInputElement | null;
+        const value = document.getElementById(`detail-pin-bulk-${kind}-opacity-value`);
+        enabled?.addEventListener("change", () => {
+            if (range) range.disabled = !enabled.checked;
+        });
+        range?.addEventListener("input", () => {
+            if (value) value.textContent = range.value;
+        });
+    }
+
+    document.getElementById("detail-pin-bulk-edit-submit")?.addEventListener("click", async function (this: HTMLButtonElement) {
+        const uuids = Array.from(selectedDpUuids);
+        if (!uuids.length || !cfg.detailPinsBulkEditUrl) return;
+
+        const payload: Record<string, unknown> = { uuids };
+        document.querySelectorAll<HTMLElement>("[data-dp-bulk-picker]").forEach((picker) => {
+            const field = picker.dataset.dpBulkField;
+            if (field && Object.hasOwn(picker.dataset, "dpBulkValue")) payload[field] = picker.dataset.dpBulkValue || null;
+        });
+        for (const kind of ["bg", "border"] as const) {
+            const enabled = document.getElementById(`detail-pin-bulk-${kind}-opacity-enabled`) as HTMLInputElement | null;
+            const range = document.getElementById(`detail-pin-bulk-${kind}-opacity`) as HTMLInputElement | null;
+            if (enabled?.checked && range) payload[`${kind}_opacity`] = Number.parseInt(range.value, 10);
+        }
+        if (Object.keys(payload).length === 1) {
+            toast.info("Choose at least one style to change.");
+            return;
+        }
+
+        const saved = this.innerHTML;
+        this.disabled = true;
+        this.innerHTML = '<i class="material-symbols-outlined spin">progress_activity</i> Saving...';
+        try {
+            const response = await fetch(cfg.detailPinsBulkEditUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+                body: JSON.stringify(payload),
+            });
+            if (!response.ok) throw new Error((await response.text()) || "Update failed.");
+            (document.getElementById("detail-pin-bulk-edit-dialog") as HTMLDialogElement | null)?.close();
+            toast.success(`${uuids.length} child pin${uuids.length === 1 ? "" : "s"} updated.`);
+            clearDpSelection();
+            loadDetailPins();
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : "Failed to update child pins.");
+        } finally {
+            this.disabled = false;
+            this.innerHTML = saved;
+        }
+    });
 
     async function doPromoteSelectedDp(): Promise<void> {
         const uuids = Array.from(selectedDpUuids);
@@ -1000,6 +1102,7 @@ function init(): void {
         if (promoted < n) toast.warning(`${n - promoted} pin${n - promoted === 1 ? "" : "s"} could not be promoted (location conflict).`);
         clearDpSelection();
         loadDetailPins();
+        fetchBoundaries(0);
     }
 
     async function doShareSelectedDp(): Promise<void> {
@@ -1060,6 +1163,7 @@ function init(): void {
         if (deleted < n) toast.warning(`${n - deleted} pin${n - deleted === 1 ? "" : "s"} could not be deleted.`);
         clearDpSelection();
         loadDetailPins();
+        fetchBoundaries(0);
     }
 
     // Rectangle drag-select over detail-pin markers, mirroring the main map's
@@ -1801,6 +1905,7 @@ function init(): void {
             }))
             .then((resp) => {
                 dpCreatedUuid = resp.uuid;
+                fetchBoundaries(0);
             })
             .catch((resp) => toast.error((resp && resp.error) || "Failed to save detail pin."));
     }
@@ -2032,6 +2137,7 @@ function init(): void {
                 toast.success("Detail pin updated.");
                 closeDetailPinPanel();
                 loadDetailPins();
+                fetchBoundaries(0);
             })
             .catch((resp) => {
                 toast.error((resp && resp.error) || "Failed to save detail pin.");
@@ -2047,6 +2153,7 @@ function init(): void {
                 if (!r.ok) throw new Error();
                 closeDetailPinPanel();
                 loadDetailPins();
+                fetchBoundaries(0);
                 toast.success("Detail pin deleted.");
             })
             .catch(() => toast.error("Failed to delete detail pin."));

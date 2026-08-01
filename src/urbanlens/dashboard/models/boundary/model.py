@@ -6,7 +6,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.db.models import MultiPolygonField
-from django.db.models import CASCADE, SET_NULL, CharField, DateTimeField, ForeignKey, IntegerField, Q, TextChoices
+from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTimeField, ForeignKey, IntegerField, Q, TextChoices
 from django.db.models.constraints import UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
@@ -91,10 +91,14 @@ class Boundary(abstract.DashboardModel):
 
     # User-drawn boundary (clearable). None = fall back to generated_polygon.
     polygon = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)
-    # API-fetched boundary (cached). Written by the generation task, never cleared by users -
-    # only ever replaced by a later generation run finding something new (see
-    # services.locations.boundaries.generate_location_boundaries).
+    # Replaceable generated boundary. On location-default rows this is fetched
+    # from official providers; on a pin row with generated_from_children=True it
+    # is the local, tightly-fitted child-pin fallback.
     generated_polygon = MultiPolygonField(geography=True, srid=4326, null=True, blank=True)
+    generated_from_children = BooleanField(
+        default=False,
+        help_text="Marks a pin boundary that may be automatically refitted as its child pins change.",
+    )
     # When the provider chain last ran for this row. A non-null value with a
     # null generated_polygon means "we looked and found nothing" - don't refetch
     # on every page view. Once older than SiteSettings.boundary_cache_days, the

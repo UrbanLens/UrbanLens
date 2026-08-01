@@ -5037,6 +5037,9 @@ body.page-location-details .pin-detail-grid {
     > .page-onboarding,
     > #pin-detail-onboarding { grid-area: onboarding; }
 
+    > #pin-restructure-slot,
+    > #pin-restructure-offer { grid-area: onboarding; }
+
     > #pin-overview { grid-area: overview; }
 
     > .location-map,
@@ -5066,6 +5069,7 @@ body.page-location-details .pin-detail-grid {
     @include up($breakpoint-lg) {
         grid-template-columns: repeat(3, minmax(0, 1fr));
         grid-template-areas:
+            'onboarding onboarding onboarding'
             'overview   overview   overview'
             'map        map        map'
             'media      media      media'
@@ -5076,6 +5080,7 @@ body.page-location-details .pin-detail-grid {
 
     @include up($breakpoint-xl) {
         grid-template-areas:
+            'onboarding onboarding onboarding'
             'overview   overview   overview'
             'map        map        map'
             'media      media      media'

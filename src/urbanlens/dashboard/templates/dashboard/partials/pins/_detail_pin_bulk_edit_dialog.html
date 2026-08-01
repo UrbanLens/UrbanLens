@@ -1,0 +1,80 @@
+{# Bulk visual editor for selected child pins on a pin's detail map. #}
+<dialog id="detail-pin-bulk-edit-dialog" class="ul-dialog tag-edit-dialog detail-pin-bulk-edit-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit child pins" title_id="detail-pin-bulk-edit-title" %}
+    <div class="tag-edit-dialog-body">
+        <p class="form-hint detail-pin-bulk-edit-hint">Only the options you choose will be changed on the selected child pins.</p>
+
+        <div class="form-field">
+            <label class="form-label">Icon</label>
+            <div class="dp-icon-picker" data-dp-bulk-picker data-dp-bulk-field="icon">
+                <button type="button" class="dp-icon-btn" data-dp-bulk-value="" title="Use the automatic icon" aria-label="Use the automatic icon">
+                    <i class="material-symbols-outlined">restart_alt</i>
+                </button>
+                {% for icon_val, icon_label in detail_pin_icon_choices %}
+                <button type="button" class="dp-icon-btn" data-dp-bulk-value="{{ icon_val }}" title="{{ icon_label }}" aria-label="{{ icon_label }}">
+                    <i class="material-icons">{{ icon_val }}</i>
+                </button>
+                {% endfor %}
+            </div>
+            <p class="form-hint">The reset option uses each pin's automatic type icon.</p>
+        </div>
+
+        <div class="detail-pin-bulk-edit-grid">
+            <div class="form-field">
+                <label class="form-label">Icon Color</label>
+                <div class="dp-color-picker" data-dp-bulk-picker data-dp-bulk-field="color">
+                    <button type="button" class="dp-color-swatch dp-color-swatch--none" data-dp-bulk-value="" title="Use the automatic icon color" aria-label="Use the automatic icon color"><span>&empty;</span></button>
+                    {% for color_hex, color_name in color_choices %}
+                    <button type="button" class="dp-color-swatch" data-dp-bulk-value="{{ color_hex }}"
+                            style="background:{{ color_hex }}" title="{{ color_name }}" aria-label="{{ color_name }}"></button>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="form-field">
+                <label class="form-label">Background Color</label>
+                <div class="dp-color-picker" data-dp-bulk-picker data-dp-bulk-field="bg_color">
+                    <button type="button" class="dp-color-swatch dp-color-swatch--none" data-dp-bulk-value="" title="Remove the background" aria-label="Remove the background"><span>&empty;</span></button>
+                    {% for color_hex, color_name in color_choices %}
+                    <button type="button" class="dp-color-swatch" data-dp-bulk-value="{{ color_hex }}"
+                            style="background:{{ color_hex }}" title="{{ color_name }}" aria-label="{{ color_name }}"></button>
+                    {% endfor %}
+                </div>
+                <div class="dp-opacity-row">
+                    <label class="bulk-nochange-label detail-pin-bulk-opacity-toggle" for="detail-pin-bulk-bg-opacity-enabled">
+                        <input type="checkbox" id="detail-pin-bulk-bg-opacity-enabled">
+                        <span>Change opacity</span>
+                    </label>
+                    <input type="range" id="detail-pin-bulk-bg-opacity" min="0" max="100" value="80" disabled aria-label="Background opacity">
+                    <span id="detail-pin-bulk-bg-opacity-value" class="dp-opacity-val">80</span><span class="cop-pct">%</span>
+                </div>
+            </div>
+
+            <div class="form-field">
+                <label class="form-label">Border Color</label>
+                <div class="dp-color-picker" data-dp-bulk-picker data-dp-bulk-field="border_color">
+                    <button type="button" class="dp-color-swatch dp-color-swatch--none" data-dp-bulk-value="" title="Remove the border" aria-label="Remove the border"><span>&empty;</span></button>
+                    {% for color_hex, color_name in color_choices %}
+                    <button type="button" class="dp-color-swatch" data-dp-bulk-value="{{ color_hex }}"
+                            style="background:{{ color_hex }}" title="{{ color_name }}" aria-label="{{ color_name }}"></button>
+                    {% endfor %}
+                </div>
+                <div class="dp-opacity-row">
+                    <label class="bulk-nochange-label detail-pin-bulk-opacity-toggle" for="detail-pin-bulk-border-opacity-enabled">
+                        <input type="checkbox" id="detail-pin-bulk-border-opacity-enabled">
+                        <span>Change opacity</span>
+                    </label>
+                    <input type="range" id="detail-pin-bulk-border-opacity" min="0" max="100" value="100" disabled aria-label="Border opacity">
+                    <span id="detail-pin-bulk-border-opacity-value" class="dp-opacity-val">100</span><span class="cop-pct">%</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="tag-form-actions">
+            <button type="button" id="detail-pin-bulk-edit-submit" class="btn btn--primary">
+                <i class="material-symbols-outlined">edit</i> Apply Changes
+            </button>
+            <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
+        </div>
+    </div>
+</dialog>

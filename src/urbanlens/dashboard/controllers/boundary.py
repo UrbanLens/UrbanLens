@@ -201,6 +201,10 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
         else:
             # Clearing removes the custom row entirely - fall back down the chain.
             Boundary.objects.filter(pin=pin, boundary_type=boundary_type).delete()
+            if boundary_type == BoundaryType.PROPERTY:
+                from urbanlens.dashboard.services.child_pin_boundaries import refit_child_pin_boundary
+
+                refit_child_pin_boundary(pin.pk)
 
         pending = False
         refreshing = False

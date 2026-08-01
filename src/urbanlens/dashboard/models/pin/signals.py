@@ -1,7 +1,7 @@
 import logging
 
 from django.db import transaction
-from django.db.models.signals import m2m_changed, post_delete, post_save
+from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
 from django.dispatch import receiver
 
 from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
@@ -10,6 +10,46 @@ from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 
 logger = logging.getLogger(__name__)
+
+
+@receiver(pre_save, sender=Pin, dispatch_uid="pin_remember_child_boundary_parent")
+def remember_child_boundary_parent(sender: type[Pin], instance: Pin, **kwargs) -> None:
+    """Remember hierarchy/coordinate changes for the post-save boundary hook."""
+    update_fields = kwargs.get("update_fields")
+    if update_fields is not None and not {"parent_pin", "parent_pin_id", "location", "location_id"}.intersection(update_fields):
+        instance.child_boundary_previous_parent_id = instance.parent_pin_id
+        instance.child_boundary_position_changed = False
+        return
+    previous = Pin.objects.filter(pk=instance.pk).values("parent_pin_id", "location_id").first() if instance.pk else None
+    instance.child_boundary_previous_parent_id = previous["parent_pin_id"] if previous else None
+    instance.child_boundary_position_changed = bool(
+        previous
+        and (previous["parent_pin_id"] != instance.parent_pin_id or previous["location_id"] != instance.location_id)
+    )
+
+
+@receiver(post_save, sender=Pin, dispatch_uid="pin_refit_child_boundaries_on_save")
+def refit_child_boundaries_on_save(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
+    """Keep child-generated property boundaries aligned after adds and moves."""
+    if not created and not getattr(instance, "child_boundary_position_changed", False):
+        return
+    from urbanlens.dashboard.services.child_pin_boundaries import refit_child_pin_boundary
+
+    parent_ids = {
+        parent_id
+        for parent_id in (instance.parent_pin_id, instance.child_boundary_previous_parent_id)
+        if parent_id is not None
+    }
+    for parent_id in sorted(parent_ids):
+        refit_child_pin_boundary(parent_id)
+
+
+@receiver(post_delete, sender=Pin, dispatch_uid="pin_refit_child_boundaries_on_delete")
+def refit_child_boundaries_on_delete(sender: type[Pin], instance: Pin, **kwargs) -> None:
+    """Shrink a child-generated property boundary after a child is removed."""
+    from urbanlens.dashboard.services.child_pin_boundaries import refit_child_pin_boundary
+
+    refit_child_pin_boundary(instance.parent_pin_id)
 
 
 @receiver(post_save, sender=Pin, dispatch_uid="pin_invalidate_map_center")

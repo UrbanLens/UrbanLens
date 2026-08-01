@@ -827,6 +827,8 @@
 {# -- Share pin dialog (content loaded via HTMX from pin.share.dialog) ------ #}
 <dialog id="pin-share-dialog" class="pin-share-dialog ul-dialog"></dialog>
 
+{% include "dashboard/partials/pins/_detail_pin_bulk_edit_dialog.html" %}
+
 {# -- Import Photos dialog (Immich/Flickr/Google Photos tabs) -------------- #}
 <dialog id="pin-import-photos-dialog" class="pin-import-photos-dialog ul-dialog">
     {% include "dashboard/partials/pins/_import_photos_dialog.html" %}
@@ -1059,6 +1061,7 @@
      data-detail-pins-json-url="{{ detail_pins_json_url }}{% if include_children %}?children=1{% endif %}"
      data-detail-pin-create-url="{{ detail_pin_create_url }}"
      data-detail-pin-edit-url-template="{{ detail_pin_edit_url_template }}"
+     data-detail-pins-bulk-edit-url="{% url 'pin.bulk_edit' %}"
      data-boundary-url="{{ boundary_url }}"
      data-photo-gallery-json-url="{{ photo_gallery_json_url }}{% if include_children %}?children=1{% endif %}"
      data-nearby-pins-json-url="{{ nearby_pins_json_url }}"

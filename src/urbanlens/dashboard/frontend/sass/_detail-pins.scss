@@ -235,6 +235,51 @@
     }
 }
 
+// -- Child-pin bulk visual editor ---------------------------------------------
+.detail-pin-bulk-edit-hint {
+    margin: 0 0 1rem;
+}
+
+.detail-pin-bulk-edit-grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+
+    @include down($breakpoint-md) {
+        grid-template-columns: 1fr;
+    }
+
+    .form-field {
+        min-width: 0;
+    }
+}
+
+.detail-pin-bulk-edit-dialog {
+    .dp-color-swatch--none {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: transparent;
+        border: 1px dashed var(--ul-grey-4);
+        color: var(--ul-grey-5);
+        font-size: .7rem;
+    }
+
+    .dp-opacity-row {
+        align-items: center;
+        flex-wrap: wrap;
+    }
+
+    .detail-pin-bulk-opacity-toggle {
+        margin-top: 0;
+        white-space: nowrap;
+    }
+
+    .tag-form-actions {
+        margin-top: .5rem;
+    }
+}
+
 // -- Detail-pin delete animation ----------------------------------------------
 .detail-pin-item.is-deleting,
 .detail-pin-wiki-item.is-deleting {

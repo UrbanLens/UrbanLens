@@ -174,7 +174,7 @@ class PinBulkMergeView(LoginRequiredMixin, View):
 
 
 class PinBulkEditView(LoginRequiredMixin, View):
-    """Bulk-edit description, rating, labels, and parent pin across selected pins (JSON POST)."""
+    """Bulk-edit shared content, organization, and marker style across selected pins."""
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
         try:
@@ -191,6 +191,36 @@ class PinBulkEditView(LoginRequiredMixin, View):
         if not pins:
             return HttpResponse("No matching pins.", status=404)
 
+        style_updates: dict[str, str | int | None] = {}
+        for request_field, model_field, max_length in (
+            ("icon", "icon", 255),
+            ("color", "color", 20),
+            ("bg_color", "detail_bg_color", 20),
+            ("border_color", "detail_border_color", 20),
+        ):
+            if request_field not in data:
+                continue
+            raw_value = data[request_field]
+            value = str(raw_value).strip() if raw_value is not None else ""
+            if len(value) > max_length:
+                return HttpResponse(f"{request_field} is too long.", status=400)
+            style_updates[model_field] = value or None
+
+        for request_field, model_field in (
+            ("bg_opacity", "detail_bg_opacity"),
+            ("border_opacity", "detail_border_opacity"),
+        ):
+            if request_field not in data:
+                continue
+            raw_value = data[request_field]
+            try:
+                value = int(raw_value)
+            except (TypeError, ValueError):
+                return HttpResponse(f"{request_field} must be a percentage.", status=400)
+            if isinstance(raw_value, bool) or not 0 <= value <= 100:
+                return HttpResponse(f"{request_field} must be between 0 and 100.", status=400)
+            style_updates[model_field] = value
+
         description = data.get("description")
         if description is not None and str(description).strip():
             length_error = text_length_error(description, MAX_PIN_DESCRIPTION_LENGTH, "Description")
@@ -199,6 +229,13 @@ class PinBulkEditView(LoginRequiredMixin, View):
             for pin in pins:
                 pin.description = description
                 pin.save(update_fields=["description", "updated"])
+
+        if style_updates:
+            update_fields = [*style_updates, "updated"]
+            for pin in pins:
+                for field, value in style_updates.items():
+                    setattr(pin, field, value)
+                pin.save(update_fields=update_fields)
 
         # rating lives on Review (one per profile/pin pair, see PinEditView.post
         # for the single-pin equivalent) - 0 explicitly clears every selected

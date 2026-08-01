@@ -301,6 +301,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     {"action": "wiki", "icon": "public", "label": "Send to wiki"},
                 ],
                 "detail_pin_bulk_actions": [
+                    {"action": "edit", "icon": "edit", "label": "Edit"},
                     {"action": "promote", "icon": "move_up", "label": "Promote to top level"},
                     {"action": "wiki", "icon": "public", "label": "Send to wiki"},
                     {"action": "share", "icon": "ios_share", "label": "Share with a friend"},

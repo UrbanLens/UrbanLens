@@ -137,7 +137,7 @@ class PinPropertyResolutionTests(TestCase):
         wiki = baker.make("dashboard.Wiki", location=self.location)
         baker.make("dashboard.Boundary", wiki=wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_MEDIUM)
 
-        polygon, source = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.PROPERTY)
+        _polygon, source = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.PROPERTY)
         self.assertEqual(source, "wiki")
 
     def test_pin_drawing_beats_everything(self) -> None:
@@ -180,6 +180,66 @@ class PinPropertyResolutionTests(TestCase):
         self.assertFalse(polygon.intersects(_BIG))
 
 
+class ChildGeneratedPropertyBoundaryTests(TestCase):
+    """A pin's child-fitted fallback follows children until the owner draws."""
+
+    def setUp(self):
+        self.profile = baker.make("dashboard.Profile")
+        self.location = baker.make("dashboard.Location", latitude="40.000000", longitude="-74.000000")
+        self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
+
+    def _child(self, latitude: str, longitude: str):
+        location = baker.make("dashboard.Location", latitude=latitude, longitude=longitude)
+        return baker.make("dashboard.Pin", profile=self.profile, location=location, parent_pin=self.pin)
+
+    def test_adding_and_removing_children_refits_generated_boundary(self) -> None:
+        first = self._child("40.000000", "-73.999000")
+        second = self._child("40.001000", "-74.000000")
+        row = Boundary.objects.get(pin=self.pin, boundary_type=BoundaryType.PROPERTY)
+        original_wkt = row.generated_polygon.wkt
+
+        self.assertTrue(row.generated_from_children)
+        self.assertTrue(row.generated_polygon.covers(first.location.point))
+        self.assertTrue(row.generated_polygon.covers(second.location.point))
+
+        second.delete()
+        row.refresh_from_db()
+
+        self.assertNotEqual(row.generated_polygon.wkt, original_wkt)
+        self.assertTrue(row.generated_polygon.covers(first.location.point))
+        self.assertFalse(row.generated_polygon.covers(second.location.point))
+
+    def test_removing_last_child_removes_child_generated_fallback(self) -> None:
+        child = self._child("40.000000", "-73.999000")
+
+        child.delete()
+
+        self.assertFalse(Boundary.objects.filter(pin=self.pin, boundary_type=BoundaryType.PROPERTY).exists())
+
+    def test_manual_pin_boundary_is_not_changed_with_children(self) -> None:
+        child = self._child("40.000000", "-73.999000")
+        row = Boundary.objects.get(pin=self.pin, boundary_type=BoundaryType.PROPERTY)
+        row.polygon = _BIG
+        row.save(update_fields=["polygon", "updated"])
+        generated_wkt = row.generated_polygon.wkt
+
+        child.delete()
+        row.refresh_from_db()
+
+        self.assertEqual(row.polygon.wkt, _BIG.wkt)
+        self.assertEqual(row.generated_polygon.wkt, generated_wkt)
+
+    def test_official_location_boundary_is_never_replaced(self) -> None:
+        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_BIG)
+
+        child = self._child("40.000000", "-73.999000")
+        child.delete()
+
+        official = Boundary.objects.get(location=self.location, pin=None, boundary_type=BoundaryType.PROPERTY)
+        self.assertEqual(official.generated_polygon.wkt, _BIG.wkt)
+        self.assertFalse(Boundary.objects.filter(pin=self.pin, boundary_type=BoundaryType.PROPERTY).exists())
+
+
 class PinBuildingResolutionTests(TestCase):
     """Building boundaries: containment-gated inheritance, no circle fallback."""
 
@@ -194,7 +254,7 @@ class PinBuildingResolutionTests(TestCase):
 
     def test_location_generated_building_applies_to_root_pin(self) -> None:
         baker.make("dashboard.Boundary", location=self.location, boundary_type=BoundaryType.BUILDING, generated_polygon=_SMALL)
-        polygon, source = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.BUILDING)
+        _polygon, source = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.BUILDING)
         self.assertEqual(source, "generated")
 
     def test_detail_pin_inside_parent_building_inherits_it(self) -> None:

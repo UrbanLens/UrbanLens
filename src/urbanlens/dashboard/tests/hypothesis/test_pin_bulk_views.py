@@ -221,7 +221,7 @@ class PinBulkMergeViewTests(TestCase):
 
 
 class PinBulkEditViewTests(TestCase):
-    """POST /map/pins/bulk-edit/ replaces description and adds/removes labels in bulk."""
+    """POST /map/pins/bulk-edit/ updates shared pin fields in bulk."""
 
     def setUp(self) -> None:
         self.user = baker.make(User)
@@ -300,6 +300,53 @@ class PinBulkEditViewTests(TestCase):
         self.assertEqual(response.status_code, 200)
         child.refresh_from_db()
         self.assertEqual(child.description, "child note")
+
+    def test_sets_detail_pin_visual_style_on_every_selected_pin(self) -> None:
+        response = self._edit(
+            {
+                "uuids": [str(self.pin_a.uuid), str(self.pin_b.uuid)],
+                "icon": "door_front",
+                "color": "#2196F3",
+                "bg_color": "#FFFFFF",
+                "bg_opacity": 45,
+                "border_color": "#000000",
+                "border_opacity": 70,
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.pin_a.refresh_from_db()
+        self.pin_b.refresh_from_db()
+        for pin in (self.pin_a, self.pin_b):
+            self.assertEqual(pin.icon, "door_front")
+            self.assertEqual(pin.color, "#2196F3")
+            self.assertEqual(pin.detail_bg_color, "#FFFFFF")
+            self.assertEqual(pin.detail_bg_opacity, 45)
+            self.assertEqual(pin.detail_border_color, "#000000")
+            self.assertEqual(pin.detail_border_opacity, 70)
+
+    def test_visual_fields_are_partial_and_can_be_cleared(self) -> None:
+        self.pin_a.icon = "warning"
+        self.pin_a.color = "#F44336"
+        self.pin_a.detail_bg_color = "#FFFFFF"
+        self.pin_a.detail_bg_opacity = 80
+        self.pin_a.save()
+
+        response = self._edit({"uuids": [str(self.pin_a.uuid)], "icon": None, "bg_opacity": 0})
+
+        self.assertEqual(response.status_code, 200)
+        self.pin_a.refresh_from_db()
+        self.assertIsNone(self.pin_a.icon)
+        self.assertEqual(self.pin_a.color, "#F44336")
+        self.assertEqual(self.pin_a.detail_bg_color, "#FFFFFF")
+        self.assertEqual(self.pin_a.detail_bg_opacity, 0)
+
+    def test_rejects_visual_opacity_outside_percentage_range(self) -> None:
+        response = self._edit({"uuids": [str(self.pin_a.uuid)], "bg_opacity": 101})
+
+        self.assertEqual(response.status_code, 400)
+        self.pin_a.refresh_from_db()
+        self.assertEqual(self.pin_a.detail_bg_opacity, 80)
 
     def test_sets_rating_on_all_selected_pins(self) -> None:
         """rating lives on Review (one per profile/pin pair), not a plain Pin field."""

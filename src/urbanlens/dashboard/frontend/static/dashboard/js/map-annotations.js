@@ -29,6 +29,7 @@ function readConfig(el) {
     detailPinsJsonUrl: d.detailPinsJsonUrl || "",
     detailPinCreateUrl: d.detailPinCreateUrl || "",
     detailPinEditUrlTemplate: d.detailPinEditUrlTemplate || "",
+    detailPinsBulkEditUrl: d.detailPinsBulkEditUrl || "",
     pinShareDialogUrl: d.pinShareDialogUrl || "",
     detailPinsSendToWikiUrl: d.detailPinsSendToWikiUrl || "",
     boundaryUrl: d.boundaryUrl || "",
@@ -345,6 +346,7 @@ function init() {
         }).then(() => {
           toast.success("Detail pin deleted.");
           loadDetailPins();
+          fetchBoundaries(0);
         }).catch(() => toast.error("Failed to delete detail pin."));
       });
       ul.appendChild(li);
@@ -641,6 +643,7 @@ function init() {
         }).then(() => {
           toast.success("Detail pin deleted.");
           loadDetailPins();
+          fetchBoundaries(0);
         }).catch(() => toast.error("Failed to delete detail pin."));
       });
       actions.appendChild(deleteBtn);
@@ -702,6 +705,7 @@ function init() {
             entry.latitude = pos.lat;
             entry.longitude = pos.lng;
             toast.success("Pin moved.");
+            fetchBoundaries(0);
           }).catch(() => {
             toast.error("Failed to save new position.");
             marker.setLatLng([entry.latitude, entry.longitude]);
@@ -730,7 +734,7 @@ function init() {
     }
     const hasSelectable = detailSelectableEntries().length > 0;
     btn.disabled = !hasSelectable;
-    btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple child pins to promote or delete" : "This pin has no child pins to select");
+    btn.setAttribute("data-tooltip", hasSelectable ? "Select multiple child pins" : "This pin has no child pins to select");
     if (!hasSelectable && detailSelectMode)
       exitDetailPinSelectMode();
   }
@@ -777,6 +781,7 @@ function init() {
   function renderDetailBulkToolbar() {
     const n = selectedDpUuids.size;
     window.ulBulkToolbar?.sync("detailpins", n, n ? {
+      ...cfg.detailPinsBulkEditUrl ? { edit: openSelectedDpBulkEditDialog } : {},
       promote: doPromoteSelectedDp,
       ...cfg.pinShareDialogUrl ? { share: doShareSelectedDp } : {},
       ...cfg.detailPinsSendToWikiUrl ? { wiki: doSendSelectedDpToWiki } : {},
@@ -784,6 +789,107 @@ function init() {
       deselect: clearDpSelection
     } : {});
   }
+  function resetSelectedDpBulkEditDialog() {
+    document.querySelectorAll("[data-dp-bulk-picker]").forEach((picker) => {
+      delete picker.dataset.dpBulkValue;
+      picker.querySelectorAll(".dp-icon-btn--active, .dp-color-swatch--active").forEach((button) => {
+        button.classList.remove("dp-icon-btn--active", "dp-color-swatch--active");
+      });
+    });
+    for (const [kind, defaultValue] of [
+      ["bg", "80"],
+      ["border", "100"]
+    ]) {
+      const enabled = document.getElementById(`detail-pin-bulk-${kind}-opacity-enabled`);
+      const range = document.getElementById(`detail-pin-bulk-${kind}-opacity`);
+      if (enabled)
+        enabled.checked = false;
+      if (range) {
+        range.value = defaultValue;
+        range.disabled = true;
+      }
+      const value = document.getElementById(`detail-pin-bulk-${kind}-opacity-value`);
+      if (value)
+        value.textContent = defaultValue;
+    }
+  }
+  function openSelectedDpBulkEditDialog() {
+    const dialog = document.getElementById("detail-pin-bulk-edit-dialog");
+    if (!dialog || !selectedDpUuids.size)
+      return;
+    resetSelectedDpBulkEditDialog();
+    const title = document.getElementById("detail-pin-bulk-edit-title");
+    if (title)
+      title.textContent = `Edit ${selectedDpUuids.size} child pin${selectedDpUuids.size === 1 ? "" : "s"}`;
+    dialog.showModal();
+  }
+  document.querySelectorAll("[data-dp-bulk-picker]").forEach((picker) => {
+    picker.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-dp-bulk-value]");
+      if (!button || !picker.contains(button))
+        return;
+      picker.dataset.dpBulkValue = button.dataset.dpBulkValue ?? "";
+      picker.querySelectorAll(".dp-icon-btn, .dp-color-swatch").forEach((candidate) => {
+        candidate.classList.toggle("dp-icon-btn--active", candidate === button && candidate.classList.contains("dp-icon-btn"));
+        candidate.classList.toggle("dp-color-swatch--active", candidate === button && candidate.classList.contains("dp-color-swatch"));
+      });
+    });
+  });
+  for (const kind of ["bg", "border"]) {
+    const enabled = document.getElementById(`detail-pin-bulk-${kind}-opacity-enabled`);
+    const range = document.getElementById(`detail-pin-bulk-${kind}-opacity`);
+    const value = document.getElementById(`detail-pin-bulk-${kind}-opacity-value`);
+    enabled?.addEventListener("change", () => {
+      if (range)
+        range.disabled = !enabled.checked;
+    });
+    range?.addEventListener("input", () => {
+      if (value)
+        value.textContent = range.value;
+    });
+  }
+  document.getElementById("detail-pin-bulk-edit-submit")?.addEventListener("click", async function() {
+    const uuids = Array.from(selectedDpUuids);
+    if (!uuids.length || !cfg.detailPinsBulkEditUrl)
+      return;
+    const payload = { uuids };
+    document.querySelectorAll("[data-dp-bulk-picker]").forEach((picker) => {
+      const field = picker.dataset.dpBulkField;
+      if (field && Object.hasOwn(picker.dataset, "dpBulkValue"))
+        payload[field] = picker.dataset.dpBulkValue || null;
+    });
+    for (const kind of ["bg", "border"]) {
+      const enabled = document.getElementById(`detail-pin-bulk-${kind}-opacity-enabled`);
+      const range = document.getElementById(`detail-pin-bulk-${kind}-opacity`);
+      if (enabled?.checked && range)
+        payload[`${kind}_opacity`] = Number.parseInt(range.value, 10);
+    }
+    if (Object.keys(payload).length === 1) {
+      toast.info("Choose at least one style to change.");
+      return;
+    }
+    const saved = this.innerHTML;
+    this.disabled = true;
+    this.innerHTML = '<i class="material-symbols-outlined spin">progress_activity</i> Saving...';
+    try {
+      const response = await fetch(cfg.detailPinsBulkEditUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok)
+        throw new Error(await response.text() || "Update failed.");
+      document.getElementById("detail-pin-bulk-edit-dialog")?.close();
+      toast.success(`${uuids.length} child pin${uuids.length === 1 ? "" : "s"} updated.`);
+      clearDpSelection();
+      loadDetailPins();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to update child pins.");
+    } finally {
+      this.disabled = false;
+      this.innerHTML = saved;
+    }
+  });
   async function doPromoteSelectedDp() {
     const uuids = Array.from(selectedDpUuids);
     if (!uuids.length)
@@ -805,6 +911,7 @@ function init() {
       toast.warning(`${n - promoted} pin${n - promoted === 1 ? "" : "s"} could not be promoted (location conflict).`);
     clearDpSelection();
     loadDetailPins();
+    fetchBoundaries(0);
   }
   async function doShareSelectedDp() {
     if (!cfg.pinShareDialogUrl)
@@ -868,6 +975,7 @@ function init() {
       toast.warning(`${n - deleted} pin${n - deleted === 1 ? "" : "s"} could not be deleted.`);
     clearDpSelection();
     loadDetailPins();
+    fetchBoundaries(0);
   }
   (function initDetailPinDragSelect() {
     mapEl.addEventListener("mousedown", (e) => {
@@ -1500,6 +1608,7 @@ function init() {
       return resp;
     })).then((resp) => {
       dpCreatedUuid = resp.uuid;
+      fetchBoundaries(0);
     }).catch((resp) => toast.error(resp && resp.error || "Failed to save detail pin."));
   }
   function scheduleDpAutoSave() {
@@ -1698,6 +1807,7 @@ function init() {
       toast.success("Detail pin updated.");
       closeDetailPinPanel();
       loadDetailPins();
+      fetchBoundaries(0);
     }).catch((resp) => {
       toast.error(resp && resp.error || "Failed to save detail pin.");
       submitBtn.disabled = false;
@@ -1713,6 +1823,7 @@ function init() {
         throw new Error;
       closeDetailPinPanel();
       loadDetailPins();
+      fetchBoundaries(0);
       toast.success("Detail pin deleted.");
     }).catch(() => toast.error("Failed to delete detail pin."));
   });
