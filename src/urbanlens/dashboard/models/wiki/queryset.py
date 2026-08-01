@@ -12,6 +12,7 @@ from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
@@ -58,33 +59,49 @@ class WikiQuerySet(abstract.PublicDashboardQuerySet):
 class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
     """Manager for Wiki.
 
-    Wikis are only ever created explicitly by a user (the "Create community
-    wiki" button on the pin detail page, via ``WikiCreationService``). Use
-    ``get_for_location`` for the common "does this place have a wiki?" lookup.
+    A wiki page becomes user-visible either when a user explicitly creates it
+    (the "Create community wiki" button on the pin detail page, via
+    ``WikiCreationService`` -> ``claim_for_location``), or - since a Wiki row
+    can now also exist as an unofficial *draft*, auto-created in the
+    background by ``tasks.ensure_draft_wiki_for_location`` so enrichment has
+    something to populate ahead of time - when a user's create action
+    promotes an existing draft. See ``Wiki.officially_created``.
+
+    Use ``get_for_location`` for the common "does this place have a
+    user-visible wiki?" lookup; it deliberately ignores draft rows.
     """
 
     def get_for_location(self, location: Location | None) -> Wiki | None:
-        """Return the Wiki for a Location, or None when the place has no wiki yet.
+        """Return the location's *official* Wiki, or None when it has no visible wiki yet.
+
+        A draft (``officially_created=False``) counts as "no wiki" here - this
+        is the check every user- and API-facing surface should use to decide
+        whether to show wiki content vs. a "Create Wiki" affordance.
 
         Args:
             location: The shared Location to look up (None-safe).
 
         Returns:
-            The Wiki, or None.
+            The official Wiki, or None.
         """
         if location is None:
             return None
         try:
-            return location.wiki
+            wiki = location.wiki
         except ObjectDoesNotExist:
             return None
+        return wiki if wiki.officially_created else None
 
     def get_or_create_for_location(self, location: Location, defaults: dict | None = None) -> tuple[Wiki, bool]:
-        """Return the Wiki for a Location, creating it if absent.
+        """Return the Wiki for a Location, creating it (as official) if absent.
 
-        Wikis are user-initiated: this must only be called from an explicit
-        create action (``WikiCreationService``), never as a lazy side effect of
-        viewing or editing other content - use ``get_for_location`` there.
+        General-purpose get-or-create; a freshly created row defaults to
+        ``officially_created=True`` (see the field's own docstring). Most
+        callers wanting the "Create Wiki" button's semantics - including
+        correctly promoting a pre-existing draft - should use
+        ``claim_for_location`` instead. This must never be called as a lazy
+        side effect of viewing or editing other content - use
+        ``get_for_location`` there.
 
         Args:
             location: The shared Location to attach the wiki to.
@@ -103,4 +120,68 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
         placeholder = f"Unnamed Location in {location.area_label}" if location.area_label else "Unnamed Location"
         name = defaults.pop("name", None) or location.official_name or placeholder
         wiki = self.create(location=location, name=name, **defaults)
+        return wiki, True
+
+    def get_or_create_draft_for_location(self, location: Location) -> tuple[Wiki, bool]:
+        """Return the Wiki for a Location, creating an unofficial draft if absent.
+
+        Used only by ``tasks.ensure_draft_wiki_for_location``, queued whenever
+        a pin gets a shared Location, so background enrichment (Google place
+        linking, name resolution, boundary generation, Wikipedia seeding) has
+        a row to populate before any user has clicked "Create Wiki". The
+        draft stays invisible to users (see ``get_for_location``) until
+        ``claim_for_location`` promotes it.
+
+        Args:
+            location: The shared Location to attach the draft wiki to.
+
+        Returns:
+            Tuple of (Wiki, created).
+        """
+        try:
+            return location.wiki, False
+        except ObjectDoesNotExist:
+            pass
+
+        placeholder = f"Unnamed Location in {location.area_label}" if location.area_label else "Unnamed Location"
+        wiki = self.create(location=location, name=location.official_name or placeholder, officially_created=False)
+        return wiki, True
+
+    def claim_for_location(self, location: Location, profile: Profile) -> tuple[Wiki, bool]:
+        """Create or officially claim the Wiki for a Location on behalf of ``profile``.
+
+        Backs the "Create community wiki" button (``WikiCreationService``).
+        Three cases:
+
+        - No Wiki row exists yet: create one, official, attributed to
+          ``profile``.
+        - An unofficial draft exists (auto-created in the background ahead of
+          any user action): promote it - flip ``officially_created`` and
+          attribute it to ``profile``, since nobody has claimed it yet.
+        - An already-official Wiki exists: return it unchanged - never
+          re-attribute or re-seed someone else's wiki.
+
+        Args:
+            location: The shared Location to claim a wiki for.
+            profile: The profile performing the explicit create action.
+
+        Returns:
+            Tuple of (Wiki, newly_official). ``newly_official`` is True for
+            the first two cases - callers should treat this like a fresh
+            creation (seed content, enqueue enrichment) - and False for the
+            third.
+        """
+        try:
+            wiki = location.wiki
+        except ObjectDoesNotExist:
+            placeholder = f"Unnamed Location in {location.area_label}" if location.area_label else "Unnamed Location"
+            wiki = self.create(location=location, name=location.official_name or placeholder, created_by=profile, officially_created=True)
+            return wiki, True
+
+        if wiki.officially_created:
+            return wiki, False
+
+        self.filter(pk=wiki.pk).update(officially_created=True, created_by=profile)
+        wiki.officially_created = True
+        wiki.created_by = profile
         return wiki, True

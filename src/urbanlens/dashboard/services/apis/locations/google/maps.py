@@ -1034,8 +1034,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
               ``description``, ``cid``, ``maps_url`` (the source Google Maps
               URL, when the pin came from one - passed to REData for a more
               reliable deferred lookup), and ``label_ids`` (list[int]) fields.
-              Imports never create community wiki entries or hit external APIs;
-              wikis are created explicitly by the user from the pin detail page.
+              Imports never hit external APIs synchronously; each created pin's
+              ``Pin`` post_save signal (``models.pin.signals``) does queue a
+              background task that may create an unofficial draft Wiki row for
+              its Location (see ``Wiki.officially_created``), but that row
+              stays invisible until a user explicitly creates the wiki from
+              the pin detail page.
 
         A pin whose ``cid`` has no existing ``Location`` *and* no cached
         Places lookup is never placed from the client-supplied ``lat``/``lng``

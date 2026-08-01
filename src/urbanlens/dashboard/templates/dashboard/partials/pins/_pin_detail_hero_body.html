@@ -52,7 +52,7 @@ in context, plus the wiki/linking context used by the overview panel.
 
     {% if user.profile.community_enabled %}
         {% if pin.location and pin.location.slug %}
-            {% if pin.location.wiki %}
+            {% if pin.location.wiki and pin.location.wiki.officially_created %}
             <aside class="pin-hero-wiki-box" id="pin-location-section">
                 <i class="material-symbols-outlined">public</i>
                 <div class="pin-hero-wiki-box-info">

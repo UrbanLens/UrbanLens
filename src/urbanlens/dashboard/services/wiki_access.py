@@ -260,10 +260,12 @@ def visible_wiki_location_ids(profile: Profile) -> set[int]:
 def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Location, Wiki, Profile]:
     """Resolve a Location and its Wiki, 404ing unless the requester has pinned that Location.
 
-    A location with no wiki yet, a location_slug that doesn't exist at all,
-    and a real wiki the requester hasn't pinned all raise the identical
-    ``Http404`` - deliberately indistinguishable, so guessing slugs can never
-    reveal which locations other users have pinned.
+    A location with no wiki yet, a location whose only wiki is still an
+    unofficial background-created draft (see ``Wiki.officially_created``), a
+    location_slug that doesn't exist at all, and a real wiki the requester
+    hasn't pinned all raise the identical ``Http404`` - deliberately
+    indistinguishable, so guessing slugs can never reveal which locations
+    other users have pinned (or which have a draft quietly being enriched).
 
     Wiki.location stays a strict one-to-one to a single canonical Location -
     ``location_visible_to`` is what actually absorbs the "nearly-identical
@@ -289,7 +291,7 @@ def resolve_visible_wiki(request: HttpRequest, location_slug: str) -> tuple[Loca
     from urbanlens.dashboard.models.wiki.model import Wiki
 
     location = get_object_or_404(Location.objects.slug_or_uuid(location_slug))
-    wiki = get_object_or_404(Wiki, location=location)
+    wiki = get_object_or_404(Wiki, location=location, officially_created=True)
     profile, _ = Profile.objects.get_or_create(user=request.user)
     if not location_visible_to(location, profile):
         raise Http404

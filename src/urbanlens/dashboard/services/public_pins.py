@@ -343,7 +343,11 @@ def sync_public_pin_suggestions() -> int:
         Number of suggestions created.
     """
     created = 0
-    passed = PublicPinCandidate.objects.passed().select_related("location__wiki")
+    # officially_created=True: a still-unofficial background draft (see
+    # Wiki.officially_created) must not be used to suggest a pin - by name -
+    # to every community-enabled profile site-wide before anyone has
+    # actually created the page.
+    passed = PublicPinCandidate.objects.passed().filter(location__wiki__officially_created=True).select_related("location__wiki")
     for candidate in passed:
         location = candidate.location
         wiki = location.wiki

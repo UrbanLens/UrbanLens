@@ -443,8 +443,12 @@ class WikiSearchProvider(SearchProvider):
 
         if not profile.community_enabled:
             return []
+        # officially_created=True: an unofficial background draft (see
+        # Wiki.officially_created) must stay invisible in search just like
+        # everywhere else, until a user actually creates it.
         queryset = Wiki.objects.filter(
             Q(location__pins__profile=profile) | Q(created_by=profile),
+            officially_created=True,
         ).select_related("location")
         if parsed.place:
             queryset = queryset.filter(place_filter("location", parsed.place))
@@ -486,7 +490,10 @@ class ArticleSearchProvider(SearchProvider):
 
         access = Q(pin__profile=profile)
         if profile.community_enabled:
-            access |= Q(wiki__location__pins__profile=profile) | Q(wiki__created_by=profile)
+            # officially_created=True: a draft's seeded Wikipedia article (see
+            # models.cache.signals) must not leak into search before the wiki
+            # itself is user-visible.
+            access |= Q(wiki__officially_created=True) & (Q(wiki__location__pins__profile=profile) | Q(wiki__created_by=profile))
         queryset = Article.objects.filter(access).exclude(content="").select_related("pin__location__wiki", "wiki__location", "last_edited_by__user")
         if parsed.place:
             queryset = queryset.filter(place_filter("pin__location", parsed.place) | place_filter("wiki__location", parsed.place))

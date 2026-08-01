@@ -137,6 +137,17 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         blank=True,
         related_name="created_wikis",
     )
+    # False only for a wiki auto-created in the background by
+    # tasks.ensure_draft_wiki_for_location, ahead of any user action - lets
+    # enrichment (Google place linking, name resolution, boundary generation,
+    # Wikipedia seeding) populate the page before anyone has clicked "Create".
+    # Every other creation path (the pin page's Create button via
+    # WikiManager.claim_for_location, child-wiki mirroring/sync, wiki splits)
+    # creates an already-official wiki, hence the default. Every user- and
+    # API-visible surface must treat officially_created=False the same as "no
+    # wiki exists yet" - see WikiManager.get_for_location and
+    # services.wiki_access.resolve_visible_wiki.
+    officially_created = BooleanField(default=True)
     # Flips true the first time a profile other than created_by views the
     # wiki page (see LocationWikiView.get). Once true, the wiki is community
     # content and its creator can no longer unilaterally delete it.

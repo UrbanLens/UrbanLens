@@ -20,18 +20,57 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def enrich_wiki_location(self, wiki_id: int) -> bool:
-    """Enrich a freshly user-created Wiki's Location with external data.
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def ensure_draft_wiki_for_location(location_id: int) -> int | None:
+    """Auto-create an unofficial draft Wiki for a Location, so enrichment can get a head start.
 
-    Runs after the user clicks "Create community wiki": links the Location to
-    its Google Place, resolves a canonical name when the wiki is still
-    unnamed, and generates the location's default property/building
-    boundaries. This is the only place these APIs are hit for a new wiki -
-    pin creation and bulk imports do no external work.
+    Queued by the ``Pin`` post_save signal (``models.pin.signals``) whenever a
+    pin gets a shared Location, for any community-enabled profile - covering
+    every pin-creation path (manual add, CSV/Google Maps import, Flickr,
+    Immich, GPX) with one hook. The row itself is a cheap DB-only write; no
+    external API is touched here or by the signal that queued this - that
+    only happens below, once, when the draft is first created.
+
+    The draft stays invisible to users and the external API (see
+    ``Wiki.officially_created`` and ``WikiManager.get_for_location``) until a
+    user's own "Create Wiki" click promotes it (``WikiManager.claim_for_location``)
+    - by then it's already enriched and ready to go.
 
     Args:
-        wiki_id: PK of the newly created Wiki.
+        location_id: PK of the Location that just gained a pin.
+
+    Returns:
+        PK of the Wiki (new or pre-existing), or None if the Location no
+        longer exists.
+    """
+    from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.celery import safely_enqueue_task
+
+    location = Location.objects.filter(pk=location_id).first()
+    if location is None:
+        logger.info("ensure_draft_wiki_for_location: location %s no longer exists", location_id)
+        return None
+
+    wiki, created = Wiki.objects.get_or_create_draft_for_location(location)
+    if created:
+        safely_enqueue_task(enrich_wiki_location, wiki.pk)
+    return wiki.pk
+
+
+@shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def enrich_wiki_location(self, wiki_id: int) -> bool:
+    """Enrich a Wiki's Location with external data.
+
+    Runs either after a user clicks "Create community wiki", or right after
+    ``ensure_draft_wiki_for_location`` auto-creates an unofficial draft in the
+    background: links the Location to its Google Place, resolves a canonical
+    name when the wiki is still unnamed, and generates the location's default
+    property/building boundaries. This is the only place these APIs are hit
+    for a wiki - pin creation and bulk imports never call them synchronously.
+
+    Args:
+        wiki_id: PK of the Wiki to enrich.
 
     Returns:
         True when the wiki still existed and enrichment ran.

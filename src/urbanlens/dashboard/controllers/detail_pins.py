@@ -303,9 +303,12 @@ class LocationDetailPinJsonView(LoginRequiredMixin, View):
         try:
             wiki = location.wiki
         except ObjectDoesNotExist:
-            # A location with no wiki yet simply has no child wikis to show -
-            # the map overlay shouldn't error just because nobody has created
-            # a wiki page for this spot.
+            wiki = None
+        if wiki is None or not wiki.officially_created:
+            # A location with no wiki yet - or only a still-unofficial
+            # background draft (see Wiki.officially_created) - simply has no
+            # child wikis to show; the map overlay shouldn't error, or leak
+            # the draft, just because nobody has created a wiki page yet.
             return JsonResponse({"detail_pins": []})
         child_wikis = wiki.child_wikis.order_by("pin_type", "name")
         return JsonResponse({"detail_pins": [cw.to_detail_json() for cw in child_wikis]})

@@ -283,7 +283,27 @@ def sync_pin_stats_to_wiki(sender: type[Pin], instance: Pin, **kwargs) -> None:
         _sync_pin_stat_to_wiki(instance.wiki_id, instance.profile_id, wiki_field, getattr(instance, pin_field))
 
 
-# NOTE: Pins no longer trigger any community wiki or boundary creation on save.
-# Wikis are created explicitly by the user from the pin detail page, and default
-# boundaries are generated lazily when a pin detail page is first viewed - so
-# bulk imports create zero external API work.
+@receiver(post_save, sender=Pin, dispatch_uid="pin_ensure_draft_wiki")
+def ensure_draft_wiki_for_pin_location(sender: type[Pin], instance: Pin, created: bool, **kwargs) -> None:
+    """Queue background creation of an unofficial draft Wiki for a newly pinned Location.
+
+    Fires for every pin-creation path (manual add, CSV/Google Maps import,
+    Flickr, Immich, GPX) since it's a model-level signal rather than a
+    per-importer call - that's what makes this "still happens for bulk
+    imports, but in the background" without slowing any of them down: the
+    enqueue itself is a cheap non-blocking broker publish (see
+    ``tasks.ensure_draft_wiki_for_location``), and the wiki stays an
+    invisible draft (see ``Wiki.officially_created``) until the user
+    explicitly clicks "Create Wiki" - default boundaries are still generated
+    lazily on first pin-detail-page view, unchanged.
+
+    Skipped when the triggering profile has community features disabled -
+    their own action shouldn't kick off community-wiki background work for a
+    location, though another profile's pin there will.
+    """
+    if not created or instance.location_id is None or not instance.profile.community_enabled:
+        return
+    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import ensure_draft_wiki_for_location
+
+    safely_enqueue_task(ensure_draft_wiki_for_location, instance.location_id)

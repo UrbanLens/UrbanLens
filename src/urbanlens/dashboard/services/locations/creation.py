@@ -1,10 +1,15 @@
 """Explicit, user-initiated creation of community Wikis for a pin's Location.
 
-Wikis are never created automatically any more: the user clicks "Create
-community wiki" on the pin detail page and chooses which of their pin's fields
-(if any) to seed the new wiki with. External enrichment (Google place linking,
-name resolution, boundary generation) runs afterwards in a Celery task so pin
-creation and bulk imports never touch external APIs.
+The user clicks "Create community wiki" on the pin detail page and chooses
+which of their pin's fields (if any) to seed the new wiki with. The Wiki row
+itself may already exist as an unofficial draft (see
+``Wiki.officially_created`` and ``tasks.ensure_draft_wiki_for_location``,
+which auto-creates one in the background as soon as a pin gets a shared
+Location) - ``WikiManager.claim_for_location`` handles promoting that draft
+the same way as a from-scratch creation. External enrichment (Google place
+linking, name resolution, boundary generation) runs in a Celery task, either
+here or already-triggered by the draft's own creation, so pin creation and
+bulk imports never touch external APIs synchronously.
 """
 
 from __future__ import annotations
@@ -61,14 +66,15 @@ class WikiCreationService:
             pin: The pin whose Location gets a community wiki.
             include_fields: Subset of :data:`SEEDABLE_FIELDS` the user chose to
                 copy from their pin into the new wiki. Ignored when the wiki
-                already exists (never overwrite community content with
-                personal data).
+                is already official (never overwrite community content with
+                personal data) - a still-unofficial draft is fair game, since
+                nobody has edited it yet.
             alias_ids: PKs of the pin's own (non-official) aliases to copy in
                 as wiki aliases, on top of official ones (always copied).
             image_ids: PKs of the pin's own photos to also attach to the wiki.
 
         Returns:
-            Tuple of (Wiki, created).
+            Tuple of (Wiki, newly_official) - see ``WikiManager.claim_for_location``.
 
         Raises:
             ValueError: If the pin has no Location to attach a wiki to.
@@ -80,8 +86,8 @@ class WikiCreationService:
         location: Location = pin.location
 
         with transaction.atomic():
-            wiki, created = Wiki.objects.get_or_create_for_location(location, defaults={"created_by": pin.profile})
-            if created:
+            wiki, newly_official = Wiki.objects.claim_for_location(location, pin.profile)
+            if newly_official:
                 for field in _SEEDABLE_VOTE_FIELDS:
                     if field not in include:
                         continue
@@ -109,10 +115,13 @@ class WikiCreationService:
 
             seed_wiki_article_from_wikipedia(location)
 
-        if created:
+        if newly_official:
+            # Re-running enrichment here is safe even for a promoted draft
+            # that was already enriched by ensure_draft_wiki_for_location -
+            # enrich_wiki_location only ever fills in what's still missing.
             transaction.on_commit(_enqueue)
             transaction.on_commit(_seed_article)
-        return wiki, created
+        return wiki, newly_official
 
     def _seed_aliases(self, pin: Pin, wiki: Wiki, alias_ids: set[int]) -> None:
         """Copy the pin's official aliases (always) plus any chosen extras into the wiki."""

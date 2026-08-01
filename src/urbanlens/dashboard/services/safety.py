@@ -1547,9 +1547,10 @@ def attach_draft_markup_map(checkin: SafetyCheckin, profile: Profile, map_uuid: 
 def find_community_wiki(latitude: float | Decimal | None, longitude: float | Decimal | None) -> Wiki | None:
     """Return the community Wiki covering a destination point, if one already exists.
 
-    Only *existing* wikis count - wikis are created explicitly by users (see
-    ``WikiCreationService``), and a check-in escalation must not conjure a
-    community page for a place nobody has written about. Matching mirrors
+    Only *official* wikis count - a still-unofficial background draft (see
+    ``Wiki.officially_created``) doesn't either, since a check-in escalation
+    must not conjure (or silently post to) a community page for a place
+    nobody has actually written about yet. Matching mirrors
     ``LocationManager.get_for_point``: location-default generated boundary
     polygons first, then a 50 m proximity fallback.
 
@@ -1558,13 +1559,13 @@ def find_community_wiki(latitude: float | Decimal | None, longitude: float | Dec
         longitude: WGS-84 longitude of the destination, or None if no destination is set.
 
     Returns:
-        The matching Wiki, or None when there is no destination or no wiki covers it.
+        The matching Wiki, or None when there is no destination or no official wiki covers it.
     """
     if latitude is None or longitude is None:
         return None
     from urbanlens.dashboard.models.location.model import Location
 
-    location = Location.objects.filter(wiki__isnull=False).within_bounding_box(float(latitude), float(longitude)).first()
+    location = Location.objects.filter(wiki__officially_created=True).within_bounding_box(float(latitude), float(longitude)).first()
     return location.wiki if location else None
 
 
