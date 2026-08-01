@@ -134,3 +134,18 @@
         background: var(--ul-hover-bg);
     }
 }
+
+// -- Fly-to-corner dismiss animation -----------------------------------------
+// Applied by window.ulFlyToToolsFab (see themes/base.html) to auto-loading
+// cards that discover they have nothing to show, so they shrink and fly
+// toward the tools FAB instead of vanishing instantly.
+.ext-panel-dismissing {
+    transition: transform .38s cubic-bezier(.4, 0, .2, 1), opacity .3s ease-in;
+    transform: translate(var(--ext-panel-dismiss-x, 0), var(--ext-panel-dismiss-y, 0)) scale(.12);
+    opacity: 0;
+
+    @media (prefers-reduced-motion: reduce) {
+        transition: opacity .15s ease-in;
+        transform: none;
+    }
+}

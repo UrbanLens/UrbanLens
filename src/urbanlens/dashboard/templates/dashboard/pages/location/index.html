@@ -1369,7 +1369,10 @@
         }
 
         // HTMX does not perform a swap for 204 No Content responses, so the
-        // "Loading..." placeholder stays visible forever.  Remove it explicitly.
+        // "Loading..." placeholder stays visible forever. Dismiss it explicitly
+        // (window.ulFlyToToolsFab, see themes/base.html) rather than a bare
+        // el.remove() - the card shrinks and flies toward the tools FAB instead
+        // of vanishing instantly and shifting the page underneath it.
         document.body.addEventListener('htmx:afterOnLoad', function (evt) {
             var el = evt.detail && evt.detail.elt;
             if (isExtPanel204(el) && evt.detail.xhr.status === 204) {
@@ -1391,7 +1394,7 @@
                         }
                     }
                 }
-                el.remove();
+                window.ulFlyToToolsFab(el);
             }
         });
 
@@ -1410,27 +1413,27 @@
                 return;
             }
             if (el.id === 'loopnet-section') {
-                el.remove();
+                window.ulFlyToToolsFab(el);
                 return;
             }
             el.innerHTML = '<div class="card"><div class="card-body"><span class="view-muted">External data temporarily unavailable.</span></div></div>';
         }, true);
 
-        // Network failure: just remove the placeholder.
+        // Network failure: just dismiss the placeholder.
         document.body.addEventListener('htmx:sendError', function (evt) {
             var el = evt.detail && evt.detail.elt;
             if (isExtPanel204(el)) {
                 evt.stopImmediatePropagation();
-                el.remove();
+                window.ulFlyToToolsFab(el);
             }
         }, true);
 
-        // Request timeout: remove silently instead of showing the global toast.
+        // Request timeout: dismiss silently instead of showing the global toast.
         document.body.addEventListener('htmx:timeout', function (evt) {
             var el = evt.detail && evt.detail.elt;
             if (isExtPanel204(el)) {
                 evt.stopImmediatePropagation();
-                el.remove();
+                window.ulFlyToToolsFab(el);
             }
         }, true);
     }());

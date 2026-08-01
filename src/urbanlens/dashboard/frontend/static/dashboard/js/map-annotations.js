@@ -1841,6 +1841,7 @@ function init() {
       Promise.resolve(flushDpAutoSave()).finally(loadDetailPins);
   }
   window.openAddPinDialog = openAddPinDialog;
+  window.closeDetailPinPanel = closeDetailPinPanel;
   document.getElementById("dp-icon-picker")?.addEventListener("click", function(e) {
     const btn = e.target.closest(".dp-icon-btn");
     if (!btn)

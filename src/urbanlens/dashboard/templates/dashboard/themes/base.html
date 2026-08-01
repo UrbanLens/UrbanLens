@@ -2019,6 +2019,62 @@
         // next htmx settle, so switching away from a tab with collapsed
         // sections hides them from the FAB right away.
         document.body.addEventListener('ul:tabShown', _updateRestoreControls);
+
+        // -- Fly-to-corner dismiss animation -------------------------------------
+        // Auto-loading cards (data-ext-panel-204 - see location/index.html) that
+        // discover they have nothing to show used to just el.remove() themselves,
+        // vanishing instantly and shifting whatever was below them with no warning.
+        // This shrinks the card and flies it toward the tools FAB - the same corner
+        // that already holds manually-collapsed sections - so the disappearance
+        // reads as "this went there" instead of a sudden jump.
+        function _toolsFabTarget() {
+            var btn = document.getElementById('tools-fab-btn');
+            if (btn) {
+                var rect = btn.getBoundingClientRect();
+                if (rect.width) return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+            }
+            // The FAB is hidden (display:none, no box to measure) when nothing is
+            // collapsed yet - aim at its fixed on-screen position instead (see
+            // .tools-fab / .tools-fab-btn in _collapsible.scss).
+            var remPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+            return { x: 22 + 23, y: window.innerHeight - (4 * remPx) - 23 };
+        }
+
+        window.ulFlyToToolsFab = function (el) {
+            if (!el || !el.isConnected) { if (el) el.remove(); return; }
+            var rect = el.getBoundingClientRect();
+            var target = _toolsFabTarget();
+            var dx = target.x - (rect.left + rect.width / 2);
+            var dy = target.y - (rect.top + rect.height / 2);
+
+            // Pin the card to its current screen position and take it out of flow
+            // so the rest of the page (e.g. a sibling in .pin-media-row growing to
+            // fill the freed column) reflows immediately, while the card keeps
+            // flying on top, unaffected by that reflow.
+            el.style.position = 'fixed';
+            el.style.top = rect.top + 'px';
+            el.style.left = rect.left + 'px';
+            el.style.width = rect.width + 'px';
+            el.style.height = rect.height + 'px';
+            el.style.margin = '0';
+            el.style.zIndex = '9998';
+            el.style.pointerEvents = 'none';
+            void el.offsetWidth; // commit the pinned starting position before animating away from it
+
+            el.style.setProperty('--ext-panel-dismiss-x', dx + 'px');
+            el.style.setProperty('--ext-panel-dismiss-y', dy + 'px');
+            el.classList.add('ext-panel-dismissing');
+
+            var done = false;
+            function finish() {
+                if (done) return;
+                done = true;
+                el.remove();
+            }
+            el.addEventListener('transitionend', finish, { once: true });
+            // Fallback in case transitionend never fires (e.g. prefers-reduced-motion drops the transform transition).
+            setTimeout(finish, 450);
+        };
     }());
     </script>
 

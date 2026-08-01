@@ -2180,6 +2180,7 @@ function init(): void {
     }
 
     window.openAddPinDialog = openAddPinDialog;
+    window.closeDetailPinPanel = closeDetailPinPanel;
 
     document.getElementById("dp-icon-picker")?.addEventListener("click", function (this: HTMLElement, e) {
         const btn = (e.target as HTMLElement).closest<HTMLElement>(".dp-icon-btn");
@@ -2386,6 +2387,7 @@ declare global {
         _toggleDetailPinListPanel: () => void;
         toggleDetailPinSelectMode: () => void;
         openAddPinDialog: () => void;
+        closeDetailPinPanel: () => void;
         startEditBoundary: (type: "property" | "building") => void;
         saveBoundary: (options?: { type?: "property" | "building"; exitEdit?: boolean; quiet?: boolean }) => void;
         clearBoundary: () => Promise<void>;
