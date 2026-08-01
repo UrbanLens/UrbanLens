@@ -50,7 +50,6 @@ class Command(BaseCommand):
     def handle(self, *args, **options) -> None:
         confirmed = options["yes"]
 
-        """
         queryset = (
             Wiki.objects.annotate(
                 pin_owner_count=Count("pins__profile", distinct=True),
@@ -60,11 +59,9 @@ class Command(BaseCommand):
                     distinct=True,
                 ),
             )
-            .filter(Q(pin_owner_count__lte=MAX_PIN_OWNERS) | Q(user_edit_count=0))
+            #.filter(Q(pin_owner_count__lte=MAX_PIN_OWNERS) | Q(user_edit_count=0))
             .order_by("pk")
         )
-        """
-        queryset = Wiki.objects.all()
 
         total = queryset.count()
         if not total:
