@@ -175,6 +175,7 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None)
                 "longitude": building.get("longitude"),
                 "geometry": geometry,
                 "has_geometry": geometry is not None,
+                "selection_key": building.get("_selection_key") or "",
                 "child_name": _marker_name(child) if child is not None else "",
                 "child_uuid": str(child.uuid) if child is not None and getattr(child, "uuid", None) else "",
                 "child_url": (url_for(child) if url_for is not None else "") if child is not None else "",

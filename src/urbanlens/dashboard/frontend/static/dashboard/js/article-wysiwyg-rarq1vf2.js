@@ -437,4 +437,4 @@ function createMapLayers(map, options = {}) {
   };
 }
 
-export { createMapLayers };
+export { tileLayer, createMapLayers };

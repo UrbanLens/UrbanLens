@@ -1,6 +1,7 @@
 import {
-  createMapLayers
-} from "./article-wysiwyg-61596eaw.js";
+  createMapLayers,
+  tileLayer
+} from "./article-wysiwyg-rarq1vf2.js";
 import {
   confirmAction,
   getCsrfToken,
@@ -58,6 +59,94 @@ function init() {
   };
   const map = L.map("map", { scrollWheelZoom: false, attributionControl: false }).setView([mapCenterLat, mapCenterLng], 15);
   window.map = map;
+  let buildingImportMap = null;
+  function initBuildingImportDialog() {
+    const dialog = document.getElementById("building-import-dialog");
+    const mapElement = document.getElementById("building-import-map");
+    const dataElement = document.getElementById("building-import-map-data");
+    const form = dialog?.querySelector(".building-import-form");
+    if (!dialog || !mapElement || !dataElement || !form)
+      return;
+    let buildings;
+    try {
+      buildings = JSON.parse(dataElement.textContent || "[]");
+    } catch {
+      buildings = [];
+    }
+    buildingImportMap?.remove();
+    const previewMap = L.map(mapElement, { scrollWheelZoom: false, attributionControl: false }).setView([mapCenterLat, mapCenterLng], 16);
+    buildingImportMap = previewMap;
+    tileLayer("street").addTo(previewMap);
+    const pathsByKey = new Map;
+    const previewBounds = L.latLngBounds([]);
+    const selectedStyle = { color: "#2563eb", weight: 3, fillColor: "#3b82f6", fillOpacity: 0.45, opacity: 1 };
+    const unselectedStyle = { color: "#64748b", weight: 2, fillColor: "#94a3b8", fillOpacity: 0.12, opacity: 0.5 };
+    buildings.forEach((building) => {
+      const paths = [];
+      let preview = null;
+      if (building.geometry) {
+        preview = L.geoJSON(building.geometry, {
+          style: selectedStyle,
+          onEachFeature: (_feature, layer) => {
+            if (layer instanceof L.Path)
+              paths.push(layer);
+          }
+        }).addTo(previewMap);
+        const bounds = preview.getBounds();
+        if (bounds.isValid())
+          previewBounds.extend(bounds);
+      } else if (building.latitude != null && building.longitude != null) {
+        const point = L.circleMarker([building.latitude, building.longitude], { ...selectedStyle, radius: 8 }).addTo(previewMap);
+        preview = point;
+        paths.push(point);
+        previewBounds.extend(point.getLatLng());
+      }
+      preview?.bindTooltip(building.name || (building.building_number ? `Building ${building.building_number}` : "Unnamed building"));
+      pathsByKey.set(building.selection_key, paths);
+    });
+    if (previewBounds.isValid())
+      previewMap.fitBounds(previewBounds.pad(0.18), { maxZoom: 18 });
+    const checkboxes = Array.from(form.querySelectorAll('input[name="building_keys"]'));
+    const selectedCount = form.querySelector("[data-building-selected-count]");
+    const selectAll = form.querySelector("[data-building-select-all]");
+    const submit = form.querySelector("[data-building-import-submit]");
+    const submitLabel = form.querySelector("[data-building-submit-label]");
+    const isRestructure = form.dataset.restructure === "1";
+    const canSubmitWithoutBuildings = Number.parseInt(form.dataset.nestableCount || "0", 10) > 0;
+    const syncSelection = () => {
+      let checked = 0;
+      checkboxes.forEach((checkbox) => {
+        if (checkbox.checked)
+          checked += 1;
+        pathsByKey.get(checkbox.value)?.forEach((path) => path.setStyle(checkbox.checked ? selectedStyle : unselectedStyle));
+      });
+      if (selectedCount)
+        selectedCount.textContent = String(checked);
+      if (selectAll)
+        selectAll.textContent = checked === checkboxes.length ? "Uncheck all" : "Check all";
+      if (submit)
+        submit.disabled = checked === 0 && !canSubmitWithoutBuildings;
+      if (submitLabel && !isRestructure)
+        submitLabel.textContent = `Add ${checked} building${checked === 1 ? "" : "s"}`;
+    };
+    checkboxes.forEach((checkbox) => checkbox.addEventListener("change", syncSelection));
+    selectAll?.addEventListener("click", () => {
+      const shouldCheck = checkboxes.some((checkbox) => !checkbox.checked);
+      checkboxes.forEach((checkbox) => {
+        checkbox.checked = shouldCheck;
+      });
+      syncSelection();
+    });
+    syncSelection();
+    requestAnimationFrame(() => buildingImportMap?.invalidateSize());
+  }
+  window.openBuildingImportDialog = function() {
+    const dialog = document.getElementById("building-import-dialog");
+    if (!dialog)
+      return;
+    dialog.showModal();
+    requestAnimationFrame(initBuildingImportDialog);
+  };
   map.createPane("markupPane").style.zIndex = "550";
   map.createPane("boundaryPane").style.zIndex = "540";
   const SCROLL_ZOOM_ENABLE_DELAY_MS = 350;
@@ -1037,6 +1126,10 @@ function init() {
   window.openMarkupEditDialog = toolbar.openMarkupEditDialog;
   window.loadMarkup = toolbar.loadMarkup;
   loadDetailPins();
+  document.body.addEventListener("pinDetailPinsChanged", () => {
+    loadDetailPins();
+    fetchBoundaries(0);
+  });
   function makePhotoIcon(url, size, highlighted) {
     const shadow = highlighted ? "0 0 0 3px #2563eb, 0 3px 10px rgba(0,0,0,.45)" : "0 2px 6px rgba(0,0,0,.35)";
     return L.divIcon({

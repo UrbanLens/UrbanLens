@@ -288,6 +288,11 @@ class RestructureOfferContentTests(TestCase):
         self.assertContains(response, reverse("pin.restructure.dismiss", kwargs={"pin_slug": self.pin.slug}))
         self.assertContains(response, "scope=all")
 
+    def test_organize_button_loads_the_building_picker_instead_of_posting(self) -> None:
+        body = self.client.get(self.url).content.decode()
+        self.assertIn(f'hx-get="{reverse("pin.restructure.apply", kwargs={"pin_slug": self.pin.slug})}"', body)
+        self.assertNotIn(f'hx-post="{reverse("pin.restructure.apply", kwargs={"pin_slug": self.pin.slug})}"', body)
+
 
 class RestructureDismissTests(TestCase):
     def setUp(self) -> None:
@@ -339,6 +344,24 @@ class RestructureApplyTests(TestCase):
         self.stray.refresh_from_db()
         self.assertEqual(self.stray.parent_pin_id, self.pin.pk)
         self.assertEqual(self.pin.detail_pins.filter(pin_type=PinType.BUILDING).count(), 3)
+
+    def test_get_renders_a_checked_building_list_and_map(self) -> None:
+        response = self.client.get(self.url)
+        self.assertContains(response, 'id="building-import-map"')
+        self.assertContains(response, 'name="building_keys"', count=3)
+        self.assertContains(response, "Tool Shed")
+        self.assertContains(response, "Main Hall")
+        self.assertContains(response, "Organize property")
+
+    def test_only_selected_buildings_are_created_but_existing_pins_are_still_nested(self) -> None:
+        response = self.client.get(self.url)
+        selected_key = response.context["rows"][0]["selection_key"]
+
+        self.client.post(self.url, {"building_selection": "1", "building_keys": selected_key})
+
+        self.stray.refresh_from_db()
+        self.assertEqual(self.stray.parent_pin_id, self.pin.pk)
+        self.assertEqual(self.pin.detail_pins.filter(pin_type=PinType.BUILDING).count(), 1)
 
     def test_a_nested_pin_keeps_everything_about_itself(self) -> None:
         """Nesting re-parents; it never merges or renames."""
@@ -441,6 +464,29 @@ class BuildingImportPanelActionTests(TestCase):
     def test_creates_the_building_pins(self) -> None:
         self.client.post(self.url)
         self.assertEqual(self.pin.detail_pins.filter(pin_type=PinType.BUILDING).count(), 3)
+
+    def test_get_renders_a_checked_building_list_and_map(self) -> None:
+        response = self.client.get(self.url)
+        self.assertContains(response, 'id="building-import-map"')
+        self.assertContains(response, 'name="building_keys"', count=3)
+        self.assertContains(response, "Tool Shed")
+        self.assertContains(response, "Main Hall")
+        self.assertContains(response, "Add 3 buildings")
+
+    def test_post_imports_only_the_selected_buildings(self) -> None:
+        response = self.client.get(self.url)
+        selected_row = next(row for row in response.context["rows"] if row["name"] == "Main Hall")
+
+        self.client.post(self.url, {"building_selection": "1", "building_keys": selected_row["selection_key"]})
+
+        children = self.pin.detail_pins.filter(pin_type=PinType.BUILDING)
+        self.assertEqual(children.count(), 1)
+        self.assertEqual(children.get().name, "Main Hall")
+
+    def test_post_with_every_building_unchecked_imports_nothing(self) -> None:
+        response = self.client.post(self.url, {"building_selection": "1"})
+        self.assertEqual(self.pin.detail_pins.filter(pin_type=PinType.BUILDING).count(), 0)
+        self.assertIn("Select at least one building", response["HX-Trigger"])
 
     def test_it_never_nests_existing_top_level_pins(self) -> None:
         """The panel button is about buildings; re-parenting is the dialog's job."""

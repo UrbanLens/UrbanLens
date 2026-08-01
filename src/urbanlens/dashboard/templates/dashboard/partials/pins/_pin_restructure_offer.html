@@ -54,11 +54,12 @@ Context:
         {% endif %}
         <div class="page-onboarding-card__actions">
             <button type="button" class="btn btn--primary"
-                    hx-post="{% url 'pin.restructure.apply' pin.slug %}"
-                    hx-target="#pin-restructure-offer"
-                    hx-swap="outerHTML"
+                    hx-get="{% url 'pin.restructure.apply' pin.slug %}"
+                    hx-target="#building-import-dialog"
+                    hx-swap="innerHTML"
                     hx-indicator="#pin-restructure-spinner"
-                    hx-disabled-elt="this">
+                    hx-disabled-elt="this"
+                    hx-on::after-request="if(event.detail.successful && event.detail.xhr.status === 200){window.openBuildingImportDialog()}">
                 Yes, organize it
             </button>
             <button type="button" class="btn btn--ghost"
@@ -74,7 +75,7 @@ Context:
                 Don't show again
             </button>
             <span id="pin-restructure-spinner" class="htmx-indicator">
-                <i class="material-icons spin">autorenew</i> Organizing...
+                <i class="material-icons spin">autorenew</i> Loading buildings...
             </span>
         </div>
     </div>

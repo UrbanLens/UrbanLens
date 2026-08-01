@@ -26,6 +26,7 @@ that publish a bare centroid.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import hashlib
 import json
 import logging
 from typing import TYPE_CHECKING, Any
@@ -309,6 +310,24 @@ def building_name(building: dict[str, Any]) -> str:
         return name
     number = str(building.get("building_number") or "").strip()
     return f"Building {number}" if number else ""
+
+
+def building_selection_key(building: dict[str, Any]) -> str:
+    """Return a stable, opaque key for selecting a cached building record.
+
+    The dialog sends keys rather than coordinates or serialized building data,
+    then the POST recomputes the current missing-building list and accepts only
+    keys still present there. A stale dialog therefore cannot recreate a
+    building that gained a child pin in the meantime.
+    """
+    canonical = json.dumps(building, sort_keys=True, separators=(",", ":"), default=str)
+    return hashlib.sha256(canonical.encode()).hexdigest()[:24]
+
+
+def select_buildings(buildings: list[dict[str, Any]], selection_keys: list[str]) -> list[dict[str, Any]]:
+    """Filter building records by keys produced by :func:`building_selection_key`."""
+    selected = set(selection_keys)
+    return [building for building in buildings if building_selection_key(building) in selected]
 
 
 def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:

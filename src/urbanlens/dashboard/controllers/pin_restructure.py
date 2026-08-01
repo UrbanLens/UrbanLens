@@ -28,6 +28,7 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_rows
 from urbanlens.dashboard.services import pin_restructure
 from urbanlens.dashboard.services.locations import site_scope
 
@@ -59,6 +60,42 @@ def _toast(response: HttpResponse, level: str, message: str, *, refresh: bool = 
         triggers["pinDetailPinsChanged"] = True
     response["HX-Trigger"] = json.dumps(triggers)
     return response
+
+
+def _dialog_rows(buildings: list[dict]) -> list[dict]:
+    """Building-panel rows decorated with server-validated selection keys."""
+    keyed = [{**building, "_selection_key": pin_restructure.building_selection_key(building)} for building in buildings]
+    return building_rows(keyed, [])
+
+
+def _selected_buildings(request: HttpRequest, buildings: list[dict]) -> list[dict]:
+    """Honor an explicit dialog selection; retain all-building legacy POSTs."""
+    if "building_selection" not in request.POST:
+        return buildings
+    return pin_restructure.select_buildings(buildings, request.POST.getlist("building_keys"))
+
+
+def _render_building_dialog(
+    request: HttpRequest,
+    pin: Pin,
+    buildings: list[dict],
+    *,
+    restructure: bool,
+    nestable_count: int = 0,
+) -> HttpResponse:
+    """Render the shared selectable building-import dialog body."""
+    return render(
+        request,
+        "dashboard/partials/pins/_building_import_dialog.html",
+        {
+            "pin": pin,
+            "rows": _dialog_rows(buildings),
+            "building_count": len(buildings),
+            "restructure": restructure,
+            "nestable_count": nestable_count,
+            "form_action": request.path,
+        },
+    )
 
 
 class PinRestructureOfferView(LoginRequiredMixin, View):
@@ -131,12 +168,19 @@ class PinRestructureDismissView(LoginRequiredMixin, View):
 
 
 class PinRestructureApplyView(LoginRequiredMixin, View):
-    """POST: create the missing building pins and nest the matching top-level pins.
+    """GET the chooser; POST selected buildings and matching top-level pins.
 
     Idempotent in the way that matters: the plan is recomputed here rather than
     trusted from the page, so buildings pinned (or pins nested) since the dialog
     rendered are simply skipped.
     """
+
+    def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
+        pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
+        plan = pin_restructure.plan_for(pin)
+        if plan.is_empty:
+            return HttpResponse(status=204)
+        return _render_building_dialog(request, pin, plan.buildings, restructure=True, nestable_count=len(plan.nestable))
 
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
@@ -144,8 +188,9 @@ class PinRestructureApplyView(LoginRequiredMixin, View):
         if plan.is_empty:
             return _toast(HttpResponse("", status=200), "info", "This property is already organized.")
 
-        created = pin_restructure.create_building_pins(pin, plan.buildings)
-        wiki_created = pin_restructure.mirror_buildings_to_wiki(pin, plan.buildings, pin.profile)
+        buildings = _selected_buildings(request, plan.buildings)
+        created = pin_restructure.create_building_pins(pin, buildings)
+        wiki_created = pin_restructure.mirror_buildings_to_wiki(pin, buildings, pin.profile)
         nested = pin_restructure.nest_root_pins(pin, plan.nestable)
 
         parts = []
@@ -159,12 +204,19 @@ class PinRestructureApplyView(LoginRequiredMixin, View):
 
 
 class PinBuildingImportView(LoginRequiredMixin, View):
-    """POST: create a child pin for every unpinned building on this property.
+    """GET the chooser; POST selected unpinned buildings on this property.
 
     The "Buildings on this Property" panel's own action, distinct from the
     restructure suggestion above: always available (never dismissed), and
     scoped strictly to buildings - it never re-parents anything.
     """
+
+    def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
+        pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
+        missing = pin_restructure.missing_buildings(pin)
+        if not missing:
+            return HttpResponse(status=204)
+        return _render_building_dialog(request, pin, missing, restructure=False)
 
     def post(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
         pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
@@ -173,8 +225,12 @@ class PinBuildingImportView(LoginRequiredMixin, View):
         if not missing:
             return _toast(HttpResponse("", status=200), "info", "Every building here already has a pin.")
 
-        created = pin_restructure.create_building_pins(pin, missing)
-        wiki_created = pin_restructure.mirror_buildings_to_wiki(pin, missing, pin.profile)
+        buildings = _selected_buildings(request, missing)
+        if not buildings:
+            return _toast(HttpResponse("", status=200), "info", "Select at least one building to add.")
+
+        created = pin_restructure.create_building_pins(pin, buildings)
+        wiki_created = pin_restructure.mirror_buildings_to_wiki(pin, buildings, pin.profile)
 
         message = f"Added {created} building pin{'s' if created != 1 else ''}."
         if wiki_created:
