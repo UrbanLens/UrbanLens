@@ -1681,6 +1681,9 @@ ICON_KEYWORDS: dict[str, str] = {
 }
 
 
+# Color new labels get when the user doesn't pick one (rather than no color at all).
+DEFAULT_LABEL_COLOR = "#FFFFFF"
+
 COLOR_CHOICES = [
     ("#F44336", "Red"),
     ("#E91E63", "Pink"),

@@ -11,6 +11,7 @@
  */
 import { getCsrfToken } from "../shared/csrf";
 import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
+import type { CustomLayerToggle } from "../shared/map-layers";
 import { createMapLayers, tileLayer } from "../shared/map-layers";
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
 
@@ -104,6 +105,25 @@ function readConfig(el: HTMLElement) {
         markupBorderOpacity: d.markupBorderOpacity ? Number.parseInt(d.markupBorderOpacity, 10) : 100,
         showOnboardingTips: d.showOnboardingTips === "1",
     };
+}
+
+interface CustomLayerEntry {
+    uuid: string;
+    name: string;
+    color: string;
+    icon: string;
+    default_visible: boolean;
+}
+
+// Same json_script-embedded-<script> pattern as #building-import-map-data
+// above - lives next to #map rather than on #map-annotations-config's
+// dataset since it's a list, not a scalar attribute.
+function readCustomLayers(): CustomLayerEntry[] {
+    try {
+        return JSON.parse(document.getElementById("custom-layers-data")?.textContent || "[]");
+    } catch {
+        return [];
+    }
 }
 
 function init(): void {
@@ -449,6 +469,25 @@ function init(): void {
         }
     }
 
+    // -- Custom layers: user-created groupings of markup items (e.g. "Tunnels"), --
+    // independently toggleable from the base Markup layer. One Leaflet LayerGroup
+    // per CustomLayer row, keyed by uuid so markup-toolbar.ts's layerGroupFor hook
+    // can route each item's shapes into the right one. See templatetags/
+    // map_components.py's custom_layer_button() for the matching "layer-<uuid>"
+    // button key rendered into the layers panel.
+    const customLayers = readCustomLayers();
+    const customLayerGroups = new Map<string, L.LayerGroup>();
+    const customLayerToggles: Record<string, CustomLayerToggle> = {};
+    customLayers.forEach((layer) => {
+        const group = L.layerGroup();
+        if (layer.default_visible) group.addTo(map);
+        customLayerGroups.set(layer.uuid, group);
+        customLayerToggles[`layer-${layer.uuid}`] = {
+            isActive: () => map.hasLayer(group),
+            toggle: () => (map.hasLayer(group) ? map.removeLayer(group) : group.addTo(map)),
+        };
+    });
+
     // Shared layers engine + panel - the exact same component as the main map
     // (see {% map_layers_panel %} in _map_annotations_panels.html). Details and
     // Photos are this page's own layer groups, registered as custom toggles.
@@ -473,6 +512,7 @@ function init(): void {
                 isActive: () => nearbyActive,
                 toggle: () => setNearbyActive(!nearbyActive),
             },
+            ...customLayerToggles,
         },
     });
 
@@ -544,7 +584,7 @@ function init(): void {
         const handle = document.getElementById("detail-pin-list-handle");
         const countLabel = document.getElementById("detail-pin-count-label");
         const total = detailPins.length + toolbar.getMarkupItems().length + photoPanelItems.length;
-        if (countLabel) countLabel.textContent = `${total} Layer${total === 1 ? "" : "s"}`;
+        if (countLabel) countLabel.textContent = `${total} Item${total === 1 ? "" : "s"}`;
         // Nothing to show yet (brand-new pin: no detail pins, markup, or photos) -
         // hide the edge handle entirely rather than exposing an empty sidebar.
         if (handle) handle.style.display = total ? "" : "none";
@@ -604,15 +644,30 @@ function init(): void {
             li.dataset.kind = "markup";
             const displayName = item.label || item.markup_type.charAt(0).toUpperCase() + item.markup_type.slice(1);
             const ownerMeta = item.owner_name ? `<span class="detail-pin-list-item-meta">in ${escHtml(item.owner_name)}</span>` : "";
+            // Inline layer picker - the "move onto/off a layer without recreating
+            // it" affordance: changing it calls toolbar.setItemLayer, which just
+            // updates PinMarkup.layer and re-renders in place.
+            const layerPicker =
+                !item.owner_name && customLayers.length
+                    ? `<select class="detail-pin-list-item-layer" title="Layer" aria-label="Layer">
+                        <option value=""${item.layer_uuid ? "" : " selected"}>No layer</option>
+                        ${customLayers.map((layer) => `<option value="${escHtml(layer.uuid)}"${item.layer_uuid === layer.uuid ? " selected" : ""}>${escHtml(layer.name)}</option>`).join("")}
+                       </select>`
+                    : "";
             li.innerHTML = `
                 <span class="material-icons detail-pin-list-item-icon" style="color:${escHtml(item.color)}">${escHtml(markupIcon[item.markup_type] || "edit")}</span>
                 <span class="detail-pin-list-item-name">${escHtml(displayName)}</span>
                 ${ownerMeta}
+                ${layerPicker}
                 ${item.owner_name ? "" : `<button type="button" class="detail-pin-list-item-delete" title="Delete"><i class="material-symbols-outlined">close</i></button>`}`;
             li.addEventListener("click", (e) => {
-                if ((e.target as HTMLElement).closest(".detail-pin-list-item-delete")) return;
+                if ((e.target as HTMLElement).closest(".detail-pin-list-item-delete, .detail-pin-list-item-layer")) return;
                 if (item.owner_name) return; // child-pin markup is edited from its own page
                 toolbar.openMarkupEditDialog(item);
+            });
+            li.querySelector(".detail-pin-list-item-layer")?.addEventListener("click", (e) => e.stopPropagation());
+            li.querySelector(".detail-pin-list-item-layer")?.addEventListener("change", (e) => {
+                toolbar.setItemLayer(item.uuid, (e.target as HTMLSelectElement).value || null);
             });
             li.querySelector(".detail-pin-list-item-delete")?.addEventListener("click", async (e) => {
                 e.stopPropagation();
@@ -1318,12 +1373,14 @@ function init(): void {
         onBuildDetailList: () => buildDetailList(),
         onClearDetailPinHighlight: () => clearDetailPinHighlight(),
         onCloseDetailPinPanel: () => closeDetailPinPanel(),
+        layerGroupFor: (item) => (item.layer_uuid && customLayerGroups.get(item.layer_uuid)) || markupLayer,
     });
 
     window.startMarkupDraw = toolbar.startMarkupDraw;
     window.startShapeDraw = toolbar.startShapeDraw;
     window.startTextPlacement = toolbar.startTextPlacement;
     window.closeMarkupPanel = toolbar.closeMarkupPanel;
+    window._liveApplyMarkupEdit = toolbar.liveApplyMarkupEdit;
     window._closeMarkupDraw = toolbar.closeOrFinishDraw;
     window.deleteMarkupEdit = toolbar.deleteMarkupEdit;
     window.openMarkupEditDialog = toolbar.openMarkupEditDialog;
@@ -2377,6 +2434,10 @@ declare global {
         deleteMarkupEdit: () => Promise<void>;
         openMarkupEditDialog: (item: MarkupItem) => void;
         loadMarkup: () => void;
+        // Applies the edit panel's fields (label/width/opacity/security/layer) to
+        // the item being edited - called by _markup_panel_dialog.html's inline
+        // oninput=/onchange= attributes on every field in that panel.
+        _liveApplyMarkupEdit: () => void;
 
         // "Take a screenshot" toolbar button (_map_annotations_panels.html) -
         // opens the shared standalone map composer pre-scoped to this pin/wiki.

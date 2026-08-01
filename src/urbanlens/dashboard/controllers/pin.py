@@ -22,6 +22,7 @@ from rest_framework.viewsets import GenericViewSet
 from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
@@ -260,11 +261,18 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # familiar, rather than re-introducing it on every new pin.
         has_ever_used_aliases = PinAlias.objects.filter(pin__profile=profile).exists()
 
+        from django.urls import reverse
+
+        custom_layers = list(CustomLayer.objects.for_pin(pin).order_by("order", "created"))
+
         return render(
             request,
             "dashboard/pages/location/index.html",
             {
                 "pin": pin,
+                "custom_layers": custom_layers,
+                "custom_layers_json": [layer.to_json() for layer in custom_layers],
+                "manage_layers_url": reverse("pin.layers", args=[pin.slug]),
                 "profile": profile,
                 "parent_pin": pin.parent_pin,
                 "has_child_pins": pin.detail_pins.exists(),

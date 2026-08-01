@@ -23,6 +23,7 @@ from django.views import View
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
@@ -156,11 +157,16 @@ class LocationWikiView(LoginRequiredMixin, View):
 
             wiki_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in Image.objects.filter(wiki=wiki).visible_to(profile).exclude(pk=wiki.cover_photo_id).order_by("-created")[:20] if img.image]
 
+        custom_layers = list(CustomLayer.objects.for_wiki(wiki).order_by("order", "created"))
+
         return render(
             request,
             "dashboard/pages/location/wiki.html",
             {
                 "wiki": wiki,
+                "custom_layers": custom_layers,
+                "custom_layers_json": [layer.to_json() for layer in custom_layers],
+                "manage_layers_url": reverse("location.wiki.layers", args=[location.slug]),
                 "location": location,
                 "profile": profile,
                 "show_wiki_cover_photo": show_wiki_cover_photo,

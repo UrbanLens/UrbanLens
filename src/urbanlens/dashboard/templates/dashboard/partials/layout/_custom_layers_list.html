@@ -1,0 +1,95 @@
+{% comment %}
+Manage Layers dialog body - HTMX-swapped by every create/rename/recolor/
+reorder/delete action (see controllers/custom_layers.py's _render_layer_list).
+Rendered inside #custom-layers-dialog-body (see _map_annotations_panels.html).
+
+Reuses the .dp-color-picker/.dp-color-swatch/.dp-icon-picker/.dp-icon-btn CSS
+classes already defined for the detail-pin add form in this same directory -
+no new picker styling needed, just a small swatch-click script scoped to this
+fragment (delegated, so it survives being HTMX-swapped back in).
+{% endcomment %}
+<ul id="custom-layer-manage-list" class="custom-layer-manage-list">
+    {% for row in rows %}
+    <li class="custom-layer-manage-row" id="custom-layer-row-{{ row.layer.uuid }}">
+        <span class="dp-color-swatch custom-layer-manage-swatch" style="background:{{ row.layer.color|default:'#94a3b8' }}"></span>
+        <i class="material-symbols-outlined">{{ row.layer.icon|default:"layers" }}</i>
+        <input type="text" name="name" class="custom-layer-manage-name" value="{{ row.layer.name }}" maxlength="100"
+               hx-post="{{ row.edit_url }}" hx-trigger="change"
+               hx-target="#custom-layer-manage-list" hx-swap="outerHTML"
+               aria-label="Layer name">
+        <button type="button" class="btn btn--icon" title="Move up"
+                hx-post="{{ row.reorder_url }}" hx-vals='{"direction":"up"}'
+                hx-target="#custom-layer-manage-list" hx-swap="outerHTML">
+            <i class="material-symbols-outlined">arrow_upward</i>
+        </button>
+        <button type="button" class="btn btn--icon" title="Move down"
+                hx-post="{{ row.reorder_url }}" hx-vals='{"direction":"down"}'
+                hx-target="#custom-layer-manage-list" hx-swap="outerHTML">
+            <i class="material-symbols-outlined">arrow_downward</i>
+        </button>
+        <button type="button" class="btn btn--icon btn--danger" title="Delete layer"
+                hx-delete="{{ row.edit_url }}"
+                hx-confirm="Delete &quot;{{ row.layer.name }}&quot;? Its items move back to the base Markup layer - they are not deleted."
+                hx-target="#custom-layer-manage-list" hx-swap="outerHTML">
+            <i class="material-symbols-outlined">delete</i>
+        </button>
+    </li>
+    {% empty %}
+    <li class="custom-layer-manage-empty">No custom layers yet - add one below.</li>
+    {% endfor %}
+</ul>
+<form class="custom-layer-manage-form" hx-post="{{ create_url }}" hx-target="#custom-layer-manage-list" hx-swap="outerHTML">
+    {% csrf_token %}
+    <div class="form-row">
+        <label for="custom-layer-name-input">Layer name</label>
+        <input type="text" id="custom-layer-name-input" name="name" maxlength="100" placeholder="e.g. Tunnels" required>
+    </div>
+    <div class="form-row">
+        <label>Icon <span class="form-optional">(optional)</span></label>
+        <div class="dp-icon-picker" id="custom-layer-icon-picker">
+            {% for icon_val, icon_label in custom_layer_icon_choices %}
+            <button type="button" class="dp-icon-btn" data-icon="{{ icon_val }}" title="{{ icon_label }}">
+                <i class="material-icons">{{ icon_val }}</i>
+            </button>
+            {% endfor %}
+        </div>
+        <input type="hidden" id="custom-layer-icon-input" name="icon" value="">
+    </div>
+    <div class="form-row">
+        <label>Color <span class="form-optional">(optional)</span></label>
+        <div class="dp-color-picker" id="custom-layer-color-picker">
+            {% for color_hex, color_name in color_choices %}
+            <button type="button" class="dp-color-swatch" data-color="{{ color_hex }}"
+                    style="background:{{ color_hex }}" title="{{ color_name }}"></button>
+            {% endfor %}
+        </div>
+        <input type="hidden" id="custom-layer-color-input" name="color" value="">
+    </div>
+    <div class="form-actions">
+        <button type="submit" class="btn btn--primary">Add Layer</button>
+    </div>
+</form>
+<script>
+(function () {
+    var form = document.currentScript.previousElementSibling;
+    if (!form || !form.classList.contains("custom-layer-manage-form")) return;
+    var iconPicker = form.querySelector("#custom-layer-icon-picker");
+    var iconInput = form.querySelector("#custom-layer-icon-input");
+    iconPicker.addEventListener("click", function (e) {
+        var btn = e.target.closest(".dp-icon-btn");
+        if (!btn) return;
+        iconPicker.querySelectorAll(".dp-icon-btn").forEach(function (b) { b.classList.remove("dp-icon-btn--active"); });
+        btn.classList.add("dp-icon-btn--active");
+        iconInput.value = btn.dataset.icon;
+    });
+    var colorPicker = form.querySelector("#custom-layer-color-picker");
+    var colorInput = form.querySelector("#custom-layer-color-input");
+    colorPicker.addEventListener("click", function (e) {
+        var btn = e.target.closest(".dp-color-swatch");
+        if (!btn) return;
+        colorPicker.querySelectorAll(".dp-color-swatch").forEach(function (b) { b.classList.remove("dp-color-swatch--active"); });
+        btn.classList.add("dp-color-swatch--active");
+        colorInput.value = btn.dataset.color;
+    });
+})();
+</script>

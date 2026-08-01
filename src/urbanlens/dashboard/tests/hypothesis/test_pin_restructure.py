@@ -409,6 +409,15 @@ class RestructureApplyTests(TestCase):
         created = self.pin.detail_pins.filter(pin_type=PinType.BUILDING).select_related("location")
         self.assertEqual(len({(str(c.location.latitude), str(c.location.longitude)) for c in created}), 3)
 
+    def test_created_pins_default_to_a_legible_icon_and_background(self) -> None:
+        """The generic per-type default (grey icon, no background) is unreadable on satellite imagery."""
+        self.client.post(self.url)
+        created = self.pin.detail_pins.filter(pin_type=PinType.BUILDING)
+        for pin in created:
+            self.assertEqual(pin.color, "#000000")
+            self.assertEqual(pin.detail_bg_color, "#ffffff")
+            self.assertGreater(pin.detail_bg_opacity, 0)
+
     def test_another_users_pin_is_not_reachable(self) -> None:
         other = baker.make(Pin, profile=baker.make(User).profile, location=_make_location(), slug="not-mine")
         self.assertEqual(self.client.post(reverse("pin.restructure.apply", kwargs={"pin_slug": other.slug})).status_code, 404)

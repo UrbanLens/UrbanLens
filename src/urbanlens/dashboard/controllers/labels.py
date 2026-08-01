@@ -23,6 +23,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.labels.meta import DEFAULT_LABEL_COLOR
 from urbanlens.dashboard.models.labels.model import (
     COLOR_CHOICES,
     ICON_CATEGORIES,
@@ -582,7 +583,7 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
             name=name,
             description=request.POST.get("description", "").strip() or None,
             icon=request.POST.get("icon") or None,
-            color=request.POST.get("color") or None,
+            color=request.POST.get("color") or DEFAULT_LABEL_COLOR,
             custom_icon=custom_icon,
             order=order,
         )

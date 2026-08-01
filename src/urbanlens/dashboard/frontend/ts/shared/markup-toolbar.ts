@@ -42,10 +42,15 @@ export interface MarkupItem {
     fill_opacity?: number;
     border_opacity?: number;
     security_indicator?: string;
+    /** UUID of the CustomLayer this item is filed under, or null/undefined for the base Markup layer. */
+    layer_uuid?: string | null;
     _layers?: L.Layer[];
     _textMarker?: L.Marker;
     _arrowheadMarker?: L.Marker;
     _arrowheadDeg?: number;
+    /** The LayerGroup this item is currently rendered into - tracked so a
+     * layer move can cleanly remove it before re-rendering into the new group. */
+    _group?: L.LayerGroup;
 }
 
 const METERS_PER_DEGREE_LAT = 111_320;
@@ -141,6 +146,11 @@ export interface MarkupToolbarConfig {
     onBuildDetailList?: () => void;
     onClearDetailPinHighlight?: () => void;
     onCloseDetailPinPanel?: () => void;
+
+    /** Resolves which LayerGroup an item's shapes render into, based on its
+     * layer_uuid - lets the host page route custom-layer items into their own
+     * independently-toggleable LayerGroups. Defaults to the base markupLayer. */
+    layerGroupFor?: (item: MarkupItem) => L.LayerGroup;
 }
 
 export interface MarkupToolbar {
@@ -153,6 +163,13 @@ export interface MarkupToolbar {
     closeOrFinishDraw: () => void;
     deleteMarkupEdit: () => Promise<void>;
     openMarkupEditDialog: (item: MarkupItem) => void;
+    /** Applies every edit-panel field (including the Layer picker) to the
+     * currently-editing item and schedules an autosave. Exposed as
+     * window._liveApplyMarkupEdit for the dialog's inline oninput/onchange handlers. */
+    liveApplyMarkupEdit: () => void;
+    /** Moves an existing item onto (or off, with null) a custom layer without
+     * recreating it - used by the sidebar list's inline per-item Layer picker. */
+    setItemLayer: (uuid: string, layerUuid: string | null) => void;
     getMarkupItems: () => MarkupItem[];
     /** Current items converted to the snapshot ShapeSpec format, for MapExport. */
     getShapesForExport: () => ShapeSpec[];
@@ -373,8 +390,10 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
             layers.push(circle);
         }
 
-        layers.forEach((l) => l.addTo(markupLayer));
+        const targetGroup = config.layerGroupFor?.(item) ?? markupLayer;
+        layers.forEach((l) => l.addTo(targetGroup));
         item._layers = layers;
+        item._group = targetGroup;
 
         // Clicking any interactive layer opens the edit dialog; also bind a
         // tooltip showing the label (if any) on hover. Markup belonging to a
@@ -391,12 +410,23 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         });
     }
 
+    // Clears every LayerGroup any current item is actually rendered into -
+    // not just the base markupLayer - so a full reload also wipes items that
+    // were routed into a custom layer's own group via config.layerGroupFor.
+    function clearRenderedMarkup(): void {
+        const groups = new Set<L.LayerGroup>([markupLayer]);
+        markupItems.forEach((item) => {
+            if (item._group) groups.add(item._group);
+        });
+        groups.forEach((g) => g.clearLayers());
+    }
+
     function loadMarkup(): void {
         if (!markupJsonUrl) return; // lazy mode - nothing to load until the map is created
         fetch(markupJsonUrl)
             .then((r) => r.json())
             .then((data) => {
-                markupLayer.clearLayers();
+                clearRenderedMarkup();
                 markupItems = [];
                 (data.markup_items || []).forEach((item: MarkupItem) => {
                     renderMarkupItem(item);
@@ -497,6 +527,11 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         document.getElementById("markup-panel-width-label-text")!.textContent = isText ? "Font Size" : "Width";
         (document.getElementById("markup-panel-security-row") as HTMLElement).hidden = isText;
         rebuildEditSwatch("markup-panel-border-swatches", "markup-panel-border", true, isText ? markupPalette : borderOnlyPalette);
+        // Layer assignment only makes sense once an item exists to move - a
+        // freshly-drawn item reopens straight into edit mode (see
+        // reloadMarkupAndOpenEdit) where the row becomes available.
+        const layerRow = document.getElementById("markup-panel-layer-row") as HTMLElement | null;
+        if (layerRow) layerRow.hidden = true;
 
         const widthEl = document.getElementById("markup-panel-width") as HTMLInputElement;
         widthEl.min = isText ? "10" : "1";
@@ -596,7 +631,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         return fetch(markupJsonUrl)
             .then((r) => r.json())
             .then((markupData) => {
-                markupLayer.clearLayers();
+                clearRenderedMarkup();
                 markupItems = [];
                 (markupData.markup_items || []).forEach((item: MarkupItem) => {
                     renderMarkupItem(item);
@@ -688,12 +723,16 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         item.fill_opacity = Number.parseInt((document.getElementById("markup-panel-fill-opacity") as HTMLInputElement).value, 10);
         item.border_opacity = Number.parseInt((document.getElementById("markup-panel-border-opacity") as HTMLInputElement).value, 10);
         item.security_indicator = isText ? "" : (document.getElementById("markup-panel-security") as HTMLInputElement).value;
+        const layerSelect = document.getElementById("markup-panel-layer") as HTMLSelectElement | null;
+        if (layerSelect) item.layer_uuid = layerSelect.value || null;
 
         // Re-render in place: the item object's identity is preserved (same
         // reference in markupItems / editingMarkupItem), only its layers change,
         // so this reuses renderMarkupItem as the single source of truth for how
         // every shape type looks rather than hand-rolling per-type restyle logic.
-        item._layers?.forEach((l) => markupLayer.removeLayer(l));
+        // Removed from its *current* group (item._group), not always markupLayer -
+        // a layer_uuid change above may be about to move it to a different one.
+        item._layers?.forEach((l) => (item._group ?? markupLayer).removeLayer(l));
         renderMarkupItem(item);
 
         scheduleMarkupAutoSave(item);
@@ -722,6 +761,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
                 fill_opacity: item.fill_opacity,
                 border_opacity: item.border_opacity,
                 security_indicator: item.security_indicator,
+                layer_uuid: item.layer_uuid,
             }),
         }).catch(() => toast.error("Failed to save annotation changes."));
     }
@@ -760,6 +800,13 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         rebuildEditSwatch("markup-panel-border-swatches", "markup-panel-border", true, isText ? markupPalette : borderOnlyPalette);
         (document.getElementById("markup-panel-security-row") as HTMLElement).hidden = isText;
         (document.getElementById("markup-panel-security") as HTMLInputElement).value = item.security_indicator || "";
+        const layerSelect = document.getElementById("markup-panel-layer") as HTMLSelectElement | null;
+        const layerRow = document.getElementById("markup-panel-layer-row") as HTMLElement | null;
+        if (layerSelect && layerRow) {
+            // Only worth showing when there's more than the built-in "No layer" option.
+            layerRow.hidden = layerSelect.options.length <= 1;
+            layerSelect.value = item.layer_uuid || "";
+        }
 
         (document.getElementById("markup-panel-hint") as HTMLElement).hidden = true;
         (document.getElementById("markup-panel-draw-actions") as HTMLElement).hidden = true;
@@ -784,6 +831,19 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
                 toast.success("Annotation deleted.");
             })
             .catch(() => toast.error("Failed to delete annotation."));
+    }
+
+    // Reassigns an existing item to a different custom layer (or back to the
+    // base Markup layer, with layerUuid=null) in place - no delete+recreate.
+    // Used by the sidebar list's inline per-item Layer picker, so a move
+    // doesn't require opening the full edit panel.
+    function setItemLayer(uuid: string, layerUuid: string | null): void {
+        const item = markupItems.find((i) => i.uuid === uuid);
+        if (!item) return;
+        item._layers?.forEach((l) => (item._group ?? markupLayer).removeLayer(l));
+        item.layer_uuid = layerUuid;
+        renderMarkupItem(item);
+        scheduleMarkupAutoSave(item);
     }
 
     // Rescale arrowheads and text labels when the user zooms in/out.
@@ -822,6 +882,8 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         closeOrFinishDraw,
         deleteMarkupEdit,
         openMarkupEditDialog,
+        liveApplyMarkupEdit,
+        setItemLayer,
         getMarkupItems: () => markupItems,
         getShapesForExport: () => markupItems.map(markupItemToShapeSpec).filter((s): s is ShapeSpec => s !== null),
         isDrawBusy: () => drawSession.isBusy(),

@@ -275,12 +275,40 @@ register_map_layer(
 )
 
 
+def custom_layer_button(layer: Any) -> MapLayerSpec:
+    """Wrap a CustomLayer row as a MapLayerSpec so it renders in the layers panel.
+
+    The panel template only ever duck-types on a button's key/kind/label/icon/...
+    attributes, so a per-pin/wiki user-created layer can reuse the exact same
+    rendering path as the static, developer-registered layers - it just isn't
+    added to the process-wide :data:`MAP_LAYER_REGISTRY`, since that would leak
+    one pin's layers into every other map on the site.
+
+    Args:
+        layer: A ``CustomLayer`` instance.
+
+    Returns:
+        A MapLayerSpec representing this layer's button.
+    """
+    return MapLayerSpec(
+        key=f"layer-{layer.uuid}",
+        kind="custom",
+        label=layer.name,
+        aria_label=f"Show or hide {layer.name}",
+        tooltip=layer.name,
+        icon=layer.icon or "layers",
+        button_id=f"custom-layer-{layer.uuid}-button",
+    )
+
+
 @register.inclusion_tag("dashboard/partials/map/_layers_panel.html")
 def map_layers_panel(
     layers: str = "street,terrain,satellite,weather,dark,borders",
     variant: str = "panel",
     panel_id: str = "map-layers-panel",
     extra_class: str = "",
+    custom_layers: Any = None,
+    manage_layers_url: str = "",
 ) -> dict[str, Any]:
     """Render the shared map layers component.
 
@@ -295,17 +323,23 @@ def map_layers_panel(
         extra_class: Extra CSS classes for the root (e.g.
             ``map-layers-panel--inline`` to dock it in a
             ``.map-bottom-controls`` row).
+        custom_layers: Iterable of ``CustomLayer`` rows to append after the
+            static registry buttons (e.g. a pin or wiki's own layers).
+        manage_layers_url: HTMX GET URL for the "Manage Layers" dialog entry
+            point. Omit to hide that button (e.g. the ``strip`` variant).
 
     Returns:
         Context for ``partials/map/_layers_panel.html``.
     """
     keys = [k.strip() for k in layers.split(",") if k.strip()]
     buttons = [MAP_LAYER_REGISTRY[k] for k in keys if k in MAP_LAYER_REGISTRY]
+    buttons += [custom_layer_button(layer) for layer in (custom_layers or [])]
     return {
         "buttons": buttons,
         "variant": variant,
         "panel_id": panel_id,
         "extra_class": extra_class,
+        "manage_layers_url": manage_layers_url,
     }
 
 

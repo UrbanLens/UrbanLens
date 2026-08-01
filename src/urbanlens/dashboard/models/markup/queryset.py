@@ -62,3 +62,19 @@ class MarkupMapQuerySet(abstract.FrontendDashboardQuerySet):
 
 class MarkupMapManager(abstract.FrontendDashboardManager.from_queryset(MarkupMapQuerySet)):
     """Manager for MarkupMap."""
+
+
+class CustomLayerQuerySet(abstract.FrontendDashboardQuerySet):
+    """QuerySet for CustomLayer (per-pin/wiki groupings of markup items)."""
+
+    def for_pin(self, pin) -> Self:
+        """All custom layers belonging to a specific parent pin."""
+        return self.filter(parent_pin=pin)
+
+    def for_wiki(self, wiki) -> Self:
+        """All shared/community custom layers belonging to a specific Wiki."""
+        return self.filter(parent_wiki=wiki)
+
+
+class CustomLayerManager(abstract.FrontendDashboardManager.from_queryset(CustomLayerQuerySet)):
+    """Manager for CustomLayer."""

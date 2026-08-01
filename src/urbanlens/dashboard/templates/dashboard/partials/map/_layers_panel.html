@@ -46,6 +46,16 @@ variant="strip": compact icon row for dialogs (comment map composer/viewer).
             <span>{{ b.label }}</span>
         </button>
         {% endfor %}
+        {% if manage_layers_url %}
+        <button type="button" class="map-layer-btn map-layers-manage-btn"
+                hx-get="{{ manage_layers_url }}" hx-target="#custom-layers-dialog-body" hx-swap="innerHTML"
+                onclick="document.getElementById('custom-layers-dialog').showModal()">
+            <span class="map-layer-thumb map-layer-thumb--icon">
+                <i class="material-symbols-outlined">tune</i>
+            </span>
+            <span>Manage Layers</span>
+        </button>
+        {% endif %}
     </div>
 </div>
 {% endif %}

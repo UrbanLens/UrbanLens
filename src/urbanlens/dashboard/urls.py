@@ -23,6 +23,7 @@ from urbanlens.dashboard.controllers import (
     consensus,
     costs,
     custom_fields,
+    custom_layers,
     detail_pins,
     direct_message_shares,
     direct_messages,
@@ -531,6 +532,21 @@ urlpatterns = [
                                 "<slug:pin_slug>/markup/<uuid:markup_uuid>/",
                                 markup.MarkupEditView.as_view(),
                                 name="pin.markup.edit",
+                            ),
+                            path(
+                                "<slug:pin_slug>/layers/",
+                                custom_layers.CustomLayerListCreateView.as_view(),
+                                name="pin.layers",
+                            ),
+                            path(
+                                "<slug:pin_slug>/layers/<uuid:layer_uuid>/",
+                                custom_layers.CustomLayerEditView.as_view(),
+                                name="pin.layers.edit",
+                            ),
+                            path(
+                                "<slug:pin_slug>/layers/<uuid:layer_uuid>/reorder/",
+                                custom_layers.CustomLayerReorderView.as_view(),
+                                name="pin.layers.reorder",
                             ),
                             path(
                                 "<slug:pin_slug>/overview/",
@@ -1219,6 +1235,21 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/markup/<uuid:markup_uuid>/",
                     markup.MarkupEditView.as_view(),
                     name="location.wiki.markup.edit",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/layers/",
+                    custom_layers.CustomLayerListCreateView.as_view(),
+                    name="location.wiki.layers",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/layers/<uuid:layer_uuid>/",
+                    custom_layers.CustomLayerEditView.as_view(),
+                    name="location.wiki.layers.edit",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/layers/<uuid:layer_uuid>/reorder/",
+                    custom_layers.CustomLayerReorderView.as_view(),
+                    name="location.wiki.layers.reorder",
                 ),
                 path(
                     "<slug:location_slug>/wiki/comments/",

@@ -50,6 +50,15 @@ logger = logging.getLogger(__name__)
 #: backstop against a provider returning something pathological.
 MAX_RESTRUCTURE_ITEMS = 500
 
+#: Default icon/background styling for auto-created building pins. The generic
+#: per-type default (a mid-grey building icon, no background) reads poorly
+#: against satellite imagery; these give every imported building marker a
+#: legible black icon on a faint white disc without the owner having to style
+#: a hundred pins by hand. Owners can still override per pin as usual.
+BUILDING_PIN_ICON_COLOR = "#000000"
+BUILDING_PIN_BG_COLOR = "#ffffff"
+BUILDING_PIN_BG_OPACITY = 35
+
 
 # ----------------------------------------------------------------------
 # Geometry helpers
@@ -368,6 +377,9 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
                 parent_pin=pin,
                 profile=pin.profile,
                 location=location,
+                color=BUILDING_PIN_ICON_COLOR,
+                detail_bg_color=BUILDING_PIN_BG_COLOR,
+                detail_bg_opacity=BUILDING_PIN_BG_OPACITY,
             )
             created += 1
     return created

@@ -23,7 +23,7 @@ from django.views import View
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.markup.meta import normalize_layer_mode
-from urbanlens.dashboard.models.markup.model import MarkupMap, MarkupType, PinMarkup, SecurityIndicatorType
+from urbanlens.dashboard.models.markup.model import CustomLayer, MarkupMap, MarkupType, PinMarkup, SecurityIndicatorType
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
@@ -158,6 +158,20 @@ def _resolve_owner(
     return wiki, PinMarkup.objects.for_wiki(wiki)
 
 
+def _owner_layer_kwargs(owner: Pin | Wiki | MarkupMap) -> dict:
+    """Return the CustomLayer filter kwargs (parent_pin/parent_wiki) for *owner*.
+
+    A MarkupMap owner (standalone maps have no custom layers) yields kwargs
+    that can never match any real CustomLayer, so a layer lookup against it
+    always resolves to None rather than needing a special case at each call site.
+    """
+    if isinstance(owner, Pin):
+        return {"parent_pin": owner}
+    if isinstance(owner, Wiki):
+        return {"parent_wiki": owner}
+    return {"pk": None}
+
+
 class MarkupJsonView(LoginRequiredMixin, View):
     """Return all markup items for a pin, location, or markup map as JSON.
 
@@ -186,10 +200,10 @@ class MarkupJsonView(LoginRequiredMixin, View):
         include_children = pin_slug is not None and request.GET.get("children") == "1"
         if include_children and isinstance(owner, Pin):
             subtree = Pin.objects.filter(pk=owner.pk).with_descendants()
-            items = PinMarkup.objects.filter(parent_pin__in=subtree).select_related("parent_pin__location", "parent_pin__location__wiki")
+            items = PinMarkup.objects.filter(parent_pin__in=subtree).select_related("parent_pin__location", "parent_pin__location__wiki", "layer")
 
         markup_items = []
-        for m in items.order_by("created"):
+        for m in items.select_related("layer").order_by("created"):
             entry = m.to_json()
             if include_children and m.parent_pin_id is not None and m.parent_pin_id != owner.pk and m.parent_pin is not None:
                 entry["owner_name"] = m.parent_pin.effective_name
@@ -593,6 +607,19 @@ class MarkupView(LoginRequiredMixin, View):
             owner_kwargs = {"parent_map": owner}
         else:
             owner_kwargs = {"parent_wiki": owner}
+
+        # CustomLayer only ever attaches to a Pin or Wiki (never a standalone
+        # MarkupMap), so owner_kwargs' parent_pin/parent_wiki double as the
+        # exact filter needed here - a layer_uuid belonging to a different
+        # pin/wiki (or any value on the map_uuid route) silently resolves to
+        # None rather than erroring, matching this view's existing lenient
+        # validation style (see security_indicator above).
+        layer = None
+        if map_uuid is None:
+            layer_uuid = body.get("layer_uuid")
+            if layer_uuid:
+                layer = CustomLayer.objects.filter(uuid=layer_uuid, **owner_kwargs).first()
+
         item = PinMarkup.objects.create(
             profile=profile,
             markup_type=markup_type,
@@ -604,6 +631,7 @@ class MarkupView(LoginRequiredMixin, View):
             fill_opacity=fill_opacity,
             border_opacity=border_opacity,
             security_indicator=security_indicator,
+            layer=layer,
             **owner_kwargs,
         )
         if security_indicator and isinstance(owner, (Pin, Wiki)):
@@ -670,6 +698,9 @@ class MarkupEditView(LoginRequiredMixin, View):
             item.fill_opacity = int(body["fill_opacity"])
         if "border_opacity" in body:
             item.border_opacity = int(body["border_opacity"])
+        if "layer_uuid" in body:
+            layer_uuid = body.get("layer_uuid")
+            item.layer = CustomLayer.objects.filter(uuid=layer_uuid, **_owner_layer_kwargs(owner)).first() if layer_uuid else None
         if "security_indicator" in body:
             indicator = body.get("security_indicator") or ""
             item.security_indicator = indicator if indicator in _ALLOWED_SECURITY_INDICATORS else ""

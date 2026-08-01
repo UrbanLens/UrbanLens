@@ -163,6 +163,7 @@ from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.labels.meta import DEFAULT_LABEL_COLOR
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.markup.model import MarkupMap
@@ -2172,7 +2173,7 @@ class LabelsView(PaginatedListMixin, ExternalApiView):
             name=data["name"],
             description=data.get("description") or None,
             kind=data["kind"],
-            color=data.get("color") or None,
+            color=data.get("color") or DEFAULT_LABEL_COLOR,
             icon=data.get("icon") or None,
             order=data.get("order", 0),
             allow_auto_tag=data.get("allow_auto_tag", True),

@@ -22,8 +22,9 @@ from django.db.models import (
 )
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.models.markup.meta import MapLayerMode, MarkupType, SecurityIndicatorType, normalize_layer_mode
-from urbanlens.dashboard.models.markup.queryset import MarkupMapManager, PinMarkupManager
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
+from urbanlens.dashboard.models.markup.meta import CUSTOM_LAYER_ICON_CHOICES, MapLayerMode, MarkupType, SecurityIndicatorType, normalize_layer_mode
+from urbanlens.dashboard.models.markup.queryset import CustomLayerManager, MarkupMapManager, PinMarkupManager
 from urbanlens.dashboard.services.text_limits import MAX_MARKUP_LABEL_LENGTH
 
 if TYPE_CHECKING:
@@ -292,6 +293,100 @@ class MarkupMap(abstract.FrontendDashboardModel):
         ]
 
 
+class CustomLayer(abstract.FrontendDashboardModel):
+    """A user-created, independently-toggleable group of markup items on a Pin or Wiki map.
+
+    Lets a user pull a subset of their :class:`PinMarkup` annotations (e.g.
+    every shape marking a tunnel system) into a named layer that shows/hides
+    as one unit in the map's layers panel, separately from the base "Markup"
+    layer. Exactly one of ``parent_pin`` / ``parent_wiki`` is set - the same
+    convention PinMarkup itself uses for parent_pin/parent_wiki/parent_map,
+    enforced by the owning controller rather than a DB constraint. Unlike
+    PinMarkup, a CustomLayer never attaches to a standalone MarkupMap -
+    layers only make sense on the pin detail / wiki pages where the layers
+    panel lives.
+
+    Deleting a layer never deletes its items: ``PinMarkup.layer`` is
+    ``SET_NULL``, so its markup simply falls back to the base layer.
+
+    Attributes:
+        uuid: Stable public identifier (used in URLs).
+        name: User-supplied display name (e.g. "Tunnels").
+        color: Optional accent color for the layer's button/swatch, from the
+            shared :data:`COLOR_CHOICES` palette.
+        icon: Optional Material Symbols icon name for the layer's button.
+        order: Display order among a pin/wiki's own layers.
+        default_visible: Whether this layer starts toggled on when the map
+            first loads. Defaults to False - custom layers are opt-in extras,
+            unlike the always-on base Markup layer.
+        parent_pin: The Pin whose detail map this layer belongs to, if personal.
+        parent_wiki: The Wiki whose map this layer belongs to, if shared.
+        profile: The user who created this layer.
+    """
+
+    name = CharField(max_length=100)
+    color = CharField(max_length=20, blank=True, default="", choices=COLOR_CHOICES)
+    icon = CharField(max_length=50, blank=True, default="", choices=CUSTOM_LAYER_ICON_CHOICES)
+    order = IntegerField(default=0)
+    default_visible = BooleanField(default=False)
+
+    parent_pin = ForeignKey(
+        "dashboard.Pin",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
+        related_name="custom_layers",
+    )
+    parent_wiki = ForeignKey(
+        "dashboard.Wiki",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
+        related_name="custom_layers",
+    )
+    profile = ForeignKey(
+        "dashboard.Profile",
+        on_delete=CASCADE,
+        related_name="custom_layers",
+    )
+
+    if TYPE_CHECKING:
+        parent_pin_id: int | None
+        parent_wiki_id: int | None
+        profile_id: int
+        items: QuerySet[PinMarkup]
+
+    objects = CustomLayerManager()
+
+    def to_json(self) -> dict:
+        """Compact serialisation for the layers panel and manage-layers dialog.
+
+        Returns:
+            dict with uuid, name, color, icon, order, default_visible.
+        """
+        return {
+            "uuid": str(self.uuid),
+            "name": self.name,
+            "color": self.color,
+            "icon": self.icon,
+            "order": self.order,
+            "default_visible": self.default_visible,
+        }
+
+    def __str__(self) -> str:
+        owner = f"pin={self.parent_pin_id}" if self.parent_pin_id else f"wiki={self.parent_wiki_id}"
+        return f"{self.name} [{owner}]"
+
+    class Meta(abstract.DashboardModel.Meta):
+        db_table = "dashboard_custom_layers"
+        ordering = ["order", "created"]
+        indexes = [
+            Index(fields=["parent_pin"], name="idxdb_cl_pin"),
+            Index(fields=["parent_wiki"], name="idxdb_cl_wiki"),
+            Index(fields=["profile"], name="idxdb_cl_profile"),
+        ]
+
+
 class PinMarkup(abstract.FrontendDashboardModel):
     """A map annotation attached to a user's Pin, a Wiki page, or a MarkupMap.
 
@@ -371,12 +466,23 @@ class PinMarkup(abstract.FrontendDashboardModel):
         on_delete=CASCADE,
         related_name="markup_items",
     )
+    # The custom layer this item has been filed under, if any - see
+    # CustomLayer. SET_NULL so deleting a layer un-groups its items (falls
+    # back to the base Markup layer) instead of deleting them.
+    layer = ForeignKey(
+        CustomLayer,
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
+        related_name="items",
+    )
 
     if TYPE_CHECKING:
         parent_pin_id: int | None
         parent_wiki_id: int | None
         parent_map_id: int | None
         profile_id: int
+        layer_id: int | None
 
     objects = PinMarkupManager()
 
@@ -398,6 +504,7 @@ class PinMarkup(abstract.FrontendDashboardModel):
             "fill_opacity": self.fill_opacity,
             "border_opacity": self.border_opacity,
             "security_indicator": self.security_indicator,
+            "layer_uuid": str(self.layer.uuid) if self.layer is not None else None,
         }
 
     def to_snapshot_shape(self) -> dict | None:
@@ -547,4 +654,5 @@ class PinMarkup(abstract.FrontendDashboardModel):
             Index(fields=["parent_wiki"], name="idxdb_pm_wiki"),
             Index(fields=["parent_map"], name="idxdb_pm_map"),
             Index(fields=["profile"], name="idxdb_pm_profile"),
+            Index(fields=["layer"], name="idxdb_pm_layer"),
         ]
