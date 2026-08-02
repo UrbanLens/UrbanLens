@@ -1,0 +1,326 @@
+// Achievements: the profile-page grid, the full catalogue page, and the
+// site-admin award editor.
+//
+// Each award carries its own accent through the --achievement-color custom
+// property, set inline from the colour the admin picked, so one rule set styles
+// every award without a class per colour.
+
+@use 'variables' as *;
+
+// -- Award tile ---------------------------------------------------------------
+
+.achievement {
+  --achievement-color: var(--ul-color-accent);
+
+  align-items: center;
+  background: var(--ul-control-bg);
+  border: 1px solid var(--ul-border);
+  border-radius: 10px;
+  display: flex;
+  gap: .75rem;
+  padding: .75rem;
+  transition: border-color .15s, box-shadow .15s, transform .15s;
+
+  &:hover {
+    border-color: var(--achievement-color);
+    box-shadow: var(--ul-shadow-sm);
+    transform: translateY(-1px);
+  }
+}
+
+.achievement__medal {
+  align-items: center;
+  // color-mix keeps the medal's fill and ring derived from the single colour
+  // the admin chose, instead of needing a second, hand-picked tint per award.
+  background: color-mix(in srgb, var(--achievement-color) 18%, transparent);
+  border: 2px solid color-mix(in srgb, var(--achievement-color) 55%, transparent);
+  border-radius: 50%;
+  display: flex;
+  flex: 0 0 auto;
+  height: 3rem;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+  width: 3rem;
+
+  &--sm {
+    height: 2.25rem;
+    width: 2.25rem;
+  }
+}
+
+.achievement__icon {
+  color: var(--achievement-color);
+  font-size: 1.5rem;
+  line-height: 1;
+
+  &--emoji {
+    font-size: 1.35rem;
+  }
+}
+
+.achievement__image {
+  height: 100%;
+  object-fit: cover;
+  width: 100%;
+}
+
+.achievement__lock {
+  background: var(--ul-grey-1);
+  border-radius: 50%;
+  bottom: -2px;
+  color: var(--ul-grey-5);
+  font-size: .9rem;
+  padding: 2px;
+  position: absolute;
+  right: -2px;
+}
+
+.achievement__body {
+  min-width: 0;
+}
+
+.achievement__name {
+  color: var(--ul-grey-8);
+  font-size: .9rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.achievement__description {
+  color: var(--ul-grey-5);
+  font-size: .8rem;
+  margin: .15rem 0 0;
+}
+
+.achievement__meta {
+  color: var(--ul-grey-5);
+  font-size: .72rem;
+  margin: .25rem 0 0;
+}
+
+.achievement__progress {
+  background: var(--ul-grey-1);
+  border-radius: 999px;
+  height: 5px;
+  margin-top: .4rem;
+  overflow: hidden;
+}
+
+.achievement__progress-fill {
+  background: var(--achievement-color);
+  height: 100%;
+  transition: width .3s ease;
+}
+
+// Locked awards stay legible but visibly secondary - greying them out entirely
+// would hide the goal the user is working toward.
+.achievement--locked {
+  opacity: .62;
+
+  .achievement__medal {
+    background: var(--ul-grey-0);
+    border-color: var(--ul-border);
+  }
+
+  .achievement__icon {
+    color: var(--ul-grey-4);
+  }
+
+  .achievement__image {
+    filter: grayscale(1);
+  }
+}
+
+// -- Grids --------------------------------------------------------------------
+
+.achievement-grid {
+  display: grid;
+  gap: .6rem;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+}
+
+.achievement-grid--full {
+  grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+}
+
+.achievement-count {
+  background: var(--ul-color-accent-bg);
+  border-radius: 999px;
+  color: var(--ul-color-accent-fg);
+  font-size: .72rem;
+  font-weight: 600;
+  margin-left: .4rem;
+  padding: .1rem .45rem;
+}
+
+.achievement-more {
+  font-size: .8rem;
+  margin: .6rem 0 0;
+}
+
+// -- Streaks ------------------------------------------------------------------
+
+.achievement-streaks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  list-style: none;
+  margin: 0 0 .75rem;
+  padding: 0;
+}
+
+.achievement-streak {
+  align-items: center;
+  background: var(--ul-control-bg);
+  border: 1px solid var(--ul-border);
+  border-radius: 999px;
+  color: var(--ul-grey-5);
+  display: flex;
+  font-size: .78rem;
+  gap: .35rem;
+  padding: .25rem .65rem;
+
+  i {
+    font-size: 1rem;
+  }
+}
+
+// A live streak is the one thing on the page a user can lose today, so it gets
+// the only warm accent in the section.
+.achievement-streak--live {
+  background: var(--ul-color-warning-bg);
+  border-color: var(--ul-color-warning-border);
+  color: var(--ul-color-warning-text);
+
+  i {
+    color: var(--ul-color-warning-icon);
+  }
+}
+
+.achievement-streak__value {
+  font-weight: 600;
+}
+
+.achievement-streak__best {
+  font-weight: 400;
+  opacity: .7;
+}
+
+.achievement-streaks--full .achievement-streak {
+  font-size: .85rem;
+  padding: .4rem .8rem;
+}
+
+// -- Catalogue page -----------------------------------------------------------
+
+.achievement-summary {
+  display: flex;
+  gap: 2rem;
+}
+
+.achievement-summary__stat {
+  display: flex;
+  flex-direction: column;
+}
+
+.achievement-summary__value {
+  color: var(--ul-grey-8);
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+
+.achievement-summary__label {
+  color: var(--ul-grey-5);
+  font-size: .75rem;
+  text-transform: uppercase;
+}
+
+// -- Site-admin editor --------------------------------------------------------
+
+.admin-achievement-list {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+}
+
+.admin-achievement-card {
+  &.is-inactive {
+    opacity: .6;
+  }
+}
+
+.admin-achievement-head {
+  align-items: center;
+  display: flex;
+  gap: .75rem;
+  margin-bottom: .75rem;
+}
+
+.admin-achievement-titles {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: .3rem;
+  min-width: 0;
+}
+
+.admin-achievement-name {
+  font-weight: 600;
+}
+
+.admin-achievement-count {
+  color: var(--ul-grey-5);
+  flex: 0 0 auto;
+  font-size: .78rem;
+  white-space: nowrap;
+}
+
+.admin-achievement-grid {
+  display: grid;
+  gap: .6rem;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+}
+
+.admin-achievement-toggles {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: .75rem;
+  margin-top: .75rem;
+}
+
+.admin-achievement-secondary {
+  border-top: 1px solid var(--ul-border);
+  display: flex;
+  gap: .5rem;
+  margin-top: .75rem;
+  padding-top: .6rem;
+}
+
+.admin-metric-list {
+  display: grid;
+  gap: .5rem;
+  grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  margin: 0;
+}
+
+.admin-metric-item {
+  dt {
+    color: var(--ul-grey-8);
+    font-size: .85rem;
+    font-weight: 600;
+  }
+
+  dd {
+    color: var(--ul-grey-5);
+    font-size: .78rem;
+    margin: .15rem 0 0;
+  }
+}
+
+.admin-metric-unit {
+  color: var(--ul-grey-4);
+  font-weight: 400;
+}

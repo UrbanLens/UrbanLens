@@ -53,6 +53,7 @@ TEXT_ALERTABLE_TYPES: frozenset[str] = frozenset(
         "pin_shared",
         "visit_suggested",
         "wiki_safety_checkin",
+        "achievement_earned",
     },
 )
 

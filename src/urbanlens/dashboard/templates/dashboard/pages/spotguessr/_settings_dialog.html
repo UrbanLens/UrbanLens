@@ -76,6 +76,15 @@ starts a multiplayer lobby instead of a solo game.
                     <span>Only places I've actually visited</span>
                 </label>
             </div>
+            <div class="spotguessr-field">
+                <label for="sg-label-filter">Only spots from this label</label>
+                <select id="sg-label-filter">
+                    <option value="">All spots</option>
+                    {% for label in labels %}
+                    <option value="{{ label.id }}">{{ label.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
             <div class="spotguessr-field spotguessr-field--switch">
                 <label>
                     <span class="ul-switch"><input type="checkbox" id="sg-restrict-area"><span class="ul-switch__track"></span></span>

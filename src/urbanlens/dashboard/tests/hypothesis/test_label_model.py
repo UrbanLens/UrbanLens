@@ -416,6 +416,43 @@ class LabelQuerySetWithPinCountsTests(TestCase):
         self.assertEqual(result.location_count, 0)
 
 
+# -- LabelQuerySet.with_hierarchy ------------------------------------------
+
+
+class LabelQuerySetWithHierarchyTests(TestCase):
+    """with_hierarchy() prefetches parents/children but skips the pin count annotations."""
+
+    def setUp(self):
+        self.user = baker.make("auth.User")
+        self.parent = baker.make(Label, name="Parent", profile=None, kind=KIND_TAG)
+        self.label = baker.make(Label, name="Child", profile=None, kind=KIND_TAG)
+        self.label.parents.add(self.parent)
+
+    def test_does_not_annotate_pin_count(self) -> None:
+        qs = Label.objects.filter(pk=self.label.pk).with_hierarchy()
+        result = qs.get()
+        self.assertFalse(hasattr(result, "pin_count"))
+
+    def test_does_not_annotate_location_count(self) -> None:
+        qs = Label.objects.filter(pk=self.label.pk).with_hierarchy()
+        result = qs.get()
+        self.assertFalse(hasattr(result, "location_count"))
+
+    def test_prefetches_parents_without_extra_queries(self) -> None:
+        qs = Label.objects.filter(pk=self.label.pk).with_hierarchy()
+        result = qs.get()
+        with self.assertNumQueries(0):
+            parent_ids = {p.id for p in result.parents.all()}
+        self.assertEqual(parent_ids, {self.parent.id})
+
+    def test_prefetches_children_without_extra_queries(self) -> None:
+        qs = Label.objects.filter(pk=self.parent.pk).with_hierarchy()
+        result = qs.get()
+        with self.assertNumQueries(0):
+            child_ids = {c.id for c in result.children.all()}
+        self.assertEqual(child_ids, {self.label.id})
+
+
 # -- Label.get_label_and_descendants ------------------------------------------
 
 

@@ -79,6 +79,23 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
             ),
         )
 
+    def with_hierarchy(self) -> Self:
+        """Prefetch parents/children without computing pin or location counts.
+
+        Cheap counterpart to `with_pin_counts()` for a page's first paint: the
+        Organize page renders label cards from this immediately, then a
+        follow-up HTMX request re-fetches the same rows via `with_pin_counts()`
+        to back-fill the stat badges once they're ready, so the DOM shows up
+        before the count queries (including the per-label descendant BFS in
+        `tag_total_pins`) have run at all.
+        """
+        from urbanlens.dashboard.models.labels.model import Label
+
+        return self.prefetch_related(
+            Prefetch("children", queryset=Label.objects.only("id", "name", "kind")),
+            Prefetch("parents", queryset=Label.objects.only("id", "name", "kind")),
+        )
+
     def with_pin_counts(self) -> Self:
         """Annotate pin_count / location_count and prefetch children (with their own pin_count) and parents.
 

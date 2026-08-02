@@ -915,6 +915,7 @@ img.leaflet-marker-icon.is-selected {
 
 .add-pin-dialog {
     @include dialog-base(46em);
+    @include tad-tabs;
     // Full-viewport-aware height: keeps the dialog clear of mobile browser chrome
     max-height: calc(100dvh - 4rem);
     // Lighter backdrop - the map behind it should remain partially visible
@@ -2300,6 +2301,32 @@ details.fp-accordion-item[open] .fp-acc-arrow {
 }
 
 /* -- Tag filter list ------------------------------------------------ */
+#fp-acc-labels {
+    @include tad-tabs;
+
+    // This filter sidebar is a fixed dark glass panel regardless of site theme
+    // (see the hardcoded rgba(255,255,255,x) tones throughout this section),
+    // so the tab bar gets the same treatment instead of the theme-aware
+    // dialog default `tad-tabs` otherwise reads.
+    .tad-tabs {
+        background: rgba(255, 255, 255, .04);
+        border-bottom-color: rgba(255, 255, 255, .11);
+    }
+
+    .tad-tab {
+        color: var(--ul-grey-4);
+
+        &:hover {
+            color: $ui-fp-active;
+        }
+
+        &--active {
+            color: $ui-fp-active;
+            border-bottom-color: $ui-fp-active;
+        }
+    }
+}
+
 .fp-tag-search {
     width: 100%;
     background: rgba(255, 255, 255, 0.06);

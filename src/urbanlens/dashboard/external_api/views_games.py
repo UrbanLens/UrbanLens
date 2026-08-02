@@ -466,7 +466,7 @@ class SpotGuessrSessionsView(PaginatedListMixin, ExternalApiView):
     )
     def post(self, request: Request) -> Response:
         """Start a solo session and return it together with its first round."""
-        serializer = SpotGuessrSessionCreateSerializer(data=request.data)
+        serializer = SpotGuessrSessionCreateSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         profile = request.user.profile
@@ -479,6 +479,7 @@ class SpotGuessrSessionsView(PaginatedListMixin, ExternalApiView):
             use_aliases=data.get("use_aliases", True),
             geo_bounds_geojson=data.get("geo_bounds"),
             round_time_limit_seconds=data.get("round_time_limit_seconds"),
+            label_id=data.get("label_id"),
         )
         # Saved before the game starts, exactly as the web start does, so the
         # next start on *either* client opens with these settings.

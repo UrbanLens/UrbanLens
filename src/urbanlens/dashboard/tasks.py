@@ -2755,3 +2755,76 @@ def process_device_scan_upload(self, upload_id: int) -> bool:
 
     update_task_progress(self, current=1, total=1, message="Device scan processed")
     return True
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def evaluate_achievements_for_profile(profile_id: int, metric_keys: list[str] | None = None) -> int:
+    """Grant any achievements a profile now qualifies for.
+
+    Queued by ``models.achievements.signals`` after a contribution, but only
+    when some active award actually measures the affected metric - so this runs
+    rarely, and when it does it re-checks a single count rather than sweeping.
+
+    Streak days are recorded synchronously by the signal, not here, so a task
+    delayed past midnight cannot credit the wrong day.
+
+    Args:
+        profile_id: PK of the profile that contributed.
+        metric_keys: Registry keys of the metrics to re-check. None re-checks
+            every active achievement; an empty list re-checks nothing.
+
+    Returns:
+        How many awards were newly granted.
+    """
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.services.achievements.evaluate import evaluate_profile
+
+    if metric_keys is not None and not metric_keys:
+        return 0
+
+    profile = Profile.objects.filter(pk=profile_id).first()
+    if profile is None:
+        logger.info("evaluate_achievements_for_profile: profile %s no longer exists", profile_id)
+        return 0
+
+    return len(evaluate_profile(profile, metric_keys=metric_keys))
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def backfill_achievement(achievement_id: int) -> int:
+    """Grant a newly defined achievement to everyone who already qualifies.
+
+    Queued when an admin saves an ``Achievement``, so awards added at any point
+    reach users retroactively instead of only rewarding activity from then on.
+
+    Args:
+        achievement_id: PK of the achievement to backfill.
+
+    Returns:
+        How many profiles received the award.
+    """
+    from urbanlens.dashboard.models.achievements.model import Achievement
+    from urbanlens.dashboard.services.achievements.evaluate import evaluate_achievement_for_all
+
+    achievement = Achievement.objects.filter(pk=achievement_id).first()
+    if achievement is None:
+        logger.info("backfill_achievement: achievement %s no longer exists", achievement_id)
+        return 0
+
+    return evaluate_achievement_for_all(achievement)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_achievements() -> int:
+    """Re-evaluate every achievement for every profile.
+
+    The nightly safety net. Some thresholds are crossed with no write to react
+    to - "trips attended" ticks up simply because a trip's end date passed - and
+    an enqueue is lost whenever the broker is briefly unreachable.
+
+    Returns:
+        Total awards granted across all profiles.
+    """
+    from urbanlens.dashboard.services.achievements.evaluate import evaluate_all_profiles
+
+    return evaluate_all_profiles()

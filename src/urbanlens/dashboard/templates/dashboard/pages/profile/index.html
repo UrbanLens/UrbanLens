@@ -273,6 +273,19 @@
     {# pages/home/overview.html and partials/home/_widget_*.html. #}
 
 
+    {# -- Achievements -------------------------------------------------------- #}
+    <div id="profile_achievements"
+         hx-get="{% url 'achievement.profile_panel' profile.slug %}"
+         hx-trigger="load"
+         hx-swap="outerHTML"
+         class="profile-section ul-section">
+        <div class="profile-section-header">
+            <h3 class="profile-section-title">Achievements</h3>
+        </div>
+        <p class="loading-text">Loading achievements...</p>
+    </div>
+
+
     {# -- Friends ------------------------------------------------------------- #}
     <div id="friend_list"
          hx-get="{% url 'friend.list' profile.id %}"

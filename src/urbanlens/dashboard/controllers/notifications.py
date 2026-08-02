@@ -34,6 +34,7 @@ _PREF_FIELDS = [
     ("wiki_updated", "Community Wiki Updated"),
     ("wiki_safety_checkin", "Safety Check-in at a Pinned Location"),
     ("safety_checkin_partner_invite", "Safety Check-in Partner Invitation"),
+    ("achievement_earned", "Achievement Unlocked"),
 ]
 
 

@@ -11,6 +11,7 @@ class DashboardConfig(AppConfig):
     def ready(self):
         from django.db.models.signals import post_save
 
+        from urbanlens.dashboard.models.achievements.signals import connect as connect_achievement_signals
         import urbanlens.dashboard.models.aliases.signals
         import urbanlens.dashboard.models.cache.signals
         import urbanlens.dashboard.models.comments.signals
@@ -29,6 +30,10 @@ class DashboardConfig(AppConfig):
         from urbanlens.dashboard.plugins import plugin_registry
 
         post_save.connect(create_default_tags, sender=Profile, dispatch_uid="label_create_default_tags")
+
+        # Achievements subscribe to a dozen unrelated models, so their receivers
+        # are registered from a table rather than one import per sender.
+        connect_achievement_signals()
 
         # Plugin discovery only imports modules and instantiates plugin
         # classes - it must never touch the database this early.

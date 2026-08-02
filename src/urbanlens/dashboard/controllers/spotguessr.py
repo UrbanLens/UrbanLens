@@ -27,6 +27,7 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import (
@@ -105,13 +106,41 @@ def _parse_geo_bounds(geo_bounds_raw: str | None) -> tuple[dict | None, JsonResp
     return geo_bounds_geojson, None
 
 
-def _config_from_request(request: HttpRequest) -> tuple[spotguessr_session.GameConfig | None, JsonResponse | None]:
+def _validate_label_id(raw_label_id: str | None, profile: Profile) -> tuple[int | None, JsonResponse | None]:
+    """Parse+validate an optional ``label_id`` - must name a label ``profile`` can actually use.
+
+    Mirrors ``_parse_geo_bounds``'s shape. Scoped to ``Label.objects.location_labels().visible_to(profile)``
+    (the same visibility rule the map's label filter uses) so a profile can't probe for the
+    existence of another profile's private label via the game-start endpoint - an id that
+    doesn't resolve is reported identically whether it's malformed, someone else's personal
+    label, or simply doesn't exist.
+
+    Returns:
+        ``(label_id, None)`` on success (``label_id`` is None when omitted), or
+        ``(None, error_response)``.
+    """
+    if not raw_label_id:
+        return None, None
+    try:
+        label_id = int(raw_label_id)
+    except (TypeError, ValueError):
+        return None, JsonResponse({"error": "label_id must be an integer."}, status=400)
+    if not Label.objects.location_labels().visible_to(profile).filter(pk=label_id).exists():
+        return None, JsonResponse({"error": "Unknown label."}, status=400)
+    return label_id, None
+
+
+def _config_from_request(request: HttpRequest, profile: Profile) -> tuple[spotguessr_session.GameConfig | None, JsonResponse | None]:
     """Build+validate a GameConfig from POST fields, shared by solo and multiplayer start.
 
     Returns:
         ``(config, None)`` on success, or ``(None, error_response)``.
     """
     geo_bounds_geojson, error = _parse_geo_bounds(request.POST.get("geo_bounds"))
+    if error is not None:
+        return None, error
+
+    label_id, error = _validate_label_id(request.POST.get("label_id"), profile)
     if error is not None:
         return None, error
 
@@ -138,6 +167,7 @@ def _config_from_request(request: HttpRequest) -> tuple[spotguessr_session.GameC
         use_aliases=request.POST.get("use_aliases", "on") == "on",
         geo_bounds_geojson=geo_bounds_geojson,
         round_time_limit_seconds=round_time_limit_seconds,
+        label_id=label_id,
     )
     return config, None
 
@@ -258,6 +288,7 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
                 "round_time_limit_choices": spotguessr_session.ROUND_TIME_LIMIT_CHOICES,
                 "modes": SpotGuessrMode.choices,
                 "mode_cards": _mode_cards(),
+                "labels": Label.objects.location_labels().visible_to(profile).ordered(),
                 "urls": _url_templates(),
                 "my_profile_id": profile.pk,
                 "initial_session_id": initial_session_id,
@@ -313,7 +344,7 @@ class SpotGuessrStartView(LoginRequiredMixin, View):
         if mode not in SpotGuessrMode.values:
             return JsonResponse({"error": f"Unknown mode {mode!r}."}, status=400)
 
-        config, error = _config_from_request(request)
+        config, error = _config_from_request(request, profile)
         if config is None:
             # _config_from_request always pairs a None config with a non-None
             # error response - the fallback below never actually fires.

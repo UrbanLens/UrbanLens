@@ -95,6 +95,12 @@ class GameConfig:
     #: settings dialog only offers those), but not validated against that
     #: list here - any positive int is honored.
     round_time_limit_seconds: int | None = None
+    #: Restrict candidate locations to those tagged (by any participant's own pin)
+    #: with this Label or one of its descendants - see
+    #: ``services.spotguessr.eligibility.eligible_locations``'s ``label_id`` for the
+    #: exact semantics and why it can never surface a location nobody in the
+    #: session has pinned.
+    label_id: int | None = None
 
     def to_dict(self) -> dict:
         """JSON-serializable form for ``GameSession.config``."""
@@ -199,7 +205,12 @@ def start_solo_playthrough(profile: Profile, mode: str, config: GameConfig, *, t
         SpotGuessrError: If the mode has no round-generation strategy
             registered (a programming error, not a player-facing condition).
     """
-    if not eligibility.has_eligible_locations([profile], require_visited_by_all=config.require_visited_all, geo_bounds=config.geo_bounds):
+    if not eligibility.has_eligible_locations(
+        [profile],
+        require_visited_by_all=config.require_visited_all,
+        geo_bounds=config.geo_bounds,
+        label_id=config.label_id,
+    ):
         return SoloStartResult(session=None, round=None, no_eligible_locations=True)
 
     session = start_solo_session(profile, mode, config, total_rounds=total_rounds)
@@ -396,6 +407,7 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
             participants,
             require_visited_by_all=config.require_visited_all,
             geo_bounds=config.geo_bounds,
+            label_id=config.label_id,
         )
         scope = geo_bonus.bonus_scope_for(initial_candidates)
         session.config = {**(session.config or {}), "bonus_scope": scope.to_dict()}
@@ -517,6 +529,7 @@ def generate_round_content(
             require_visited_by_all=config.require_visited_all,
             geo_bounds=config.geo_bounds,
             exclude_location_ids=excluded_ids,
+            label_id=config.label_id,
         )
         location = selection.pick_next_location(candidates, mode=mode, difficulty=config.difficulty, previous_location=previous_location)
         if location is None:

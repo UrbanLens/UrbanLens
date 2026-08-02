@@ -50,7 +50,7 @@ Unused functions/methods (0 references found): 144  (High: 123, Medium: 19, Low:
     [High  ] ./urbanlens/dashboard/models/abstract/choices.py:22  TextChoices.invalid  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/abstract/choices.py:30  TextChoices.get_name  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/api_call_log/model.py:62  ApiCallLog.prune_older_than_days  (refs: 0)
-    [High  ] ./urbanlens/dashboard/models/badges/model.py:114  Badge.is_customized  (refs: 0)
+    [High  ] ./urbanlens/dashboard/models/badges/model.py:114  Label.is_customized  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/campus/model.py:70  Campus.is_default  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/campus/model.py:75  Campus.effective_polygon  (refs: 0)
     [High  ] ./urbanlens/dashboard/models/friendship/invitation/model.py:42  FriendInvitation.is_expired  (refs: 0)
@@ -176,7 +176,7 @@ Rarely-used functions/methods: 327  (High: 248, Medium: 77, Low: 2)
     [High  ] ./urbanlens/dashboard/controllers/visits.py:40  _add_visited_status  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/abstract/slug.py:35  HasSlug._slug_max_length  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/account/model.py:41  EmailVerification.mark_verified  (refs: 1)
-    [High  ] ./urbanlens/dashboard/models/badges/model.py:126  Badge.initial_order_for_parents  (refs: 1)
+    [High  ] ./urbanlens/dashboard/models/badges/model.py:126  Label.initial_order_for_parents  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/cache/location_cache.py:48  LocationCache.is_stale  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/friendship/invitation/model.py:50  FriendInvitation.mark_accepted  (refs: 1)
     [High  ] ./urbanlens/dashboard/models/pin/model.py:161  Pin.display_label  (refs: 1)
@@ -336,10 +336,10 @@ Rarely-used functions/methods: 327  (High: 248, Medium: 77, Low: 2)
                - method on 'TestCase', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
     [Medium] ./urbanlens/core/tests/testcase.py:166  TestCase.append_to_failure  (refs: 1)
                - method on 'TestCase', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
-    [Medium] ./urbanlens/dashboard/controllers/badges.py:840  BadgeBulkConvertView._resolved_target_kind  (refs: 1)
-               - method on 'BadgeBulkConvertView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
-    [Medium] ./urbanlens/dashboard/controllers/badges.py:899  BadgeCustomizeView._customize_ctx  (refs: 1)
-               - method on 'BadgeCustomizeView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/badges.py:840  LabelBulkConvertView._resolved_target_kind  (refs: 1)
+               - method on 'LabelBulkConvertView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
+    [Medium] ./urbanlens/dashboard/controllers/badges.py:899  LabelCustomizeView._customize_ctx  (refs: 1)
+               - method on 'LabelCustomizeView', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
     [Medium] ./urbanlens/dashboard/controllers/campus.py:31  CampusController.get_campus  (refs: 1)
                - method on 'CampusController', which looks like a Django/DRF view, form, admin, or similar framework class - these are often dispatched by name/string convention in ways this script can't fully trace
     [Medium] ./urbanlens/dashboard/controllers/campus.py:65  CampusController.save_campus  (refs: 1)

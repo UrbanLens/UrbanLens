@@ -120,6 +120,7 @@
       {% elif n.notification_type == 'wiki_updated' %}article
       {% elif n.notification_type == 'pin_shared' %}ios_share
       {% elif n.notification_type == 'visit_suggested' %}event_available
+      {% elif n.notification_type == 'achievement_earned' %}emoji_events
       {% elif n.notification_type == 'error' %}error
       {% elif n.notification_type == 'warning' %}warning
       {% elif n.notification_type == 'comment_upload_failed' %}image_not_supported

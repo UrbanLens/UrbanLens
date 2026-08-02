@@ -1587,10 +1587,10 @@
                 if (src && src !== 'photos' && !isNotRelevant) counts[src] = (counts[src] || 0) + 1;
                 if (isNotRelevant) notRelevantCount += 1;
             });
-            var countBadge = document.getElementById('media-count-badge');
-            if (countBadge) {
-                countBadge.textContent = String(total);
-                countBadge.hidden = total === 0;
+            var countLabel = document.getElementById('media-count-badge');
+            if (countLabel) {
+                countLabel.textContent = String(total);
+                countLabel.hidden = total === 0;
             }
             var sources = Object.keys(counts);
             var showSourceTabs = sources.length >= 2;

@@ -187,6 +187,13 @@ class NotificationPreference(abstract.DashboardModel):
     safety_checkin_partner_invite_whatsapp = models.BooleanField(default=False)
     safety_checkin_partner_invite_sms = models.BooleanField(default=False)
 
+    # Defaults to SITE only. Earning an award is good news but not urgent, and
+    # a tier of awards can unlock several at once - emailing each one would be
+    # a burst of mail for something the profile page already shows.
+    achievement_earned = models.CharField(max_length=10, choices=DeliveryPreference.choices, default=DeliveryPreference.SITE)
+    achievement_earned_whatsapp = models.BooleanField(default=False)
+    achievement_earned_sms = models.BooleanField(default=False)
+
     profile = models.OneToOneField(
         "dashboard.Profile",
         on_delete=models.CASCADE,

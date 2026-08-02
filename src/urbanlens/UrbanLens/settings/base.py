@@ -279,6 +279,12 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.sweep_stalled_consensus_sessions",
         "schedule": 2 * 60,
     },
+    # Catches thresholds no write crosses - "trips attended" ticks up simply
+    # because a trip's end date passed - and anything a signal enqueue lost.
+    "achievements-sweep": {
+        "task": "urbanlens.dashboard.tasks.sweep_achievements",
+        "schedule": 24 * 60 * 60,
+    },
     "safety-checkin-due-reminders": {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
         "schedule": 5 * 60,

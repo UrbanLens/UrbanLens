@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 
 if TYPE_CHECKING:
@@ -26,6 +27,7 @@ def eligible_locations(
     require_visited_by_all: bool = False,
     geo_bounds: GEOSGeometry | None = None,
     exclude_location_ids: Iterable[int] = (),
+    label_id: int | None = None,
 ) -> QuerySet[Location]:
     """Locations every profile in ``profiles`` has pinned (and optionally visited).
 
@@ -38,6 +40,12 @@ def eligible_locations(
             player-chosen region.
         exclude_location_ids: Locations to exclude outright - already used
             earlier in this session (no repeats within one playthrough).
+        label_id: Optional ``Label`` id (``config.label_id``) restricting candidates to
+            locations where at least one participant's own pin carries that label or
+            one of its descendants (``Label.get_label_and_descendants``). Applied as an
+            *additional* narrowing condition scoped to ``pins__profile__in=profiles`` -
+            it can only shrink the already-pinned-by-everyone pool above, never surface a
+            location some participant hasn't pinned themselves.
 
     Returns:
         A Location queryset, unevaluated. Empty (``.none()``) when
@@ -54,6 +62,10 @@ def eligible_locations(
         else:
             candidates = candidates.filter(pins__profile=profile)
 
+    if label_id is not None:
+        expanded_label_ids = Label.get_label_and_descendants(label_id)
+        candidates = candidates.filter(pins__profile__in=profiles, pins__labels__id__in=expanded_label_ids)
+
     if geo_bounds is not None:
         candidates = candidates.filter(point__within=geo_bounds)
 
@@ -69,6 +81,7 @@ def has_eligible_locations(
     *,
     require_visited_by_all: bool = False,
     geo_bounds: GEOSGeometry | None = None,
+    label_id: int | None = None,
 ) -> bool:
     """Whether ``eligible_locations`` would return anything at all, without materializing it.
 
@@ -83,8 +96,14 @@ def has_eligible_locations(
         profiles: Every participant in the session.
         require_visited_by_all: See ``eligible_locations``.
         geo_bounds: See ``eligible_locations``.
+        label_id: See ``eligible_locations``.
 
     Returns:
         True if at least one location is eligible for every profile.
     """
-    return eligible_locations(profiles, require_visited_by_all=require_visited_by_all, geo_bounds=geo_bounds).exists()
+    return eligible_locations(
+        profiles,
+        require_visited_by_all=require_visited_by_all,
+        geo_bounds=geo_bounds,
+        label_id=label_id,
+    ).exists()

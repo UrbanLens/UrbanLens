@@ -75,7 +75,7 @@ class NotificationPreferenceCoverageTests(TestCase):
         """
         stems = set(preference_field_names())
         all_types = {value for value, _label in NotificationType.choices}
-        self.assertEqual(len(stems), 12)
+        self.assertEqual(len(stems), 13)
         self.assertLess(len(stems), len(all_types))
 
     def test_one_preference_stem_does_not_match_its_notification_type(self) -> None:

@@ -544,3 +544,179 @@ $inputs: (
 		pointer-events: auto;
 	}
 }
+
+// -- Label pickers ---------------------------------------------------------------
+
+// Search + kind-tab bar shared by every label picker (tag-add-dialog, bulk-edit
+// dialog, saved-filter/map label pickers, quick-add-pin dialog...) - the same
+// visual pattern reused across unrelated containers, so it's a mixin rather
+// than a global selector. Reads the ambient --ul-surface-raised/--ul-grey-*
+// tokens each container already establishes via @include dialog-base(...) or
+// @include surface($rung: N).
+@mixin tad-tabs {
+	.tad-tabs {
+		display: flex;
+		gap: 0;
+		border-bottom: 2px solid var(--ul-surface-raised-border);
+		padding: 0 .5rem;
+		flex-shrink: 0;
+		background: var(--ul-surface-raised);
+	}
+
+	.tad-tab {
+		flex: 1;
+		padding: .5rem .4rem;
+		border: none;
+		border-bottom: 2px solid transparent;
+		margin-bottom: -2px;
+		background: transparent;
+		font-size: .8rem;
+		font-weight: 500;
+		color: var(--ul-grey-5);
+		cursor: pointer;
+		transition: color .12s, border-color .12s;
+		white-space: nowrap;
+
+		&:hover {
+			color: $color-indigo-500;
+		}
+
+		&--active {
+			color: $color-indigo-500;
+			border-bottom-color: $color-indigo-500;
+		}
+	}
+
+	[data-theme="dark"] & {
+		.tad-tab {
+			color: var(--ul-grey-6);
+
+			&:hover {
+				color: $color-indigo-400;
+			}
+
+			&--active {
+				color: $color-indigo-400;
+				border-bottom-color: $color-indigo-400;
+			}
+		}
+	}
+
+	// -- Kind pill (shown in the "All" tab next to a label's name) -------------
+	.tad-kind-pill {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.5em 1em;
+		border-radius: 999px;
+		font-size: .7rem;
+		font-weight: 600;
+		letter-spacing: .03em;
+		text-transform: uppercase;
+		flex-shrink: 0;
+		color: var(--ul-grey-0);
+
+		&--tag {
+			background-color: #{$color-purple-900};
+			color: #{$color-purple-100};
+		}
+
+		&--category {
+			background-color: #{$color-blue-900};
+			color: #{$color-blue-100};
+		}
+
+		&--status {
+			background-color: #{$color-green-900};
+			color: #{$color-green-100};
+		}
+	}
+}
+
+// -- Search + scrollable button list (shared by every single/multi label list) --
+@mixin tag-dialog-list {
+	.dialog-search {
+		display: block;
+		width: calc(100% - 1.5rem);
+		margin: .6rem .75rem;
+		padding: .45rem .7rem;
+		border: 1px solid var(--ul-surface-raised-border);
+		border-radius: 8px;
+		font-size: .85rem;
+		box-sizing: border-box;
+		outline: none;
+		flex-shrink: 0;
+		background: var(--ul-surface-raised);
+		color: inherit;
+
+		&:focus {
+			border-color: $color-indigo-500;
+			box-shadow: 0 0 0 3px rgba(99, 102, 241, .12);
+		}
+	}
+
+	.tag-dialog-list {
+		list-style: none;
+		padding: 0 .5rem .5rem;
+		margin: 0;
+		overflow-y: auto;
+		flex: 1;
+	}
+
+	.tag-dialog-item {
+		margin-bottom: 2px;
+	}
+
+	.tag-dialog-btn {
+		display: flex;
+		align-items: center;
+		gap: .55rem;
+		width: 100%;
+		padding: .5rem .6rem;
+		border: none;
+		border-radius: 8px;
+		background: transparent;
+		cursor: pointer;
+		font-size: .88rem;
+		text-align: left;
+		transition: background .12s;
+		color: inherit;
+
+		&:hover {
+			background: rgba(99, 102, 241, .08);
+		}
+
+		&--selected {
+			background: rgba(99, 102, 241, .12);
+		}
+	}
+
+	.tag-dialog-icon {
+		width: 20px;
+		text-align: center;
+		flex-shrink: 0;
+	}
+
+	.tag-dialog-name {
+		font-weight: 500;
+		flex: 1;
+	}
+
+	[data-theme="dark"] & {
+		.dialog-search {
+			&:focus {
+				border-color: $color-indigo-400;
+				box-shadow: 0 0 0 3px rgba(129, 140, 248, .15);
+			}
+		}
+
+		.tag-dialog-btn {
+			&:hover {
+				background: rgba(129, 140, 248, .12);
+			}
+
+			&--selected {
+				background: rgba(129, 140, 248, .18);
+			}
+		}
+	}
+}

@@ -33,6 +33,7 @@ class NotificationType(TextChoices):
     TRIVIA_INVITE = "trivia_invite", "Trivia Invitation"
     CONSENSUS_INVITE = "consensus_invite", "Consensus Invitation"
     PIN_IMPORT_COMPLETE = "pin_import_complete", "Pin Import Complete"
+    ACHIEVEMENT_EARNED = "achievement_earned", "Achievement Unlocked"
     ERROR = "error", "Error"
     WARNING = "warning", "Warning"
     INFO = "info", "Info"

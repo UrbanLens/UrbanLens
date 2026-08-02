@@ -65,6 +65,7 @@ interface LastConfig {
     use_aliases: boolean;
     geo_bounds_geojson: GeoJSON.Geometry | null;
     round_time_limit_seconds: number | null;
+    label_id: number | null;
 }
 
 // [[south, west], [north, east]] - matches Leaflet's LatLngBoundsExpression shape directly.
@@ -1288,6 +1289,8 @@ async function startGame(mode: string): Promise<void> {
     });
     if (geoBounds) body.append("geo_bounds", geoBounds);
     if (roundTimeLimit) body.append("round_time_limit_seconds", roundTimeLimit);
+    const labelId = el<HTMLSelectElement>("sg-label-filter").value;
+    if (labelId) body.append("label_id", labelId);
     for (const profileId of state.selectedInviteIds) body.append("invite_profile_ids", String(profileId));
 
     const response = await postForm(urls.start, body);
@@ -1440,12 +1443,15 @@ function resetToSettings(): void {
 function activeFilterLabels(): string[] {
     const labels: string[] = [];
     if (el<HTMLInputElement>("sg-require-visited-all").checked) labels.push("Only places I've visited");
+    const labelFilter = el<HTMLSelectElement>("sg-label-filter");
+    if (labelFilter.value) labels.push(`Restricted to the "${labelFilter.selectedOptions[0]?.textContent}" label`);
     if (el<HTMLInputElement>("sg-restrict-area").checked && currentGeoBoundsGeoJson()) labels.push("Restricted to a chosen area");
     return labels;
 }
 
 function clearActiveFilters(): void {
     el<HTMLInputElement>("sg-require-visited-all").checked = false;
+    el<HTMLSelectElement>("sg-label-filter").value = "";
     clearAreaGeometry();
 }
 
@@ -1511,6 +1517,10 @@ function applyLastConfig(): void {
     el<HTMLInputElement>("sg-use-aliases").checked = config.use_aliases;
     el<HTMLInputElement>("sg-require-visited-all").checked = config.require_visited_all;
     el<HTMLSelectElement>("sg-round-time-limit").value = config.round_time_limit_seconds ? String(config.round_time_limit_seconds) : "";
+    // A label the profile deleted (or that never existed - a stale/tampered snapshot)
+    // simply leaves no matching <option>, so the select silently falls back to "All spots"
+    // rather than erroring.
+    el<HTMLSelectElement>("sg-label-filter").value = config.label_id ? String(config.label_id) : "";
 
     if (config.geo_bounds_geojson) {
         el<HTMLInputElement>("sg-restrict-area").checked = true;

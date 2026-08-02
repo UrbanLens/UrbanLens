@@ -333,6 +333,31 @@ dialog.tag-create-card.ul-dialog {
     }
 }
 
+// Pin/total-pins stat placeholders shown while the Organize page's initial
+// paint is still waiting on its follow-up HTMX request for real counts.
+@keyframes tag-stat-skeleton-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: .4; }
+}
+
+.tag-stat-loading {
+    display: inline-block;
+    width: 1.6em;
+    height: .95em;
+    border-radius: 999px;
+    background: var(--ul-grey-4);
+    animation: tag-stat-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.tag-card-stat-loading {
+    display: inline-block;
+    width: 1.6em;
+    height: .88rem;
+    border-radius: 4px;
+    background: var(--ul-grey-4);
+    animation: tag-stat-skeleton-pulse 1.4s ease-in-out infinite;
+}
+
 .tag-color-dot {
     width: 12px;
     height: 12px;
@@ -527,7 +552,9 @@ $org-stat-col-color-w: 2.75rem;
     .organize-label-rows.tag-view--list .tag-card-view,
     .organize-label-rows.tag-view--tree .tag-card-view {
         overflow: hidden;
-        transition: padding-bottom 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+        // Un-delayed: leaving hover collapses the row back down immediately,
+        // even mid-way through a delayed grow (see below).
+        transition: padding-bottom 0.16s ease;
 
         .tag-card-actions {
             position: absolute;
@@ -536,17 +563,23 @@ $org-stat-col-color-w: 2.75rem;
             opacity: 0;
             transform: translateY(6px);
             pointer-events: none;
-            transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+            transition: opacity 0.14s ease, transform 0.14s ease;
         }
 
+        // Hover-intent: growing the row and sliding the actions in both
+        // carry a short delay, so a cursor merely passing over a row
+        // mid-scroll never triggers the animation - only a pointer that
+        // actually lingers does.
         &:hover,
         &:focus-within {
             padding-bottom: 3.1rem;
+            transition: padding-bottom 0.24s cubic-bezier(0.4, 0, 0.2, 1) 0.15s;
 
             .tag-card-actions {
                 opacity: 1;
                 transform: translateY(0);
                 pointer-events: auto;
+                transition: opacity 0.18s ease 0.15s, transform 0.22s cubic-bezier(0.4, 0, 0.2, 1) 0.15s;
             }
         }
     }
@@ -921,6 +954,8 @@ $org-stat-col-color-w: 2.75rem;
 // overflow: visible is provided by @include dialog-base, keeping icon-picker panels visible.
 .tag-edit-dialog {
     @include dialog-base(52em);
+    @include tad-tabs;
+    @include tag-dialog-list;
 }
 
 .tag-edit-dialog-body {
@@ -940,6 +975,17 @@ $org-stat-col-color-w: 2.75rem;
 // -- Tag merge dialog form -----------------------------------------------------
 .tag-merge-form {
     padding: 1.25rem;
+
+    // .tag-dialog-list (via @include tag-dialog-list on .tag-edit-dialog) assumes
+    // a bounded flex ancestor to scroll within, which this plain form doesn't have -
+    // give it its own bordered, capped-height box instead.
+    .tag-dialog-list {
+        max-height: 220px;
+        border: 1px solid var(--ul-surface-raised-border);
+        border-radius: 8px;
+        margin-top: .4rem;
+        padding: .35rem;
+    }
 }
 
 .tag-merge-source {
@@ -3096,29 +3142,43 @@ $org-stat-col-color-w: 2.75rem;
     }
 }
 
-// Organize rows expose destructive/edit actions only while the row is being used.
+// Organize rows expose destructive/edit actions only while the row is being
+// used - but only on hover-capable, fine-pointer devices (mouse/trackpad).
+// Touch devices have no reliable persistent hover, so the mobile-first
+// baseline is "visible"; hiding-until-hover is an enhancement layered on
+// top for devices that can actually hover.
+@media (hover: hover) and (pointer: fine) {
+    .organize-page {
+        .tag-card-actions,
+        .tag-row-actions,
+        .priority-edit-btn,
+        .priority-jump-actions {
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.12s ease;
+        }
+
+        // Hover-intent: the reveal transition carries a short delay so a
+        // cursor passing over a row mid-scroll (hover flickering on/off in
+        // well under 150ms as the page scrolls under a stationary pointer)
+        // never triggers it. Leaving hover reverts instantly via the
+        // un-delayed transition above.
+        .tag-card:hover .tag-card-actions,
+        .tag-card:focus-within .tag-card-actions,
+        .tag-row:hover .tag-row-actions,
+        .tag-row:focus-within .tag-row-actions,
+        .priority-item:hover .priority-edit-btn,
+        .priority-item:focus-within .priority-edit-btn,
+        .priority-item:hover .priority-jump-actions,
+        .priority-item:focus-within .priority-jump-actions {
+            opacity: 1;
+            pointer-events: auto;
+            transition: opacity 0.18s ease 0.15s;
+        }
+    }
+}
+
 .organize-page {
-    .tag-card-actions,
-    .tag-row-actions,
-    .priority-edit-btn,
-    .priority-jump-actions {
-        opacity: 0;
-        pointer-events: none;
-        transition: opacity 0.12s ease;
-    }
-
-    .tag-card:hover .tag-card-actions,
-    .tag-card:focus-within .tag-card-actions,
-    .tag-row:hover .tag-row-actions,
-    .tag-row:focus-within .tag-row-actions,
-    .priority-item:hover .priority-edit-btn,
-    .priority-item:focus-within .priority-edit-btn,
-    .priority-item:hover .priority-jump-actions,
-    .priority-item:focus-within .priority-jump-actions {
-        opacity: 1;
-        pointer-events: auto;
-    }
-
     .priority-jump-actions {
         display: inline-flex;
         align-items: center;
@@ -3173,22 +3233,6 @@ $org-stat-col-color-w: 2.75rem;
 
 .organize-page .org-filter-bar.open {
     animation: org-filter-bar-open 0.15s ease;
-}
-
-// -- Touch devices: always-visible row actions ---------------------------------
-// On touch devices there is no hover state; keep action buttons permanently
-// visible at reduced opacity so they remain discoverable.
-
-@media (hover: none) and (pointer: coarse) {
-    .organize-page {
-        .tag-card-actions,
-        .tag-row-actions,
-        .priority-edit-btn,
-        .priority-jump-actions {
-            opacity: 0.6 !important;
-            pointer-events: auto !important;
-        }
-    }
 }
 
 

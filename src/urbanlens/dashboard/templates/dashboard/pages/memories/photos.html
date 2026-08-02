@@ -354,7 +354,7 @@
     // Upload/delete mutate the grid directly (no htmx refetch, so the "All
     // photos" count next to the gallery header would otherwise stay at its
     // value as of last page load).
-    function _updatePhotoCountBadge(delta) {
+    function _updatePhotoCountLabel(delta) {
         var head = document.querySelector('.photos-gallery-head');
         if (!head) return;
         var badge = head.querySelector('.badge');
@@ -392,7 +392,7 @@
             '<button type="button" class="photo-tile-del" title="Delete photo" onclick="photosDelete(' + img.id + ')">' +
             '<i class="material-symbols-outlined">delete</i></button>';
         grid.insertBefore(li, grid.firstChild);
-        _updatePhotoCountBadge(1);
+        _updatePhotoCountLabel(1);
     }
 
     // -- Delete ----------------------------------------------------------------
@@ -402,7 +402,7 @@
             .then(function (r) {
                 if (!r.ok) return;
                 var el = document.getElementById('photo-tile-' + id);
-                if (el) { el.remove(); _updatePhotoCountBadge(-1); }
+                if (el) { el.remove(); _updatePhotoCountLabel(-1); }
                 var card = document.getElementById('photo-card-' + id);
                 if (card) card.remove();
                 if (window.toastr) toastr.info('Photo deleted.');

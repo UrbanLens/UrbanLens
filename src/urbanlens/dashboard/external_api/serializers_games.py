@@ -188,6 +188,28 @@ class SpotGuessrSessionCreateSerializer(serializers.Serializer):
     #: to have the server parse it again is a needless round trip and an easy
     #: source of double-encoding bugs.
     geo_bounds = serializers.JSONField(required=False, allow_null=True)
+    label_id = serializers.IntegerField(required=False, allow_null=True, min_value=1)
+
+    def validate_label_id(self, value: int | None) -> int | None:
+        """Reject a label id the caller's own profile can't actually use.
+
+        Mirrors ``controllers.spotguessr._validate_label_id``: an unresolvable id
+        (nonexistent, or someone else's private label) reads as the same 400 either
+        way, so this can't be used to probe for the existence of another profile's
+        labels.
+
+        Raises:
+            rest_framework.serializers.ValidationError: When the id doesn't resolve to
+                a label visible to the requesting profile.
+        """
+        from urbanlens.dashboard.models.labels.model import Label
+
+        if value is None:
+            return None
+        profile = self.context["request"].user.profile
+        if not Label.objects.location_labels().visible_to(profile).filter(pk=value).exists():
+            raise serializers.ValidationError("Unknown label.")
+        return value
 
     def validate_geo_bounds(self, value: Any) -> dict | None:
         """Reject anything that isn't a GEOS-parseable GeoJSON geometry.

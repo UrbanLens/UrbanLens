@@ -8,7 +8,7 @@
  * the pill display instead of silently showing a misleading simplification.
  */
 import { describe, expect, test } from "bun:test";
-import { isSimpleGroups, type LabelGroup } from "./label-picker";
+import { isSimpleGroups, matchesLabelFilter, type LabelGroup } from "./label-picker";
 
 describe("isSimpleGroups", () => {
     test("null/empty groups are simple (nothing selected)", () => {
@@ -74,5 +74,47 @@ describe("isSimpleGroups", () => {
             { op: "or", ids: [3, 4] },
         ];
         expect(isSimpleGroups(groups)).toBe(false);
+    });
+});
+
+/**
+ * matchesLabelFilter() is the combined kind-tab + search-text predicate shared
+ * by createFilterPicker's availability list and createChipPicker's suggestion
+ * list - every label picker's "All/Tags/Categories/Statuses" tabs plus a
+ * search box reduce to this one pure function.
+ */
+describe("matchesLabelFilter", () => {
+    test("empty kind ('All') and empty query matches everything", () => {
+        expect(matchesLabelFilter("tag", "Rooftop", "", "")).toBe(true);
+        expect(matchesLabelFilter("category", "Water Tower", "", "")).toBe(true);
+        expect(matchesLabelFilter(undefined, "Anything", "", "")).toBe(true);
+    });
+
+    test("active kind excludes labels of a different kind", () => {
+        expect(matchesLabelFilter("tag", "Rooftop", "category", "")).toBe(false);
+        expect(matchesLabelFilter("category", "Rooftop", "category", "")).toBe(true);
+    });
+
+    test("a label with no kind never matches a specific kind tab", () => {
+        expect(matchesLabelFilter(undefined, "Rooftop", "tag", "")).toBe(false);
+    });
+
+    test("search text matches case-insensitively, anywhere in the name", () => {
+        expect(matchesLabelFilter("tag", "Water Tower", "", "tower")).toBe(true);
+        expect(matchesLabelFilter("tag", "Water Tower", "", "WATER")).toBe(true);
+        expect(matchesLabelFilter("tag", "Water Tower", "", "silo")).toBe(false);
+    });
+
+    test("surrounding whitespace in the query is ignored", () => {
+        expect(matchesLabelFilter("tag", "Rooftop", "", "  roof  ")).toBe(true);
+    });
+
+    test("kind and search combine with AND, not either/or", () => {
+        // Right kind, wrong text - hidden.
+        expect(matchesLabelFilter("status", "Visited", "status", "demolished")).toBe(false);
+        // Right text, wrong kind - hidden.
+        expect(matchesLabelFilter("tag", "Demolished", "status", "demolished")).toBe(false);
+        // Both right - shown.
+        expect(matchesLabelFilter("status", "Demolished", "status", "demolished")).toBe(true);
     });
 });

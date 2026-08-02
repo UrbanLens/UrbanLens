@@ -119,7 +119,7 @@ Features planned for future releases.
 * Yelp reviews. [UL-160]
 * XLS import [UL-162]
 * Ensure AI sandboxing. This isn't really necessary now, but would be necessary prior to any MCP usage for security reasons, and would also allow for local AI models. (ollama, etc) [UL-163]
-* Badges that are created automatically: start them in a sensible priority order [UL-167]
+* Labels that are created automatically: start them in a sensible priority order [UL-167]
 * Organize Page: Move badge to child of another just by dragging (maybe??) [UL-169]
 * Better emojis for: legal stuff (admission ticket, museum), underground, tunnel, sewer grate, hardhat. Verify we have: religions, languages, countries, urbex gear (boots, flashlight, backpack), photography stuff, time/calendar stuff (seasons?), greek letters, shapes (square, triangle, etc), ceramic tile (mosaic, etc), eyeglasses, book, magnifying glass, share symbol, muscle icon, weights, ninja, gavel, snake eating itself, better "repeat" arrow, "tag" icon (i.e. 'labelled'), save symbol, fleur d'lis [UL-170]
 * "Recently used emojis" to make selecting them easier. [UL-172]
@@ -140,7 +140,7 @@ Features planned for future releases.
 * Main Map: When searching, show loading overlay [UL-194]
 * Organize > Merge Dialog -> Make an effort to choose the best merge candidate. (The one with an icon, then most pins). Is this done already?? [UL-198]
 * Organize Page -> Allow reordering kind tabs somehow, to make understanding the feature set more accessible. [UL-200]
-* Organize Page > Edit Badge -> The first parent badges to show are the ones already selected. [UL-201]
+* Organize Page > Edit Label -> The first parent badges to show are the ones already selected. [UL-201]
 * ~~BUG: Not able to read all takeout files. For example: Parking.csv~~ RESOLVED 2026-07-19 (`d6a677a9`): the CSV importer only recognized a column literally named "URL"; Google Takeout's Parking.csv export uses "Parking location" instead, and has no latitude/longitude columns for the fallback to catch either, so every row silently failed and the file produced zero pins. Broadened the check to a candidate-column list. Note: the exact "Parking location" header name is based on the known Google Takeout Parking export format, not a sample file from this report - re-open if a real Parking.csv still fails after this fix. [UL-203]
 * Create task to ensure vestigial assets are deleted (e.g. if they were supposed to be deleted already, but there was an error - such as for pin imports, exports, etc). [UL-205]
 * BUG: Map import dialog, existing pins still show "new" in the row. [UL-206]
@@ -171,7 +171,7 @@ Features planned for future releases.
 * ~~pages/location/index.html and pages/location/satellite_view.html seem to have duplicate code. Confirm.~~ RESOLVED 2026-07-19 (`45db854e`): those two templates aren't duplicated (index.html just holds the standard HTMX auto-load skeleton for the satellite_view.html fragment) - the real duplication was in `PinController`: `satellite_view_carousell()` and `street_view()` were two near-identical ~50-line methods. Extracted a shared `_render_media_carousel()` helper. [UL-288]
 * Move inline JS into separate TS files for performance, maintainability, typescript. [UL-289]
 * Reorganize template partials [UL-292]
-* ~~AI chat assistant to find, organize...~~ RESOLVED 2026-07-24 (`402c3cdd`): `/assistant/` chat page over the existing LLM gateway stack. Provider-agnostic JSON tool protocol with a budgeted server-side loop (6 tool calls/message); five profile-scoped tools - search pins, find unvisited pins, list trips, create a trip, add a pin to a trip as an activity. No delete/share/privacy-surface tools exist at all (the v1 answer to UL-163's sandboxing concern - the model can only name an allowlisted tool, never execute anything itself). Conversation history is session-only, never persisted to the DB. Badge organizing and invitee/visited Q&A beyond what the tools above cover are not built. [UL-293]
+* ~~AI chat assistant to find, organize...~~ RESOLVED 2026-07-24 (`402c3cdd`): `/assistant/` chat page over the existing LLM gateway stack. Provider-agnostic JSON tool protocol with a budgeted server-side loop (6 tool calls/message); five profile-scoped tools - search pins, find unvisited pins, list trips, create a trip, add a pin to a trip as an activity. No delete/share/privacy-surface tools exist at all (the v1 answer to UL-163's sandboxing concern - the model can only name an allowlisted tool, never execute anything itself). Conversation history is session-only, never persisted to the DB. Label organizing and invitee/visited Q&A beyond what the tools above cover are not built. [UL-293]
 * Convert remaining external services to plugins (weather, geocoding, search providers, routexl, wayback, overpass, datagov, digital commonwealth, apple maps, google earth, openhistoricalmap) [UL-294]
 * Automatically mark nearby PD, public parking, etc. [UL-295]
 * ~~On the main map > filter sidepanel, sliders don't account for 0 (e.g. "unrated")~~ RESOLVED 2026-07-18 (`18d03c3d`): `filter_by_criteria`'s min/max_rating AND min/max_danger used walrus-truthiness (`if x := criteria.get(...):`), which treats 0 as "not set" and skips the filter entirely. Fixed to `is not None`; rating additionally needed 0 special-cased as "unrated" (`reviews__isnull=True` for max_rating=0) since the app never persists an actual `Review.rating=0` row - `pin_edit.py` deletes the review instead. Danger needed only the simple fix, since it's a plain always-populated field where 0 is a real value. [UL-296]
@@ -210,7 +210,7 @@ Features planned for future releases.
 * Create TOS -> I'm one person, please don't sue me. Safety checkin is best effort. For legal reasons, this site cannot advocate doing anything illegal. [UL-376]
 * More targetted exports. For instance: exporting all pins that match a certain search, or exporting just a list of pins (once lists are implemented). This would allow importing select things into another app without importing everything. [UL-377]
 * Markup: Dotted lines. [UL-378]
-* Badge merge dialog: Show a big, obvious visual displaying what badges will go into what other badge, and which badges will no longer exist. [UL-379]
+* Label merge dialog: Show a big, obvious visual displaying what badges will go into what other badge, and which badges will no longer exist. [UL-379]
 * On pin details page, allow dragging map vertically bigger, which saves between sessions. [UL-380]
 * Turning off the markup layer on a map should turn off showing boundaries. [UL-381]
 * ~~Allow exporting data as other formats: KML, GPX, GeoJSON, CSV.~~ RESOLVED 2026-07-24 (`174b5729`): one-click "Download all pins as..." links on the Tools export card for all four formats, reusing the existing per-selection writers (`services/export_formats.py`) over the account's full root-pin set. [UL-382]
@@ -309,7 +309,7 @@ This could be a playground for implementing a few exploratory ideas I've had in 
 
 ## Code Quality
 ### Fix Generics
-* tags = Badge.objects.tags() (and also .categories()) -> Cannot access attribute "categories" for class "Manager" [UL-126]
+* tags = Label.objects.tags() (and also .categories()) -> Cannot access attribute "categories" for class "Manager" [UL-126]
 * profile = user.profile -> Cannot access attribute "profile" for class "User" [UL-127]
 
 ## From README Roadmap (migrated)

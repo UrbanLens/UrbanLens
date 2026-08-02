@@ -238,6 +238,39 @@ Wiki "how many people have this pinned" style counts (`services/community_counts
 deliberately fuzzed (small random jitter, cached for a day) rather than exact — an exact count
 combined with a timeline could otherwise let someone infer individual pinning activity.
 
+## Achievements — awards are permanent, and streaks are judged on read
+
+Three non-obvious rules hold the achievement system together:
+
+**Awards are never revoked.** `evaluate_profile` only ever grants. Deleting pins drops
+`pins_created` below the threshold, and the award stays. That is why there are no `post_delete`
+handlers in `models/achievements/signals.py` — their absence is deliberate, not an oversight.
+
+**Streak achievements compare against `longest_length`, never `current_length`.** Breaking a
+streak must not take back the award it earned. Separately, `current_length` is only ever
+*advanced* — nothing fires on the day a user stops — so it is stale by construction. Always read
+it through `ProfileStreak.current_length_as_of()`, which returns 0 once `last_day` is more than a
+day old. The stored column is not the live value.
+
+**One activity row per day is what makes streaks idempotent.** `record_activity` is safe to call
+on every write because `ProfileActivityDay` is unique on (profile, kind, day); only the first call
+of a day advances the streak. Do not "optimise" that `get_or_create` away — uploading fifty photos
+in an afternoon would then count as fifty streak days.
+
+Two things about the write path. Streak days are recorded **synchronously**, inside the
+contributing transaction, not in the Celery task — streaks are the only metric with no source of
+truth outside our own tables, so the day has to be written even when no streak award exists yet,
+or an award added later would have nothing to reward. The *evaluation* enqueue, by contrast, is
+gated on `active_metric_keys()`: if no active award measures the affected metric, nothing is
+queued at all. That gate is deliberately **uncached** — caching it made write-path behaviour
+depend on whatever ran before it, because a rolled-back transaction leaves no signal to
+invalidate on.
+
+Two more things that bite: metric keys are stored on `Achievement.metric`, so renaming one in the
+registry orphans every award pointing at it (needs a data migration). And `Achievement.metric`
+takes its `choices` as a *callable* precisely so registering a new metric does not generate a
+migration — don't "simplify" it to a literal list.
+
 ## Undo framework — do not "delete" through save()/post_save
 
 The generic undo system (`services/undo/`, `models/undo/UndoAction`) stages deletions in cache

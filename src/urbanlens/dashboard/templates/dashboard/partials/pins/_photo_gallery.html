@@ -312,7 +312,7 @@ Context:
   // Upload/delete mutate the grid directly (no htmx refetch, see comment above)
   // but previously left the header's photo-count badge showing its value as of
   // last page load - keep it in sync with the same direct DOM edit.
-  function _updateGalleryCountBadge(delta) {
+  function _updateGalleryCountLabel(delta) {
     var header = document.querySelector('#photo-gallery .card-header');
     if (!header) return;
     var badge = header.querySelector('.badge');
@@ -374,7 +374,7 @@ Context:
       id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true,
       author: img.author || '', copyright: img.copyright || '', sourceUrl: img.source_url || '', takenAt: img.taken_at || '',
     });
-    _updateGalleryCountBadge(1);
+    _updateGalleryCountLabel(1);
   }
 
   // -- Delete -----------------------------------------------------------------
@@ -389,7 +389,7 @@ Context:
         if (el) el.remove();
         _items = _items.filter(function (i) { return i.id !== imgId; });
         if (window._galleryRemoveMarker) window._galleryRemoveMarker(imgId);
-        _updateGalleryCountBadge(-1);
+        _updateGalleryCountLabel(-1);
         if (window.toastr) toastr.success('Photo deleted.');
       }
     });

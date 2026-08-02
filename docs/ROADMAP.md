@@ -291,7 +291,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
 - **Docstrings**: Google style, everywhere, Sphinx-consumed. Ruff enforces much of style;
   always run `ruff check --fix` before hand-fixing.
 - **MyPy**: fix types at the origin; no `cast`-to-silence. Known generics gaps: manager
-  typing for `Badge.objects.tags()` (UL-126) and `user.profile` (UL-127) — a proper
+  typing for `Label.objects.tags()` (UL-126) and `user.profile` (UL-127) — a proper
   generic `Manager`/`QuerySet` typing pass in `models/abstract/` would fix a whole class.
 
 ### 3.3 Extensibility
@@ -461,7 +461,7 @@ close or convert to a bug."
     locality wrapped as one exact-phrase term specifically so a generic street address can't match
     the same address in an unrelated city. Already has dedicated test coverage naming this exact
     caller. No code change needed.
-16. ~~**Badge-kind-change UX** (UL-155)~~ RESOLVED 2026-07-19 (`02729c81`) — other properties do
+16. ~~**Label-kind-change UX** (UL-155)~~ RESOLVED 2026-07-19 (`02729c81`) — other properties do
     get updated correctly on a kind conversion (memberships migrate, parent/child hierarchy is
     cleared since it only makes sense within one kind, pin marker caches invalidate, protected
     labels are blocked), but it wasn't clear beforehand: the edit form's hint only mentioned

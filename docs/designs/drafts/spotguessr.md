@@ -46,6 +46,16 @@ A Location is eligible for a round in session S iff:
 6. **Joined, not just invited** (multiplayer only) — "every participant" means every profile
    with `GameSessionParticipant.status = JOINED`. An invited-but-not-yet-accepted profile is
    not yet a player and does not gate eligibility on their pins — see "Multiplayer sessions."
+7. **Restricted to a label** (optional, `config.label_id`) — at least one participant's own
+   pin at that location carries this `Label` or one of its descendants
+   (`Label.get_label_and_descendants`), scoped to `pins__profile__in=<session participants>`
+   so the check can only match a pin one of them actually owns. This is a pure narrowing of
+   rule 1's pool, never an alternative to it — a label can never make an unpinned location
+   eligible, so it cannot leak the existence of a location to a participant who hasn't
+   pinned it themselves. `label_id` must resolve to a label visible to whichever profile
+   configured the session (global, or owned by them) — enforced at the settings-validation
+   layer (`controllers.spotguessr._validate_label_id` / the external API's
+   `SpotGuessrSessionCreateSerializer.validate_label_id`), not here.
 
 ## Scoring: point vs. boundary distance
 

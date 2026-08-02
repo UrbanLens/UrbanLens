@@ -674,6 +674,8 @@
     flex-direction: column;
     gap: .5rem;
 
+    @include tad-tabs;
+
     .fp-tag-list {
         max-height: 180px;
         overflow-y: auto;

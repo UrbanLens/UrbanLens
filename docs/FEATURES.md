@@ -274,6 +274,13 @@ relationships, bulk edit and bulk convert between kinds, per-user color/icon cus
 (`LabelCustomization`) on top of shared global labels, drag-to-reorder priority, and a unified
 "Organize" management page.
 
+Every surface where a user picks one or more labels (map filter sidebar, saved filters, bulk pin
+edit, the quick-add-pin dialog, the label merge target picker, add-labels-to-pin/location/image,
+organize page parent/child picker) shares the same search + kind-tab (Tags/Categories/Statuses/
+All) filtering UX, backed by the `createFilterPicker`/`createChipPicker` factories in
+`ts/shared/label-picker.ts` (or the equivalent bespoke picker where one predates those factories),
+plus the `@mixin tad-tabs` / `@mixin tag-dialog-list` Sass mixins for consistent styling.
+
 ## Notifications
 
 - In-app notification center (bell dropdown), mark read/unread, per-type delivery preferences
@@ -318,11 +325,44 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
   action for a limited window before it's finalized
 - Settings → Undo History page to review and restore recently undo-able actions
 
+## Achievements
+
+Admin-defined awards users earn for contributing. An achievement is a **metric** plus a
+**threshold** plus an icon, so new ones can be added at any time with no deploy — saving one
+queues a backfill that grants it retroactively to everyone who already qualifies. Tiers
+("10 pins", "100 pins") are just several achievements sharing a metric.
+
+- **Where they show**: an Achievements section on every profile page, visible to exactly the
+  audience that can see that profile (it reuses `Profile.can_view_profile`), plus a full
+  catalogue at `/profile/<slug>/achievements/all/`. Progress bars toward unearned awards are
+  shown only to the profile's owner — they would otherwise leak exact contribution counts.
+- **Defining them**: Site Admin → Achievements (`/site-admin/achievements/`), or Django admin.
+  Each award takes a name, description, metric, threshold, a Material Symbols icon name or emoji
+  or an uploaded image, a colour, a display order, plus `is_active` (retire without revoking) and
+  `is_secret` (hidden until earned).
+- **Metrics** (`services/achievements/metrics.py`, extensible via `register()`): pins created,
+  wikis created, wiki edits, photos uploaded, markup maps created, places visited, places rated
+  by stars / vulnerability / danger (independently), trips planned, trips attended, comments
+  written, friends, people invited who joined, and longest streak for each of the five streak
+  kinds. Each metric documents its own exclusions (background draft wikis and externally sourced
+  photos do not count, for instance).
+- **Streaks**: consecutive days of logging in, uploading a photo, editing a wiki, pinning a spot,
+  or commenting. One `ProfileActivityDay` row per profile per kind per day makes repeats within a
+  day free, and `ProfileStreak` caches current/longest. Awards compare against **longest**, so
+  breaking a streak never revokes what it earned.
+- **Awards are permanent**: deleting pins lowers the metric but keeps the award.
+- **Evaluation**: signals on the contributing models queue a narrowly scoped re-check (only the
+  metrics that event could move) on transaction commit — and only when some active award actually
+  measures one of them, so a site with no award on a metric does no background work when it
+  changes. A nightly `sweep_achievements` task catches thresholds no write crosses, such as
+  "trips attended" ticking up when a trip ends.
+
 ## Site Administration
 
 - `/site-admin/` panel: user management, site-wide settings, usage stats (KPIs, system, API),
-  subscription role management, per-service API rate-limit toggles, plugin inventory, UI component
-  showcase, dev toolbar (theme/map-dark-mode toggles, session reset)
+  subscription role management, per-service API rate-limit toggles, plugin inventory,
+  achievement definitions, UI component showcase, dev toolbar (theme/map-dark-mode toggles,
+  session reset)
 - Data export/import tooling and on-demand/scheduled database backups
 - Subscription roles grant feature flags (`SiteFeature`) per user; pending grants can attach to an
   email invite for users who haven't joined yet

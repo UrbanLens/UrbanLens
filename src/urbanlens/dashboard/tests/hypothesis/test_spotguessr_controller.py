@@ -12,6 +12,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.images.model import Image, MediaKind
+from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -150,6 +151,63 @@ class SpotGuessrStartViewTests(TestCase):
     def test_a_non_numeric_round_time_limit_is_rejected(self) -> None:
         response = self.client.post(self.start_url, {"round_time_limit_seconds": "soon"})
         self.assertEqual(response.status_code, 400)
+
+    def test_a_valid_label_id_is_persisted_on_the_session_config(self) -> None:
+        label = baker.make(Label, name="Factories", profile=self.profile)
+        Pin.objects.get(profile=self.profile, location=self.location).labels.add(label)
+        response = self.client.post(self.start_url, {"label_id": str(label.pk)})
+        self.assertEqual(response.status_code, 200, response.json())
+        session = GameSession.objects.get(pk=response.json()["session_id"])
+        self.assertEqual(session.config["label_id"], label.pk)
+
+    def test_no_label_id_defaults_to_no_label_filter(self) -> None:
+        response = self.client.post(self.start_url, {})
+        self.assertEqual(response.status_code, 200)
+        session = GameSession.objects.get(pk=response.json()["session_id"])
+        self.assertIsNone(session.config["label_id"])
+
+    def test_a_non_numeric_label_id_is_rejected(self) -> None:
+        response = self.client.post(self.start_url, {"label_id": "not-an-id"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_nonexistent_label_id_is_rejected(self) -> None:
+        response = self.client.post(self.start_url, {"label_id": "999999"})
+        self.assertEqual(response.status_code, 400)
+
+    def test_another_profiles_private_label_id_is_rejected(self) -> None:
+        """Guards against using this endpoint to probe for another profile's private labels."""
+        other_profile = _make_profile()
+        someone_elses_label = baker.make(Label, name="Someone else's spots", profile=other_profile)
+        response = self.client.post(self.start_url, {"label_id": str(someone_elses_label.pk)})
+        self.assertEqual(response.status_code, 400)
+
+    def test_a_global_label_id_is_accepted(self) -> None:
+        global_label = baker.make(Label, name="Abandoned", profile=None)
+        response = self.client.post(self.start_url, {"label_id": str(global_label.pk)})
+        self.assertEqual(response.status_code, 200, response.json())
+
+    def test_label_filter_narrows_which_location_the_round_uses(self) -> None:
+        label = baker.make(Label, name="Factories", profile=self.profile)
+        other_location = _make_location()
+        other_pin = baker.make(Pin, profile=self.profile, location=other_location)
+        other_pin.labels.add(label)
+        baker.make(
+            Image,
+            location=other_location,
+            media_type=MediaKind.PHOTO,
+            latitude=None,
+            longitude=None,
+            image=ContentFile(b"fake image bytes", name="other.jpg"),
+            wiki=baker.make(Wiki, location=other_location),
+        )
+        # self.location (from setUp) is pinned but never labeled, so only
+        # other_location should ever be picked once label_id narrows the pool.
+
+        for _ in range(5):
+            response = self.client.post(self.start_url, {"label_id": str(label.pk), "total_rounds": "1"})
+            self.assertEqual(response.status_code, 200)
+            round_ = GameRound.objects.get(pk=response.json()["round"]["round_id"])
+            self.assertEqual(round_.location_id, other_location.pk)
 
     def test_round_payload_reports_whether_it_shows_imagery(self) -> None:
         response = self.client.post(self.start_url, {"total_rounds": "1"})

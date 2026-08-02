@@ -12,6 +12,7 @@ from rest_framework import routers
 
 from urbanlens.dashboard.controllers import (
     account_deletion,
+    achievements,
     ai_extraction,
     aliases,
     api_keys,
@@ -946,6 +947,16 @@ urlpatterns = [
                 path("preview/<slug:mode>/", userprofile.ProfilePreviewStartView.as_view(), name="profile.preview"),
                 path("<slug:profile_slug>/", userprofile.ViewProfileView.as_view(), name="profile.view_user"),
                 path("<slug:profile_slug>/common-pins/", userprofile.CommonPinsView.as_view(), name="profile.common_pins"),
+                path(
+                    "<slug:profile_slug>/achievements/",
+                    achievements.ProfileAchievementsView.as_view(),
+                    name="achievement.profile_panel",
+                ),
+                path(
+                    "<slug:profile_slug>/achievements/all/",
+                    achievements.AchievementListView.as_view(),
+                    name="achievement.list",
+                ),
                 path("<slug:profile_slug>/note/", userprofile.ProfileNoteView.as_view(), name="profile.note"),
                 path(
                     "<slug:profile_slug>/note/<int:note_id>/delete/",
@@ -1772,6 +1783,18 @@ urlpatterns = [
     path("site-admin/subscriptions/", site_admin.SiteAdminSubscriptionsView.as_view(), name="site_admin_subscriptions"),
     path("site-admin/api-limits/", site_admin.SiteAdminApiLimitsView.as_view(), name="site_admin_api_limits"),
     path("site-admin/plugins/", site_admin.SiteAdminPluginsView.as_view(), name="site_admin_plugins"),
+    path("site-admin/achievements/", achievements.SiteAdminAchievementsView.as_view(), name="site_admin_achievements"),
+    path(
+        "site-admin/achievements/<int:achievement_id>/",
+        achievements.SiteAdminAchievementEditView.as_view(),
+        name="site_admin_achievement_edit",
+    ),
+    path(
+        "site-admin/achievements/<int:achievement_id>/backfill/",
+        achievements.SiteAdminAchievementBackfillView.as_view(),
+        name="site_admin_achievement_backfill",
+    ),
+    path("achievements/", achievements.AchievementRedirectView.as_view(), name="achievement.mine"),
     path(
         "site-admin/ui-components/",
         site_admin.SiteAdminUIComponentsView.as_view(),

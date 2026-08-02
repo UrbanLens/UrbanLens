@@ -303,6 +303,16 @@
                         <div class="fp-formula-display-text" id="fp-formula-display-text"></div>
                     </div>
 
+                    {# Kind tabs filtering the availability list below - shared with every #}
+                    {# label picker (search still narrows within the active tab, via the  #}
+                    {# formula bar below - see ts/shared/label-picker.ts). #}
+                    <div class="tad-tabs" id="fp-label-kind-tabs" role="tablist">
+                        <button type="button" class="tad-tab tad-tab--active" data-tab="" role="tab">All</button>
+                        <button type="button" class="tad-tab" data-tab="tag" role="tab">Tags</button>
+                        <button type="button" class="tad-tab" data-tab="category" role="tab">Categories</button>
+                        <button type="button" class="tad-tab" data-tab="status" role="tab">Statuses</button>
+                    </div>
+
                     {# Formula bar - replaces old search input. Supports plain search + formula operators. #}
                     <div class="fp-formula-wrap" id="fp-formula-wrap">
                         <input type="text" class="fp-formula-bar" id="fp-label-formula"
@@ -324,6 +334,7 @@
                                 data-label-text="{{ label.name|escapejs }}"
                                 data-label-color="{{ label.color|default:'' }}"
                                 data-label-icon="{{ label.icon|default:'' }}"
+                                data-label-kind="{{ label.kind }}"
                                 {% if label.color %}style="border-color:{{ label.color }}55;background:{{ label.color }}18;color:{{ label.color }}cc"{% endif %}>
                             {% if label.icon %}<span style="font-size:.9em">{{ label.icon }}</span>{% endif %}
                             {{ label.name }}
@@ -478,6 +489,12 @@
             <label class="form-label">Labels</label>
             <div class="apdlg-label-field" id="apdlg-label-field">
                 <div class="apdlg-label-chips" id="apdlg-label-chips"></div>
+                <div class="tad-tabs" id="apdlg-label-kind-tabs" role="tablist">
+                    <button type="button" class="tad-tab tad-tab--active" data-tab="" role="tab">All</button>
+                    <button type="button" class="tad-tab" data-tab="tag" role="tab">Tags</button>
+                    <button type="button" class="tad-tab" data-tab="category" role="tab">Categories</button>
+                    <button type="button" class="tad-tab" data-tab="status" role="tab">Statuses</button>
+                </div>
                 <div class="apdlg-label-input-wrap form-input-wrap">
                     <input type="text" id="apdlg-label-search" class="form-input apdlg-label-input"
                            placeholder="Search or add labels..." autocomplete="off" autocorrect="off">
@@ -3387,16 +3404,17 @@
     // Thin id-based wrapper over the shared chip picker (ts/shared/label-picker.ts,
     // installed globally by core.js) - the same component the saved-filter pages
     // used to duplicate.
-    function _makeLabelChipPicker(chipsElId, searchElId, suggElId) {
+    function _makeLabelChipPicker(chipsElId, searchElId, suggElId, tabsElId) {
         return window.UrbanLensLabelPicker.createChipPicker({
             chipsEl: document.getElementById(chipsElId),
             searchEl: document.getElementById(searchElId),
             suggEl: document.getElementById(suggElId),
+            tabsEl: tabsElId ? document.getElementById(tabsElId) : undefined,
         });
     }
 
-    const _bulkEditAddPicker = _makeLabelChipPicker('bulk-edit-add-label-chips', 'bulk-edit-add-label-search', 'bulk-edit-add-label-suggestions');
-    const _bulkEditRemovePicker = _makeLabelChipPicker('bulk-edit-remove-label-chips', 'bulk-edit-remove-label-search', 'bulk-edit-remove-label-suggestions');
+    const _bulkEditAddPicker = _makeLabelChipPicker('bulk-edit-add-label-chips', 'bulk-edit-add-label-search', 'bulk-edit-add-label-suggestions', 'bulk-edit-add-label-tabs');
+    const _bulkEditRemovePicker = _makeLabelChipPicker('bulk-edit-remove-label-chips', 'bulk-edit-remove-label-search', 'bulk-edit-remove-label-suggestions', 'bulk-edit-remove-label-tabs');
 
     // -- Bulk edit: set parent pin (single-pick search, not a label chip set) --
     const _bulkEditParentPicker = (function () {
@@ -4706,6 +4724,7 @@
                 formulaDisplayText: document.getElementById('fp-formula-display-text'),
                 formulaDisplayClear: document.getElementById('fp-formula-display-clear'),
                 accordion: document.getElementById('fp-acc-labels'),
+                kindTabs: document.getElementById('fp-label-kind-tabs'),
             },
             onChange: function () { htmx.trigger(document.getElementById('filter-form'), 'change'); },
         });
@@ -4881,6 +4900,8 @@
         if (labelSearch) labelSearch.value = '';
         const labelSugg = document.getElementById('apdlg-label-suggestions');
         if (labelSugg) labelSugg.hidden = true;
+        _apdlgActiveKind = '';
+        document.querySelectorAll('#apdlg-label-kind-tabs .tad-tab').forEach((t, i) => t.classList.toggle('tad-tab--active', i === 0));
 
         const customize = document.getElementById('apdlg-customize');
         if (customize) customize.open = false;
@@ -5171,12 +5192,30 @@
     // -- Label selector ----------------------------------------------------
     let _apdlgSelectedLabels = [];
     let _apdlgAllLabels = [];
+    let _apdlgActiveKind = ''; // '' = All - only filters which candidates are offered, see _apdlgKindOk
     (function() {
         const dataEl = document.getElementById('apdlg-label-data');
         if (dataEl) {
             try { _apdlgAllLabels = JSON.parse(dataEl.textContent); } catch(e) {}
         }
     })();
+
+    // Shared by every candidate lookup below (suggestions + Tab/comma/space/Enter
+    // top-match) so the active kind tab narrows all of them consistently.
+    function _apdlgKindOk(label) {
+        return !_apdlgActiveKind || label.kind === _apdlgActiveKind;
+    }
+
+    document.querySelectorAll('#apdlg-label-kind-tabs .tad-tab').forEach((tab) => {
+        tab.addEventListener('click', () => {
+            document.querySelectorAll('#apdlg-label-kind-tabs .tad-tab').forEach((t) => t.classList.remove('tad-tab--active'));
+            tab.classList.add('tad-tab--active');
+            _apdlgActiveKind = tab.dataset.tab || '';
+            const searchEl = document.getElementById('apdlg-label-search');
+            searchEl.focus();
+            _apdlgShowSuggestions(searchEl.value);
+        });
+    });
 
     function _apdlgRenderSelectedChips() {
         const chips = document.getElementById('apdlg-label-chips');
@@ -5201,7 +5240,7 @@
         if (!box) return;
         const q = query.toLowerCase().trim();
         const selectedIds = new Set(_apdlgSelectedLabels.map(b => b.id));
-        let matches = _apdlgAllLabels.filter(b => !selectedIds.has(b.id) && (!q || b.name.toLowerCase().includes(q)));
+        let matches = _apdlgAllLabels.filter(b => !selectedIds.has(b.id) && _apdlgKindOk(b) && (!q || b.name.toLowerCase().includes(q)));
         matches = matches.slice(0, 12);
         box.innerHTML = '';
         matches.forEach(b => {
@@ -5266,7 +5305,7 @@
                 e.preventDefault();
                 const q = this.value.trim();
                 const topMatch = _apdlgAllLabels.find(b =>
-                    !_apdlgSelectedLabels.find(s => s.id === b.id) && b.name.toLowerCase().includes(q.toLowerCase())
+                    !_apdlgSelectedLabels.find(s => s.id === b.id) && _apdlgKindOk(b) && b.name.toLowerCase().includes(q.toLowerCase())
                 );
                 if (topMatch) _apdlgSelectLabel(topMatch);
                 return;
@@ -5277,13 +5316,14 @@
                 // Find if continuing to type would still match: any label that starts with q but isn't q
                 const wouldContinue = _apdlgAllLabels.some(b =>
                     !_apdlgSelectedLabels.find(s => s.id === b.id) &&
+                    _apdlgKindOk(b) &&
                     b.name.toLowerCase().startsWith(q) &&
                     b.name.toLowerCase() !== q
                 );
                 if (!wouldContinue && items.length === 1) {
                     e.preventDefault();
                     const topMatch = _apdlgAllLabels.find(b =>
-                        !_apdlgSelectedLabels.find(s => s.id === b.id) && b.name.toLowerCase().includes(q)
+                        !_apdlgSelectedLabels.find(s => s.id === b.id) && _apdlgKindOk(b) && b.name.toLowerCase().includes(q)
                     );
                     if (topMatch) { _apdlgSelectLabel(topMatch); return; }
                 }
@@ -5306,7 +5346,7 @@
                     e.preventDefault();
                     const q = this.value.trim();
                     const topMatch = _apdlgAllLabels.find(b =>
-                        !_apdlgSelectedLabels.find(s => s.id === b.id) && b.name.toLowerCase().includes(q.toLowerCase())
+                        !_apdlgSelectedLabels.find(s => s.id === b.id) && _apdlgKindOk(b) && b.name.toLowerCase().includes(q.toLowerCase())
                     );
                     if (topMatch) _apdlgSelectLabel(topMatch);
                 }
@@ -5329,6 +5369,7 @@
         btn.dataset.labelText = label.name || '';
         btn.dataset.labelColor = label.color || '';
         btn.dataset.labelIcon = label.icon || '';
+        btn.dataset.labelKind = label.kind || '';
         if (label.color) {
             btn.style.borderColor = label.color + '55';
             btn.style.background = label.color + '18';
