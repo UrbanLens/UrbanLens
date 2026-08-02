@@ -38,7 +38,7 @@ from urbanlens.dashboard.plugins.builtin.nominatim import NominatimPanelSource, 
 from urbanlens.dashboard.plugins.builtin.nps import NpsPanelSource
 from urbanlens.dashboard.plugins.builtin.parcel_buildings import ParcelBuildingsPanelSource, building_footprint_geojson
 from urbanlens.dashboard.plugins.builtin.usgs import UsgsTopoPanelSource
-from urbanlens.dashboard.services.external_data import (
+from urbanlens.dashboard.services.pins.external_data import (
     BoundaryPanelSource,
     GalleryMediaSource,
     InfoPanelSource,

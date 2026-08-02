@@ -33,7 +33,7 @@ from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActiv
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.locations.naming import _MEANINGLESS_NAME_PHRASES
-from urbanlens.dashboard.services.visits import (
+from urbanlens.dashboard.services.visits.visits import (
     accept_visit_suggestion,
     build_visit_suggestion_message,
     create_visit_suggestion,

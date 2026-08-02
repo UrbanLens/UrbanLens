@@ -41,7 +41,7 @@ from urbanlens.dashboard.services.apis.locations.base import (
 )
 
 # Adjust this import to wherever Gateway/Gateway actually live.
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 
 try:
     from overturemaps import geodataframe as _overture_geodataframe  # pyright: ignore[reportMissingImports]

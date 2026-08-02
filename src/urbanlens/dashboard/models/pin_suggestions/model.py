@@ -10,10 +10,10 @@ from django.db.models import CASCADE, SET_NULL, CharField, DecimalField, Foreign
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.pin_suggestions.queryset import PinSuggestionManager
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 
 #: Distinct visit dates kept per suggestion - a sanity cap on storage/UI size,
-#: not an API-call budget like ``services.photo_import.MAX_VISIT_DATES``.
+#: not an API-call budget like ``services.photos.photo_import.MAX_VISIT_DATES``.
 MAX_STORED_VISIT_DATES = 30
 
 #: Representative photos kept per suggestion for review-queue previews and
@@ -53,9 +53,9 @@ class PinSuggestion(abstract.DashboardModel):
     Unlike :class:`~urbanlens.dashboard.models.visit_suggestions.model.VisitSuggestion`,
     this is always self-directed (no recipient/notification-preference routing) and may
     propose creating a brand-new pin rather than only logging a visit on one that already
-    exists. Created in bulk by ``services.pin_suggestions.ingest_location_hits``, which
+    exists. Created in bulk by ``services.pins.pin_suggestions.ingest_location_hits``, which
     matches each discovered coordinate against the profile's existing pins (their
-    effective property boundary, exactly as ``services.visits.find_pin_containing_point``
+    effective property boundary, exactly as ``services.visits.visits.find_pin_containing_point``
     does for live geolocation) and clusters whatever doesn't match into new-pin candidates.
 
     Attributes:

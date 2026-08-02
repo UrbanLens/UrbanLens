@@ -13,7 +13,7 @@ from one that does not exist.
 **The notification.** Reacting to somebody's comment notifies them on the web
 and, until this change, did not over the API: the internal HTMX panel wrote the
 ``NotificationLog`` row itself, while both API reaction endpoints went through
-``services.comments.toggle_reaction``, which did not. Moving the notification
+``services.comments.comments.toggle_reaction``, which did not. Moving the notification
 into the service is what makes the two surfaces agree, and the tests below fail
 against the previous implementation.
 """
@@ -29,9 +29,9 @@ from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, No
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.reactions.model import Reaction
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.comments import toggle_reaction
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.comments.comments import toggle_reaction
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 BASE = "/dashboard/api/external/v1/pins"
 

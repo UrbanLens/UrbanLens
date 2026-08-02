@@ -28,7 +28,7 @@ from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.apis.calendar.google import ACTIVITY_ID_EVENT_PROPERTY, TRIP_UUID_EVENT_PROPERTY, CalendarEventNotFoundError
-from urbanlens.dashboard.services.calendar_sync import (
+from urbanlens.dashboard.services.trips.calendar_sync import (
     DEFAULT_ACTIVITY_EVENT_DURATION,
     activity_to_event_body,
     disconnect_member_calendar_sync,
@@ -40,7 +40,7 @@ from urbanlens.dashboard.services.calendar_sync import (
     remove_trip_from_calendar,
     trip_to_event_body,
 )
-from urbanlens.dashboard.services.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 _DATES = st.dates(min_value=datetime.date(1990, 1, 1), max_value=datetime.date(2100, 1, 1))
 
@@ -193,7 +193,7 @@ class _CalendarSyncDBTestCase(TestCase):
 
     def _patch_gateway(self):
         """Patch the gateway class used by the sync service; returns the instance mock."""
-        patcher = mock.patch("urbanlens.dashboard.services.calendar_sync.GoogleCalendarGateway")
+        patcher = mock.patch("urbanlens.dashboard.services.trips.calendar_sync.GoogleCalendarGateway")
         gateway_cls = patcher.start()
         self.addCleanup(patcher.stop)
         return gateway_cls.return_value
@@ -377,7 +377,7 @@ class MatchEventAttendeesTests(_CalendarSyncDBTestCase):
 
     def test_friend_attendee_is_invitable(self):
         from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
-        from urbanlens.dashboard.services.calendar_sync import match_event_attendees
+        from urbanlens.dashboard.services.trips.calendar_sync import match_event_attendees
 
         friend = User.objects.create_user(username="att-friend", email="att-friend@example.com").profile
         Friendship.objects.create(from_profile=self.profile, to_profile=friend, status=FriendshipStatus.ACCEPTED)
@@ -395,7 +395,7 @@ class MatchEventAttendeesTests(_CalendarSyncDBTestCase):
         self.assertEqual(others, ["No Account"])
 
     def test_non_friend_account_is_not_invitable(self):
-        from urbanlens.dashboard.services.calendar_sync import match_event_attendees
+        from urbanlens.dashboard.services.trips.calendar_sync import match_event_attendees
 
         User.objects.create_user(username="att-stranger", email="att-stranger@example.com")
 
@@ -947,7 +947,7 @@ class PushAutoSyncedTripChangesTests(_CalendarSyncDBTestCase):
             trip=trip, profile=other_profile, google_event_id="evt-ok", direction=CalendarSyncDirection.IMPORTED, auto_sync=True,
         )
 
-        gateway_cls = mock.patch("urbanlens.dashboard.services.calendar_sync.GoogleCalendarGateway").start()
+        gateway_cls = mock.patch("urbanlens.dashboard.services.trips.calendar_sync.GoogleCalendarGateway").start()
         self.addCleanup(mock.patch.stopall)
 
         def _gateway_for(*, account):

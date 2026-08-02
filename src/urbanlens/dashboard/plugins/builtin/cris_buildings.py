@@ -36,19 +36,19 @@ import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
-from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource, GalleryMediaSource, PanelApiKind
-from urbanlens.dashboard.services.geo_boundary import state_boundary
+from urbanlens.dashboard.services.geo.geo_boundary import state_boundary
+from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, GalleryMediaSource, PanelApiKind
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.assets.base import MediaItem
-    from urbanlens.dashboard.services.enrichment import EnrichmentSource
-    from urbanlens.dashboard.services.external_data import PanelSource
-    from urbanlens.dashboard.services.geo_boundary import GeoBoundary
+    from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
+    from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 logger = logging.getLogger(__name__)
 

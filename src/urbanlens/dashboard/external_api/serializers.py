@@ -5,7 +5,7 @@ These never subclass or reuse the internal ``PinSerializer``/``ProfileSerializer
 the internal API is free to grow fields for the site's own frontend without
 silently expanding what a third-party application is permitted to submit or
 read. Field-level bounds here are the first line of defense against
-untrusted input; ``services.pin_creation.create_pin_for_profile`` is the
+untrusted input; ``services.pins.pin_creation.create_pin_for_profile`` is the
 second, since it's shared with the (trusted) map UI form and sanitizes
 regardless of caller.
 """
@@ -57,12 +57,7 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyCheckinStatus,
 )
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
-from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
-from urbanlens.dashboard.services.media_labels import MAX_MEDIA_LABEL_NAME_LENGTH, MAX_MEDIA_LABELS
-from urbanlens.dashboard.services.notification_center import preference_field_names
-from urbanlens.dashboard.services.pin_edit import EDITABLE_PIN_FIELDS
-from urbanlens.dashboard.services.text_limits import (
+from urbanlens.dashboard.services.core.text_limits import (
     MAX_COMMENT_TEXT_LENGTH,
     MAX_FRIEND_REQUEST_MESSAGE_LENGTH,
     MAX_PIN_DESCRIPTION_LENGTH,
@@ -73,7 +68,12 @@ from urbanlens.dashboard.services.text_limits import (
     MAX_TRIP_DESCRIPTION_LENGTH,
     MAX_VISIT_NOTES_LENGTH,
 )
-from urbanlens.dashboard.services.trip_comments import ALLOWED_COMMENT_EMOJIS
+from urbanlens.dashboard.services.locations.naming import normalize_name_for_comparison
+from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
+from urbanlens.dashboard.services.media.media_labels import MAX_MEDIA_LABEL_NAME_LENGTH, MAX_MEDIA_LABELS
+from urbanlens.dashboard.services.notifications.notification_center import preference_field_names
+from urbanlens.dashboard.services.pins.pin_edit import EDITABLE_PIN_FIELDS
+from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS
 
 if TYPE_CHECKING:
     import datetime
@@ -139,7 +139,7 @@ class PinCreateSerializer(serializers.Serializer):
     uuid = serializers.UUIDField(required=False, allow_null=True, default=None)
     #: uuid of one of the caller's own pins to create this one as a child
     #: (detail pin) of - e.g. a building entrance a few meters from its main
-    #: pin. See ``services.pin_creation.create_pin_for_profile``'s parent_id
+    #: pin. See ``services.pins.pin_creation.create_pin_for_profile``'s parent_id
     #: docstring for why this matters: without it, coordinates this close
     #: would be swallowed by the default fuzzy-location dedup instead of
     #: creating the distinct child.
@@ -185,7 +185,7 @@ class PinSuggestionCreateSerializer(serializers.Serializer):
     Unlike ``PinCreateSerializer``, nothing here is written to a real Pin
     immediately - it's staged as a ``PinSuggestion`` the profile owner must
     explicitly accept before anything appears on their map (see
-    ``services.pin_suggestions.ingest_location_hits``). This is why an
+    ``services.pins.pin_suggestions.ingest_location_hits``). This is why an
     external "discovery" app (finds candidate places autonomously, without
     the user having been there) should use this endpoint rather than
     ``PinCreateSerializer``/``PinsView.post``, which creates a real pin outright.
@@ -267,7 +267,7 @@ class SyncPinSerializer(serializers.Serializer):
     """Documents the pin payload shape served by the delta-sync endpoint.
 
     Schema-only: the actual payload is built by
-    ``services.pin_sync.serialize_sync_pin`` (the map payload plus sync-only
+    ``services.pins.pin_sync.serialize_sync_pin`` (the map payload plus sync-only
     fields), never by this class - but the OpenAPI contract (and the Dart
     client generated from it) needs the shape spelled out.
     ``test_external_api_schema`` asserts these fields exactly match what the
@@ -380,7 +380,7 @@ class PinLinkSerializer(serializers.Serializer):
         """The Wayback snapshot url, or null when none has been archived yet.
 
         The model stores "not archived" as ``""``; this reports it as null to
-        match the shape ``services.pin_detail.build_pin_detail`` already ships.
+        match the shape ``services.pins.pin_detail.build_pin_detail`` already ships.
 
         Args:
             link: The link being serialized.
@@ -431,7 +431,7 @@ class PinDetailSerializer(SyncPinSerializer):
     """Documents the full pin-detail response (schema-only).
 
     A superset of :class:`SyncPinSerializer` - see
-    ``services.pin_detail.build_pin_detail``, the function that actually
+    ``services.pins.pin_detail.build_pin_detail``, the function that actually
     builds this payload. ``test_external_api_schema.PinDetailContractTests``
     asserts these fields exactly match what that function really emits.
     """
@@ -545,7 +545,7 @@ class PinUpdateSerializer(serializers.Serializer):
     name = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
     icon = serializers.CharField(max_length=255, required=False, allow_blank=True, allow_null=True)
     #: The owner's personal notes on this pin. Bounded by the same limit the
-    #: website's own editor enforces (``services.text_limits``).
+    #: website's own editor enforces (``services.core.text_limits``).
     description = serializers.CharField(max_length=MAX_PIN_DESCRIPTION_LENGTH, required=False, allow_blank=True, allow_null=True)
     #: Hex color override for this pin's marker, e.g. ``"#F44336"``. Null/blank
     #: restores the inherited color (the winning label's, or the default).
@@ -623,7 +623,7 @@ class PinUpdateSerializer(serializers.Serializer):
         """Flatten the validated payload into ``Pin`` column name -> value to write.
 
         Only keys this request actually submitted appear, so the result can be
-        handed straight to ``services.pin_edit.apply_pin_edits`` without
+        handed straight to ``services.pins.pin_edit.apply_pin_edits`` without
         breaking its absent-means-untouched contract. Everything that is not a
         ``Pin`` column (``latitude``/``longitude``, ``parent_id``,
         ``label_uuids``, ``visited``, ``confirm_wiki_loss``) is dropped here -
@@ -645,7 +645,7 @@ class PinUpdateSerializer(serializers.Serializer):
 
         Returns:
             Mapping of ``Pin`` field name to the value to write. Always a
-            subset of ``services.pin_edit.EDITABLE_PIN_FIELDS``.
+            subset of ``services.pins.pin_edit.EDITABLE_PIN_FIELDS``.
         """
         data = self.validated_data
         edits: dict[str, Any] = {field: value for field, value in data.items() if field in EDITABLE_PIN_FIELDS and field != SECURITY_WIRE_KEY}
@@ -810,10 +810,10 @@ class SettingsSerializer(serializers.Serializer):
     an external client has no business reading, and a model-derived serializer
     would leak each new such field the moment someone added it. An explicit
     list fails closed - a new preference is invisible here until deliberately
-    added to ``services.profile_settings.SETTINGS_FIELDS`` and to this class.
+    added to ``services.profile.profile_settings.SETTINGS_FIELDS`` and to this class.
 
     Fields mirror that allowlist exactly; the trailing read-only keys are
-    computed context (see ``services.profile_settings.read_settings``).
+    computed context (see ``services.profile.profile_settings.read_settings``).
     """
 
     # Name (User passthrough).
@@ -929,7 +929,7 @@ class SettingsPatchSerializer(serializers.Serializer):
     first_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
     last_name = serializers.CharField(required=False, allow_blank=True, max_length=150)
     # Contact methods. discord_username's charset is checked in
-    # services.profile_settings (mirrors ContactMethodsForm.clean_discord_username).
+    # services.profile.profile_settings (mirrors ContactMethodsForm.clean_discord_username).
     phone_number = serializers.CharField(required=False, allow_blank=True, max_length=30)
     signal_username = serializers.CharField(required=False, allow_blank=True, max_length=100)
     discord_username = serializers.CharField(required=False, allow_blank=True, max_length=100)
@@ -1012,7 +1012,7 @@ class SettingsPatchSerializer(serializers.Serializer):
     # External APIs.
     external_apis_enabled = serializers.BooleanField(required=False)
     #: Null means "no downscaling preference"; any value is checked against the
-    #: caller's plan entitlement in services.profile_settings.
+    #: caller's plan entitlement in services.profile.profile_settings.
     image_downscale_max_dimension = serializers.IntegerField(required=False, allow_null=True)
     video_downscale_max_height = serializers.IntegerField(required=False, allow_null=True)
 
@@ -1026,11 +1026,11 @@ MAX_BOUNDARY_VERTICES = 20_000
 
 #: Human-readable description of the ``criteria``/``smart_filter`` JSON shape,
 #: reused by every field carrying it. Deliberately describes the *existing*
-#: format produced by ``services.filter_criteria.serialize_form_criteria`` -
+#: format produced by ``services.search.filter_criteria.serialize_form_criteria`` -
 #: this is not a new contract, and the two must not drift.
 CRITERIA_HELP_TEXT = (
     "Saved main-map filter criteria, in the same JSON shape "
-    "`services.filter_criteria.serialize_form_criteria` produces and "
+    "`services.search.filter_criteria.serialize_form_criteria` produces and "
     "`deserialize_criteria` replays. Every key is optional; an absent key means "
     '"no filter on that dimension". Recognized keys: `name` (substring match); '
     "the numeric bounds `min_rating`/`max_rating`, `min_priority`/`max_priority`, "
@@ -1107,7 +1107,7 @@ class PinListDetailSerializer(PinListSerializer):
 
     def get_smart_boundary(self, obj) -> dict | None:
         """The boundary as a GeoJSON MultiPolygon, or null when unset."""
-        from urbanlens.dashboard.services.geo import geometry_to_geojson
+        from urbanlens.dashboard.services.geo.geo import geometry_to_geojson
 
         return geometry_to_geojson(obj.smart_boundary)
 
@@ -1125,7 +1125,7 @@ class PinListWriteSerializer(serializers.Serializer):
     is_smart = serializers.BooleanField(required=False)
     smart_filter = serializers.JSONField(required=False, allow_null=True, help_text=CRITERIA_HELP_TEXT)
     #: A GeoJSON Polygon or MultiPolygon. Converted to a MultiPolygon on the
-    #: way in (see services.geo.parse_multipolygon_geojson), so a client may
+    #: way in (see services.geo.geo.parse_multipolygon_geojson), so a client may
     #: submit either.
     smart_boundary = serializers.JSONField(required=False, allow_null=True)
     #: Point this list at one of the caller's saved filters: its criteria are
@@ -1149,7 +1149,7 @@ class PinListWriteSerializer(serializers.Serializer):
         """
         if value is None:
             return None
-        from urbanlens.dashboard.services.geo import parse_multipolygon_geojson
+        from urbanlens.dashboard.services.geo.geo import parse_multipolygon_geojson
 
         try:
             geom = parse_multipolygon_geojson(value)
@@ -1300,7 +1300,7 @@ class SavedFilterUpdateResponseSerializer(SavedFilterSerializer):
 
     #: Smart lists whose membership was recomputed because they were derived
     #: from this filter and its criteria changed. See
-    #: ``services.pin_list_membership.resync_lists_for_saved_filter``.
+    #: ``services.pins.pin_list_membership.resync_lists_for_saved_filter``.
     lists_resynced = serializers.IntegerField(read_only=True)
 
 
@@ -1727,7 +1727,7 @@ class SafetyPhotoAttachSerializer(serializers.Serializer):
     Interim shape: the multipart upload pipeline (quota accounting, checksum
     dedup, downscaling, EXIF handling) lives in
     ``controllers.safety.SafetyGalleryView.post`` and has not yet been extracted
-    into the shared ``services.photo_upload`` the Photos domain is landing.
+    into the shared ``services.photos.photo_upload`` the Photos domain is landing.
     Rebuilding it here would fork that logic and give the external surface its
     own subtly different quota and dedup behavior, so this endpoint deliberately
     only *references* an image the caller already uploaded.
@@ -1785,7 +1785,7 @@ class FriendProfileSerializer(serializers.Serializer):
     """A person as they may be shown to the caller, masking included.
 
     Never populated straight off a ``Profile``. Callers must build the dict
-    through ``services.identity_visibility.resolve_visible_identity`` so a
+    through ``services.profile.identity_visibility.resolve_visible_identity`` so a
     profile whose privacy settings don't permit the caller is masked here
     exactly as it is in the web UI - the API surface must not become the way
     to read a name the site itself would hide.
@@ -1893,7 +1893,7 @@ class FriendInviteResponseSerializer(serializers.Serializer):
     ``result`` is always the literal ``"sent"``. It does not vary by whether
     the address was registered, whether the target's privacy settings
     accepted the request, or whether the mail actually went out - see
-    ``services.friendship.invite_by_email``. Anything that made this field (or
+    ``services.social.friendship.invite_by_email``. Anything that made this field (or
     the status code, or the headers) branch would hand a caller an
     account-enumeration oracle.
     """
@@ -2067,7 +2067,7 @@ class NotificationPreferenceEntrySerializer(serializers.Serializer):
 def _preference_entry_fields() -> dict[str, serializers.Field]:
     """Build one nested entry field per real notification-preference stem.
 
-    Driven by ``services.notification_center.preference_field_names``, which
+    Driven by ``services.notifications.notification_center.preference_field_names``, which
     introspects the model - so a thirteenth preference becomes readable and
     writable here with no change to this module.
 
@@ -2137,7 +2137,7 @@ class PhotoSerializer(serializers.Serializer):
 def build_photo_payload(image: Image, viewer_profile: Profile) -> dict:
     """Build one photo's external-API payload for a given viewer.
 
-    Deliberately not ``services.images.image_to_gallery_json``: that one takes
+    Deliberately not ``services.media.images.image_to_gallery_json``: that one takes
     an ``HttpRequest``, builds absolute URLs and template-facing flags for the
     site's own gallery, and is free to change shape whenever the frontend
     needs it. This payload is a published contract.
@@ -2147,9 +2147,9 @@ def build_photo_payload(image: Image, viewer_profile: Profile) -> dict:
     viewer can legitimately see never becomes a side channel for context they
     cannot:
 
-    - ``owner_slug`` goes through ``services.identity_visibility`` and is null
+    - ``owner_slug`` goes through ``services.profile.identity_visibility`` and is null
       when the uploader's privacy settings hide them from this viewer.
-    - ``wiki_slug``/``wiki_name`` go through ``services.wiki_access`` and are
+    - ``wiki_slug``/``wiki_name`` go through ``services.wiki.wiki_access`` and are
       null when the viewer has no standing to see that community page.
     - ``dm_peer_*`` is the other participant in the photo's originating direct
       message, and is null unless the viewer is one of the two participants -
@@ -2167,9 +2167,9 @@ def build_photo_payload(image: Image, viewer_profile: Profile) -> dict:
     Returns:
         A dict matching :class:`PhotoSerializer`.
     """
-    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
     from urbanlens.dashboard.services.memories.photos import classify_photo
-    from urbanlens.dashboard.services.wiki_access import location_visible_to
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+    from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
 
     is_owner = image.profile_id == viewer_profile.pk
 
@@ -2459,7 +2459,7 @@ class JournalResponseSerializer(serializers.Serializer):
 class TripMemberProfileSerializer(serializers.Serializer):
     """One person as they may be shown to the requesting viewer.
 
-    Always sourced from ``services.identity_visibility.resolve_visible_identities``'
+    Always sourced from ``services.profile.identity_visibility.resolve_visible_identities``'
     masked output, never from the raw model fields. That matters for ``slug``
     in particular: a profile slug is derived from the username, so emitting it
     for someone whose privacy settings hide them from this viewer would undo
@@ -2601,7 +2601,7 @@ class TripViewerSerializer(serializers.Serializer):
     """What the requesting caller specifically may see and do on this trip.
 
     The four ``can_*`` booleans are derived server-side from
-    ``services.trip_access.can_perform``, not re-derived by the client from
+    ``services.trips.trip_access.can_perform``, not re-derived by the client from
     the permission levels - so a future change to how a level is evaluated
     reaches the app without an app release, and a client can gray out an
     action it would be refused rather than discovering that by 403.
@@ -2701,7 +2701,7 @@ class TripActivitySerializer(serializers.Serializer):
 
     def _visible_coords(self, row) -> tuple[float, float] | None:
         """Coordinates this viewer may see, or None when hidden or absent."""
-        from urbanlens.dashboard.services.trip_legs import activity_coords
+        from urbanlens.dashboard.services.trips.trip_legs import activity_coords
 
         if row["effective_location_hidden"]:
             return None
@@ -2726,7 +2726,7 @@ class TripActivitySerializer(serializers.Serializer):
 class TripMapPointSerializer(serializers.Serializer):
     """Documents one trip-map marker (schema-only).
 
-    The map endpoint returns ``services.trip_map.build_trip_map_points`` output
+    The map endpoint returns ``services.trips.trip_map.build_trip_map_points`` output
     verbatim so it stays byte-identical to the web map's own ``map-data/``
     payload; this class exists purely to describe that shape in the OpenAPI
     contract and is never used to serialize.
@@ -2906,7 +2906,7 @@ class TripUpdateSerializer(_StoredRangeValidationMixin):
 
     No field carries a default, so ``"x" in validated_data`` distinguishes
     "omitted" from "explicitly set to null" - the same presence-keyed pattern
-    :class:`PinUpdateSerializer` uses, and what ``services.trip_crud.update_trip``
+    :class:`PinUpdateSerializer` uses, and what ``services.trips.trip_crud.update_trip``
     expects.
 
     Unlike :class:`TripCreateSerializer` this had no range validation at all,
@@ -3043,7 +3043,7 @@ class TripActivityStatusSerializer(serializers.Serializer):
     """Validates an activity status change.
 
     ``completed`` is accepted here and routed to
-    ``services.trip_activities.complete_activity``, which also logs the
+    ``services.trips.trip_activities.complete_activity``, which also logs the
     completer's visit and snaps a future date back to today - so a client never
     has to know that completing is a different operation from confirming.
     """

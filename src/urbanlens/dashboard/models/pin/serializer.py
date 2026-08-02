@@ -80,7 +80,7 @@ class PinSerializer(serializers.ModelSerializer):
         validated_data["name_is_user_provided"] = False
         pin = Pin.objects.create(**validated_data)
         try:
-            from urbanlens.dashboard.services.auto_tag import AutoTagService
+            from urbanlens.dashboard.services.labels.auto_tag import AutoTagService
 
             AutoTagService().suggest_for_pin(pin, apply=True)
         except (RuntimeError, OSError, ValueError):

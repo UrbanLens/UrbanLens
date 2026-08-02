@@ -20,12 +20,12 @@ class ImageSource(TextChoices):
 
     ``UPLOAD`` is the default for ordinary user uploads (personal galleries).
     Most external values are set only on rows materialized from the Media
-    gallery's transient provider results (see ``services.external_data`` and
-    ``services.media_materialize``) when a user sends one to a wiki or sets it
+    gallery's transient provider results (see ``services.pins.external_data`` and
+    ``services.media.media_materialize``) when a user sends one to a wiki or sets it
     as a cover photo - the Media gallery itself renders straight from each
     provider's live results without persisting an ``Image`` row per item.
     ``EXTERNAL_API`` is the exception: it's set on candidate photos an
-    external-app pin suggestion submits (see ``services.pin_suggestions.attach_suggestion_photos``),
+    external-app pin suggestion submits (see ``services.pins.pin_suggestions.attach_suggestion_photos``),
     staged against a ``PinSuggestion`` rather than materialized from the Media gallery.
     """
 
@@ -53,7 +53,7 @@ class MediaKind(TextChoices):
 
     Photos, videos, and documents all share every other field on this model
     (caption, author, location, labels, etc.) - this is only a discriminator
-    for upload-time processing (services.videos/services.documents) and
+    for upload-time processing (services.media.videos/services.media.documents) and
     display (player vs. viewer vs. image tag).
     """
 
@@ -151,7 +151,7 @@ class Image(abstract.FrontendDashboardModel):
     source_url = URLField(max_length=500, null=True, blank=True)
     copyright = CharField(max_length=255, null=True, blank=True)
     # Set only on rows materialized from the Media gallery's transient provider
-    # results (see services.media_materialize) - the *raw* provider panel key
+    # results (see services.media.media_materialize) - the *raw* provider panel key
     # (e.g. "wikimedia", "loc") and the sha1 hash of the item's full-resolution
     # url, i.e. exactly the (source, item_key) identity MediaRelevance marks
     # are keyed by (models.images.relevance.media_item_key). `source_url`
@@ -159,7 +159,7 @@ class Image(abstract.FrontendDashboardModel):
     # from the raw `url` that item_key is always hashed from whenever a
     # provider supplies a page_url - these two fields are what let a
     # materialized Image row be reliably joined back to its wiki votes (see
-    # services.media_relevance.effective_relevance). Deliberately NOT the
+    # services.media.media_relevance.effective_relevance). Deliberately NOT the
     # same value as `source` above, which stores the *translated*
     # ImageSource value and can differ from the raw panel key (see
     # media_materialize._PANEL_KEY_TO_IMAGE_SOURCE).
@@ -172,7 +172,7 @@ class Image(abstract.FrontendDashboardModel):
     latitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     # Crowd-sourced approximation of this photo's own position, from
-    # anonymized SpotGuessr guesses (services.photo_coordinates) - only ever
+    # anonymized SpotGuessr guesses (services.photos.photo_coordinates) - only ever
     # set once a photo has accumulated enough guesses to be worth showing,
     # and always deferred to `latitude`/`longitude` above the moment a real
     # (manual or EXIF) position exists for this photo - see effective_latitude/
@@ -183,7 +183,7 @@ class Image(abstract.FrontendDashboardModel):
     estimated_longitude = DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     # Compass bearing (0-360, true or magnetic north per the device's own
     # EXIF GPSImgDirectionRef - not itself preserved, see
-    # services.images.extract_gps_direction) the camera was facing when this
+    # services.media.images.extract_gps_direction) the camera was facing when this
     # photo was taken. Standardized field for a future "same place, same
     # angle, over time" comparison UI - not read or displayed anywhere yet.
     # Same GPS-IFD-sourced privacy opt-out as latitude/longitude: never
@@ -209,7 +209,7 @@ class Image(abstract.FrontendDashboardModel):
     # JSON-sanitized (rationals/bytes stringified).
     exif_data = JSONField(null=True, blank=True)
     # Extracted text for a document upload: the PDF's native text layer plus
-    # OCR output from any embedded raster images (see services.documents).
+    # OCR output from any embedded raster images (see services.media.documents).
     # Searched by the Media section's search box (labels__name, caption, etc.)
     # the same way as every other text field on this model.
     ocr_text = TextField(null=True, blank=True)

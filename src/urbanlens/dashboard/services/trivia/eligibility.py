@@ -37,7 +37,7 @@ def eligible_questions(
     """Approved, in-rotation questions about a location every profile in ``profiles`` has pinned.
 
     "In rotation" means ``effective_score(question) >= 0`` - the same
-    gate-at-selection-time pattern ``services.media_relevance`` uses for
+    gate-at-selection-time pattern ``services.media.media_relevance`` uses for
     photos, evaluated per-question here since the vote weighting (notably
     the passive ``NO_REACTION`` signal) isn't expressible as a single
     queryset ``annotate()``. A question whose score climbs back to

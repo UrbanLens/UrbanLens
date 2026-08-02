@@ -5,17 +5,17 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
-from urbanlens.dashboard.services.external_data import LocationCachePanelSource, PanelApiKind, info_card
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelApiKind, info_card
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.enrichment import EnrichmentSource
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 #: Cached keys that make the panel worth showing at all. A reverse-geocode that
 #: matched only an address (no name, no tags) tells a viewer nothing they can't

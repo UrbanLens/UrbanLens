@@ -197,7 +197,7 @@ def add_direct_messages(request: HttpRequest) -> dict[str, bool]:
         try:
             from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
             from urbanlens.dashboard.models.friendship import Friendship
-            from urbanlens.dashboard.services.direct_messages import has_used_direct_messages
+            from urbanlens.dashboard.services.messaging.direct_messages import has_used_direct_messages
 
             needs_oauth_enroll = not request.user.has_usable_password() and not MessagingKeyBundle.objects.filter(profile__user=request.user).exists()
             show_messages_icon = has_used_direct_messages(request.user.profile) or Friendship.objects.profile(request.user.profile).ever_friends().exists()

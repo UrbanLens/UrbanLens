@@ -24,7 +24,7 @@ from django.urls import reverse
 from django.views import View
 import qrcode
 
-from urbanlens.dashboard.services.two_factor import (
+from urbanlens.dashboard.services.auth.two_factor import (
     SESSION_PENDING_TOTP_SECRET,
     disable_totp,
     enroll_totp,

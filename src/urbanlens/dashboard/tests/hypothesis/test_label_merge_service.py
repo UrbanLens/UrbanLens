@@ -21,7 +21,7 @@ from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, K
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 
 class LabelMergeServiceTests(TestCase):

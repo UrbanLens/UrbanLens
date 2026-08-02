@@ -10,7 +10,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
-from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location

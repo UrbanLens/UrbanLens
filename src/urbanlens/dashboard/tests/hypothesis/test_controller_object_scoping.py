@@ -238,7 +238,7 @@ class TripCommentReactionMembershipTests(TestCase):
         """A non-member is told the trip does not exist, rather than refused.
 
         This answered 403 until the trip lookup moved to
-        ``services.trip_access.get_trip_for_viewer``, which reports a trip the
+        ``services.trips.trip_access.get_trip_for_viewer``, which reports a trip the
         viewer has no standing access to as simply not found - a 403 confirms
         the slug is real, which is the enumeration leak that change closed.
         """

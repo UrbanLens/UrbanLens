@@ -4,12 +4,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
-from urbanlens.dashboard.services.geo_boundary import USA
+from urbanlens.dashboard.services.geo.geo_boundary import USA
 
 if TYPE_CHECKING:
     from collections.abc import Generator
 
-    from urbanlens.dashboard.services.geo_boundary import GeoBoundary
+    from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 
 
 @dataclass(slots=True, kw_only=True)

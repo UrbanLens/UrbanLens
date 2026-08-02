@@ -1,6 +1,6 @@
 """Page-number pagination for the external API's *browse* list endpoints.
 
-Deliberately distinct from the pin sync feed (``services.pin_sync``, served by
+Deliberately distinct from the pin sync feed (``services.pins.pin_sync``, served by
 ``views.PinsView``/``PinTombstonesView``), which is cursor-based on
 ``(updated, pk)`` and hands back a watermark so a client can ask "what changed
 since?" and never miss a row that shifted position mid-walk. That feed must not

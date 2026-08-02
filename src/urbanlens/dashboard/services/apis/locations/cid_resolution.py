@@ -16,7 +16,7 @@ Single chokepoint for the "which provider resolves a CID" decision (see
   someone else running UrbanLens themselves). Falls back to calling Google
   Places directly, one CID at a time, via the existing
   ``GoogleGeocodingGateway.get_coordinates_by_cid`` (already rate-limited and
-  cached - see ``services.rate_limiter`` and ``GeocodedLocation``).
+  cached - see ``services.core.rate_limiter`` and ``GeocodedLocation``).
 
 Only ever called from background work (see ``tasks.resolve_deferred_pin_locations``)
 - never from a request/response cycle, since both providers can be slow.
@@ -31,8 +31,8 @@ import requests
 
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
 from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import CidLookupEntry, RedataCidGateway, RedataPermissionError
-from urbanlens.dashboard.services.gateway import GatewayRequestError
-from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)

@@ -2,7 +2,7 @@
 
 Two endpoints, both pin-scoped and both no-ops (with a toast explaining why)
 when the pin's location has no community wiki yet - see
-``services.pin_wiki_sync`` for why neither ever creates one.
+``services.pins.pin_wiki_sync`` for why neither ever creates one.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services import pin_wiki_sync
+from urbanlens.dashboard.services.pins import pin_wiki_sync
 
 logger = logging.getLogger(__name__)
 

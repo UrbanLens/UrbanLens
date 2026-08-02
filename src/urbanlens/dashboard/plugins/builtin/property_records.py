@@ -40,18 +40,18 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import REASON_BLOCKED, REASON_MANUAL_ONLY, REASON_SOURCE_ERROR
-from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
-from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource, PanelApiKind
-from urbanlens.dashboard.services.geo_boundary import USA
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.geo.geo_boundary import USA
+from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource, PanelApiKind
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.property_owner.model import WikiOwner
-    from urbanlens.dashboard.services.enrichment import EnrichmentSource
-    from urbanlens.dashboard.services.external_data import PanelSource
-    from urbanlens.dashboard.services.geo_boundary import GeoBoundary
+    from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
+    from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 logger = logging.getLogger(__name__)
 
@@ -64,7 +64,7 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
     Args:
         location: The Location to fetch a property record for. Its own
             geocoded ``address`` (when already resolved - see
-            ``services.enrichment.AddressEnrichmentSource``) is passed
+            ``services.locations.enrichment.AddressEnrichmentSource``) is passed
             through to REData as an additional search key; REData decides for
             itself whether/how to use it alongside anything it already knows.
         latitude: The latitude to look up - passed explicitly (rather than

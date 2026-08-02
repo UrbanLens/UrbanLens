@@ -69,7 +69,7 @@ privacy bug.
    contacts, mentions) must check block status at the initiation point. A test named "blocked"
    must actually exercise a *blocked* relationship, not just a privacy tier.
 3. **Every pin/location share path calls `resolve_origin_share` + `record_share_exposure`**
-   (`services/share_provenance.py`) so the `LocationExposure` provenance chain stays intact. New
+   (`services/sharing/share_provenance.py`) so the `LocationExposure` provenance chain stays intact. New
    sharing surfaces (DM pin shares, group chats, trips, lists, markup maps, exports) must not
    bypass this.
 4. **External sync channels need separate revocation.** Membership removal is not the same as
@@ -84,7 +84,7 @@ privacy bug.
    The user-editable `polygon` is display-only — otherwise users could inflate boundaries to
    claim overlap with other users' pins/areas and widen their wiki access (§1.3.1 makes this
    invariant *more* critical, not less).
-7. **Community counts are fuzzed** (`services/community_counts.py`) — never expose exact
+7. **Community counts are fuzzed** (`services/wiki/community_counts.py`) — never expose exact
    "N users pinned this" counts; exact counts + timeline = individual activity inference.
 8. **Pin slugs are unique per-profile, not global.** Any slug lookup not scoped by profile
    silently returns another user's pin. Recurring bug source (uploads, galleries, weather).
@@ -344,7 +344,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
   full-page renders where equivalent.
 - **Known worst-covered security-adjacent modules** (from the 2026-07-18 full run):
   `controllers/safety.py` (49%), direct-message-shares trio (54–58%),
-  `services/google_oauth.py` (39%), `consumers.py` (35%). These are the highest-value
+  `services/auth/google_oauth.py` (39%), `consumers.py` (35%). These are the highest-value
   coverage targets in the repo.
 - **Integration/E2E** (UL-368): nothing exists today. The chiron dev server
   (`https://dev.urbanlens.org`) is the natural target for a Playwright-style smoke suite
@@ -532,12 +532,12 @@ These have most of their machinery already built:
    manually pick photos in Google's own hosted UI, confirmed directly in
    `controllers/google_photos.py`'s own docstring.
 4. ~~**Geolocation visit creation** (UL-312)~~ VERIFIED-ALREADY-IMPLEMENTED 2026-07-19 — contrary
-   to this list treating it as unbuilt, `services.visits.record_geolocation_pin_visits()` already
+   to this list treating it as unbuilt, `services.visits.visits.record_geolocation_pin_visits()` already
    creates a same-day `PinVisit(source=GEOLOCATION)` for every pin whose boundary contains the
    device's point, wired end-to-end from a `MapController` endpoint through to the live GPS
    success callback in `map/index.html`, with full existing test coverage. No code change needed.
 5. ~~**Targeted exports + more formats** (UL-377, UL-382)~~ RESOLVED 2026-07-19 (`56c2113e`,
-   `de3394f2`) — `services/export_formats.py` adds GeoJSON/KML/GPX/CSV writers (typed against a
+   `de3394f2`) — `services/import_export/export_formats.py` adds GeoJSON/KML/GPX/CSV writers (typed against a
    small `_ExportablePin` Protocol, not the concrete `Pin` model, so tests don't need a DB) mirroring
    the existing import-side readers. Reachable two ways: the main map's multi-select toolbar
    (`PinBulkExportView`, `/map/pins/bulk-export/`) for an ad-hoc/search-scoped selection, and a new
@@ -722,6 +722,6 @@ non-obvious behavior → `docs/NOTES.md`; TODO strikes with evidence.
   calendar-sync revocation, account-deletion file cleanup, dead-unscoped-view removal, SSO/passkey
   coverage, full-suite coverage run + triage.
 - Known-open coverage holes: `controllers/safety.py` 49%, direct-message-shares 54–58%,
-  `services/google_oauth.py` 39%, `consumers.py` 35%.
+  `services/auth/google_oauth.py` 39%, `consumers.py` 35%.
 - Deployment: verify the HTTPS-enforcement nginx fix (`dfb04003`) and the nginx healthcheck fix
   (`d9033b03`) are live in production; staging worker saturation still unresolved (infra-side).

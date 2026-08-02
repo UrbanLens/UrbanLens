@@ -15,7 +15,7 @@ Exposes exactly what a credential can be scoped to grant (see
 (``pins/``, ``pins/deleted/`` - cursor + ``modified_since`` + tombstones,
 built for the native apps' offline-first sync), and creating pins on their
 behalf (``POST pins/``, idempotent via client-generated uuid) through the
-same ``services.pin_creation.create_pin_for_profile`` call the map UI uses.
+same ``services.pins.pin_creation.create_pin_for_profile`` call the map UI uses.
 The OpenAPI contract for this surface - and nothing else - is served at
 ``schema/`` (browsable at ``docs/``).
 

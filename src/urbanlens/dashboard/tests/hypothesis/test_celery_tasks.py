@@ -50,7 +50,7 @@ class PushTripToCalendarTaskTests(TestCase):
     """push_trip_to_calendar looks up the trip and delegates to the sync service."""
 
     def test_missing_trip_is_a_noop(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.calendar_sync.push_auto_synced_trip_changes") as push:
+        with mock.patch("urbanlens.dashboard.services.trips.calendar_sync.push_auto_synced_trip_changes") as push:
             result = tasks.push_trip_to_calendar(999999)
 
         self.assertEqual(result, 0)
@@ -60,7 +60,7 @@ class PushTripToCalendarTaskTests(TestCase):
         from model_bakery import baker
 
         trip = baker.make("dashboard.Trip")
-        with mock.patch("urbanlens.dashboard.services.calendar_sync.push_auto_synced_trip_changes", return_value=2) as push:
+        with mock.patch("urbanlens.dashboard.services.trips.calendar_sync.push_auto_synced_trip_changes", return_value=2) as push:
             result = tasks.push_trip_to_calendar(trip.pk)
 
         self.assertEqual(result, 2)
@@ -92,7 +92,7 @@ class DatabaseBackupTaskTests(SimpleTestCase):
 
     def test_scheduled_backup_skips_when_not_due(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.services.backups.scheduled_backup_due", return_value=False),
+            mock.patch("urbanlens.dashboard.services.admin.backups.scheduled_backup_due", return_value=False),
             mock.patch("urbanlens.dashboard.tasks._run_database_backup") as backup,
             mock.patch("urbanlens.dashboard.tasks.update_task_progress") as progress,
         ):
@@ -104,7 +104,7 @@ class DatabaseBackupTaskTests(SimpleTestCase):
 
     def test_scheduled_backup_runs_when_due(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.services.backups.scheduled_backup_due", return_value=True),
+            mock.patch("urbanlens.dashboard.services.admin.backups.scheduled_backup_due", return_value=True),
             mock.patch("urbanlens.dashboard.tasks._run_database_backup", return_value=True) as backup,
         ):
             result = tasks.run_scheduled_database_backup()

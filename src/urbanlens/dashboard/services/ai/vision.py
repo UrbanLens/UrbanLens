@@ -21,7 +21,7 @@ from typing import Any
 
 import requests
 
-from urbanlens.dashboard.services.rate_limiter import check_rate_limit, log_api_call, service_is_enabled
+from urbanlens.dashboard.services.core.rate_limiter import check_rate_limit, log_api_call, service_is_enabled
 
 logger = logging.getLogger(__name__)
 

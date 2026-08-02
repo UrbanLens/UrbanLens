@@ -23,8 +23,8 @@ import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.photo_keywords import KeywordResult, PhotoKeywordProvider, downscaled_jpeg_bytes
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.photos.photo_keywords import KeywordResult, PhotoKeywordProvider, downscaled_jpeg_bytes
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image

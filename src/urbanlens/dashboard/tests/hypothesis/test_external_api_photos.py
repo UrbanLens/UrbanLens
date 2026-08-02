@@ -40,7 +40,7 @@ from urbanlens.dashboard.external_api.serializers import JournalEntrySerializer
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.memories.journal import JournalEntry
 
 if TYPE_CHECKING:
@@ -365,7 +365,7 @@ class PhotoUploadApiTests(TestCase):
         self.profile = Profile.objects.get(user=self.user)
         self.raw_key = _key_with_scopes(self.user, [ApiKeyScope.PHOTOS_READ, ApiKeyScope.PHOTOS_WRITE])
 
-    @patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_upload_creates_a_photo(self, mock_enqueue) -> None:
         """A multipart upload lands as an Image owned by the key's user."""
         upload = SimpleUploadedFile("new.png", _PNG_BYTES, content_type="image/png")
@@ -382,7 +382,7 @@ class PhotoUploadApiTests(TestCase):
         self.assertEqual(image.profile_id, self.profile.pk)
         mock_enqueue.assert_called_once()
 
-    @patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_duplicate_upload_is_refused(self, _mock_enqueue) -> None:
         """The same bytes twice is a 409, matching the web uploader."""
         for _ in range(2):

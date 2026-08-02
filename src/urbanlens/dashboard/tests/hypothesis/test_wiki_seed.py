@@ -1,7 +1,7 @@
 """Tests for seeding a wiki's article from a confidently-matched Wikipedia article.
 
 Covers:
-- The pure HTML-extract-to-Markdown conversion (services.wiki_seed).
+- The pure HTML-extract-to-Markdown conversion (services.wiki.wiki_seed).
 - seed_wiki_article_from_wikipedia's guards: no wiki, no cache, empty cache,
   existing article (never overwritten).
 - The two trigger points: models.cache.signals firing on a "wikipedia"
@@ -20,7 +20,7 @@ from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.wiki_seed import _attribution_line, _extract_html_to_markdown, _infobox_markdown, seed_pin_article_from_wikipedia, seed_wiki_article_from_wikipedia
+from urbanlens.dashboard.services.wiki.wiki_seed import _attribution_line, _extract_html_to_markdown, _infobox_markdown, seed_pin_article_from_wikipedia, seed_wiki_article_from_wikipedia
 
 _ARTICLE_DATA = {
     "title": "Eighteenth District School",
@@ -119,14 +119,14 @@ def test_infobox_markdown_malformed_pairs_are_ignored() -> None:
 
 
 def test_lead_image_markdown_renders_an_image() -> None:
-    from urbanlens.dashboard.services.wiki_seed import _lead_image_markdown
+    from urbanlens.dashboard.services.wiki.wiki_seed import _lead_image_markdown
 
     md = _lead_image_markdown({"title": "Eighteenth District School", "thumbnail": "https://upload.wikimedia.org/thumb.jpg"})
     assert md == "![Eighteenth District School](https://upload.wikimedia.org/thumb.jpg)"  # nosec B101
 
 
 def test_lead_image_markdown_no_thumbnail_returns_empty_string() -> None:
-    from urbanlens.dashboard.services.wiki_seed import _lead_image_markdown
+    from urbanlens.dashboard.services.wiki.wiki_seed import _lead_image_markdown
 
     assert _lead_image_markdown({"title": "Some Article", "thumbnail": ""}) == ""  # nosec B101
     assert _lead_image_markdown({"title": "Some Article"}) == ""  # nosec B101
@@ -134,7 +134,7 @@ def test_lead_image_markdown_no_thumbnail_returns_empty_string() -> None:
 
 def test_lead_image_markdown_sanitizes_brackets_in_title() -> None:
     """A literal `]` in the title must not be able to close the Markdown image's alt text early."""
-    from urbanlens.dashboard.services.wiki_seed import _lead_image_markdown
+    from urbanlens.dashboard.services.wiki.wiki_seed import _lead_image_markdown
 
     md = _lead_image_markdown({"title": "Foo [bar]", "thumbnail": "https://example.test/x.jpg"})
     assert md == "![Foo (bar)](https://example.test/x.jpg)"  # nosec B101

@@ -41,9 +41,9 @@ from urbanlens.dashboard.services.apis.photos.google import (
     media_item_web_url,
     session_items_cache_key,
 )
-from urbanlens.dashboard.services.celery import get_task_progress, safely_enqueue_task
-from urbanlens.dashboard.services.gateway import GatewayRequestError
-from urbanlens.dashboard.services.google_oauth import extract_email_from_id_token, revoke_token
+from urbanlens.dashboard.services.auth.google_oauth import extract_email_from_id_token, revoke_token
+from urbanlens.dashboard.services.core.celery import get_task_progress, safely_enqueue_task
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 if TYPE_CHECKING:
     from django.http import HttpRequest

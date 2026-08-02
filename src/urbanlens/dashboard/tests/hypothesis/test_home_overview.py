@@ -4,7 +4,7 @@ The profile page's private-activity section moved to a new homepage
 (``/dashboard/home/``, the authenticated landing page) and was rebuilt as a
 customizable widget dashboard: no more "only visible to you" framing, an
 empty subnav matching other pages, and per-user widget selection/ordering
-persisted via ``Profile.home_widget_layout`` (see services.home_widgets).
+persisted via ``Profile.home_widget_layout`` (see services.home.home_widgets).
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.services.home_widgets import HOME_WIDGETS, effective_widget_layout
+from urbanlens.dashboard.services.home.home_widgets import HOME_WIDGETS, effective_widget_layout
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -80,7 +80,7 @@ class HomeOverviewPageTests(TestCase):
 
 
 class EffectiveWidgetLayoutTests(TestCase):
-    """services.home_widgets.effective_widget_layout()."""
+    """services.home.home_widgets.effective_widget_layout()."""
 
     def setUp(self) -> None:
         self.profile = baker.make(User).profile

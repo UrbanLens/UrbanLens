@@ -58,7 +58,7 @@ def reaction_summary(message: Any) -> list[dict[str, Any]]:
     Relies on the caller having `prefetch_related("reactions__profile")` on
     the message queryset to avoid N+1 queries across a thread.
     """
-    from urbanlens.dashboard.services.direct_messages import reaction_summary as _reaction_summary
+    from urbanlens.dashboard.services.messaging.direct_messages import reaction_summary as _reaction_summary
 
     return _reaction_summary(message)
 
@@ -308,7 +308,7 @@ def distance(distance_km: Any, units: str = "km") -> str:
         A formatted string like ``"12.3 km"`` or ``"7.6 mi"``, or "" if the
         input is not a number.
     """
-    from urbanlens.dashboard.services.units import format_distance
+    from urbanlens.dashboard.services.core.units import format_distance
 
     try:
         value = float(distance_km)

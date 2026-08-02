@@ -12,8 +12,8 @@ import requests
 
 from urbanlens.core.cache_keys import make_cache_key
 from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider
-from urbanlens.dashboard.services.gateway import Gateway
-from urbanlens.dashboard.services.redact import redact_coordinate
+from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:

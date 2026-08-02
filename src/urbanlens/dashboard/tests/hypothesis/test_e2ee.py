@@ -30,8 +30,8 @@ from urbanlens.dashboard.models.account import AccountKdf
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.e2ee import ConversationKey, MessagingKeyBundle
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.direct_messages import create_direct_message, serialize_direct_message
-from urbanlens.dashboard.services.e2ee import fake_auth_salt, is_base64, login_params_for_identifier, valid_blob
+from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message, serialize_direct_message
+from urbanlens.dashboard.services.security.e2ee import fake_auth_salt, is_base64, login_params_for_identifier, valid_blob
 
 _db_settings = settings(
     max_examples=25,
@@ -579,7 +579,7 @@ class ExportTests(TestCase):
     """Encrypted messages export ciphertext + a note, not a readable body."""
 
     def test_encrypted_message_exports_ciphertext(self) -> None:
-        from urbanlens.dashboard.services.export import _export_direct_messages
+        from urbanlens.dashboard.services.import_export.export import _export_direct_messages
 
         a, b = _profile(), _profile()
         _open_dms(a, b)

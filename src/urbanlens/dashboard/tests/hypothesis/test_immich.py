@@ -270,7 +270,7 @@ class ImmichSettingsViewTests(TestCase):
         # "photos.example.com" is RFC 2606 non-resolving (unlike bare
         # example.com, arbitrary subdomains don't resolve), and
         # ImmichAccountForm.clean_server_url now runs it through the SSRF
-        # guard in services.url_safety, which resolves the hostname for
+        # guard in services.security.url_safety, which resolves the hostname for
         # real. Mock DNS to a fixed public IP, matching the convention used
         # elsewhere for this same guard (see test_pin_suggestions.py).
         self._dns_patch = mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))])
@@ -538,7 +538,7 @@ class ImportImmichPhotosTaskTests(TestCase):
 
     def test_over_quota_asset_is_skipped_without_failing_the_batch(self) -> None:
         # First call (asset "ok") is admitted; second ("too_big") exceeds quota.
-        with mock.patch("urbanlens.dashboard.services.storage.quota_error_for_upload", side_effect=[None, "Storage quota exceeded."]):
+        with mock.patch("urbanlens.dashboard.services.media.storage.quota_error_for_upload", side_effect=[None, "Storage quota exceeded."]):
             counts = self._run(
                 ["ok", "too_big"],
                 {"ok": (b"small", "a.jpg", "image/jpeg"), "too_big": (b"huge", "b.jpg", "image/jpeg")},

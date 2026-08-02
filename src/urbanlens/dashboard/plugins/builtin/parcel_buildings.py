@@ -29,15 +29,15 @@ import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
-from urbanlens.dashboard.services.external_data import LocationCachePanelSource, PanelApiKind
+from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
+from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelApiKind
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.enrichment import EnrichmentSource
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 logger = logging.getLogger(__name__)
 
@@ -129,7 +129,7 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None)
     whether ``children`` are child pins or child wikis, which both expose the
     same ``effective_latitude``/``effective_longitude``/``pin_type`` surface.
 
-    Matching is delegated to ``services.pin_restructure.match_marker`` so this
+    Matching is delegated to ``services.pins.pin_restructure.match_marker`` so this
     panel's idea of "already pinned" can never drift from what the restructure
     suggestion would actually create.
 
@@ -152,7 +152,7 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None)
         be a lie on one of the two callers. The external API renames them to
         ``child_pin_*`` at its own boundary, where they really are pins.
     """
-    from urbanlens.dashboard.services.pin_restructure import match_marker
+    from urbanlens.dashboard.services.pins.pin_restructure import match_marker
 
     rows: list[dict[str, Any]] = []
     unmatched = list(children)
@@ -197,7 +197,7 @@ def building_footprint_geojson(building: dict[str, Any]) -> dict[str, Any] | Non
     outline?" flag rather than a "did the provider send a geometry key?" one.
 
     Named ``..._geojson`` to stay distinct from
-    ``services.pin_restructure.building_footprint``, which answers the same
+    ``services.pins.pin_restructure.building_footprint``, which answers the same
     question for the marker-matching code but returns a parsed *shapely* shape
     (and rejects non-areal geometry) rather than the raw GeoJSON a client wants.
 
@@ -277,7 +277,7 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
         The child-pin pairing is the part a client cannot compute for itself:
         deciding whether an existing marker already "covers" a footprint is a
         geometry-then-nearest-centroid contest (see
-        ``services.pin_restructure.match_marker``), and a client guessing at it
+        ``services.pins.pin_restructure.match_marker``), and a client guessing at it
         would offer to create duplicate pins for buildings that are already
         pinned. It is resolved server-side through the very same
         :func:`building_rows` the web panel renders, so both surfaces agree on

@@ -43,8 +43,8 @@ from urbanlens.dashboard.external_api.mixins import DualAuthJsonView
 from urbanlens.dashboard.models.account.model import AccountKdf, ApiKeyScope
 from urbanlens.dashboard.models.e2ee import ConversationKey, MessagingKeyBundle
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.direct_messages import can_direct_message
-from urbanlens.dashboard.services.e2ee import (
+from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message
+from urbanlens.dashboard.services.security.e2ee import (
     MAX_PUBLIC_KEY_LENGTH,
     MAX_SALT_LENGTH,
     MAX_WRAPPED_CONVERSATION_KEY_LENGTH,
@@ -609,13 +609,13 @@ class E2EEGroupKeyView(DualAuthJsonView):
             JSON ``{keys, latest, needs_rotation, members}`` - ``members`` is
             a ``[{id, public_key}]`` list when every active member is enrolled
             (so the caller can rotate), else null. ``id`` is an opaque
-            per-(group, member) token (see ``services.e2ee.group_member_token``)
+            per-(group, member) token (see ``services.security.e2ee.group_member_token``)
             - never a slug, which would hand every member the real identity of
             members whose ``profile_visibility`` masks them elsewhere. 404 for
             non-members and unknown groups.
         """
         from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope, MessagingKeyBundle
-        from urbanlens.dashboard.services.e2ee import group_member_token
+        from urbanlens.dashboard.services.security.e2ee import group_member_token
 
         resolved = self._resolve(request, group_uuid)
         if resolved is None:
@@ -664,7 +664,7 @@ class E2EEGroupKeyView(DualAuthJsonView):
             winner's envelope when racing; 400/404/409 on invalid input.
         """
         from urbanlens.dashboard.models.e2ee import GroupKey, GroupKeyEnvelope, MessagingKeyBundle
-        from urbanlens.dashboard.services.e2ee import group_member_token
+        from urbanlens.dashboard.services.security.e2ee import group_member_token
 
         resolved = self._resolve(request, group_uuid)
         if resolved is None:

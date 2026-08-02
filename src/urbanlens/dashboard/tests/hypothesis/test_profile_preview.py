@@ -18,7 +18,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.profile_preview import SESSION_KEY, create_ghost_viewer, preview_modes
+from urbanlens.dashboard.services.profile.profile_preview import SESSION_KEY, create_ghost_viewer, preview_modes
 
 
 def _owner() -> Profile:

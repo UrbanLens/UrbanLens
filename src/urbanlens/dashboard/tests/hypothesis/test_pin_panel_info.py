@@ -17,7 +17,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
-from urbanlens.dashboard.services.external_data import InfoPanelSource, panel_sources
+from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, panel_sources
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location

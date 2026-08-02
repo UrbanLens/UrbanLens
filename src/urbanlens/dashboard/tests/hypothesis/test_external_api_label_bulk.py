@@ -20,7 +20,7 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 _BASE = "/dashboard/api/external/v1/labels/"
 

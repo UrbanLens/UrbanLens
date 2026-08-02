@@ -32,7 +32,7 @@ from urbanlens.dashboard.controllers.trip import (
 )
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.trip_legs import activity_coords as _activity_coords
+from urbanlens.dashboard.services.trips.trip_legs import activity_coords as _activity_coords
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User

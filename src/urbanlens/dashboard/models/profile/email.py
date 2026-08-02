@@ -9,7 +9,7 @@ from django.db.models import CASCADE, BooleanField, CharField, DateTimeField, Em
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.profile.queryset import ProfileEmailManager
-from urbanlens.dashboard.services.email_normalization import normalize_email
+from urbanlens.dashboard.services.auth.email_normalization import normalize_email
 
 
 class ProfileEmail(abstract.DashboardModel):

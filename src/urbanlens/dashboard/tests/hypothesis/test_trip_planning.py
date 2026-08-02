@@ -12,8 +12,8 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.trip_legs import TripLeg, _cache_key, compute_legs
-from urbanlens.dashboard.services.trip_names import random_trip_name, trip_name_suggestions
+from urbanlens.dashboard.services.trips.trip_legs import TripLeg, _cache_key, compute_legs
+from urbanlens.dashboard.services.trips.trip_names import random_trip_name, trip_name_suggestions
 
 
 class TripLegDisplayTests(TestCase):
@@ -45,38 +45,38 @@ class ComputeLegsTests(TestCase):
     def test_cached_legs_never_touch_the_gateway(self) -> None:
         cache.set(_cache_key(self.stops[0][1], self.stops[1][1]), {"distance_meters": 18000.0, "duration_seconds": 1200.0})
         cache.set(_cache_key(self.stops[1][1], self.stops[2][1]), {"distance_meters": 9000.0, "duration_seconds": 600.0})
-        with patch("urbanlens.dashboard.services.trip_legs.OSRMGateway") as gateway_cls:
+        with patch("urbanlens.dashboard.services.trips.trip_legs.OSRMGateway") as gateway_cls:
             legs = compute_legs(self.stops)
         gateway_cls.assert_not_called()
         self.assertEqual(set(legs), {2, 3})
         self.assertEqual(legs[2].duration_display, "20 min")
 
     def test_live_calls_respect_the_budget_and_fill_the_cache(self) -> None:
-        with patch("urbanlens.dashboard.services.trip_legs.OSRMGateway") as gateway_cls:
+        with patch("urbanlens.dashboard.services.trips.trip_legs.OSRMGateway") as gateway_cls:
             gateway_cls.return_value.get_route_between.return_value = {"distance_meters": 5000.0, "duration_seconds": 300.0}
             legs = compute_legs(self.stops, max_live_calls=1)
         self.assertEqual(gateway_cls.return_value.get_route_between.call_count, 1)
         self.assertEqual(set(legs), {2})
 
         # Second render: leg 1→2 is cached now, so the budget covers 2→3.
-        with patch("urbanlens.dashboard.services.trip_legs.OSRMGateway") as gateway_cls:
+        with patch("urbanlens.dashboard.services.trips.trip_legs.OSRMGateway") as gateway_cls:
             gateway_cls.return_value.get_route_between.return_value = {"distance_meters": 7000.0, "duration_seconds": 420.0}
             legs = compute_legs(self.stops, max_live_calls=1)
         self.assertEqual(gateway_cls.return_value.get_route_between.call_count, 1)
         self.assertEqual(set(legs), {2, 3})
 
     def test_unroutable_pairs_are_negative_cached(self) -> None:
-        with patch("urbanlens.dashboard.services.trip_legs.OSRMGateway") as gateway_cls:
+        with patch("urbanlens.dashboard.services.trips.trip_legs.OSRMGateway") as gateway_cls:
             gateway_cls.return_value.get_route_between.return_value = None
             legs = compute_legs(self.stops[:2])
         self.assertEqual(legs, {})
-        with patch("urbanlens.dashboard.services.trip_legs.OSRMGateway") as gateway_cls:
+        with patch("urbanlens.dashboard.services.trips.trip_legs.OSRMGateway") as gateway_cls:
             legs = compute_legs(self.stops[:2])
         gateway_cls.assert_not_called()
         self.assertEqual(legs, {})
 
     def test_identical_consecutive_stops_are_skipped(self) -> None:
-        with patch("urbanlens.dashboard.services.trip_legs.OSRMGateway") as gateway_cls:
+        with patch("urbanlens.dashboard.services.trips.trip_legs.OSRMGateway") as gateway_cls:
             legs = compute_legs([(1, (42.1, -73.1)), (2, (42.1, -73.1))])
         gateway_cls.assert_not_called()
         self.assertEqual(legs, {})

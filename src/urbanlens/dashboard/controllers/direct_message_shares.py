@@ -16,8 +16,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip
-from urbanlens.dashboard.services.connections import get_connections
-from urbanlens.dashboard.services.direct_message_shares import ShareTargetPermissionError, ShareValidationError, invite_to_trip_in_message, recommend_friend_in_message, share_pin_in_message
+from urbanlens.dashboard.services.messaging.direct_message_shares import ShareTargetPermissionError, ShareValidationError, invite_to_trip_in_message, recommend_friend_in_message, share_pin_in_message
+from urbanlens.dashboard.services.social.connections import get_connections
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -160,7 +160,7 @@ class MessageMentionAddPinView(LoginRequiredMixin, View):
     """POST /messages/<profile_slug>/mention/<mention_id>/add-pin/ - "Add to map" on a detected location.
 
     Accepts the DM_DETECTED share behind a coordinates/address mention (see
-    ``services.dm_location_detection``), creating the recipient's pin at the
+    ``services.messaging.dm_location_detection``), creating the recipient's pin at the
     shared location, and swaps the mention footer to the "On your map as …"
     reference in place. Recipient-only: the mention footer never renders for
     the sender, and this endpoint 404s for anyone but the message recipient.

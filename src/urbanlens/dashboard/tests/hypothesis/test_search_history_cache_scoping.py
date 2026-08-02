@@ -87,7 +87,7 @@ class SafetyDestinationSearchHistoryScopingTests(TestCase):
         from django.utils import timezone
 
         from urbanlens.dashboard.models.markup.model import MarkupMap
-        from urbanlens.dashboard.services.safety import create_checkin
+        from urbanlens.dashboard.services.visits.safety import create_checkin
 
         checkin = create_checkin(
             profile=self.profile,

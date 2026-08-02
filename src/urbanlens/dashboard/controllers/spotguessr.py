@@ -37,7 +37,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     Guess,
     SpotGuessrMode,
 )
-from urbanlens.dashboard.services.connections import get_connections
+from urbanlens.dashboard.services.social.connections import get_connections
 from urbanlens.dashboard.services.spotguessr import (
     chat as spotguessr_chat,
     overview as spotguessr_overview,
@@ -230,7 +230,7 @@ def _mode_cards() -> list[dict[str, str]]:
 
 def _prewarm_solo_start(profile_id: int, mode: str, last_config: dict) -> None:
     """Queue ``tasks.prewarm_spotguessr_solo_start`` - see ``SpotGuessrHomeView.get``'s call site."""
-    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import prewarm_spotguessr_solo_start
 
     safely_enqueue_task(prewarm_spotguessr_solo_start, profile_id, mode, last_config)
@@ -584,7 +584,7 @@ class SpotGuessrPhotoFeedbackView(LoginRequiredMixin, View):
 
     POST /spotguessr/session/<session_id>/round/<round_id>/feedback/   body: ``kind`` (thumbs_up/thumbs_down/reported)
 
-    Feeds ``services.media_relevance.effective_relevance`` at a reduced
+    Feeds ``services.media.media_relevance.effective_relevance`` at a reduced
     weight (or, for a report, full weight against "not relevant") - see
     ``services.spotguessr.relevance`` for exactly how. A no-op for a round
     with no photo (Named Place/Street View) or one this profile never

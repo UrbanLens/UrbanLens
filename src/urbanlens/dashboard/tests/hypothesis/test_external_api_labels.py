@@ -24,7 +24,7 @@ from urbanlens.dashboard.models.labels.customization import LabelCustomization
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 _BASE = "/dashboard/api/external/v1/labels/"
 
@@ -376,7 +376,7 @@ class LabelMergeEndpointTests(LabelApiTestCase):
         )
 
     def test_merge_moves_pins_and_deletes_the_source(self) -> None:
-        from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+        from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
         target = self._mine("Keep")
         source = self._mine("Drop")

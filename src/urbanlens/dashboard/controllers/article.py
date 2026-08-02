@@ -30,9 +30,9 @@ from django.views import View
 from urbanlens.dashboard.models.article.model import Article, ArticleRevision
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.articles import ArticleConflictError, diff_revisions, get_article, render_article, restore_revision, save_article_checked
-from urbanlens.dashboard.services.text_limits import MAX_ARTICLE_LENGTH, text_length_error
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.core.text_limits import MAX_ARTICLE_LENGTH, text_length_error
+from urbanlens.dashboard.services.wiki.articles import ArticleConflictError, diff_revisions, get_article, render_article, restore_revision, save_article_checked
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -218,7 +218,7 @@ class ArticleSaveView(ArticleViewBase):
 
         # Conflict check: someone else saved while this editor was open. The
         # client keeps the user's text so nothing is lost. Shared with the
-        # external API via services.articles.save_article_checked.
+        # external API via services.wiki.articles.save_article_checked.
         base_revision_id = int(base_revision_raw) if base_revision_raw.isdigit() else None
         try:
             _article, revision = save_article_checked(
@@ -281,8 +281,8 @@ class ArticleImageUploadView(ArticleViewBase):
             return JsonResponse({"error": "No image provided."}, status=400)
 
         from urbanlens.dashboard.models.images.model import Image, MediaKind
-        from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
-        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
+        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 
         upload_error = image_upload_error(image_file, MediaKind.PHOTO)
         if upload_error:
@@ -306,7 +306,7 @@ class ArticleImageUploadView(ArticleViewBase):
                 file_size=image_file.size,
             )
 
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, img.pk)

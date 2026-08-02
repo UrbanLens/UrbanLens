@@ -15,7 +15,7 @@ from django.db.models.signals import post_save
 from django.dispatch import receiver
 
 from urbanlens.dashboard.models.notifications.model import NotificationLog
-from urbanlens.dashboard.services.channel_broadcast import send_group_message
+from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
 
 #: Longest message body forwarded in the live push payload. The full text stays
 #: in the database and is shown in the bell dropdown; the toast only needs a preview.
@@ -102,7 +102,7 @@ def enqueue_text_alerts(sender: type[NotificationLog], instance: NotificationLog
     if created and instance.profile_id:
 
         def _enqueue() -> None:
-            from urbanlens.dashboard.services.notification_text_alerts import schedule_notification_text_alerts
+            from urbanlens.dashboard.services.notifications.notification_text_alerts import schedule_notification_text_alerts
 
             schedule_notification_text_alerts(instance)
 
@@ -115,7 +115,7 @@ def enqueue_native_push(sender: type[NotificationLog], instance: NotificationLog
 
     The WebSocket broadcast above only reaches open browser tabs; a native app
     in the background needs a real push (UnifiedPush/ntfy - see
-    ``services.push``). Runs after commit so the Celery worker is guaranteed
+    ``services.notifications.push``). Runs after commit so the Celery worker is guaranteed
     to see the row, and the task itself exits immediately for profiles with no
     registered devices.
 
@@ -129,7 +129,7 @@ def enqueue_native_push(sender: type[NotificationLog], instance: NotificationLog
         notification_id = instance.pk
 
         def _enqueue() -> None:
-            from urbanlens.dashboard.services.celery import safely_enqueue_task
+            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
             from urbanlens.dashboard.tasks import dispatch_native_push
 
             safely_enqueue_task(dispatch_native_push, notification_id)

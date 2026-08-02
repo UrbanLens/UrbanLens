@@ -70,7 +70,7 @@ class MapPinPayloadService:
         Reads ``pin.labels.all()``, which ``prepare_queryset`` prefetches with
         the profile's per-label customizations applied - so calling this on a
         prepared pin costs no additional query. Shared with
-        ``services.pin_sync.serialize_sync_pin``, which needs the same set to
+        ``services.pins.pin_sync.serialize_sync_pin``, which needs the same set to
         emit each chip's ``kind``.
 
         Args:

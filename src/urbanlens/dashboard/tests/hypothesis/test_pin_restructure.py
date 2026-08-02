@@ -30,7 +30,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services import pin_restructure
+from urbanlens.dashboard.services.pins import pin_restructure
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE, is_site_scope
 
 _coord_counter = 0
@@ -235,14 +235,14 @@ class RestructureOfferGatingTests(TestCase):
 
     def test_an_uncached_parcel_polls_instead_of_blocking(self) -> None:
         pin = baker.make(Pin, profile=self.user.profile, location=_make_location(), slug="unknown-parcel")
-        with patch("urbanlens.dashboard.services.external_data.schedule_panel_fetch", return_value=True):
+        with patch("urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch", return_value=True):
             response = self.client.get(reverse("pin.restructure.offer", kwargs={"pin_slug": pin.slug}))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "attempt=1")
 
     def test_a_spent_poll_budget_still_offers_whatever_is_known(self) -> None:
         """Nesting doesn't depend on the building lookup, so a slow REData mustn't hide it."""
-        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS
 
         pin = baker.make(Pin, profile=self.user.profile, location=_make_location(), slug="slow-parcel")
         Boundary.objects.create(location=pin.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_parcel_polygon())

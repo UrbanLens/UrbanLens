@@ -4,7 +4,7 @@ Both stream a REData media file's bytes server-side so REData's API key
 never reaches the browser (same reasoning as the Immich thumbnail proxy).
 Unlike that one, neither requires login: this data is public (LoopNet
 marketing photos, CRIS government historic-preservation records), and
-services.media_materialize.materialize_media_item re-downloads this same URL
+services.media.media_materialize.materialize_media_item re-downloads this same URL
 server-side with no session of its own - a login requirement would break it.
 
 django.core.cache.cache is mocked directly rather than exercised for real,

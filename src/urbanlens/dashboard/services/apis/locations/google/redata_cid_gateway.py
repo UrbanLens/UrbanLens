@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)

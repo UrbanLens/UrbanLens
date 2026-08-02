@@ -48,7 +48,7 @@ class DirectMessageTemporaryAccess(abstract.DashboardModel):
         while it is unexpired - a block placed after the recommendation was
         made must kill the access immediately, and recommendations to a
         blocked party are refused at creation time as well (see
-        ``services.direct_message_shares.recommend_friend_in_message``).
+        ``services.messaging.direct_message_shares.recommend_friend_in_message``).
 
         Args:
             profile_id: The profile being viewed.

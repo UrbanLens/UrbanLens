@@ -33,9 +33,9 @@ import requests
 from urbanlens.dashboard.services.apis.locations.google.geocoding import LOCALITY_PLACE_TYPES
 from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import RedataPlacesGateway
-from urbanlens.dashboard.services.gateway import GatewayRequestError
-from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
-from urbanlens.dashboard.services.redact import redact_coordinate
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)

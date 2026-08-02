@@ -40,7 +40,7 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 AccessToken = get_access_token_model()
 Application = get_application_model()
@@ -304,7 +304,7 @@ class GroupKeyTokenContractTests(TestCase):
         self.creator.refresh_from_db()
         self.member.refresh_from_db()
 
-        from urbanlens.dashboard.services.group_chats import create_group_chat
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
 
         self.group = create_group_chat(self.creator, "Trip crew", [self.member])
         self.token = _token_for(self.creator.user, f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}")

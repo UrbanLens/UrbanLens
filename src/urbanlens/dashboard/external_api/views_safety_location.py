@@ -21,7 +21,7 @@ endpoint does not create a new capability, only a polling-friendly REST path
 to the same data.
 
 Visibility mirrors the chat consumer's model exactly
-(``consumers.SafetyCheckinChatConsumer``, ``services.safety.is_owner_or_accepted_partner``):
+(``consumers.SafetyCheckinChatConsumer``, ``services.visits.safety.is_owner_or_accepted_partner``):
 GET is open to the owner or a currently-ACCEPTED partner, via
 :class:`~urbanlens.dashboard.external_api.mixins_safety.SafetyCheckinViewerScopedView`.
 A declined or removed partner loses read access exactly like they lose the
@@ -44,7 +44,7 @@ from urbanlens.dashboard.external_api.serializers import ErrorSerializer
 from urbanlens.dashboard.external_api.serializers_safety_location import SafetyCheckinLocationSerializer, SafetyCheckinLocationUpdateSerializer
 from urbanlens.dashboard.external_api.throttling import ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle, SafetyLocationThrottle
 from urbanlens.dashboard.models.account.model import ApiKeyScope
-from urbanlens.dashboard.services.safety import SafetyValidationError, set_live_location_sharing, update_live_location
+from urbanlens.dashboard.services.visits.safety import SafetyValidationError, set_live_location_sharing, update_live_location
 
 if TYPE_CHECKING:
     from rest_framework.request import Request

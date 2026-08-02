@@ -31,12 +31,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import GalleryMediaSource
+from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.assets.base import MediaItem
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 #: Fixed subject-matter clause: at least one of these words must appear, so a
 #: place name that coincides with an operating business/brand doesn't flood the

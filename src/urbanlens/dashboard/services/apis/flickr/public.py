@@ -16,7 +16,7 @@ import re
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.apis.flickr.oauth import _consumer_credentials
-from urbanlens.dashboard.services.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
 
 logger = logging.getLogger(__name__)
 

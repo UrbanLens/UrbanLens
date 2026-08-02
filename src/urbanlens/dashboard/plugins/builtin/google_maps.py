@@ -5,11 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.locations.base import SatelliteViewProvider, StreetViewProvider
-    from urbanlens.dashboard.services.enrichment import EnrichmentSource
+    from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
 
 
 class GoogleMapsPlugin(UrbanLensPlugin):
@@ -50,6 +50,6 @@ class GoogleMapsPlugin(UrbanLensPlugin):
 
     def get_enrichment_sources(self) -> list[EnrichmentSource]:
         """Contribute static Street View/satellite photo backfill to scheduled background enrichment."""
-        from urbanlens.dashboard.services.photo_enrichment import SatelliteEnrichmentSource, StreetViewEnrichmentSource
+        from urbanlens.dashboard.services.photos.photo_enrichment import SatelliteEnrichmentSource, StreetViewEnrichmentSource
 
         return [StreetViewEnrichmentSource(), SatelliteEnrichmentSource()]

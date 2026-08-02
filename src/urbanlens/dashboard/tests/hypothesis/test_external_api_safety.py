@@ -26,8 +26,8 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinStatus
 from urbanlens.dashboard.models.undo import UndoAction
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.safety import create_checkin, save_contact_defaults
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.visits.safety import create_checkin, save_contact_defaults
 
 
 def _bearer(raw_key: str) -> dict:

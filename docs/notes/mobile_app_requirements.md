@@ -83,7 +83,7 @@ security decision, not an oversight.)*
   (`PUT/DELETE .../comments/{id}/reactions/{emoji}/`) — pins don't. Asymmetric; please
   add the equivalent for pins, or confirm it's intentionally DM/wiki-only.
 - **[P1] Pin↔wiki manual sync** (`send-to-wiki`/`pull-from-wiki` bulk actions,
-  `dashboard/services/pin_wiki_sync.py`) has no external-API mirror — still session/HTMX
+  `dashboard/services/pins/pin_wiki_sync.py`) has no external-API mirror — still session/HTMX
   only.
 - **[P1] Pin's own private article** (`Article.pin` OneToOne, real model, real internal
   save/preview/history HTMX views) has no external-API mirror.

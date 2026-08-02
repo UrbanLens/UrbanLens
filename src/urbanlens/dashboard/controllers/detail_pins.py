@@ -18,11 +18,11 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
-from urbanlens.dashboard.services.pin_creation import PinCreationError, resolve_child_pin_location
+from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
-from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
+from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, resolve_visible_wiki
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +55,7 @@ def _requested_pin_type(body) -> tuple[str, bool]:
 
 def _schedule_classification(kind: str, pk: int) -> None:
     """Queue automatic building classification for a newly placed marker."""
-    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import classify_detail_marker
 
     safely_enqueue_task(classify_detail_marker, kind, pk)

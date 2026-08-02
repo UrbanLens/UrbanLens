@@ -63,7 +63,7 @@ class GetSearchGatewayTests(SimpleTestCase):
 
     def test_brave_provider_returns_brave_gateway(self):
         from urbanlens.dashboard.services.apis.search.brave.search import BraveSearchGateway
-        from urbanlens.dashboard.services.search import get_search_gateway
+        from urbanlens.dashboard.services.search.search import get_search_gateway
 
         mock_settings = MagicMock()
         mock_settings.search_provider = "brave"
@@ -76,7 +76,7 @@ class GetSearchGatewayTests(SimpleTestCase):
 
     def test_google_provider_returns_google_gateway(self):
         from urbanlens.dashboard.services.apis.search.google import GoogleCustomSearchGateway
-        from urbanlens.dashboard.services.search import get_search_gateway
+        from urbanlens.dashboard.services.search.search import get_search_gateway
 
         mock_settings = MagicMock()
         mock_settings.search_provider = "google"
@@ -89,7 +89,7 @@ class GetSearchGatewayTests(SimpleTestCase):
 
     def test_db_error_falls_back_to_brave(self):
         from urbanlens.dashboard.services.apis.search.brave.search import BraveSearchGateway
-        from urbanlens.dashboard.services.search import get_search_gateway
+        from urbanlens.dashboard.services.search.search import get_search_gateway
 
         with patch("urbanlens.dashboard.models.site_settings.SiteSettings") as MockSiteSettings:
             MockSiteSettings.get_current.side_effect = Exception("DB unavailable")
@@ -98,7 +98,7 @@ class GetSearchGatewayTests(SimpleTestCase):
         self.assertIsInstance(gateway, BraveSearchGateway)
 
     def test_returned_gateway_satisfies_search_gateway_protocol(self):
-        from urbanlens.dashboard.services.search import SearchGateway, get_search_gateway
+        from urbanlens.dashboard.services.search.search import SearchGateway, get_search_gateway
 
         mock_settings = MagicMock()
         mock_settings.search_provider = "brave"
@@ -111,7 +111,7 @@ class GetSearchGatewayTests(SimpleTestCase):
 
     def test_unknown_provider_defaults_to_brave(self):
         from urbanlens.dashboard.services.apis.search.brave.search import BraveSearchGateway
-        from urbanlens.dashboard.services.search import get_search_gateway
+        from urbanlens.dashboard.services.search.search import get_search_gateway
 
         mock_settings = MagicMock()
         mock_settings.search_provider = "nonexistent_provider"
@@ -134,7 +134,7 @@ class GetSearchGatewaysOrderTests(SimpleTestCase):
         from urbanlens.dashboard.services.apis.search.brave.search import BraveSearchGateway
         from urbanlens.dashboard.services.apis.search.google import GoogleCustomSearchGateway
         from urbanlens.dashboard.services.apis.search.searxng import SearxngGateway
-        from urbanlens.dashboard.services.search import get_search_gateways
+        from urbanlens.dashboard.services.search.search import get_search_gateways
 
         mock_settings = MagicMock()
         mock_settings.search_provider = ""
@@ -150,7 +150,7 @@ class GetSearchGatewaysOrderTests(SimpleTestCase):
 
     def test_preferred_provider_is_promoted_to_the_front(self):
         from urbanlens.dashboard.services.apis.search.marginalia import MarginaliaGateway
-        from urbanlens.dashboard.services.search import get_search_gateways
+        from urbanlens.dashboard.services.search.search import get_search_gateways
 
         mock_settings = MagicMock()
         mock_settings.search_provider = "marginalia"
@@ -164,7 +164,7 @@ class GetSearchGatewaysOrderTests(SimpleTestCase):
 
     def test_preferred_provider_is_not_duplicated(self):
         from urbanlens.dashboard.services.apis.search.searxng import SearxngGateway
-        from urbanlens.dashboard.services.search import get_search_gateways
+        from urbanlens.dashboard.services.search.search import get_search_gateways
 
         mock_settings = MagicMock()
         mock_settings.search_provider = "searxng"
@@ -181,13 +181,13 @@ class SearchWebFallbackTests(SimpleTestCase):
     """search_web() tries each gateway in order until one succeeds."""
 
     def test_returns_first_successful_providers_results(self):
-        from urbanlens.dashboard.services.search import search_web
+        from urbanlens.dashboard.services.search.search import search_web
 
         gw1, gw2 = MagicMock(), MagicMock()
         gw1.search.side_effect = RuntimeError("not configured")
         gw2.search.return_value = [{"title": "ok"}]
 
-        with patch("urbanlens.dashboard.services.search.get_search_gateways", return_value=[gw1, gw2]):
+        with patch("urbanlens.dashboard.services.search.search.get_search_gateways", return_value=[gw1, gw2]):
             results = search_web("query")
 
         self.assertEqual(results, [{"title": "ok"}])
@@ -195,36 +195,36 @@ class SearchWebFallbackTests(SimpleTestCase):
         gw2.search.assert_called_once()
 
     def test_stops_at_the_first_successful_provider(self):
-        from urbanlens.dashboard.services.search import search_web
+        from urbanlens.dashboard.services.search.search import search_web
 
         gw1, gw2 = MagicMock(), MagicMock()
         gw1.search.return_value = [{"title": "first"}]
 
-        with patch("urbanlens.dashboard.services.search.get_search_gateways", return_value=[gw1, gw2]):
+        with patch("urbanlens.dashboard.services.search.search.get_search_gateways", return_value=[gw1, gw2]):
             results = search_web("query")
 
         self.assertEqual(results, [{"title": "first"}])
         gw2.search.assert_not_called()
 
     def test_reraises_the_last_error_when_every_provider_fails(self):
-        from urbanlens.dashboard.services.search import search_web
+        from urbanlens.dashboard.services.search.search import search_web
 
         gw1, gw2 = MagicMock(), MagicMock()
         gw1.search.side_effect = RuntimeError("first failed")
         gw2.search.side_effect = ValueError("second failed")
 
-        with patch("urbanlens.dashboard.services.search.get_search_gateways", return_value=[gw1, gw2]), self.assertRaises(ValueError):
+        with patch("urbanlens.dashboard.services.search.search.get_search_gateways", return_value=[gw1, gw2]), self.assertRaises(ValueError):
             search_web("query")
 
     def test_rate_limited_provider_falls_back_to_next(self):
-        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
-        from urbanlens.dashboard.services.search import search_web
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+        from urbanlens.dashboard.services.search.search import search_web
 
         gw1, gw2 = MagicMock(), MagicMock()
         gw1.search.side_effect = RateLimitExceededError("searxng")
         gw2.search.return_value = [{"title": "fallback"}]
 
-        with patch("urbanlens.dashboard.services.search.get_search_gateways", return_value=[gw1, gw2]):
+        with patch("urbanlens.dashboard.services.search.search.get_search_gateways", return_value=[gw1, gw2]):
             results = search_web("query")
 
         self.assertEqual(results, [{"title": "fallback"}])

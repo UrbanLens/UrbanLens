@@ -15,7 +15,7 @@ def _resync_pin_against_smart_lists(instance: Pin) -> None:
         return
 
     def _run() -> None:
-        from urbanlens.dashboard.services.pin_list_membership import sync_pin_against_smart_lists
+        from urbanlens.dashboard.services.pins.pin_list_membership import sync_pin_against_smart_lists
 
         sync_pin_against_smart_lists(instance)
 
@@ -47,7 +47,7 @@ def _touch_pin(pin_id: int | None) -> None:
 
     Going through ``Pin.save(update_fields=["updated"])`` (rather than a bare
     ``.update()``) deliberately re-fires ``sync_smart_list_membership`` above
-    for free, and also keeps ``services.saved_filter_cache``'s
+    for free, and also keeps ``services.search.saved_filter_cache``'s
     ``Max(Pin.updated)`` cache-key fingerprint current - both would otherwise
     miss changes that don't call ``Pin.save()`` themselves (a PinLink
     add/remove, or a child pin being created/deleted under a parent).

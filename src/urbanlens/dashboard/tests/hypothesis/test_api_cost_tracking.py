@@ -19,8 +19,8 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults, _RateLimitedSession
-from urbanlens.dashboard.services.site_admin import add_user_to_site_admin_group
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults, _RateLimitedSession
+from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
 
 
 class ServiceDefaultsCostPerCallTests(SimpleTestCase):
@@ -34,7 +34,7 @@ class ServiceDefaultsCostPerCallTests(SimpleTestCase):
     def test_google_geocoding_has_a_configured_cost(self) -> None:
         """Derived from that entry's own $200-credit/~40,000-calls note - a
         regression guard against silently losing the one seeded real value."""
-        from urbanlens.dashboard.services.rate_limiter import SERVICE_REGISTRY
+        from urbanlens.dashboard.services.core.rate_limiter import SERVICE_REGISTRY
 
         self.assertEqual(SERVICE_REGISTRY["google_geocoding"].cost_per_call, Decimal("0.005"))
 
@@ -69,9 +69,9 @@ class DoRequestCostEstimateTests(TestCase):
         defaults = {"priced_svc": ServiceDefaults(display_name="Priced", cost_per_call=Decimal("0.05"))}
         session = self._mock_session("priced_svc", ok=True)
         with (
-            patch("urbanlens.dashboard.services.rate_limiter.check_rate_limit", return_value=True),
-            patch("urbanlens.dashboard.services.rate_limiter.service_is_enabled", return_value=True),
-            patch("urbanlens.dashboard.services.rate_limiter.all_service_defaults", return_value=defaults),
+            patch("urbanlens.dashboard.services.core.rate_limiter.check_rate_limit", return_value=True),
+            patch("urbanlens.dashboard.services.core.rate_limiter.service_is_enabled", return_value=True),
+            patch("urbanlens.dashboard.services.core.rate_limiter.all_service_defaults", return_value=defaults),
         ):
             session.get("https://example.com/api")
 
@@ -82,9 +82,9 @@ class DoRequestCostEstimateTests(TestCase):
         defaults = {"free_svc": ServiceDefaults(display_name="Free")}
         session = self._mock_session("free_svc", ok=True)
         with (
-            patch("urbanlens.dashboard.services.rate_limiter.check_rate_limit", return_value=True),
-            patch("urbanlens.dashboard.services.rate_limiter.service_is_enabled", return_value=True),
-            patch("urbanlens.dashboard.services.rate_limiter.all_service_defaults", return_value=defaults),
+            patch("urbanlens.dashboard.services.core.rate_limiter.check_rate_limit", return_value=True),
+            patch("urbanlens.dashboard.services.core.rate_limiter.service_is_enabled", return_value=True),
+            patch("urbanlens.dashboard.services.core.rate_limiter.all_service_defaults", return_value=defaults),
         ):
             session.get("https://example.com/api")
 
@@ -96,9 +96,9 @@ class DoRequestCostEstimateTests(TestCase):
         defaults = {"priced_svc": ServiceDefaults(display_name="Priced", cost_per_call=Decimal("0.05"))}
         session = self._mock_session("priced_svc", ok=False)
         with (
-            patch("urbanlens.dashboard.services.rate_limiter.check_rate_limit", return_value=True),
-            patch("urbanlens.dashboard.services.rate_limiter.service_is_enabled", return_value=True),
-            patch("urbanlens.dashboard.services.rate_limiter.all_service_defaults", return_value=defaults),
+            patch("urbanlens.dashboard.services.core.rate_limiter.check_rate_limit", return_value=True),
+            patch("urbanlens.dashboard.services.core.rate_limiter.service_is_enabled", return_value=True),
+            patch("urbanlens.dashboard.services.core.rate_limiter.all_service_defaults", return_value=defaults),
         ):
             session.get("https://example.com/api")
 
@@ -119,7 +119,7 @@ class SiteAdminApiUsageIncludesPluginsTests(TestCase):
 
     def test_plugin_only_service_appears_in_the_report(self) -> None:
         defaults = {"a_plugin_service": ServiceDefaults(display_name="A Plugin Service")}
-        with patch("urbanlens.dashboard.services.rate_limiter.all_service_defaults", return_value=defaults):
+        with patch("urbanlens.dashboard.services.core.rate_limiter.all_service_defaults", return_value=defaults):
             response = self.client.get(reverse("site_admin_stats_api"))
 
         self.assertContains(response, "A Plugin Service")
@@ -127,14 +127,14 @@ class SiteAdminApiUsageIncludesPluginsTests(TestCase):
     def test_priced_service_shows_its_cost(self) -> None:
         defaults = {"priced_svc": ServiceDefaults(display_name="Priced Svc", cost_per_call=Decimal("0.10"))}
         ApiCallLog.objects.create(service="priced_svc", success=True, cost_estimate=Decimal("0.10"))
-        with patch("urbanlens.dashboard.services.rate_limiter.all_service_defaults", return_value=defaults):
+        with patch("urbanlens.dashboard.services.core.rate_limiter.all_service_defaults", return_value=defaults):
             response = self.client.get(reverse("site_admin_stats_api"))
 
         self.assertContains(response, "$0.10")
 
     def test_unpriced_service_shows_not_priced(self) -> None:
         defaults = {"free_svc": ServiceDefaults(display_name="Free Svc")}
-        with patch("urbanlens.dashboard.services.rate_limiter.all_service_defaults", return_value=defaults):
+        with patch("urbanlens.dashboard.services.core.rate_limiter.all_service_defaults", return_value=defaults):
             response = self.client.get(reverse("site_admin_stats_api"))
 
         self.assertContains(response, "not")
@@ -153,7 +153,7 @@ class CostsPageTests(TestCase):
         ApiCallLog.objects.create(service="priced_svc", success=True, cost_estimate=Decimal("0.25"))
         ApiCallLog.objects.create(service="priced_svc", success=True, cost_estimate=Decimal("0.25"))
 
-        with patch("urbanlens.dashboard.services.rate_limiter.all_service_defaults", return_value=defaults):
+        with patch("urbanlens.dashboard.services.core.rate_limiter.all_service_defaults", return_value=defaults):
             response = self.client.get(reverse("costs"))
 
         self.assertEqual(response.context["total_cost_30d"], Decimal("0.50"))
@@ -167,7 +167,7 @@ class CostsPageTests(TestCase):
         }
         ApiCallLog.objects.create(service="priced_svc", success=True, cost_estimate=Decimal("0.25"))
 
-        with patch("urbanlens.dashboard.services.rate_limiter.all_service_defaults", return_value=defaults):
+        with patch("urbanlens.dashboard.services.core.rate_limiter.all_service_defaults", return_value=defaults):
             response = self.client.get(reverse("costs"))
 
         self.assertEqual(response.context["unpriced_service_count"], 2)

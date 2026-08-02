@@ -1,6 +1,6 @@
 """Auto-apply helpers for protected status labels that a plugin (not a user) sets.
 
-Mirrors ``services.visits.add_visited_status`` for the "Demolished" status -
+Mirrors ``services.visits.visits.add_visited_status`` for the "Demolished" status -
 also a protected label (``is_protected=True``, seeded alongside "Visited" in
 ``models.labels.signals.create_default_tags``) that a plugin determines and
 applies automatically rather than the user picking it manually.

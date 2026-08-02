@@ -275,7 +275,7 @@ class ImportMyActivityStreamingTests(TestCase):
 
     @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
     def test_accepting_suggestion_uses_history_visit_source(self, _mock_resolve_name):
-        from urbanlens.dashboard.services.visits import accept_visit_suggestion
+        from urbanlens.dashboard.services.visits.visits import accept_visit_suggestion
 
         self._run(_DIRECTIONS_ENTRY)
         suggestion = VisitSuggestion.objects.get(suggested_to=self.profile)

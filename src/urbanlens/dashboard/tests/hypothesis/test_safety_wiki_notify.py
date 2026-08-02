@@ -25,8 +25,8 @@ from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinStatus
-from urbanlens.dashboard.services.mentions import render_comment_text
-from urbanlens.dashboard.services.safety import escalate_checkin, find_community_wiki, post_checkin_to_community_wiki
+from urbanlens.dashboard.services.notifications.mentions import render_comment_text
+from urbanlens.dashboard.services.visits.safety import escalate_checkin, find_community_wiki, post_checkin_to_community_wiki
 
 WIKI_LAT = 40.0
 WIKI_LNG = -74.0

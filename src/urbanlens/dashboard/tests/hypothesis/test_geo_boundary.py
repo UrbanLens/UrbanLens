@@ -13,7 +13,7 @@ from unittest.mock import patch
 from django.core.cache import cache
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.geo_boundary import USA, GeoBoundary, state_boundary
+from urbanlens.dashboard.services.geo.geo_boundary import USA, GeoBoundary, state_boundary
 
 # A simple rectangular "state" for tests: lon in [-80, -70], lat in [40, 45].
 # Esri convention is the opposite of GeoJSON's: a clockwise ring is a shell.

@@ -36,7 +36,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.property_owner.meta import OwnerSource
 from urbanlens.dashboard.models.property_owner.model import PinOwner, PinPropertySale, WikiOwner, WikiPropertySale
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse

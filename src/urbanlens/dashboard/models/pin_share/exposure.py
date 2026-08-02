@@ -12,12 +12,12 @@ mutable while its Location is immutable:
 So a share "infects" both. Every share received creates a LocationExposure for
 ``(recipient, shared location)``, and moving a pin propagates its owner's
 exposures from the old location to the new one (see ``Pin.save`` /
-``services.share_provenance.propagate_exposures_for_pin_move``). Exposure rows
+``services.sharing.share_provenance.propagate_exposures_for_pin_move``). Exposure rows
 are deliberately independent of any Pin, so deleting and re-creating pins never
 clears them: any future pin the recipient creates within
-``services.share_provenance.EXPOSURE_RADIUS_METERS`` of an exposed location -
+``services.sharing.share_provenance.EXPOSURE_RADIUS_METERS`` of an exposed location -
 at any time - has its onward shares chained back to the originating share (see
-``services.share_provenance.resolve_origin_share``).
+``services.sharing.share_provenance.resolve_origin_share``).
 """
 
 from __future__ import annotations
@@ -47,7 +47,7 @@ class LocationExposure(abstract.DashboardModel):
     Read as: "``profile`` first learned about ``location`` via ``share``".
     Multiple exposures may exist for the same (profile, location) when the
     place was shared with them repeatedly - resolution picks the earliest
-    (see ``services.share_provenance.resolve_origin_share``).
+    (see ``services.sharing.share_provenance.resolve_origin_share``).
     """
 
     profile = models.ForeignKey("dashboard.Profile", on_delete=models.CASCADE, related_name="location_exposures")

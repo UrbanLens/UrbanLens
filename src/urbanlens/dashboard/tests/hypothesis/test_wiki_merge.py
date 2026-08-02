@@ -1,4 +1,4 @@
-"""Tests for automatic wiki parent/child nesting on boundary containment (services.wiki_merge).
+"""Tests for automatic wiki parent/child nesting on boundary containment (services.wiki.wiki_merge).
 
 Two independently-created community wikis - a campus and one of its own
 buildings - should read as parent/child once both have a real property
@@ -21,7 +21,7 @@ from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.wiki_merge import (
+from urbanlens.dashboard.services.wiki.wiki_merge import (
     reconcile_wiki_nesting,
     reconcile_wiki_nesting_for_location,
     wiki_property_polygon,
@@ -276,7 +276,7 @@ class GenerateLocationBoundariesIntegrationTests(TestCase):
         baker.make(Wiki, location=location, name="Some Wiki")
         with (
             patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain") as mock_chain_cls,
-            patch("urbanlens.dashboard.services.wiki_merge.reconcile_wiki_nesting_for_location") as mock_reconcile,
+            patch("urbanlens.dashboard.services.wiki.wiki_merge.reconcile_wiki_nesting_for_location") as mock_reconcile,
         ):
             mock_chain_cls.return_value.get_boundaries.return_value.polygon_for.return_value = None
             generate_location_boundaries(location)

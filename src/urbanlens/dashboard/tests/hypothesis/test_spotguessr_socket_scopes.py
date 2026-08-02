@@ -30,7 +30,7 @@ from urbanlens.dashboard.consumers import GameSessionConsumer
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import SpotGuessrMode
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_solo_session
 from urbanlens.dashboard.websocket_auth import CREDENTIAL_SCOPE_KEY
 

@@ -10,8 +10,8 @@ from django.db import DatabaseError
 import s2sphere
 
 from urbanlens.dashboard.models.cache import GeocodedLocation
-from urbanlens.dashboard.services.gateway import Gateway
-from urbanlens.dashboard.services.redact import redact_coordinate, redact_params
+from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_params
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:

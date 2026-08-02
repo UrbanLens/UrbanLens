@@ -13,7 +13,7 @@ from django.test import override_settings
 from hypothesis import given, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.community_counts import MIN_VISIBLE_PIN_COUNT, approximate_pin_count
+from urbanlens.dashboard.services.wiki.community_counts import MIN_VISIBLE_PIN_COUNT, approximate_pin_count
 
 _LOCMEM_CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}}
 

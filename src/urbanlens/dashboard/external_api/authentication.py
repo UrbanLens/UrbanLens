@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 
-from urbanlens.dashboard.services.api_keys import KEY_LABEL, authenticate_api_key, record_api_key_usage
+from urbanlens.dashboard.services.auth.api_keys import KEY_LABEL, authenticate_api_key, record_api_key_usage
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User

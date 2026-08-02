@@ -19,7 +19,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.export import _export_custom_fields
+from urbanlens.dashboard.services.import_export.export import _export_custom_fields
 
 
 class CustomFieldTestsBase(TestCase):
@@ -798,7 +798,7 @@ class NewTypeCriteriaRoundTripTests(CustomFieldTestsBase):
     """serialize_form_criteria / deserialize_criteria for the new criterion shapes."""
 
     def test_round_trip_preserves_new_shapes(self) -> None:
-        from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
+        from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
 
         select_field = CustomField.objects.create(
             profile=self.profile, entity_type=CustomFieldEntity.PIN, name="Access", field_type=CustomFieldType.SELECT, config={"choices": ["Open", "Locked"]},
@@ -916,7 +916,7 @@ class ReferenceFieldTests(CustomFieldTestsBase):
         self.assertEqual(names, {"Old Mill"})
 
     def test_reference_criteria_round_trip(self) -> None:
-        from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
+        from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
 
         field = self._reference_field("pin")
         other_pin = baker.make(Pin, profile=self.profile, name="Boiler House", name_is_user_provided=True)

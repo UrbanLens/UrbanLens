@@ -12,7 +12,7 @@ def archive_pin_link(sender: type[PinLink], instance: PinLink, created: bool, **
         return
 
     def _enqueue() -> None:
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import archive_link_to_wayback
 
         safely_enqueue_task(archive_link_to_wayback, "PinLink", instance.pk)
@@ -27,7 +27,7 @@ def archive_wiki_link(sender: type[WikiLink], instance: WikiLink, created: bool,
         return
 
     def _enqueue() -> None:
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import archive_link_to_wayback
 
         safely_enqueue_task(archive_link_to_wayback, "WikiLink", instance.pk)

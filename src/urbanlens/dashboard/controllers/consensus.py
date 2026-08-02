@@ -30,8 +30,8 @@ from urbanlens.dashboard.models.consensus.model import (
     ConsensusSessionParticipant,
 )
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.connections import get_connections
 from urbanlens.dashboard.services.consensus import chat as consensus_chat, fields, serializers, session as consensus_session
+from urbanlens.dashboard.services.social.connections import get_connections
 
 logger = logging.getLogger(__name__)
 
@@ -370,10 +370,10 @@ class ConsensusPhotoUploadView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, session_id: int, round_id: int) -> HttpResponse:
         from urbanlens.dashboard.models.images.model import Image, MediaKind
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
         from urbanlens.dashboard.services.consensus import photos as consensus_photos, points as consensus_points
-        from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
-        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
+        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
         from urbanlens.dashboard.tasks import process_image_upload
 
         profile = _current_profile(request)

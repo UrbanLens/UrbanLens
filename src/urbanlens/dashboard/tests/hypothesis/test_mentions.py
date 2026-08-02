@@ -12,7 +12,7 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from urbanlens.dashboard.services.mentions import (
+from urbanlens.dashboard.services.notifications.mentions import (
     extract_location_uuids,
     filter_visible_comments,
     is_visible_to,

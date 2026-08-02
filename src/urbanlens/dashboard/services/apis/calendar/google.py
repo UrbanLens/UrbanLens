@@ -24,9 +24,9 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.utils import timezone
 
-from urbanlens.dashboard.services import google_oauth
-from urbanlens.dashboard.services.gateway import Gateway, GatewayRequestError
-from urbanlens.dashboard.services.google_oauth import GoogleAuthExpiredError, extract_email_from_id_token
+from urbanlens.dashboard.services.auth import google_oauth
+from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError, extract_email_from_id_token
+from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:

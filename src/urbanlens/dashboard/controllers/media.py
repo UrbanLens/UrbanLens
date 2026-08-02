@@ -33,9 +33,9 @@ of the owning model's file field):
   on top of host membership - pin comments visible to the pin's owner (pin
   comment threads are owner+author scoped, see
   ``controllers.comments.PinCommentsView``), wiki comments to anyone who can
-  see the wiki (``services.wiki_access.location_visible_to``), and trip
+  see the wiki (``services.wiki.wiki_access.location_visible_to``), and trip
   comments to the trip's members. This mirrors the gates
-  ``services.comments.visible_comment_tree``/``services.trip_comments.build_comment_tree``
+  ``services.comments.comments.visible_comment_tree``/``services.trips.trip_comments.build_comment_tree``
   apply to the comment's text, so tightening the privacy setting after a
   viewer already has the image URL revokes access to the file too.
 - ``avatars/`` - profile avatars render site-wide next to usernames, so any
@@ -266,7 +266,7 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
         """
         from urbanlens.dashboard.models.comments.model import Comment
         from urbanlens.dashboard.models.trips.model import TripComment, TripMembership
-        from urbanlens.dashboard.services.wiki_access import location_visible_to
+        from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
 
         comment = Comment.objects.filter(image=rel_path).select_related("pin", "wiki__location", "profile").first()
         if comment is not None:
@@ -278,7 +278,7 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
                 return False
             if not profile.can_view_comments_from(comment.profile):
                 # The author's comment_visibility setting hides the comment
-                # itself from this viewer (see services.comments.visible_comment_tree
+                # itself from this viewer (see services.comments.comments.visible_comment_tree
                 # gate 1) - the attachment must be hidden right along with it,
                 # not just from the rendered thread.
                 return False

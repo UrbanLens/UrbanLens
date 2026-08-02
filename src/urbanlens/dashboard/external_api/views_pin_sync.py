@@ -3,13 +3,13 @@
 The detail page's multi-select toolbar can push selected child pins onto the
 property's community wiki, and its "pull from wiki" button can create personal
 child pins for whatever the wiki already documents. Both are deliberately
-manual, opt-in actions (see ``services.pin_wiki_sync`` for why neither ever
+manual, opt-in actions (see ``services.pins.pin_wiki_sync`` for why neither ever
 runs automatically, and why neither ever *creates* the wiki), and both were
 reachable only from the web UI until now.
 
 Three things this module gets right that a naive port would not:
 
-**Ownership is re-established here.** ``services.pin_wiki_sync`` takes a Pin and
+**Ownership is re-established here.** ``services.pins.pin_wiki_sync`` takes a Pin and
 trusts it: ``send_pins_to_wiki`` writes child wikis and a ``WikiEdit`` row
 attributed to the profile it is handed, and ``pull_children_from_wiki`` creates
 pins owned by ``parent_pin.profile``. Neither re-checks that the caller owns the
@@ -46,7 +46,7 @@ from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.external_api.views_pin_article import OwnedPinRequiredMixin
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.pin_wiki_sync import pull_children_from_wiki, send_pins_to_wiki
+from urbanlens.dashboard.services.pins.pin_wiki_sync import pull_children_from_wiki, send_pins_to_wiki
 
 if TYPE_CHECKING:
     from rest_framework.request import Request

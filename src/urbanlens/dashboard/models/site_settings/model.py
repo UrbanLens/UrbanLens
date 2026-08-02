@@ -307,7 +307,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
     # Hourly Celery task (tasks.run_scheduled_enrichment) that proactively
     # backfills high-value external data (official names, aliases, addresses,
     # boundaries) for every pinned/wiki'd Location, spending only the API
-    # budget left over after organic traffic. See services.enrichment.
+    # budget left over after organic traffic. See services.locations.enrichment.
 
     enrichment_enabled = BooleanField(
         default=True,
@@ -459,7 +459,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
     # --- Outbound email limits ---
     # Caps on user-triggered emails to third parties (friend/visit invites).
     # Subscription roles can raise these per-tier; the largest applicable
-    # limit wins and 0 means unlimited (see services.email_safety).
+    # limit wins and 0 means unlimited (see services.security.email_safety).
 
     email_limit_per_hour = IntegerField(
         default=5,

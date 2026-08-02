@@ -22,7 +22,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.global_search import GlobalSearchEngine
 from urbanlens.dashboard.services.locations.creation import WikiCreationService
 
-_SAFELY_ENQUEUE = "urbanlens.dashboard.services.celery.safely_enqueue_task"
+_SAFELY_ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
 
 
 class PinSignalQueuesDraftWikiTests(TestCase):

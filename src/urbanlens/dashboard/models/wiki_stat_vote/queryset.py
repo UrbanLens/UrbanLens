@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 from django.db.models import Avg, Count
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.services.community_counts import approximate_pin_count
+from urbanlens.dashboard.services.wiki.community_counts import approximate_pin_count
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -63,7 +63,7 @@ class WikiStatVoteQuerySet(abstract.DashboardQuerySet["WikiStatVote"]):
             field. The raw vote count is never returned as-is: showing it
             exactly would let someone place a vote and watch the number tick
             to learn precisely when someone else votes - the same concern
-            ``services.community_counts.approximate_pin_count`` fuzzes away
+            ``services.wiki.community_counts.approximate_pin_count`` fuzzes away
             for a wiki's pinned-user count, reused here unchanged.
         """
         agg = self.for_wiki(wiki).for_field(field).aggregate(avg=Avg("value"), count=Count("id"))

@@ -1,7 +1,7 @@
 """Memories → Locations page: review queue for PinImportFailure rows.
 
 Failures are raised by ``tasks.resolve_deferred_pin_locations`` (via
-``services.pin_import_failures.record_pin_import_failure``) when a pin's Google Maps
+``services.pins.pin_import_failures.record_pin_import_failure``) when a pin's Google Maps
 CID can't be resolved to a location - Google has no data for the place, or the live
 lookup itself stalled or errored out. This controller only lets the owner act on what
 was already recorded: supply an address or coordinates to place the pin themselves, or
@@ -22,8 +22,8 @@ from django.views import View
 
 from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.pin_creation import PinCreationError
-from urbanlens.dashboard.services.pin_import_failures import dismiss_pin_import_failure, resolve_pin_import_failure
+from urbanlens.dashboard.services.pins.pin_creation import PinCreationError
+from urbanlens.dashboard.services.pins.pin_import_failures import dismiss_pin_import_failure, resolve_pin_import_failure
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet

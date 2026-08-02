@@ -47,10 +47,10 @@ from urbanlens.dashboard.models.boundary.queryset import DEFAULT_RADIUS_METERS
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.external_data import schedule_panel_fetch
-from urbanlens.dashboard.services.geo import InvalidPolygonGeoJSONError, geometry_to_geojson as _geojson, parse_multipolygon_geojson as _parse_multipolygon
+from urbanlens.dashboard.services.geo.geo import InvalidPolygonGeoJSONError, geometry_to_geojson as _geojson, parse_multipolygon_geojson as _parse_multipolygon
 from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, schedule_location_boundary_generation
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.pins.external_data import schedule_panel_fetch
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -202,7 +202,7 @@ class BoundaryController(LoginRequiredMixin, GenericViewSet):
             # Clearing removes the custom row entirely - fall back down the chain.
             Boundary.objects.filter(pin=pin, boundary_type=boundary_type).delete()
             if boundary_type == BoundaryType.PROPERTY:
-                from urbanlens.dashboard.services.child_pin_boundaries import refit_child_pin_boundary
+                from urbanlens.dashboard.services.geo.child_pin_boundaries import refit_child_pin_boundary
 
                 refit_child_pin_boundary(pin.pk)
 

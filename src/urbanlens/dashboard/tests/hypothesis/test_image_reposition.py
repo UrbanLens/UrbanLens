@@ -23,7 +23,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.images import parse_reposition_payload
+from urbanlens.dashboard.services.media.images import parse_reposition_payload
 
 
 def _body(latitude: object, longitude: object) -> bytes:

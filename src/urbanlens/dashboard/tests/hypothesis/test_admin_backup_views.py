@@ -45,7 +45,7 @@ class BackupStartViewTests(TestCase):
         async_result = mock.Mock(id="task-123")
 
         with (
-            mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task", return_value=async_result) as enqueue,
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=async_result) as enqueue,
             mock.patch("urbanlens.dashboard.controllers.tools.reverse", return_value="/tasks/task-123/status/"),
         ):
             response = BackupStartView().post(request)
@@ -58,7 +58,7 @@ class BackupStartViewTests(TestCase):
         request = RequestFactory().post("/tools/backup/start/")
         request.user = _user(allowed=True)
 
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task", return_value=None):
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=None):
             response = BackupStartView().post(request)
 
         self.assertEqual(response.status_code, 503)

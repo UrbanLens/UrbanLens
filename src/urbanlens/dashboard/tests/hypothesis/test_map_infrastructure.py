@@ -12,7 +12,7 @@ from django.urls import reverse
 import pytest
 
 from urbanlens.dashboard.controllers.maps import MapController
-from urbanlens.dashboard.services import infrastructure_map
+from urbanlens.dashboard.services.map import infrastructure_map
 from urbanlens.dashboard.templatetags.map_components import MAP_LAYER_REGISTRY
 
 
@@ -113,7 +113,7 @@ class InfrastructureMapEndpointTests(SimpleTestCase):
         self.assertIn("zoom in", json.loads(response.content)["error"])
 
     @mock.patch(
-        "urbanlens.dashboard.services.infrastructure_map.infrastructure_feature_collection",
+        "urbanlens.dashboard.services.map.infrastructure_map.infrastructure_feature_collection",
         return_value={"type": "FeatureCollection", "features": [], "attribution": "© OpenStreetMap contributors"},
     )
     def test_returns_geojson_with_private_browser_cache(self, feature_collection: mock.Mock) -> None:

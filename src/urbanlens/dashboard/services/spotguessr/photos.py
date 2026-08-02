@@ -23,7 +23,7 @@ import random
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
-from urbanlens.dashboard.services.media_relevance import effective_relevance
+from urbanlens.dashboard.services.media.media_relevance import effective_relevance
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -41,7 +41,7 @@ def candidate_image_for_location(
         allow_arbitrary_external_photos: When False (the default -
             ``config.allow_arbitrary_external_photos``), an externally-
             sourced candidate must have a *non-negative*
-            ``services.media_relevance.effective_relevance`` score - a
+            ``services.media.media_relevance.effective_relevance`` score - a
             community-reported (or heavily downvoted) wiki photo is skipped
             rather than shown. Non-negative rather than strictly positive on
             purpose: almost every wiki photo starts at exactly 0 (no votes

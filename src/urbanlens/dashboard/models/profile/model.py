@@ -29,7 +29,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
 from urbanlens.dashboard.models.profile.meta import DistanceUnit, GuidanceLevel, MapCenterMode, MapViewChoice, SyncAliasesDirection, ThemeChoice, VisibilityChoice
 from urbanlens.dashboard.models.profile.queryset import ProfileManager
-from urbanlens.dashboard.services.text_limits import MAX_PROFILE_BIO_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_PROFILE_BIO_LENGTH
 
 if TYPE_CHECKING:
     from django.db.models import Manager as DjangoManager
@@ -345,7 +345,7 @@ class Profile(abstract.PublicDashboardModel):
     show_wiki_cover_photos = BooleanField(default=True, help_text="Show the community-selected cover photo banner on wiki pages.")
 
     # Mirrors what already happens automatically for community wikis (see
-    # services.wiki_seed) - when a Wikipedia article is confidently matched to
+    # services.wiki.wiki_seed) - when a Wikipedia article is confidently matched to
     # one of your pins and it doesn't have an article yet, start one from that
     # extract instead of leaving it blank. Never overwrites an existing
     # article (seeded or human-written) - see seed_pin_article_from_wikipedia's
@@ -359,24 +359,24 @@ class Profile(abstract.PublicDashboardModel):
     # nesting existing top-level pins that fall inside the property boundary.
     # Off silences the suggestion everywhere at once; declining it on a single
     # pin instead is per-pin and permanent (Pin.restructure_offer_dismissed).
-    # See services.pin_restructure.
+    # See services.pins.pin_restructure.
     suggest_pin_restructure = BooleanField(default=True, help_text="Offer to organize pins into buildings and child pins when you open a property that has several.")
 
     # Master switch for the whole pin-suggestion surface (Memories -> Locations).
     # Off overrides every per-source toggle below: no new suggestions are
     # created and any already-pending ones are hidden (not deleted) - see
-    # services.pin_suggestions.pending_suggestions_for_profile.
+    # services.pins.pin_suggestions.pending_suggestions_for_profile.
     pin_suggestions_enabled = BooleanField(default=True, help_text="Suggest pins based on your photos, public locations, and connected apps.")
 
     # Whether community-approved public locations appear in this profile's
     # suggestion queue. Public locations are the (rare) outcome of the
-    # public-pin vote - see services.public_pins. Off both stops new
+    # public-pin vote - see services.pins.public_pins. Off both stops new
     # suggestions from being created and hides any pending ones.
     suggest_public_pins = BooleanField(default=True, help_text="Suggest community-approved public locations that you haven't pinned yet.")
 
     # Whether Immich/local-folder photo scans may raise pin suggestions. Off
     # both stops new suggestions from being created (see
-    # services.pin_suggestions.ingest_location_hits) and hides any pending ones.
+    # services.pins.pin_suggestions.ingest_location_hits) and hides any pending ones.
     suggest_pins_from_photos = BooleanField(default=True, help_text="Suggest pins found by scanning your Immich library or local photo folders.")
 
     # Whether external apps (via the Pin Suggestions API endpoint) may raise
@@ -442,7 +442,7 @@ class Profile(abstract.PublicDashboardModel):
     # toggles below/elsewhere that remain independently adjustable.
     external_apis_enabled = BooleanField(default=True, help_text="Allow external services (weather, geocoding, place data, AI) to retrieve anonymized research data for you.")
 
-    # Ordered list of enabled homepage widget keys (see services.home_widgets),
+    # Ordered list of enabled homepage widget keys (see services.home.home_widgets),
     # e.g. ["stats", "recent_photos", ...]. Empty = never customized - the
     # homepage falls back to every widget, in the registry's default order.
     # Widgets omitted here are simply disabled, not deleted - re-enabling one

@@ -50,7 +50,7 @@ from urbanlens.dashboard.models.device_scan.model import DeviceScanEntry, Device
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.device_scan.pipeline import process_scan_upload
 from urbanlens.dashboard.urls import router as internal_rest_router
 

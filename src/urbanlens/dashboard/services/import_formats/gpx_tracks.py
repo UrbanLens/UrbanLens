@@ -210,7 +210,7 @@ def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint
 
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-    from urbanlens.dashboard.services.visits import sync_last_visited
+    from urbanlens.dashboard.services.visits.visits import sync_last_visited
 
     if not any(p.time is not None for p in raw_points):
         # No per-point timestamps (e.g. some <rte> files) - dwell duration can't be measured.

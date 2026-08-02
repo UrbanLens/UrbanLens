@@ -359,7 +359,7 @@ class SignalIntegrationTests(AchievementTestsBase):
 
     def test_no_award_for_a_metric_means_no_task_is_queued(self) -> None:
         """A site with no award on a metric pays nothing when it changes."""
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
             baker.make(Pin, profile=self.profile)
 
         queued = [call for call in enqueue.call_args_list if "achievement" in str(call)]
@@ -371,7 +371,7 @@ class SignalIntegrationTests(AchievementTestsBase):
 
         self._achievement(metric="pins_created", threshold=50, name="Far Off")
 
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
             baker.make(Pin, profile=self.profile)
 
         enqueued_tasks = [call.args[0] for call in enqueue.call_args_list if call.args]

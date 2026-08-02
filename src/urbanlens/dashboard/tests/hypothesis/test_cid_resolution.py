@@ -12,8 +12,8 @@ from unittest import mock
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations import cid_resolution
 from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import CidLookupEntry, RedataCidBatchResult, RedataPermissionError
-from urbanlens.dashboard.services.gateway import GatewayRequestError
-from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.UrbanLens.settings.app import settings
 
 

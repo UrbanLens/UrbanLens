@@ -5,18 +5,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.enrichment import LocationCacheEnrichmentSource
-from urbanlens.dashboard.services.external_data import LocationCachePanelSource, MediaPanelSource
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import LocationCacheNameProvider
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, MediaPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.assets.base import MediaProvider
-    from urbanlens.dashboard.services.enrichment import EnrichmentSource
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 
 class WikipediaPanelSource(LocationCachePanelSource):

@@ -27,7 +27,7 @@ from urbanlens.dashboard.models.wiki.model import Wiki
 
 _coord_counter = 0
 
-_ENQUEUE = "urbanlens.dashboard.services.celery.safely_enqueue_task"
+_ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
 
 
 def _make_location(**kwargs) -> Location:

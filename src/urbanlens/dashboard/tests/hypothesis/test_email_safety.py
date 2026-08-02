@@ -24,7 +24,7 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.email_log import EmailSendLog, EmailType
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, grant_subscription
-from urbanlens.dashboard.services.email_safety import (
+from urbanlens.dashboard.services.security.email_safety import (
     email_rate_limit_error,
     get_email_limits,
     has_sent_join_email,

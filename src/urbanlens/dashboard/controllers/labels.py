@@ -42,7 +42,7 @@ from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
 from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
@@ -478,7 +478,7 @@ def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> str | No
     custom_icon = _uploaded_custom_icon(request)
     if custom_icon:
         from urbanlens.dashboard.models.images.model import MediaKind
-        from urbanlens.dashboard.services.images import image_upload_error
+        from urbanlens.dashboard.services.media.images import image_upload_error
 
         upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
         if upload_error:

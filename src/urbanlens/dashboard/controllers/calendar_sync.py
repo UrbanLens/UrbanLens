@@ -31,15 +31,15 @@ from urbanlens.dashboard.services.apis.calendar.google import (
     extract_email_from_id_token,
     revoke_token,
 )
-from urbanlens.dashboard.services.calendar_sync import (
+from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.trips.calendar_sync import (
     build_import_preview,
     export_trip_to_calendar,
     import_events_as_trips,
     list_importable_events,
     remove_trip_from_calendar,
 )
-from urbanlens.dashboard.services.gateway import GatewayRequestError
-from urbanlens.dashboard.services.google_oauth import GoogleAuthExpiredError
 
 logger = logging.getLogger(__name__)
 

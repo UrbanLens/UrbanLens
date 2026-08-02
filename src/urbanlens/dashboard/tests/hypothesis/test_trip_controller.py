@@ -251,7 +251,7 @@ class TripCreateViewTests(TestCase):
         This test previously asserted a 400, which stopped being true when the
         name became optional so a "just start planning" flow needn't invent a
         title up front - it had been failing ever since. The behavior itself
-        now lives in ``services.trip_crud.create_trip``.
+        now lives in ``services.trips.trip_crud.create_trip``.
         """
         before = set(Trip.objects.values_list("pk", flat=True))
         resp = self.client.post(
@@ -358,7 +358,7 @@ class TripDetailViewTests(TestCase):
         This used to be a 403 while a missing slug was a 404, so the status
         code alone let anyone enumerate valid private trip slugs - despite both
         rendering the same "not found" page specifically to prevent that. See
-        ``services.trip_access.get_trip_for_viewer``.
+        ``services.trips.trip_access.get_trip_for_viewer``.
         """
         client = Client()
         client.force_login(self.outsider_user)

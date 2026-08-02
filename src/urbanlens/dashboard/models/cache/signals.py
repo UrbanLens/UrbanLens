@@ -44,7 +44,7 @@ def seed_articles_on_wikipedia_cache_write(sender: type[LocationCache], instance
         from django.core.exceptions import ObjectDoesNotExist
 
         from urbanlens.dashboard.services.locations.external_links import add_pin_link, add_wiki_link
-        from urbanlens.dashboard.services.wiki_seed import seed_pin_article_from_wikipedia, seed_wiki_article_from_wikipedia
+        from urbanlens.dashboard.services.wiki.wiki_seed import seed_pin_article_from_wikipedia, seed_wiki_article_from_wikipedia
 
         location = instance.location
         url = (instance.data or {}).get("url") or ""

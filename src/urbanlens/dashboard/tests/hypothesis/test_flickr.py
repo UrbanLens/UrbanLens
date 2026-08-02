@@ -32,7 +32,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.apis.flickr import oauth as flickr_oauth
 from urbanlens.dashboard.services.apis.flickr.gateway import FlickrGateway, FlickrPhoto
-from urbanlens.dashboard.services.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 
 def _mock_response(*, ok: bool = True, status_code: int = 200, json_data=None, content: bytes = b"", headers: dict | None = None):

@@ -20,7 +20,8 @@ from django.views import View
 
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.direct_messages import (
+from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
+from urbanlens.dashboard.services.messaging.direct_messages import (
     REACTION_PICKER_EMOJIS,
     DirectMessagePermissionError,
     DirectMessageValidationError,
@@ -43,7 +44,6 @@ from urbanlens.dashboard.services.direct_messages import (
     thread_page,
     toggle_reaction,
 )
-from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -425,8 +425,8 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
             JSON with the new image's ``id`` and ``url``, or a 400/413 error.
         """
         from urbanlens.dashboard.models.images.model import Image, MediaKind
-        from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
-        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
+        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 
         profile = _get_profile(request)
         image_file = request.FILES.get("image")
@@ -448,7 +448,7 @@ class DirectMessageImageUploadView(LoginRequiredMixin, View):
 
             image = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size)
 
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, image.pk)
@@ -493,7 +493,7 @@ class MessageReactionToggleView(LoginRequiredMixin, View):
 
     Args come from the POST body (``emoji``). Broadcasts the message's updated
     reaction summary to both participants over the WebSocket (see
-    ``services.direct_messages.toggle_reaction``); the response itself is the
+    ``services.messaging.direct_messages.toggle_reaction``); the response itself is the
     re-rendered reaction-bar partial, used to update the acting client's own
     UI immediately without waiting on the WS round-trip.
     """
@@ -651,7 +651,7 @@ class ConversationSearchView(LoginRequiredMixin, View):
 
     Understands the same natural-language phrasing as global search (dates,
     "photos"/"maps"/"pins" keywords, "from <person>") via
-    ``services.direct_messages.search_direct_messages`` - the same query
+    ``services.messaging.direct_messages.search_direct_messages`` - the same query
     parser and queryset builder the Ctrl+K dialog's message search uses, so
     behavior never drifts between the two surfaces.
     """
@@ -774,7 +774,7 @@ class MessagesUnreadCountView(LoginRequiredMixin, View):
             least one unread message (not the total unread message count -
             one label per conversation needing attention).
         """
-        from urbanlens.dashboard.services.group_chats import unread_group_conversation_count
+        from urbanlens.dashboard.services.messaging.group_chats import unread_group_conversation_count
 
         profile = _get_profile(request)
         count = DirectMessage.objects.unread_conversation_count(profile) + unread_group_conversation_count(profile)

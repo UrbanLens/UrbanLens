@@ -17,10 +17,10 @@ from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.images import compute_checksum, image_to_gallery_json, image_upload_error, parse_reposition_payload
-from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.media.images import compute_checksum, image_to_gallery_json, image_upload_error, parse_reposition_payload
+from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -124,7 +124,7 @@ class PinGalleryView(LoginRequiredMixin, View):
                 checksum=checksum,
                 file_size=image_file.size,
             )
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, img.pk)
@@ -312,7 +312,7 @@ class WikiGalleryView(LoginRequiredMixin, View):
                 checksum=checksum,
                 file_size=image_file.size,
             )
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, img.pk)

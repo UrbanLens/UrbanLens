@@ -32,8 +32,8 @@ from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinA
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.services.pin_edit import ORGANIZE_LABEL_KINDS, PinReparentError, reparent_pin
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.pins.pin_edit import ORGANIZE_LABEL_KINDS, PinReparentError, reparent_pin
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 

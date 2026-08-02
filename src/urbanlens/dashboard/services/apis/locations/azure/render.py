@@ -11,7 +11,7 @@ import requests
 
 from urbanlens.dashboard.services.apis.locations.azure.gateway import AZURE_MAPS_BASE_URL
 from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider
-from urbanlens.dashboard.services.redact import redact_coordinate
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:

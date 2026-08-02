@@ -13,7 +13,7 @@ from urbanlens.dashboard.models.notifications.meta import Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
-from urbanlens.dashboard.services.visits import accept_visit_suggestion, merge_visit_suggestion, reject_visit_suggestion
+from urbanlens.dashboard.services.visits.visits import accept_visit_suggestion, merge_visit_suggestion, reject_visit_suggestion
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse

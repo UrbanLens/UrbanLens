@@ -36,7 +36,7 @@ from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 
 def _bearer(raw_key: str) -> dict:

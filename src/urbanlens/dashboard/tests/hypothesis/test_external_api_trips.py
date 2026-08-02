@@ -12,7 +12,7 @@ three enumeration/authorization defects the extraction deliberately fixed:
    coordinates must be bounds-checked.
 
 They also assert the trip-map payload is byte-identical between the internal
-HTMX endpoint and this one, which is what keeps ``services.trip_map`` an
+HTMX endpoint and this one, which is what keeps ``services.trips.trip_map`` an
 actual single source rather than two implementations that happen to agree.
 """
 
@@ -32,7 +32,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment, TripMembership
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 _TRIP_SCOPES = [ApiKeyScope.TRIPS_READ.value, ApiKeyScope.TRIPS_WRITE.value]
 
@@ -345,7 +345,7 @@ class TripMemberTests(_TripApiTestCase):
     def test_removing_a_member_revokes_their_calendar_sync(self) -> None:
         """A removed member's live calendar export must be cut at the same moment."""
         TripMembership.objects.create(trip=self.trip, profile=self.invitee, status=TripMembership.STATUS_JOINED)
-        with mock.patch("urbanlens.dashboard.services.trip_membership.disconnect_member_calendar_sync") as disconnect:
+        with mock.patch("urbanlens.dashboard.services.trips.trip_membership.disconnect_member_calendar_sync") as disconnect:
             self.client.delete(reverse("external_api:trips.members.detail", args=[self.trip.slug, self.invitee.slug]), **_bearer(self.raw_key))
         disconnect.assert_called_once()
 
@@ -385,7 +385,7 @@ class TripMemberTests(_TripApiTestCase):
         """Joining reveals the itinerary, which must enter the reshare chain."""
         trip = self._make_trip(creator=self.other_profile, name="Theirs")
         TripMembership.objects.create(trip=trip, profile=self.profile, status=TripMembership.STATUS_INVITED)
-        with mock.patch("urbanlens.dashboard.services.trip_share_tracking.record_trip_shares_for_member") as record:
+        with mock.patch("urbanlens.dashboard.services.trips.trip_share_tracking.record_trip_shares_for_member") as record:
             response = self.client.post(reverse("external_api:trips.join", args=[trip.slug]), **_bearer(self.raw_key))
         self.assertEqual(response.status_code, 200)
         record.assert_called_once()
@@ -419,7 +419,7 @@ class TripActivityTests(_TripApiTestCase):
 
     def test_create_activity_records_share_provenance(self) -> None:
         """Putting a place on the itinerary counts as a share of that place."""
-        with mock.patch("urbanlens.dashboard.services.trip_share_tracking.record_trip_activity_shares") as record:
+        with mock.patch("urbanlens.dashboard.services.trips.trip_share_tracking.record_trip_activity_shares") as record:
             response = self.client.post(
                 reverse("external_api:trips.activities", args=[self.trip.slug]),
                 {"title": "Fisher Body", "latitude": 42.36, "longitude": -83.08},
@@ -459,7 +459,7 @@ class TripActivityTests(_TripApiTestCase):
             added_by=self.profile,
             title="Second stop",
         )
-        with mock.patch("urbanlens.dashboard.services.trip_legs.compute_legs") as compute:
+        with mock.patch("urbanlens.dashboard.services.trips.trip_legs.compute_legs") as compute:
             response = self._get("external_api:trips.activities", self.trip.slug)
         self.assertEqual(response.status_code, 200)
         compute.assert_not_called()
@@ -474,7 +474,7 @@ class TripActivityTests(_TripApiTestCase):
             title="Second stop",
         )
         Profile.objects.filter(pk=self.profile.pk).update(external_apis_enabled=True)
-        with mock.patch("urbanlens.dashboard.services.trip_legs.compute_legs", return_value={}) as compute:
+        with mock.patch("urbanlens.dashboard.services.trips.trip_legs.compute_legs", return_value={}) as compute:
             response = self.client.get(
                 reverse("external_api:trips.activities", args=[self.trip.slug]),
                 {"include_legs": "true"},
@@ -584,7 +584,7 @@ class TripActivityTests(_TripApiTestCase):
 
     def test_status_completed_routes_through_complete_activity(self) -> None:
         """Completing through the API logs visits like the web app's own action."""
-        with mock.patch("urbanlens.dashboard.services.trip_activities.create_visit_entries_for_completed_activity") as entries:
+        with mock.patch("urbanlens.dashboard.services.trips.trip_activities.create_visit_entries_for_completed_activity") as entries:
             response = self.client.put(
                 reverse("external_api:trips.activities.status", args=[self.trip.slug, self.activity.id]),
                 {"status": "completed"},
@@ -699,7 +699,7 @@ class TripCommentTests(_TripApiTestCase):
 class TripMapParityTests(_TripApiTestCase):
     """The external map payload must equal the internal one, byte for byte.
 
-    This is the regression guard for ``services.trip_map`` being a genuine
+    This is the regression guard for ``services.trips.trip_map`` being a genuine
     single source: if either surface ever grows its own point-building code,
     these payloads drift and this test fails.
     """

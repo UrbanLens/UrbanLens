@@ -15,8 +15,8 @@ from rest_framework.response import Response
 from urbanlens.dashboard.external_api.serializers import ErrorSerializer, PinListMarkupMapResponseSerializer
 from urbanlens.dashboard.external_api.views import ExternalApiView, _get_pin_list
 from urbanlens.dashboard.models.account.model import ApiKeyScope
-from urbanlens.dashboard.services.map_snapshot import materialize_markup_map
-from urbanlens.dashboard.services.pin_list_markup import build_list_markup_snapshot
+from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
+from urbanlens.dashboard.services.pins.pin_list_markup import build_list_markup_snapshot
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 class PinListMarkupMapView(ExternalApiView):
     """POST: create or refresh a markup map showing every pin on one of the caller's lists.
 
-    Wraps the same ``services.pin_list_markup`` calls
+    Wraps the same ``services.pins.pin_list_markup`` calls
     ``controllers.pin_lists.PinListMarkupMapView`` uses, but returns the
     created/refreshed map's uuid rather than a website redirect - there's no
     dedicated "fetch one markup map" read endpoint yet, so a client currently

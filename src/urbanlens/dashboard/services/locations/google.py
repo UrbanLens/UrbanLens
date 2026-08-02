@@ -11,9 +11,9 @@ import requests
 
 from urbanlens.dashboard.services.apis.locations import places_resolution
 from urbanlens.dashboard.services.apis.locations.google.geocoding import GoogleGeocodingGateway
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name
-from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
-from urbanlens.dashboard.services.redact import redact_coordinate
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)

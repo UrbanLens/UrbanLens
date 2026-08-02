@@ -195,12 +195,12 @@ stay plaintext; only encrypted messages render a padlock.
 | Concern | Location |
 | --- | --- |
 | Key storage models | `dashboard/models/e2ee/`, `AccountKdf` in `models/account/model.py` |
-| Storage endpoints | `dashboard/controllers/e2ee.py`, `services/e2ee.py` |
+| Storage endpoints | `dashboard/controllers/e2ee.py`, `services/security/e2ee.py` |
 | Browser crypto primitives | `frontend/ts/shared/e2ee-crypto.ts` |
 | Browser flows (enroll/login/unlock/encrypt) | `frontend/ts/shared/e2ee-client.ts` |
 | Key cache | `frontend/ts/shared/e2ee-store.ts` (IndexedDB) |
 | Global bundle | `frontend/ts/entries-classic/e2ee.ts` → `window.UrbanLensE2EE` |
-| Message plaintext touchpoints | `services/direct_messages.py`, `consumers.py` |
+| Message plaintext touchpoints | `services/messaging/direct_messages.py`, `consumers.py` |
 | Interop / format tests | `tests/hypothesis/test_e2ee_interop.py` |
 
 ## Future work

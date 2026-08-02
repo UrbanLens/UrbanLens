@@ -263,12 +263,12 @@ class CustomField(abstract.FrontendDashboardModel):
         """The configured target kind for a reference field ("" for other types).
 
         Returns:
-            A ``services.custom_field_references.REFERENCE_KINDS`` value, or ""
+            A ``services.custom_fields.custom_field_references.REFERENCE_KINDS`` value, or ""
             when this isn't a reference field or the config is missing/invalid.
         """
         if self.field_type != CustomFieldType.REFERENCE:
             return ""
-        from urbanlens.dashboard.services.custom_field_references import REFERENCE_KINDS
+        from urbanlens.dashboard.services.custom_fields.custom_field_references import REFERENCE_KINDS
 
         raw = (self.config or {}).get("ref_type") or ""
         return raw if any(raw == kind for kind, _ in REFERENCE_KINDS) else ""
@@ -276,7 +276,7 @@ class CustomField(abstract.FrontendDashboardModel):
     @property
     def reference_kind_label(self) -> str:
         """Display label for the configured reference kind ("" when not set)."""
-        from urbanlens.dashboard.services.custom_field_references import REFERENCE_KINDS
+        from urbanlens.dashboard.services.custom_fields.custom_field_references import REFERENCE_KINDS
 
         return dict(REFERENCE_KINDS).get(self.reference_kind, "")
 
@@ -294,7 +294,7 @@ class CustomField(abstract.FrontendDashboardModel):
         kind = self.reference_kind
         if not kind:
             return []
-        from urbanlens.dashboard.services.custom_field_references import reference_choices
+        from urbanlens.dashboard.services.custom_fields.custom_field_references import reference_choices
 
         return reference_choices(kind, self.profile, include_pk=include_pk)
 
@@ -539,7 +539,7 @@ class CustomFieldValue(abstract.DashboardModel):
     @property
     def reference_url(self) -> str | None:
         """Detail-page URL for the referenced object, or None when it has none."""
-        from urbanlens.dashboard.services.custom_field_references import reference_url
+        from urbanlens.dashboard.services.custom_fields.custom_field_references import reference_url
 
         return reference_url(self.field.reference_kind, self.reference_target)
 
@@ -547,7 +547,7 @@ class CustomFieldValue(abstract.DashboardModel):
     def display_value(self) -> str:
         """The value formatted for display (numbers without trailing zeros)."""
         if self.field.field_type == CustomFieldType.REFERENCE:
-            from urbanlens.dashboard.services.custom_field_references import reference_label
+            from urbanlens.dashboard.services.custom_fields.custom_field_references import reference_label
 
             return reference_label(self.field.reference_kind, self.reference_target)
         raw = self.value
@@ -632,7 +632,7 @@ class CustomFieldValue(abstract.DashboardModel):
                 raise CustomFieldValueError(f"{raw!r} is not a valid link.") from e
             self.value_text = candidate
         elif field_type == CustomFieldType.REFERENCE:
-            from urbanlens.dashboard.services.custom_field_references import resolve_reference
+            from urbanlens.dashboard.services.custom_fields.custom_field_references import resolve_reference
 
             kind = self.field.reference_kind
             ref_field = self.REF_FIELD_BY_KIND.get(kind)

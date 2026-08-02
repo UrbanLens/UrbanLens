@@ -23,13 +23,13 @@ from urbanlens.dashboard.models.trips.model import (
     TripComment,
     TripMembership,
 )
-from urbanlens.dashboard.services.trip_access import (
+from urbanlens.dashboard.services.trips.trip_access import (
     can_perform as _can_perform,
     get_trip_for_viewer,
     has_joined as _viewer_has_joined,
     is_organizer as _is_organizer,
 )
-from urbanlens.dashboard.services.trip_activities import (
+from urbanlens.dashboard.services.trips.trip_activities import (
     activity_queryset as _activity_qs,
     build_activity_rows,
     complete_activity,
@@ -47,12 +47,12 @@ from urbanlens.dashboard.services.trip_activities import (
     set_activity_vote,
     update_activity,
 )
-from urbanlens.dashboard.services.trip_comments import ALLOWED_COMMENT_EMOJIS, TripCommentData, add_comment, build_comment_tree, delete_comment, get_comment
-from urbanlens.dashboard.services.trip_crud import TRIP_DELETED_MESSAGE, create_trip, delete_trip, set_trip_permissions, update_trip
-from urbanlens.dashboard.services.trip_errors import TripError, TripMemberNotFoundError, TripNotFoundError, TripPermissionError
-from urbanlens.dashboard.services.trip_legs import activity_coords
-from urbanlens.dashboard.services.trip_map import build_trip_map_points
-from urbanlens.dashboard.services.trip_membership import (
+from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS, TripCommentData, add_comment, build_comment_tree, delete_comment, get_comment
+from urbanlens.dashboard.services.trips.trip_crud import TRIP_DELETED_MESSAGE, create_trip, delete_trip, set_trip_permissions, update_trip
+from urbanlens.dashboard.services.trips.trip_errors import TripError, TripMemberNotFoundError, TripNotFoundError, TripPermissionError
+from urbanlens.dashboard.services.trips.trip_legs import activity_coords
+from urbanlens.dashboard.services.trips.trip_map import build_trip_map_points
+from urbanlens.dashboard.services.trips.trip_membership import (
     add_member_by_username,
     addable_friends as _addable_friends,
     join_trip,
@@ -145,7 +145,7 @@ def _apply_trip_list_identity_masking(viewer: Profile, trips: Iterable[Trip]) ->
         viewer: The profile viewing the list.
         trips: Trips about to be rendered via ``trip_list_partial.html``.
     """
-    from urbanlens.dashboard.services.identity_visibility import mask_profile_references
+    from urbanlens.dashboard.services.profile.identity_visibility import mask_profile_references
 
     all_refs: list[Profile] = []
     for trip in trips:
@@ -234,7 +234,7 @@ def trip_or_not_found(request: HttpRequest, trip_slug: str, profile: Profile) ->
     """Return the trip when *profile* may see it, else the styled "not found" page.
 
     The thin HTMX-facing adapter over
-    :func:`~urbanlens.dashboard.services.trip_access.get_trip_for_viewer`,
+    :func:`~urbanlens.dashboard.services.trips.trip_access.get_trip_for_viewer`,
     which is where the rule itself lives.
 
     Replaces the former ``_trip_or_403``. That version rendered the same page
@@ -397,7 +397,7 @@ class TripOverviewView(LoginRequiredMixin, View):
 
     def get(self, request):
         from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
-        from urbanlens.dashboard.services.connections import get_connections
+        from urbanlens.dashboard.services.social.connections import get_connections
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         all_trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user"))
@@ -434,7 +434,7 @@ class TripListView(LoginRequiredMixin, View):
 
     def get(self, request):
         from urbanlens.dashboard.models.calendar_sync.model import GoogleCalendarAccount
-        from urbanlens.dashboard.services.connections import get_connections
+        from urbanlens.dashboard.services.social.connections import get_connections
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         sort, direction = _trip_list_sort_params(request)
@@ -695,7 +695,7 @@ class TripAiSuggestionsView(LoginRequiredMixin, View):
         return self._respond(request, trip_slug, force_refresh=True)
 
     def _respond(self, request, trip_slug, *, force_refresh: bool):
-        from urbanlens.dashboard.services.trip_ai_suggestions import get_trip_suggestions
+        from urbanlens.dashboard.services.trips.trip_ai_suggestions import get_trip_suggestions
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = trip_or_not_found(request, trip_slug, profile)
@@ -1070,7 +1070,7 @@ class TripMapDataView(LoginRequiredMixin, View):
         trip = result
         include_past = request.GET.get("include_past", "0") not in {"", "0", "false"}
         # The external API's map endpoint returns exactly this, unmodified -
-        # see services.trip_map for why the two must not diverge.
+        # see services.trips.trip_map for why the two must not diverge.
         return JsonResponse({"points": build_trip_map_points(trip, profile, include_past=include_past)})
 
 
@@ -1339,7 +1339,7 @@ class TripActivityPositionView(LoginRequiredMixin, View):
             now requires edit-activities permission (it previously admitted any
             *invited* member, joined or not), and coordinates are bounds-checked
             (they previously were not, so a marker could be saved at latitude
-            5000). See ``services.trip_activities.set_activity_position``.
+            5000). See ``services.trips.trip_activities.set_activity_position``.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = trip_or_not_found(request, trip_slug, profile)

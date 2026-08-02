@@ -19,7 +19,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.subscriptions.model import SubscriptionRole, grant_subscription
-from urbanlens.dashboard.services.storage import (
+from urbanlens.dashboard.services.media.storage import (
     DOWNSCALE_DIMENSION_CHOICES,
     GIB,
     allowed_user_dimension_values,

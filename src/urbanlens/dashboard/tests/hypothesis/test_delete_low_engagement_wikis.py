@@ -4,7 +4,7 @@ Locks in the two independent deletion criteria - <=2 distinct pin owners, or
 no active user edit - and the edge cases that make each nontrivial: pin
 ownership is deduped per profile (not per pin), and "user edit" excludes both
 reverted edits and null-editor (seed/system) edits, mirroring the precedent
-in ``services.safety.destination_wiki_activity``. Also locks in that
+in ``services.visits.safety.destination_wiki_activity``. Also locks in that
 deletion cascades to child wikis regardless of the child's own engagement,
 since that's an easy thing to get wrong silently.
 """

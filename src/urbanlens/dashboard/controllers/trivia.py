@@ -28,7 +28,7 @@ from urbanlens.dashboard.models.trivia.model import (
     TriviaSession,
     TriviaSessionParticipant,
 )
-from urbanlens.dashboard.services.connections import get_connections
+from urbanlens.dashboard.services.social.connections import get_connections
 from urbanlens.dashboard.services.trivia import chat as trivia_chat, eligibility, serializers, session as trivia_session, social, submission, voting
 
 if TYPE_CHECKING:

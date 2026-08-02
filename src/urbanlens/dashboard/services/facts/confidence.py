@@ -2,7 +2,7 @@
 
 Dispatches per ``Fact.data_type``: NUMBER/POINT facts converge via a
 trust-and-recency-weighted centroid (generalizing
-``services.photo_coordinates.recompute_estimated_coordinates``); every other
+``services.photos.photo_coordinates.recompute_estimated_coordinates``); every other
 data type (TEXT/CHOICE/BOOL/DATE) converges via trust-weighted agreement
 clustering with Bayesian-smoothed confidence, extending
 ``ConsensusProfile``'s Beta-Bernoulli trust pattern (see
@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 #: Below this many active evidence rows, a fact's value/status is left
 #: alone - not enough signal to be worth caching or surfacing. Mirrors
-#: ``services.photo_coordinates.MIN_GUESSES_FOR_ESTIMATE``.
+#: ``services.photos.photo_coordinates.MIN_GUESSES_FOR_ESTIMATE``.
 MIN_EVIDENCE_FOR_ESTIMATE = 5
 
 #: confidence >= this promotes a fact to CONFIRMED.
@@ -210,7 +210,7 @@ def recompute(fact_id: int) -> None:
     (TEXT/CHOICE/BOOL/DATE), a previously-``CONFIRMED`` value is protected
     from flip-flopping by :func:`resolve_categorical`. NUMBER/POINT facts
     always recompute their centroid/mean fresh, mirroring
-    ``services.photo_coordinates.recompute_estimated_coordinates`` - a
+    ``services.photos.photo_coordinates.recompute_estimated_coordinates`` - a
     weighted average can't suddenly jump to a wildly different value from
     one new observation the way a discrete categorical winner can, so no
     equivalent gate is needed there.

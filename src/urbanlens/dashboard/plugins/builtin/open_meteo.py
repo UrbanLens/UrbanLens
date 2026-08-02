@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 
 
 class OpenMeteoPlugin(UrbanLensPlugin):

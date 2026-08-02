@@ -14,7 +14,7 @@ from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.site_settings import SiteSettings
-from urbanlens.dashboard.services.site_admin import complete_site_admin_onboarding
+from urbanlens.dashboard.services.admin.site_admin import complete_site_admin_onboarding
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User
@@ -313,7 +313,7 @@ class SetupWizardView(LoginRequiredMixin, PermissionRequiredMixin, View):
         if site.bootstrap_admin_onboarding_complete:
             return redirect("map.view")
 
-        from urbanlens.dashboard.services.avatar import AvatarService
+        from urbanlens.dashboard.services.profile.avatar import AvatarService
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         profile = request.user.profile

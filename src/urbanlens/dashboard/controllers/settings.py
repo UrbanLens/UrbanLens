@@ -33,7 +33,7 @@ from urbanlens.dashboard.forms.settings_form import (
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.flickr.oauth import is_configured as flickr_is_configured
-from urbanlens.dashboard.services.storage import allowed_user_dimension_values, allowed_user_video_height_values, get_storage_settings_context
+from urbanlens.dashboard.services.media.storage import allowed_user_dimension_values, allowed_user_video_height_values, get_storage_settings_context
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -75,13 +75,13 @@ def _security_context(user: User, request: HttpRequest) -> dict:
     """Context for the Security section (passkeys, TOTP status, backup codes) and the
     Advanced tab's separate API Keys section.
 
-    Thin wrapper around ``services.two_factor.security_settings_context`` and
-    ``services.api_keys.api_keys_settings_context``, which are also called
+    Thin wrapper around ``services.auth.two_factor.security_settings_context`` and
+    ``services.auth.api_keys.api_keys_settings_context``, which are also called
     directly by the 2FA and API key action views (``two_factor.py``,
     ``api_keys.py``) so they can re-render just their own section for htmx requests.
     """
-    from urbanlens.dashboard.services.api_keys import api_keys_settings_context
-    from urbanlens.dashboard.services.two_factor import security_settings_context
+    from urbanlens.dashboard.services.auth.api_keys import api_keys_settings_context
+    from urbanlens.dashboard.services.auth.two_factor import security_settings_context
 
     return {**security_settings_context(user, request), **api_keys_settings_context(user, request)}
 

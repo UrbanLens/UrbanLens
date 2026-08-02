@@ -23,7 +23,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.public_pins.model import PublicPinCandidate, PublicPinCandidateStatus, PublicPinVote
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatField, WikiStatVote
-from urbanlens.dashboard.services.public_pins import (
+from urbanlens.dashboard.services.pins.public_pins import (
     PublicPinConfig,
     PublicVoteError,
     cast_public_vote,

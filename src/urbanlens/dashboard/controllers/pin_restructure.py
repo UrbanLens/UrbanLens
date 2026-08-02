@@ -29,8 +29,8 @@ from django.views import View
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_rows
-from urbanlens.dashboard.services import pin_restructure
 from urbanlens.dashboard.services.locations import site_scope
+from urbanlens.dashboard.services.pins import pin_restructure
 
 logger = logging.getLogger(__name__)
 
@@ -102,7 +102,7 @@ class PinRestructureOfferView(LoginRequiredMixin, View):
     """GET: the restructure suggestion for this pin, or a quiet 204."""
 
     def get(self, request: HttpRequest, pin_slug: str) -> HttpResponse:
-        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, schedule_panel_fetch
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, schedule_panel_fetch
 
         pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
         if not pin_restructure.should_offer(pin):

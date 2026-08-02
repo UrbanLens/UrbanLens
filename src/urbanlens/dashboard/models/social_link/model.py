@@ -19,7 +19,7 @@ class SocialLink(abstract.DashboardModel):
 
     The ``platform`` field is a free-form string key (e.g. ``"instagram"``,
     ``"bluesky"``).  Validation and URL construction are handled by
-    :mod:`urbanlens.dashboard.services.social_links`, not by this model.
+    :mod:`urbanlens.dashboard.services.profile.social_links`, not by this model.
     """
 
     platform = CharField(max_length=30)

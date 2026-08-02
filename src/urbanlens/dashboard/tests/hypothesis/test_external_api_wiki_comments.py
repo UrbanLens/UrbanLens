@@ -16,7 +16,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.tests.hypothesis.test_external_api_wiki_oracle import grant_wiki_scopes
 
 BASE = "/dashboard/api/external/v1/wikis"

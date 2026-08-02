@@ -1,6 +1,6 @@
 """Media archive plugins: providers for the pin detail page's combined Media gallery.
 
-Each plugin contributes one :class:`~urbanlens.dashboard.services.external_data.MediaPanelSource`,
+Each plugin contributes one :class:`~urbanlens.dashboard.services.pins.external_data.MediaPanelSource`,
 which the gallery fetches independently so a slow provider never blocks the
 others.
 """
@@ -10,11 +10,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import MediaPanelSource
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import MediaPanelSource
 
 if TYPE_CHECKING:
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 
 class SmithsonianPlugin(UrbanLensPlugin):

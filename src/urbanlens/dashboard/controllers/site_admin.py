@@ -35,9 +35,9 @@ from urbanlens.dashboard.models.site_settings import (
     SearchProviderChoice,
     SiteSettings,
 )
-from urbanlens.dashboard.services.infrastructure_stats import _format_duration
-from urbanlens.dashboard.services.json_safety import safe_json_for_script
-from urbanlens.dashboard.services.site_admin import SITE_ADMIN_GROUP_NAME, complete_site_admin_onboarding
+from urbanlens.dashboard.services.admin.infrastructure_stats import _format_duration
+from urbanlens.dashboard.services.admin.site_admin import SITE_ADMIN_GROUP_NAME, complete_site_admin_onboarding
+from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 logger = logging.getLogger(__name__)
@@ -120,7 +120,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         ranked_slugs = {slug for slug, _label, _ranked in name_source_order}
         name_source_order += [(slug, label, False) for slug, label in providers_by_slug.items() if slug not in ranked_slugs]
 
-        from urbanlens.dashboard.services.enrichment import enrichment_sources, last_run_summary, self_reported_skip
+        from urbanlens.dashboard.services.locations.enrichment import enrichment_sources, last_run_summary, self_reported_skip
 
         enrichment_source_rows = [
             {
@@ -833,7 +833,7 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     def _get_all_configs(self):
         """Return ApiRateLimit rows for every known service, creating missing ones."""
-        from urbanlens.dashboard.services.rate_limiter import all_service_defaults, get_limit_config
+        from urbanlens.dashboard.services.core.rate_limiter import all_service_defaults, get_limit_config
 
         return [get_limit_config(key) for key in sorted(all_service_defaults())]
 
@@ -966,7 +966,7 @@ class SiteAdminPluginsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
     def get(self, request: HttpRequest):
         from urbanlens.dashboard.plugins import plugin_registry
-        from urbanlens.dashboard.services.rate_limiter import get_limit_config
+        from urbanlens.dashboard.services.core.rate_limiter import get_limit_config
 
         entries = []
         for info in plugin_registry.plugins():
@@ -1033,8 +1033,8 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
     def get(self, request: HttpRequest):
         from urbanlens.dashboard.models.profile.model import Profile
         from urbanlens.dashboard.models.subscriptions import active_subscription_roles
-        from urbanlens.dashboard.services.pagination import get_page
-        from urbanlens.dashboard.services.storage import get_quota_bytes, get_storage_used_bytes
+        from urbanlens.dashboard.services.core.pagination import get_page
+        from urbanlens.dashboard.services.media.storage import get_quota_bytes, get_storage_used_bytes
 
         if not isinstance(request.user, User):
             return HttpResponseForbidden()
@@ -1105,7 +1105,7 @@ class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
         admin using ``cancel_delete`` here).
         """
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.account_deletion import cancel_deletion, request_deletion
+        from urbanlens.dashboard.services.profile.account_deletion import cancel_deletion, request_deletion
 
         if not isinstance(request.user, User):
             return HttpResponseForbidden()
@@ -1258,7 +1258,7 @@ class SiteAdminHomeStatusPartialView(_AdminPermissionMixin, View):
 
     def get(self, request: HttpRequest):
         from urbanlens.core.version import get_current_git_branch, get_git_commit_at_start, get_git_update_status
-        from urbanlens.dashboard.services.infrastructure_stats import collect_infrastructure_service_stats
+        from urbanlens.dashboard.services.admin.infrastructure_stats import collect_infrastructure_service_stats
 
         infra_services = collect_infrastructure_service_stats()
         unhealthy_count = sum(1 for s in infra_services if s.status == "unhealthy")
@@ -1379,8 +1379,8 @@ class SiteAdminStatsSystemPartialView(_AdminPermissionMixin, View):
             get_git_commit_at_start,
             get_git_update_status,
         )
-        from urbanlens.dashboard.services.backups import collect_backup_stats
-        from urbanlens.dashboard.services.infrastructure_stats import collect_infrastructure_service_stats
+        from urbanlens.dashboard.services.admin.backups import collect_backup_stats
+        from urbanlens.dashboard.services.admin.infrastructure_stats import collect_infrastructure_service_stats
 
         uptime = _app_uptime()
         media_root = getattr(django_settings, "MEDIA_ROOT", "")
@@ -1419,7 +1419,7 @@ class SiteAdminStatsApiUsagePartialView(_AdminPermissionMixin, View):
     """
 
     def get(self, request: HttpRequest):
-        from urbanlens.dashboard.services.rate_limiter import all_service_defaults
+        from urbanlens.dashboard.services.core.rate_limiter import all_service_defaults
 
         # all_service_defaults() (SERVICE_REGISTRY + every plugin's own
         # get_service_defaults()) - the static registry alone only covers the
@@ -1480,7 +1480,7 @@ class CeleryTaskStatusView(_AdminPermissionMixin, View):
     """
 
     def get(self, request, task_id: str):
-        from urbanlens.dashboard.services.celery import get_task_progress
+        from urbanlens.dashboard.services.core.celery import get_task_progress
 
         try:
             return JsonResponse(get_task_progress(task_id).as_dict())

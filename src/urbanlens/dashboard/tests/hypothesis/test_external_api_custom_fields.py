@@ -21,7 +21,7 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType, CustomFieldValue
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 _CUSTOM_FIELD_SCOPES = [ApiKeyScope.CUSTOM_FIELDS_READ.value, ApiKeyScope.CUSTOM_FIELDS_WRITE.value, ApiKeyScope.PHOTOS_READ.value, ApiKeyScope.PHOTOS_WRITE.value]
 

@@ -22,7 +22,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.visits import _sync_visit_photos, _visit_dialog_context
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.services.images import compute_checksum
+from urbanlens.dashboard.services.media.images import compute_checksum
 
 _hyp = hyp_settings(max_examples=40, deadline=None)
 

@@ -469,7 +469,7 @@ class PhotoCoordinateGuess(abstract.DashboardModel):
 class GamePhotoFeedbackKind(abstract.TextChoices):
     """What a participant did (or didn't do) about the photo shown in a Photos-mode round.
 
-    See ``services.media_relevance.effective_relevance`` for how these feed
+    See ``services.media.media_relevance.effective_relevance`` for how these feed
     into a photo's overall relevance score - notably, ``THUMBS_DOWN`` is
     recorded here but deliberately excluded from that score.
     """

@@ -2,7 +2,7 @@
 
 Always computed via PostGIS ``ST_Distance`` over a ``geography`` cast (correct
 in meters at any latitude) - never the codebase's other, approximate
-"degrees x 111,320" shortcut (``services.map_sharing``), since scoring
+"degrees x 111,320" shortcut (``services.sharing.map_sharing``), since scoring
 fairness depends on being right at sub-kilometer scale, not just
 trip-planning scale. Mirrors the existing ``Distance()`` convention already
 used in ``models/pin/queryset.py`` and ``services/memories/photos.py``.

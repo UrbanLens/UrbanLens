@@ -18,7 +18,7 @@ leaving a native client to discover them from a sample response.
 
 Nothing in this module holds business logic. The permission vocabulary comes
 from ``Trip.PERMISSION_CHOICES`` and the status block from
-``services.calendar_sync.trip_calendar_status``, so neither can drift into a
+``services.trips.calendar_sync.trip_calendar_status``, so neither can drift into a
 second definition that only the API believes in.
 """
 
@@ -29,7 +29,7 @@ from typing import TYPE_CHECKING
 from rest_framework import serializers
 
 from urbanlens.dashboard.models.trips.model import Trip
-from urbanlens.dashboard.services.trip_crud import TRIP_PERMISSION_FIELDS
+from urbanlens.dashboard.services.trips.trip_crud import TRIP_PERMISSION_FIELDS
 
 if TYPE_CHECKING:
     from typing import Any
@@ -40,7 +40,7 @@ class TripPermissionsUpdateSerializer(serializers.Serializer):
 
     Every field is optional and **none carries a default**, which is the whole
     point: a field the caller omitted must be absent from ``validated_data`` so
-    that :func:`~urbanlens.dashboard.services.trip_crud.set_trip_permissions`
+    that :func:`~urbanlens.dashboard.services.trips.trip_crud.set_trip_permissions`
     can leave it alone. A ``default=`` on any of these would silently
     reintroduce the very defect the service was fixed for - a client toggling
     one switch rewriting three other permissions on a trip it shares with other

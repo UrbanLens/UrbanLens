@@ -29,14 +29,14 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.routes.model import Route
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.map_snapshot import materialize_markup_map, parse_map_data
+from urbanlens.dashboard.services.core.units import km_to_display, unit_label
+from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map, parse_map_data
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
 from urbanlens.dashboard.services.memories.distance import total_travel_distance_km
 from urbanlens.dashboard.services.memories.journal import get_journal_entries
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
-from urbanlens.dashboard.services.units import km_to_display, unit_label
-from urbanlens.dashboard.services.visit_invites import resolve_suggest_participant_ids, sync_external_participants
-from urbanlens.dashboard.services.visits import add_visited_status, create_visit_suggestion, remove_visited_status, sync_last_visited, visit_logging_allowed
+from urbanlens.dashboard.services.visits.visit_invites import resolve_suggest_participant_ids, sync_external_participants
+from urbanlens.dashboard.services.visits.visits import add_visited_status, create_visit_suggestion, remove_visited_status, sync_last_visited, visit_logging_allowed
 
 if TYPE_CHECKING:
     from django.http import HttpRequest

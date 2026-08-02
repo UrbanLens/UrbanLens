@@ -633,7 +633,7 @@ class DirectMessageSearchProvider(SearchProvider):
     fuzzy_field = ""
 
     def search(self, profile: Profile, parsed: ParsedQuery, limit: int) -> list[SearchResult]:
-        from urbanlens.dashboard.services.direct_messages import message_search_queryset
+        from urbanlens.dashboard.services.messaging.direct_messages import message_search_queryset
 
         if not parsed.terms and not parsed.person:
             return []

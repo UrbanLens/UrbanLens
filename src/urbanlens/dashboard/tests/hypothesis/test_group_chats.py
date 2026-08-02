@@ -33,8 +33,8 @@ from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.group_chats.model import GroupChat, GroupChatMembership, GroupMessage, GroupMessageShare
 from urbanlens.dashboard.models.pin_share.model import PinShare
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.direct_messages import all_conversations_for
-from urbanlens.dashboard.services.group_chats import (
+from urbanlens.dashboard.services.messaging.direct_messages import all_conversations_for
+from urbanlens.dashboard.services.messaging.group_chats import (
     add_group_members,
     create_group_chat,
     create_group_message,
@@ -509,7 +509,7 @@ class GroupKeyEndpointTests(TestCase):
         return self.client.post(self.url, json.dumps(payload), content_type="application/json")
 
     def _token(self, profile) -> str:
-        from urbanlens.dashboard.services.e2ee import group_member_token
+        from urbanlens.dashboard.services.security.e2ee import group_member_token
 
         return group_member_token(self.group.uuid, profile.pk)
 
@@ -544,7 +544,7 @@ class GroupKeyEndpointTests(TestCase):
     def test_member_tokens_differ_between_groups(self) -> None:
         """Tokens are group-scoped, so they can't correlate a member across groups."""
         other_group = create_group_chat(self.creator, "Other", [self.member])
-        from urbanlens.dashboard.services.e2ee import group_member_token
+        from urbanlens.dashboard.services.security.e2ee import group_member_token
 
         self.assertNotEqual(group_member_token(self.group.uuid, self.member.pk), group_member_token(other_group.uuid, self.member.pk))
 

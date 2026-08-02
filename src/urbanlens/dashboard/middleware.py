@@ -11,7 +11,7 @@ from django.db import transaction
 from django.http import HttpResponse
 from django.utils.html import escape
 
-from urbanlens.dashboard.services.profile_preview import SESSION_KEY, create_ghost_viewer, mode_label
+from urbanlens.dashboard.services.profile.profile_preview import SESSION_KEY, create_ghost_viewer, mode_label
 
 if TYPE_CHECKING:
     from collections.abc import Callable

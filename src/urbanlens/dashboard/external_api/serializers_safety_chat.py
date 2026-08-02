@@ -50,7 +50,7 @@ from urbanlens.dashboard.external_api.serializers import SafetyCheckinDetailSeri
 # exempt - PEP 563 never evaluates those - which is why ``Profile`` stays in the
 # type-checking block below where ruff's TC001 wants it.
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinMessage, SafetyCheckinPartner, SafetyCheckinPartnerStatus
-from urbanlens.dashboard.services.safety import MAX_CHAT_MESSAGE_LENGTH
+from urbanlens.dashboard.services.visits.safety import MAX_CHAT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -141,7 +141,7 @@ class SafetyCheckinMessageSerializer(serializers.Serializer):
 class SafetyCheckinMessageCreateSerializer(serializers.Serializer):
     """Validates an untrusted chat message submission.
 
-    The bounds mirror ``services.safety.create_chat_message`` rather than
+    The bounds mirror ``services.visits.safety.create_chat_message`` rather than
     replacing it. That duplication is deliberate: the service is the real gate
     (the WebSocket path reaches it without passing through here), and this
     serializer exists so a REST caller gets the uniform field-keyed 400 envelope
@@ -176,13 +176,13 @@ class SafetyPartnerRoleSerializer(serializers.Serializer):
     It carries the check-in's ``title`` even though the caller may not have
     accepted yet, because that is already disclosed: the invitation
     notification and email both name the check-in
-    (``services.safety._notify_checkin_partner_invite``). Withholding it here
+    (``services.visits.safety._notify_checkin_partner_invite``). Withholding it here
     would only leave the client rendering "someone invited you to something".
     Nothing *else* about the check-in is exposed before acceptance - no plan, no
     destination, no contacts, no live position - and the ``checkin_uuid`` is the
     caller's own accept/decline handle, not a readable address: the partner
     detail endpoint resolves it through
-    ``services.safety.get_partnered_checkin``, which requires ACCEPTED.
+    ``services.visits.safety.get_partnered_checkin``, which requires ACCEPTED.
     """
 
     checkin_uuid = serializers.SerializerMethodField()

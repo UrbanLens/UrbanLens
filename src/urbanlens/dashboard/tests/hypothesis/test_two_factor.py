@@ -17,7 +17,7 @@ import pyotp
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers import account as account_controllers
 from urbanlens.dashboard.models.account import BackupCode, TOTPDevice, WebAuthnCredential
-from urbanlens.dashboard.services import two_factor
+from urbanlens.dashboard.services.auth import two_factor
 
 
 class HasSecondFactorTests(TestCase):

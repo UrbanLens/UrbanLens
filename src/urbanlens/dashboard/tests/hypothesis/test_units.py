@@ -7,7 +7,7 @@ from hypothesis import strategies as st
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.profile.meta import DistanceUnit
 from urbanlens.dashboard.models.profile.model import _units_for_point
-from urbanlens.dashboard.services.units import _MILES_PER_KM, format_distance, km_to_display, unit_label
+from urbanlens.dashboard.services.core.units import _MILES_PER_KM, format_distance, km_to_display, unit_label
 from urbanlens.dashboard.templatetags.dashboard_tags import distance as distance_filter
 
 

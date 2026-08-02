@@ -37,8 +37,8 @@ from urbanlens.dashboard.external_api.views_wiki import WikiCommentReactionView
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.reactions.model import Reaction
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.comments import ALLOWED_EMOJIS, aggregate_reactions, toggle_reaction
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS, aggregate_reactions, toggle_reaction
 from urbanlens.dashboard.tests.hypothesis.test_external_api_wiki_oracle import grant_wiki_scopes
 
 BASE = "/dashboard/api/external/v1/wikis"

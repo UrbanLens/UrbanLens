@@ -19,7 +19,7 @@ class SavedFilter(abstract.FrontendDashboardModel):
 
     ``criteria`` stores a JSON-safe, normalized form of the fields
     ``SearchForm.cleaned_data`` (plus parsed ``label_groups``/custom-field
-    criteria) would produce - see ``dashboard.services.filter_criteria`` for
+    criteria) would produce - see ``dashboard.services.search.filter_criteria`` for
     the (de)serialization helpers that build and replay this shape against
     ``Pin.objects.filter_by_criteria()``.
     """

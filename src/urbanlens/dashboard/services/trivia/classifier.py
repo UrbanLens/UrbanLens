@@ -8,7 +8,7 @@ back to "the filter missed this," and a false positive silently kills a
 legitimate question with (by design) no feedback loop for the author to
 notice or correct. Every failure mode here defaults to REJECT (fail closed).
 
-Follows ``services.auto_tag``'s allowlisted-``<ANSWER>`` pattern: the model
+Follows ``services.labels.auto_tag``'s allowlisted-``<ANSWER>`` pattern: the model
 must answer with exactly one token from a fixed set; anything else
 (unparseable, empty, gateway unavailable) is treated as a rejection, never
 as an approval.
@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
-from urbanlens.dashboard.services.rate_limiter import log_api_call
+from urbanlens.dashboard.services.core.rate_limiter import log_api_call
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location

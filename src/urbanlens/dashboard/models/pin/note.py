@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 from django.db.models import CASCADE, ForeignKey, Index, TextField
 
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.services.text_limits import MAX_PIN_NOTE_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_NOTE_LENGTH
 
 
 class PinNote(abstract.DashboardModel):
@@ -18,7 +18,7 @@ class PinNote(abstract.DashboardModel):
     """
 
     #: max_length adds a MaxLengthValidator without changing the DB column (see
-    #: services.text_limits) - the note body was previously unbounded on every
+    #: services.core.text_limits) - the note body was previously unbounded on every
     #: write path, which is a storage-abuse vector now that the external API
     #: can create notes too.
     text = TextField(max_length=MAX_PIN_NOTE_LENGTH)

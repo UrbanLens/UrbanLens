@@ -16,7 +16,7 @@ TESTING = True
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
 # No clamd daemon runs in the test environment - tests that exercise the
-# malware-rejection path (services.malware_scan) mock it explicitly; every
+# malware-rejection path (services.security.malware_scan) mock it explicitly; every
 # other upload test should hit the "clean" no-op path instead of a 503 from
 # an unreachable scanner (see AppSettings.clamav_enabled's fail-closed
 # behavior).

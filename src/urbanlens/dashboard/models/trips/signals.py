@@ -35,7 +35,7 @@ def _queue_calendar_push(trip_id: int | None) -> None:
         return
 
     def _enqueue() -> None:
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import push_trip_to_calendar
 
         safely_enqueue_task(push_trip_to_calendar, trip_id)

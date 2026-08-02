@@ -1,7 +1,7 @@
 """Behavioral lock on the Memories photo-upload path.
 
 Written to characterize ``controllers.photos.PhotoUploadView.post`` *before*
-its body was extracted into ``services.photo_upload.upload_photo``, and kept
+its body was extracted into ``services.photos.photo_upload.upload_photo``, and kept
 afterwards so the extraction stays honest: the web uploader and the external
 API's ``POST photos/`` now share one implementation, and this is what catches
 that implementation drifting away from what the page has always done.
@@ -49,7 +49,7 @@ class PhotoUploadViewTests(TestCase):
         self.assertEqual(response.status_code, HTTPStatus.BAD_REQUEST)
         self.assertEqual(response.json()["error"], "No image provided.")
 
-    @patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_successful_upload_returns_201_and_creates_the_row(self, mock_enqueue) -> None:
         """A valid image lands as an Image owned by the uploader, with ingestion queued."""
         response = self._upload()
@@ -63,7 +63,7 @@ class PhotoUploadViewTests(TestCase):
         mock_enqueue.assert_called_once()
         self.assertEqual(mock_enqueue.call_args.args[1], image.pk)
 
-    @patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_duplicate_upload_is_409(self, _mock_enqueue) -> None:
         """Re-uploading identical bytes is refused by checksum, per profile."""
         self._upload()
@@ -72,7 +72,7 @@ class PhotoUploadViewTests(TestCase):
         self.assertEqual(response.json()["error"], "You already uploaded this file.")
         self.assertEqual(Image.objects.filter(profile=self.profile).count(), 1)
 
-    @patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_another_profile_may_upload_the_same_bytes(self, _mock_enqueue) -> None:
         """The duplicate check is per-profile, not global."""
         self._upload()

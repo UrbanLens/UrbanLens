@@ -14,7 +14,7 @@ def wikis_containing_point(point: Point) -> list[Wiki]:
     """Every wiki (including child wikis) whose official boundary contains *point*.
 
     Reuses the exact location-default-boundary containment query already
-    proven in ``services.wiki_access.wikis_hidden_by_pin_move``: only
+    proven in ``services.wiki.wiki_access.wikis_hidden_by_pin_move``: only
     ``generated_polygon`` on a boundary with no owning pin/wiki/profile and no
     per-provider ``source`` is ever consulted, never a user-editable one, so
     this can't be gamed by inflating a boundary. Child wikis are included for

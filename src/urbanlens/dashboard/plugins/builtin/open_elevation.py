@@ -9,12 +9,12 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 #: Meters-to-feet, for showing both units without requiring a second lookup.
 _METERS_PER_FOOT = 0.3048

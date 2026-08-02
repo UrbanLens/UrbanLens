@@ -56,7 +56,7 @@ Hard cases resolved: Wiki attribution FKs server accounts via username-handle (g
 Agent↔Server API contract
 Defined once as pydantic models in urbanlens_core/contract/ (imported by LocalServerClient, RemoteServerClient, and server views); OpenAPI emitted. URL major version + X-UL-Contract header; GET /.well-known/urbanlens-server advertises supported range + capabilities (the hook for server-switching later).
 
-Auth, two layers (both reuse the hashed-bearer pattern from dashboard/external_api/authentication.py + services/api_keys.py, which moves to core):
+Auth, two layers (both reuse the hashed-bearer pattern from dashboard/external_api/authentication.py + services/auth/api_keys.py, which moves to core):
 
 Agent credential uls_agent_<prefix>_<secret> from manage.py register_agent (open, rate-limited, revocable) — sent as X-UL-Agent-Key.
 Per-user OAuth2 bearer token from the auth flow below. Never wired into DRF defaults.
@@ -65,14 +65,14 @@ Endpoint families: pins prepare/commit (POST /pins/prepare {lat,lng} → point-m
 Anti-enumeration: per-account human-scale quotas on prepare/commit (SiteSettings-tunable), per-agent aggregate ceilings scaled by active accounts, velocity checks via existing ApiRateLimit machinery, no bulk/nearest-N/list endpoint exists in the contract at all (enforced by contract tests). Documented honestly per UL-102: quotas raise cost; they are not cryptography.
 
 Identity & auth
-Server is the IdP: signup, derived-credential login (authKey/wrapKey unchanged), Google/Discord SSO, TOTP, passkeys, recovery all move to urbanlens_server.accounts (services/auth_backend.py, webauthn.py, two_factor.py, social_auth/ relocate). Agent becomes a relying party: django-oauth-toolkit (OAuth2+OIDC) on the server, consumed via social-core's generic OIDC backend (social_django already installed on agent). Flow: agent → auth-code+PKCE redirect → server login (2FA/passkey unchanged) → agent creates shadow auth.User keyed by account UUID → normal Valkey session; refresh tokens stored with EncryptedTextField.
+Server is the IdP: signup, derived-credential login (authKey/wrapKey unchanged), Google/Discord SSO, TOTP, passkeys, recovery all move to urbanlens_server.accounts (services/auth/auth_backend.py, webauthn.py, two_factor.py, social_auth/ relocate). Agent becomes a relying party: django-oauth-toolkit (OAuth2+OIDC) on the server, consumed via social-core's generic OIDC backend (social_django already installed on agent). Flow: agent → auth-code+PKCE redirect → server login (2FA/passkey unchanged) → agent creates shadow auth.User keyed by account UUID → normal Valkey session; refresh tokens stored with EncryptedTextField.
 
 E2EE improves: on a self-hosted agent, the agent ships e2ee-client.ts/e2ee-crypto.ts, closing the "server ships the JS" gap for message content. Cutover invalidates all sessions (release-notes item). Server-switching is design-doc-only this release (UL_SERVER_URL + well-known discovery keep it possible).
 
 Cross-agent social (blind relay)
 One primitive: sealed X25519/secretbox envelopes (existing E2EE vocabulary). Sender seals against recipient's public bundle from the key directory, posts to /relay/envelopes; server stores opaque blobs until acked or TTL (default 30 days for offline self-hosted agents). v1 delivery = agent Celery polling (public agent batches one poll); WS push over server Daphne is a fast-follow. Same-agent interactions short-circuit locally with identical semantics.
 
-Pin shares: envelope {location_uuid, message, sender proof} → accept → POST /exposures → LocationRef + local PinShare (services/pin_sharing.py refactor).
+Pin shares: envelope {location_uuid, message, sender proof} → accept → POST /exposures → LocationRef + local PinShare (services/sharing/pin_sharing.py refactor).
 DMs/groups: already E2EE; cross-agent = envelopes.
 Friendships: handshake envelopes; accept registers a bare RelayConsent(a,b) spam-gate edge.
 Trips: invite/accept/activity-sync op-log envelopes, organizer's agent authoritative.
@@ -109,10 +109,10 @@ Non-goals v0.6.0: coordinate-hiding crypto (PSI/PIR), P2P/NAT traversal, server-
 Deferred minor decisions (defaults chosen): relay TTL 30 days; global labels as fixtures + server catalog endpoint; subscription entitlements enforced server-side at the enrichment API and mirrored read-only to agents for UI gating; public domain layout (server.urbanlens.com vs paths) decided at Phase 7 deployment.
 
 Critical existing files
-src/urbanlens/dashboard/services/pin_creation.py — single pin-creation path → prepare/commit seam
-src/urbanlens/dashboard/services/wiki_access.py — oracle-free gate → server-side against PinRegistry
+src/urbanlens/dashboard/services/pins/pin_creation.py — single pin-creation path → prepare/commit seam
+src/urbanlens/dashboard/services/wiki/wiki_access.py — oracle-free gate → server-side against PinRegistry
 src/urbanlens/dashboard/models/location/queryset.py — matching logic the server inherits
-src/urbanlens/dashboard/external_api/authentication.py + services/api_keys.py — hashed-bearer auth pattern reused for agent credentials and client PATs
-src/urbanlens/dashboard/services/share_provenance.py, community_counts.py — port to server against PinRegistry
+src/urbanlens/dashboard/external_api/authentication.py + services/auth/api_keys.py — hashed-bearer auth pattern reused for agent credentials and client PATs
+src/urbanlens/dashboard/services/sharing/share_provenance.py, community_counts.py — port to server against PinRegistry
 docs/e2ee.md — E2EE vocabulary + threat model this work extends
 docker-compose.yml, src/urbanlens/UrbanLens/settings/app.py — templates

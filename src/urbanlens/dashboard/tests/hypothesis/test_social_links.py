@@ -12,7 +12,7 @@ from hypothesis import given, settings as hyp_settings
 from hypothesis import strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.social_links import (
+from urbanlens.dashboard.services.profile.social_links import (
     PLATFORM_FA_ICON,
     PLATFORM_URL_TEMPLATE,
     _clean_handle,

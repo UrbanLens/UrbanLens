@@ -28,14 +28,14 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
-from urbanlens.dashboard.services.boundary_voting import BoundaryVoteError, boundary_vote_context, cast_boundary_vote, has_consensus
+from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.geo.boundary_voting import BoundaryVoteError, boundary_vote_context, cast_boundary_vote, has_consensus
 from urbanlens.dashboard.services.locations import site_scope
-from urbanlens.dashboard.services.public_pins import PublicVoteError, cast_public_vote, public_vote_context
-from urbanlens.dashboard.services.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.pins.public_pins import PublicVoteError, cast_public_vote, public_vote_context
 from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
-from urbanlens.dashboard.services.wiki_edits import WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit
 
 logger = logging.getLogger(__name__)
 
@@ -108,11 +108,11 @@ class LocationWikiView(LoginRequiredMixin, View):
             wiki.viewed_by_other = True
 
         # Only count root pins (not detail pins), and count distinct users.
-        # The exact count is never exposed - see services.community_counts.
+        # The exact count is never exposed - see services.wiki.community_counts.
         # Shared with the external API's wiki detail payload so the two can't
         # drift on the privacy rules (notably: first_pinned is suppressed
         # entirely while the pin count is too low to display).
-        from urbanlens.dashboard.services.community_counts import wiki_community_summary
+        from urbanlens.dashboard.services.wiki.community_counts import wiki_community_summary
 
         community = wiki_community_summary(wiki, location)
         pin_count_display = {"is_low": community["pin_count_low"], "value": community["pin_count_approx"]}

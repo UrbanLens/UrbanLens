@@ -1,6 +1,6 @@
 """The wiki page's "other location" conflict notice must not link to the other
 location's own wiki page - a wiki page 404s for anyone without a pin there
-(see services.wiki_access.resolve_visible_wiki), and the whole premise of this
+(see services.wiki.wiki_access.resolve_visible_wiki), and the whole premise of this
 notice is that the viewer's pin is NOT at that other location yet. Only the
 "Switch" button (which relinks the pin first) can ever actually get there.
 """

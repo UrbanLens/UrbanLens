@@ -25,7 +25,7 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 _BASE = "/dashboard/api/external/v1/saved-filters/"
 

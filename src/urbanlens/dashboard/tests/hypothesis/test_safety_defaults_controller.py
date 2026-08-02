@@ -20,7 +20,7 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.controllers.safety import SafetySettingsView, _contact_display_label
 from urbanlens.dashboard.models.friendship import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.safety.model import EmergencyContactDefault
-from urbanlens.dashboard.services.safety import get_or_create_preference
+from urbanlens.dashboard.services.visits.safety import get_or_create_preference
 
 
 class ContactDisplayLabelTests(SimpleTestCase):

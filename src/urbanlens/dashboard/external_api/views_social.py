@@ -8,7 +8,7 @@ endpoint - which resolved the relationship row direction-agnostically and
 happily applied ``Friendship.remove()`` whichever side asked. A blocked user
 holding ``social:write`` could therefore clear the block placed on them and
 resume contact. The service now refuses that (see
-``services.friendship.remove_friend``) and this module adds the real inverse.
+``services.social.friendship.remove_friend``) and this module adds the real inverse.
 Every refusal here is 404 with the same body an unknown uuid produces: a
 blocked party must not be able to confirm the block exists, and a distinguishing
 403 would do exactly that.
@@ -18,7 +18,7 @@ blocked party must not be able to confirm the block exists, and a distinguishing
 which is why these routes are gated on ``social:write`` rather than
 ``photos:write``. Reusing the photo scope would over-grant: ``photos:write``
 also authorizes deleting a user's actual photographs. The upload itself goes
-through ``services.avatar.set_profile_avatar``, so the size/sniffing/antivirus
+through ``services.profile.avatar.set_profile_avatar``, so the size/sniffing/antivirus
 checks are the same ones the site's own form runs, and the refusal messages are
 verbatim the shared ``image_upload_error`` vocabulary so an app needs one
 mapping rather than two.
@@ -66,9 +66,8 @@ from urbanlens.dashboard.external_api.serializers_social import (
 from urbanlens.dashboard.external_api.views import ExternalApiView, FriendActionView, ProfileDetailView, _resolve_profile
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.social_link.model import SocialLink
-from urbanlens.dashboard.services.avatar import AvatarUploadError, clear_profile_avatar, set_profile_avatar, set_profile_avatar_from_emoji
-from urbanlens.dashboard.services.friendship import unblock_profile
-from urbanlens.dashboard.services.profile_annotations import (
+from urbanlens.dashboard.services.profile.avatar import AvatarUploadError, clear_profile_avatar, set_profile_avatar, set_profile_avatar_from_emoji
+from urbanlens.dashboard.services.profile.profile_annotations import (
     AnnotationError,
     clear_nickname,
     clear_trust,
@@ -76,7 +75,8 @@ from urbanlens.dashboard.services.profile_annotations import (
     set_nickname,
     set_trust,
 )
-from urbanlens.dashboard.services.social_links import get_profile_links
+from urbanlens.dashboard.services.profile.social_links import get_profile_links
+from urbanlens.dashboard.services.social.friendship import unblock_profile
 
 if TYPE_CHECKING:
     from rest_framework.request import Request

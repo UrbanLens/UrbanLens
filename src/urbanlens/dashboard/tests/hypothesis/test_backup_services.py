@@ -12,7 +12,7 @@ from unittest import mock
 from hypothesis import given, settings as hyp_settings, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.backups import backup_files, collect_backup_stats, scheduled_backup_due
+from urbanlens.dashboard.services.admin.backups import backup_files, collect_backup_stats, scheduled_backup_due
 
 
 @dataclass(slots=True)
@@ -53,11 +53,11 @@ class ScheduledBackupDueTests(SimpleTestCase):
     """scheduled_backup_due respects enablement, frequency, and latest backup time."""
 
     def test_disabled_backups_are_never_due(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.backups.backup_files", return_value=[]):
+        with mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", return_value=[]):
             self.assertFalse(scheduled_backup_due(_SiteSettings(backup_enabled=False)))
 
     def test_no_existing_backups_are_due(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.backups.backup_files", return_value=[]):
+        with mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", return_value=[]):
             self.assertTrue(scheduled_backup_due(_SiteSettings()))
 
     @given(
@@ -71,7 +71,7 @@ class ScheduledBackupDueTests(SimpleTestCase):
         fake_file = mock.Mock()
         fake_file.stat.return_value.st_mtime = latest.timestamp()
 
-        with mock.patch("urbanlens.dashboard.services.backups.backup_files", return_value=[fake_file]):
+        with mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", return_value=[fake_file]):
             due = scheduled_backup_due(_SiteSettings(backup_frequency_hours=frequency_hours), now=now)
 
         self.assertEqual(due, elapsed_hours >= frequency_hours)
@@ -88,8 +88,8 @@ class CollectBackupStatsTests(SimpleTestCase):
             _touch(root / "b.sql", base + timedelta(hours=2), size=2048)
 
             with (
-                mock.patch("urbanlens.dashboard.services.backups.app_settings.backups_dir", root),
-                mock.patch("urbanlens.dashboard.services.backups.backup_files", wraps=lambda backup_dir=None: backup_files(root)),
+                mock.patch("urbanlens.dashboard.services.admin.backups.app_settings.backups_dir", root),
+                mock.patch("urbanlens.dashboard.services.admin.backups.backup_files", wraps=lambda backup_dir=None: backup_files(root)),
             ):
                 stats = collect_backup_stats(_SiteSettings(backup_frequency_hours=12, backup_retention=7))
 

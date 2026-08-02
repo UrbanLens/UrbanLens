@@ -27,9 +27,9 @@ from django.core.files.base import ContentFile
 from django.shortcuts import redirect
 from django.urls import reverse
 
-from urbanlens.dashboard.services.avatar import AvatarService
-from urbanlens.dashboard.services.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT, SESSION_WEBAUTHN_PENDING_USER, has_second_factor
-from urbanlens.dashboard.services.username import USERNAME_RE, UsernameGenerator, username_is_taken
+from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT, SESSION_WEBAUTHN_PENDING_USER, has_second_factor
+from urbanlens.dashboard.services.auth.username import USERNAME_RE, UsernameGenerator, username_is_taken
+from urbanlens.dashboard.services.profile.avatar import AvatarService
 
 if TYPE_CHECKING:
     from django.contrib.auth.models import User

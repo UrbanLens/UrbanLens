@@ -333,7 +333,7 @@ class LocationAliasUseGoesThroughTheServiceTests(TestCase):
     """The wiki "use this name" view must not re-implement the rename itself.
 
     It used to assign ``wiki.name`` and hand-write a ``WikiEdit`` row, which is
-    a second implementation of ``services.wiki_aliases.promote_wiki_alias_to_name``
+    a second implementation of ``services.wiki.wiki_aliases.promote_wiki_alias_to_name``
     and carried two defects the service does not have. Both are covered here so
     a future re-inlining of the logic fails loudly rather than quietly
     reintroducing them.

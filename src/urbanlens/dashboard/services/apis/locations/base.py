@@ -12,7 +12,7 @@ from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, P
 from django.core.cache import cache
 
 from urbanlens.core.cache_keys import make_cache_key
-from urbanlens.dashboard.services.gateway import Gateway, Service
+from urbanlens.dashboard.services.core.gateway import Gateway, Service
 
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterable

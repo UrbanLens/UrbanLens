@@ -9,7 +9,7 @@ from django import forms
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType
 from urbanlens.dashboard.models.labels.model import Label
-from urbanlens.dashboard.services.custom_field_references import resolve_reference
+from urbanlens.dashboard.services.custom_fields.custom_field_references import resolve_reference
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import MultiPolygon
@@ -252,7 +252,7 @@ class SearchForm(forms.Form):
             geojson = json.loads(raw)
         except (json.JSONDecodeError, TypeError):
             return None
-        from urbanlens.dashboard.services.geo import parse_multipolygon_geojson
+        from urbanlens.dashboard.services.geo.geo import parse_multipolygon_geojson
 
         try:
             return parse_multipolygon_geojson(geojson)

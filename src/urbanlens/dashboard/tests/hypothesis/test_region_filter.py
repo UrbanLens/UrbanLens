@@ -2,9 +2,9 @@
 
 Covers three layers:
 
-- ``services.geo.dissolve_polygons`` - the merge-overlapping-polygons helper.
+- ``services.geo.geo.dissolve_polygons`` - the merge-overlapping-polygons helper.
 - ``Pin.objects.filter_by_criteria``'s ``include_regions``/``exclude_regions`` handling.
-- ``services.filter_criteria``'s (de)serialization round-trip for regions.
+- ``services.search.filter_criteria``'s (de)serialization round-trip for regions.
 """
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
-from urbanlens.dashboard.services.geo import dissolve_polygons
+from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
+from urbanlens.dashboard.services.geo.geo import dissolve_polygons
 
 
 def _square(lng: float, lat: float, delta: float) -> Polygon:

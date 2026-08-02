@@ -14,7 +14,7 @@ from urbanlens.dashboard.services.social_auth.pipeline import (
     _sanitize_sso_username,
     generate_sso_username,
 )
-from urbanlens.dashboard.services.username import USERNAME_RE
+from urbanlens.dashboard.services.auth.username import USERNAME_RE
 
 
 class SanitizeSsoUsernameTests(SimpleTestCase):
@@ -75,7 +75,7 @@ class GenerateSsoUsernameTests(TestCase):
         baker.make(User, username="taken_name")
         backend = SimpleNamespace(name="discord")
         with patch(
-            "urbanlens.dashboard.services.username.UsernameGenerator.generate",
+            "urbanlens.dashboard.services.auth.username.UsernameGenerator.generate",
             return_value="randomfallback",
         ) as random_username:
             result = generate_sso_username(

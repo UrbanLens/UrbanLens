@@ -15,7 +15,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey
-from urbanlens.dashboard.services.api_keys import authenticate_api_key, generate_api_key, record_api_key_usage
+from urbanlens.dashboard.services.auth.api_keys import authenticate_api_key, generate_api_key, record_api_key_usage
 
 
 class ApiKeyCreateViewTests(TestCase):

@@ -4,7 +4,7 @@ Covers:
 - PinMarkup.from_snapshot_shape / to_snapshot_shape round-trips (property-based).
 - sanitize_map_data's layer_mode/show_borders handling.
 - MarkupMap.replace_items_from_snapshot + to_snapshot.
-- services.map_snapshot.materialize_markup_map create/update/remove semantics.
+- services.map.map_snapshot.materialize_markup_map create/update/remove semantics.
 - MarkupMapQuerySet.unattached().
 - The /markup-maps/ endpoints: create, item CRUD, view-state, delete, and
   ownership enforcement.
@@ -24,7 +24,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
-from urbanlens.dashboard.services.map_snapshot import default_markup_map_title, materialize_markup_map, sanitize_map_data
+from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title, materialize_markup_map, sanitize_map_data
 
 # Latitudes stay away from the poles so circle radius→edge conversion stays finite.
 _lat = st.floats(min_value=-84, max_value=84, allow_nan=False, allow_infinity=False)

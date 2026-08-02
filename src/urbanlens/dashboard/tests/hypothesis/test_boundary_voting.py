@@ -19,7 +19,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.boundary_voting import (
+from urbanlens.dashboard.services.geo.boundary_voting import (
     HALF_LIFE_DAYS,
     BoundaryVoteError,
     apply_winning_boundary,

@@ -22,7 +22,7 @@ from urbanlens.dashboard.external_api.views import AuthSessionView, UnscopedExte
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 AccessToken = get_access_token_model()
 Application = get_application_model()

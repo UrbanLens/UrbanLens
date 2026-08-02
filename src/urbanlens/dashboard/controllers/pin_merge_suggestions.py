@@ -21,9 +21,9 @@ from django.views import View
 
 from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.pin_merge import MergeFieldConflict, UnresolvedMergeConflictError, plan_merge_conflicts
-from urbanlens.dashboard.services.pin_merge_suggestions import accept_pin_merge_suggestion, reject_pin_merge_suggestion
+from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.pins.pin_merge import MergeFieldConflict, UnresolvedMergeConflictError, plan_merge_conflicts
+from urbanlens.dashboard.services.pins.pin_merge_suggestions import accept_pin_merge_suggestion, reject_pin_merge_suggestion
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -122,7 +122,7 @@ class PinMergeSuggestionActionView(LoginRequiredMixin, View):
 
     Accept body: ``survivor_pk`` (optional - defaults to
     ``suggestion.suggested_survivor``), plus one ``resolution__<key>`` field
-    per conflict rendered on the card (see ``services.pin_merge.plan_merge_conflicts``).
+    per conflict rendered on the card (see ``services.pins.pin_merge.plan_merge_conflicts``).
     Missing resolutions re-render the card with the conflict form intact and
     an error toast, rather than failing with a 500.
     """

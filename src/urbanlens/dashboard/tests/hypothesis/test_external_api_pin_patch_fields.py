@@ -48,9 +48,9 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki_stat_vote.model import WikiStatVote
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
-from urbanlens.dashboard.services.pin_edit import EDITABLE_PIN_FIELDS, SECURITY_EDIT_FIELDS
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.pins.pin_edit import EDITABLE_PIN_FIELDS, SECURITY_EDIT_FIELDS
 
 BASE = "/dashboard/api/external/v1/pins"
 
@@ -271,7 +271,7 @@ class PinPatchRoundTripTests(_PinPatchTestCase):
 
         ``PATCH`` accepts both, and both are persisted - but neither appears in
         the pin-detail payload, because ``services.map_pins.payload`` (which
-        ``services.pin_detail.build_pin_detail`` builds on) never emitted them
+        ``services.pins.pin_detail.build_pin_detail`` builds on) never emitted them
         and the schema serializers honestly reflect that. The result is two
         write-only fields: a client cannot read back what it just wrote, so it
         has no way to detect a lost write or reconcile after an offline edit.

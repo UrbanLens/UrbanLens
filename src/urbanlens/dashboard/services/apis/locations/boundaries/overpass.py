@@ -17,8 +17,8 @@ from django.utils import timezone
 import requests
 
 from urbanlens.dashboard.services.apis.locations.base import BoundaryProvider, _is_reasonable_default, best_polygon_from_geometry
-from urbanlens.dashboard.services.gateway import Gateway
-from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
 logger = logging.getLogger(__name__)
 

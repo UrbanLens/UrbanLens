@@ -23,8 +23,8 @@ from urbanlens.dashboard.models.notifications.meta import DeliveryPreference
 from urbanlens.dashboard.models.notifications.model import NotificationPreference
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.services import export as export_service, import_data
-from urbanlens.dashboard.services.articles import save_article
+from urbanlens.dashboard.services.import_export import export as export_service, import_data
+from urbanlens.dashboard.services.wiki.articles import save_article
 from urbanlens.dashboard.tests.hypothesis.strategies import nonempty_name, short_text_or_none
 
 # DB-backed @given tests below never touch self.client - only the underlying
@@ -173,7 +173,7 @@ class ImportPinCompletenessTests(TestCase):
         save_article(editor=self.exporter, content="An old mill.", pin=self.pin)
 
     def test_round_trip_creates_matching_pin(self) -> None:
-        from urbanlens.dashboard.services.import_data import ImportResult
+        from urbanlens.dashboard.services.import_export.import_data import ImportResult
 
         with tempfile.TemporaryDirectory() as temp_dir:
             export_service._export_pins(self.exporter, temp_dir)
@@ -191,7 +191,7 @@ class ImportPinCompletenessTests(TestCase):
         """Idempotency: a pin that already exists for this user is skipped
         entirely (matching the pre-existing label behavior), so re-running an
         import never creates a second Review or Article for the same pin."""
-        from urbanlens.dashboard.services.import_data import ImportResult
+        from urbanlens.dashboard.services.import_export.import_data import ImportResult
 
         with tempfile.TemporaryDirectory() as temp_dir:
             export_service._export_pins(self.exporter, temp_dir)
@@ -209,7 +209,7 @@ class ImportSettingsCompletenessTests(TestCase):
     """Exported settings groups and notification preferences round-trip through import."""
 
     def test_round_trip_applies_grouped_settings(self) -> None:
-        from urbanlens.dashboard.services.import_data import ImportResult
+        from urbanlens.dashboard.services.import_export.import_data import ImportResult
 
         exporter = baker.make(User).profile
         exporter.ai_label_categories = True
@@ -237,7 +237,7 @@ class ImportCustomFieldsTests(TestCase):
     """New _import_custom_fields: definitions always import; pin-targeted values round-trip."""
 
     def test_definition_and_pin_value_round_trip(self) -> None:
-        from urbanlens.dashboard.services.import_data import ImportResult
+        from urbanlens.dashboard.services.import_export.import_data import ImportResult
 
         exporter = baker.make(User).profile
         pin = baker.make(Pin, profile=exporter, name="Gatehouse")
@@ -265,7 +265,7 @@ class ImportCustomFieldsTests(TestCase):
         """Photo/profile/map-targeted field definitions still import (useful on
         their own); their values are skipped with a warning since this import
         pass can't resolve those entity types to a local object."""
-        from urbanlens.dashboard.services.import_data import ImportResult
+        from urbanlens.dashboard.services.import_export.import_data import ImportResult
 
         exporter = baker.make(User).profile
         CustomField.objects.create(profile=exporter, entity_type=CustomFieldEntity.PROFILE, name="Relationship", field_type=CustomFieldType.TEXT)
@@ -498,7 +498,7 @@ class RoundTripPhotosTests(TestCase):
         row = {"uuid": "8a4f0a53-1111-4f77-9111-000000000006", "filename": "mill.jpg"}
         with tempfile.TemporaryDirectory() as temp_dir:
             self._archive(temp_dir, [row], {"mill.jpg": b"fake-jpeg-bytes"})
-            with mock.patch("urbanlens.dashboard.services.storage.quota_error_for_upload", return_value="over quota"):
+            with mock.patch("urbanlens.dashboard.services.media.storage.quota_error_for_upload", return_value="over quota"):
                 result = self._import(temp_dir)
 
         self.assertFalse(Image.objects.filter(profile=self.importer).exists())

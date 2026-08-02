@@ -1,7 +1,7 @@
 """Tests for the shared channel-layer dispatch boundary.
 
 Covers:
-- services.channel_broadcast.send_group_message() - no-ops without a channel
+- services.core.channel_broadcast.send_group_message() - no-ops without a channel
   layer, otherwise enqueues tasks.broadcast_channel_group_message via Celery
   rather than calling async_to_sync inline (see that module's docstring for
   why: gunicorn's gevent worker class and asyncio event loops don't mix).
@@ -16,7 +16,7 @@ from unittest import mock
 from unittest.mock import AsyncMock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services import channel_broadcast
+from urbanlens.dashboard.services.core import channel_broadcast
 from urbanlens.dashboard.tasks import broadcast_channel_group_message
 
 
@@ -26,7 +26,7 @@ class SendGroupMessageTests(SimpleTestCase):
     def test_no_channel_layer_does_not_enqueue(self) -> None:
         with (
             mock.patch.object(channel_broadcast, "get_channel_layer", return_value=None),
-            mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue,
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             channel_broadcast.send_group_message("some-group", {"type": "x"})
 
@@ -35,7 +35,7 @@ class SendGroupMessageTests(SimpleTestCase):
     def test_channel_layer_present_enqueues_the_broadcast_task(self) -> None:
         with (
             mock.patch.object(channel_broadcast, "get_channel_layer", return_value=mock.Mock()),
-            mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue,
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             channel_broadcast.send_group_message("some-group", {"type": "x", "payload": 1})
 

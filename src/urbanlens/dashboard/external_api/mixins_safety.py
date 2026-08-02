@@ -9,7 +9,7 @@ live position the explorer chose to share - and they need a *different*
 question answered: "were you named on this, and did you accept?"
 
 That question already has exactly one correct implementation,
-``services.safety.is_owner_or_accepted_partner``, and this module exists to
+``services.visits.safety.is_owner_or_accepted_partner``, and this module exists to
 make sure the API asks it rather than re-deriving it. The re-derivation people
 reach for is ``checkin.partners.filter(profile=profile).exists()``, which is
 wrong in a way that does not look wrong: ``SafetyCheckinPartner`` rows are
@@ -35,7 +35,7 @@ from rest_framework.response import Response
 from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin
-from urbanlens.dashboard.services.safety import is_owner_or_accepted_partner
+from urbanlens.dashboard.services.visits.safety import is_owner_or_accepted_partner
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -83,7 +83,7 @@ class SafetyCheckinViewerScopedView(ExternalApiView):
         is a second step, because the entitlement is a disjunction over two
         different relations (ownership, and an ACCEPTED partner row) that is
         already implemented once in
-        ``services.safety.is_owner_or_accepted_partner`` - the same predicate
+        ``services.visits.safety.is_owner_or_accepted_partner`` - the same predicate
         the WebSocket consumer and the HTMX chat view gate on. Expressing it as
         a queryset filter here would be a second implementation of a rule whose
         whole risk is that a subtly weaker version of it looks correct; the

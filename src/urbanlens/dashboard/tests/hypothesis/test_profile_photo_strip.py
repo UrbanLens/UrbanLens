@@ -1,4 +1,4 @@
-"""Tests for the profile page's photo strip (services.profile_photos + the
+"""Tests for the profile page's photo strip (services.profile.profile_photos + the
 PhotoAttachmentPointsView lightbox side panel).
 
 The central invariant, stated explicitly in the original request: a photo
@@ -23,7 +23,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.profile_photos import attachment_points_for_image, strip_photos_for_owner, strip_photos_visible_to
+from urbanlens.dashboard.services.profile.profile_photos import attachment_points_for_image, strip_photos_for_owner, strip_photos_visible_to
 
 
 _coord_counter = 0

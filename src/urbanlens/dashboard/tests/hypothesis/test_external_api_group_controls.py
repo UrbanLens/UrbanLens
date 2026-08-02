@@ -50,8 +50,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.reactions.model import Reaction
 from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.group_chats import create_group_chat, set_group_muted, share_pin_in_group_message
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.messaging.group_chats import create_group_chat, set_group_muted, share_pin_in_group_message
 
 AccessToken = get_access_token_model()
 Application = get_application_model()
@@ -451,7 +451,7 @@ class GroupMuteTests(GroupControlsBaseTestCase):
 
 
 class SetGroupMutedServiceTests(GroupControlsBaseTestCase):
-    """``services.group_chats.set_group_muted`` writes narrowly."""
+    """``services.messaging.group_chats.set_group_muted`` writes narrowly."""
 
     def test_write_does_not_clobber_a_concurrent_removal(self) -> None:
         """``update_fields`` is load-bearing, not a micro-optimization.
@@ -541,7 +541,7 @@ class ConversationMuteTests(GroupControlsBaseTestCase):
 
     def test_muted_conversation_stays_in_the_conversation_list(self) -> None:
         """Muting is notification-only for one-to-one threads too."""
-        from urbanlens.dashboard.services.direct_messages import create_direct_message
+        from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message
 
         create_direct_message(self.member, self.creator, "hi")
         self.client.put(self.url, **self.creator_auth)

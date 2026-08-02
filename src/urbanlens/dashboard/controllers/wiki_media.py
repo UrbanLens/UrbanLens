@@ -30,13 +30,13 @@ from django.http import HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import render
 from django.views import View
 
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
-    from urbanlens.dashboard.services.external_data import GalleryMediaSource
+    from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource
 
 logger = logging.getLogger(__name__)
 
@@ -69,7 +69,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
 
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
-        from urbanlens.dashboard.services.external_data import GalleryMediaSource, get_panel_source
+        from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, get_panel_source
 
         panel = get_panel_source(source)
         if not isinstance(panel, GalleryMediaSource):
@@ -80,7 +80,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
             return self._pending(request, location, profile, source, panel)
         items = panel.media_items(cached.data or {})
 
-        from urbanlens.dashboard.services.media_relevance import local_images_for_gallery_items
+        from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
 
         scores = MediaRelevance.objects.vote_scores(location, source)
         my_marks = dict(MediaRelevance.objects.for_gallery(profile, location, source).values_list("item_key", "is_relevant"))
@@ -143,7 +143,7 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         their quota. A boundary-mate viewer with no pin at this exact location
         just sees whatever the pin detail page has already cached (204).
         """
-        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, schedule_panel_fetch
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, schedule_panel_fetch
 
         driver_pin = location.pins.filter(profile=profile).select_related("location").first()
         if driver_pin is None or not panel.gate(driver_pin):

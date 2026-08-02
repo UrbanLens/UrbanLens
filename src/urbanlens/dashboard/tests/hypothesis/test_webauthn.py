@@ -28,7 +28,7 @@ from webauthn.registration.verify_registration_response import VerifiedRegistrat
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers import account as account_controllers
 from urbanlens.dashboard.models.account import WebAuthnCredential
-from urbanlens.dashboard.services import webauthn as webauthn_service
+from urbanlens.dashboard.services.auth import webauthn as webauthn_service
 
 
 def _request_with_session(path: str = "/", method: str = "get"):

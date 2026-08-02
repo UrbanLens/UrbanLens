@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipSt
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.common_pins import common_pin_location_ids, common_pin_locations
+from urbanlens.dashboard.services.pins.common_pins import common_pin_location_ids, common_pin_locations
 
 
 def _make_profile() -> Profile:

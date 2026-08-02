@@ -23,7 +23,7 @@ to someone else indistinguishable from one that does not exist, and it must
 stay part of the lookup rather than becoming a check that answers 403.
 
 **Do not add ``record_share_exposure`` here.** The instinct is right in general
-and wrong in this specific place; ``services.pin_sharing``'s module docstring
+and wrong in this specific place; ``services.sharing.pin_sharing``'s module docstring
 explains why at length, and there is a test asserting the ``LocationExposure``
 row count is unchanged across an accept.
 """
@@ -41,7 +41,7 @@ from urbanlens.dashboard.external_api.serializers_pin_shares import PinShareResp
 from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
-from urbanlens.dashboard.services.pin_sharing import apply_pin_share_response
+from urbanlens.dashboard.services.sharing.pin_sharing import apply_pin_share_response
 
 if TYPE_CHECKING:
     from rest_framework.request import Request

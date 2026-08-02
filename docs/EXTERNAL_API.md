@@ -372,7 +372,7 @@ Field *definitions* (shared across every entity type: pins, photos, profiles, ma
 
 ## Community Wikis
 
-Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wiki(request, location_slug)` first (`services/wiki_access.py`), which raises a bare `Http404` for all three of: (1) an unknown `location_slug`, (2) a real Location with no Wiki, and (3) a real Wiki the caller hasn't pinned/earned access to. These three are byte-for-byte indistinguishable **on purpose** — a distinguishable response would let a caller use the slug as an oracle for which locations other users have pinned. Every sub-resource id (edit, alias, link, comment, revision) is looked up scoped to the already-resolved wiki, never by bare pk.
+Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wiki(request, location_slug)` first (`services/wiki/wiki_access.py`), which raises a bare `Http404` for all three of: (1) an unknown `location_slug`, (2) a real Location with no Wiki, and (3) a real Wiki the caller hasn't pinned/earned access to. These three are byte-for-byte indistinguishable **on purpose** — a distinguishable response would let a caller use the slug as an oracle for which locations other users have pinned. Every sub-resource id (edit, alias, link, comment, revision) is looked up scoped to the already-resolved wiki, never by bare pk.
 
 ### Wikis
 
@@ -653,7 +653,7 @@ discovered, via the same `wiki_access` visibility gate every other wiki-scoped r
 
 `POST /games/spotguessr/sessions/{session_id}/rounds/{round_id}/expire/` — `SpotGuessrRoundExpireView` — scopes: `games:write` — client-driven fast path for "the round timer hit zero"; the authoritative check is still server-side (`round.created` + the session's `round_time_limit_seconds`, never the client's clock) — response `{"revealed": bool}` — a no-op, not an error, when the round is already revealed or the timer genuinely hasn't expired yet.
 
-`POST /games/spotguessr/sessions/{session_id}/rounds/{round_id}/feedback/` — `SpotGuessrRoundFeedbackView` — scopes: `games:write` — body: `kind` (`thumbs_up`/`thumbs_down`/`reported`) — records (or overwrites) the caller's reaction to a Photos-mode round's photo, feeding `services.media_relevance` — 403 if the caller never guessed on this round; 400 for a round with no photo (Named Place/Street View).
+`POST /games/spotguessr/sessions/{session_id}/rounds/{round_id}/feedback/` — `SpotGuessrRoundFeedbackView` — scopes: `games:write` — body: `kind` (`thumbs_up`/`thumbs_down`/`reported`) — records (or overwrites) the caller's reaction to a Photos-mode round's photo, feeding `services.media.media_relevance` — 403 if the caller never guessed on this round; 400 for a round with no photo (Named Place/Street View).
 
 `GET /games/spotguessr/sessions/{session_id}/rounds/{round_id}/image/` — `SpotGuessrRoundImageView` — scopes: **`games:read` AND `media:read`** (both required) — round photo as raw bytes with **all EXIF metadata stripped** (source photo routinely carries GPS tags pointing at the answer) — `Cache-Control: private, max-age=300` — metered against the **media** throttle bucket (`ExternalApiMediaThrottle`), not the JSON read/write budgets.
 

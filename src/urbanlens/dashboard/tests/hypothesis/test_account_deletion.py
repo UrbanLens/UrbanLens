@@ -2,7 +2,7 @@
 
 Covers:
 - ProfileQuerySet.due_for_deletion_reminder / due_for_hard_delete boundary conditions.
-- services.account_deletion: request/cancel/reminder/hard-delete, notifications, emails, idempotency.
+- services.profile.account_deletion: request/cancel/reminder/hard-delete, notifications, emails, idempotency.
 - RequestAccountDeletionView / CancelAccountDeletionView controllers.
 - The site-wide deletion banner rendering.
 """
@@ -28,7 +28,7 @@ from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import ACCOUNT_DELETION_GRACE_PERIOD, Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripComment
-from urbanlens.dashboard.services.account_deletion import (
+from urbanlens.dashboard.services.profile.account_deletion import (
     cancel_deletion,
     hard_delete_profile,
     request_deletion,

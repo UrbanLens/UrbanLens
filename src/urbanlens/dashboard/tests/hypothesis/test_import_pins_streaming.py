@@ -22,7 +22,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 
 
 def _events(sse_lines: list[str]) -> list[dict]:

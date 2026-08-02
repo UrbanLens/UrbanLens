@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:

@@ -51,7 +51,7 @@ def submit_user_question(profile: Profile, location: Location, prompt: str, answ
 
 def _enqueue_classification(question_id: int) -> None:
     from urbanlens.dashboard import tasks
-    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 
     safely_enqueue_task(tasks.classify_trivia_submission, question_id)
 

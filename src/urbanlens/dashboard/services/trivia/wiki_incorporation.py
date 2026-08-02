@@ -32,9 +32,9 @@ from urbanlens.dashboard.services.ai.article_expansion import append_to_article,
 from urbanlens.dashboard.services.ai.article_safety import classify_article_text
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.scanner import wrap_user_data
-from urbanlens.dashboard.services.articles import get_article
-from urbanlens.dashboard.services.rate_limiter import log_api_call
+from urbanlens.dashboard.services.core.rate_limiter import log_api_call
 from urbanlens.dashboard.services.trivia.voting import effective_score
+from urbanlens.dashboard.services.wiki.articles import get_article
 
 logger = logging.getLogger(__name__)
 

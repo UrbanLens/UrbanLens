@@ -38,7 +38,7 @@ from urbanlens.dashboard.services.apis.locations.boundaries.microsoft_buildings 
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.overture_maps import OvertureMapsGateway
 from urbanlens.dashboard.services.apis.locations.boundaries.redata import RedataBoundaryProvider
-from urbanlens.dashboard.services.redact import redact_coordinate
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -275,7 +275,7 @@ def schedule_location_boundary_generation(location: Location, profile=None) -> b
         return False
     lock_key = generation_lock_key(location.pk)
     if cache.add(lock_key, 1, 600):
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import generate_boundaries_for_location
 
         if safely_enqueue_task(generate_boundaries_for_location, location.pk) is None:
@@ -355,7 +355,7 @@ def generate_location_boundaries(location: Location, *, name: str | None = None)
     # Re-apply the community's boundary vote (if any) now that candidates may
     # have changed - the winning candidate's polygon is materialized onto the
     # canonical property row so every matching path respects the vote.
-    from urbanlens.dashboard.services.boundary_voting import apply_winning_boundary
+    from urbanlens.dashboard.services.geo.boundary_voting import apply_winning_boundary
 
     apply_winning_boundary(location)
 
@@ -366,7 +366,7 @@ def generate_location_boundaries(location: Location, *, name: str | None = None)
     # whether this location's wiki (if any) now nests under - or now contains
     # - another one. A no-op for the overwhelming majority of locations, which
     # have no wiki at all.
-    from urbanlens.dashboard.services.wiki_merge import reconcile_wiki_nesting_for_location
+    from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting_for_location
 
     reconcile_wiki_nesting_for_location(location)
 

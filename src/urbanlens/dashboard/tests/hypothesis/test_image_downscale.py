@@ -21,7 +21,7 @@ from PIL.TiffImagePlugin import IFDRational
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.services.images import _json_safe, downscale_stored_image, extract_exif_data
+from urbanlens.dashboard.services.media.images import _json_safe, downscale_stored_image, extract_exif_data
 
 _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-")
 

@@ -235,7 +235,7 @@ class SidebarPreviewTombstoneTests(TestCase):
         self.assertContains(response, "This message is no longer available")
 
     def test_deleted_for_everyone_message_is_not_in_the_sidebar_preview(self) -> None:
-        from urbanlens.dashboard.services.direct_messages import delete_message_for_everyone
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
 
         message = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, body=self.SECRET)
         delete_message_for_everyone(message, self.sender)
@@ -245,7 +245,7 @@ class SidebarPreviewTombstoneTests(TestCase):
         self.assertContains(response, "Message deleted")
 
     def test_the_sender_still_sees_their_own_deleted_message_in_their_own_sidebar(self) -> None:
-        from urbanlens.dashboard.services.direct_messages import delete_message_for_everyone
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
 
         message = _make_message(self.sender, self.recipient, sender_delete_after=MessageRetentionChoice.NEVER, body=self.SECRET)
         delete_message_for_everyone(message, self.sender)

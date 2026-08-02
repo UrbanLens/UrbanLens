@@ -28,8 +28,8 @@ from django.utils import timezone
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, TextChoices
 from urbanlens.dashboard.models.pin.queryset import PinManager
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name, sanitize_name
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
     from django.db.models import Manager as DjangoManager
@@ -195,7 +195,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # Best-effort, heuristic link to a map-detected share that plausibly
     # explains how the owner learned about this location, for pins the owner
     # created themselves rather than by accepting a share. Populated lazily
-    # (see services.map_sharing.infer_source_share_for_pin) only when the
+    # (see services.sharing.map_sharing.infer_source_share_for_pin) only when the
     # owner explicitly shares this pin onward, so reshare chains still credit
     # the map that originally revealed it. Never set by _create_pin_from_share
     # - source_share covers that case exactly, and the two are never both
@@ -209,7 +209,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     )
     # Hero banner photo for the pin detail page. Any Image tied to this pin
     # (its own gallery uploads or a materialized Media-gallery item, see
-    # services.media_materialize) is eligible; SET_NULL so deleting the photo
+    # services.media.media_materialize) is eligible; SET_NULL so deleting the photo
     # just drops the banner rather than the pin.
     cover_photo = ForeignKey(
         "dashboard.Image",
@@ -279,7 +279,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         Moving the pin to a different Location also propagates the owner's
         share-chain exposures onto the new location here, so the "infection"
         follows the pin no matter which write path moved it (see
-        ``services.share_provenance``).
+        ``services.sharing.share_provenance``).
         """
         update_fields = kwargs.get("update_fields")
         if update_fields is None or "name" in update_fields:
@@ -333,7 +333,7 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             return
         old_location_id = getattr(self, "_loaded_location_id", None)
         if old_location_id is not None and self.location_id != old_location_id:
-            from urbanlens.dashboard.services.share_provenance import propagate_exposures_for_pin_move
+            from urbanlens.dashboard.services.sharing.share_provenance import propagate_exposures_for_pin_move
 
             propagate_exposures_for_pin_move(self, old_location_id)
         self._loaded_location_id = self.location_id

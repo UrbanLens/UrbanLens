@@ -1,7 +1,7 @@
 """Per-user relevance marks for the pin detail page's Media gallery.
 
 The Media gallery (Wikimedia/Smithsonian/Yelp/Google Images/...) renders
-straight from each provider's live results (see ``services.external_data``)
+straight from each provider's live results (see ``services.pins.external_data``)
 rather than persisting an ``Image`` row per item, so "relevant"/"not relevant"
 can't hang off an FK to one. This model keys a mark to the stable identity of
 a transient item instead: which Location it belongs to, which provider

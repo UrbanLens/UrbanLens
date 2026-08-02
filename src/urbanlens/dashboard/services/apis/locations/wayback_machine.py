@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 from urllib.parse import urlparse
 
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 
 _AVAILABILITY_URL = "https://archive.org/wayback/available"
 _CDX_URL = "https://web.archive.org/cdx/search/cdx"

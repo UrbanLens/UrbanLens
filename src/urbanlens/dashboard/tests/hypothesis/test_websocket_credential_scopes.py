@@ -43,7 +43,7 @@ from oauth2_provider.models import get_access_token_model, get_application_model
 
 from urbanlens.dashboard.consumers import DirectMessageConsumer, SafetyCheckinChatConsumer, UserNotificationConsumer
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.websocket_auth import ApiKeyAuthMiddleware
 
 _IN_MEMORY_CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}

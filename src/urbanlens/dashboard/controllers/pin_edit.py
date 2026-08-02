@@ -17,9 +17,9 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.services.pin_edit import SECURITY_EDIT_FIELDS, apply_pin_edits
-from urbanlens.dashboard.services.pin_subresources import create_pin_note, delete_pin_note
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.pins.pin_edit import SECURITY_EDIT_FIELDS, apply_pin_edits
+from urbanlens.dashboard.services.pins.pin_subresources import create_pin_note, delete_pin_note
 
 logger = logging.getLogger(__name__)
 
@@ -185,7 +185,7 @@ class PinOverviewView(LoginRequiredMixin, View):
         # geocoding call right here - the last inline external call on this
         # page's render path.)
         if pin.location and pin.profile.external_apis_enabled:
-            from urbanlens.dashboard.services.celery import safely_enqueue_task
+            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
             from urbanlens.dashboard.tasks import backfill_location_address, resolve_location_place_name
 
             if not pin.location.route:
@@ -228,7 +228,7 @@ class PinEditView(LoginRequiredMixin, View):
         # field they changed, so anything absent from the body must be left
         # alone rather than rewritten with its current value. `edits` therefore
         # collects *only* what this request actually submitted, and
-        # ``services.pin_edit.apply_pin_edits`` writes exactly that much.
+        # ``services.pins.pin_edit.apply_pin_edits`` writes exactly that much.
         edits: dict[str, object] = {}
 
         if "name" in body:

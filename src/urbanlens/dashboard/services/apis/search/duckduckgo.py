@@ -16,7 +16,7 @@ from typing import Any, ClassVar
 
 from requests import HTTPError
 
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 
 logger = logging.getLogger(__name__)
 

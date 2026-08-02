@@ -9,7 +9,7 @@ from django.db.models import CASCADE, SET_NULL, CharField, DecimalField, Foreign
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin_import_failures.queryset import PinImportFailureManager
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 
 
 class PinImportFailureReason(abstract.TextChoices):
@@ -32,7 +32,7 @@ class PinImportFailure(abstract.DashboardModel):
     """A pin from an import whose Google Maps CID could not be automatically resolved to a location.
 
     Raised by ``tasks.resolve_deferred_pin_locations`` (via
-    ``services.pin_import_failures.record_pin_import_failure``) when Google/REData
+    ``services.pins.pin_import_failures.record_pin_import_failure``) when Google/REData
     either confirms no location exists for a cid, or repeated lookup attempts stall
     out - see that task's docstring. This always reflects a data gap on Google's side
     (or a transient lookup failure), never a defect in the pin the user tried to

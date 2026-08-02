@@ -16,7 +16,7 @@ import pytest
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google import redata_cid_gateway as gw_module
 from urbanlens.dashboard.services.apis.locations.google.redata_cid_gateway import CidLookupEntry, RedataCidGateway, RedataPermissionError
-from urbanlens.dashboard.services.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 
 def _response(status_code: int, body: dict) -> mock.Mock:

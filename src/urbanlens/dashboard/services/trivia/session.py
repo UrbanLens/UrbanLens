@@ -28,7 +28,7 @@ from urbanlens.dashboard.models.trivia.model import (
     TriviaSessionParticipantStatus,
     TriviaSessionStatus,
 )
-from urbanlens.dashboard.services.connections import are_connections
+from urbanlens.dashboard.services.social.connections import are_connections
 from urbanlens.dashboard.services.trivia import eligibility, realtime, selection, serializers, voting
 from urbanlens.dashboard.services.trivia.answer_check import is_answer_equivalent
 from urbanlens.dashboard.services.trivia.ratings import apply_round_ratings
@@ -174,7 +174,7 @@ def _notify_invite(host: Profile, invitee: Profile, session: TriviaSession) -> N
 
     from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
-    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
     host_name = resolve_visible_identity(invitee, host)["display_name"]
     NotificationLog.objects.create(

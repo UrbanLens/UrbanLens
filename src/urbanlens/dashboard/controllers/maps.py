@@ -29,12 +29,12 @@ from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
-from urbanlens.dashboard.services.json_safety import safe_json_for_script
+from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
+from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
-from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
-from urbanlens.dashboard.services.redact import redact_secret
-from urbanlens.dashboard.services.saved_filter_cache import get_or_compute_matching_uuids
+from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
+from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids
+from urbanlens.dashboard.services.security.redact import redact_secret
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -116,7 +116,7 @@ def _apply_toolbar_filters(query: PinQuerySet, profile: Profile, raw_ids: str) -
     """AND-narrow ``query`` by the bottom-right toolbar's active saved filters.
 
     Each active filter is resolved and cached independently (see
-    ``services.saved_filter_cache``), then chained onto ``query`` as a
+    ``services.search.saved_filter_cache``), then chained onto ``query`` as a
     ``uuid__in`` restriction - equivalent to (and just as strict as) calling
     ``filter_by_criteria`` once per filter, but reuses a warm cache when one
     exists instead of re-running each filter's full query.
@@ -161,7 +161,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"ok": False, "error": "Latitude or longitude is out of range."}, status=400)
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        from urbanlens.dashboard.services.visits import record_geolocation_pin_visits
+        from urbanlens.dashboard.services.visits.visits import record_geolocation_pin_visits
 
         visits = record_geolocation_pin_visits(profile, latitude=latitude, longitude=longitude)
         return JsonResponse({"ok": True, "created": len(visits), "pin_ids": [visit.pin_id for visit in visits]})
@@ -206,7 +206,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         # it never appears again; see Profile.map_pin_suggestions_intro_seen.
         show_pin_suggestions_intro = False
         if not profile.map_pin_suggestions_intro_seen:
-            from urbanlens.dashboard.services.pin_suggestions import pending_suggestions_for_profile
+            from urbanlens.dashboard.services.pins.pin_suggestions import pending_suggestions_for_profile
 
             if pending_suggestions_for_profile(profile).exists():
                 show_pin_suggestions_intro = True
@@ -250,8 +250,8 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
     def infrastructure_features(self, request, *args, **kwargs):
         """Return viewport-scoped active and historic rail/water routes as GeoJSON."""
-        from urbanlens.dashboard.services.infrastructure_map import infrastructure_feature_collection, parse_infrastructure_bbox
-        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+        from urbanlens.dashboard.services.map.infrastructure_map import infrastructure_feature_collection, parse_infrastructure_bbox
 
         try:
             bounds = parse_infrastructure_bbox(request.GET.get("bbox"))
@@ -278,7 +278,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             custom_icon = request.FILES.get("custom_icon") or None
             if custom_icon:
                 from urbanlens.dashboard.models.images.model import MediaKind
-                from urbanlens.dashboard.services.images import image_upload_error
+                from urbanlens.dashboard.services.media.images import image_upload_error
 
                 upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
                 if upload_error:
@@ -574,9 +574,9 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             upload would exceed the uploader's storage quota.
         """
         from urbanlens.dashboard.models.images.model import MediaKind
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
-        from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
-        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
+        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
         from urbanlens.dashboard.tasks import process_image_upload
 
         image = request.FILES.get("image")
@@ -769,7 +769,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         custom_icon = request.FILES.get("custom_icon") or None
         if custom_icon:
             from urbanlens.dashboard.models.images.model import MediaKind
-            from urbanlens.dashboard.services.images import image_upload_error
+            from urbanlens.dashboard.services.media.images import image_upload_error
 
             upload_error = image_upload_error(custom_icon, MediaKind.PHOTO)
             if upload_error:

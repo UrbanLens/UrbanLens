@@ -18,11 +18,11 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
-from urbanlens.dashboard.services.images import image_to_gallery_json
+from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.media.images import image_to_gallery_json
 from urbanlens.dashboard.services.memories.photos import classify_photo, create_pin_and_log_visit, log_visit_on_pin
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
-from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.visits import accept_visit_suggestion, reject_visit_suggestion
+from urbanlens.dashboard.services.visits.visits import accept_visit_suggestion, reject_visit_suggestion
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -139,7 +139,7 @@ class MemoriesPhotosView(LoginRequiredMixin, View):
         Returns:
             The rendered Photos page.
         """
-        from urbanlens.dashboard.services.storage import get_quota_bytes, get_storage_used_bytes, max_upload_file_size_bytes
+        from urbanlens.dashboard.services.media.storage import get_quota_bytes, get_storage_used_bytes, max_upload_file_size_bytes
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         gallery = Image.objects.uploaded_by(profile).select_related("pin", "wiki")
@@ -225,7 +225,7 @@ class PhotoUploadView(LoginRequiredMixin, View):
         Returns:
             The new image serialized for the gallery grid, or a 400 error.
         """
-        from urbanlens.dashboard.services.photo_upload import PhotoUploadError, upload_photo
+        from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         image_file = request.FILES.get("image")

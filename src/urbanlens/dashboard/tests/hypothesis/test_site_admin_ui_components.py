@@ -8,7 +8,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.site_settings import EnvironmentOverrideChoice, SiteSettings
-from urbanlens.dashboard.services.site_admin import add_user_to_site_admin_group
+from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
 
 _UI_COMPONENTS_URL = reverse("site_admin_ui_components")
 

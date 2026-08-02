@@ -20,8 +20,8 @@ from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.account import WebAuthnCredential
-from urbanlens.dashboard.services.two_factor import maybe_clear_backup_codes
-from urbanlens.dashboard.services.webauthn import WebAuthnError, build_registration_options, verify_and_save_registration
+from urbanlens.dashboard.services.auth.two_factor import maybe_clear_backup_codes
+from urbanlens.dashboard.services.auth.webauthn import WebAuthnError, build_registration_options, verify_and_save_registration
 
 if TYPE_CHECKING:
     from django.http import HttpRequest

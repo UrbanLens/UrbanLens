@@ -20,7 +20,7 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.undo import UndoAction
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action, stash_for_undo
 
@@ -336,7 +336,7 @@ class PinBulkExportView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, *args, **kwargs) -> HttpResponse:
-        from urbanlens.dashboard.services.export_formats import EXPORT_FORMATS
+        from urbanlens.dashboard.services.import_export.export_formats import EXPORT_FORMATS
 
         fmt = request.POST.get("format", "")
         if fmt not in EXPORT_FORMATS:

@@ -66,7 +66,7 @@ class GooglePhotosGatewayTests(TestCase):
         self.assertEqual(result, PickerSession(id="sess1", picker_uri="https://photos.google.com/picker/sess1", media_items_set=False, poll_interval_s=5, timeout_s=300))
 
     def test_create_session_raises_on_error(self) -> None:
-        from urbanlens.dashboard.services.gateway import GatewayRequestError
+        from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
         gw = self._gateway()
         gw.session.post.return_value = _mock_response(ok=False, status_code=500)
@@ -239,7 +239,7 @@ class ImportGooglePhotosTaskTests(TestCase):
         self.assertEqual(counts, {"imported": 0, "skipped": 1, "failed": 0})
 
     def test_item_missing_from_cache_and_relist_fails_counts_as_failed(self) -> None:
-        from urbanlens.dashboard.services.gateway import GatewayRequestError
+        from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
         with (
             mock.patch.object(GooglePhotosGateway, "list_session_media_items", side_effect=GatewayRequestError("boom")),

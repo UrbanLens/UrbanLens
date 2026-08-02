@@ -23,11 +23,11 @@ from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus, SafetyContactOptOutScope
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-from urbanlens.dashboard.services.connections import get_connections
-from urbanlens.dashboard.services.images import image_to_gallery_json, parse_reposition_payload
-from urbanlens.dashboard.services.map_snapshot import default_markup_map_title
-from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.safety import (
+from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title
+from urbanlens.dashboard.services.media.images import image_to_gallery_json, parse_reposition_payload
+from urbanlens.dashboard.services.social.connections import get_connections
+from urbanlens.dashboard.services.visits.safety import (
     CheckinArchivedError,
     ContactInput,
     SafetyValidationError,
@@ -233,7 +233,7 @@ def _get_checkin_as_partner(profile: Profile, checkin_slug: str) -> SafetyChecki
     """Look up a check-in ``profile`` is an accepted partner on, by slug or UUID.
 
     A partner has no slug access of their own - the URL value reaching here is
-    always the check-in's UUID (see ``services.safety._notify_checkin_partner_invite``) -
+    always the check-in's UUID (see ``services.visits.safety._notify_checkin_partner_invite``) -
     but resolving the same way ``_get_checkin_by_slug`` does (slug then UUID)
     costs nothing and stays consistent.
 
@@ -623,13 +623,13 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
 
         Two non-owner fallbacks exist, tried in order:
 
-        * An accepted partner (see ``services.safety.is_owner_or_accepted_partner``)
+        * An accepted partner (see ``services.visits.safety.is_owner_or_accepted_partner``)
           gets the exact same full detail page as the owner, minus the
           edit/contact-management/cancel/delete controls (``viewer_is_partner``
           in the template context) - a partner's whole point is seeing the plan
           "before it's missed", not a limited view.
         * Otherwise, a non-owner following the link from a community wiki comment
-          (see ``services.safety.post_checkin_to_community_wiki``) gets the
+          (see ``services.visits.safety.post_checkin_to_community_wiki``) gets the
           limited read-only status page - but only for check-ins that were
           actually posted to a wiki, and only via their UUID link.
 
@@ -785,7 +785,7 @@ class SafetyCheckinDetailView(LoginRequiredMixin, View):
         checkin = _get_checkin_by_slug(profile, checkin_slug)
 
         if request.POST.get("action") == "cancel":
-            from urbanlens.dashboard.services.safety import cancel_checkin
+            from urbanlens.dashboard.services.visits.safety import cancel_checkin
 
             cancel_checkin(checkin)
             return redirect("safety.home")
@@ -855,7 +855,7 @@ class SafetyCheckinCancelView(LoginRequiredMixin, View):
         Returns:
             Redirect to the safety home page.
         """
-        from urbanlens.dashboard.services.safety import cancel_checkin
+        from urbanlens.dashboard.services.visits.safety import cancel_checkin
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         checkin = get_object_or_404(SafetyCheckin, uuid=checkin_uuid, profile=profile)
@@ -867,7 +867,7 @@ class SafetyCheckinDeleteView(LoginRequiredMixin, View):
     """Permanently delete a safety check-in (owner-only).
 
     If the check-in hasn't been resolved yet, it's routed through the normal
-    self-check-in flow first (``services.safety.check_in``) so any side effects
+    self-check-in flow first (``services.visits.safety.check_in``) so any side effects
     that flow carries - today, resolving the check-in and raising a visit
     suggestion; it does not itself email already-notified contacts - happen
     before the row disappears, rather than silently vanishing out from under
@@ -1044,7 +1044,7 @@ class SafetyCheckinPartnerInviteAcceptView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         # Same narrowly-scoped lookup the external API uses, so the two surfaces
         # cannot drift on which invitations a caller may address - see
-        # services.safety.get_partner_role for why it is scoped to the caller
+        # services.visits.safety.get_partner_role for why it is scoped to the caller
         # and why it carries no status filter.
         partner = get_partner_role(profile, checkin_uuid)
         if partner is None:
@@ -1329,7 +1329,7 @@ class SafetyCheckinMapAttachView(LoginRequiredMixin, View):
         if markup_map.pk == checkin.markup_map_id:
             # The picker (SafetyCheckinMapPickerView) already excludes the primary map from
             # its candidate list, but that's UI-only - re-enforce it here too, since
-            # services.safety._build_archive_payload's "maps" list is keyed by primary map
+            # services.visits.safety._build_archive_payload's "maps" list is keyed by primary map
             # first and would otherwise carry the same map twice once archived.
             return HttpResponseBadRequest("This map is already the check-in's primary route map.")
         checkin.markup_maps.add(markup_map)
@@ -1411,7 +1411,7 @@ class SafetyGalleryView(LoginRequiredMixin, View):
         if not image_file:
             return JsonResponse({"error": "No image provided."}, status=400)
         from urbanlens.dashboard.models.images.model import MediaKind
-        from urbanlens.dashboard.services.images import compute_checksum, image_upload_error
+        from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
 
         upload_error = image_upload_error(image_file, MediaKind.PHOTO)
         if upload_error:
@@ -1421,7 +1421,7 @@ class SafetyGalleryView(LoginRequiredMixin, View):
         checksum = compute_checksum(image_file)
         if Image.objects.filter(safety_checkin=checkin, checksum=checksum).exists():
             return JsonResponse({"error": "That photo is already on this check-in."}, status=409)
-        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 
         with per_profile_upload_lock(profile):
             quota_error = quota_error_for_upload(profile, image_file.size)
@@ -1436,7 +1436,7 @@ class SafetyGalleryView(LoginRequiredMixin, View):
                 checksum=checksum,
                 file_size=image_file.size,
             )
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, img.pk)

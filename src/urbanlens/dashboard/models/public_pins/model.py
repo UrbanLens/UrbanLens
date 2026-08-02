@@ -4,7 +4,7 @@ A tiny, highly selective set of locations can be voted "public" by the users
 who have them pinned. Public locations are suggested to every account
 (opt-out), which gives new users a populated map without exposing anything
 vulnerable. Eligibility is computed entirely server-side by
-``services.public_pins`` on a schedule - users never see the rule engine,
+``services.pins.public_pins`` on a schedule - users never see the rule engine,
 only the vote buttons when a place qualifies.
 
 Votes are anonymous in the UI: only the voter ever sees their own choice,
@@ -87,7 +87,7 @@ class PublicPinVote(abstract.DashboardModel):
     Attributes:
         candidate: The vote this ballot belongs to.
         profile: Who cast it. Only profiles with a root pin at the candidate's
-            location may vote - enforced in ``services.public_pins``.
+            location may vote - enforced in ``services.pins.public_pins``.
         make_public: True for "make it public", False for "keep it private".
     """
 

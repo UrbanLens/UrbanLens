@@ -44,7 +44,7 @@ from urbanlens.dashboard.external_api.serializers_search import parse_result_typ
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.global_search import GlobalSearchEngine
 from urbanlens.dashboard.services.global_search.results import RESULT_TYPES
 

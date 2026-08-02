@@ -9,7 +9,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.email import ProfileEmail
-from urbanlens.dashboard.services.auth_backend import EmailOrUsernameModelBackend
+from urbanlens.dashboard.services.auth.auth_backend import EmailOrUsernameModelBackend
 
 
 class EmailOrUsernameModelBackendTests(TestCase):

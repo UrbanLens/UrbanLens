@@ -35,7 +35,7 @@ pin); a wiki readable by any logged-in user would let people browse other users'
 by guessing/crawling `location_slug` values, defeating that.
 
 Every wiki-scoped controller must resolve its `Location`/`Wiki` through
-`services.wiki_access.resolve_visible_wiki(request, location_slug)` (or check
+`services.wiki.wiki_access.resolve_visible_wiki(request, location_slug)` (or check
 `location_visible_to(location, profile)` directly for views that need a different response shape
 than a redirect/404 — e.g. a JSON polling endpoint that should return an empty list rather than
 error). The check is simply "does the requester have a `Pin` at this `Location`" —
@@ -136,7 +136,7 @@ Consequences worth knowing:
 
 ## The restructure suggestion is one dialog, and it is offered exactly once
 
-`services/pin_restructure.py` answers two questions that are really one — "this pin's hierarchy
+`services/pins/pin_restructure.py` answers two questions that are really one — "this pin's hierarchy
 doesn't match the ground" — so they share a single prompt on the pin detail page rather than
 interrupting twice:
 
@@ -168,7 +168,7 @@ Load-bearing details:
 
 ## Wiki-to-wiki auto-merge is the one hierarchy change with no confirmation dialog
 
-`services/wiki_merge.py` is the exception to this codebase's usual "ask first" pattern for
+`services/wiki/wiki_merge.py` is the exception to this codebase's usual "ask first" pattern for
 structural changes. Two community wikis are independent, user-initiated pages - nothing stops
 someone wiki-ing a building before anyone's wiki-ed the campus it sits on. Once both have a real
 property boundary, `reconcile_wiki_nesting` re-parents the smaller under the bigger automatically,
@@ -209,7 +209,7 @@ swaps its own queryset from `pin.<related>` to `<Model>.objects.filter(pin__in=P
 filter(pk=pin.pk).with_descendants())` when the flag is set, and independently threads
 `extra_query="children=1"` through its own pagination. There is no shared helper - see
 `controllers.comments._pin_comments_context` for the newest one, modelled directly on
-`controllers.visits._render_visit_history`. `services.pin_restructure`/`services.pin_wiki_sync`
+`controllers.visits._render_visit_history`. `services.pins.pin_restructure`/`services.pins.pin_wiki_sync`
 cover pin ↔ external-data and pin ↔ wiki *hierarchy* fixes; this is purely about *display* -
 aliases and labels are not yet aggregated this way (tracked in `docs/PROBLEMS.md`).
 
@@ -234,7 +234,7 @@ subtree, not just the exact pin in the URL - otherwise deleting an aggregated ch
 
 ## Community counts are fuzzed, not exact
 
-Wiki "how many people have this pinned" style counts (`services/community_counts.py`) are
+Wiki "how many people have this pinned" style counts (`services/wiki/community_counts.py`) are
 deliberately fuzzed (small random jitter, cached for a day) rather than exact — an exact count
 combined with a timeline could otherwise let someone infer individual pinning activity.
 
@@ -305,7 +305,7 @@ Inbound-facing, unlike everything else in "Rate limiting and cost tracking" abov
   assumption) so a future picker only has to change what gets written at creation time, not the
   verification path in `external_api/permissions.py`.
 - Pin creation from the external API goes through the exact same
-  `services.pin_creation.create_pin_for_profile` call as the map UI's "Add pin" form (see
+  `services.pins.pin_creation.create_pin_for_profile` call as the map UI's "Add pin" form (see
   `controllers/maps.py`) - this is intentional, not incidental reuse. Any validation/sanitization
   added to one caller must go in that shared function so it automatically covers the other.
 - `external_api/` never imports from - or gets imported by - the internal viewsets under

@@ -39,7 +39,7 @@ class WikiCreationServiceTests(TestCase):
         )
 
     def _create(self, *, include: set[str] | None = None, alias_ids: set[int] | None = None, image_ids: set[int] | None = None) -> tuple[Wiki, bool]:
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             return WikiCreationService().create_for_pin(self.pin, include_fields=include, alias_ids=alias_ids, image_ids=image_ids)
 
     def test_creates_wiki_without_seeding_by_default(self) -> None:
@@ -89,7 +89,7 @@ class WikiCreationServiceTests(TestCase):
 
         pin2 = baker.make("dashboard.Pin", location=baker.make("dashboard.Location", latitude="41", longitude="-75"))
         alt2 = baker.make("dashboard.PinAlias", pin=pin2, name="Chosen Alias", kind=AliasType.ALTERNATE)
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             new_wiki, created = WikiCreationService().create_for_pin(pin2, alias_ids={alt2.pk})
         self.assertTrue(created)
         self.assertTrue(new_wiki.aliases.filter(name="Chosen Alias").exists())

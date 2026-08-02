@@ -86,7 +86,7 @@ would be strictly worse than using the best data available now.
 Distance is computed geodesically in the database (PostGIS `Distance()` over a `geography`
 cast), matching the existing convention in `models/pin/queryset.py` and
 `services/memories/photos.py` — never the codebase's other, approximate
-"degrees × 111,320" shortcut (`services/map_sharing.py`), because scoring fairness depends on
+"degrees × 111,320" shortcut (`services/sharing/map_sharing.py`), because scoring fairness depends on
 it being right at small (sub-km) scales, not just roughly right at trip-planning scale.
 
 ## Points
@@ -227,7 +227,7 @@ The game's secondary goal (besides being fun) is generating data that improves t
 notion of which wiki photos are actually good - see "External media caching + relevance"
 below for the full design. Briefly: `GamePhotoFeedback` records one event per (round, guessing
 profile) - `thumbs_up`, `thumbs_down`, `reported`, or a server-backfilled `no_reaction` for
-anyone who never explicitly reacted (`services.spotguessr.relevance`). `services.media_relevance
+anyone who never explicitly reacted (`services.spotguessr.relevance`). `services.media.media_relevance
 .effective_relevance()` blends this with the wiki's own organic `MediaRelevance` votes:
 
 | Signal | Weight | Why |
@@ -270,7 +270,7 @@ structurally, not just by convention, there is no way to trace a row back
 to who made it.
 
 Once a photo *without its own coordinates* has 5+ correct guesses,
-`services.photo_coordinates.recompute_estimated_coordinates()` averages
+`services.photos.photo_coordinates.recompute_estimated_coordinates()` averages
 them into `Image.estimated_latitude`/`estimated_longitude`, recomputed
 fresh from the photo's full correct-guess set after every new correct guess
 (not incrementally) - per-photo guess volume is small enough that this
@@ -297,8 +297,8 @@ someone manually places it first.
 
 Not SpotGuessr-specific, but implemented alongside it since the game's relevance feedback
 needed a reliable way to join a materialized photo back to its wiki votes. Two independent
-fixes/additions to the existing pin-detail/wiki Media gallery (`services.media_materialize`,
-`services.media_relevance`):
+fixes/additions to the existing pin-detail/wiki Media gallery (`services.media.media_materialize`,
+`services.media.media_relevance`):
 
 - **Identity fix.** `Image.media_source_key`/`Image.media_item_key` now store the *raw*
   provider panel key and the sha1 hash of the item's raw full-resolution url - exactly the
@@ -315,7 +315,7 @@ fixes/additions to the existing pin-detail/wiki Media gallery (`services.media_m
   downloaded and materialized it into a durable `Image` row (existed before this pass, on the
   pin-detail page only). What was missing: the gallery never *served* that local copy back -
   every subsequent page load, by anyone, still hot-linked the live provider url straight from
-  `LocationCache`. `services.media_relevance.local_images_for_gallery_items()` bulk-looks-up
+  `LocationCache`. `services.media.media_relevance.local_images_for_gallery_items()` bulk-looks-up
   already-materialized rows for a panel's live results; both the pin-detail and wiki Media
   views now prefer that local url for the displayed thumbnail/image, falling back to the
   remote url when no local copy exists yet. The remote page (`item.page_url|default:item.url`)
@@ -368,7 +368,7 @@ separate `GameSessionInvite` model. The host's own row is created as `JOINED` im
 (`start_multiplayer_session`); every invitee's row is created as `INVITED`.
 
 - **Inviting**: friends-only, matching the trip-invite precedent (`controllers/trip.py`) —
-  `services.connections.get_connections(host)` gates who can be picked. Inviting a non-friend
+  `services.social.connections.get_connections(host)` gates who can be picked. Inviting a non-friend
   is rejected server-side, not just hidden in the picker UI. One `GameSessionParticipant`
   per invitee, plus one `NotificationLog` (`NotificationType.SPOTGUESSR_INVITE`) that reaches
   the invitee live via the existing `notification_new` Channels push — no new notification
@@ -495,7 +495,7 @@ completion marker regardless of which of the above set it.
 ### Named Place mode
 
 **Selection** (`services.spotguessr.named_place.candidate_name_for_location`): the location
-needs a *meaningful* name to show. Reuses `services.public_pins.is_meaningful_name()`
+needs a *meaningful* name to show. Reuses `services.pins.public_pins.is_meaningful_name()`
 verbatim (already filters blank/placeholder/coordinate-shaped strings — see
 `docs/designs/public-pins-by-vote.md`) rather than inventing a second heuristic:
 
@@ -619,8 +619,8 @@ instead of keeping its own hardcoded `["photos", "street_view"]` list.
 | Glicko-2: rating / RD / volatility / scale / τ | 1500 / 350 / 0.06 / 173.7178 / 0.5 | Glickman's published defaults |
 | `use_aliases` | True | Named Place mode; per-session config, not a site-wide constant |
 | `allow_arbitrary_external_photos` | False | Photos mode; skips the relevance filter entirely when true - see "Photo relevance feedback" |
-| `GAME_THUMBS_UP_WEIGHT` / `GAME_REPORT_WEIGHT` / `GAME_NO_REACTION_WEIGHT` / `GAME_THUMBS_DOWN_WEIGHT` | 0.5 / 1.0 / 0.01 / 0.001 | `services.media_relevance` - thumbs down is a token weight, not a real "not relevant" vote |
-| `MIN_GUESSES_FOR_ESTIMATE` / `MIN_GUESSES_FOR_OUTLIER_TRIM` / `OUTLIER_TRIM_FRACTION` | 5 / 10 / 0.15 | `services.photo_coordinates` - crowd-sourced unplaced-photo coordinates |
+| `GAME_THUMBS_UP_WEIGHT` / `GAME_REPORT_WEIGHT` / `GAME_NO_REACTION_WEIGHT` / `GAME_THUMBS_DOWN_WEIGHT` | 0.5 / 1.0 / 0.01 / 0.001 | `services.media.media_relevance` - thumbs down is a token weight, not a real "not relevant" vote |
+| `MIN_GUESSES_FOR_ESTIMATE` / `MIN_GUESSES_FOR_OUTLIER_TRIM` / `OUTLIER_TRIM_FRACTION` | 5 / 10 / 0.15 | `services.photos.photo_coordinates` - crowd-sourced unplaced-photo coordinates |
 | `CHAT_HISTORY_LIMIT` | 50 | messages returned by the chat-history GET on reconnect |
 
 ## Social: ratings visibility
@@ -661,7 +661,7 @@ instead of keeping its own hardcoded `["photos", "street_view"]` list.
   profile's game session with no sharing action behind it. `candidate_image_for_location` now
   unconditionally requires `wiki__isnull=False` — see "Photo selection" above. Also built the
   in-game thumbs-up/thumbs-down/report feedback buttons and their weighted contribution to
-  `services.media_relevance.effective_relevance` (`GamePhotoFeedback`,
+  `services.media.media_relevance.effective_relevance` (`GamePhotoFeedback`,
   `services.spotguessr.relevance`), the `allow_arbitrary_external_photos` setting, and — not
   SpotGuessr-specific, but needed to make relevance joinable at all — the `Image.media_source_key`/
   `media_item_key` identity fields and local-copy-preferred serving in the pin-detail/wiki

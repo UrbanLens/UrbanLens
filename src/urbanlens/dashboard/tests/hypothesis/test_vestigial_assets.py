@@ -9,8 +9,8 @@ from tempfile import TemporaryDirectory
 from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.export import EXPORT_TTL_SECONDS
-from urbanlens.dashboard.services.vestigial_assets import cleanup_vestigial_assets
+from urbanlens.dashboard.services.import_export.export import EXPORT_TTL_SECONDS
+from urbanlens.dashboard.services.import_export.vestigial_assets import cleanup_vestigial_assets
 from urbanlens.dashboard.tasks import cleanup_vestigial_assets_task
 
 
@@ -34,7 +34,7 @@ class CleanupVestigialAssetsTests(SimpleTestCase):
             _touch_dir(stale_export, expired)
             _touch_dir(stale_import, expired)
 
-            with mock.patch("urbanlens.dashboard.services.vestigial_assets.django_settings.MEDIA_ROOT", str(media_root)):
+            with mock.patch("urbanlens.dashboard.services.import_export.vestigial_assets.django_settings.MEDIA_ROOT", str(media_root)):
                 result = cleanup_vestigial_assets(now=now)
 
             self.assertEqual(result.deleted, 2)
@@ -51,7 +51,7 @@ class CleanupVestigialAssetsTests(SimpleTestCase):
             marker_file = media_root / "exports" / "README.txt"
             marker_file.write_text("not a job directory", encoding="utf-8")
 
-            with mock.patch("urbanlens.dashboard.services.vestigial_assets.django_settings.MEDIA_ROOT", str(media_root)):
+            with mock.patch("urbanlens.dashboard.services.import_export.vestigial_assets.django_settings.MEDIA_ROOT", str(media_root)):
                 result = cleanup_vestigial_assets(now=now)
 
             self.assertEqual(result.deleted, 0)
@@ -65,8 +65,8 @@ class CleanupVestigialAssetsTests(SimpleTestCase):
         with TemporaryDirectory() as tmp:
             media_root = Path(tmp)
 
-            with mock.patch("urbanlens.dashboard.services.vestigial_assets.django_settings.MEDIA_ROOT", str(media_root)):
-                with self.assertNoLogs("urbanlens.dashboard.services.vestigial_assets", level="WARNING"):
+            with mock.patch("urbanlens.dashboard.services.import_export.vestigial_assets.django_settings.MEDIA_ROOT", str(media_root)):
+                with self.assertNoLogs("urbanlens.dashboard.services.import_export.vestigial_assets", level="WARNING"):
                     result = cleanup_vestigial_assets(now=now)
 
             self.assertEqual(result.total, 0)
@@ -82,7 +82,7 @@ class CleanupVestigialAssetsTaskTests(SimpleTestCase):
         fake_result.as_dict.return_value = {"scanned": 1337, "deleted": 3, "skipped": 1334, "errors": 0}
         fake_result.total = 1337
 
-        with mock.patch("urbanlens.dashboard.services.vestigial_assets.cleanup_vestigial_assets", return_value=fake_result):
+        with mock.patch("urbanlens.dashboard.services.import_export.vestigial_assets.cleanup_vestigial_assets", return_value=fake_result):
             self.assertDictEqual(
                 cleanup_vestigial_assets_task(),
                 {"scanned": 1337, "deleted": 3, "skipped": 1334, "errors": 0},

@@ -26,12 +26,12 @@ from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import LocationExposure, PinShare, PinShareOrigin, PinShareStatus
-from urbanlens.dashboard.services.dm_location_detection import (
+from urbanlens.dashboard.services.messaging.dm_location_detection import (
     detect_coordinate_mentions,
     parse_addresses,
     parse_coordinates,
 )
-from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 
 class ParseCoordinatesTests(TestCase):
@@ -246,7 +246,7 @@ class DetectCoordinateMentionTests(_DmDetectionTestCase):
 
         location = Location.objects.get(latitude="42.100000", longitude="-73.900000")
         recipient_pin = Pin.objects.create(profile=self.profiles["recipient"], location=location)
-        from urbanlens.dashboard.services.share_provenance import resolve_origin_share
+        from urbanlens.dashboard.services.sharing.share_provenance import resolve_origin_share
 
         parent = resolve_origin_share(self.profiles["recipient"].pk, pin=recipient_pin)
         self.assertEqual(parent, dm_share)

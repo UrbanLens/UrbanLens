@@ -2,7 +2,7 @@
 alias nickname toggle, ownership/sale history, and article-revision hard-delete.
 
 Every endpoint here inherits the same anti-enumeration invariant as the rest
-of the wiki surface (``services.wiki_access.resolve_visible_wiki``): a wiki
+of the wiki surface (``services.wiki.wiki_access.resolve_visible_wiki``): a wiki
 the caller has not earned access to is a 404, never a 403. That exhaustive
 property is covered once, for the whole surface, by
 ``test_external_api_wiki_oracle.py``; these tests check each endpoint's own
@@ -24,8 +24,8 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.property_owner.model import WikiOwner, WikiPropertySale
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.articles import get_article, restore_revision, save_article
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.wiki.articles import get_article, restore_revision, save_article
 from urbanlens.dashboard.tests.hypothesis.test_external_api_wiki_oracle import disable_throttling, grant_wiki_scopes
 
 BASE = "/dashboard/api/external/v1/wikis"

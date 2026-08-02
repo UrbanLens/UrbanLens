@@ -37,7 +37,7 @@ from urbanlens.dashboard.models.links.model import PinLink
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.pin_suggestions import LocationHit, accept_pin_suggestion, attach_suggestion_photos, ingest_location_hits, reject_pin_suggestion
+from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, accept_pin_suggestion, attach_suggestion_photos, ingest_location_hits, reject_pin_suggestion
 
 _PIN_LAT = Decimal("40.000000")
 _PIN_LON = Decimal("-74.000000")
@@ -1237,7 +1237,7 @@ class AttachSuggestionPhotosTests(TestCase):
         self.addCleanup(self._dns_patch.stop)
 
     def test_downloads_and_stages_candidate_images(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response()):
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()):
             created = attach_suggestion_photos(self.suggestion, ["https://example.test/photo.jpg"], self.profile)
 
         self.assertEqual(len(created), 1)
@@ -1249,7 +1249,7 @@ class AttachSuggestionPhotosTests(TestCase):
 
     def test_never_exceeds_max_suggestion_photos(self) -> None:
         urls = [f"https://example.test/photo-{i}.jpg" for i in range(MAX_SUGGESTION_PHOTOS + 5)]
-        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response()):
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()):
             created = attach_suggestion_photos(self.suggestion, urls, self.profile)
 
         self.assertEqual(len(created), MAX_SUGGESTION_PHOTOS)
@@ -1258,7 +1258,7 @@ class AttachSuggestionPhotosTests(TestCase):
     def test_respects_photos_already_attached_from_a_prior_call(self) -> None:
         baker.make(Image, profile=self.profile, pin=None, pin_suggestion=self.suggestion, checksum="already-here")
         urls = [f"https://example.test/photo-{i}.jpg" for i in range(MAX_SUGGESTION_PHOTOS)]
-        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response()):
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()):
             created = attach_suggestion_photos(self.suggestion, urls, self.profile)
 
         self.assertEqual(len(created), MAX_SUGGESTION_PHOTOS - 1)
@@ -1267,7 +1267,7 @@ class AttachSuggestionPhotosTests(TestCase):
         import requests
 
         with mock.patch(
-            "urbanlens.dashboard.services.pin_suggestions.requests.get",
+            "urbanlens.dashboard.services.pins.pin_suggestions.requests.get",
             side_effect=[requests.exceptions.ConnectionError("boom"), _ok_photo_response()],
         ):
             created = attach_suggestion_photos(self.suggestion, ["https://example.test/broken.jpg", "https://example.test/ok.jpg"], self.profile)
@@ -1276,7 +1276,7 @@ class AttachSuggestionPhotosTests(TestCase):
 
     def test_an_oversized_download_is_skipped(self) -> None:
         huge = b"x" * (20 * 1024 * 1024 + 1)
-        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response(huge)):
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response(huge)):
             created = attach_suggestion_photos(self.suggestion, ["https://example.test/huge.jpg"], self.profile)
 
         self.assertEqual(created, [])
@@ -1284,8 +1284,8 @@ class AttachSuggestionPhotosTests(TestCase):
 
     def test_over_quota_stops_the_batch(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.services.pin_suggestions.quota_error_for_upload", return_value="Over quota"),
-            mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=_ok_photo_response()) as mocked,
+            mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.quota_error_for_upload", return_value="Over quota"),
+            mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=_ok_photo_response()) as mocked,
         ):
             created = attach_suggestion_photos(self.suggestion, ["https://example.test/a.jpg", "https://example.test/b.jpg"], self.profile)
 
@@ -1306,7 +1306,7 @@ class AttachSuggestionPhotosSsrfTests(TestCase):
         )
 
     def test_a_literal_private_ip_target_is_rejected(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get") as mocked:
+        with mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get") as mocked:
             created = attach_suggestion_photos(self.suggestion, ["http://169.254.169.254/latest/meta-data/"], self.profile)
         mocked.assert_not_called()
         self.assertEqual(created, [])
@@ -1315,7 +1315,7 @@ class AttachSuggestionPhotosSsrfTests(TestCase):
         redirect_response = mock.Mock(status_code=302, headers={"Location": "http://127.0.0.1/internal"}, is_redirect=True)
         with (
             mock.patch("socket.getaddrinfo", return_value=[(2, 1, 6, "", ("93.184.216.34", 0))]),
-            mock.patch("urbanlens.dashboard.services.pin_suggestions.requests.get", return_value=redirect_response),
+            mock.patch("urbanlens.dashboard.services.pins.pin_suggestions.requests.get", return_value=redirect_response),
         ):
             created = attach_suggestion_photos(self.suggestion, ["https://example.test/photo.jpg"], self.profile)
         self.assertEqual(created, [])

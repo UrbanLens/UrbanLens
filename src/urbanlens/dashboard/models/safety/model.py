@@ -205,7 +205,7 @@ class SafetyCheckin(abstract.PublicDashboardModel):
     If the profile doesn't check in by ``checkin_by`` + ``grace_period``, the
     linked ``SafetyCheckinContact`` rows are notified. Concluding the check-in
     (self check-in, or a contact marking the profile safe) raises a
-    VisitSuggestion for the destination via ``services.safety._conclude_checkin``,
+    VisitSuggestion for the destination via ``services.visits.safety._conclude_checkin``,
     reusing the same confirm/reject flow as any other tentative visit.
 
     ``slug`` (from ``PublicDashboardModel``) is scoped per-profile - only the owner-facing
@@ -217,7 +217,7 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         profile: The profile who created and owns this check-in.
         trip: The Trip this check-in was started for, if any - a profile may
             have at most one active check-in per (profile, trip) scope (see
-            ``services.safety.get_active_checkin``), so a general (``trip``
+            ``services.visits.safety.get_active_checkin``), so a general (``trip``
             is ``None``) check-in and a trip-scoped one, or check-ins for two
             different trips, can be active at the same time.
         title: Short display label (e.g. "Weekend hike - Eagle Ridge").
@@ -238,19 +238,19 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         markup_map: The standalone MarkupMap holding the route/plan drawing shown on the
             detail page and contact portal, if any.
         notify_community_wiki: Whether escalation should also post a comment to the destination's
-            community wiki and notify users with pins there (see ``services.safety.notify_community_wiki``).
+            community wiki and notify users with pins there (see ``services.visits.safety.notify_community_wiki``).
         wiki_notified_at: When the community wiki comment was posted, if at all - also makes the
             escalation-time wiki notification idempotent.
         live_location_sharing_enabled: Whether the owner has opted into sharing their current
-            position with accepted partners (see ``services.safety.set_live_location_sharing``).
+            position with accepted partners (see ``services.visits.safety.set_live_location_sharing``).
         live_latitude: The owner's most recently shared position, if sharing is/was enabled.
         live_longitude: The owner's most recently shared position, if sharing is/was enabled.
         live_location_accuracy: Accuracy (meters) reported alongside ``live_latitude``/``live_longitude``.
         live_location_updated_at: When the live position was last updated, if ever.
-        archive_scheduled_at: When ``services.safety.archive_checkin`` should encrypt and scrub
+        archive_scheduled_at: When ``services.visits.safety.archive_checkin`` should encrypt and scrub
             this check-in's PII, if it has resolved - immediately on resolution if no one but the
             owner could ever see it, or after a 1-hour grace window otherwise (see
-            ``services.safety.schedule_checkin_archival``). ``None`` until resolved.
+            ``services.visits.safety.schedule_checkin_archival``). ``None`` until resolved.
         resolved_by_label: Display label of whoever concluded this check-in ("you", a partner's
             username, or a contact's display name) - captured for the archive payload, then
             scrubbed at archival like every other PII field on this model.
@@ -288,7 +288,7 @@ class SafetyCheckin(abstract.PublicDashboardModel):
     live_location_updated_at = DateTimeField(null=True, blank=True)
 
     # Post-resolution encryption/archival - see SafetyCheckinArchive and
-    # services.safety.schedule_checkin_archival/archive_checkin.
+    # services.visits.safety.schedule_checkin_archival/archive_checkin.
     archive_scheduled_at = DateTimeField(null=True, blank=True)
     resolved_by_label = CharField(max_length=150, blank=True, default="")
 
@@ -550,7 +550,7 @@ class SafetyCheckinPartner(abstract.DashboardModel):
     anything goes wrong. Access requires ``status == ACCEPTED``: this is a real
     safety responsibility, not a passive share, so an invite must be actively
     accepted before any view/act access is granted (see
-    ``services.safety.is_owner_or_accepted_partner``).
+    ``services.visits.safety.is_owner_or_accepted_partner``).
 
     Only the check-in's owner may invite a partner - unlike Trip's
     ``allow_add_members`` permission matrix, a check-in has exactly one
@@ -592,7 +592,7 @@ class SafetyCheckinPartner(abstract.DashboardModel):
 class SafetyCheckinArchive(abstract.DashboardModel):
     """The encrypted, owner-only remnant of a concluded check-in.
 
-    Created by ``services.safety.archive_checkin`` once a resolved check-in's
+    Created by ``services.visits.safety.archive_checkin`` once a resolved check-in's
     grace window elapses: the check-in's PII (plan, contacts, chat, resolution
     details) is serialized to JSON, encrypted with a fresh random key
     (``crypto_secretbox``), and that key is sealed (``crypto_box_seal``) to

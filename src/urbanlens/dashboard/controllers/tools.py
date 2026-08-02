@@ -19,7 +19,7 @@ from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.immich.model import ImmichAccount
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.export import (
+from urbanlens.dashboard.services.import_export.export import (
     EXPORT_TTL_SECONDS as _EXPORT_TTL_SECONDS,
     VALID_EXPORT_TYPES,
     ExportJobStatus,
@@ -27,16 +27,16 @@ from urbanlens.dashboard.services.export import (
     export_dir as _export_dir_fn,
     schedule_export_cleanup,
 )
-from urbanlens.dashboard.services.images import compute_checksum
-from urbanlens.dashboard.services.import_data import (
+from urbanlens.dashboard.services.import_export.import_data import (
     IMPORT_TTL_SECONDS as _IMPORT_TTL_SECONDS,
     ImportJobStatus,
     cleanup_import_artifacts,
     import_dir as _import_dir_fn,
     schedule_import_cleanup,
 )
-from urbanlens.dashboard.services.pin_suggestions import LocationHit, ingest_location_hits
-from urbanlens.dashboard.services.visits import visit_logging_allowed
+from urbanlens.dashboard.services.media.images import compute_checksum
+from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, ingest_location_hits
+from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
 
 logger = logging.getLogger(__name__)
 
@@ -151,7 +151,7 @@ class ExportStartView(LoginRequiredMixin, View):
         ExportJobStatus(job_id).write("pending", 0, "Preparing export...", user_id=request.user.pk)
 
         base_url = request.build_absolute_uri("/")
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import run_user_data_export
 
         result = safely_enqueue_task(run_user_data_export, request.user.pk, export_types, exp_dir, base_url, job_id, email_to_user)
@@ -285,7 +285,7 @@ class ExportFormatDownloadView(LoginRequiredMixin, View):
             Http404: If ``fmt`` is not a known export format.
         """
         from urbanlens.dashboard.models.pin.model import Pin
-        from urbanlens.dashboard.services.export_formats import EXPORT_FORMATS
+        from urbanlens.dashboard.services.import_export.export_formats import EXPORT_FORMATS
 
         if fmt not in EXPORT_FORMATS:
             raise Http404("Unknown export format.")
@@ -347,7 +347,7 @@ class ImportStartView(LoginRequiredMixin, View):
 
         ImportJobStatus(job_id).write("pending", 0, "Preparing import...", user_id=request.user.pk)
 
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import run_user_data_import
 
         result = safely_enqueue_task(run_user_data_import, request.user.pk, zip_path, job_id)
@@ -440,7 +440,7 @@ class BackupStartView(LoginRequiredMixin, PermissionRequiredMixin, View):
         Returns:
             JSON with task id and status URL, or error.
         """
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import run_database_backup
 
         result = safely_enqueue_task(run_database_backup)
@@ -593,7 +593,7 @@ class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
     user explicitly checked in the scanner's opt-in picker, immediately after
     the cluster metadata upload has told the client which ``PinSuggestion``
     each cluster became. The image is staged unattached (candidate only) until
-    the suggestion is accepted or rejected - see ``services.pin_suggestions.accept_pin_suggestion``
+    the suggestion is accepted or rejected - see ``services.pins.pin_suggestions.accept_pin_suggestion``
     and ``reject_pin_suggestion``.
     """
 
@@ -631,7 +631,7 @@ class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
             return JsonResponse({"error": f"You can attach up to {MAX_SUGGESTION_PHOTOS} photos per location."}, status=400)
 
         from urbanlens.dashboard.models.images.model import MediaKind
-        from urbanlens.dashboard.services.images import image_upload_error
+        from urbanlens.dashboard.services.media.images import image_upload_error
 
         upload_error = image_upload_error(image_file, MediaKind.PHOTO)
         if upload_error:
@@ -642,7 +642,7 @@ class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
         if Image.objects.filter(profile=profile, checksum=checksum).exists():
             return JsonResponse({"error": "You already uploaded this photo."}, status=409)
 
-        from urbanlens.dashboard.services.storage import per_profile_upload_lock, quota_error_for_upload
+        from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 
         with per_profile_upload_lock(profile):
             quota_error = quota_error_for_upload(profile, image_file.size)
@@ -651,7 +651,7 @@ class PhotoLocationScanPhotoUploadView(LoginRequiredMixin, View):
 
             img = Image.objects.create(image=image_file, profile=profile, checksum=checksum, file_size=image_file.size, pin_suggestion=suggestion)
 
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import process_image_upload
 
         safely_enqueue_task(process_image_upload, img.pk)

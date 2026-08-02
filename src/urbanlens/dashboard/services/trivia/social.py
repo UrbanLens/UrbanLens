@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.models.trivia.model import PlayerTriviaRating, TriviaPreference
-from urbanlens.dashboard.services.connections import get_connections
+from urbanlens.dashboard.services.social.connections import get_connections
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile

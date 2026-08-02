@@ -31,7 +31,7 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyContactOptOut,
     SafetyContactOptOutScope,
 )
-from urbanlens.dashboard.services.safety import _seal_archive_payload, archive_checkin, schedule_checkin_archival
+from urbanlens.dashboard.services.visits.safety import _seal_archive_payload, archive_checkin, schedule_checkin_archival
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -240,7 +240,7 @@ class ChatBlockedAfterArchivalTests(TestCase):
         self.checkin.refresh_from_db()
 
     def test_owner_message_is_rejected_after_archival(self):
-        from urbanlens.dashboard.services.safety import create_chat_message
+        from urbanlens.dashboard.services.visits.safety import create_chat_message
 
         with self.assertRaisesMessage(ValueError, "concluded"):
             create_chat_message(self.checkin, user=self.owner.user, contact=None, body="One more thing")
@@ -254,7 +254,7 @@ class ChatBlockedAfterArchivalTests(TestCase):
         the ACCEPTED status flip must still happen, but no system chat message may be
         written into the already-archived (never-to-be-scrubbed-again) record.
         """
-        from urbanlens.dashboard.services.safety import accept_checkin_partner_invite
+        from urbanlens.dashboard.services.visits.safety import accept_checkin_partner_invite
 
         invitee = _profile()
         partner = SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=invitee, invited_by=self.owner)
@@ -271,7 +271,7 @@ class ChatBlockedAfterArchivalTests(TestCase):
         button) - hitting it again must be a clean no-op, not a fresh plaintext message
         into a record that already claims to have no more plaintext left.
         """
-        from urbanlens.dashboard.services.safety import mark_found_safe
+        from urbanlens.dashboard.services.visits.safety import mark_found_safe
 
         contact = SafetyCheckinContact.objects.create(checkin=self.checkin, email="watcher@example.com", name="Watcher")
 
@@ -280,7 +280,7 @@ class ChatBlockedAfterArchivalTests(TestCase):
         self.assertEqual(self.checkin.messages.count(), 0)
 
     def test_mark_found_safe_by_partner_after_archival_writes_no_plaintext_message(self):
-        from urbanlens.dashboard.services.safety import mark_found_safe_by_partner
+        from urbanlens.dashboard.services.visits.safety import mark_found_safe_by_partner
 
         partner_profile = _profile()
         SafetyCheckinPartner.objects.create(checkin=self.checkin, profile=partner_profile, invited_by=self.owner, status=SafetyCheckinPartnerStatus.ACCEPTED)
@@ -299,7 +299,7 @@ class ArchivePayloadMapDedupTests(TestCase):
 
     def test_a_map_that_is_both_primary_and_attached_is_only_listed_once(self):
         from urbanlens.dashboard.models.markup.model import MarkupMap
-        from urbanlens.dashboard.services.safety import _build_archive_payload
+        from urbanlens.dashboard.services.visits.safety import _build_archive_payload
 
         owner = _profile()
         checkin = _checkin(owner)

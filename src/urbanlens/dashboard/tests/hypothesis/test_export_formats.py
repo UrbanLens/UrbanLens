@@ -19,7 +19,7 @@ import gpxpy
 from hypothesis import given, strategies as st
 from pygeoif.geometry import Point
 
-from urbanlens.dashboard.services.export_formats import pins_to_csv, pins_to_geojson, pins_to_gpx, pins_to_kml
+from urbanlens.dashboard.services.import_export.export_formats import pins_to_csv, pins_to_geojson, pins_to_gpx, pins_to_kml
 
 
 @dataclass

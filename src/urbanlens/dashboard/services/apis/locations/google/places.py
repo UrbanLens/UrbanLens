@@ -5,7 +5,7 @@ from typing import ClassVar
 
 import requests
 
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 
 
 @dataclass(slots=True, kw_only=True)

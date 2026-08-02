@@ -121,7 +121,7 @@ class GoogleMapsPhotoProxyView(CredentialOrSessionMediaMixin, View):
         from urllib.parse import unquote
 
         from urbanlens.dashboard.services.apis.locations import places_resolution
-        from urbanlens.dashboard.services.gateway import GatewayRequestError
+        from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
         sig = request.GET.get("sig", "")
         if not (hmac.compare_digest(sig, sign_photo_name(photo_name)) or hmac.compare_digest(sig, sign_photo_name(unquote(photo_name)))):

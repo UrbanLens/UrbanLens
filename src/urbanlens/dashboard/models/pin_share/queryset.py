@@ -27,7 +27,7 @@ class LocationExposureQuerySet(abstract.DashboardQuerySet):
         """Exposure rows for ``profile_id`` within ``radius_meters`` of ``location``.
 
         The one spatial query every resolution/propagation step in
-        ``services.share_provenance`` shares, so "same place" always means the
+        ``services.sharing.share_provenance`` shares, so "same place" always means the
         same thing (a radius match, never an exact Location-row match) no
         matter which caller is asking.
 
@@ -52,7 +52,7 @@ class LocationExposureManager(abstract.DashboardManager.from_queryset(LocationEx
         """Get-or-create the (profile, location, share) exposure row.
 
         Consolidates the near-identical ``get_or_create`` calls scattered
-        across ``services.share_provenance`` (``record_share_exposure``,
+        across ``services.sharing.share_provenance`` (``record_share_exposure``,
         ``propagate_exposures_for_pin_move``), which only ever differed in
         ``source``. Any ``DatabaseError`` is left to the caller - this
         performs no exception handling of its own, matching plain

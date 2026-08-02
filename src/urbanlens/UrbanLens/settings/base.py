@@ -97,7 +97,7 @@ MIDDLEWARE = [
 AUTHENTICATION_BACKENDS = [
     "social_core.backends.google.GoogleOAuth2",
     "social_core.backends.discord.DiscordOAuth2",
-    "urbanlens.dashboard.services.auth_backend.EmailOrUsernameModelBackend",
+    "urbanlens.dashboard.services.auth.auth_backend.EmailOrUsernameModelBackend",
 ]
 
 ROOT_URLCONF = "urbanlens.UrbanLens.urls"
@@ -240,7 +240,7 @@ UL_BACKUP_RETENTION = int(os.getenv("UL_BACKUP_RETENTION", "30"))
 
 # Leaflet zoom level at/above which a saved MarkupMap viewport is considered
 # "zoomed in" for pin-share detection purposes (see
-# services.map_pin_share_detection.is_zoomed_in): every one of the sender's
+# services.sharing.map_pin_share_detection.is_zoomed_in): every one of the sender's
 # pins visible in frame counts as shared, regardless of markup content. Below
 # this, only pins specifically called out by markup (in-boundary marker,
 # arrow pointing toward, or shape overlap) count.
@@ -326,7 +326,7 @@ CELERY_BEAT_SCHEDULE = {
         "schedule": 60 * 60,
     },
     # Daily is plenty: retention is measured in hundreds of days
-    # (services.pin_sync.TOMBSTONE_RETENTION), and the pins/deleted/ feed's 410
+    # (services.pins.pin_sync.TOMBSTONE_RETENTION), and the pins/deleted/ feed's 410
     # full-resync signal guards clients against any pruning-induced gap.
     "pin-tombstone-pruning": {
         "task": "urbanlens.dashboard.tasks.prune_pin_tombstones",

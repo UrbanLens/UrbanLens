@@ -2,7 +2,7 @@
 never resolved to a location during import.
 
 Covers:
-- services.pin_import_failures.record_pin_import_failure - creates a PENDING
+- services.pins.pin_import_failures.record_pin_import_failure - creates a PENDING
   row, and is idempotent per (profile, cid) even across differing
   name/description/reason on a later call (re-running the same import must
   never resurrect or duplicate an entry).
@@ -12,7 +12,7 @@ Covers:
   cap, consecutive_no_progress cap) fires; auto-resolves a pending failure the
   moment its cid succeeds, on this call or a later retry; never duplicates a
   failure row across repeated calls.
-- services.pin_import_failures.resolve_pin_import_failure /
+- services.pins.pin_import_failures.resolve_pin_import_failure /
   dismiss_pin_import_failure / auto_resolve_pin_import_failure_for_cid.
 - controllers.pin_import_failures - the HTTP review-queue actions (resolve,
   dismiss, queue partial), with ownership/already-handled guards.
@@ -37,8 +37,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailure, PinImportFailureReason, PinImportFailureStatus
 from urbanlens.dashboard.services.apis.locations.cid_resolution import PROVIDER_REDATA, CidResolutionResult
 from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import LEGACY_COORDINATE_CUTOFF
-from urbanlens.dashboard.services.pin_creation import PinCreationError
-from urbanlens.dashboard.services.pin_import_failures import (
+from urbanlens.dashboard.services.pins.pin_creation import PinCreationError
+from urbanlens.dashboard.services.pins.pin_import_failures import (
     auto_resolve_pin_import_failure_for_cid,
     dismiss_pin_import_failure,
     record_pin_import_failure,
@@ -157,8 +157,8 @@ class ResolvePinImportFailureTests(TestCase):
     def test_resolve_via_address_success(self) -> None:
         failure = self._failure()
         with (
-            mock.patch("urbanlens.dashboard.services.pin_import_failures.get_pin_by_address", return_value=(40.0, -74.0)),
-            mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
+            mock.patch("urbanlens.dashboard.services.pins.pin_import_failures.get_pin_by_address", return_value=(40.0, -74.0)),
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
         ):
             pin = resolve_pin_import_failure(failure, self.profile, address="123 Main St, Springfield")
 
@@ -172,7 +172,7 @@ class ResolvePinImportFailureTests(TestCase):
 
     def test_resolve_via_lat_lng_success(self) -> None:
         failure = self._failure()
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             pin = resolve_pin_import_failure(failure, self.profile, latitude=41.5, longitude=-72.5)
 
         self.assertAlmostEqual(float(pin.location.latitude), 41.5, places=4)
@@ -187,7 +187,7 @@ class ResolvePinImportFailureTests(TestCase):
         of the import pipeline - failure.description must not be re-run through
         strip_html/extract_image_urls/extract_link_urls."""
         failure = self._failure(description="Raw <b>html</b> and a [link](http://example.com)")
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             pin = resolve_pin_import_failure(failure, self.profile, latitude=41.5, longitude=-72.5)
 
         self.assertEqual(pin.description, failure.description)
@@ -250,7 +250,7 @@ class ResolvePinImportFailureLegacyRepairTests(TestCase):
         legacy_pin = self._legacy_pin(wrong, name="Old Water Tower")
         failure = self._failure()
 
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             pin = resolve_pin_import_failure(failure, self.profile, latitude=42.6, longitude=-73.6)
 
         self.assertEqual(pin.pk, legacy_pin.pk)
@@ -270,7 +270,7 @@ class ResolvePinImportFailureLegacyRepairTests(TestCase):
         # (PinImportFailure.cid is never null - every deferred pin has one).
         failure = self._failure(cid=54321, name="42.5, -73.5")
 
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             pin = resolve_pin_import_failure(failure, self.profile, latitude=42.6, longitude=-73.6)
 
         self.assertEqual(pin.pk, legacy_pin.pk)
@@ -280,7 +280,7 @@ class ResolvePinImportFailureLegacyRepairTests(TestCase):
         """No pre-cutoff pin for this cid/name - the normal create path still runs."""
         failure = self._failure(cid=99999, name="Brand New Place")
 
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             pin = resolve_pin_import_failure(failure, self.profile, latitude=42.6, longitude=-73.6)
 
         self.assertEqual(pin.name, "Brand New Place")
@@ -294,7 +294,7 @@ class ResolvePinImportFailureLegacyRepairTests(TestCase):
         Pin.objects.filter(pk=other_pin.pk).update(created=LEGACY_COORDINATE_CUTOFF - timedelta(days=30))
         failure = self._failure()
 
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             pin = resolve_pin_import_failure(failure, self.profile, latitude=42.6, longitude=-73.6)
 
         self.assertNotEqual(pin.pk, other_pin.pk)
@@ -514,7 +514,7 @@ class PinImportFailureResolveViewTests(TestCase):
 
     def test_resolve_with_valid_coordinates_places_a_pin_and_toasts(self) -> None:
         failure = self._failure()
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task"):
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
             response = self.client.post(
                 reverse("memories.locations.import_failures.resolve", args=[failure.pk]),
                 {"latitude": "41.5", "longitude": "-72.5"},

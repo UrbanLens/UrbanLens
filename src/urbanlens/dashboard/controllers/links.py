@@ -19,8 +19,8 @@ from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, Wiki
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink, WikiLink
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.pin_subresources import InvalidLinkError, create_pin_link, delete_pin_link
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.pins.pin_subresources import InvalidLinkError, create_pin_link, delete_pin_link
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 logger = logging.getLogger(__name__)
 

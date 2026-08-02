@@ -1,7 +1,7 @@
 """Property-based tests for the map-based pin-share detection algorithm.
 
 Covers the pure-function geometry/bearing/viewport math in
-``services.map_pin_share_detection`` - no database round-trips required.
+``services.sharing.map_pin_share_detection`` - no database round-trips required.
 See ``test_map_pin_share_detection_integration.py`` for the DB-backed
 ``detect_shared_pins``/``share_markup_map_with_profile`` behavior.
 """
@@ -14,13 +14,13 @@ from django.contrib.gis.geos import Point
 from hypothesis import given, settings, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.map_pin_share_detection import (
+from urbanlens.dashboard.services.sharing.map_pin_share_detection import (
     bearing_degrees,
     geometry_to_geos,
     is_zoomed_in,
     viewport_bounds,
 )
-from urbanlens.dashboard.services.map_pin_share_detection import arrow_points_toward as _arrow_points_toward
+from urbanlens.dashboard.services.sharing.map_pin_share_detection import arrow_points_toward as _arrow_points_toward
 from urbanlens.dashboard.tests.hypothesis.strategies import coord_pair_float, lat_float, lon_float, two_distant_coord_pairs
 
 

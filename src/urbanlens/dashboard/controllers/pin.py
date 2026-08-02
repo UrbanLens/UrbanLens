@@ -27,10 +27,10 @@ from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
-from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
-from urbanlens.dashboard.services.redact import redact_coordinate
-from urbanlens.dashboard.services.search import format_search_date, search_web
+from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.search.search import format_search_date, search_web
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 
     from rest_framework.request import Request
 
-    from urbanlens.dashboard.services.external_data import LocationCachePanelSource, PanelSource, ProviderFetchResult
+    from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelSource, ProviderFetchResult
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ def _viewer_may_see_panel(request: HttpRequest, source: PanelSource) -> bool:
     that anyone logged in can type, so a gate applied only during tab assembly
     withholds nothing at all.
 
-    Delegates to ``services.external_data.panel_visible_to``, which is also
+    Delegates to ``services.pins.external_data.panel_visible_to``, which is also
     what the external API's panel endpoints call - a feature-gated panel must
     never be visible on one surface and hidden on the other.
 
@@ -138,7 +138,7 @@ def _viewer_may_see_panel(request: HttpRequest, source: PanelSource) -> bool:
         True when the source is unrestricted (the overwhelming majority) or the
         viewer holds the feature it requires.
     """
-    from urbanlens.dashboard.services.external_data import panel_visible_to
+    from urbanlens.dashboard.services.pins.external_data import panel_visible_to
 
     return panel_visible_to(request.user, source)
 
@@ -200,7 +200,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             ("emergency", "Emergency"),
         ]
 
-        from urbanlens.dashboard.services.debug_overlay import can_view_debug_overlay
+        from urbanlens.dashboard.services.admin.debug_overlay import can_view_debug_overlay
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 
         # Whether this pin covers a whole parcel/site rather than one building,
@@ -223,7 +223,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if pin.cover_photo_id:
             pin_cover_candidates = [{"id": img.pk, "url": img.image.url} for img in pin.images.exclude(pk=pin.cover_photo_id).order_by("-created")[:20] if img.image]
 
-        from urbanlens.dashboard.services.external_data import InfoPanelSource, panel_readiness, panel_sources
+        from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, panel_readiness, panel_sources
 
         # Subscription-gated sources are filtered out once, here, rather than at
         # each of the four surfaces built from this dict below (three tab strips
@@ -342,7 +342,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Returns:
             A `DebugEntry`, or None if the requesting user can't view debug info.
         """
-        from urbanlens.dashboard.services.debug_overlay import DebugEntry, can_view_debug_overlay
+        from urbanlens.dashboard.services.admin.debug_overlay import DebugEntry, can_view_debug_overlay
 
         if not can_view_debug_overlay(request.user):
             return None
@@ -381,7 +381,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             suppressed or the poll budget is exhausted (the page's existing
             htmx 204 handler removes the section quietly).
         """
-        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, get_panel_source, schedule_panel_fetch
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, get_panel_source, schedule_panel_fetch
 
         attempt = self._poll_attempt(request)
         if attempt >= MAX_POLL_ATTEMPTS or not schedule_panel_fetch(source_key, pin):
@@ -461,7 +461,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             suppressed or the poll budget is exhausted (the gallery JS counts
             a 204 as "this provider is done, with nothing").
         """
-        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, schedule_panel_fetch
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, schedule_panel_fetch
 
         attempt = self._poll_attempt(request)
         if attempt >= MAX_POLL_ATTEMPTS or not schedule_panel_fetch(source_key, pin):
@@ -502,7 +502,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
-        from urbanlens.dashboard.services.external_data import GalleryMediaSource, get_panel_source
+        from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, get_panel_source
 
         panel = get_panel_source(source)
         if not isinstance(panel, GalleryMediaSource):
@@ -525,7 +525,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return self._pending_media(request, pin, source)
         items = panel.media_items(cached.data or {})
 
-        from urbanlens.dashboard.services.media_relevance import local_images_for_gallery_items
+        from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         relevance = dict(
@@ -534,7 +534,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # Prefer an already-materialized local copy over hot-linking the
         # provider, if anyone (this profile or another) has previously voted
         # this exact item relevant - see media_relevance.py and
-        # services.media_materialize's docstring. The remote page_url stays
+        # services.media.media_materialize's docstring. The remote page_url stays
         # the "Open source" link regardless, so the original is never lost.
         local_images = local_images_for_gallery_items(location, source, [item.url for item in items])
         rendered_items = [
@@ -618,7 +618,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         Marking an item relevant also materializes it (downloads and saves it
         as a real ``Image`` row on this pin, exactly as if the user had
-        uploaded it themselves - see ``services.media_materialize``) so the
+        uploaded it themselves - see ``services.media.media_materialize``) so the
         gallery never depends on the external provider's URL staying alive.
         A failed download still records the relevance mark (the user's
         opinion that this item matters is worth keeping even if today's
@@ -632,8 +632,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         materialized photo never has a moment with no coordinates.
         """
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
-        from urbanlens.dashboard.services.images import coerce_coordinates
-        from urbanlens.dashboard.services.media_materialize import MaterializeError, materialize_media_item
+        from urbanlens.dashboard.services.media.images import coerce_coordinates
+        from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -705,7 +705,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
     def media_send_to_wiki(self, request: Request, pin_slug: str):
         """Materialize selected Media gallery items and attach them to this location's wiki."""
         from urbanlens.dashboard.models.wiki.model import Wiki
-        from urbanlens.dashboard.services.media_materialize import MaterializeError, materialize_media_item
+        from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -883,7 +883,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 },
             )
 
-        from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+        from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
 
         try:
             # Deadline-bounded: this is the one external fetch still made on
@@ -972,8 +972,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             The rendered carousel fragment, a pending-panel placeholder, or a
             404 if the pin doesn't belong to the requesting user.
         """
-        from urbanlens.dashboard.services.external_data import panel_sources
-        from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+        from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE, call_with_deadline
+        from urbanlens.dashboard.services.pins.external_data import panel_sources
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -1042,7 +1042,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         - Bing Maps Aerial (current, high-res) - fetched server-side
         - OpenAerialMap community imagery - browser-loaded thumbnails
         """
-        from urbanlens.dashboard.services.external_data import collect_satellite_slides
+        from urbanlens.dashboard.services.pins.external_data import collect_satellite_slides
 
         return self._render_media_carousel(
             request,
@@ -1061,7 +1061,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         - Mapillary crowdsourced imagery (browser-loaded URLs, cached 24 h)
         - KartaView open imagery (browser-loaded URLs, cached 24 h)
         """
-        from urbanlens.dashboard.services.external_data import collect_street_view_slides
+        from urbanlens.dashboard.services.pins.external_data import collect_street_view_slides
 
         return self._render_media_carousel(
             request,
@@ -1116,7 +1116,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         Archives are extracted securely before parsing; malformed or unsupported
         entries are skipped without aborting the whole import.
         """
-        from urbanlens.dashboard.services.archive_extractor import extract_archive, is_archive
+        from urbanlens.dashboard.services.import_export.archive_extractor import extract_archive, is_archive
 
         form = UploadDataFile(request.POST, request.FILES)
         if not form.is_valid():
@@ -1190,7 +1190,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.services.apis.locations.google.maps import _filename_stem
-        from urbanlens.dashboard.services.archive_extractor import extract_archive, is_archive
+        from urbanlens.dashboard.services.import_export.archive_extractor import extract_archive, is_archive
 
         if not isinstance(request.user, User):
             return JsonResponse({"error": "Authentication required."}, status=401)
@@ -1585,7 +1585,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         hides it rather than leaving it clickable only to land on "No data
         available." every time.
         """
-        from urbanlens.dashboard.services.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, LocationCachePanelSource, get_panel_source, schedule_panel_fetch
+        from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS, POLL_INTERVAL_SECONDS, LocationCachePanelSource, get_panel_source, schedule_panel_fetch
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -1798,8 +1798,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_rows
-        from urbanlens.dashboard.services.external_data import get_panel_source
         from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
+        from urbanlens.dashboard.services.pins.external_data import get_panel_source
 
         try:
             pin = Pin.objects.select_related("location", "profile").get(slug=pin_slug, profile__user=request.user)
@@ -1850,7 +1850,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         omitted from the page's tab strip - see :func:`_viewer_may_see_panel`.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.external_data import InfoPanelSource, get_panel_source
+        from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, get_panel_source
 
         panel = get_panel_source(panel_key)
         if not isinstance(panel, InfoPanelSource):
@@ -1956,7 +1956,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         release-list cache, which is shared across all pins/users.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.debug_overlay import can_view_debug_overlay
+        from urbanlens.dashboard.services.admin.debug_overlay import can_view_debug_overlay
 
         if not can_view_debug_overlay(request.user):
             return HttpResponse(status=403)
@@ -2075,7 +2075,7 @@ class PinLoopnetPhotoView(View):
     cached briefly to avoid re-hitting REData on every gallery view. No
     login required, unlike the Immich proxy: LoopNet listing photos are
     public marketing material (not a specific user's private library), and
-    ``services.media_materialize.materialize_media_item`` downloads this same
+    ``services.media.media_materialize.materialize_media_item`` downloads this same
     URL server-side with no session of its own - it would 302 to the login
     page and fail if this endpoint required one.
     """

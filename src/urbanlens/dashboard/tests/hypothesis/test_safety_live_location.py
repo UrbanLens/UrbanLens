@@ -20,7 +20,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus
-from urbanlens.dashboard.services.safety import set_live_location_sharing, update_live_location
+from urbanlens.dashboard.services.visits.safety import set_live_location_sharing, update_live_location
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile

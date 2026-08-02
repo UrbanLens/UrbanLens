@@ -24,7 +24,7 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.assets.internet_archive import _EXCLUDED_COLLECTIONS, InternetArchiveGateway
-from urbanlens.dashboard.services.external_data import MediaPanelSource
+from urbanlens.dashboard.services.pins.external_data import MediaPanelSource
 
 #: Matches one ``"..."`` phrase literal, honouring backslash escapes.
 _PHRASE_LITERAL = re.compile(r'"(?:[^"\\]|\\.)*"')

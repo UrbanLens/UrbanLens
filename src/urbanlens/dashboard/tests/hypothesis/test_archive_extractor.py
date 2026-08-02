@@ -19,7 +19,7 @@ import zipfile
 from hypothesis import given, settings as hyp_settings, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.archive_extractor import (
+from urbanlens.dashboard.services.import_export.archive_extractor import (
     _extension,
     _safe_basename,
     extract_archive,

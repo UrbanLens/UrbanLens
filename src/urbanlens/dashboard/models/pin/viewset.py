@@ -9,8 +9,8 @@ from rest_framework.response import Response
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin.serializer import PinSerializer
-from urbanlens.dashboard.services.pin_edit import PinHasChildrenError, PinMoveError, delete_pin, move_pin_to_coordinates
-from urbanlens.dashboard.services.wiki_access import wikis_hidden_by_pin_move
+from urbanlens.dashboard.services.pins.pin_edit import PinHasChildrenError, PinMoveError, delete_pin, move_pin_to_coordinates
+from urbanlens.dashboard.services.wiki.wiki_access import wikis_hidden_by_pin_move
 
 logger = logging.getLogger(__name__)
 

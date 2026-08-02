@@ -20,7 +20,7 @@ from urbanlens.dashboard.models.safety.model import (
     SafetyContactOptOutScope,
 )
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
-from urbanlens.dashboard.services.safety import (
+from urbanlens.dashboard.services.visits.safety import (
     cancel_checkin,
     check_in,
     create_checkin,
@@ -67,7 +67,7 @@ class SafetyCheckinLifecycleTests(TestCase):
 
         # A second conclusion attempt (e.g. a stray double-submit) must not raise
         # the exactly-one-origin constraint by creating a duplicate suggestion.
-        from urbanlens.dashboard.services.safety import _conclude_checkin
+        from urbanlens.dashboard.services.visits.safety import _conclude_checkin
 
         _conclude_checkin(checkin)
 

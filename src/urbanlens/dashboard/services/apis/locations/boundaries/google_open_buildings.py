@@ -30,7 +30,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from urbanlens.dashboard.services.apis.locations.base import BOUNDARY_LOOKUP_BBOX_DEGREES, BBox, BoundaryProvider, best_containing_polygon, create_bbox, validate_bbox
 
 # Adjust this import to wherever Gateway/Gateway actually live.
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 
 try:
     import s2sphere

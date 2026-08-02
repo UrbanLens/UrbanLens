@@ -165,7 +165,7 @@ class WikiMediaProviderViewTests(TestCase):
         self.assertNotIn(unrelated.image.url, body)
 
     def test_external_source_renders_cached_items_with_vote_scores(self) -> None:
-        from urbanlens.dashboard.services.external_data import get_panel_source
+        from urbanlens.dashboard.services.pins.external_data import get_panel_source
 
         panel = get_panel_source("wikimedia")
         url_a = "https://example.com/a.jpg"
@@ -200,7 +200,7 @@ class WikiMediaProviderViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     def test_uncached_external_source_schedules_a_fetch_and_returns_a_pending_loader(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.external_data.schedule_panel_fetch", return_value=True) as sched:
+        with mock.patch("urbanlens.dashboard.services.pins.external_data.schedule_panel_fetch", return_value=True) as sched:
             response = self.client.get(reverse("location.wiki.media", args=[self.location.slug, "wikimedia"]))
         # Either a pending loader (fetch scheduled) or a quiet 204 if the panel
         # gate rejected this pin - both are valid; if it did schedule, the

@@ -31,9 +31,9 @@ from django.views import View, generic
 from django.views.decorators.http import require_GET, require_POST
 
 from urbanlens.dashboard.models.account import EmailVerification
-from urbanlens.dashboard.services.site_admin import should_redirect_to_site_admin
-from urbanlens.dashboard.services.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT as _WEBAUTHN_PENDING_REDIRECT_KEY, SESSION_WEBAUTHN_PENDING_USER as _WEBAUTHN_PENDING_USER_KEY
-from urbanlens.dashboard.services.username import USERNAME_RE, username_is_taken
+from urbanlens.dashboard.services.admin.site_admin import should_redirect_to_site_admin
+from urbanlens.dashboard.services.auth.two_factor import SESSION_WEBAUTHN_PENDING_REDIRECT as _WEBAUTHN_PENDING_REDIRECT_KEY, SESSION_WEBAUTHN_PENDING_USER as _WEBAUTHN_PENDING_USER_KEY
+from urbanlens.dashboard.services.auth.username import USERNAME_RE, username_is_taken
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -85,7 +85,7 @@ def _resolve_login_user(identifier: str) -> User | None:
     if user is not None:
         return user
     if "@" in identifier:
-        from urbanlens.dashboard.services.email_normalization import find_user_by_email
+        from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email
 
         return find_user_by_email(identifier, active_only=False)
     return None
@@ -104,7 +104,7 @@ def _raw_lockout_key(identifier: str) -> str:
     account is rate-limited under one shared key rather than each variant
     getting a fresh counter - it just isn't tied to a real account id.
     """
-    from urbanlens.dashboard.services.email_normalization import normalize_email
+    from urbanlens.dashboard.services.auth.email_normalization import normalize_email
 
     normalized = identifier.strip().lower()
     if "@" in normalized:
@@ -264,7 +264,7 @@ class RegistrationForm(UserCreationForm):
 
     def clean_email(self) -> str:
         """Reject email addresses already in use (normalized comparison)."""
-        from urbanlens.dashboard.services.email_normalization import is_email_taken
+        from urbanlens.dashboard.services.auth.email_normalization import is_email_taken
 
         email = self.cleaned_data["email"].strip().lower()
         if is_email_taken(email):
@@ -368,7 +368,7 @@ def _store_signup_auth_salt(user: User, auth_salt: str) -> None:
         auth_salt: The base64 salt from the signup POST, possibly blank.
     """
     from urbanlens.dashboard.models.account import AccountKdf
-    from urbanlens.dashboard.services.e2ee import MAX_SALT_LENGTH, valid_blob
+    from urbanlens.dashboard.services.security.e2ee import MAX_SALT_LENGTH, valid_blob
 
     if valid_blob(auth_salt, MAX_SALT_LENGTH):
         AccountKdf.objects.set_auth_salt(user, auth_salt)
@@ -432,7 +432,7 @@ class VerifyEmailView(View):
 
         # Deliver any friend requests + visit suggestions that were waiting on
         # this email address (visit participants tagged before the account existed).
-        from urbanlens.dashboard.services.visit_invites import process_pending_visit_invites
+        from urbanlens.dashboard.services.visits.visit_invites import process_pending_visit_invites
 
         process_pending_visit_invites(user)
 
@@ -447,7 +447,7 @@ class ResendVerificationView(View):
         return render(request, "registration/resend_verification.html", {"email": email})
 
     def post(self, request: HttpRequest) -> HttpResponse:
-        from urbanlens.dashboard.services.email_normalization import find_user_by_email
+        from urbanlens.dashboard.services.auth.email_normalization import find_user_by_email
 
         email = request.POST.get("email", "").strip()
         user = find_user_by_email(email, active_only=False)
@@ -641,7 +641,7 @@ class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
         """
         from urbanlens.dashboard.models.account import AccountKdf
         from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
-        from urbanlens.dashboard.services.e2ee import MAX_SALT_LENGTH, valid_blob
+        from urbanlens.dashboard.services.security.e2ee import MAX_SALT_LENGTH, valid_blob
 
         response = super().form_valid(form)
         user = form.user
@@ -687,7 +687,7 @@ class CustomLoginView(LoginView):
         for a genuinely empty site and stays False through the whole
         registration -> login -> setup-wizard journey, only flipping True
         once the bootstrap admin finishes onboarding (see
-        ``services.site_admin``), which is the actual window this copy
+        ``services.admin.site_admin``), which is the actual window this copy
         should stay off for.
         """
         from urbanlens.dashboard.models.site_settings import SiteSettings
@@ -719,7 +719,7 @@ class CustomLoginView(LoginView):
         user = form.get_user()
         _clear_login_attempts(_lockout_key_for_user(user))
 
-        from urbanlens.dashboard.services.two_factor import has_second_factor
+        from urbanlens.dashboard.services.auth.two_factor import has_second_factor
 
         if has_second_factor(user):
             # Password verified, but this account has a passkey and/or TOTP device
@@ -782,8 +782,8 @@ def _pending_2fa_user(request: HttpRequest) -> User | None:
 
 def _two_factor_challenge_context(user: User, **extra: object) -> dict:
     """Shared template context for login_2fa.html: which options this account has."""
-    from urbanlens.dashboard.services.two_factor import has_totp, remaining_backup_code_count
-    from urbanlens.dashboard.services.webauthn import has_passkeys
+    from urbanlens.dashboard.services.auth.two_factor import has_totp, remaining_backup_code_count
+    from urbanlens.dashboard.services.auth.webauthn import has_passkeys
 
     return {
         "username": user.username,
@@ -797,7 +797,7 @@ def _complete_two_factor_login(request: HttpRequest, user: User) -> str:
     """Finish a 2FA-gated login: establish the session and return the post-login redirect target."""
     redirect_to = request.session.pop(_WEBAUTHN_PENDING_REDIRECT_KEY, None) or reverse("post_login")
     request.session.pop(_WEBAUTHN_PENDING_USER_KEY, None)
-    auth_login(request, user, backend="urbanlens.dashboard.services.auth_backend.EmailOrUsernameModelBackend")
+    auth_login(request, user, backend="urbanlens.dashboard.services.auth.auth_backend.EmailOrUsernameModelBackend")
     return redirect_to
 
 
@@ -835,7 +835,7 @@ class LoginTwoFactorOptionsView(View):
         if user is None:
             return JsonResponse({"error": "No sign-in in progress. Please log in again."}, status=400)
 
-        from urbanlens.dashboard.services.webauthn import WebAuthnError, build_authentication_options
+        from urbanlens.dashboard.services.auth.webauthn import WebAuthnError, build_authentication_options
 
         try:
             options_json = build_authentication_options(request, user)
@@ -852,7 +852,7 @@ class LoginTwoFactorVerifyView(View):
         if user is None:
             return JsonResponse({"error": "No sign-in in progress. Please log in again."}, status=400)
 
-        from urbanlens.dashboard.services.webauthn import WebAuthnError, verify_authentication
+        from urbanlens.dashboard.services.auth.webauthn import WebAuthnError, verify_authentication
 
         try:
             verify_authentication(request, user, request.body.decode("utf-8"))
@@ -880,7 +880,7 @@ class LoginTwoFactorCodeView(View):
             context = _two_factor_challenge_context(user, code_error="Too many incorrect attempts. Please wait before trying again.")
             return render(request, "registration/login_2fa.html", context, status=429)
 
-        from urbanlens.dashboard.services.two_factor import verify_login_code
+        from urbanlens.dashboard.services.auth.two_factor import verify_login_code
 
         code = request.POST.get("code", "")
         if not verify_login_code(user, code):
@@ -1105,7 +1105,7 @@ def suggest_passphrases(request: HttpRequest) -> JsonResponse:
     Returns:
         JSON with a ``passphrases`` list, or 429 when the rate limit is hit.
     """
-    from urbanlens.dashboard.services.passphrases import generate_passphrases
+    from urbanlens.dashboard.services.auth.passphrases import generate_passphrases
 
     key = _PASSPHRASE_RATE_KEY.format(ip=_client_ip(request))
     hits = int(cache.get(key) or 0)

@@ -22,7 +22,7 @@ from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
-from urbanlens.dashboard.services.pin_wiki_sync import pull_children_from_wiki, send_pins_to_wiki
+from urbanlens.dashboard.services.pins.pin_wiki_sync import pull_children_from_wiki, send_pins_to_wiki
 
 _coord_counter = 0
 

@@ -12,7 +12,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.friendship.invitation.queryset import FriendInvitationManager
-from urbanlens.dashboard.services.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH
 
 
 class FriendInvitation(abstract.DashboardModel):

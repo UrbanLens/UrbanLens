@@ -7,7 +7,7 @@ import logging
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, create_bbox_str
-from urbanlens.dashboard.services.redact import redact_coordinate
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
     from collections.abc import Generator

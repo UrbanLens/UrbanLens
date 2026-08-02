@@ -32,9 +32,9 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import LocationExposure, PinShare, PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
-from urbanlens.dashboard.services.share_provenance import record_share_exposure
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.sharing.share_provenance import record_share_exposure
 
 BASE = "/dashboard/api/external/v1/pin-shares"
 

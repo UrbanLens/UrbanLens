@@ -19,12 +19,12 @@ import logging
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import GalleryMediaSource, PanelApiKind
+from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, PanelApiKind
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.assets.base import MediaItem
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 logger = logging.getLogger(__name__)
 

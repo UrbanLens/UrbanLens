@@ -134,7 +134,7 @@ class FriendRatingSerializer(serializers.Serializer):
     """One friend's visible rating, with their identity already resolved for the viewer.
 
     ``display_name`` and ``profile_slug`` come from
-    ``services.identity_visibility.resolve_visible_identity``, so a friend who
+    ``services.profile.identity_visibility.resolve_visible_identity``, so a friend who
     restricts profile visibility is masked here exactly as they are everywhere
     else rather than being named because they happen to play a game.
     """

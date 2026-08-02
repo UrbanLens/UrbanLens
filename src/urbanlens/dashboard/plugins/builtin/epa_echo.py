@@ -30,14 +30,14 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.models.subscriptions import SiteFeature
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import CoordinateGatedInfoPanelSource
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.locations.name_resolution import NameProvider
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import CoordinateGatedInfoPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +100,8 @@ def _fetch_epa_echo_data(pin: Pin) -> dict[str, Any]:
     """
     from urbanlens.dashboard.models.epa_facility import EpaFacility
     from urbanlens.dashboard.services.apis.locations.epa_echo import EpaEchoGateway
-    from urbanlens.dashboard.services.geo_filter import is_usa_coordinates
-    from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+    from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+    from urbanlens.dashboard.services.geo.geo_filter import is_usa_coordinates
 
     lat = float(pin.effective_latitude or 0)
     lng = float(pin.effective_longitude or 0)

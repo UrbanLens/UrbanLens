@@ -2,7 +2,7 @@
 
 The *decision* half of the lifecycle - materialising a pin from an accepted
 share, re-creating its bundled child hierarchy, and flipping the share's status
-- no longer lives here. It moved to ``services.pin_sharing`` so the DM share
+- no longer lives here. It moved to ``services.sharing.pin_sharing`` so the DM share
 card, the group-chat share card, this page and the external API all run the
 same code; see that module's docstring, in particular its explanation of why
 accepting must **not** re-record a ``LocationExposure``.
@@ -25,25 +25,25 @@ from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import PinShare, PinShareStatus
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.connections import are_connections, get_connections
-from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
-from urbanlens.dashboard.services.map_sharing import share_markup_map_with_profile
-from urbanlens.dashboard.services.pin_sharing import apply_pin_share_response, create_pin_from_share
-from urbanlens.dashboard.services.share_provenance import find_profile_pin_near_location, record_share_exposure, resolve_and_stamp_origin_share
-from urbanlens.dashboard.services.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_SHARE_MESSAGE_LENGTH, text_length_error
+from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+from urbanlens.dashboard.services.sharing.map_sharing import share_markup_map_with_profile
+from urbanlens.dashboard.services.sharing.pin_sharing import apply_pin_share_response, create_pin_from_share
+from urbanlens.dashboard.services.sharing.share_provenance import find_profile_pin_near_location, record_share_exposure, resolve_and_stamp_origin_share
+from urbanlens.dashboard.services.social.connections import are_connections, get_connections
 
 #: Compatibility alias for the name this helper had while it lived here. Two
-#: provenance test modules and ``services.profile_photos``'s docstring still
+#: provenance test modules and ``services.profile.profile_photos``'s docstring still
 #: refer to ``controllers.pin_sharing._create_pin_from_share``; keeping the name
 #: bound means the move is a pure relocation rather than a rename that ripples
 #: through unrelated files. New callers should import from
-#: ``services.pin_sharing`` directly.
+#: ``services.sharing.pin_sharing`` directly.
 _create_pin_from_share = create_pin_from_share
 
 
 def _recipient_existing_pin(profile: Profile, source: Pin) -> Pin | None:
     # A Pin's coordinates live on its Location; "same place" == same Location
-    # or one within the exposure radius (see services.share_provenance).
+    # or one within the exposure radius (see services.sharing.share_provenance).
     if not source.location_id:
         return None
     return find_profile_pin_near_location(profile.pk, source.location)
@@ -172,7 +172,7 @@ class PinShareCreateView(LoginRequiredMixin, View):
         # If this place arrived via an earlier share - the pin was accepted
         # from one, or its location carries an exposure - record the lineage
         # so reshare chains can be counted (see PinShare.chain_share_count
-        # and services.share_provenance for the full resolution rule).
+        # and services.sharing.share_provenance for the full resolution rule).
         parent_share = resolve_and_stamp_origin_share(pin)
 
         already_pinned = _recipient_existing_pin(recipient, pin) is not None

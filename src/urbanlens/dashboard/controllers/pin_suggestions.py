@@ -1,6 +1,6 @@
 """Memories → Locations page: review queue for batch-scan pin suggestions.
 
-Suggestions are produced in bulk by ``services.pin_suggestions.ingest_location_hits``
+Suggestions are produced in bulk by ``services.pins.pin_suggestions.ingest_location_hits``
 (called from the Immich full-library sweep and the Tools-page local folder scanner) -
 this controller only lets the owner accept or reject what was already found; it never
 triggers a scan itself.
@@ -27,11 +27,11 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.apis.immich import ImmichGateway
-from urbanlens.dashboard.services.celery import safely_enqueue_task
-from urbanlens.dashboard.services.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
-from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.pin_suggestions import accept_pin_suggestion, pending_suggestions_for_profile, reject_pin_suggestion
+from urbanlens.dashboard.services.pins.pin_suggestions import accept_pin_suggestion, pending_suggestions_for_profile, reject_pin_suggestion
 
 _ORGANIZE_LABEL_KINDS = (KIND_TAG, KIND_CATEGORY, KIND_STATUS)
 
@@ -63,7 +63,7 @@ def _pending_suggestions(profile: Profile) -> QuerySet[PinSuggestion]:
 
     Suggestions from a source the profile has turned off (or all of them, if
     ``pin_suggestions_enabled`` is off) are hidden, not deleted - see
-    ``services.pin_suggestions.pending_suggestions_for_profile``.
+    ``services.pins.pin_suggestions.pending_suggestions_for_profile``.
     """
     return pending_suggestions_for_profile(profile).select_related("pin", "pin__location").prefetch_related("candidate_images").order_by("-created")
 
@@ -225,7 +225,7 @@ class PinSuggestionBulkActionView(LoginRequiredMixin, View):
     Modeled on ``controllers.pin_bulk``'s pattern: non-owned, already-handled,
     or nonexistent ids are silently skipped rather than erroring the whole
     batch. Bulk actions never carry a photo selection - see
-    ``services.pin_suggestions.accept_pin_suggestion``; any candidate photos on
+    ``services.pins.pin_suggestions.accept_pin_suggestion``; any candidate photos on
     a bulk-accepted suggestion are simply discarded, same as an unchecked
     single accept.
     """

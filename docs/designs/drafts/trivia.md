@@ -117,7 +117,7 @@ AI-generated one** — the same rules, the same code path, per spec.
 
 Every failure mode defaults to reject (fail closed): AI globally/per-profile disabled, a
 transport-level failure, an empty response, or an unparseable response are all treated as a
-rejection, never an approval. Follows `services.auto_tag`'s allowlisted-`<ANSWER>` pattern — the
+rejection, never an approval. Follows `services.labels.auto_tag`'s allowlisted-`<ANSWER>` pattern — the
 model must answer with exactly one of a fixed set of tokens.
 
 Reject categories:
@@ -249,7 +249,7 @@ lifecycle, same status enum values, as SpotGuessr.
 
 ### Multiplayer
 
-- **Inviting**: host-only, friends-only (`services.connections.are_connections`), same as
+- **Inviting**: host-only, friends-only (`services.social.connections.are_connections`), same as
   SpotGuessr — an in-app notification (`NotificationType.TRIVIA_INVITE`) deep-links straight
   into the lobby.
 - **Joining**: flips `INVITED` → `JOINED`, idempotent for an already-joined profile, rejected

@@ -21,7 +21,7 @@ from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvid
 from urbanlens.dashboard.services.apis.assets.internet_archive import InternetArchiveGateway
 from urbanlens.dashboard.services.apis.assets.loc import LOCJsonGateway
 from urbanlens.dashboard.services.apis.assets.smithsonian import SmithsonianGateway
-from urbanlens.dashboard.services.external_data import MediaPanelSource
+from urbanlens.dashboard.services.pins.external_data import MediaPanelSource
 
 if TYPE_CHECKING:
     from collections.abc import Generator

@@ -33,7 +33,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.external_api.permissions import OAUTH2_ONLY_SCOPES, SourceGrants, credential_grants, filter_sources_by_grants
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 if TYPE_CHECKING:
     from collections.abc import Iterable

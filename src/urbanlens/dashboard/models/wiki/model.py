@@ -28,7 +28,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor
 from urbanlens.dashboard.models.pin.model import PinType
 from urbanlens.dashboard.models.wiki.queryset import WikiManager
-from urbanlens.dashboard.services.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
 
 if TYPE_CHECKING:
     from decimal import Decimal
@@ -146,7 +146,7 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     # creates an already-official wiki, hence the default. Every user- and
     # API-visible surface must treat officially_created=False the same as "no
     # wiki exists yet" - see WikiManager.get_for_location and
-    # services.wiki_access.resolve_visible_wiki.
+    # services.wiki.wiki_access.resolve_visible_wiki.
     officially_created = BooleanField(default=True)
     # Flips true the first time a profile other than created_by views the
     # wiki page (see LocationWikiView.get). Once true, the wiki is community
@@ -154,7 +154,7 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     viewed_by_other = BooleanField(default=False)
     # Hero banner photo for the wiki page. Any Image tied to this wiki
     # (community gallery uploads, or a materialized Media-gallery item, see
-    # services.media_materialize) is eligible; SET_NULL so deleting the photo
+    # services.media.media_materialize) is eligible; SET_NULL so deleting the photo
     # just drops the banner rather than the wiki. Display is further gated by
     # each viewer's own Profile.show_wiki_cover_photos preference.
     cover_photo = ForeignKey(

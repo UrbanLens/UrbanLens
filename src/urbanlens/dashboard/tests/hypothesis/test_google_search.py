@@ -6,7 +6,7 @@ import pytest
 from requests import HTTPError
 
 from urbanlens.dashboard.services.apis.search.google import GoogleCustomSearchError, GoogleCustomSearchGateway
-from urbanlens.dashboard.services.redact import redact_secret
+from urbanlens.dashboard.services.security.redact import redact_secret
 
 
 def test_search_masks_forbidden_key_from_exception_and_logs(caplog) -> None:

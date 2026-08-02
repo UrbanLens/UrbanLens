@@ -332,7 +332,7 @@ class PinManagerGetNearbyOrCreateChildPinTests(TestCase):
 class PinQuerySetWithCachedPhotosTests(TestCase):
     """with_cached_photos() - "does this pin's location already have a stored photo" lookup.
 
-    A pure DB predicate (no external API call) - see services.photo_enrichment for the
+    A pure DB predicate (no external API call) - see services.photos.photo_enrichment for the
     background job that populates these Image rows.
     """
 

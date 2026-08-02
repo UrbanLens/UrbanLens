@@ -51,7 +51,7 @@ from urbanlens.dashboard.external_api.errors import ErrorEnvelopeMixin
 from urbanlens.dashboard.external_api.permissions import HasApiKeyScope
 from urbanlens.dashboard.external_api.throttling import ExternalApiBurstThrottle, ExternalApiReadThrottle, ExternalApiWriteThrottle
 from urbanlens.dashboard.models.reactions.model import Reaction
-from urbanlens.dashboard.services.comments import CommentValidationError
+from urbanlens.dashboard.services.comments.comments import CommentValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -251,7 +251,7 @@ class _ReactionMixin:
     reaction_response_key: ClassVar[str] = "reactions"
 
     #: Error body for an emoji rejected by :attr:`reaction_allowed_emojis`.
-    #: Matches ``services.comments.toggle_reaction``'s wording so a client sees
+    #: Matches ``services.comments.comments.toggle_reaction``'s wording so a client sees
     #: one message whether the check fired here or in the service.
     reaction_invalid_emoji_message: ClassVar[str] = "That is not a supported reaction."
 

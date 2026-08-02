@@ -15,7 +15,7 @@ from typing import TYPE_CHECKING
 from django.core.cache import cache
 
 from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
-from urbanlens.dashboard.services.redact import redact_coordinate
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import Point

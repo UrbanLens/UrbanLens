@@ -23,15 +23,15 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services import import_data
-from urbanlens.dashboard.services.import_data import (
+from urbanlens.dashboard.services.import_export import import_data
+from urbanlens.dashboard.services.import_export.import_data import (
     ImportResult,
     _extract_and_validate,
     _import_connections,
     _import_pins,
     _ImportValidationError,
 )
-from urbanlens.dashboard.services.malware_scan import MalwareScanUnavailableError
+from urbanlens.dashboard.services.security.malware_scan import MalwareScanUnavailableError
 
 
 def _write_zip(zip_path: str, entries: dict[str, bytes]) -> None:
@@ -112,9 +112,9 @@ class ExtractAndValidateSafetyTests(SimpleTestCase):
         ABOVE the user's storage quota (a 10 GB-quota user's legitimate
         archive would be refused by a fixed 2 GiB cap) while unlimited-quota
         users still get a finite bomb guard."""
-        with mock.patch("urbanlens.dashboard.services.storage.get_quota_bytes", return_value=10 * 1024**3):
+        with mock.patch("urbanlens.dashboard.services.media.storage.get_quota_bytes", return_value=10 * 1024**3):
             self.assertEqual(import_data._extraction_size_ceiling(object()), 20 * 1024**3)
-        with mock.patch("urbanlens.dashboard.services.storage.get_quota_bytes", return_value=None):
+        with mock.patch("urbanlens.dashboard.services.media.storage.get_quota_bytes", return_value=None):
             unlimited_ceiling = import_data._extraction_size_ceiling(object())
         self.assertGreater(unlimited_ceiling, 10 * 1024**3)
         self.assertEqual(import_data._extraction_size_ceiling(None), import_data._EXTRACTED_BYTES_FLOOR * 32)
@@ -169,13 +169,13 @@ class ExtractedFileScanningTests(SimpleTestCase):
         """manifest.json/pins.json are the export's own structured data, not a
         user media upload - even with malware_error_for_upload mocked to flag
         everything, a JSON-only archive must still pass."""
-        with mock.patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", return_value="infected"):
+        with mock.patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value="infected"):
             self.assertTrue(self._run(_valid_entries()))
 
     def test_infected_file_is_rejected(self) -> None:
         entries = _valid_entries()
         entries["urbanlens_export_2026-07-18/photos/cover.jpg"] = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"\x00" * 32
-        with mock.patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", return_value="This file was flagged as malicious"), self.assertRaises(_ImportValidationError) as ctx:
+        with mock.patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", return_value="This file was flagged as malicious"), self.assertRaises(_ImportValidationError) as ctx:
             self._run(entries)
         self.assertIn("cover.jpg", str(ctx.exception))
         self.assertIn("malicious", str(ctx.exception))
@@ -183,7 +183,7 @@ class ExtractedFileScanningTests(SimpleTestCase):
     def test_scanner_unavailable_is_a_retryable_error_not_a_permanent_rejection(self) -> None:
         entries = _valid_entries()
         entries["urbanlens_export_2026-07-18/photos/cover.jpg"] = b"\xff\xd8\xff\xe0\x00\x10JFIF\x00" + b"\x00" * 32
-        with mock.patch("urbanlens.dashboard.services.malware_scan.malware_error_for_upload", side_effect=MalwareScanUnavailableError("down")), self.assertRaises(_ImportValidationError) as ctx:
+        with mock.patch("urbanlens.dashboard.services.security.malware_scan.malware_error_for_upload", side_effect=MalwareScanUnavailableError("down")), self.assertRaises(_ImportValidationError) as ctx:
             self._run(entries)
         self.assertIn("temporarily unavailable", str(ctx.exception))
         self.assertNotIn("malicious", str(ctx.exception))

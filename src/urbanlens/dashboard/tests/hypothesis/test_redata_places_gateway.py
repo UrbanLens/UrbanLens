@@ -14,7 +14,7 @@ import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations.google.redata_places_gateway import RedataPlacesGateway
-from urbanlens.dashboard.services.gateway import GatewayRequestError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 
 def _response(status_code: int, body: object) -> mock.Mock:

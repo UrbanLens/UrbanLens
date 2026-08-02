@@ -41,7 +41,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 from urbanlens.dashboard.plugins.builtin.epa_echo import EpaEchoDetailPanelSource, EpaEchoNearbyPanelSource
-from urbanlens.dashboard.services.external_data import get_panel_source
+from urbanlens.dashboard.services.pins.external_data import get_panel_source
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin

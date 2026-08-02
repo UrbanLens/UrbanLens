@@ -26,15 +26,15 @@ from urbanlens.dashboard.services.locations.naming import (
     normalize_name_for_comparison,
     persist_official_aliases_for_location,
 )
-from urbanlens.dashboard.services.pin_subresources import (
+from urbanlens.dashboard.services.pins.pin_subresources import (
     AliasExistsError,
     AliasIsCurrentNameError,
     create_pin_alias,
     delete_pin_alias,
     promote_alias_to_name,
 )
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
-from urbanlens.dashboard.services.wiki_aliases import promote_wiki_alias_to_name
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.wiki.wiki_aliases import promote_wiki_alias_to_name
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location

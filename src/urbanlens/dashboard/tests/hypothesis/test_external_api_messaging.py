@@ -45,8 +45,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.exposure import LocationExposure
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.direct_messages import create_direct_message
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message
 
 #: A real 1x1 PNG - ImageField stores whatever bytes it's given, but the
 #: upload pipeline sniffs content, so a valid file avoids testing the wrong
@@ -320,7 +320,7 @@ class TombstoneTests(MessagingBaseTestCase):
 
     def test_deleted_for_everyone_is_tombstoned_for_the_recipient(self) -> None:
         message = create_direct_message(self.partner, self.sender, "regrettable message")
-        from urbanlens.dashboard.services.direct_messages import delete_message_for_everyone
+        from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone
 
         delete_message_for_everyone(message, self.partner)
 
@@ -423,7 +423,7 @@ class GroupMembershipTests(MessagingBaseTestCase):
         self.third = _profile()
         _open_dms(self.sender, self.partner, self.third)
 
-        from urbanlens.dashboard.services.group_chats import create_group_chat
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
 
         self.group = create_group_chat(self.sender, "Crew", [self.partner])
         self.members_url = reverse("external_api:messages.groups.members", kwargs={"group_uuid": self.group.uuid})
@@ -478,7 +478,7 @@ class GroupMessageTests(MessagingBaseTestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        from urbanlens.dashboard.services.group_chats import create_group_chat
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
 
         self.group = create_group_chat(self.sender, "Crew", [self.partner])
         self.url = reverse("external_api:messages.groups.messages", kwargs={"group_uuid": self.group.uuid})

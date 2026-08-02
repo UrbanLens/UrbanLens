@@ -232,7 +232,7 @@ def _schedule(profile_ids: list[int], metric_keys: list[str], activity_kind: str
         return
 
     def _enqueue() -> None:
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import evaluate_achievements_for_profile
 
         for profile_id in profile_ids:
@@ -290,7 +290,7 @@ def on_achievement_saved(sender: type[Model], instance: Any, created: bool, raw:
         return
 
     def _enqueue() -> None:
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import backfill_achievement
 
         safely_enqueue_task(backfill_achievement, instance.pk)

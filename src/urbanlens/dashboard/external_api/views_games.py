@@ -90,7 +90,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     Guess,
     SpotGuessrMode,
 )
-from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 from urbanlens.dashboard.services.spotguessr import (
     overview as spotguessr_overview,
     relevance as spotguessr_relevance,
@@ -688,7 +688,7 @@ class SpotGuessrRoundFeedbackView(SpotGuessrSessionScopedView):
     """POST: thumbs up/down, or report, the photo a Photos-mode round just showed.
 
     Mirrors ``controllers.spotguessr.SpotGuessrPhotoFeedbackView``. Feeds
-    ``services.media_relevance.effective_relevance`` at a reduced weight (or,
+    ``services.media.media_relevance.effective_relevance`` at a reduced weight (or,
     for a report, full weight against "not relevant") - see
     ``services.spotguessr.relevance`` for exactly how. A 400 for a round with
     no photo (Named Place/Street View); a 403 for a round this profile never

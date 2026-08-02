@@ -11,10 +11,10 @@ same place?" four different ways in four different subsystems:
 
 | Subsystem | Predicate | Where |
 |---|---|---|
-| Pin drop/import dedup | 50m radius snap onto an existing `Location` | `services/pin_creation.py` (~L174), `models/location/queryset.py::get_nearby_or_create` |
-| Wiki visibility | point-in-official-polygon containment, 50m circle fallback | `services/wiki_access.py::location_visible_to` |
+| Pin drop/import dedup | 50m radius snap onto an existing `Location` | `services/pins/pin_creation.py` (~L174), `models/location/queryset.py::get_nearby_or_create` |
+| Wiki visibility | point-in-official-polygon containment, 50m circle fallback | `services/wiki/wiki_access.py::location_visible_to` |
 | Wiki creation dedup | exact `Location` row (`OneToOneField`) | `models/wiki/model.py`, `models/wiki/queryset.py::get_or_create_for_location` |
-| "Places in common" | exact `location_id` equality, no geometry at all | `services/common_pins.py::common_pin_location_ids` |
+| "Places in common" | exact `location_id` equality, no geometry at all | `services/pins/common_pins.py::common_pin_location_ids` |
 
 Consequences, all confirmed against the code:
 
@@ -24,7 +24,7 @@ Consequences, all confirmed against the code:
    lat/lng ≈ 0.11m, and the DB enforces coordinate immutability — the precision machinery exists,
    but the snap defeats it at the front door).
 2. **Inconsistent invariants.** Manual moves use exact-match (`threshold_meters=0` in
-   `services/pin_edit.py::move_pin_to_coordinates`), so "no two root pins within 50m" is only an
+   `services/pins/pin_edit.py::move_pin_to_coordinates`), so "no two root pins within 50m" is only an
    at-creation behavior, not an invariant.
 3. **Duplicate wikis for one real place.** Wiki dedup is exact-Location; two users pinning the
    same large property >50m apart get two Locations and can create two wikis.
@@ -194,7 +194,7 @@ boundary-mates), creation dedup, and merge suggestions.
 - **Drop/create**: store exact coordinates (existing `get_nearby_or_create` with
   `threshold_meters=0` semantics, everywhere). Then a place-membership check: if the profile
   already has a root pin resolving to the same Place, prompt — merge into it, add as child pin,
-  or cancel. The existing `get_all_for_point` choice UI (`services/pin_creation.py` ~L184) is
+  or cancel. The existing `get_all_for_point` choice UI (`services/pins/pin_creation.py` ~L184) is
   the seed of this interaction.
 - **Import**: exact coordinates + `client_uuid` idempotency. Same-place collisions can't prompt
   per-row mid-import; default: dedupe onto the existing pin (today's outcome, but
@@ -214,7 +214,7 @@ Phased; each phase lands green before the next. Splits/grants (phase 4) can trai
 splits are rare and the schema supports them from phase 1.
 
 - **Phase 0 — standalone fixes** (independent of Place): **DONE 2026-07-27.**
-  - `services.pin_creation.resolve_child_pin_location` is now the single child-pin Location
+  - `services.pins.pin_creation.resolve_child_pin_location` is now the single child-pin Location
     resolver: exact-coordinate matching (quantized to the fields' own 6dp, so it can't race the
     `(latitude, longitude)` unique constraint) plus the rule that no two of one profile's pins
     may share a point. All four child-pin paths use it - the map UI dialog
@@ -242,7 +242,7 @@ splits are rare and the schema supports them from phase 1.
   copies; `Location.place` resolution service + backfill; boundary generation re-anchors to
   Place (one provider run per place, not per Location).
 - **Phase 2 — wiki re-anchor**: `Wiki.place` migration via `location.place`; merge duplicate
-  wikis landing on the same Place (reuse `services/wiki_merge.py`); recompute `Pin.wiki` caches.
+  wikis landing on the same Place (reuse `services/wiki/wiki_merge.py`); recompute `Pin.wiki` caches.
 - **Phase 3 — predicate unification**: creation/import flip to exact-coords + place dedup;
   `location_visible_to`, `common_pins`, merge suggestions, and `reconcile_wiki_nesting` all move
   to place-id logic; remove the 50m constants (`models/location/queryset.py` L81 hardcode,

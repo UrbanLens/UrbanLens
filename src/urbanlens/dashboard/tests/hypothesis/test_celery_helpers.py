@@ -8,7 +8,7 @@ from hypothesis import given, settings as hyp_settings, strategies as st
 from kombu.exceptions import KombuError
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.celery import PROGRESS_STATE, TaskProgress, get_task_progress, safely_enqueue_task, update_task_progress
+from urbanlens.dashboard.services.core.celery import PROGRESS_STATE, TaskProgress, get_task_progress, safely_enqueue_task, update_task_progress
 
 
 class TaskProgressTests(SimpleTestCase):
@@ -48,21 +48,21 @@ class GetTaskProgressTests(SimpleTestCase):
 
     def test_success_uses_result_payload(self) -> None:
         result = mock.Mock(state="SUCCESS", result={"ok": True}, info={})
-        with mock.patch("urbanlens.dashboard.services.celery.AsyncResult", return_value=result):
+        with mock.patch("urbanlens.dashboard.services.core.celery.AsyncResult", return_value=result):
             progress = get_task_progress("task-1")
         self.assertEqual(progress.percent, 100)
         self.assertEqual(progress.result, {"ok": True})
 
     def test_failure_exposes_error_string(self) -> None:
         result = mock.Mock(state="FAILURE", result=RuntimeError("boom"), info={})
-        with mock.patch("urbanlens.dashboard.services.celery.AsyncResult", return_value=result):
+        with mock.patch("urbanlens.dashboard.services.core.celery.AsyncResult", return_value=result):
             progress = get_task_progress("task-1")
         self.assertEqual(progress.state, "FAILURE")
         self.assertIn("boom", progress.error)
 
     def test_progress_state_reads_metadata(self) -> None:
         result = mock.Mock(state="PROGRESS", info={"current": 2, "total": 4, "percent": 50, "message": "Halfway"})
-        with mock.patch("urbanlens.dashboard.services.celery.AsyncResult", return_value=result):
+        with mock.patch("urbanlens.dashboard.services.core.celery.AsyncResult", return_value=result):
             progress = get_task_progress("task-1")
         self.assertEqual(progress.current, 2)
         self.assertEqual(progress.total, 4)

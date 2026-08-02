@@ -21,7 +21,7 @@ from urbanlens.dashboard.plugins import UrbanLensPlugin, plugin_registry
 from urbanlens.dashboard.plugins.hooks import HookRegistry
 from urbanlens.dashboard.plugins.registry import PluginRegistry
 from urbanlens.dashboard.services.locations.name_resolution import NameProvider
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 
 # -- HookRegistry ----------------------------------------------------------------
 
@@ -230,7 +230,7 @@ class BuiltinDiscoveryTests(SimpleTestCase):
         self.assertTrue(expected.issubset(names), f"missing: {expected - names}")
 
     def test_all_service_defaults_merges_static_and_plugin_entries(self) -> None:
-        from urbanlens.dashboard.services.rate_limiter import all_service_defaults
+        from urbanlens.dashboard.services.core.rate_limiter import all_service_defaults
 
         merged = all_service_defaults()
         # Plugin-declared services (google_places moved out of SERVICE_REGISTRY).
@@ -245,7 +245,7 @@ class BuiltinDiscoveryTests(SimpleTestCase):
             self.assertIn(expected, sources, f"name provider '{expected}' missing")
 
     def test_panel_sources_contains_core_and_plugin_panels(self) -> None:
-        from urbanlens.dashboard.services.external_data import panel_sources
+        from urbanlens.dashboard.services.pins.external_data import panel_sources
 
         sources = panel_sources()
         for key in ("boundary", "satellite", "street_view"):
@@ -272,7 +272,7 @@ class BuiltinDiscoveryTests(SimpleTestCase):
         self.assertEqual(street, ["GoogleMapsGateway", "MapillaryGateway", "KartaViewGateway", "PanoramaxGateway"])
 
     def test_unknown_panel_source_is_rejected_cleanly(self) -> None:
-        from urbanlens.dashboard.services.external_data import get_panel_source, schedule_panel_fetch
+        from urbanlens.dashboard.services.pins.external_data import get_panel_source, schedule_panel_fetch
 
         self.assertIsNone(get_panel_source("no_such_panel"))
         self.assertFalse(schedule_panel_fetch("no_such_panel", pin=None))

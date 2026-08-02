@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.base import create_bbox_str
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 
 _API_URL = "https://www.openhistoricalmap.org/api/0.6"
 _NOMINATIM_URL = "https://nominatim.openhistoricalmap.org"

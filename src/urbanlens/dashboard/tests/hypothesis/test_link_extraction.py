@@ -303,7 +303,7 @@ class AvailabilityAndLimitTests(TestCase):
         _grant_ai_to_everyone()
         SiteSettings.objects.filter(pk=SiteSettings.get_current().pk).update(ai_link_extraction_daily_limit=2)
         self.assertEqual(extractions_remaining_today(self.profile), 2)
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task", return_value=object()):
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=object()):
             start_link_extraction(self.user, self.profile, self.pin, "https://example.com/a")
             self.assertEqual(extractions_remaining_today(self.profile), 1)
             start_link_extraction(self.user, self.profile, self.pin, "https://example.com/b")
@@ -319,7 +319,7 @@ class AvailabilityAndLimitTests(TestCase):
 
     def test_start_marks_failed_when_broker_unavailable(self) -> None:
         _grant_ai_to_everyone()
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task", return_value=None):
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=None):
             extraction = start_link_extraction(self.user, self.profile, self.pin, "https://example.com/a")
         self.assertEqual(extraction.status, LinkExtractionStatus.FAILED)
 
@@ -489,7 +489,7 @@ class RecentlyRequestedButtonRenderingTests(TestCase):
         self.assertIn("ai-extract-btn", other_chip)
 
     def test_extract_endpoint_response_hides_the_button_for_that_link_on_next_render(self) -> None:
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task", return_value=object()):
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=object()):
             self.client.post(reverse("pin.ai_extract", args=[self.pin.slug]), {"url": "https://example.com/history"})
         context = ai_extract_button_context(self.user, self.profile, self.pin)
         self.assertIn("https://example.com/history", context["recently_extracted_urls"])
@@ -507,7 +507,7 @@ class EndpointTests(TestCase):
 
     def test_extract_endpoint_queues_a_run(self) -> None:
         _grant_ai_to_everyone()
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task", return_value=object()):
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task", return_value=object()):
             response = self.client.post(reverse("pin.ai_extract", args=[self.pin.slug]), {"url": "https://example.com/history"})
         self.assertEqual(response.status_code, 200)
         extraction = LinkExtraction.objects.get()

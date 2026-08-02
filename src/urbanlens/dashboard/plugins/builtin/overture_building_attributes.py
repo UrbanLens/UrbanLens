@@ -14,11 +14,11 @@ import time
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.external_data import InfoPanelSource
+from urbanlens.dashboard.services.pins.external_data import InfoPanelSource
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 logger = logging.getLogger(__name__)
 

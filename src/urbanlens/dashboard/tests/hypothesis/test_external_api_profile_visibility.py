@@ -19,7 +19,7 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import _COMMUNITY_GATED_VISIBILITY_FIELDS, Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 #: The values that let a stranger (no friendship, no pin/friend/trip in common)
 #: through ``Profile.visibility_permits``. Everything else must 404.

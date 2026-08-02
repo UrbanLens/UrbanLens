@@ -22,7 +22,7 @@ from urbanlens.dashboard.models.boundary.model import Boundary
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.custom_field_references import referenceable_queryset, resolve_reference
+from urbanlens.dashboard.services.custom_fields.custom_field_references import referenceable_queryset, resolve_reference
 
 
 def _square(lng: float, lat: float, delta: float) -> MultiPolygon:

@@ -31,7 +31,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.location.queryset import quantize_coordinate
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.pin_edit import PinMoveError, move_pin_to_coordinates
+from urbanlens.dashboard.services.pins.pin_edit import PinMoveError, move_pin_to_coordinates
 
 _db_settings = settings(
     max_examples=15,

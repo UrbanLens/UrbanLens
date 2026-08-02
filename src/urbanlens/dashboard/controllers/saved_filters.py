@@ -16,10 +16,10 @@ from urbanlens.dashboard.models.labels.meta import ICON_CATEGORIES
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.services.filter_criteria import deserialize_criteria, serialize_form_criteria
-from urbanlens.dashboard.services.geo import dissolve_polygons
-from urbanlens.dashboard.services.pin_list_membership import resync_lists_for_saved_filter
-from urbanlens.dashboard.services.saved_filter_cache import get_or_compute_matching_uuids
+from urbanlens.dashboard.services.geo.geo import dissolve_polygons
+from urbanlens.dashboard.services.pins.pin_list_membership import resync_lists_for_saved_filter
+from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
+from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids
 from urbanlens.dashboard.services.undo.handlers.saved_filter import MODEL_LABEL as SAVED_FILTER_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
@@ -212,7 +212,7 @@ class SavedFilterEditView(LoginRequiredMixin, View):
 
         # Refreshes every PinList still pointing at this filter, resolving the
         # matching pin ids once and reusing them across all of them - see
-        # services.pin_list_membership.resync_lists_for_saved_filter.
+        # services.pins.pin_list_membership.resync_lists_for_saved_filter.
         resync_lists_for_saved_filter(saved_filter)
 
         return JsonResponse({"ok": True, "uuid": str(saved_filter.uuid)})

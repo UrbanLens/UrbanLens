@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from urbanlens.dashboard.services.channel_broadcast import send_group_message
+from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
 
 
 def session_group_name(session_id: int) -> str:

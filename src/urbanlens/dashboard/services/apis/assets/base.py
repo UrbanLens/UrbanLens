@@ -16,13 +16,13 @@ from dataclasses import asdict, dataclass
 import logging
 from typing import TYPE_CHECKING, ClassVar
 
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 
 if TYPE_CHECKING:
     from collections.abc import Generator
 
     from urbanlens.dashboard.models.location.model import Location
-    from urbanlens.dashboard.services.geo_boundary import GeoBoundary
+    from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +61,7 @@ class MediaProvider(Gateway, ABC):
     """
 
     display_name: ClassVar[str] = "Media"
-    #: Restricts this provider to a geographic region (see ``services.geo_boundary``);
+    #: Restricts this provider to a geographic region (see ``services.geo.geo_boundary``);
     #: None means unrestricted. Enforced by ``MediaPanelSource.gate``.
     geo_boundary: ClassVar[GeoBoundary | None] = None
     search_with_country: ClassVar[bool] = True

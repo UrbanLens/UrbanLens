@@ -1,7 +1,7 @@
 """External-facing pin-detail panel endpoints: enrichment data as JSON.
 
 Exposes exactly the panels that have opted in via a non-empty
-``PanelSource.api_kinds`` - see ``services.external_data`` for why that,
+``PanelSource.api_kinds`` - see ``services.pins.external_data`` for why that,
 rather than whether ``api_payload`` happens to return data right now, is the
 authoritative "exposed to the API" signal. The satellite and street-view
 carousels are deliberately not among them: their web payload is base64
@@ -22,7 +22,7 @@ from urbanlens.dashboard.external_api.serializers import ErrorSerializer
 from urbanlens.dashboard.external_api.serializers_panels import PanelListEntrySerializer, PanelPendingSerializer
 from urbanlens.dashboard.external_api.views import ExternalApiView, OwnedPinMixin
 from urbanlens.dashboard.models.account.model import ApiKeyScope
-from urbanlens.dashboard.services.external_data import POLL_INTERVAL_SECONDS, get_panel_source, panel_readiness, panel_sources, panel_visible_to, schedule_panel_fetch
+from urbanlens.dashboard.services.pins.external_data import POLL_INTERVAL_SECONDS, get_panel_source, panel_readiness, panel_sources, panel_visible_to, schedule_panel_fetch
 
 if TYPE_CHECKING:
     from rest_framework.request import Request

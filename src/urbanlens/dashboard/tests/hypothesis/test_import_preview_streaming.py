@@ -17,7 +17,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.apis.locations.google.place_info import GooglePlaceService
 from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import LEGACY_COORDINATE_CUTOFF
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 
 
 class ImportPreviewStreamingLabelAssignmentTests(TestCase):
@@ -266,7 +266,7 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
     def test_img_src_becomes_a_pin_photo_not_a_link(self) -> None:
         fake_image = mock.Mock(pin_id=None)
         with mock.patch(
-            "urbanlens.dashboard.services.media_materialize.materialize_media_item",
+            "urbanlens.dashboard.services.media.media_materialize.materialize_media_item",
             return_value=fake_image,
         ) as materialize:
             self._run('<img src="https://example.com/a.jpg">')

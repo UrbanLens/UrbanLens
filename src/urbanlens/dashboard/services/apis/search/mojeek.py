@@ -15,8 +15,8 @@ from typing import Any, ClassVar
 
 from requests import HTTPError
 
-from urbanlens.dashboard.services.gateway import Gateway
-from urbanlens.dashboard.services.redact import redact_secret
+from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.security.redact import redact_secret
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)

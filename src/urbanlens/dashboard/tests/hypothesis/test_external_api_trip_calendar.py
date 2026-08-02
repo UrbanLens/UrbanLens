@@ -2,11 +2,11 @@
 
 Two things are covered here, and the first is not an API concern at all:
 
-**The export privacy gate.** ``services.calendar_sync`` used to honour only an
+**The export privacy gate.** ``services.trips.calendar_sync`` used to honour only an
 activity's own ``location_hidden`` flag when writing event locations, ignoring
 the adder's ``trip_pin_location_visibility`` setting that every other trip
 surface applies (the activities panel, the map, AI suggestions - all via
-``services.trip_visibility.viewer_hidden_activity_ids``). Exporting a shared
+``services.trips.trip_visibility.viewer_hidden_activity_ids``). Exporting a shared
 trip therefore copied trip-mates' coordinates - ones the trip screen
 deliberately hides from the exporter - into a third party's calendar, where no
 UrbanLens setting can ever claw them back. The first class below is the
@@ -40,11 +40,11 @@ from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.apis.calendar.google import CalendarNotConfiguredError
-from urbanlens.dashboard.services.calendar_sync import export_trip_to_calendar
-from urbanlens.dashboard.services.gateway import GatewayRequestError
-from urbanlens.dashboard.services.google_oauth import GoogleAuthExpiredError
+from urbanlens.dashboard.services.trips.calendar_sync import export_trip_to_calendar
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError
 
 _TRIP_SCOPES = [ApiKeyScope.TRIPS_READ.value, ApiKeyScope.TRIPS_WRITE.value]
 
@@ -100,7 +100,7 @@ class _CalendarTestCase(TestCase):
             The mock standing in for the gateway *instance*, with
             ``create_event`` already returning a plausible event id.
         """
-        patcher = mock.patch("urbanlens.dashboard.services.calendar_sync.GoogleCalendarGateway")
+        patcher = mock.patch("urbanlens.dashboard.services.trips.calendar_sync.GoogleCalendarGateway")
         gateway_cls = patcher.start()
         self.addCleanup(patcher.stop)
         gateway = gateway_cls.return_value

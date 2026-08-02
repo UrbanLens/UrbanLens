@@ -31,7 +31,7 @@ from urbanlens.dashboard.models.markup.model import PinMarkup
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripComment, TripMembership
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.text_limits import (
+from urbanlens.dashboard.services.core.text_limits import (
     MAX_COMMENT_TEXT_LENGTH,
     MAX_MARKUP_LABEL_LENGTH,
     MAX_PIN_DESCRIPTION_LENGTH,

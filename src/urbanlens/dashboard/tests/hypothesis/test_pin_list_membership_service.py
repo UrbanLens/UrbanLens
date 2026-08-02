@@ -1,4 +1,4 @@
-"""Tests for the explicit membership operations in ``services.pin_list_membership``.
+"""Tests for the explicit membership operations in ``services.pins.pin_list_membership``.
 
 These are the add/remove/reorder functions extracted from
 ``controllers.pin_lists``, plus the shared-computation resync extracted from
@@ -24,8 +24,8 @@ from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
-from urbanlens.dashboard.services.pin_list_membership import (
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.pins.pin_list_membership import (
     add_pins_to_list,
     remove_pins_from_list,
     reorder_list_items,

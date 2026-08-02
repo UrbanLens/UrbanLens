@@ -8,7 +8,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.profile.email import ProfileEmail
-from urbanlens.dashboard.services.email_normalization import (
+from urbanlens.dashboard.services.auth.email_normalization import (
     find_user_by_email,
     is_email_taken,
     normalize_email,

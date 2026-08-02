@@ -90,21 +90,21 @@ class ScheduleLocationBoundaryGenerationGateTests(TestCase):
 
     def test_never_run_schedules_generation(self):
         location = baker.make(Location, latitude=42.65, longitude=-73.75)
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue:
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             result = schedule_location_boundary_generation(location)
         self.assertTrue(result)
         enqueue.assert_called_once()
 
     def test_fresh_generation_is_not_rescheduled(self):
         location = self._make_stale_location(age_days=1)
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue:
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             result = schedule_location_boundary_generation(location)
         self.assertFalse(result)
         enqueue.assert_not_called()
 
     def test_stale_generation_is_rescheduled(self):
         location = self._make_stale_location(age_days=61)
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue:
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             result = schedule_location_boundary_generation(location)
         self.assertTrue(result)
         enqueue.assert_called_once()
@@ -113,7 +113,7 @@ class ScheduleLocationBoundaryGenerationGateTests(TestCase):
         location = baker.make(Location, latitude=42.65, longitude=-73.75)
         location.latitude = None
         location.longitude = None
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue:
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             result = schedule_location_boundary_generation(location)
         self.assertFalse(result)
         enqueue.assert_not_called()

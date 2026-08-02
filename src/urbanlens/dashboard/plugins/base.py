@@ -27,11 +27,11 @@ from typing import TYPE_CHECKING, ClassVar
 if TYPE_CHECKING:
     from urbanlens.dashboard.plugins.hooks import HookRegistry
     from urbanlens.dashboard.services.apis.locations.base import SatelliteViewProvider, StreetViewProvider
-    from urbanlens.dashboard.services.enrichment import EnrichmentSource
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+    from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
     from urbanlens.dashboard.services.locations.name_resolution import NameProvider
-    from urbanlens.dashboard.services.photo_keywords import PhotoKeywordProvider
-    from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+    from urbanlens.dashboard.services.photos.photo_keywords import PhotoKeywordProvider
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 
 class UrbanLensPlugin:

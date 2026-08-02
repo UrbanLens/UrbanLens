@@ -1,4 +1,4 @@
-"""Property-based tests for ``services.wiki_edits.apply_wiki_edit``.
+"""Property-based tests for ``services.wiki.wiki_edits.apply_wiki_edit``.
 
 The strict/non-strict split is the whole point of this service, so the
 properties asserted here are about that split rather than about any one input:
@@ -22,7 +22,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.wiki_edits import (
+from urbanlens.dashboard.services.wiki.wiki_edits import (
     WIKI_SECURITY_FIELDS,
     WikiEditValidationError,
     apply_wiki_edit,
@@ -146,7 +146,7 @@ class ApplyWikiEditBehaviorTests(TestCase):
 
     def test_overlong_description_is_rejected_in_both_modes(self) -> None:
         """A too-long description was always a hard error, not a silent skip."""
-        from urbanlens.dashboard.services.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
+        from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH
 
         too_long = "x" * (MAX_WIKI_DESCRIPTION_LENGTH + 1)
         for strict in (True, False):

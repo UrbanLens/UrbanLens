@@ -27,7 +27,7 @@ class CostsView(TemplateView):
             and ``total_cost_30d``.
         """
         from urbanlens.dashboard.models.api_call_log import ApiCallLog
-        from urbanlens.dashboard.services.rate_limiter import all_service_defaults
+        from urbanlens.dashboard.services.core.rate_limiter import all_service_defaults
 
         context = super().get_context_data(**kwargs)
         context["page_name"] = "costs"

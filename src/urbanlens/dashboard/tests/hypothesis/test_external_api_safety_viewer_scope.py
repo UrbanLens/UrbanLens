@@ -33,7 +33,7 @@ from urbanlens.dashboard.external_api.mixins_safety import SafetyCheckinViewerSc
 from urbanlens.dashboard.external_api.views import SafetyCheckinScopedView
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckinPartner, SafetyCheckinPartnerStatus
-from urbanlens.dashboard.services.safety import create_checkin
+from urbanlens.dashboard.services.visits.safety import create_checkin
 
 
 class SafetyCheckinViewerScopeTests(TestCase):

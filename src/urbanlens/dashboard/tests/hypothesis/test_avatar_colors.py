@@ -1,6 +1,6 @@
 """Tests for the distinct-per-list fallback avatar color system.
 
-Covers the pure assignment algorithm (services.avatar_colors) and its two
+Covers the pure assignment algorithm (services.profile.avatar_colors) and its two
 wired-in render sites: the group members dialog and the group member search
 results (both listing several people's fallback avatars together, where a
 shared default color made them indistinguishable).
@@ -13,8 +13,8 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.avatar_colors import PALETTE_SIZE, assign_avatar_colors
-from urbanlens.dashboard.services.group_chats import create_group_chat
+from urbanlens.dashboard.services.profile.avatar_colors import PALETTE_SIZE, assign_avatar_colors
+from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
 
 
 def _profile() -> Profile:

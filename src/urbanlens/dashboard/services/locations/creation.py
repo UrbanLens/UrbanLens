@@ -101,7 +101,7 @@ class WikiCreationService:
             Pin.objects.filter(pk=pin.pk).update(wiki=wiki)
 
         def _enqueue() -> None:
-            from urbanlens.dashboard.services.celery import safely_enqueue_task
+            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
             from urbanlens.dashboard.tasks import enrich_wiki_location
 
             safely_enqueue_task(enrich_wiki_location, wiki.pk)
@@ -111,7 +111,7 @@ class WikiCreationService:
             # and cached for this location *before* the wiki existed to seed
             # (see models.cache.signals for the other trigger - a Wikipedia
             # match caching *after* the wiki already exists).
-            from urbanlens.dashboard.services.wiki_seed import seed_wiki_article_from_wikipedia
+            from urbanlens.dashboard.services.wiki.wiki_seed import seed_wiki_article_from_wikipedia
 
             seed_wiki_article_from_wikipedia(location)
 

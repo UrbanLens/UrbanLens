@@ -12,7 +12,7 @@ from django.views import View
 
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
-from urbanlens.dashboard.services.notification_center import get_preferences, mark_all_read, unread_count
+from urbanlens.dashboard.services.notifications.notification_center import get_preferences, mark_all_read, unread_count
 
 if TYPE_CHECKING:
     from django.http import HttpResponse
@@ -42,7 +42,7 @@ def _get_or_create_prefs(profile: Profile) -> NotificationPreference:
     """Return the profile's preference row, creating the default one if absent.
 
     Thin alias kept for this module's existing callers; the implementation
-    lives in ``services.notification_center`` so the external API shares it.
+    lives in ``services.notifications.notification_center`` so the external API shares it.
 
     Args:
         profile: The owner whose preferences to read.

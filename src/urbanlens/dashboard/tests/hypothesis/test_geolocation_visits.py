@@ -13,7 +13,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.visits import record_geolocation_pin_visits
+from urbanlens.dashboard.services.visits.visits import record_geolocation_pin_visits
 
 
 def _square_around(lng: float, lat: float, delta: float = 0.001) -> MultiPolygon:

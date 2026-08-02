@@ -17,16 +17,16 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
-from urbanlens.dashboard.services.notification_text_alerts import (
+from urbanlens.dashboard.services.notifications.notification_text_alerts import (
     TEXT_ALERTABLE_TYPES,
     schedule_notification_text_alerts,
     send_notification_text_alerts_now,
 )
 from urbanlens.dashboard.tasks import send_notification_text_alerts_if_unread
 
-_ENQUEUE_PATCH = "urbanlens.dashboard.services.celery.safely_enqueue_task"
-_WHATSAPP_PATCH = "urbanlens.dashboard.services.notification_delivery.send_whatsapp"
-_SMS_PATCH = "urbanlens.dashboard.services.notification_delivery.send_sms"
+_ENQUEUE_PATCH = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
+_WHATSAPP_PATCH = "urbanlens.dashboard.services.notifications.notification_delivery.send_whatsapp"
+_SMS_PATCH = "urbanlens.dashboard.services.notifications.notification_delivery.send_sms"
 
 
 class _AlertTestBase(TestCase):

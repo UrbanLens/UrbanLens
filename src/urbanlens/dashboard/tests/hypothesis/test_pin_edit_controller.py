@@ -16,7 +16,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.pin_edit import PinEditView, PinOverviewView
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
 if TYPE_CHECKING:
     from django.http import HttpResponseBase
@@ -202,7 +202,7 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
         self.pin.location.route = ""
         self.pin.location.save(update_fields=["route"])
 
-    def _get(self, mock_enqueue_target: str = "urbanlens.dashboard.services.celery.safely_enqueue_task"):
+    def _get(self, mock_enqueue_target: str = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"):
         req = self.factory.get(f"/map/pin/{self.pin.slug}/overview/")
         req.user = self.user
         with (
@@ -236,7 +236,7 @@ class PinOverviewAddressBackfillDispatchTests(TestCase):
         with (
             patch("urbanlens.dashboard.services.apis.locations.google.geocoding.GoogleGeocodingGateway.geocode_coordinates") as mock_geocode,
             patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
-            patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
         ):
             response = PinOverviewView.as_view()(req, pin_slug=self.pin.slug)
         self.assertEqual(response.status_code, 200)
@@ -268,7 +268,7 @@ class PinOverviewEditableDescriptionTests(TestCase):
         req.user = self.user
         with (
             patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None),
-            patch("urbanlens.dashboard.services.celery.safely_enqueue_task"),
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"),
         ):
             return PinOverviewView.as_view()(req, pin_slug=pin.slug)
 

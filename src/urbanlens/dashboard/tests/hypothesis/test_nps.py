@@ -120,7 +120,7 @@ class FindParkContainingLocationTests(SimpleTestCase):
         boundary-lookup failure does (empty panel, no propagated exception),
         just logged at a level that doesn't read as a crash (see the comment
         at the call site)."""
-        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
         gw = _parks_gateway()
         with (

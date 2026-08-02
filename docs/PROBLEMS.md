@@ -34,7 +34,7 @@ gevent's monkeypatching can virtualize `threading.local` and friends for greenle
 virtualize that.
 
 The codebase calls `asgiref.sync.async_to_sync(channel_layer.group_send)(...)` throughout the
-real-time layer (`services/direct_messages.py`, `services/group_chats.py`, `services/safety.py`,
+real-time layer (`services/messaging/direct_messages.py`, `services/messaging/group_chats.py`, `services/visits/safety.py`,
 `models/notifications/signals.py`, and the game realtime modules
 `services/{spotguessr,trivia,consensus}/realtime.py`). Whenever any of those is mid-flight -
 specifically while `run_until_complete` is doing network I/O against the Valkey channel-layer
@@ -46,7 +46,7 @@ game-session broadcast could poison any other in-flight request on the same geve
 duration of the `group_send` call.
 
 **Fix**: every `async_to_sync(channel_layer.group_send)` call site now goes through
-`services.channel_broadcast.send_group_message(group, message)`, which enqueues
+`services.core.channel_broadcast.send_group_message(group, message)`, which enqueues
 `tasks.broadcast_channel_group_message` on `celery-worker`'s prefork pool (a real, separate OS
 process per slot - confirmed never gevent-patched, per `celery-worker-panels`'s `--pool=threads`
 comment and the plain default `celery-worker` command in `docker-compose.yml`) instead of calling
@@ -89,8 +89,8 @@ to a directional pair would have changed the shape the API batch was told to exp
 Noted while splitting mute off `Friendship.status` (migration
 `0020_friendship_muted_flag`). The bug that split fixed was that muting **un-friended** people;
 what it did *not* fix is that friendship-mute has never actually suppressed anything. Grep for
-`muted` across `services/notifications.py`, `services/notification_delivery.py`,
-`services/notification_text_alerts.py` and `services/notification_center.py`: no hit. The two
+`muted` across `services/notifications/notifications.py`, `services/notifications/notification_delivery.py`,
+`services/notifications/notification_text_alerts.py` and `services/notifications/notification_center.py`: no hit. The two
 mute features that do work are unrelated models - `DirectMessageMute` (per-sender DM mute) and
 `GroupChatMembership.muted` (per-group mute) - and neither consults `Friendship`.
 
@@ -102,15 +102,15 @@ still arrives, and `NotificationLog` still has an unread row.
 
 Fix is to make `Friendship.muted` an input to notification delivery in the same place
 `NotificationLog` rows are created from a `source_profile` - most cleanly a single
-`is_muted_by(recipient, source)` helper in `services/friendship.py` that
-`services/notifications.py` consults, so the check cannot be forgotten per notification type.
+`is_muted_by(recipient, source)` helper in `services/social/friendship.py` that
+`services/notifications/notifications.py` consults, so the check cannot be forgotten per notification type.
 Deliberately left out of the schema change: wiring a new suppression rule into every
 notification producer is a behaviour change of its own size, and the external API's `is_muted`
 surface (Batch S) needs the flag to exist first.
 
 ## 2026-07-28: Satellite/street-view imagery render path re-runs the full provider chain even when "ready"
 
-`services/external_data.py`'s `SlidesPanelSource` (base of `SatellitePanelSource`/street-view
+`services/pins/external_data.py`'s `SlidesPanelSource` (base of `SatellitePanelSource`/street-view
 equivalent) tracks readiness with a summary marker (`is_ready`, `ready_key`) set after a background
 warm-up pass, separate from each provider's own 24h slide cache (`SLIDES_READY_TTL_SECONDS`,
 line ~108). The class docstring (line ~875) confirms "the Celery warm-up task and the request-path
@@ -134,7 +134,7 @@ restores those rows to `Accepted` with `muted=True`. That is a judgement call an
 here so a future audit does not have to re-derive it:
 
 - The only user-reachable mute path is `FriendController.mute_friend` ->
-  `services.friendship.mute_profile`, and the only template rendering that URL
+  `services.social.friendship.mute_profile`, and the only template rendering that URL
   (`partials/profile/_profile_hero_body.html`) emits the Mute button **exclusively** inside its
   `friendship_status == 'accepted'` branch. So every mute a real user performed started from
   `Accepted`, which makes the restore faithful rather than a widening of access.
@@ -156,9 +156,9 @@ with `created`/`updated` predating the deploy of `0020`.
 **Severity: privacy, cross-user, and irreversible once it fired** - the data went to a third
 party (Google), where no later UrbanLens privacy change can reach it.
 
-`services/calendar_sync.py::_activity_location_string` honoured only `TripActivity.location_hidden`
+`services/trips/calendar_sync.py::_activity_location_string` honoured only `TripActivity.location_hidden`
 and ignored the adder's `Profile.trip_pin_location_visibility` gate that every other trip surface
-applies via `services/trip_visibility.py::viewer_hidden_activity_ids` (the activities panel, the
+applies via `services/trips/trip_visibility.py::viewer_hidden_activity_ids` (the activities panel, the
 trip map, AI trip suggestions). A trip is a shared space, so exporting one wrote **other members'**
 coordinates - precisely the ones the trip screen deliberately withholds from the exporter - into
 the exporter's Google Calendar, as the `location` field of both the all-day trip event
@@ -545,7 +545,7 @@ gate needs a documented exception instead.
 
 ## OPEN 2026-07-26: WhatsApp/SMS alerts never fire for safety check-in partner invites
 
-`services/notification_text_alerts.py:114-115` derives the preference column name from the
+`services/notifications/notification_text_alerts.py:114-115` derives the preference column name from the
 notification's own type:
 
 ```python
@@ -577,7 +577,7 @@ changing the external API's preference field names.
 
 ## OPEN 2026-07-26: FCM push transport is registered but never dispatched
 
-`services/push.py` accepts and stores FCM device registrations, but only the UnifiedPush
+`services/notifications/push.py` accepts and stores FCM device registrations, but only the UnifiedPush
 transport actually dispatches; FCM rows are skipped at send time until a Play-flavor client
 exists (see that module's docstring). This is server-side dispatch infrastructure requiring a
 Google service-account credential - it is *not* a missing external-API endpoint, and
@@ -587,7 +587,7 @@ gets silence rather than an error.
 
 ## OPEN 2026-07-26: notification "friend accepted" loses its source_profile on one path
 
-`services/friendship.py::accept_friend_request` (ported verbatim from the old
+`services/social/friendship.py::accept_friend_request` (ported verbatim from the old
 `FriendController.accept_friend`) creates the `FRIEND_ACCEPTED` notification **without**
 `source_profile`, whereas `request_or_accept_friendship` and
 `FriendController.friend_request_respond` both set it. The external API's
@@ -610,7 +610,7 @@ handling.
 
 **Closed in the post-cleanup round, same day**: **PinTombstone pruning** (daily
 `prune_pin_tombstones` beat task, 400-day retention in
-`services.pin_sync.TOMBSTONE_RETENTION`; `pins/deleted/` now returns **410 Gone +
+`services.pins.pin_sync.TOMBSTONE_RETENTION`; `pins/deleted/` now returns **410 Gone +
 `full_resync_required`** when `deleted_since` predates the retention floor, so pruning can
 never cause a silent miss - 3 new tests in `test_external_api.py`), and the **four export
 importers** (see the struck entry below for the design decisions that shaped them - 24 new
@@ -717,24 +717,24 @@ browser. Any authenticated user can point `server_url` at internal infrastructur
 ping/thumbnail endpoints as an authenticated blind-SSRF oracle. Self-hosted-by-design feature, so
 risk is single-tenant, but worth a scheme/private-IP guard in `clean_server_url`.
 
-**SSRF: `services/url_safety.py`'s IP blocklist misses RFC 6598 CGNAT space.**
+**SSRF: `services/security/url_safety.py`'s IP blocklist misses RFC 6598 CGNAT space.**
 `is_blocked_address` (`url_safety.py:20-22`) checks `is_private`/`is_loopback`/`is_link_local`/
 `is_reserved`/`is_multicast` but not the `100.64.0.0/10` Carrier-Grade-NAT range — verified
 `ipaddress.ip_address("100.64.0.5")` returns `False` for every one of those checks. Many cloud
 providers route internal-only infra (AWS NAT gateways, GCP internal LBs) through this range, so a
 user-supplied URL resolving there sails through `ensure_public_http_url` unblocked. This is the
 *only* IP-range guard for AI link extraction (`services/ai/link_extraction.py`), pin-suggestion
-photo download (`services/pin_suggestions.py`), and media materialization
-(`services/media_materialize.py`) — one missed CIDR range is a gap in three subsystems at once.
+photo download (`services/pins/pin_suggestions.py`), and media materialization
+(`services/media/media_materialize.py`) — one missed CIDR range is a gap in three subsystems at once.
 
 **Decompression-bomb protection in the full-archive importer only checks forgeable declared
-sizes.** `services/import_data.py:275-289` sums each ZIP member's *declared* `file_size` against a
+sizes.** `services/import_export/import_data.py:275-289` sums each ZIP member's *declared* `file_size` against a
 ceiling, then calls `zf.extractall()` unbounded. `file_size` in ZIP headers is attacker-controlled;
 Python's `zipfile` only detects a declared-vs-actual mismatch via CRC32 *after* a member is fully
 decompressed and written to disk. A crafted archive well within the 500MB upload cap
 (`controllers/tools.py:330`) with forged small `file_size` fields but highly compressible payloads
 can decompress to hundreds of GB before the mismatch is caught. The project's own
-`services/archive_extractor.py:_extract_zip` (lines 299-311) already guards this correctly (caps
+`services/import_export/archive_extractor.py:_extract_zip` (lines 299-311) already guards this correctly (caps
 each member read, rejects on overrun) — `import_data.py` just doesn't reuse it. A companion gap:
 `services/import_formats/gpx.py:41` / `gpx_tracks.py:140` parse GPX XML via `gpxpy` with no
 `defusedxml` wrapper (unlike `osm_xml.py`, which correctly uses one) — a latent XXE surface since
@@ -752,12 +752,12 @@ consumer classes identically — fix once at the base-class level.
 
 **Two rate-limit/quota checks with the same non-atomic check-then-act race**, each independently
 discovered:
-- `services/rate_limiter.py:279-491` — `check_rate_limit` (COUNT) and `log_api_call` (INSERT) are
+- `services/core/rate_limiter.py:279-491` — `check_rate_limit` (COUNT) and `log_api_call` (INSERT) are
   separate operations with no locking; concurrent requests can all pass the check before any log,
   breaching even Nominatim's hard 1 req/sec ToS limit under a handful of simultaneous pin-detail loads.
-- `services/email_safety.py:89-111` (`email_rate_limit_error`) — same shape for outbound
+- `services/security/email_safety.py:89-111` (`email_rate_limit_error`) — same shape for outbound
   friend-invite/visit-invite emails (`controllers/friendship.py:649-720`,
-  `services/visit_invites.py:82-109`); concurrent requests can exceed the configured hourly/daily/
+  `services/visits/visit_invites.py:82-109`); concurrent requests can exceed the configured hourly/daily/
   monthly cap arbitrarily.
 Both need either `select_for_update()` around the count+log pair or an atomic increment
 (`cache.add()`-style) rather than read-then-write.
@@ -773,7 +773,7 @@ and auto-tag cost/token estimate for Anthropic and OpenAI is currently ~2x actua
 **~~Friend-request-visibility bypass via the email-invite path.~~ FIXED - this entry was stale
 (verified 2026-07-27).** It described `invite_by_email` checking only
 `to_profile.friend_request_visibility != VisibilityChoice.NO_ONE`. That logic has since moved out
-of the controller into `services/friendship.py:invite_by_email`, which runs the full
+of the controller into `services/social/friendship.py:invite_by_email`, which runs the full
 `Profile.visibility_permits` evaluator - the same one `request_friend` uses. The non-`NO_ONE`
 cases this entry correctly flagged as untested are now covered; see the resolved friend-invite
 entry above, including the UX consequence the fix carries.
@@ -788,7 +788,7 @@ overlap exists at all.
 **Login-lockout is keyed on the raw submitted string, not the resolved account — brute-force is
 bypassable.** `controllers/account.py:51-58,623-634,657-692` keys failed-attempt/lockout counters
 by the literal POSTed "username" value, but `EmailOrUsernameModelBackend`
-(`services/auth_backend.py:14-36`) resolves that same field against primary email, verified
+(`services/auth/auth_backend.py:14-36`) resolves that same field against primary email, verified
 secondary email, and Gmail dot/plus-normalized variants before authenticating. An attacker can
 brute-force one account indefinitely by rotating through equivalent-but-textually-distinct login
 strings (`victim@gmail.com`, `vic.tim@gmail.com`, `v.ictim+x@gmail.com`, a secondary email — each
@@ -804,7 +804,7 @@ no global fallback — the label vanishes from every Organize > Categories listi
 **permanently un-editable and un-deletable through the UI** (recoverable only via direct DB access).
 
 **Safety check-in escalation can re-email every emergency contact on any partial failure.**
-`services/safety.py:940-981` (`escalate_checkin`) loops all contacts unconditionally (no
+`services/visits/safety.py:940-981` (`escalate_checkin`) loops all contacts unconditionally (no
 `notified_at__isnull=True` filter) and only saves `status`/`escalated_at` *after* the whole loop
 completes. If anything raises mid-loop (bad email address, a non-SMTP/OSError mail-backend
 exception), the checkin never flips to `OVERDUE`, so the next 5-minute beat tick re-matches it and
@@ -899,7 +899,7 @@ the rest of the verification-debt list.
 ## ~~Data export: comments/photos/trips/direct_messages have no importer~~ (RESOLVED 2026-07-23)
 
 **RESOLVED 2026-07-23** - all four built (`_import_comments`/`_import_photos`/`_import_trips`/
-`_import_direct_messages` in `services/import_data.py`, wired into `_IMPORT_ORDER` between
+`_import_direct_messages` in `services/import_export/import_data.py`, wired into `_IMPORT_ORDER` between
 visit_history and connections). Export shape fixed first: `_resolve_target` now emits a
 `target_uuid` (pin or wiki uuid; names are matched never), photos metadata gained
 `media_type`, trips gained `is_creator` + `member_uuids`, and DM rows gained `partner_uuid`
@@ -1090,7 +1090,7 @@ has pins and no restrictive settings are active.
 
 Root cause: `services.spotguessr.photos.candidate_image_for_location()`'s default
 (`allow_arbitrary_external_photos=False`) excludes any externally-sourced candidate photo whose
-`services.media_relevance.effective_relevance()` score is negative. That score is fed by
+`services.media.media_relevance.effective_relevance()` score is negative. That score is fed by
 `GamePhotoFeedback` rows (`services.spotguessr.relevance`) - thumbs-down/report reactions from
 *any* past session, against *any* profile - and those rows never expire or get reset. For a
 small pin pool where most or all locations have exactly one candidate photo, a handful of
@@ -1160,7 +1160,7 @@ the same way the region-mode buttons were fixed.
 
 A full review of the partner/live-location/post-resolution-encryption feature (two independent
 review agents, backend-correctness and frontend-security) found and fixed nine issues directly
-in `services/safety.py`/`consumers.py`/`tasks.py`/`models/safety/model.py` (archival payload not
+in `services/visits/safety.py`/`consumers.py`/`tasks.py`/`models/safety/model.py` (archival payload not
 capturing/severing `destination_location`/`trip`/`markup_map`/`markup_maps`, `archive_checkin`
 non-atomicity, chat messages postable after archival, three TOCTOU races, a missing index, an
 N+1, and no live-connection revocation on partner removal - all covered by new tests in
@@ -1227,7 +1227,7 @@ this pass:
   it didn't, since the stash (an immediate `UndoAction.objects.create()`) had already committed
   before the atomic block even opened. Moved the stash call inside each atomic block, before the
   delete, so a mid-delete failure now rolls back both together.
-- **The storage-quota check-then-create race (`services/storage.py`'s `per_profile_upload_lock`)
+- **The storage-quota check-then-create race (`services/media/storage.py`'s `per_profile_upload_lock`)
   was only wired up at 2 of 8 call sites** (`photos.py`, `image_gallery.py`) - `article.py`,
   `direct_messages.py`, `maps.py`, `safety.py`, `tools.py`, and `visits.py` still raced. All six now
   wrap their check-then-create in `per_profile_upload_lock`.
@@ -1236,7 +1236,7 @@ this pass:
   `unique_together = ["latitude", "longitude"]` constraint that two concurrent requests creating a
   Location at the exact same coordinates could hit. Now catches it and returns the
   concurrently-created row, matching `PinManager`'s pattern.
-- **`services/direct_messages.py`'s email/text-alert debounce (`is_email_debounced`/
+- **`services/messaging/direct_messages.py`'s email/text-alert debounce (`is_email_debounced`/
   `is_text_alert_debounced`) was still a plain `cache.get()` check-then-later-`cache.set()`** - the
   same TOCTOU shape already fixed in the sibling `notification_text_alerts.py` via atomic
   `cache.add()`. Ported the same fix; the now-redundant `cache.set()` calls inside
@@ -1265,7 +1265,7 @@ this pass:
 here so the next session doesn't have to re-derive them from `docs/notes/ai/codebase-audit.md`'s
 full per-unit detail):
 
-- `services/direct_messages.py`'s TOCTOU fix above only covers the DM email/text debounce; the
+- `services/messaging/direct_messages.py`'s TOCTOU fix above only covers the DM email/text debounce; the
   underlying **`quota_error_for_upload`/`per_profile_upload_lock` pattern itself is a "soft" lock**
   (proceeds without the lock if it can't be acquired promptly) - fine for its stated purpose but
   worth remembering it's not a hard guarantee.
@@ -1445,7 +1445,7 @@ already reset between tests.
 
 - **Markup-map attachments bypass share provenance.** Attaching a `MarkupMap` to a direct
   message (`create_direct_message(markup_map_uuid=...)`, and the `send_message_with_share`
-  path in `services/direct_message_shares.py` when no `shared_pin_id` accompanies it) records
+  path in `services/messaging/direct_message_shares.py` when no `shared_pin_id` accompanies it) records
   **no `LocationExposure`**, even though a markup map can depict pin locations and therefore
   can disclose them to the recipient. Sharing the *pin* correctly stamps the chain via
   `create_pin_share` -> `resolve_and_stamp_origin_share` + `record_share_exposure`; attaching a
@@ -1477,9 +1477,9 @@ already reset between tests.
   together - they only appear once `external_api/views.py` pulls them into one type-check graph.
 
 - **Pin-detail's `wiki_slug` was unusable for navigating to a wiki (FIXED in this pass).**
-  `services/pin_detail.py::build_pin_detail` set `payload["wiki_slug"] = wiki.slug`, which reads
+  `services/pins/pin_detail.py::build_pin_detail` set `payload["wiki_slug"] = wiki.slug`, which reads
   naturally as "the slug to fetch this pin's wiki with". It isn't. Every wiki-scoped route
-  resolves through `services.wiki_access.resolve_visible_wiki`, which takes a **Location**
+  resolves through `services.wiki.wiki_access.resolve_visible_wiki`, which takes a **Location**
   slug/uuid - and `Wiki.slug` is an independent `SlugField` on an unrelated model with its own
   value. A client that followed `wiki_slug` to `GET /wikis/{location_slug}/` therefore got a 404
   for a wiki it could plainly see. Fixed by adding `location_slug` (from
@@ -1492,7 +1492,7 @@ already reset between tests.
   `continue`s past (a) a security value not in `SecurityLevel.choices` and (b) a date that fails
   `datetime.strptime(raw, "%Y-%m-%d")`. The user is told `{"ok": True}` and the field simply
   never changes, with no error surfaced anywhere - a submitted-but-dropped edit is
-  indistinguishable from a successful one. The shared `services/wiki_edits.py::apply_wiki_edit`
+  indistinguishable from a successful one. The shared `services/wiki/wiki_edits.py::apply_wiki_edit`
   extracted in this pass takes a `strict` flag: the external API passes `strict=True` and gets a
   hard rejection, while the internal path keeps `strict=False` to preserve existing HTMX
   behavior. The internal path should be migrated to strict (with proper field-level error
@@ -1506,7 +1506,7 @@ already reset between tests.
   effectively "when this specific person pinned it" - exactly what the count fuzzing exists to
   hide. (The template already rendered `|date:"M Y"`, so the day was never displayed; the leak
   was the missing low-count suppression, and the fact that day-precision sat in the template
-  context at all.) Fixed by `services/community_counts.py::wiki_community_summary`, which
+  context at all.) Fixed by `services/wiki/community_counts.py::wiki_community_summary`, which
   truncates `first_pinned` to the 1st of its month and returns `None` whenever `pin_count_low`
   is true. Both `LocationWikiView` and the external API now read that one function, and
   `wiki.html` renders the pre-truncated date rather than reaching into a Pin instance.
@@ -1544,8 +1544,8 @@ already reset between tests.
   work stream.
 
 - **The inbox list serializes each conversation's last message with no reaction/share
-  prefetch** (`src/urbanlens/dashboard/services/direct_messages.py::conversations_for`,
-  `src/urbanlens/dashboard/services/group_chats.py::group_conversations_for`). Each row's
+  prefetch** (`src/urbanlens/dashboard/services/messaging/direct_messages.py::conversations_for`,
+  `src/urbanlens/dashboard/services/messaging/group_chats.py::group_conversations_for`). Each row's
   `last_message` is rendered through `build_direct_message_payload` /
   `build_group_message_payload`, which read `message.reactions.all()` (and, for groups,
   `message.share_for(viewer)`), so a page of N conversations issues ~2N extra queries. Both
@@ -1566,17 +1566,17 @@ already reset between tests.
   `GET messages.group.member_search?q=searchable-user` to return all four;
   `response.context["results"]` is empty. The candidate filter in
   `controllers/group_chats.GroupMemberSearchView` (and the `can_direct_message` gate it leans
-  on in `services/direct_messages.py`) is the place to look - the test sets
+  on in `services/messaging/direct_messages.py`) is the place to look - the test sets
   `user.username` directly with `save(update_fields=["username"])`, so a search that reads a
   denormalized/`Profile`-side name would match nothing. Both of those modules carry
   uncommitted edits from another work stream, and nothing in the social/avatar/annotation
   change this was found under touches conversation membership or direct-message gating.
   Noted while running `test_avatar_colors.py` as a regression check for the avatar-write
-  extraction (`services/avatar.py::set_profile_avatar`); left alone as it belongs to the
+  extraction (`services/profile/avatar.py::set_profile_avatar`); left alone as it belongs to the
   messaging work stream.
 
 - **Blocked `Friendship` rows created before `block_profile` started normalizing direction may
-  record the wrong blocker** (`src/urbanlens/dashboard/services/friendship.py::block_profile`).
+  record the wrong blocker** (`src/urbanlens/dashboard/services/social/friendship.py::block_profile`).
   `Friendship` has no "blocked_by" column, so `from_profile` is the only record of who blocked
   whom, and `block_profile` used to reuse whichever row already joined the pair - a block
   placed on an inbound friend request therefore left the *blocked* party as `from_profile`.
@@ -1668,7 +1668,7 @@ without the context of whoever wrote it.
 ## 2026-07-30: `test_media_auth_mixin.py::MediaAuthResolutionTests::test_session_wins_over_a_credential_header` is flaky (PK off-by-one)
 
 Found while running the media/search/public-pins suites for an unrelated PR #126 review-comment pass
-(scoping fixes in `external_api/views_search.py`, `controllers/media.py`, `services/public_pins.py`
+(scoping fixes in `external_api/views_search.py`, `controllers/media.py`, `services/pins/public_pins.py`
 - this test file was never touched). Fails both in isolation and alongside other files, non-
 deterministically off by exactly one: `AssertionError: '17' != '16'` in one run, `'194' != '193'` in
 another. The assertion is `self.assertEqual(response.content.decode(), str(self.profile.pk))` -

@@ -10,7 +10,7 @@ from urbanlens.dashboard.models.abstract import DashboardModel, TextChoices
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.queryset import Manager
 from urbanlens.dashboard.models.profile import Profile
-from urbanlens.dashboard.services.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH
 
 logger = logging.getLogger(__name__)
 

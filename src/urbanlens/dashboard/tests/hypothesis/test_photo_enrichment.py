@@ -1,4 +1,4 @@
-"""Tests for services.photo_enrichment - background photo/Street View/satellite caching.
+"""Tests for services.photos.photo_enrichment - background photo/Street View/satellite caching.
 
 Covers _save_enriched_image (wiki-attach + resize/WebP), each of the three
 EnrichmentSource subclasses' gate/missing_filter/enrich contracts (never
@@ -23,7 +23,7 @@ from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services import photo_enrichment
+from urbanlens.dashboard.services.photos import photo_enrichment
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.apis.locations.places_resolution import PhotoNotFoundError
 from urbanlens.UrbanLens.settings.app import settings as app_settings

@@ -14,7 +14,7 @@ from django.utils import timezone
 
 # App Imports
 from urbanlens.dashboard.models import abstract
-from urbanlens.dashboard.services.redact import redact_coordinate
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import Point

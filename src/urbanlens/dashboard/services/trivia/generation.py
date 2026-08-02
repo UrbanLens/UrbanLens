@@ -2,7 +2,7 @@
 
 Every wiki already implies at least one profile can see it (a Wiki only
 ever exists because its creator had pinned that location - see
-``services.wiki_access``'s visibility rule) - so, unlike a per-viewer
+``services.wiki.wiki_access``'s visibility rule) - so, unlike a per-viewer
 request, this background generator needs no additional profile-scoping
 before reading a wiki's article text.
 

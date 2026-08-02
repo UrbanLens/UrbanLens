@@ -29,7 +29,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.safety import validate_notifiable_contacts
+from urbanlens.dashboard.services.visits.safety import validate_notifiable_contacts
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile

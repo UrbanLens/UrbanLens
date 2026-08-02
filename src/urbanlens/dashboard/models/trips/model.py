@@ -23,7 +23,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.trips.queryset import TripCommentManager, TripManager, TripMembershipManager
-from urbanlens.dashboard.services.text_limits import (
+from urbanlens.dashboard.services.core.text_limits import (
     MAX_COMMENT_TEXT_LENGTH,
     MAX_TRIP_ACTIVITY_NOTES_LENGTH,
     MAX_TRIP_DESCRIPTION_LENGTH,

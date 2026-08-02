@@ -29,11 +29,11 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.map_sharing import clone_markup_map
-from urbanlens.dashboard.services.map_snapshot import default_markup_map_title, sanitize_map_data
-from urbanlens.dashboard.services.safety import notify_contacts_of_update
-from urbanlens.dashboard.services.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
-from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
+from urbanlens.dashboard.services.core.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
+from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title, sanitize_map_data
+from urbanlens.dashboard.services.sharing.map_sharing import clone_markup_map
+from urbanlens.dashboard.services.visits.safety import notify_contacts_of_update
+from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet

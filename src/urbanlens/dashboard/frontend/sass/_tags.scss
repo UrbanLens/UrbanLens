@@ -3066,11 +3066,7 @@ $org-stat-col-color-w: 2.75rem;
 
 .org-bulk-btn {
     @include btn-ghost;
-    min-height: 34px;
-    padding: 6px 14px;
     border-radius: 999px;
-    font-size: .82rem;
-    font-weight: 600;
     border: 1px solid var(--ul-surface-raised-border);
     background: var(--ul-surface-raised);
 
@@ -3079,33 +3075,9 @@ $org-stat-col-color-w: 2.75rem;
         font-size: .95rem;
     }
 
-    &:disabled {
-        opacity: .4;
-        cursor: not-allowed;
-    }
-}
-
-.org-bulk-btn--edit:hover:not(:disabled) {
-    background: color-mix(in srgb, $primary-color 10%, var(--ul-surface-raised));
-    border-color: color-mix(in srgb, $primary-color 35%, transparent);
-    color: var(--primary-color);
-}
-
-.org-bulk-btn--merge {
-    &:disabled {
-        box-shadow: none;
-        cursor: not-allowed;
-    }
-}
-
-.org-bulk-btn--delete {
-    color: $color-red-500;
-    border-color: color-mix(in srgb, $color-red-500 20%, transparent);
-
-    &:hover:not(:disabled) {
-        background: color-mix(in srgb, $color-red-500 10%, var(--ul-surface-raised));
-        border-color: color-mix(in srgb, $color-red-500 35%, transparent);
-        color: $color-red-600;
+    &--delete:hover:not(:disabled) {
+        color: $color-red-500;
+        border-color: color-mix(in srgb, $color-red-500 20%, transparent);
     }
 }
 

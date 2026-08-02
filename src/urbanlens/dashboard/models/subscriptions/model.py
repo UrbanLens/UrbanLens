@@ -30,7 +30,7 @@ class SiteFeature(TextChoices):
     # larger than photos, so admins grant this tier explicitly to manage
     # storage cost rather than bundling it into every VIP subscription.
     VIDEO_UPLOADS = "video_uploads", "Video uploads"
-    # Documents are converted to PDF and OCR'd on upload (see services.documents),
+    # Documents are converted to PDF and OCR'd on upload (see services.media.documents),
     # which costs meaningfully more CPU than a photo upload - kept as its own
     # grant for the same reason as VIDEO_UPLOADS.
     DOCUMENT_UPLOADS = "document_uploads", "Document uploads"
@@ -68,7 +68,7 @@ class SubscriptionRole(abstract.DashboardModel):
     )
     # Outbound email caps for this role. Null falls back to the site-wide
     # default; when a user holds several active roles the largest applicable
-    # limit wins and 0 means unlimited (see services.email_safety).
+    # limit wins and 0 means unlimited (see services.security.email_safety).
     email_limit_per_hour = IntegerField(
         null=True,
         blank=True,

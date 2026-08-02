@@ -2,7 +2,7 @@
 
 Sits beside ``controllers.direct_messages`` on the messages page: group
 threads swap into the same ``#dm-thread-pane``, live delivery rides the same
-per-profile WebSocket (see ``services.group_chats``), and the send endpoint
+per-profile WebSocket (see ``services.messaging.group_chats``), and the send endpoint
 here is the no-JS / socket-down fallback.
 """
 
@@ -22,8 +22,9 @@ from urbanlens.dashboard.controllers.direct_messages import _get_profile
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH, GroupChat, GroupMessage
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.direct_messages import can_direct_message
-from urbanlens.dashboard.services.group_chats import (
+from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
+from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message
+from urbanlens.dashboard.services.messaging.group_chats import (
     GroupChatPermissionError,
     GroupChatValidationError,
     create_group_chat,
@@ -37,7 +38,6 @@ from urbanlens.dashboard.services.group_chats import (
     set_group_muted,
     share_pin_in_group_message,
 )
-from urbanlens.dashboard.services.text_limits import MAX_DIRECT_MESSAGE_LENGTH
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
@@ -99,7 +99,7 @@ def _group_thread_context(profile: Profile, group: GroupChat, membership: GroupC
     Returns:
         Context dict for ``_group_thread.html``.
     """
-    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
     GroupMessage.objects.mark_read(membership)
     mark_group_thread_open(profile.pk, group.pk)
@@ -176,7 +176,7 @@ class GroupConversationView(LoginRequiredMixin, View):
             Thread partial for HTMX requests; the whole messages page with
             this group active otherwise.
         """
-        from urbanlens.dashboard.services.direct_messages import all_conversations_for
+        from urbanlens.dashboard.services.messaging.direct_messages import all_conversations_for
 
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
@@ -247,7 +247,7 @@ class GroupOlderMessagesView(LoginRequiredMixin, View):
         Returns:
             The message-items partial for that page, or 400 for a bad cursor.
         """
-        from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
+        from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
@@ -364,7 +364,7 @@ class GroupMembersDialogView(LoginRequiredMixin, View):
         Returns:
             The rendered dialog partial.
         """
-        from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities
+        from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
         profile = _get_profile(request)
         group, _membership = _get_group(profile, group_uuid)
@@ -402,7 +402,7 @@ class GroupAddMembersView(LoginRequiredMixin, View):
         Returns:
             The re-rendered thread partial, or 400/403 on failure.
         """
-        from urbanlens.dashboard.services.group_chats import add_group_members
+        from urbanlens.dashboard.services.messaging.group_chats import add_group_members
 
         profile = _get_profile(request)
         group, membership = _get_group(profile, group_uuid)
@@ -603,7 +603,7 @@ class GroupMemberSearchView(LoginRequiredMixin, View):
         """
         from django.db.models import Q
 
-        from urbanlens.dashboard.services.avatar_colors import assign_avatar_colors
+        from urbanlens.dashboard.services.profile.avatar_colors import assign_avatar_colors
 
         profile = _get_profile(request)
         query = request.GET.get("q", "").strip()

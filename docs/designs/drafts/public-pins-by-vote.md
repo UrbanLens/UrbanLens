@@ -151,7 +151,7 @@ matching "calculate 10 most common after the criteria above are filtered out".
   decided_at) and `PublicPinVote` (candidate+profile unique; withdraw = row delete,
   mirroring WikiStatVote). Migration `0015_public_pin_voting` (also adds
   `Profile.suggest_public_pins` and the `community` PinSuggestionOrigin).
-- Engine: `services/public_pins.py` — `PublicPinConfig` (all tunables), `evaluate_public_pin_candidates`
+- Engine: `services/pins/public_pins.py` — `PublicPinConfig` (all tunables), `evaluate_public_pin_candidates`
   (per-aspect aggregate queries: distinct Counts annotation + grouped vulnerability
   composite + `Length(content)` on Article; haversine for region exclusivity; per-state
   top-N with ties). Vulnerability = `WikiStatVote` VULNERABILITY composite (1–5 scale).

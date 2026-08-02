@@ -20,8 +20,8 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.meta import SyncAliasesDirection, ThemeChoice, VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.profile_settings import SETTINGS_FIELDS, SettingsValidationError, apply_settings_patch, read_settings
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.profile.profile_settings import SETTINGS_FIELDS, SettingsValidationError, apply_settings_patch, read_settings
 
 
 def _bearer(raw_key: str) -> dict:
@@ -177,13 +177,13 @@ class SettingsFeatureGatingTests(_SettingsApiTestCase):
     """A gated field submitted while its feature is off is a 400, not a silent drop."""
 
     def test_ai_field_rejected_when_feature_is_off(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.profile_settings.user_has_feature", return_value=False):
+        with mock.patch("urbanlens.dashboard.services.profile.profile_settings.user_has_feature", return_value=False):
             response = self.client.patch(self.url, {"ai_enabled": True}, content_type="application/json", **_bearer(self.raw_key))
         self.assertEqual(response.status_code, 400)
         self.assertIn("ai_enabled", response.json()["fields"])
 
     def test_places_field_rejected_when_feature_is_off(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.profile_settings.user_has_feature", return_value=False):
+        with mock.patch("urbanlens.dashboard.services.profile.profile_settings.user_has_feature", return_value=False):
             response = self.client.patch(self.url, {"places_google_enabled": False}, content_type="application/json", **_bearer(self.raw_key))
         self.assertEqual(response.status_code, 400)
         self.assertIn("places_google_enabled", response.json()["fields"])
@@ -191,7 +191,7 @@ class SettingsFeatureGatingTests(_SettingsApiTestCase):
     def test_rejected_patch_writes_nothing_at_all(self) -> None:
         """A partially-invalid patch is refused whole - no half-applied state."""
         original = self.profile.theme_mode
-        with mock.patch("urbanlens.dashboard.services.profile_settings.user_has_feature", return_value=False):
+        with mock.patch("urbanlens.dashboard.services.profile.profile_settings.user_has_feature", return_value=False):
             response = self.client.patch(
                 self.url,
                 {"ai_enabled": True, "theme_mode": ThemeChoice.LIGHT},
@@ -203,7 +203,7 @@ class SettingsFeatureGatingTests(_SettingsApiTestCase):
         self.assertEqual(self.profile.theme_mode, original)
 
     def test_ungated_fields_are_unaffected_by_a_missing_feature(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.profile_settings.user_has_feature", return_value=False):
+        with mock.patch("urbanlens.dashboard.services.profile.profile_settings.user_has_feature", return_value=False):
             response = self.client.patch(self.url, {"theme_mode": ThemeChoice.LIGHT}, content_type="application/json", **_bearer(self.raw_key))
         self.assertEqual(response.status_code, 200)
 
@@ -213,7 +213,7 @@ class SettingsNameAndContactTests(_SettingsApiTestCase):
 
     These live on ``User`` (name) and ``Profile`` (contact) respectively, but
     both are meant to look like an ordinary settings field to a client - see
-    ``services.profile_settings``'s docstring on why they're allowlisted here
+    ``services.profile.profile_settings``'s docstring on why they're allowlisted here
     rather than left to ``PATCH /profiles/{slug}/``.
     """
 
@@ -333,7 +333,7 @@ class SettingsServiceTests(TestCase):
         self.assertIn("discord_username", ctx.exception.errors)
 
     def test_apply_rejects_a_storage_dimension_above_entitlement(self) -> None:
-        with mock.patch("urbanlens.dashboard.services.profile_settings.allowed_user_dimension_values", return_value={1080}), self.assertRaises(SettingsValidationError) as ctx:
+        with mock.patch("urbanlens.dashboard.services.profile.profile_settings.allowed_user_dimension_values", return_value={1080}), self.assertRaises(SettingsValidationError) as ctx:
             apply_settings_patch(self.profile, {"image_downscale_max_dimension": 999999}, user=self.user)
         self.assertIn("image_downscale_max_dimension", ctx.exception.errors)
 

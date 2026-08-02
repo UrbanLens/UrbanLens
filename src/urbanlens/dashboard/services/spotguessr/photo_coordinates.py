@@ -1,6 +1,6 @@
 """Recording anonymized coordinate guesses toward a photo's own position.
 
-See ``services.photo_coordinates`` for how these accumulate into an
+See ``services.photos.photo_coordinates`` for how these accumulate into an
 estimate; this module is only the SpotGuessr-side hook that records every
 Photos-mode guess and decides whether it's also worth feeding into that
 estimate. See ``docs/designs/spotguessr.md``'s "Crowd-sourced photo
@@ -12,7 +12,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.models.spotguessr.model import PhotoCoordinateGuess
-from urbanlens.dashboard.services.photo_coordinates import recompute_estimated_coordinates
+from urbanlens.dashboard.services.photos.photo_coordinates import recompute_estimated_coordinates
 
 if TYPE_CHECKING:
     from django.contrib.gis.geos import Point

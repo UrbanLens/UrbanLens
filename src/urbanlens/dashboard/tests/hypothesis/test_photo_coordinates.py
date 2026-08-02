@@ -1,4 +1,4 @@
-"""Tests for services.photo_coordinates - averaging anonymized SpotGuessr coordinate guesses."""
+"""Tests for services.photos.photo_coordinates - averaging anonymized SpotGuessr coordinate guesses."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.spotguessr.model import PhotoCoordinateGuess
-from urbanlens.dashboard.services.photo_coordinates import (
+from urbanlens.dashboard.services.photos.photo_coordinates import (
     MIN_GUESSES_FOR_ESTIMATE,
     MIN_GUESSES_FOR_OUTLIER_TRIM,
     recompute_estimated_coordinates,

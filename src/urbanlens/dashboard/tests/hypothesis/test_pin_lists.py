@@ -38,7 +38,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.services.filter_criteria import serialize_form_criteria
+from urbanlens.dashboard.services.search.filter_criteria import serialize_form_criteria
 
 _db_settings = settings(max_examples=20, deadline=None, suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much])
 

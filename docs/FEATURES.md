@@ -111,7 +111,7 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - **Wiki article auto-seeding** — a wiki with no article yet is automatically started from a
   confidently-matched Wikipedia article the first time one is cached for its location (converted
   to Markdown, with a required CC BY-SA attribution footer linking back to the source) - never
-  overwrites an existing article, seeded or human-written (`services.wiki_seed`,
+  overwrites an existing article, seeded or human-written (`services.wiki.wiki_seed`,
   `models.cache.signals`)
 - Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, Photon, EPA ECHO, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering, an admin-only drag-to-reorder priority list (Site Admin), and Google Places demoted to fallback-only (only considered when no other source has a candidate) - individual users cannot override the ordering
 - Boundary drawing — property/building polygons per pin, generated automatically from a typed
@@ -287,7 +287,7 @@ plus the `@mixin tad-tabs` / `@mixin tag-dialog-list` Sass mixins for consistent
 - Real-time push over WebSockets (`ws/notifications/`) with desktop `Notification` API support and
   a 60s polling fallback
 - Outbound email notifications with per-role rate caps (hourly/daily/monthly) and safety controls
-- **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. WhatsApp/SMS delivery is wired for every event type: DMs and safety check-ins keep their dedicated pipelines, and all other types dispatch centrally via a `NotificationLog` post_save signal (`services/notification_text_alerts.py`) — delayed 2 minutes, skipped if read in the meantime, debounced per type per 6h.
+- **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. WhatsApp/SMS delivery is wired for every event type: DMs and safety check-ins keep their dedicated pipelines, and all other types dispatch centrally via a `NotificationLog` post_save signal (`services/notifications/notification_text_alerts.py`) — delayed 2 minutes, skipped if read in the meantime, debounced per type per 6h.
 - Admin-only critical alerting via email + Gotify push (distinct from user-facing notifications)
 
 ## Custom Fields
@@ -315,7 +315,7 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
 - **External API keys** (Settings → Security → API keys): create/revoke/view API keys that let a
   third-party application act on the user's behalf with an extremely limited, scoped grant -
   currently reading only the owner's uuid and creating pins through the exact same
-  `services.pin_creation.create_pin_for_profile` path the map UI uses. Keys are hashed
+  `services.pins.pin_creation.create_pin_for_profile` path the map UI uses. Keys are hashed
   (never stored in plaintext, like backup codes) and revocation takes effect immediately.
   See `dashboard/external_api/` and the REST API section above.
 
@@ -450,7 +450,7 @@ play, all three guess modes.** Everything below the line is not yet built.
   it up), and **Street View** (imagery from the existing Street View integration, point-scored;
   map-click or pin search)
 - Photos-mode community-relevance feedback: in-game thumbs up/down/report on the shown photo
-  feed a blended relevance score (`services.media_relevance.effective_relevance`) alongside the
+  feed a blended relevance score (`services.media.media_relevance.effective_relevance`) alongside the
   wiki's own thumbs, weighted down for in-game signal (thumbs down at only a token weight - see
   the design doc's "Photo relevance feedback"); an "allow arbitrary external photos" setting
   (off by default) opts a session out of the relevance filter

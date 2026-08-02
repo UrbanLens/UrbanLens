@@ -89,7 +89,7 @@ class CreatePinAndLogVisitTests(TestCase):
         )
 
     @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
-    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_creates_pin_visit_and_attaches_photo(self, _mock_enqueue, _mock_resolve_name):
         # No Location exists yet at these coordinates, so create_minimal_pin()
         # creates one via _create_location_with_canonical_name(), which resolves
@@ -106,7 +106,7 @@ class CreatePinAndLogVisitTests(TestCase):
         self.assertEqual(self.photo.pin_id, pin.pk)
 
     @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
-    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_places_pin_at_override_coords_with_name(self, _mock_enqueue, _mock_resolve_name):
         # The confirmation dialog can move the marker and name the pin; the pin
         # lands at the override coords while the photo keeps its own capture coords.
@@ -120,14 +120,14 @@ class CreatePinAndLogVisitTests(TestCase):
         self.photo.refresh_from_db()
         self.assertEqual(Decimal(str(self.photo.latitude)), Decimal(str(_LAT)))
 
-    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_raises_without_coordinates(self, _mock_enqueue):
         photo = baker.make("dashboard.Image", profile=self.profile, pin=None, wiki=None, latitude=None, longitude=None)
         with self.assertRaises(ValueError):
             create_pin_and_log_visit(self.profile, photo)
 
     @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
-    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_files_same_day_sibling_photos_directly(self, _mock_enqueue, _mock_resolve_name):
         # A second photo from the same drop, close enough to match the pin the
         # first photo is about to create, taken the same day. create_visit_suggestion
@@ -155,7 +155,7 @@ class CreatePinAndLogVisitTests(TestCase):
         self.assertFalse(VisitSuggestion.objects.filter(origin_image=self.photo).exists())
 
     @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
-    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_resuggests_nearby_photos_from_a_different_day(self, _mock_enqueue, _mock_resolve_name):
         # A photo at the same spot but from an earlier trip - not obviously the
         # same visit, so it should get a normal confirmable suggestion instead
@@ -180,7 +180,7 @@ class CreatePinAndLogVisitTests(TestCase):
         self.assertIsNone(older_photo.pin_id)
 
     @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
-    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_does_not_resuggest_photos_already_filed_or_dismissed(self, _mock_enqueue, _mock_resolve_name):
         filed = baker.make(
             "dashboard.Image",
@@ -208,7 +208,7 @@ class CreatePinAndLogVisitTests(TestCase):
         self.assertFalse(VisitSuggestion.objects.filter(origin_image=dismissed).exists())
 
     @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
-    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_reuses_existing_pin_instead_of_colliding(self, _mock_enqueue, _mock_resolve_name):
         # Simulates the staging bug: a second, unrelated photo resolves to the
         # same Location as one that already has a pin (e.g. a stale "create a
@@ -238,7 +238,7 @@ class CreatePinAndLogVisitTests(TestCase):
         self.assertEqual(PinVisit.objects.filter(pin=first_pin).count(), 2)
 
     @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
-    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_reused_pin_keeps_its_existing_name(self, _mock_enqueue, _mock_resolve_name):
         create_pin_and_log_visit(self.profile, self.photo, name="Old Water Tower")
 
@@ -292,7 +292,7 @@ class PhotoPinConfirmViewTests(TestCase):
         self.assertEqual(response.status_code, 404)
 
     @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
-    @mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task")
+    @mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
     def test_create_pin_post_uses_confirmed_placement(self, _mock_enqueue, _mock_resolve_name):
         from django.urls import reverse
 

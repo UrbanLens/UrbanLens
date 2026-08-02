@@ -59,7 +59,7 @@ class Boundary(abstract.DashboardModel):
     Source candidate (location=<Location>, source="redata"|"overpass", pin=None, wiki=None, profile=None):
         A per-provider copy of a location's externally-sourced property
         geometry, kept so users can vote on which provider's boundary is most
-        accurate (see ``services.boundary_voting``). One per (location,
+        accurate (see ``services.geo.boundary_voting``). One per (location,
         boundary_type, source). Candidates never participate in
         point→location matching directly - the winning candidate's polygon is
         materialized onto the canonical location-default row (``source=""``),

@@ -14,7 +14,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripActivityVote, TripMembership
 from urbanlens.dashboard.models.visits.model import PinVisit
-from urbanlens.dashboard.services.trip_ai_suggestions import (
+from urbanlens.dashboard.services.trips.trip_ai_suggestions import (
     ExistingActivity,
     ScheduleSuggestion,
     TripAiContext,
@@ -298,7 +298,7 @@ class GenerateTripSuggestionsTests(TestCase):
         self.trip = _joined_trip(self.alice)
 
     def test_unavailable_when_gateway_is_none(self) -> None:
-        with patch("urbanlens.dashboard.services.trip_ai_suggestions.get_gateway", return_value=None):
+        with patch("urbanlens.dashboard.services.trips.trip_ai_suggestions.get_gateway", return_value=None):
             result = generate_trip_suggestions(self.trip, self.alice)
         self.assertFalse(result.generated)
 
@@ -311,21 +311,21 @@ class GenerateTripSuggestionsTests(TestCase):
 
     def test_successful_generation_parses_summary(self) -> None:
         gateway = _StubGateway('{"summary": "Looks good.", "pin_suggestions": [], "schedule": null}')
-        with patch("urbanlens.dashboard.services.trip_ai_suggestions.get_gateway", return_value=gateway):
+        with patch("urbanlens.dashboard.services.trips.trip_ai_suggestions.get_gateway", return_value=gateway):
             result = generate_trip_suggestions(self.trip, self.alice)
         self.assertTrue(result.generated)
         self.assertEqual(result.summary, "Looks good.")
 
     def test_no_answer_from_gateway_is_handled(self) -> None:
         gateway = _StubGateway(None)
-        with patch("urbanlens.dashboard.services.trip_ai_suggestions.get_gateway", return_value=gateway):
+        with patch("urbanlens.dashboard.services.trips.trip_ai_suggestions.get_gateway", return_value=gateway):
             result = generate_trip_suggestions(self.trip, self.alice)
         self.assertTrue(result.generated)
         self.assertIn("Couldn't reach", result.summary)
 
     def test_unparseable_answer_is_handled(self) -> None:
         gateway = _StubGateway("not json at all")
-        with patch("urbanlens.dashboard.services.trip_ai_suggestions.get_gateway", return_value=gateway):
+        with patch("urbanlens.dashboard.services.trips.trip_ai_suggestions.get_gateway", return_value=gateway):
             result = generate_trip_suggestions(self.trip, self.alice)
         self.assertTrue(result.generated)
         self.assertIn("couldn't be understood", result.summary)
@@ -344,21 +344,21 @@ class GetTripSuggestionsCacheTests(TestCase):
 
     def test_second_call_is_served_from_cache(self) -> None:
         gateway = _StubGateway('{"summary": "first"}')
-        with patch("urbanlens.dashboard.services.trip_ai_suggestions.get_gateway", return_value=gateway) as mocked:
+        with patch("urbanlens.dashboard.services.trips.trip_ai_suggestions.get_gateway", return_value=gateway) as mocked:
             get_trip_suggestions(self.trip, self.alice)
             get_trip_suggestions(self.trip, self.alice)
         self.assertEqual(mocked.call_count, 1)
 
     def test_force_refresh_bypasses_cache_once(self) -> None:
         gateway = _StubGateway('{"summary": "fresh"}')
-        with patch("urbanlens.dashboard.services.trip_ai_suggestions.get_gateway", return_value=gateway) as mocked:
+        with patch("urbanlens.dashboard.services.trips.trip_ai_suggestions.get_gateway", return_value=gateway) as mocked:
             get_trip_suggestions(self.trip, self.alice)
             get_trip_suggestions(self.trip, self.alice, force_refresh=True)
         self.assertEqual(mocked.call_count, 2)
 
     def test_rapid_force_refresh_is_cooldown_limited(self) -> None:
         gateway = _StubGateway('{"summary": "x"}')
-        with patch("urbanlens.dashboard.services.trip_ai_suggestions.get_gateway", return_value=gateway) as mocked:
+        with patch("urbanlens.dashboard.services.trips.trip_ai_suggestions.get_gateway", return_value=gateway) as mocked:
             get_trip_suggestions(self.trip, self.alice, force_refresh=True)
             get_trip_suggestions(self.trip, self.alice, force_refresh=True)
         self.assertEqual(mocked.call_count, 1)
@@ -394,7 +394,7 @@ class TripAiSuggestionsViewTests(TestCase):
         self.assertContains(response, "turned off")
 
     def test_get_renders_generated_suggestions(self) -> None:
-        with patch("urbanlens.dashboard.services.trip_ai_suggestions.get_trip_suggestions") as mocked:
+        with patch("urbanlens.dashboard.services.trips.trip_ai_suggestions.get_trip_suggestions") as mocked:
             mocked.return_value = TripSuggestions(summary="A great plan.", pin_suggestions=[], schedule=None)
             response = self.client.get(reverse("trips.ai_suggestions", args=[self.trip.slug]))
         self.assertEqual(response.status_code, 200)
@@ -405,7 +405,7 @@ class TripAiSuggestionsViewTests(TestCase):
         self.assertEqual(kwargs, {"force_refresh": False})
 
     def test_post_forces_refresh(self) -> None:
-        with patch("urbanlens.dashboard.services.trip_ai_suggestions.get_trip_suggestions") as mocked:
+        with patch("urbanlens.dashboard.services.trips.trip_ai_suggestions.get_trip_suggestions") as mocked:
             mocked.return_value = TripSuggestions(summary="Refreshed.", pin_suggestions=[], schedule=None)
             self.client.post(reverse("trips.ai_suggestions", args=[self.trip.slug]))
         _, kwargs = mocked.call_args

@@ -5,7 +5,7 @@ from __future__ import annotations
 from django.core.management.base import BaseCommand, CommandError
 
 from urbanlens.dashboard.services.apis.search.google import GoogleCustomSearchError, GoogleCustomSearchGateway
-from urbanlens.dashboard.services.redact import redact_secret
+from urbanlens.dashboard.services.security.redact import redact_secret
 from urbanlens.UrbanLens.settings.app import settings
 
 

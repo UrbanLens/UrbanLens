@@ -174,8 +174,8 @@ class DatabaseBackup:
             True if a backup task was enqueued, False if none was due or one is already
             pending.
         """
-        from urbanlens.dashboard.services.backups import scheduled_backup_due
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.admin.backups import scheduled_backup_due
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import run_scheduled_database_backup
 
         if not scheduled_backup_due():

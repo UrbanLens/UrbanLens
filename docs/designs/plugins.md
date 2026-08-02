@@ -11,7 +11,7 @@ integration needs:
 
 ```python
 from urbanlens.dashboard.plugins import UrbanLensPlugin
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 
 
 class NpsPlugin(UrbanLensPlugin):
@@ -79,7 +79,7 @@ admin-only decision - individual users cannot override it.
 
 ### Enrichment sources
 
-An `EnrichmentSource` (`urbanlens.dashboard.services.enrichment`) is one kind of
+An `EnrichmentSource` (`urbanlens.dashboard.services.locations.enrichment`) is one kind of
 proactively backfillable data. The hourly `run_scheduled_enrichment` task computes how
 much of each declared `service_keys` rate limit is safely spendable (keeping the
 admin-configured buffer in reserve and pacing multi-day limits evenly), picks the

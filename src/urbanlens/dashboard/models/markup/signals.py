@@ -9,7 +9,7 @@ from django.dispatch import receiver
 from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
 
 #: MarkupMap fields whose change can alter geometric pin-inference detection
-#: (see ``services.map_pin_share_detection.detect_shared_pins``, which only
+#: (see ``services.sharing.map_pin_share_detection.detect_shared_pins``, which only
 #: ever reads the saved viewport off the map itself - everything else it
 #: needs comes from the map's ``items``, covered by the PinMarkup receivers
 #: below). Saves that touch only other fields (title, layer/border display
@@ -31,7 +31,7 @@ def _defer_sync(markup_map_id: int) -> None:
     """
 
     def _run() -> None:
-        from urbanlens.dashboard.services.map_pin_share_detection import sync_pin_inferences
+        from urbanlens.dashboard.services.sharing.map_pin_share_detection import sync_pin_inferences
 
         try:
             markup_map = MarkupMap.objects.get(pk=markup_map_id)

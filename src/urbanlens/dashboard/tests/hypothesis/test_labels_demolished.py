@@ -1,6 +1,6 @@
 """Tests for services.labels - auto-applying the protected "Demolished" status.
 
-Mirrors services.visits.add_visited_status's contract for pins, plus the
+Mirrors services.visits.visits.add_visited_status's contract for pins, plus the
 wiki-side counterpart that uses one canonical global label instead of a
 per-profile one (a Wiki has no owning profile - see services.labels'
 module docstring).

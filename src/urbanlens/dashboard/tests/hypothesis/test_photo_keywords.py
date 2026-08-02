@@ -11,7 +11,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images import ImageKeyword
 from urbanlens.dashboard.models.images.keyword import MAX_KEYWORD_LENGTH
-from urbanlens.dashboard.services.photo_keywords import (
+from urbanlens.dashboard.services.photos.photo_keywords import (
     MAX_KEYWORDS_PER_SOURCE,
     KeywordResult,
     PhotoKeywordProvider,

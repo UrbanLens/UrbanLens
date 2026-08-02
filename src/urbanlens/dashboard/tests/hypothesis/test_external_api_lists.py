@@ -20,8 +20,8 @@ from urbanlens.dashboard.models.pin_list.model import PinList, PinListItem
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 _BASE = "/dashboard/api/external/v1/lists/"
 

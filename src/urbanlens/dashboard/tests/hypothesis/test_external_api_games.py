@@ -43,7 +43,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind, GameRound, GameSession, GameSessionStatus, Guess, SpotGuessrMode
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_multiplayer_session, start_solo_session
 
 _coordinate_counter = count()

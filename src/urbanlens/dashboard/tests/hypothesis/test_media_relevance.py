@@ -1,4 +1,4 @@
-"""Tests for services.media_relevance - blended wiki + SpotGuessr photo relevance."""
+"""Tests for services.media.media_relevance - blended wiki + SpotGuessr photo relevance."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_it
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind, GameRound, GameSession, SpotGuessrMode
-from urbanlens.dashboard.services.media_relevance import effective_relevance, local_images_for_gallery_items
+from urbanlens.dashboard.services.media.media_relevance import effective_relevance, local_images_for_gallery_items
 
 _coordinate_counter = count()
 

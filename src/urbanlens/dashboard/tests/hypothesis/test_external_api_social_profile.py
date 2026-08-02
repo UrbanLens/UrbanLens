@@ -40,7 +40,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.profile.nickname import ProfileNickname
 from urbanlens.dashboard.models.profile.note import ProfileNote
 from urbanlens.dashboard.models.profile.trust import ProfileTrust
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 #: A real 1x1 PNG. The upload pipeline sniffs magic bytes, so junk content would
 #: exercise the content-mismatch rejection instead of the path under test.
@@ -210,7 +210,7 @@ class AvatarUploadTests(_SocialProfileTestCase):
         The payload is a real PDF wearing a ``.png`` name and an ``image/png``
         Content-Type. Unrecognizable junk would *not* be rejected - a format
         ``filetype`` cannot fingerprint is deliberately trusted (see
-        ``services.content_sniffing``) - so a mismatch only exists when the
+        ``services.security.content_sniffing``) - so a mismatch only exists when the
         bytes are identifiable as something else.
         """
         response = _multipart_put(
@@ -236,7 +236,7 @@ class AvatarUploadTests(_SocialProfileTestCase):
             ("Our antivirus scanner is temporarily unavailable. Please try again shortly.", 503),
         )
         for message, status_code in cases:
-            with self.subTest(status=status_code), patch("urbanlens.dashboard.services.images.image_upload_error", return_value=(message, status_code)):
+            with self.subTest(status=status_code), patch("urbanlens.dashboard.services.media.images.image_upload_error", return_value=(message, status_code)):
                 response = self._put_png(self.profile)
                 self.assertEqual(response.status_code, status_code)
                 self.assertEqual(response.json(), {"error": message})

@@ -17,7 +17,7 @@ import pytest
 from urbanlens.dashboard.baker_recipes import _make_profile
 from urbanlens.dashboard.controllers.pin import PinController
 from urbanlens.dashboard.services.ai.factory import get_gateway
-from urbanlens.dashboard.services.external_data import schedule_panel_fetch
+from urbanlens.dashboard.services.pins.external_data import schedule_panel_fetch
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -141,7 +141,7 @@ def test_cpu_heavy_panels_stay_on_the_default_queue() -> None:
     work (gunzipping/parsing GeoParquet, shapely geometry) - several of those running
     concurrently on the thread-pool queue would cause enough GIL contention to slow
     down every other panel sharing it, so they opt out via PanelSource.queue."""
-    from urbanlens.dashboard.services.external_data import BoundaryPanelSource, get_panel_source
+    from urbanlens.dashboard.services.pins.external_data import BoundaryPanelSource, get_panel_source
 
     assert BoundaryPanelSource().queue == "celery"
 

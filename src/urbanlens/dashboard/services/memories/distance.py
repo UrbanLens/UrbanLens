@@ -9,7 +9,7 @@
    though no route was recorded for those legs.
 
 All values are returned in kilometres; convert to the viewer's unit at display
-time with ``services.units``.
+time with ``services.core.units``.
 """
 
 from __future__ import annotations

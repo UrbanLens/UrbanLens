@@ -14,16 +14,16 @@ from typing import TYPE_CHECKING, ClassVar
 from django.db.models import Q
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.enrichment import EnrichmentSource
-from urbanlens.dashboard.services.external_data import GalleryMediaSource, PanelApiKind
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
 from urbanlens.dashboard.services.locations.name_resolution import NameProvider
-from urbanlens.dashboard.services.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.pins.external_data import GalleryMediaSource, PanelApiKind
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.apis.assets.base import MediaItem
-    from urbanlens.dashboard.services.external_data import PanelSource
+    from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 
 class GoogleMapsPhotosPanelSource(GalleryMediaSource):
@@ -184,6 +184,6 @@ class GooglePlacesPlugin(UrbanLensPlugin):
 
     def get_enrichment_sources(self) -> list[EnrichmentSource]:
         """Contribute GooglePlace linking and photo backfill to scheduled background enrichment."""
-        from urbanlens.dashboard.services.photo_enrichment import PlacePhotoEnrichmentSource
+        from urbanlens.dashboard.services.photos.photo_enrichment import PlacePhotoEnrichmentSource
 
         return [GooglePlaceLinkEnrichmentSource(), PlacePhotoEnrichmentSource()]

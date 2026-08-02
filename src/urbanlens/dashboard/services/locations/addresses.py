@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from django.db import DatabaseError
 
-from urbanlens.dashboard.services.rate_limiter import RequestCancelledError
+from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -22,7 +22,7 @@ def ensure_location_address(location: Location | None) -> bool:
     then writes the parsed components back to the Location row so the next request
     reads directly from the DB with no API call. Used lazily by the pin overview
     page and proactively by background enrichment
-    (:class:`~urbanlens.dashboard.services.enrichment.AddressEnrichmentSource`).
+    (:class:`~urbanlens.dashboard.services.locations.enrichment.AddressEnrichmentSource`).
 
     Args:
         location: The location to backfill; no-ops when None or already addressed.

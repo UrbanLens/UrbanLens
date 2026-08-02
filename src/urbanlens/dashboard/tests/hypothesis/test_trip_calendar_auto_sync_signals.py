@@ -36,7 +36,7 @@ class TripCalendarAutoSyncSignalTests(TestCase):
         callbacks = []
         with (
             mock.patch("urbanlens.dashboard.models.trips.signals.transaction.on_commit", side_effect=callbacks.append),
-            mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue,
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             sync_trip_on_save(sender=Trip, instance=self.trip)
             for callback in callbacks:
@@ -74,7 +74,7 @@ class TripCalendarAutoSyncSignalTests(TestCase):
         callbacks = []
         with (
             mock.patch("urbanlens.dashboard.models.trips.signals.transaction.on_commit", side_effect=callbacks.append),
-            mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue,
+            mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue,
         ):
             sync_trip_on_activity_save(sender=TripActivity, instance=activity)
             for callback in callbacks:

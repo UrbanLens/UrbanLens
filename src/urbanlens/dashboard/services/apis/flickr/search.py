@@ -26,7 +26,7 @@ based on whether a Flickr API key is configured:
   full-text relevance, and only a small preview image is available, not a
   full-resolution original.
 
-Both contribute the same Media gallery tab (see ``services.external_data``)
+Both contribute the same Media gallery tab (see ``services.pins.external_data``)
 alongside Wikimedia/Smithsonian/LOC/Internet Archive, and share the
 ``flickr`` rate-limit/usage-tracking service key with the other two Flickr
 integrations.
@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
 from urbanlens.dashboard.services.apis.flickr.oauth import FlickrNotConfiguredError, _consumer_credentials
 from urbanlens.dashboard.services.apis.flickr.public import photo_web_url
-from urbanlens.dashboard.services.external_data import MediaPanelSource
+from urbanlens.dashboard.services.pins.external_data import MediaPanelSource
 
 if TYPE_CHECKING:
     from collections.abc import Generator

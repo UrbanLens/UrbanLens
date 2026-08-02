@@ -18,9 +18,9 @@ from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reviews.model import Review
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.comments import top_level_comment_queryset, visible_comment_tree
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.comments.comments import top_level_comment_queryset, visible_comment_tree
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 BASE = "/dashboard/api/external/v1/pins"
 

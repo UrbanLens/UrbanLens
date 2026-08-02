@@ -21,8 +21,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.undo.model import UndoAction
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.pin_creation import create_pin_for_profile
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.pins.pin_creation import create_pin_for_profile
 
 _BASE = "/dashboard/api/external/v1/pins/bulk/"
 

@@ -31,7 +31,7 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.pin_creation import PinCreationError, create_pin_for_profile, resolve_child_pin_location
+from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, create_pin_for_profile, resolve_child_pin_location
 
 # DB-backed @given tests never touch self.client - only ORM/service calls - per
 # this repo's documented rule that hypothesis's per-example DB flush and the

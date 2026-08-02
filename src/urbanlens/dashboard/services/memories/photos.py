@@ -1,7 +1,7 @@
 """Organize-photos helpers for the Memories Photos page: pin matching, classification, and visit logging.
 
 These build on the lower-level PinVisit/VisitSuggestion helpers in
-``services.visits`` and are the operations the Photos page controllers call when a
+``services.visits.visits`` and are the operations the Photos page controllers call when a
 user confirms, pins, or manually files an uploaded photo. Ingestion (raising a
 ``VisitSuggestion`` from a freshly uploaded, unfiled photo) lives in
 ``services.memories.visits.maybe_suggest_photo_visit``.
@@ -17,7 +17,7 @@ from django.contrib.gis.measure import D
 
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.visits import add_visited_status, resolve_location_for_point, sync_last_visited, visit_logging_allowed
+from urbanlens.dashboard.services.visits.visits import add_visited_status, resolve_location_for_point, sync_last_visited, visit_logging_allowed
 
 if TYPE_CHECKING:
     from decimal import Decimal

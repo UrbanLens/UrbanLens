@@ -3,12 +3,12 @@
 A wiki qualifies for deletion when either is true:
 - 2 or fewer distinct profiles have a Pin explicitly linked to it (``Pin.wiki``
   - this is *not* every pin at the wiki's Location, only the ones a user has
-  explicitly attached; see ``WikiCreationService``/``services.pin_wiki_sync``).
+  explicitly attached; see ``WikiCreationService``/``services.pins.pin_wiki_sync``).
 - It has no *active* edit by a real user - a ``WikiEdit`` whose ``editor`` is
   set and ``reverted`` is False. Reverted edits and edits with a null editor
-  (seed/system content, e.g. ``services.wiki_seed``/``services.wiki_merge``)
+  (seed/system content, e.g. ``services.wiki.wiki_seed``/``services.wiki.wiki_merge``)
   don't count, mirroring the "has a human touched this" check in
-  ``services.safety.destination_wiki_activity``.
+  ``services.visits.safety.destination_wiki_activity``.
 
 This is a hard delete with no undo path: Wiki has no soft-delete, and isn't
 wired into the undo framework the way a single user-initiated delete is (see

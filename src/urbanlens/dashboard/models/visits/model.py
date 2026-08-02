@@ -8,7 +8,7 @@ from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, DateTim
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.visits.queryset import VisitManager
-from urbanlens.dashboard.services.text_limits import MAX_VISIT_NOTES_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_VISIT_NOTES_LENGTH
 
 
 class VisitSource(TextChoices):
@@ -51,7 +51,7 @@ class PinVisit(abstract.FrontendDashboardModel):
 
     visited_at = DateTimeField()
     #: max_length adds a MaxLengthValidator without changing the DB column (see
-    #: services.text_limits) - previously unbounded on every write path, which
+    #: services.core.text_limits) - previously unbounded on every write path, which
     #: is a storage-abuse vector now that the external API can log visits too.
     notes = TextField(null=True, blank=True, max_length=MAX_VISIT_NOTES_LENGTH)
     source = CharField(max_length=20, choices=VisitSource.choices, default=VisitSource.MANUAL)
@@ -117,7 +117,7 @@ class PinVisit(abstract.FrontendDashboardModel):
         """
         if not self.notes:
             return ""
-        from urbanlens.dashboard.services.articles import render_article
+        from urbanlens.dashboard.services.wiki.articles import render_article
 
         return render_article(self.notes).html
 

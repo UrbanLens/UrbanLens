@@ -43,7 +43,7 @@ class ImportPreviewCidDeferralTests(TestCase):
 
     def test_pin_with_uncached_cid_is_deferred_not_created_from_preview_coords(self) -> None:
         """The preview's lat/lng for an unresolved cid is a guess - never trust it."""
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue:
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             events = self._run(
                 [{"name": "Cresson Sanatorium", "lat": 40.431072, "lng": -78.502283, "description": "", "cid": 12345}],
             )
@@ -71,7 +71,7 @@ class ImportPreviewCidDeferralTests(TestCase):
         """resolve_deferred_pin_locations passes this to REData, which resolves via a
         place's own URL faster and more reliably than the bare cid alone."""
         url = "https://www.google.com/maps/place/Cresson+Sanatorium/data=!4m2!3m1!1s0x0:0x3039"
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue:
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             self._run(
                 [{"name": "Cresson Sanatorium", "lat": 40.431072, "lng": -78.502283, "description": "", "cid": 12345, "maps_url": url}],
             )
@@ -88,7 +88,7 @@ class ImportPreviewCidDeferralTests(TestCase):
             json_response=json.dumps({"result": {"geometry": {"location": {"lat": 40.450732, "lng": -78.563382}}}}),
         )
 
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue:
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             events = self._run(
                 # Deliberately wrong preview coordinates - the cache hit must win.
                 [{"name": "Cresson Sanatorium", "lat": 40.431072, "lng": -78.502283, "description": "", "cid": 99999}],
@@ -105,7 +105,7 @@ class ImportPreviewCidDeferralTests(TestCase):
         google_place = baker.make(GooglePlace, cid=55555)
         location = baker.make(Location, latitude=41.0, longitude=-75.0, google_place=google_place)
 
-        with mock.patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as enqueue:
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
             events = self._run(
                 [{"name": "Known Place", "lat": 0.0, "lng": 0.0, "description": "", "cid": 55555}],
             )

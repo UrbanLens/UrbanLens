@@ -17,7 +17,7 @@ from urbanlens.dashboard.controllers.setup import (
     setup_app_title_value,
 )
 from urbanlens.dashboard.models.site_settings import SiteSettings
-from urbanlens.dashboard.services.site_admin import add_user_to_site_admin_group
+from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
 
 
 class AppTitleNormalizationTests(SimpleTestCase):

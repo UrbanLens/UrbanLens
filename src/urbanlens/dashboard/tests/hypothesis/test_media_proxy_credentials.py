@@ -46,7 +46,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.external_api.throttling import ExternalApiMediaThrottle
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.apis.locations.google.places import GooglePlacesGateway
 from urbanlens.UrbanLens.settings.app import settings
 

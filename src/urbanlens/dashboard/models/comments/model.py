@@ -9,7 +9,7 @@ from django.db import models
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.comments.queryset import CommentManager
-from urbanlens.dashboard.services.text_limits import MAX_COMMENT_TEXT_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_COMMENT_TEXT_LENGTH
 
 
 class Comment(abstract.FrontendDashboardModel):

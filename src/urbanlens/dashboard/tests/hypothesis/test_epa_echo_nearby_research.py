@@ -411,7 +411,7 @@ class FetchEpaEchoDataExactMatchTests(TestCase):
         and keep the already-fetched facilities list + any exact_site found so far, not
         propagate and wipe out everything fetch() already has - see the module docstring for
         why that used to leave the panel suppressed for 30 minutes with no cached data at all."""
-        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
         facilities = [
             {"name": "First Facility", "address": "1 Main St", "registry_id": "R1"},
@@ -445,7 +445,7 @@ class FetchEpaEchoDataExactMatchTests(TestCase):
         call happens too - checking that RA (the farthest, array-order-first
         candidate) was never reached confirms the rate limit trips before the
         loop gets that far, which is exactly why checking order matters here."""
-        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
         facilities = [
             {"name": "Far Facility A", "address": "1 Far St", "registry_id": "RA", "latitude": 45.0},
@@ -490,7 +490,7 @@ class FetchEpaEchoDataExactMatchTests(TestCase):
         self.assertEqual(result["exact_site"]["registry_id"], "R2")
 
     def test_rate_limit_on_the_very_first_candidate_still_keeps_the_facilities_list(self) -> None:
-        from urbanlens.dashboard.services.rate_limiter import RateLimitExceededError
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
         facilities = [{"name": "First Facility", "address": "1 Main St", "registry_id": "R1"}]
         gateway = self._gateway(facilities=facilities, detail_by_registry_id={})

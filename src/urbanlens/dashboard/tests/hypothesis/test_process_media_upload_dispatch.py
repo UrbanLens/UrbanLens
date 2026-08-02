@@ -58,7 +58,7 @@ class VideoUploadDispatchTests(TestCase):
         }
         with (
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.videos.process_uploaded_video", return_value=(metadata, None)),
+            patch("urbanlens.dashboard.services.media.videos.process_uploaded_video", return_value=(metadata, None)),
         ):
             result = process_image_upload(self.image.pk)
 
@@ -73,7 +73,7 @@ class VideoUploadDispatchTests(TestCase):
     def test_video_downscale_updates_file_size(self) -> None:
         with (
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.videos.process_uploaded_video", return_value=({}, 12345)),
+            patch("urbanlens.dashboard.services.media.videos.process_uploaded_video", return_value=({}, 12345)),
         ):
             process_image_upload(self.image.pk)
         self.image.refresh_from_db()
@@ -82,8 +82,8 @@ class VideoUploadDispatchTests(TestCase):
     def test_video_upload_does_not_enqueue_photo_keyword_generation(self) -> None:
         with (
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.videos.process_uploaded_video", return_value=({}, None)),
-            patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as mock_enqueue,
+            patch("urbanlens.dashboard.services.media.videos.process_uploaded_video", return_value=({}, None)),
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as mock_enqueue,
         ):
             process_image_upload(self.image.pk)
         for call in mock_enqueue.call_args_list:
@@ -106,8 +106,8 @@ class DocumentUploadDispatchTests(TestCase):
     def test_conversion_and_ocr_are_invoked_and_persisted(self) -> None:
         with (
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.documents.convert_to_pdf", return_value=999) as mock_convert,
-            patch("urbanlens.dashboard.services.documents.extract_pdf_text", return_value="Extracted document text") as mock_ocr,
+            patch("urbanlens.dashboard.services.media.documents.convert_to_pdf", return_value=999) as mock_convert,
+            patch("urbanlens.dashboard.services.media.documents.extract_pdf_text", return_value="Extracted document text") as mock_ocr,
         ):
             result = process_image_upload(self.image.pk)
 
@@ -121,8 +121,8 @@ class DocumentUploadDispatchTests(TestCase):
     def test_no_ocr_text_leaves_field_unset(self) -> None:
         with (
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.documents.convert_to_pdf", return_value=None),
-            patch("urbanlens.dashboard.services.documents.extract_pdf_text", return_value=None),
+            patch("urbanlens.dashboard.services.media.documents.convert_to_pdf", return_value=None),
+            patch("urbanlens.dashboard.services.media.documents.extract_pdf_text", return_value=None),
         ):
             process_image_upload(self.image.pk)
         self.image.refresh_from_db()
@@ -131,9 +131,9 @@ class DocumentUploadDispatchTests(TestCase):
     def test_document_upload_does_not_enqueue_photo_keyword_generation(self) -> None:
         with (
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.documents.convert_to_pdf", return_value=None),
-            patch("urbanlens.dashboard.services.documents.extract_pdf_text", return_value=None),
-            patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as mock_enqueue,
+            patch("urbanlens.dashboard.services.media.documents.convert_to_pdf", return_value=None),
+            patch("urbanlens.dashboard.services.media.documents.extract_pdf_text", return_value=None),
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as mock_enqueue,
         ):
             process_image_upload(self.image.pk)
         for call in mock_enqueue.call_args_list:
@@ -156,7 +156,7 @@ class PhotoUploadStillEnqueuesKeywordsTests(TestCase):
         )
         with (
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
-            patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as mock_enqueue,
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as mock_enqueue,
         ):
             process_image_upload(image.pk)
         enqueued_tasks = [call.args[0] for call in mock_enqueue.call_args_list if call.args]

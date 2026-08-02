@@ -27,7 +27,7 @@ from urbanlens.dashboard.models.spotguessr.model import (
     GameSessionStatus,
     Guess,
 )
-from urbanlens.dashboard.services.connections import are_connections
+from urbanlens.dashboard.services.social.connections import are_connections
 from urbanlens.dashboard.services.spotguessr import eligibility, geo_bonus, modes, photo_coordinates, prewarm, realtime, relevance, scoring, selection, serializers
 from urbanlens.dashboard.services.spotguessr.ratings import RatingChange, apply_round_ratings
 
@@ -289,7 +289,7 @@ def _notify_invite(host: Profile, invitee: Profile, session: GameSession) -> Non
 
     from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
-    from urbanlens.dashboard.services.identity_visibility import resolve_visible_identity
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
     host_name = resolve_visible_identity(invitee, host)["display_name"]
     NotificationLog.objects.create(
@@ -440,7 +440,7 @@ def get_or_create_round(session: GameSession) -> GameRound | None:
     # Best-effort: a broker hiccup here just means the next round falls back
     # to live generation, exactly as if this had never run.
     if next_sequence_index + 1 < session.total_rounds:
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import prewarm_spotguessr_round
 
         safely_enqueue_task(prewarm_spotguessr_round, session.pk, next_sequence_index + 1)

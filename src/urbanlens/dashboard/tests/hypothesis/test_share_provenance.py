@@ -1,4 +1,4 @@
-"""Tests for gaming-proof share-chain provenance (services.share_provenance).
+"""Tests for gaming-proof share-chain provenance (services.sharing.share_provenance).
 
 Covers the exposure model end to end:
 - receiving a share records a LocationExposure for the recipient
@@ -37,7 +37,7 @@ from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipSt
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share import ExposureSource, LocationExposure, PinShare, PinShareStatus
-from urbanlens.dashboard.services.share_provenance import (
+from urbanlens.dashboard.services.sharing.share_provenance import (
     record_share_exposure,
     resolve_origin_share,
 )

@@ -13,7 +13,7 @@ from typing import Any, ClassVar
 
 import requests
 
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 
 logger = logging.getLogger(__name__)
 

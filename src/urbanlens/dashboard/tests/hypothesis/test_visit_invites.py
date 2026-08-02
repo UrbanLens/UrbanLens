@@ -31,8 +31,8 @@ from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.models.visits.participant import ExternalVisitParticipant
-from urbanlens.dashboard.services.email_safety import hash_email, record_email_sent
-from urbanlens.dashboard.services.visit_invites import process_pending_visit_invites, sync_external_participants
+from urbanlens.dashboard.services.security.email_safety import hash_email, record_email_sent
+from urbanlens.dashboard.services.visits.visit_invites import process_pending_visit_invites, sync_external_participants
 
 
 class _VisitInviteTestCase(TestCase):

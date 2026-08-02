@@ -22,7 +22,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.services.saved_filter_cache import get_or_compute_matching_uuids
+from urbanlens.dashboard.services.search.saved_filter_cache import get_or_compute_matching_uuids
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile

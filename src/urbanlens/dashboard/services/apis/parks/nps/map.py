@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import logging
 from typing import ClassVar
 
-from urbanlens.dashboard.services.gateway import Gateway
+from urbanlens.dashboard.services.core.gateway import Gateway
 
 logger = logging.getLogger(__name__)
 

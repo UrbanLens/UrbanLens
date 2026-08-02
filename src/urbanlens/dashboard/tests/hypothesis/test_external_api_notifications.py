@@ -3,7 +3,7 @@
 The acknowledgement endpoint is the security-sensitive one. It answers 204
 whether or not a row matched, so a caller cannot use it to discover whether a
 given uuid belongs to *somebody* - the same reasoning behind
-``services.push.unregister_device`` returning a bare bool.
+``services.notifications.push.unregister_device`` returning a bare bool.
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
-from urbanlens.dashboard.services.notification_center import preference_field_names
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
+from urbanlens.dashboard.services.notifications.notification_center import preference_field_names
 
 
 def _bearer(raw_key: str) -> dict:
@@ -85,7 +85,7 @@ class NotificationPreferenceCoverageTests(TestCase):
         ``safety_ci_partner_invite``, but its preference columns are named
         ``safety_checkin_partner_invite*``. Anything deriving a field name from
         a notification's type therefore misses it -
-        ``services.notification_text_alerts._wants_text_alerts`` does exactly
+        ``services.notifications.notification_text_alerts._wants_text_alerts`` does exactly
         that and falls back to ``False``, so WhatsApp/SMS alerts for that type
         never fire even when the user enabled them. Recorded in
         ``docs/PROBLEMS.md``.

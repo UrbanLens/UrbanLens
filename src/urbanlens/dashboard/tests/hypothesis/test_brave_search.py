@@ -17,7 +17,7 @@ from urbanlens.dashboard.services.apis.search.brave.search import (
     BraveSearchError,
     BraveSearchGateway,
 )
-from urbanlens.dashboard.services.redact import redact_secret
+from urbanlens.dashboard.services.security.redact import redact_secret
 
 _hyp = hyp_settings(max_examples=50, deadline=None)
 

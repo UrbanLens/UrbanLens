@@ -33,7 +33,7 @@ def refit_child_boundaries_on_save(sender: type[Pin], instance: Pin, created: bo
     """Keep child-generated property boundaries aligned after adds and moves."""
     if not created and not getattr(instance, "child_boundary_position_changed", False):
         return
-    from urbanlens.dashboard.services.child_pin_boundaries import refit_child_pin_boundary
+    from urbanlens.dashboard.services.geo.child_pin_boundaries import refit_child_pin_boundary
 
     parent_ids = {
         parent_id
@@ -47,7 +47,7 @@ def refit_child_boundaries_on_save(sender: type[Pin], instance: Pin, created: bo
 @receiver(post_delete, sender=Pin, dispatch_uid="pin_refit_child_boundaries_on_delete")
 def refit_child_boundaries_on_delete(sender: type[Pin], instance: Pin, **kwargs) -> None:
     """Shrink a child-generated property boundary after a child is removed."""
-    from urbanlens.dashboard.services.child_pin_boundaries import refit_child_pin_boundary
+    from urbanlens.dashboard.services.geo.child_pin_boundaries import refit_child_pin_boundary
 
     refit_child_pin_boundary(instance.parent_pin_id)
 
@@ -308,7 +308,7 @@ def ensure_draft_wiki_for_pin_location(sender: type[Pin], instance: Pin, created
     location_id = instance.location_id
 
     def _run() -> None:
-        from urbanlens.dashboard.services.celery import safely_enqueue_task
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import ensure_draft_wiki_for_location
 
         safely_enqueue_task(ensure_draft_wiki_for_location, location_id)

@@ -37,7 +37,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.friendship import FriendshipNotFoundError, mute_profile, unmute_profile
+from urbanlens.dashboard.services.social.friendship import FriendshipNotFoundError, mute_profile, unmute_profile
 
 _db_settings = settings(
     max_examples=20,

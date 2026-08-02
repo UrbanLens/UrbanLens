@@ -4,7 +4,7 @@ When more than one external provider has geometry for a place (REData's
 county parcel vs. Overpass's OpenStreetMap perimeter), the community picks
 which one should be the location's *official* property boundary - the one
 used for matching pins to wikis. Votes are recency-weighted (see
-``services.boundary_voting``), so a newer vote outweighs an equally-split
+``services.geo.boundary_voting``), so a newer vote outweighs an equally-split
 older one and the consensus can drift as the underlying data improves.
 
 Only externally-sourced candidate ``Boundary`` rows are votable - a

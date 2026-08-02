@@ -179,8 +179,68 @@ from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit
-from urbanlens.dashboard.services.filter_criteria import CriteriaOwnershipError, validate_criteria_ownership
-from urbanlens.dashboard.services.friendship import (
+from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
+from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
+from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
+from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
+from urbanlens.dashboard.services.map_pins.autocomplete import resolve_google_place, search_google_places, search_local
+from urbanlens.dashboard.services.media.media_labels import MediaLabelError, set_media_labels
+from urbanlens.dashboard.services.media.media_relevance import toggle_media_vote
+from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
+from urbanlens.dashboard.services.memories.journal import get_journal_entries
+from urbanlens.dashboard.services.memories.photos import create_pin_and_log_visit, log_visit_on_pin
+from urbanlens.dashboard.services.notifications.notification_center import (
+    DEFAULT_NOTIFICATION_PAGE_SIZE,
+    InvalidNotificationCursorError,
+    get_preferences,
+    list_notifications,
+    mark_all_read,
+    mark_notification_read,
+    serialize_preferences,
+    unread_count,
+    update_preferences,
+)
+from urbanlens.dashboard.services.notifications.push import PushRegistrationError, register_device, unregister_device
+from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
+from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
+from urbanlens.dashboard.services.pins.pin_detail import build_pin_detail
+from urbanlens.dashboard.services.pins.pin_edit import (
+    ORGANIZE_LABEL_KINDS,
+    PinEditError,
+    PinHasChildrenError,
+    PinMoveError,
+    PinReparentError,
+    apply_pin_edits,
+    delete_pin,
+    move_pin_to_coordinates,
+    reparent_pin,
+)
+from urbanlens.dashboard.services.pins.pin_list_membership import (
+    add_pins_to_list,
+    remove_pins_from_list,
+    reorder_list_items,
+    resync_lists_for_saved_filter,
+    resync_smart_list,
+)
+from urbanlens.dashboard.services.pins.pin_subresources import (
+    AliasExistsError,
+    AliasIsCurrentNameError,
+    InvalidLinkError,
+    PinSubResourceError,
+    create_pin_alias,
+    create_pin_link,
+    create_pin_note,
+    delete_pin_alias,
+    delete_pin_link,
+    delete_pin_note,
+    promote_alias_to_name,
+)
+from urbanlens.dashboard.services.pins.pin_suggestions import LocationHit, accept_pin_suggestion, attach_suggestion_photos, ingest_location_hits, pending_suggestions_for_profile, reject_pin_suggestion
+from urbanlens.dashboard.services.pins.pin_sync import InvalidSyncCursorError, StaleDeletedSinceError, sync_pins_page, sync_tombstones_page
+from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities, resolve_visible_identity
+from urbanlens.dashboard.services.profile.profile_settings import SettingsValidationError, apply_settings_patch, read_settings
+from urbanlens.dashboard.services.search.filter_criteria import CriteriaOwnershipError, validate_criteria_ownership
+from urbanlens.dashboard.services.social.friendship import (
     DEFAULT_FRIEND_PAGE_SIZE,
     FriendLimitExceededError,
     FriendshipActionError,
@@ -198,67 +258,34 @@ from urbanlens.dashboard.services.friendship import (
     request_or_accept_friendship,
     unmute_profile,
 )
-from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities, resolve_visible_identity
-from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
-from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
-from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
-from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
-from urbanlens.dashboard.services.map_pins.autocomplete import resolve_google_place, search_google_places, search_local
-from urbanlens.dashboard.services.media_labels import MediaLabelError, set_media_labels
-from urbanlens.dashboard.services.media_relevance import toggle_media_vote
-from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
-from urbanlens.dashboard.services.memories.journal import get_journal_entries
-from urbanlens.dashboard.services.memories.photos import create_pin_and_log_visit, log_visit_on_pin
-from urbanlens.dashboard.services.notification_center import (
-    DEFAULT_NOTIFICATION_PAGE_SIZE,
-    InvalidNotificationCursorError,
-    get_preferences,
-    list_notifications,
-    mark_all_read,
-    mark_notification_read,
-    serialize_preferences,
-    unread_count,
-    update_preferences,
+from urbanlens.dashboard.services.trips.trip_access import can_perform, get_trip_for_viewer, has_joined, is_organizer
+from urbanlens.dashboard.services.trips.trip_activities import (
+    build_activity_rows,
+    complete_activity,
+    create_activity,
+    delete_activity,
+    set_activity_position,
+    set_activity_rsvp,
+    set_activity_status,
+    set_activity_vote,
+    update_activity,
 )
-from urbanlens.dashboard.services.photo_upload import PhotoUploadError, upload_photo
-from urbanlens.dashboard.services.pin_creation import PinCreationError, PinCreationForbiddenError, create_pin_for_profile
-from urbanlens.dashboard.services.pin_detail import build_pin_detail
-from urbanlens.dashboard.services.pin_edit import (
-    ORGANIZE_LABEL_KINDS,
-    PinEditError,
-    PinHasChildrenError,
-    PinMoveError,
-    PinReparentError,
-    apply_pin_edits,
-    delete_pin,
-    move_pin_to_coordinates,
-    reparent_pin,
+from urbanlens.dashboard.services.trips.trip_comments import add_comment, build_comment_tree, delete_comment, get_comment, set_comment_reaction
+from urbanlens.dashboard.services.trips.trip_crud import create_trip, delete_trip, update_trip
+from urbanlens.dashboard.services.trips.trip_errors import TripError, TripNotFoundError, TripPermissionError, TripValidationError
+from urbanlens.dashboard.services.trips.trip_map import build_trip_map_points
+from urbanlens.dashboard.services.trips.trip_membership import (
+    add_member_by_username,
+    join_trip,
+    leave_trip,
+    list_members,
+    remove_member,
+    require_trip_creator,
+    resolve_trip_member,
+    set_member_organizer,
+    set_trip_rsvp,
 )
-from urbanlens.dashboard.services.pin_list_membership import (
-    add_pins_to_list,
-    remove_pins_from_list,
-    reorder_list_items,
-    resync_lists_for_saved_filter,
-    resync_smart_list,
-)
-from urbanlens.dashboard.services.pin_subresources import (
-    AliasExistsError,
-    AliasIsCurrentNameError,
-    InvalidLinkError,
-    PinSubResourceError,
-    create_pin_alias,
-    create_pin_link,
-    create_pin_note,
-    delete_pin_alias,
-    delete_pin_link,
-    delete_pin_note,
-    promote_alias_to_name,
-)
-from urbanlens.dashboard.services.pin_suggestions import LocationHit, accept_pin_suggestion, attach_suggestion_photos, ingest_location_hits, pending_suggestions_for_profile, reject_pin_suggestion
-from urbanlens.dashboard.services.pin_sync import InvalidSyncCursorError, StaleDeletedSinceError, sync_pins_page, sync_tombstones_page
-from urbanlens.dashboard.services.profile_settings import SettingsValidationError, apply_settings_patch, read_settings
-from urbanlens.dashboard.services.push import PushRegistrationError, register_device, unregister_device
-from urbanlens.dashboard.services.safety import (
+from urbanlens.dashboard.services.visits.safety import (
     CheckinArchivedError,
     SafetyValidationError,
     apply_checkin_edit,
@@ -275,34 +302,7 @@ from urbanlens.dashboard.services.safety import (
     save_contact_defaults,
     validate_notifiable_contacts,
 )
-from urbanlens.dashboard.services.trip_access import can_perform, get_trip_for_viewer, has_joined, is_organizer
-from urbanlens.dashboard.services.trip_activities import (
-    build_activity_rows,
-    complete_activity,
-    create_activity,
-    delete_activity,
-    set_activity_position,
-    set_activity_rsvp,
-    set_activity_status,
-    set_activity_vote,
-    update_activity,
-)
-from urbanlens.dashboard.services.trip_comments import add_comment, build_comment_tree, delete_comment, get_comment, set_comment_reaction
-from urbanlens.dashboard.services.trip_crud import create_trip, delete_trip, update_trip
-from urbanlens.dashboard.services.trip_errors import TripError, TripNotFoundError, TripPermissionError, TripValidationError
-from urbanlens.dashboard.services.trip_map import build_trip_map_points
-from urbanlens.dashboard.services.trip_membership import (
-    add_member_by_username,
-    join_trip,
-    leave_trip,
-    list_members,
-    remove_member,
-    require_trip_creator,
-    resolve_trip_member,
-    set_member_organizer,
-    set_trip_rsvp,
-)
-from urbanlens.dashboard.services.visits import (
+from urbanlens.dashboard.services.visits.visits import (
     VisitLoggingDisabledError,
     accept_visit_suggestion,
     create_manual_visit,
@@ -311,7 +311,7 @@ from urbanlens.dashboard.services.visits import (
     sync_last_visited,
     visit_logging_allowed,
 )
-from urbanlens.dashboard.services.wiki_access import wikis_hidden_by_pin_move
+from urbanlens.dashboard.services.wiki.wiki_access import wikis_hidden_by_pin_move
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -611,7 +611,7 @@ class PinsView(ExternalApiView):
     and hands back the ``sync_watermark`` to use as the next sync's
     ``modified_since``. Deletions are the separate ``pins/deleted/`` feed.
 
-    POST goes through the exact same ``services.pin_creation.create_pin_for_profile``
+    POST goes through the exact same ``services.pins.pin_creation.create_pin_for_profile``
     call as the map UI's "Add pin" form - the same sanitization, geocoding
     gate, and background enrichment apply regardless of which caller created
     the pin. A caller-generated ``uuid`` makes the create idempotent for
@@ -706,7 +706,7 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
     GET returns a superset of the sync feed's payload - description, dates,
     security indicators, personal notes/aliases/links, custom fields, the
     property boundary, the cover photo, and the discovered wiki slug (see
-    ``services.pin_detail.build_pin_detail``).
+    ``services.pins.pin_detail.build_pin_detail``).
 
     PATCH extends the same semantics as the internal ``PinViewSet``
     (renaming, re-icon, a coordinate move that relinks the Location) plus
@@ -753,7 +753,7 @@ class PinDetailView(OwnedPinMixin, ExternalApiView):
     def patch(self, request: Request, pin_slug: str) -> Response:
         """Apply a partial update to one of the key owner's pins.
 
-        Field writes go through ``services.pin_edit.apply_pin_edits``, the same
+        Field writes go through ``services.pins.pin_edit.apply_pin_edits``, the same
         function behind the website's own pin-edit dialog, so the two surfaces
         cannot drift on which companion flags a write implies (a submitted
         ``pin_type`` marking the type user-provided, for instance) or on the
@@ -865,7 +865,7 @@ class PinSuggestionsView(ExternalApiView):
 
     Unlike ``PinsView.post``, nothing is created on the map immediately - the
     submission is staged as a ``PinSuggestion`` (see
-    ``services.pin_suggestions.ingest_location_hits``) that the key's owner
+    ``services.pins.pin_suggestions.ingest_location_hits``) that the key's owner
     must explicitly accept or reject from the Memories -> Locations review
     queue before anything appears. An external "discovery" app that finds
     candidate places autonomously (rather than acting on the user's own
@@ -1021,7 +1021,7 @@ class AccountSettingsView(ExternalApiView):
     Named for the account rather than matching ``controllers.settings.SettingsView``
     (the site's own multi-form settings page) - the two are unrelated and share
     only the underlying ``Profile`` fields, via
-    ``services.profile_settings``.
+    ``services.profile.profile_settings``.
 
     PATCH is partial by construction: only submitted keys are touched, so a
     client syncing one toggle never overwrites preferences changed on the web
@@ -1143,7 +1143,7 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
     detect deletions re-walks the list.
 
     POST runs the identical admission pipeline as the Memories page's
-    drag-and-drop uploader (``services.photo_upload.upload_photo``) - the same
+    drag-and-drop uploader (``services.photos.photo_upload.upload_photo``) - the same
     media-type sniffing, feature gates, malware/size checks, duplicate
     rejection and storage quota.
     """
@@ -1614,7 +1614,7 @@ class MemoriesOnThisDayApiView(ExternalApiView):
     @extend_schema(responses={200: OnThisDayResponseSerializer})
     def get(self, request: Request) -> Response:
         """Return this month/day's past-year visits, routes, and photos."""
-        from urbanlens.dashboard.services.geo import geometry_to_geojson
+        from urbanlens.dashboard.services.geo.geo import geometry_to_geojson
 
         profile = request.user.profile
         today = timezone.now().date()
@@ -3203,7 +3203,7 @@ class SafetyCheckinPartnerDetailApiView(SafetyCheckinScopedView):
         if partner is None:
             return Response({"error": "No such partner."}, status=404)
         # Also force-closes an accepted partner's open WebSocket, whose permission
-        # was only checked at connect time - see services.safety.remove_checkin_partner.
+        # was only checked at connect time - see services.visits.safety.remove_checkin_partner.
         remove_checkin_partner(partner)
         return self._detail_response(checkin)
 
@@ -3303,7 +3303,7 @@ class SafetyCheckinMapsView(SafetyCheckinScopedView, PaginatedListMixin):
         if markup_map is None:
             return Response({"error": "No such map."}, status=400)
         if markup_map.pk == checkin.markup_map_id:
-            # Same rule the web attach view enforces: services.safety._build_archive_payload
+            # Same rule the web attach view enforces: services.visits.safety._build_archive_payload
             # keys its "maps" list by the primary map first, so allowing the primary
             # map to also be attached would archive it twice.
             return Response({"error": "This map is already the check-in's primary route map."}, status=400)
@@ -3361,7 +3361,7 @@ class SafetyContactDefaultsView(ExternalApiView):
         """Replace the caller's default contacts wholesale.
 
         PUT rather than PATCH because the underlying
-        ``services.safety.save_contact_defaults`` deletes and recreates the whole
+        ``services.visits.safety.save_contact_defaults`` deletes and recreates the whole
         set - there is no per-entry addressing to PATCH against.
         """
         serializer = SafetyContactDefaultsSerializer(data=request.data)
@@ -3437,7 +3437,7 @@ class PushDeviceDetailView(ExternalApiView):
 def _friend_identity(viewer: Profile, subject: Profile) -> dict[str, Any]:
     """Shape ``subject`` for ``FriendProfileSerializer`` as ``viewer`` may see them.
 
-    Always routed through ``services.identity_visibility.resolve_visible_identity``
+    Always routed through ``services.profile.identity_visibility.resolve_visible_identity``
     rather than read off the model, so a profile whose privacy settings don't
     permit ``viewer`` is masked here exactly as it is in the web UI. The
     ``uuid`` is still returned when masked - it is an opaque handle the caller
@@ -3595,7 +3595,7 @@ class FriendActionView(ExternalApiView):
     }
 
     def service_action(self, actor: Profile, target: Profile) -> Friendship:
-        """Apply this view's ``services.friendship`` transition.
+        """Apply this view's ``services.social.friendship`` transition.
 
         Args:
             actor: The calling profile.
@@ -4135,7 +4135,7 @@ class NotificationDeliveryPreferencesView(ExternalApiView):
 # -- Trips ---------------------------------------------------------------------
 #
 # Every endpoint below delegates to the shared trip services
-# (``services.trip_access``/``trip_crud``/``trip_membership``/``trip_activities``/
+# (``services.trips.trip_access``/``trip_crud``/``trip_membership``/``trip_activities``/
 # ``trip_comments``/``trip_map``) - the same functions ``controllers.trip``
 # calls. Nothing about permissions, quotas, share provenance, calendar-sync
 # revocation, identity masking or location visibility is re-implemented here;
@@ -4209,7 +4209,7 @@ class TripScopedApiView(TripErrorResponseMixin, ExternalApiView):
 
         Raises:
             TripNotFoundError: No such trip, or it isn't the caller's. Both
-                answer 404 - see ``services.trip_access.get_trip_for_viewer``.
+                answer 404 - see ``services.trips.trip_access.get_trip_for_viewer``.
         """
         return get_trip_for_viewer(trip_slug, request.user.profile)
 
@@ -4226,7 +4226,7 @@ def _activity_place_fields(data: dict) -> dict[str, object]:
         data: Validated activity payload.
 
     Returns:
-        The keyword shape ``services.trip_activities.resolve_activity_place`` expects.
+        The keyword shape ``services.trips.trip_activities.resolve_activity_place`` expects.
     """
     return {
         "pin_slug": data.get("pin_slug") or "",
@@ -4434,7 +4434,7 @@ class TripMapView(TripScopedApiView):
     once, and a client that only had the first page would draw the wrong
     viewport. The point set is bounded by ``max_trip_activities`` anyway.
 
-    Returns ``services.trip_map.build_trip_map_points`` verbatim so it stays
+    Returns ``services.trips.trip_map.build_trip_map_points`` verbatim so it stays
     byte-identical to the web map's own ``map-data/`` payload.
     """
 
@@ -4731,7 +4731,7 @@ class TripActivityPositionView(TripScopedApiView):
     Requires the trip's edit-activities permission, and bounds-checks the
     coordinates. Both were missing from the endpoint this mirrors, which is
     now fixed on the internal surface too - see
-    ``services.trip_activities.set_activity_position``.
+    ``services.trips.trip_activities.set_activity_position``.
     """
 
     @extend_schema(request=TripActivityPositionSerializer, responses={200: TripActivityPositionSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 404: ErrorSerializer})

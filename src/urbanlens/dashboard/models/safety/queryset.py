@@ -41,7 +41,7 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
         Includes check-ins still stuck on SCHEDULED (not just AWAITING_CHECKIN) so a
         missed or failed ``send_due_checkin_reminders`` run can't prevent escalation -
         the reminder-send transitions status to AWAITING_CHECKIN only after the
-        notification succeeds (see ``services.safety.send_checkin_reminder``).
+        notification succeeds (see ``services.visits.safety.send_checkin_reminder``).
 
         Returns:
             Filtered queryset.
@@ -114,7 +114,7 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
         """Return resolved check-ins whose post-resolution encryption grace window has elapsed.
 
         Excludes check-ins already archived (``archive`` one-to-one exists) -
-        this is what makes ``services.safety.archive_checkin`` idempotent
+        this is what makes ``services.visits.safety.archive_checkin`` idempotent
         across the eta-scheduled task and the periodic sweep both picking up
         the same row.
 
@@ -127,7 +127,7 @@ class SafetyCheckinQuerySet(abstract.PublicDashboardQuerySet):
         """Return check-ins that have not yet reached a terminal status.
 
         Used to enforce that a profile may only have one active check-in at a
-        time (see ``services.safety.create_checkin``) and to power the
+        time (see ``services.visits.safety.create_checkin``) and to power the
         navbar's active-check-in banner.
 
         Returns:

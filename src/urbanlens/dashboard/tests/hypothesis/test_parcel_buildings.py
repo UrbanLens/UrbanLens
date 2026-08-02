@@ -27,7 +27,7 @@ from urbanlens.dashboard.plugins.builtin.parcel_buildings import (
     building_rows,
     fetch_parcel_buildings,
 )
-from urbanlens.dashboard.services.pin_restructure import match_marker
+from urbanlens.dashboard.services.pins.pin_restructure import match_marker
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE

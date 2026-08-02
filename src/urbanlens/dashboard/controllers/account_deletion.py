@@ -14,7 +14,7 @@ from django.views import View
 
 from urbanlens.dashboard.forms.settings_form import DeleteAccountForm
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.account_deletion import cancel_deletion, request_deletion
+from urbanlens.dashboard.services.profile.account_deletion import cancel_deletion, request_deletion
 
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse

@@ -22,11 +22,11 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-from urbanlens.dashboard.services.map_snapshot import materialize_markup_map
-from urbanlens.dashboard.services.pin_list_markup import build_list_markup_snapshot
-from urbanlens.dashboard.services.pin_list_membership import add_pins_to_list, reorder_list_items, resync_smart_list
-from urbanlens.dashboard.services.pin_list_trip import copy_list_pins_to_trip
-from urbanlens.dashboard.services.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
+from urbanlens.dashboard.services.pins.pin_list_markup import build_list_markup_snapshot
+from urbanlens.dashboard.services.pins.pin_list_membership import add_pins_to_list, reorder_list_items, resync_smart_list
+from urbanlens.dashboard.services.pins.pin_list_trip import copy_list_pins_to_trip
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -323,7 +323,7 @@ class PinListEditView(LoginRequiredMixin, View):
             rules_changed = True
 
         if "smart_boundary" in body:
-            from urbanlens.dashboard.services.geo import InvalidPolygonGeoJSONError, parse_multipolygon_geojson
+            from urbanlens.dashboard.services.geo.geo import InvalidPolygonGeoJSONError, parse_multipolygon_geojson
 
             polygon_geojson = body.get("smart_boundary")
             if polygon_geojson:
@@ -556,7 +556,7 @@ class PinListExportView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
-        from urbanlens.dashboard.services.export_formats import EXPORT_FORMATS
+        from urbanlens.dashboard.services.import_export.export_formats import EXPORT_FORMATS
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)

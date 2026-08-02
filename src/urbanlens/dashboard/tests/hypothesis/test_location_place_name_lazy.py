@@ -71,14 +71,14 @@ class PinViewDispatchesPlaceNameResolutionTests(TestCase):
     def test_dispatches_when_uncached_and_apis_enabled(self) -> None:
         self.profile.external_apis_enabled = True
         self.profile.save(update_fields=["external_apis_enabled"])
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as mock_enqueue:
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as mock_enqueue:
             self._get_pin_page()
         self.assertIn(self.pin.location_id, self._dispatched_location_ids(mock_enqueue))
 
     def test_does_not_dispatch_when_apis_disabled(self) -> None:
         self.profile.external_apis_enabled = False
         self.profile.save(update_fields=["external_apis_enabled"])
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as mock_enqueue:
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as mock_enqueue:
             self._get_pin_page()
         self.assertEqual(self._dispatched_location_ids(mock_enqueue), [])
 
@@ -86,7 +86,7 @@ class PinViewDispatchesPlaceNameResolutionTests(TestCase):
         self.profile.external_apis_enabled = True
         self.profile.save(update_fields=["external_apis_enabled"])
         self.pin.location.cached_place_name = "Old Mill (Google Maps)"
-        with patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as mock_enqueue:
+        with patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as mock_enqueue:
             self._get_pin_page()
         self.assertEqual(self._dispatched_location_ids(mock_enqueue), [])
 
@@ -104,7 +104,7 @@ class PinViewDispatchesPlaceNameResolutionTests(TestCase):
         self.profile.external_apis_enabled = True
         self.profile.save(update_fields=["external_apis_enabled"])
         with (
-            patch("urbanlens.dashboard.services.celery.safely_enqueue_task") as mock_enqueue,
+            patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as mock_enqueue,
             patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name") as mock_resolve,
         ):
             response = self._get_pin_page()

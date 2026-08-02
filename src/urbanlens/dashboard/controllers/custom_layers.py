@@ -22,8 +22,8 @@ from urbanlens.dashboard.models.markup.meta import CUSTOM_LAYER_ICON_CHOICES
 from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.text_limits import text_length_error
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.core.text_limits import text_length_error
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet

@@ -481,7 +481,7 @@ def _validate_extraction_url(url: str) -> str:
     Raises:
         LinkExtractionError: With a user-facing message on any rejection.
     """
-    from urbanlens.dashboard.services.url_safety import UnsafeUrlError, ensure_public_http_url
+    from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url
 
     try:
         return ensure_public_http_url(url, max_length=MAX_EXTRACTION_URL_LENGTH)
@@ -522,7 +522,7 @@ def start_link_extraction(user, profile: Profile, pin: Pin, url: str) -> LinkExt
             raise LinkExtractionError("You've reached today's AI processing limit. Try again tomorrow.")
         extraction = LinkExtraction.objects.create(profile=profile, pin=pin, url=url)
 
-    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import run_link_extraction
 
     if safely_enqueue_task(run_link_extraction, extraction.pk) is None:
@@ -570,9 +570,9 @@ def fetch_page_text(url: str) -> str:
     call runs from a Celery task that may execute long after the request that
     queued it, and a hostile server can otherwise SSRF via a 3xx redirect to
     an internal address regardless of the original host's DNS. The
-    redirect-following loop itself is shared with ``services.media_materialize``
-    and ``services.pin_suggestions`` via
-    :func:`~urbanlens.dashboard.services.media_materialize.fetch_with_revalidated_redirects`
+    redirect-following loop itself is shared with ``services.media.media_materialize``
+    and ``services.pins.pin_suggestions`` via
+    :func:`~urbanlens.dashboard.services.media.media_materialize.fetch_with_revalidated_redirects`
     (previously each had its own copy).
 
     Args:
@@ -587,8 +587,8 @@ def fetch_page_text(url: str) -> str:
     """
     import requests
 
-    from urbanlens.dashboard.services.media_materialize import fetch_with_revalidated_redirects
-    from urbanlens.dashboard.services.url_safety import UnsafeUrlError
+    from urbanlens.dashboard.services.media.media_materialize import fetch_with_revalidated_redirects
+    from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError
 
     try:
         response = fetch_with_revalidated_redirects(

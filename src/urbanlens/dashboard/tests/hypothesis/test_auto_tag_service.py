@@ -22,7 +22,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.services.auto_tag import AutoTagService
+from urbanlens.dashboard.services.labels.auto_tag import AutoTagService
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile

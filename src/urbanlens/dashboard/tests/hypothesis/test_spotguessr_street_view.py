@@ -59,7 +59,7 @@ class CandidateStreetViewForLocationTests(TestCase):
         carousel fetch - it must go through the same call_with_deadline bound that
         fetch already uses, or one slow/degraded provider call can hold the whole
         request open well past nginx's timeout."""
-        from urbanlens.dashboard.services.timeout_utils import EXTERNAL_CALL_DEADLINE
+        from urbanlens.dashboard.services.core.timeout_utils import EXTERNAL_CALL_DEADLINE
 
         mock_deadline.return_value = ([StreetViewSlide(img_src="data:image/jpeg;base64,abc123", source="Google Street View", date="2024-01")], False)
 

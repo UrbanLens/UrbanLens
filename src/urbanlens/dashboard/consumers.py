@@ -56,7 +56,7 @@ def _credential_is_still_valid(credential: Any) -> bool:
     reproduced - a socket must not outlive the authority that opened it:
 
     - a PAT-style ``ApiKey`` is revoked in place, by stamping ``revoked_at``
-      (``services.api_keys.revoke_api_key``), so a stamped row is dead;
+      (``services.auth.api_keys.revoke_api_key``), so a stamped row is dead;
     - a django-oauth-toolkit ``AccessToken`` is revoked by *deleting* the row,
       and separately stops working when it expires, so a missing row or an
       expired one is dead.
@@ -289,7 +289,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     route enforces.
 
     Each connection joins the
-    per-profile group from ``services.direct_messages.direct_message_group_name``;
+    per-profile group from ``services.messaging.direct_messages.direct_message_group_name``;
     ``create_direct_message`` broadcasts every new message to both the sender's
     and the recipient's groups, so all of either party's open tabs update at once.
 
@@ -324,7 +324,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         try:
             self.profile_id = await self._get_profile_id()
-            from urbanlens.dashboard.services.direct_messages import direct_message_group_name, mark_profile_online
+            from urbanlens.dashboard.services.messaging.direct_messages import direct_message_group_name, mark_profile_online
 
             self.group_name = direct_message_group_name(self.profile_id)
             await self.channel_layer.group_add(self.group_name, self.channel_name)
@@ -352,7 +352,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             except Exception:
                 logger.exception("Direct message socket failed to leave group %s cleanly", self.group_name)
         if hasattr(self, "profile_id"):
-            from urbanlens.dashboard.services.direct_messages import mark_profile_offline
+            from urbanlens.dashboard.services.messaging.direct_messages import mark_profile_offline
 
             try:
                 await database_sync_to_async(mark_profile_offline)(self.profile_id)
@@ -395,7 +395,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         if data.get("type") == "typing":
             recipient_slug = str(data.get("recipient") or "").strip()
             if recipient_slug:
-                from urbanlens.dashboard.services.direct_messages import broadcast_typing_indicator
+                from urbanlens.dashboard.services.messaging.direct_messages import broadcast_typing_indicator
 
                 await database_sync_to_async(broadcast_typing_indicator)(self.profile_id, recipient_slug)
             return
@@ -418,7 +418,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         group_uuid = str(data.get("group") or "").strip()
         if group_uuid:
             # A group-chat frame: same validation/broadcast pipeline, but the
-            # message fans out to every active member (see services.group_chats).
+            # message fans out to every active member (see services.messaging.group_chats).
             if not (body or ciphertext):
                 return
             try:
@@ -471,7 +471,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             group_uuid: UUID string of the group chat being viewed.
         """
         from urbanlens.dashboard.models.group_chats.model import GroupChat
-        from urbanlens.dashboard.services.group_chats import mark_group_thread_open
+        from urbanlens.dashboard.services.messaging.group_chats import mark_group_thread_open
 
         group = GroupChat.objects.filter(uuid=group_uuid).first()
         if group is None:
@@ -495,7 +495,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """
         from urbanlens.dashboard.models.group_chats.model import GroupChat
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.group_chats import create_group_message
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_message
 
         sender = Profile.objects.select_related("user").get(pk=self.profile_id)
         group = GroupChat.objects.filter(uuid=group_uuid).first()
@@ -511,7 +511,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             recipient_slug: URL slug of the conversation partner being viewed.
         """
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.direct_messages import mark_thread_open
+        from urbanlens.dashboard.services.messaging.direct_messages import mark_thread_open
 
         try:
             partner = Profile.objects.get(slug=recipient_slug)
@@ -550,7 +550,7 @@ class DirectMessageConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             PermissionError: The recipient's privacy settings reject the sender.
         """
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.direct_messages import create_direct_message
+        from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message
 
         sender = Profile.objects.select_related("user").get(pk=self.profile_id)
         try:
@@ -578,7 +578,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     - ``ws/safety/checkin/<uuid:checkin_uuid>/chat/`` - session route, requires
       an authenticated session belonging to the check-in's owner or an accepted
       ``SafetyCheckinPartner`` (populated by Channels' ``AuthMiddlewareStack``
-      from the session cookie; see ``services.safety.is_owner_or_accepted_partner``),
+      from the session cookie; see ``services.visits.safety.is_owner_or_accepted_partner``),
       or the same identity established by a ``?key=`` credential through
       ``ApiKeyAuthMiddleware``. A credential additionally needs ``safety:read``
       to join and ``safety:write`` to send - being the check-in's owner is not
@@ -597,7 +597,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     partners, and all of its contacts - joins the same channel group, so a
     message from any one of them is broadcast to all the others immediately.
     The session route additionally joins a second, narrower group carrying
-    live-location updates (``services.safety._broadcast_live_location``) -
+    live-location updates (``services.visits.safety._broadcast_live_location``) -
     contacts never join it, matching the model-level rule that live location
     is visible to partners only, never to emergency contacts.
 
@@ -644,7 +644,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             await self.close(code=4404)
             return
 
-        from urbanlens.dashboard.services.safety import safety_checkin_group_name, safety_checkin_location_group_name
+        from urbanlens.dashboard.services.visits.safety import safety_checkin_group_name, safety_checkin_location_group_name
 
         self.group_name = safety_checkin_group_name(self.checkin.pk)
         # Live location is never shared with token-route contacts (see the model's
@@ -713,7 +713,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """Periodically re-check that this session-route connection is still authorized.
 
         Closes the connection with code 4404 the moment it isn't - a backstop for when
-        ``partner_access_revoked`` (services.safety._broadcast_partner_access_revoked)
+        ``partner_access_revoked`` (services.visits.safety._broadcast_partner_access_revoked)
         never arrives.
         """
         try:
@@ -744,7 +744,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """
         from urbanlens.dashboard.models.profile.model import Profile
         from urbanlens.dashboard.models.safety.model import SafetyCheckin
-        from urbanlens.dashboard.services.safety import is_owner_or_accepted_partner
+        from urbanlens.dashboard.services.visits.safety import is_owner_or_accepted_partner
 
         if not _credential_is_still_valid(self.credential):
             return False
@@ -823,7 +823,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         Args:
             event: The group-send event, with a ``payload`` dict (see
-                ``services.safety._broadcast_status_update``).
+                ``services.visits.safety._broadcast_status_update``).
         """
         await self.send(text_data=json.dumps(event["payload"]))
 
@@ -835,7 +835,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         Args:
             event: The group-send event, with a ``payload`` dict (see
-                ``services.safety._broadcast_live_location``).
+                ``services.visits.safety._broadcast_live_location``).
         """
         await self.send(text_data=json.dumps(event["payload"]))
 
@@ -848,7 +848,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         Args:
             event: The group-send event, with a ``payload`` dict (see
-                ``services.safety._broadcast_archive_scheduled``).
+                ``services.visits.safety._broadcast_archive_scheduled``).
         """
         await self.send(text_data=json.dumps(event["payload"]))
 
@@ -857,7 +857,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         Args:
             event: The group-send event, with a ``payload`` dict (see
-                ``services.safety._broadcast_checkin_archived``).
+                ``services.visits.safety._broadcast_checkin_archived``).
         """
         await self.send(text_data=json.dumps(event["payload"]))
 
@@ -872,7 +872,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         Args:
             event: The group-send event, with a ``payload`` dict containing the
                 removed partner's ``profile_id`` (see
-                ``services.safety._broadcast_partner_access_revoked``).
+                ``services.visits.safety._broadcast_partner_access_revoked``).
         """
         if self.contact is not None or getattr(self, "profile_id", None) != event["payload"]["profile_id"]:
             return
@@ -901,7 +901,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """
         from urbanlens.dashboard.models.profile.model import Profile
         from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
-        from urbanlens.dashboard.services.safety import is_owner_or_accepted_partner
+        from urbanlens.dashboard.services.visits.safety import is_owner_or_accepted_partner
 
         if token is not None:
             self.profile_id = None
@@ -941,7 +941,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         from django.contrib.auth.models import AnonymousUser
 
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.services.safety import create_chat_message, is_owner_or_accepted_partner
+        from urbanlens.dashboard.services.visits.safety import create_chat_message, is_owner_or_accepted_partner
 
         user = self.scope.get("user") or AnonymousUser()
         if self.contact is None:

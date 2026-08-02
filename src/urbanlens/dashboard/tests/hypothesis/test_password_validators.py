@@ -11,7 +11,7 @@ from hypothesis import given, settings, strategies as st
 import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.services.passphrases import generate_passphrases
+from urbanlens.dashboard.services.auth.passphrases import generate_passphrases
 from urbanlens.dashboard.validators.password import ComplexityValidator, HaveIBeenPwnedValidator
 
 _STRONG_PASSWORD = "Zebra-quilt-nexus-42!"

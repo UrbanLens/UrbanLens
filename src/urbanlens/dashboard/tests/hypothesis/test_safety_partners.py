@@ -25,7 +25,7 @@ from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinPartner, SafetyCheckinPartnerStatus
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
-from urbanlens.dashboard.services.safety import accept_checkin_partner_invite, invite_checkin_partner, is_owner_or_accepted_partner, remove_checkin_partner
+from urbanlens.dashboard.services.visits.safety import accept_checkin_partner_invite, invite_checkin_partner, is_owner_or_accepted_partner, remove_checkin_partner
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile

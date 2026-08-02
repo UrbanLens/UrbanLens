@@ -6,7 +6,7 @@ Covers:
 - push_notification_to_browser() - broadcast on create, not on update
 
 The actual channel-layer delivery (get_channel_layer/async_to_sync tolerance,
-Celery dispatch) now lives in services.channel_broadcast.send_group_message
+Celery dispatch) now lives in services.core.channel_broadcast.send_group_message
 and tasks.broadcast_channel_group_message - see test_channel_broadcast.py.
 """
 

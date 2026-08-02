@@ -25,7 +25,7 @@ from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES
 from urbanlens.dashboard.models.markup.meta import CUSTOM_LAYER_ICON_CHOICES, MapLayerMode, MarkupType, SecurityIndicatorType, normalize_layer_mode
 from urbanlens.dashboard.models.markup.queryset import CustomLayerManager, MarkupMapManager, PinMarkupManager
-from urbanlens.dashboard.services.text_limits import MAX_MARKUP_LABEL_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_MARKUP_LABEL_LENGTH
 
 if TYPE_CHECKING:
     from django.db.models import QuerySet
@@ -134,7 +134,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
         related_name="associated_maps",
     )
     # Pins this map's geometry (saved viewport + markup) is detected to reveal,
-    # per services.map_pin_share_detection.detect_shared_pins - kept in sync by
+    # per services.sharing.map_pin_share_detection.detect_shared_pins - kept in sync by
     # models.markup.signals any time the viewport or items change, independent
     # of whether the map is ever actually shared. Deliberately separate from
     # `pin` (a single explicit, user-set link): a map can geometrically point
@@ -257,7 +257,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
 
         Args:
             snapshot: A snapshot dict already validated by
-                ``services.map_snapshot.sanitize_map_data``.
+                ``services.map.map_snapshot.sanitize_map_data``.
         """
         self.center_latitude = snapshot.get("center_lat")
         self.center_longitude = snapshot.get("center_lng")
@@ -577,7 +577,7 @@ class PinMarkup(abstract.FrontendDashboardModel):
 
         Args:
             shape: A shape dict already cleaned by
-                ``services.map_snapshot._sanitize_markup_shapes`` -
+                ``services.map.map_snapshot._sanitize_markup_shapes`` -
                 ``latlngs`` are ``[lat, lng]`` pairs.
 
         Returns:

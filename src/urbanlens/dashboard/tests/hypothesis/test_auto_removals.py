@@ -218,7 +218,7 @@ class LabelDeletionTombstoneTests(TestCase):
         self.assertTrue(PinAutoRemoval.objects.was_removed(pin=self.pin, kind=AutoRemovalKind.LABEL, value=str(self.label.pk)))
 
     def test_auto_tag_does_not_reattach_a_removed_label(self) -> None:
-        from urbanlens.dashboard.services.auto_tag import AutoTagService
+        from urbanlens.dashboard.services.labels.auto_tag import AutoTagService
 
         self.pin.labels.add(self.label)
         self.client.post(
@@ -232,7 +232,7 @@ class LabelDeletionTombstoneTests(TestCase):
         self.assertFalse(self.pin.labels.filter(pk=self.label.pk).exists())
 
     def test_removing_wiki_label_records_tombstone_and_blocks_reattach(self) -> None:
-        from urbanlens.dashboard.services.auto_tag import AutoTagService
+        from urbanlens.dashboard.services.labels.auto_tag import AutoTagService
 
         self.wiki.labels.add(self.label)
         response = self.client.post(

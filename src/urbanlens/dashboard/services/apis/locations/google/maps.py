@@ -33,6 +33,7 @@ from urbanlens.dashboard.services.apis.locations.google.place_info import Google
 # blocks it feeds (each marked with a matching TEMPORARY comment below) once
 # every user has re-imported. See legacy_cid_coordinate_fix's module docstring.
 from urbanlens.dashboard.services.apis.locations.legacy_cid_coordinate_fix import is_legacy_location, preview_needs_legacy_repair, repair_legacy_pin_coordinates
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH
 from urbanlens.dashboard.services.import_formats.heuristics import (
     DEFAULT_LATITUDE_KEYS,
     DEFAULT_LONGITUDE_KEYS,
@@ -42,8 +43,7 @@ from urbanlens.dashboard.services.import_formats.heuristics import (
 )
 from urbanlens.dashboard.services.import_formats.html_description import extract_image_urls, extract_link_urls, strip_html
 from urbanlens.dashboard.services.labels.style_suggestions import suggest_label_style
-from urbanlens.dashboard.services.redact import redact_coordinate, redact_text
-from urbanlens.dashboard.services.text_limits import MAX_PIN_DESCRIPTION_LENGTH
+from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_text
 from urbanlens.UrbanLens.settings.app import settings
 
 if TYPE_CHECKING:
@@ -77,7 +77,7 @@ def _attach_description_extras(pin: Pin, image_urls: list[str], link_urls: list[
     """
     from urbanlens.dashboard.models.images.model import ImageSource
     from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink
-    from urbanlens.dashboard.services.media_materialize import MaterializeError, materialize_media_item
+    from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
 
     for url in link_urls:
         if len(url) > MAX_LINK_URL_LENGTH:
@@ -210,7 +210,7 @@ def _create_pin_from_confirmed(
         if image_urls or link_urls:
             _attach_description_extras(pin, image_urls, link_urls, user_profile)
         if auto_tag:
-            from urbanlens.dashboard.services.celery import safely_enqueue_task
+            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
             from urbanlens.dashboard.tasks import suggest_pin_category
 
             safely_enqueue_task(suggest_pin_category, pin.pk)
@@ -256,7 +256,7 @@ def _notify_pin_import_parse_failure(fmt: str) -> None:
     """
     from django.utils import timezone
 
-    from urbanlens.dashboard.services.notifications import NotificationEvent, notify
+    from urbanlens.dashboard.services.notifications.notifications import NotificationEvent, notify
 
     notify(
         NotificationEvent.PIN_IMPORT_ERROR,
@@ -644,7 +644,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         )
         from urbanlens.dashboard.services.apis.locations.google.my_activity import import_my_activity_streaming
         from urbanlens.dashboard.services.apis.locations.route_import import import_routes_streaming
-        from urbanlens.dashboard.services.archive_extractor import validate_content_type
+        from urbanlens.dashboard.services.import_export.archive_extractor import validate_content_type
         from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
         from urbanlens.dashboard.services.import_formats.gpx_tracks import ParsedRoute, gpx_tracks_to_routes
         from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
@@ -917,7 +917,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 - ``pins`` (list[dict]): serialisable pin dicts with keys
                   ``name``, ``lat``, ``lng``, ``description``, ``cid``.
         """
-        from urbanlens.dashboard.services.archive_extractor import validate_content_type
+        from urbanlens.dashboard.services.import_export.archive_extractor import validate_content_type
         from urbanlens.dashboard.services.import_formats.gpx import gpx_to_dict
         from urbanlens.dashboard.services.import_formats.osm_xml import osm_xml_to_dict
         from urbanlens.dashboard.services.import_formats.shapefile import extract_shapefile_bundles, shapefile_to_dict
@@ -1231,7 +1231,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         )
 
         if deferred_lists:
-            from urbanlens.dashboard.services.celery import safely_enqueue_task
+            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
             from urbanlens.dashboard.tasks import resolve_deferred_pin_locations
 
             safely_enqueue_task(resolve_deferred_pin_locations, user_profile.pk, deferred_lists, auto_tag)

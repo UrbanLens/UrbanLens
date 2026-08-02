@@ -16,27 +16,27 @@ from django.views import View
 from urbanlens.dashboard.models.comments.model import Comment
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reactions.model import Reaction
-from urbanlens.dashboard.services.comment_notifications import notify_reply
-from urbanlens.dashboard.services.comments import ALLOWED_EMOJIS, CommentValidationError, toggle_reaction, top_level_comment_queryset, visible_comment_tree
-from urbanlens.dashboard.services.map_snapshot import (
+from urbanlens.dashboard.services.comments.comments import ALLOWED_EMOJIS, CommentValidationError, toggle_reaction, top_level_comment_queryset, visible_comment_tree
+from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
+from urbanlens.dashboard.services.map.map_snapshot import (
     _sanitize_markup_color,
     _sanitize_markup_shapes,
     _sanitize_number,
     materialize_markup_map,
     parse_map_data as _parse_map_data,
 )
-from urbanlens.dashboard.services.mentions import render_comment_text, viewer_pinned_uuids
-from urbanlens.dashboard.services.pagination import get_page
-from urbanlens.dashboard.services.text_limits import MAX_COMMENT_TEXT_LENGTH, text_length_error
-from urbanlens.dashboard.services.trip_comments import ALLOWED_COMMENT_EMOJIS
-from urbanlens.dashboard.services.wiki_access import location_visible_to, resolve_visible_wiki
+from urbanlens.dashboard.services.notifications.comment_notifications import notify_reply
+from urbanlens.dashboard.services.notifications.mentions import render_comment_text, viewer_pinned_uuids
+from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS
+from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, resolve_visible_wiki
 
 # Re-exported so existing imports (e.g. tests) keep resolving from this module.
 __all__ = ["_parse_map_data", "_sanitize_markup_color", "_sanitize_markup_shapes", "_sanitize_number"]
 
 logger = logging.getLogger(__name__)
 
-# Canonical definition now lives in services.comments, shared with the external
+# Canonical definition now lives in services.comments.comments, shared with the external
 # API. Aliased here so existing importers (controllers.trip) keep resolving it.
 _ALLOWED_EMOJIS = ALLOWED_EMOJIS
 _COMMENTS_PAGE_SIZE = 8
@@ -51,7 +51,7 @@ def comment_image_error(image_file) -> str | None:
     """Validate an image attached to a comment (pin, wiki, or trip) before accepting it.
 
     Shared by all three comment POST handlers - comments don't go through
-    the ``Image`` model, so they can't reuse ``services.images.image_upload_error``
+    the ``Image`` model, so they can't reuse ``services.media.images.image_upload_error``
     directly, but every upload still gets the same size/content-type checks
     before it's ever saved. The antivirus scan itself is deliberately
     skipped here - it's slow and occasionally unavailable (a clamd hiccup
@@ -67,7 +67,7 @@ def comment_image_error(image_file) -> str | None:
         A user-facing error message if the file should be rejected, or None.
     """
     from urbanlens.dashboard.models.images.model import MediaKind
-    from urbanlens.dashboard.services.images import image_upload_error
+    from urbanlens.dashboard.services.media.images import image_upload_error
 
     upload_error = image_upload_error(image_file, MediaKind.PHOTO, skip_malware_scan=True)
     return upload_error[0] if upload_error else None
@@ -89,7 +89,7 @@ def start_comment_image_scan(comment) -> None:
             carrying its new image.
     """
     from urbanlens.dashboard.models.trips.model import TripComment
-    from urbanlens.dashboard.services.celery import safely_enqueue_task
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
     from urbanlens.dashboard.tasks import scan_comment_image, scan_trip_comment_image
 
     comment.pending_scan = True
@@ -437,9 +437,9 @@ class TripCommentReactionView(LoginRequiredMixin, View):
     """POST /trips/<slug>/comments/<int>/react/  - toggle reaction on a TripComment."""
 
     def post(self, request, trip_slug, comment_id):
-        from urbanlens.dashboard.services.trip_access import get_trip_for_viewer
-        from urbanlens.dashboard.services.trip_comments import get_comment, set_comment_reaction
-        from urbanlens.dashboard.services.trip_errors import TripError, TripNotFoundError, TripPermissionError
+        from urbanlens.dashboard.services.trips.trip_access import get_trip_for_viewer
+        from urbanlens.dashboard.services.trips.trip_comments import get_comment, set_comment_reaction
+        from urbanlens.dashboard.services.trips.trip_errors import TripError, TripNotFoundError, TripPermissionError
 
         profile = _profile(request)
         try:

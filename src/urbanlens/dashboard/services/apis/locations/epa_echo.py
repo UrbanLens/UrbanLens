@@ -20,8 +20,8 @@ from typing import Any, ClassVar
 
 import requests
 
-from urbanlens.dashboard.services.gateway import Gateway
-from urbanlens.dashboard.services.redact import redact_coordinate
+from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
 

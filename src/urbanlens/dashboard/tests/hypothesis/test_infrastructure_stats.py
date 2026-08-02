@@ -5,7 +5,7 @@ from __future__ import annotations
 from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.services.infrastructure_stats import (
+from urbanlens.dashboard.services.admin.infrastructure_stats import (
     InfrastructureServiceStat,
     _format_duration,
     _postgres_version_label,
@@ -70,7 +70,7 @@ class CollectValkeyStatsTests(SimpleTestCase):
 
         with (
             mock.patch.dict("os.environ", {"UL_VALKEY_URL": "redis://example:6379/0"}),
-            mock.patch("urbanlens.dashboard.services.infrastructure_stats.redis.Redis.from_url", return_value=fake_client),
+            mock.patch("urbanlens.dashboard.services.admin.infrastructure_stats.redis.Redis.from_url", return_value=fake_client),
         ):
             stat = collect_valkey_stats()
 
@@ -83,7 +83,7 @@ class CollectCeleryStatsTests(SimpleTestCase):
 
     def test_returns_disabled_when_broker_missing(self) -> None:
         with (
-            mock.patch("urbanlens.dashboard.services.infrastructure_stats.django_settings.CELERY_BROKER_URL", "", create=True),
+            mock.patch("urbanlens.dashboard.services.admin.infrastructure_stats.django_settings.CELERY_BROKER_URL", "", create=True),
             mock.patch("django.core.cache.cache.get", return_value=None),
             mock.patch("django.core.cache.cache.set"),
         ):
@@ -106,8 +106,8 @@ class CollectCeleryStatsTests(SimpleTestCase):
         fake_app.control.inspect.return_value = fake_inspect
 
         with (
-            mock.patch("urbanlens.dashboard.services.infrastructure_stats.django_settings.CELERY_BROKER_URL", "redis://example:6379/0", create=True),
-            mock.patch("urbanlens.dashboard.services.infrastructure_stats.current_app", fake_app),
+            mock.patch("urbanlens.dashboard.services.admin.infrastructure_stats.django_settings.CELERY_BROKER_URL", "redis://example:6379/0", create=True),
+            mock.patch("urbanlens.dashboard.services.admin.infrastructure_stats.current_app", fake_app),
             mock.patch("django.core.cache.cache.get", return_value=None),
             mock.patch("django.core.cache.cache.set"),
         ):
@@ -122,14 +122,14 @@ class CollectNginxStatsTests(SimpleTestCase):
 
     def test_returns_healthy_on_200_response(self) -> None:
         response = mock.Mock(status_code=200)
-        with mock.patch("urbanlens.dashboard.services.infrastructure_stats.requests.get", return_value=response):
+        with mock.patch("urbanlens.dashboard.services.admin.infrastructure_stats.requests.get", return_value=response):
             stat = collect_nginx_stats()
         self.assertEqual(stat.status, "healthy")
         self.assertEqual(stat.metrics[1].value, "200 OK")
 
     def test_returns_unavailable_when_request_fails(self) -> None:
         with mock.patch(
-            "urbanlens.dashboard.services.infrastructure_stats.requests.get",
+            "urbanlens.dashboard.services.admin.infrastructure_stats.requests.get",
             side_effect=OSError("connection refused"),
         ):
             stat = collect_nginx_stats()

@@ -85,15 +85,7 @@ from urbanlens.dashboard.models.property_owner.model import WikiOwner, WikiPrope
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatField, WikiStatVote
-from urbanlens.dashboard.services.articles import (
-    ArticleConflictError,
-    diff_revisions,
-    get_article,
-    latest_revision_id,
-    restore_revision,
-    save_article_checked,
-)
-from urbanlens.dashboard.services.comments import (
+from urbanlens.dashboard.services.comments.comments import (
     ALLOWED_EMOJIS,
     CommentValidationError,
     aggregate_reactions,
@@ -104,13 +96,21 @@ from urbanlens.dashboard.services.comments import (
     top_level_comment_queryset,
     visible_comment_tree,
 )
-from urbanlens.dashboard.services.geo import InvalidPolygonGeoJSONError, geometry_to_geojson, parse_multipolygon_geojson
+from urbanlens.dashboard.services.geo.geo import InvalidPolygonGeoJSONError, geometry_to_geojson, parse_multipolygon_geojson
 from urbanlens.dashboard.services.locations.boundaries import boundary_generation_ran, schedule_location_boundary_generation
-from urbanlens.dashboard.services.reviews import clear_review, upsert_review
-from urbanlens.dashboard.services.wiki_access import resolve_visible_wiki
-from urbanlens.dashboard.services.wiki_aliases import promote_wiki_alias_to_name
-from urbanlens.dashboard.services.wiki_detail import build_wiki_detail, masked_editor_name
-from urbanlens.dashboard.services.wiki_edits import WikiEditValidationError, apply_wiki_edit, revert_wiki_edit
+from urbanlens.dashboard.services.pins.reviews import clear_review, upsert_review
+from urbanlens.dashboard.services.wiki.articles import (
+    ArticleConflictError,
+    diff_revisions,
+    get_article,
+    latest_revision_id,
+    restore_revision,
+    save_article_checked,
+)
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.wiki.wiki_aliases import promote_wiki_alias_to_name
+from urbanlens.dashboard.services.wiki.wiki_detail import build_wiki_detail, masked_editor_name
+from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditValidationError, apply_wiki_edit, revert_wiki_edit
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -178,7 +178,7 @@ def _serialize_comment(item: Any, profile: Profile) -> dict[str, Any]:
     """Render one gated comment (and its replies) for the API.
 
     Args:
-        item: A ``services.comments.VisibleComment`` that has already passed
+        item: A ``services.comments.comments.VisibleComment`` that has already passed
             every visibility gate.
         profile: The requesting profile.
 
@@ -208,7 +208,7 @@ class WikiDetailApiView(WikiApiView):
     """GET the community wiki for a place; PATCH its editable fields.
 
     PATCH applies a community edit through the same
-    ``services.wiki_edits.apply_wiki_edit`` the dashboard's "Suggest edits"
+    ``services.wiki.wiki_edits.apply_wiki_edit`` the dashboard's "Suggest edits"
     form uses, and records the identical ``WikiEdit`` audit row - but with
     ``strict=True``, so an unrecognized security level or an unparseable date
     is a 400 rather than the internal view's silent skip.
@@ -418,7 +418,7 @@ class WikiAliasUseView(WikiApiView):
     the same payload ``GET wikis/{location_slug}/`` already hands it.
 
     Unlike the pin version this is a *community* edit, so it goes through
-    ``services.wiki_aliases.promote_wiki_alias_to_name`` and lands in the wiki's
+    ``services.wiki.wiki_aliases.promote_wiki_alias_to_name`` and lands in the wiki's
     edit history alongside every other wiki edit - a rename nobody can see or
     revert is the failure mode that matters on shared content.
     """

@@ -1009,25 +1009,9 @@
     }
 
     .org-bulk-count {
-        background: color-mix(in srgb, $primary-color 18%, transparent);
-        border-color: color-mix(in srgb, $primary-color 34%, transparent);
-        color: color-mix(in srgb, $primary-color 80%, white);
-    }
-
-    .org-bulk-btn {
-        &--edit:hover:not(:disabled) {
-            background: color-mix(in srgb, $primary-color 14%, var(--ul-grey-1));
-        }
-
-        &--merge {
-            &:disabled {
-                color: color-mix(in srgb, var(--ul-grey-0) 65%, transparent);
-            }
-        }
-
-        &--delete:hover:not(:disabled) {
-            background: color-mix(in srgb, $color-red-500 14%, var(--ul-grey-1));
-        }
+        background: color-mix(in srgb, $primary-color 50%, transparent);
+        border-color: color-mix(in srgb, $primary-color 60%, transparent);
+        color: color-mix(in srgb, $primary-color 20%, white);
     }
 }
 // Theme-level refinements for shared surfaces and controls. These catch legacy

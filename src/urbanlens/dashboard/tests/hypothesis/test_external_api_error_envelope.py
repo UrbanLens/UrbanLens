@@ -51,7 +51,7 @@ from urbanlens.dashboard.external_api.throttling import ExternalApiBurstThrottle
 from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 if TYPE_CHECKING:
     from rest_framework.request import Request

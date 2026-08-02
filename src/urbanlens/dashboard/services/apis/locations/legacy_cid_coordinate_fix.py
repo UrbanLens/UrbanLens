@@ -39,7 +39,7 @@ When the corrected coordinates land on a Location the profile already has a
 *different* pin for (moving the legacy pin there would collide with
 ``db_pin_unique_location_per_profile``), this raises a
 :class:`~urbanlens.dashboard.models.pin_merge_suggestions.model.PinMergeSuggestion`
-instead of moving anything - see :mod:`services.pin_merge_suggestions` -
+instead of moving anything - see :mod:`services.pins.pin_merge_suggestions` -
 proposing the user merge the legacy pin into the one that's already correctly
 placed, with that correct pin always preselected as the survivor.
 
@@ -73,8 +73,8 @@ from django.db.models import Q
 
 from urbanlens.dashboard.models.location import Location
 from urbanlens.dashboard.models.pin import Pin
-from urbanlens.dashboard.services.dm_location_detection import parse_coordinates
 from urbanlens.dashboard.services.locations.naming import sanitize_name
+from urbanlens.dashboard.services.messaging.dm_location_detection import parse_coordinates
 
 if TYPE_CHECKING:
     from decimal import Decimal
@@ -217,7 +217,7 @@ def repair_legacy_pin_coordinates(
     # db_pin_unique_location_per_profile. Leave the legacy pin where it is and
     # suggest merging it into the pin that's already correctly placed instead -
     # merging the two is a user decision, not something an import should do
-    # silently. See services.pin_merge_suggestions/services.pin_merge.
+    # silently. See services.pins.pin_merge_suggestions/services.pins.pin_merge.
     existing_pin = Pin.objects.filter(profile=profile, location=correct_location).exclude(pk=candidate.pk).first()
     if existing_pin is not None:
         from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion, PinMergeSuggestionOrigin

@@ -32,7 +32,7 @@ from urbanlens.dashboard.models.pin_suggestions.model import PinSuggestion, PinS
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.routes.model import Route, RouteSource
 from urbanlens.dashboard.models.visits.model import PinVisit
-from urbanlens.dashboard.services.api_keys import generate_api_key
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 if TYPE_CHECKING:
     from collections.abc import Iterable

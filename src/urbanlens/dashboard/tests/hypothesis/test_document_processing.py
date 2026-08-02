@@ -1,4 +1,4 @@
-"""Unit tests for services.documents - LibreOffice/pypdf/OCR-backed document processing.
+"""Unit tests for services.media.documents - LibreOffice/pypdf/OCR-backed document processing.
 
 External binaries (soffice/tesseract) and libraries (pypdf/pdf2image/pytesseract)
 are mocked throughout: these tests verify the Python-side decision logic, not
@@ -16,7 +16,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.images.model import Image
-from urbanlens.dashboard.services.documents import CONVERTIBLE_DOCUMENT_EXTENSIONS, convert_to_pdf, extract_pdf_text, soffice_available
+from urbanlens.dashboard.services.media.documents import CONVERTIBLE_DOCUMENT_EXTENSIONS, convert_to_pdf, extract_pdf_text, soffice_available
 
 
 class SofficeAvailableTests(SimpleTestCase):
@@ -55,7 +55,7 @@ class ConvertToPdfTests(TestCase):
             profile=self.user.profile,
             image=SimpleUploadedFile("notes.docx", b"doc-bytes", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         )
-        with patch("urbanlens.dashboard.services.documents.soffice_available", return_value=False):
+        with patch("urbanlens.dashboard.services.media.documents.soffice_available", return_value=False):
             self.assertIsNone(convert_to_pdf(image))
 
     def test_conversion_failure_returns_none(self) -> None:
@@ -65,7 +65,7 @@ class ConvertToPdfTests(TestCase):
             image=SimpleUploadedFile("notes.docx", b"doc-bytes", content_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
         )
         with (
-            patch("urbanlens.dashboard.services.documents.soffice_available", return_value=True),
+            patch("urbanlens.dashboard.services.media.documents.soffice_available", return_value=True),
             patch("subprocess.run", side_effect=subprocess.SubprocessError("boom")),
         ):
             self.assertIsNone(convert_to_pdf(image))

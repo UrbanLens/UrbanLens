@@ -7,7 +7,7 @@ is nothing here to validate, only something to document.
 The wiki-comment reaction endpoint currently declares ``200: None``, which
 generates a client method returning an untyped blob. Declaring the shape here
 is the better default and the wiki endpoint should adopt it; the shape itself
-comes from ``services.comments.aggregate_reactions``, which both endpoints call,
+comes from ``services.comments.comments.aggregate_reactions``, which both endpoints call,
 so there is no risk of the two describing different bodies.
 """
 
@@ -38,6 +38,6 @@ class CommentReactionsSerializer(serializers.Serializer):
 
     #: ``{emoji: {"count": int, "reacted": bool}}``. A free-form mapping rather
     #: than declared keys, because the emoji vocabulary
-    #: (``services.comments.ALLOWED_EMOJIS``) is a product decision that changes
+    #: (``services.comments.comments.ALLOWED_EMOJIS``) is a product decision that changes
     #: without an API version bump.
     reactions = serializers.DictField(child=ReactionCountSerializer(), read_only=True)

@@ -25,7 +25,7 @@ from urbanlens.dashboard.plugins.builtin.cris_buildings import (
     CrisBuildingsPlugin,
 )
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
-from urbanlens.dashboard.services.geo_boundary import GeoBoundary
+from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 
 # A stand-in boundary covering roughly upstate NY, so tests don't hit TIGERweb.
 _NY_ISH = GeoBoundary.from_bboxes([(40.0, 45.0, -80.0, -73.0)])

@@ -11,7 +11,7 @@ from django.views import View
 from djangofoundry.controllers import ListController
 
 from urbanlens.dashboard.models.profile import Profile
-from urbanlens.dashboard.services.home_widgets import effective_widget_layout, home_dashboard_context, save_widget_layout
+from urbanlens.dashboard.services.home.home_widgets import effective_widget_layout, home_dashboard_context, save_widget_layout
 
 if TYPE_CHECKING:
     from django.http import HttpRequest

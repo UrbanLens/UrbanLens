@@ -1,4 +1,4 @@
-"""Tests for services.identity_visibility and its trip/group-chat wiring.
+"""Tests for services.profile.identity_visibility and its trip/group-chat wiring.
 
 A trip or group chat can include people who aren't friends with everyone
 else in it - if their profile_visibility setting doesn't permit a given
@@ -24,8 +24,8 @@ from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.connections import recommendable_strangers, suggest_mutual_connection
-from urbanlens.dashboard.services.identity_visibility import resolve_visible_identities, resolve_visible_identity
+from urbanlens.dashboard.services.social.connections import recommendable_strangers, suggest_mutual_connection
+from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities, resolve_visible_identity
 
 
 def _profile(*, visibility: str = VisibilityChoice.ANYTHING_IN_COMMON, allow_recs: bool = True) -> Profile:
@@ -262,7 +262,7 @@ class LiveMessagePayloadMaskingTests(TestCase):
         self.hidden_sender = _profile(visibility=VisibilityChoice.NO_ONE)
 
     def test_group_payload_masks_a_hidden_sender_for_another_member(self) -> None:
-        from urbanlens.dashboard.services.group_chats import create_group_chat, create_group_message, serialize_group_message
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat, create_group_message, serialize_group_message
 
         group = create_group_chat(self.viewer, "Crew", [self.hidden_sender])
         message = create_group_message(self.hidden_sender, group, "Meet at the gate")
@@ -273,7 +273,7 @@ class LiveMessagePayloadMaskingTests(TestCase):
         self.assertEqual(payload["body"], "Meet at the gate")
 
     def test_group_payload_keeps_the_senders_own_name_for_their_sessions(self) -> None:
-        from urbanlens.dashboard.services.group_chats import create_group_chat, create_group_message, serialize_group_message
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat, create_group_message, serialize_group_message
 
         group = create_group_chat(self.viewer, "Crew", [self.hidden_sender])
         message = create_group_message(self.hidden_sender, group, "Meet at the gate")
@@ -283,7 +283,7 @@ class LiveMessagePayloadMaskingTests(TestCase):
         self.assertEqual(payload["sender_name"], self.hidden_sender.username)
 
     def test_group_payload_keeps_a_visible_senders_name(self) -> None:
-        from urbanlens.dashboard.services.group_chats import create_group_chat, create_group_message, serialize_group_message
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat, create_group_message, serialize_group_message
 
         visible = _profile()
         Friendship.objects.create(from_profile=self.viewer, to_profile=visible, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
@@ -296,7 +296,7 @@ class LiveMessagePayloadMaskingTests(TestCase):
 
     def test_direct_message_payload_masks_a_hidden_sender_for_the_recipient(self) -> None:
         from urbanlens.dashboard.models.direct_messages.model import DirectMessage
-        from urbanlens.dashboard.services.direct_messages import display_identity_for, serialize_direct_message
+        from urbanlens.dashboard.services.messaging.direct_messages import display_identity_for, serialize_direct_message
 
         message = DirectMessage.objects.create(sender=self.hidden_sender, recipient=self.viewer, body="hi")
 
@@ -309,7 +309,7 @@ class LiveMessagePayloadMaskingTests(TestCase):
     def test_direct_message_payload_without_viewer_keeps_raw_names(self) -> None:
         """The sender's own copy (viewer=None) is the self-view - unmasked."""
         from urbanlens.dashboard.models.direct_messages.model import DirectMessage
-        from urbanlens.dashboard.services.direct_messages import serialize_direct_message
+        from urbanlens.dashboard.services.messaging.direct_messages import serialize_direct_message
 
         message = DirectMessage.objects.create(sender=self.hidden_sender, recipient=self.viewer, body="hi")
 
@@ -323,7 +323,7 @@ class GroupMembersDialogPrivacyTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        from urbanlens.dashboard.services.group_chats import create_group_chat
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
 
         self.creator = _profile()
         self.visible_member = _profile()
@@ -331,7 +331,7 @@ class GroupMembersDialogPrivacyTests(TestCase):
         self.group = create_group_chat(self.creator, "Crew", [self.visible_member])
 
     def test_hidden_member_added_later_is_masked(self) -> None:
-        from urbanlens.dashboard.services.group_chats import add_group_members
+        from urbanlens.dashboard.services.messaging.group_chats import add_group_members
 
         hidden_member = _profile(visibility=VisibilityChoice.NO_ONE)
         add_group_members(self.group, self.creator, [hidden_member])
@@ -349,7 +349,7 @@ class GroupMessageSenderPrivacyTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        from urbanlens.dashboard.services.group_chats import create_group_chat, create_group_message
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat, create_group_message
 
         self.creator = _profile()
         self.hidden_sender = _profile(visibility=VisibilityChoice.NO_ONE)
@@ -499,7 +499,7 @@ class TripInviteNotificationPrivacyTests(TestCase):
         self.assertIn("Member", notification.message)
 
     def test_trip_invite_via_dm_masks_a_hidden_sender(self) -> None:
-        from urbanlens.dashboard.services.direct_message_shares import invite_to_trip_in_message
+        from urbanlens.dashboard.services.messaging.direct_message_shares import invite_to_trip_in_message
 
         sender = _profile(visibility=VisibilityChoice.NO_ONE)
         recipient = _profile()
@@ -521,7 +521,7 @@ class GroupAddNotificationTextPrivacyTests(TestCase):
     (notification_type=MESSAGE, title=group.name)."""
 
     def test_group_creation_notification_masks_a_hidden_creator(self) -> None:
-        from urbanlens.dashboard.services.group_chats import create_group_chat
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
 
         hidden_creator = _profile(visibility=VisibilityChoice.NO_ONE)
         member = _profile()
@@ -534,7 +534,7 @@ class GroupAddNotificationTextPrivacyTests(TestCase):
         self.assertIn("Member", notification.message)
 
     def test_add_group_members_notification_masks_a_hidden_actor(self) -> None:
-        from urbanlens.dashboard.services.group_chats import add_group_members, create_group_chat
+        from urbanlens.dashboard.services.messaging.group_chats import add_group_members, create_group_chat
 
         hidden_actor = _profile(visibility=VisibilityChoice.NO_ONE)
         existing_member = _profile()
@@ -691,7 +691,7 @@ class GroupAddMemberSuggestsConnectionTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        from urbanlens.dashboard.services.group_chats import create_group_chat
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
 
         self.creator = _profile()
         self.other_member = _profile()
@@ -699,7 +699,7 @@ class GroupAddMemberSuggestsConnectionTests(TestCase):
         self.group = create_group_chat(self.creator, "Crew", [self.other_member])
 
     def test_adding_unconnected_member_suggests_with_existing_members(self) -> None:
-        from urbanlens.dashboard.services.group_chats import add_group_members
+        from urbanlens.dashboard.services.messaging.group_chats import add_group_members
 
         new_member = _profile()
         add_group_members(self.group, self.creator, [new_member])
@@ -709,7 +709,7 @@ class GroupAddMemberSuggestsConnectionTests(TestCase):
         self.assertTrue(NotificationLog.objects.filter(profile=self.other_member, source_profile=new_member, notification_type=NotificationType.FRIEND_SUGGESTION).exists())
 
     def test_group_creation_suggests_connections_among_unconnected_initial_members(self) -> None:
-        from urbanlens.dashboard.services.group_chats import create_group_chat
+        from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
 
         member_a = _profile()
         member_b = _profile()
