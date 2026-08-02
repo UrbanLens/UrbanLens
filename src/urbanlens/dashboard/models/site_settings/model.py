@@ -500,6 +500,14 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Restrict sign-ups (invite-only)",
     )
 
+    # --- Cost tracking ---
+
+    public_costs_page_enabled = BooleanField(
+        default=False,
+        help_text="Show the public /costs/ page with the site's estimated running costs and cost-per-user. Off by default.",
+        verbose_name="Public costs page",
+    )
+
     # --- Bootstrap admin ---
     bootstrap_admin_onboarding_complete = BooleanField(
         default=False,

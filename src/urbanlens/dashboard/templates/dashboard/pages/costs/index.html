@@ -4,13 +4,35 @@
 
 {% block content %}
 
-{% include "dashboard/partials/ui/_page_hero.html" with eyebrow="Transparency" title="What it costs to run UrbanLens" subtitle="A rough, ongoing estimate of the external API spend behind the map, pin enrichment, search, and messaging features." modifier="wide" %}
+{% include "dashboard/partials/ui/_page_hero.html" with eyebrow="Transparency" title="What it costs to run UrbanLens" subtitle="A rough, ongoing estimate of everything behind the map: hardware, hosting, and the external APIs powering pin enrichment, search, and messaging." modifier="wide" %}
+
+<section class="attr-section">
+    <div class="attr-section-inner">
+        <div class="attr-section-label">Total to run UrbanLens</div>
+        <h2 class="attr-section-title">
+            ${{ breakdown.total|floatformat:2 }}/mo
+            {% if cost_per_user is not None %}(~${{ cost_per_user|floatformat:2 }}/user){% endif %}
+        </h2>
+        <p class="attr-section-lead">
+            Hardware &amp; infrastructure ${{ breakdown.hardware|floatformat:2 }}/mo (amortized) &middot;
+            Operating costs ${{ breakdown.operating|floatformat:2 }}/mo &middot;
+            External APIs ${{ breakdown.api|floatformat:2 }}/mo (last 30 days)
+            {% if cost_per_user is not None %} &middot; split across {{ active_user_count }} active user{{ active_user_count|pluralize }}{% endif %}.
+        </p>
+        <div class="stats-chart-wrap" style="height:20rem">
+            <canvas id="chart-public-cost-monthly"></canvas>
+        </div>
+        <script type="application/json" id="cost-chart-data">
+            {"labels": {{ chart_labels|safe }}, "hardware": {{ chart_hardware|safe }}, "operating": {{ chart_operating|safe }}, "api": {{ chart_api|safe }}}
+        </script>
+    </div>
+</section>
 
 <section class="attr-section">
     <div class="attr-section-inner">
         <div class="attr-section-label">Last 30 days</div>
         <h2 class="attr-section-title">
-            {% if total_cost_30d %}Estimated total: ${{ total_cost_30d|floatformat:2 }}{% else %}No priced usage yet{% endif %}
+            {% if total_cost_30d %}External API spend: ${{ total_cost_30d|floatformat:2 }}{% else %}No priced API usage yet{% endif %}
         </h2>
         <p class="attr-section-lead">
             This is an estimate, not an invoice. It only covers services we have a confirmed
@@ -53,4 +75,52 @@
     </div>
 </section>
 
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script>
+(function () {
+    var canvas = document.getElementById('chart-public-cost-monthly');
+    var dataEl = document.getElementById('cost-chart-data');
+    if (!canvas || !dataEl) return;
+
+    var data;
+    try {
+        data = JSON.parse(dataEl.textContent);
+    } catch (e) {
+        return;
+    }
+
+    var isDark = document.getElementById('html-root').getAttribute('data-theme') === 'dark';
+    var gridColor = isDark ? 'rgba(255,255,255,.08)' : 'rgba(0,0,0,.06)';
+    var labelColor = isDark ? '#94a3b8' : '#64748b';
+    var tooltipBg = isDark ? '#1e293b' : '#fff';
+    var tooltipFg = isDark ? '#f1f5f9' : '#0f172a';
+
+    new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: data.labels,
+            datasets: [
+                { label: 'Hardware', data: data.hardware, backgroundColor: '#0891b299', borderColor: '#0891b2', borderWidth: 1.5 },
+                { label: 'Operating', data: data.operating, backgroundColor: '#d9770699', borderColor: '#d97706', borderWidth: 1.5 },
+                { label: 'External APIs', data: data.api, backgroundColor: '#7c3aed99', borderColor: '#7c3aed', borderWidth: 1.5 },
+            ],
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true, labels: { color: labelColor } },
+                tooltip: { backgroundColor: tooltipBg, titleColor: tooltipFg, bodyColor: tooltipFg, borderColor: gridColor, borderWidth: 1 },
+            },
+            scales: {
+                x: { stacked: true, ticks: { color: labelColor, maxRotation: 45 }, grid: { color: gridColor } },
+                y: { stacked: true, beginAtZero: true, ticks: { color: labelColor }, grid: { color: gridColor } },
+            },
+        },
+    });
+}());
+</script>
 {% endblock %}

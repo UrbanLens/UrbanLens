@@ -66,6 +66,7 @@ from urbanlens.dashboard.controllers import (
     settings,
     setup,
     site_admin,
+    site_admin_costs,
     spotguessr,
     thanks,
     tools,
@@ -1795,6 +1796,24 @@ urlpatterns = [
         name="site_admin_achievement_backfill",
     ),
     path("achievements/", achievements.AchievementRedirectView.as_view(), name="achievement.mine"),
+    path("site-admin/costs/", site_admin_costs.SiteAdminCostsView.as_view(), name="site_admin_costs"),
+    path("site-admin/costs/components/", site_admin_costs.SiteAdminCostComponentsView.as_view(), name="site_admin_cost_component_create"),
+    path(
+        "site-admin/costs/components/<int:component_id>/",
+        site_admin_costs.SiteAdminCostComponentEditView.as_view(),
+        name="site_admin_cost_component_edit",
+    ),
+    path("site-admin/costs/operating/", site_admin_costs.SiteAdminOperatingCostsView.as_view(), name="site_admin_operating_cost_create"),
+    path(
+        "site-admin/costs/operating/<int:cost_id>/",
+        site_admin_costs.SiteAdminOperatingCostEditView.as_view(),
+        name="site_admin_operating_cost_edit",
+    ),
+    path(
+        "site-admin/costs/toggle-public/",
+        site_admin_costs.SiteAdminCostsPublicToggleView.as_view(),
+        name="site_admin_costs_toggle_public",
+    ),
     path(
         "site-admin/ui-components/",
         site_admin.SiteAdminUIComponentsView.as_view(),

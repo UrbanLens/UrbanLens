@@ -1,3 +1,4 @@
+{% load dashboard_tags %}
 <dialog id="{{ dialog_id|default:'invite-friend-dialog' }}" class="invite-dialog ul-dialog">
     <div class="dialog-header">
         <span><i class="material-symbols-outlined">mail</i> Invite a Friend</span>
@@ -22,9 +23,12 @@
             {% if perms.dashboard.view_site_admin %}
             <div class="invite-subscription-panel">
                 <label><i class="material-symbols-outlined">workspace_premium</i> Optional subscription</label>
+                {% subscription_role_choices as subscription_roles %}
                 <select name="subscription_role">
                     <option value="">No subscription</option>
-                    <option value="vip">VIP - SaaS features</option>
+                    {% for role in subscription_roles %}
+                    <option value="{{ role.slug }}">{{ role.name }}</option>
+                    {% endfor %}
                 </select>
                 <select name="subscription_duration">
                     <option value="1">1 month</option>

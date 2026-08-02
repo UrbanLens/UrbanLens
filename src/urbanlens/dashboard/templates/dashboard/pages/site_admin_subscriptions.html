@@ -56,8 +56,27 @@
       {% for role in roles %}
       <li class="subscription-types-list__item">
         <div class="subscription-types-list__heading">
-          <span class="role-pill"><i class="material-symbols-outlined">auto_awesome</i> {{ role.name }}</span>
-          {% if role.description %}<span class="subscription-types-list__description">{{ role.description }}</span>{% endif %}
+          <form method="post" class="role-meta-form" action="{% url 'site_admin_subscriptions' %}">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="role_rename">
+            <input type="hidden" name="role_slug" value="{{ role.slug }}">
+            <span class="role-pill"><i class="material-symbols-outlined">auto_awesome</i>
+              <input type="text" name="name" value="{{ role.name }}" maxlength="100" required
+                     class="role-meta-form__name" aria-label="Role name">
+            </span>
+            <input type="text" name="description" value="{{ role.description }}" maxlength="255"
+                   placeholder="Description (optional)" class="role-meta-form__description" aria-label="Role description">
+            <button type="submit" class="btn btn--ghost btn--sm">Save</button>
+          </form>
+          <form method="post" class="role-delete-form" action="{% url 'site_admin_subscriptions' %}"
+                onsubmit="return confirm('Delete the {{ role.name|escapejs }} role?{% if role.active_grant_count %} This immediately revokes it for {{ role.active_grant_count }} user{{ role.active_grant_count|pluralize }}.{% endif %} This cannot be undone.')">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="role_delete">
+            <input type="hidden" name="role_slug" value="{{ role.slug }}">
+            <button type="submit" class="btn btn--danger btn--sm" aria-label="Delete {{ role.name }} role">
+              <i class="material-symbols-outlined">delete</i>
+            </button>
+          </form>
         </div>
         <form class="inline-sub-form inline-sub-form--features"
               data-field-group="role_features" data-role="{{ role.slug }}"
@@ -79,6 +98,21 @@
         </form>
       </li>
       {% endfor %}
+      <li class="subscription-types-list__item subscription-types-list__item--add">
+        <form method="post" class="role-create-form" action="{% url 'site_admin_subscriptions' %}">
+          {% csrf_token %}
+          <input type="hidden" name="action" value="role_create">
+          <label for="new-role-name">
+            <i class="material-symbols-outlined">add_circle</i>
+            New role
+          </label>
+          <input type="text" id="new-role-name" name="name" maxlength="100" placeholder="Role name" required
+                 class="role-meta-form__name">
+          <input type="text" name="description" maxlength="255" placeholder="Description (optional)"
+                 class="role-meta-form__description">
+          <button type="submit" class="btn btn--primary btn--sm">Add role</button>
+        </form>
+      </li>
     </ul>
   </section>
   <div class="subscription-grid">

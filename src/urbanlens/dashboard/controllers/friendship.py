@@ -556,7 +556,6 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         if subscription_role_slug and request.user.has_perm("dashboard.view_site_admin"):
             from urbanlens.dashboard.models.subscriptions import SubscriptionRole
 
-            SubscriptionRole.ensure_defaults()
             subscription_role = SubscriptionRole.objects.get_by_slug(subscription_role_slug)
 
         try:

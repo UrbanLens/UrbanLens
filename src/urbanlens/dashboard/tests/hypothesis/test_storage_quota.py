@@ -40,7 +40,9 @@ def _make_profile():
 
 
 def _grant_role(profile, **role_fields):
-    role = baker.make(SubscriptionRole, slug=role_fields.pop("slug", "vip"), **role_fields)
+    # Bakery's default unique-value sequencing keeps repeated calls collision-free;
+    # avoid a fixed default slug since "vip" is now seeded as baseline data by migration 0019.
+    role = baker.make(SubscriptionRole, **role_fields)
     granter = baker.make(User)
     grant_subscription(profile.user, role, granter, months=None)
     return role

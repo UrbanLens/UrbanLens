@@ -5,6 +5,7 @@ from django.urls import reverse
 from urbanlens.dashboard.models.achievements import Achievement, ProfileStreak, UserAchievement
 from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
+from urbanlens.dashboard.models.costs import CostComponent, OperatingCost
 from urbanlens.dashboard.models.facts import Fact, FactEvidence
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.site_settings import SiteSettings
@@ -323,3 +324,25 @@ class ProfileStreakAdmin(admin.ModelAdmin):
         for streak in queryset.select_related("profile"):
             rebuild_streak(streak.profile, streak.kind)
         self.message_user(request, f"Rebuilt {queryset.count()} streak(s).", messages.SUCCESS)
+
+
+@admin.register(CostComponent)
+class CostComponentAdmin(admin.ModelAdmin):
+    """Admin for CostComponent - depreciating hardware/infrastructure assets."""
+
+    list_display = ["name", "replacement_cost", "deprecation_years", "retired_at", "order"]
+    list_editable = ["order"]
+    search_fields = ["name", "notes"]
+    readonly_fields = ["created", "updated"]
+    ordering = ["order", "name"]
+
+
+@admin.register(OperatingCost)
+class OperatingCostAdmin(admin.ModelAdmin):
+    """Admin for OperatingCost - recurring monthly operating costs."""
+
+    list_display = ["name", "monthly_cost", "retired_at", "order"]
+    list_editable = ["order"]
+    search_fields = ["name", "notes"]
+    readonly_fields = ["created", "updated"]
+    ordering = ["order", "name"]

@@ -458,3 +458,14 @@ def tooltip_label(
         Context dict for ``_tooltip_label.html``.
     """
     return {"label": label, "help": help_text, "pos": pos, "wide": wide}
+
+
+@register.simple_tag
+def subscription_role_choices():
+    """Return every subscription role, for the invite-a-friend dialog's role picker.
+
+    Usage: {% subscription_role_choices as subscription_roles %}
+    """
+    from urbanlens.dashboard.models.subscriptions import SubscriptionRole
+
+    return SubscriptionRole.objects.all()

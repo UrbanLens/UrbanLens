@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 from django.contrib.auth.models import AnonymousUser, User
 from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, IntegerField, Q, TextChoices, UniqueConstraint
 from django.utils import timezone
+from django.utils.text import slugify
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.subscriptions.queryset import PendingSubscriptionGrantManager, SubscriptionRoleManager, UserSubscriptionManager
@@ -44,8 +45,8 @@ class SiteFeature(TextChoices):
     # out of beta by just removing its gate instead of touching this enum.
     BETA_FEATURES = "beta_features", "Beta features"
     # Earlier-stage than BETA_FEATURES: features not yet ready for general use.
-    # Deliberately excluded from _VIP_CANONICAL_FEATURES and from any default
-    # SiteSettings.default_features, so user_has_feature() only grants this to
+    # Deliberately excluded from the built-in VIP role's seeded features and from
+    # any default SiteSettings.default_features, so user_has_feature() only grants this to
     # site admins (via its own admin check) unless a site admin explicitly
     # grants it to a role or as a site-wide default.
     ALPHA_FEATURES = "alpha_features", "Alpha features"
@@ -90,34 +91,23 @@ class SubscriptionRole(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         ordering = ["name"]
 
-    # Canonical features every VIP role must include.  Add new SiteFeature values here
-    # when they should be automatically granted to VIPs; ensure_defaults will merge them
-    # into existing rows without removing any admin-configured extras.
-    _VIP_CANONICAL_FEATURES: frozenset[str] = frozenset(
-        {SiteFeature.AI, SiteFeature.PLACES, SiteFeature.SEARCH, SiteFeature.NEARBY_RESEARCH, SiteFeature.BETA_FEATURES},
-    )
-
-    # Default storage quota (GB) granted to the built-in VIP role on creation.
-    _VIP_DEFAULT_STORAGE_QUOTA_GB: int = 500
-
     @classmethod
-    def ensure_defaults(cls) -> None:
-        """Create or update built-in roles, merging in any newly-added canonical features."""
-        role, created = cls.objects.get_or_create(
-            slug="vip",
-            defaults={
-                "name": "VIP",
-                "description": "Grants access to VIP-only features.",
-                "features": ",".join(sorted(cls._VIP_CANONICAL_FEATURES)),
-                "storage_quota_gb": cls._VIP_DEFAULT_STORAGE_QUOTA_GB,
-            },
-        )
-        if not created:
-            existing = role.feature_set
-            missing = cls._VIP_CANONICAL_FEATURES - existing
-            if missing:
-                merged = ",".join(sorted(existing | missing))
-                cls.objects.filter(pk=role.pk).update(features=merged)
+    def unique_slug(cls, name: str) -> str:
+        """Derive a unique slug from an admin-entered role name.
+
+        Args:
+            name: The role name to slugify.
+
+        Returns:
+            A slug not currently used by any other role.
+        """
+        base = slugify(name) or "role"
+        candidate = base
+        suffix = 2
+        while cls.objects.filter(slug=candidate).exists():
+            candidate = f"{base}-{suffix}"
+            suffix += 1
+        return candidate
 
     @property
     def feature_set(self) -> set[str]:

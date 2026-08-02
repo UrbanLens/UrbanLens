@@ -357,12 +357,35 @@ queues a backfill that grants it retroactively to everyone who already qualifies
   changes. A nightly `sweep_achievements` task catches thresholds no write crosses, such as
   "trips attended" ticking up when a trip ends.
 
+## Cost Tracking
+
+Admin-defined running-cost accounting: depreciating hardware/infrastructure **components**
+(a one-time replacement cost amortized evenly over a number of years, e.g. "Hard Drives / $1000 /
+10 years") plus recurring monthly **operating costs** (e.g. "Electricity / $100/mo"). Either stops
+counting via a `retired_at` timestamp rather than deletion, so all-time totals stay accurate.
+
+- **Site Admin → Costs** (`/site-admin/costs/`): add/edit/retire/delete any number of components
+  and operating costs, KPI cards (total recorded expenses all-time, average monthly expense,
+  effective cost for the last 30 days, cost per active user), and a stacked monthly chart, all
+  updating live via HTMX after every edit.
+- **Combined with tracked API spend**: the "effective monthly cost" and every stat/chart merge
+  admin-defined hardware/operating costs with the existing `ApiCallLog.cost_estimate` data (the
+  same external-API cost tracking the site-admin API usage report is built from) into one figure,
+  broken out by source (Hardware / Operating / External APIs) rather than shown as disconnected
+  numbers.
+- **Public transparency page** at `/costs/` mirrors the combined totals, cost-per-user, and chart
+  for anyone to see — gated behind `SiteSettings.public_costs_page_enabled` (off by default,
+  toggled from the Costs admin page); the page 404s until an admin turns it on, and a footer link
+  appears only once it's enabled.
+- Calculations live in `services/admin/cost_tracking.py`, reused by both the admin and public
+  views so the numbers can never drift apart.
+
 ## Site Administration
 
 - `/site-admin/` panel: user management, site-wide settings, usage stats (KPIs, system, API),
   subscription role management, per-service API rate-limit toggles, plugin inventory,
-  achievement definitions, UI component showcase, dev toolbar (theme/map-dark-mode toggles,
-  session reset)
+  achievement definitions, cost tracking, UI component showcase, dev toolbar (theme/map-dark-mode
+  toggles, session reset)
 - Data export/import tooling and on-demand/scheduled database backups
 - Subscription roles grant feature flags (`SiteFeature`) per user; pending grants can attach to an
   email invite for users who haven't joined yet

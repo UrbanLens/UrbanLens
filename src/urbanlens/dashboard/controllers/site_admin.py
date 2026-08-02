@@ -561,17 +561,21 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
     request: HttpRequest
 
     def get(self, request: HttpRequest):
+        from django.db.models import Count
+
         from urbanlens.dashboard.models.site_settings import SiteSettings
         from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, UserSubscription
 
-        SubscriptionRole.ensure_defaults()
         grants = UserSubscription.objects.granted_by_admin(request.user).select_related("user", "role")
+        roles = SubscriptionRole.objects.all().annotate(
+            active_grant_count=Count("user_subscriptions", filter=Q(user_subscriptions__revoked_at__isnull=True), distinct=True),
+        )
         return render(
             request,
             "dashboard/pages/site_admin_subscriptions.html",
             {
                 "page_name": "site-admin-subscriptions",
-                "roles": SubscriptionRole.objects.all(),
+                "roles": roles,
                 "grants": grants,
                 "site_features": SiteFeature.choices,
                 "site_settings": SiteSettings.get_current(),
@@ -604,7 +608,6 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
         if not isinstance(request.user, User):
             return HttpResponseForbidden()
 
-        SubscriptionRole.ensure_defaults()
         is_htmx = bool(request.headers.get("HX-Request"))
         action = request.POST.get("action", "grant")
 
@@ -695,6 +698,33 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
                 response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "role_features", "role": role.slug}})
                 return response
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "features saved"}))
+
+        if action == "role_create":
+            name = request.POST.get("name", "").strip()[:100]
+            if not name:
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role name is required."}))
+            description = request.POST.get("description", "").strip()[:255]
+            role = SubscriptionRole.objects.create(slug=SubscriptionRole.unique_slug(name), name=name, description=description)
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": f'"{role.name}" role created'}))
+
+        if action == "role_rename":
+            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
+            if role is None:
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
+            name = request.POST.get("name", "").strip()[:100]
+            if not name:
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role name is required."}))
+            description = request.POST.get("description", "").strip()[:255]
+            SubscriptionRole.objects.filter(pk=role.pk).update(name=name, description=description)
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "role renamed"}))
+
+        if action == "role_delete":
+            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
+            if role is None:
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
+            name = role.name
+            role.delete()
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": f'"{name}" role deleted'}))
 
         if action == "default_features":
             from urbanlens.dashboard.models.site_settings import SiteSettings

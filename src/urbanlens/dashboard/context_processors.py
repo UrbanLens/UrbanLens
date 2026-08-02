@@ -13,14 +13,15 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def add_site_settings(request: HttpRequest) -> dict[str, str]:
+def add_site_settings(request: HttpRequest) -> dict[str, str | bool]:
     """Inject site-wide settings into every template context.
 
     Args:
         request: The current HttpRequest.
 
     Returns:
-        dict with site_title and app_version available in all templates.
+        dict with site_title, app_version, and public_costs_page_enabled available in
+        all templates.
     """
     from urbanlens.UrbanLens.settings.app import settings as app_settings
 
@@ -29,12 +30,15 @@ def add_site_settings(request: HttpRequest) -> dict[str, str]:
 
         site = SiteSettings.get_current()
         site_title = site.app_title
+        public_costs_page_enabled = site.public_costs_page_enabled
     except (ImportError, DatabaseError):
         site_title = "UrbanLens"
+        public_costs_page_enabled = False
 
     return {
         "site_title": site_title,
         "app_version": app_settings.app_version,
+        "public_costs_page_enabled": public_costs_page_enabled,
     }
 
 

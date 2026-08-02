@@ -1,0 +1,259 @@
+{% comment %}
+Cost tracking editor: KPI cards, the stacked monthly chart, and the two
+admin-defined item lists (components, operating costs) - swapped as a single
+unit after every mutation so the numbers never go stale after an edit.
+
+Context: components, operating_costs, breakdown (CostBreakdown), total_recorded_expenses,
+         average_monthly_expense, cost_per_user, active_user_count, chart_labels,
+         chart_hardware, chart_operating, chart_api, public_costs_page_enabled,
+         component_form_errors / operating_form_errors (optional)
+{% endcomment %}
+<div id="cost_admin_body">
+
+    {% if component_form_errors %}
+    <div class="ul-alert ul-alert--error" role="alert">
+        {% for field, errors in component_form_errors.items %}
+        <p><strong>{{ field }}:</strong> {{ errors|join:" " }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+    {% if operating_form_errors %}
+    <div class="ul-alert ul-alert--error" role="alert">
+        {% for field, errors in operating_form_errors.items %}
+        <p><strong>{{ field }}:</strong> {{ errors|join:" " }}</p>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="stats-kpi-grid">
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-icon" style="background:rgba(8,145,178,.12)">
+                <i class="material-icons" style="color:#0891b2">receipt_long</i>
+            </div>
+            <div class="stats-kpi-body">
+                <div class="stats-kpi-value">${{ total_recorded_expenses|floatformat:2 }}</div>
+                <div class="stats-kpi-label">Total Recorded Expenses</div>
+                <div class="stats-kpi-sub">all time</div>
+            </div>
+        </div>
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-icon" style="background:rgba(124,58,237,.12)">
+                <i class="material-icons" style="color:#7c3aed">calendar_month</i>
+            </div>
+            <div class="stats-kpi-body">
+                <div class="stats-kpi-value">{% if average_monthly_expense is not None %}${{ average_monthly_expense|floatformat:2 }}{% else %}&mdash;{% endif %}</div>
+                <div class="stats-kpi-label">Average Monthly Expense</div>
+                <div class="stats-kpi-sub">historical average</div>
+            </div>
+        </div>
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-icon" style="background:rgba(217,119,6,.12)">
+                <i class="material-icons" style="color:#d97706">bolt</i>
+            </div>
+            <div class="stats-kpi-body">
+                <div class="stats-kpi-value">${{ breakdown.total|floatformat:2 }}</div>
+                <div class="stats-kpi-label">Last 30 Days</div>
+                <div class="stats-kpi-sub">Hardware ${{ breakdown.hardware|floatformat:2 }} &middot; Operating ${{ breakdown.operating|floatformat:2 }} &middot; API ${{ breakdown.api|floatformat:2 }}</div>
+            </div>
+        </div>
+        <div class="stats-kpi-card">
+            <div class="stats-kpi-icon" style="background:rgba(22,163,74,.12)">
+                <i class="material-icons" style="color:#16a34a">person</i>
+            </div>
+            <div class="stats-kpi-body">
+                <div class="stats-kpi-value">{% if cost_per_user is not None %}${{ cost_per_user|floatformat:2 }}{% else %}&mdash;{% endif %}</div>
+                <div class="stats-kpi-label">Cost Per User</div>
+                <div class="stats-kpi-sub">{{ active_user_count }} active user{{ active_user_count|pluralize }}</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="site-admin-card ul-section card stats-chart-card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">bar_chart</i>
+            <span>Effective Monthly Cost - last 12 months</span>
+        </div>
+        <div class="stats-chart-wrap">
+            <canvas id="chart-cost-monthly"></canvas>
+        </div>
+        <script type="application/json" id="cost-chart-data">
+            {"labels": {{ chart_labels|safe }}, "hardware": {{ chart_hardware|safe }}, "operating": {{ chart_operating|safe }}, "api": {{ chart_api|safe }}}
+        </script>
+    </div>
+
+    <div class="ul-section">
+        <div class="admin-achievement-toggles">
+            <button type="button" class="btn btn--sm {% if public_costs_page_enabled %}btn--primary{% else %}btn--ghost{% endif %}"
+                    hx-post="{% url 'site_admin_costs_toggle_public' %}"
+                    hx-target="#cost_admin_body"
+                    hx-swap="outerHTML">
+                {% if public_costs_page_enabled %}Public costs page: On{% else %}Public costs page: Off{% endif %}
+            </button>
+            <span class="stats-kpi-sub">
+                {% if public_costs_page_enabled %}Visible to everyone at <a href="{% url 'costs' %}">/costs/</a>.{% else %}Hidden - the /costs/ page 404s until enabled.{% endif %}
+            </span>
+        </div>
+    </div>
+
+    <h2 class="profile-section-title">Depreciating Components</h2>
+    <div class="admin-achievement-list">
+        {% for component in components %}
+        <div class="admin-achievement-card ul-section{% if not component.is_active %} is-inactive{% endif %}">
+            <form hx-post="{% url 'site_admin_cost_component_edit' component.id %}"
+                  hx-target="#cost_admin_body"
+                  hx-swap="outerHTML">
+                {% csrf_token %}
+                <div class="admin-achievement-grid">
+                    <label class="ul-field ul-field--wide">
+                        <span>Name</span>
+                        <input type="text" name="name" value="{{ component.name }}" required class="ul-input" placeholder="Hard Drives">
+                    </label>
+                    <label class="ul-field">
+                        <span>Replacement cost ($)</span>
+                        <input type="number" name="replacement_cost" value="{{ component.replacement_cost }}" min="0" step="0.01" required class="ul-input">
+                    </label>
+                    <label class="ul-field">
+                        <span>Years to deprecate</span>
+                        <input type="number" name="deprecation_years" value="{{ component.deprecation_years }}" min="0.1" step="0.1" required class="ul-input">
+                    </label>
+                    <label class="ul-field">
+                        <span>Order</span>
+                        <input type="number" name="order" value="{{ component.order }}" class="ul-input">
+                    </label>
+                    <label class="ul-field ul-field--wide">
+                        <span>Notes</span>
+                        <input type="text" name="notes" value="{{ component.notes }}" class="ul-input">
+                    </label>
+                </div>
+                <div class="admin-achievement-toggles">
+                    <label class="ul-checkbox"><input type="checkbox" name="is_active" {% if component.is_active %}checked{% endif %}> Active</label>
+                    <span class="stats-kpi-sub">${{ component.monthly_amortized_cost|floatformat:2 }}/mo amortized</span>
+                    <button type="submit" class="btn btn--sm btn--primary">Save</button>
+                </div>
+            </form>
+            <div class="admin-achievement-secondary">
+                <button type="button" class="btn btn--danger btn--sm"
+                        hx-delete="{% url 'site_admin_cost_component_edit' component.id %}"
+                        hx-target="#cost_admin_body"
+                        hx-swap="outerHTML"
+                        hx-confirm="Delete “{{ component.name }}”? This removes it from all-time expense totals too. Unticking Active keeps its history instead.">
+                    Delete
+                </button>
+            </div>
+        </div>
+        {% empty %}
+        <p class="empty-text">No cost components defined yet. Add the first one below.</p>
+        {% endfor %}
+    </div>
+
+    <div class="ul-section admin-achievement-create">
+        <h3 class="profile-section-title">Add a cost component</h3>
+        <form hx-post="{% url 'site_admin_cost_component_create' %}"
+              hx-target="#cost_admin_body"
+              hx-swap="outerHTML"
+              class="admin-achievement-grid">
+            {% csrf_token %}
+            <label class="ul-field ul-field--wide">
+                <span>Name</span>
+                <input type="text" name="name" required class="ul-input" placeholder="Hard Drives">
+            </label>
+            <label class="ul-field">
+                <span>Replacement cost ($)</span>
+                <input type="number" name="replacement_cost" min="0" step="0.01" required class="ul-input" placeholder="1000.00">
+            </label>
+            <label class="ul-field">
+                <span>Years to deprecate</span>
+                <input type="number" name="deprecation_years" min="0.1" step="0.1" required class="ul-input" placeholder="10">
+            </label>
+            <label class="ul-field">
+                <span>Order</span>
+                <input type="number" name="order" value="0" class="ul-input">
+            </label>
+            <label class="ul-field ul-field--wide">
+                <span>Notes</span>
+                <input type="text" name="notes" class="ul-input">
+            </label>
+            <div class="admin-achievement-toggles">
+                <label class="ul-checkbox"><input type="checkbox" name="is_active" checked> Active</label>
+                <button type="submit" class="btn btn--primary">Add component</button>
+            </div>
+        </form>
+    </div>
+
+    <h2 class="profile-section-title">Monthly Operating Costs</h2>
+    <div class="admin-achievement-list">
+        {% for cost in operating_costs %}
+        <div class="admin-achievement-card ul-section{% if not cost.is_active %} is-inactive{% endif %}">
+            <form hx-post="{% url 'site_admin_operating_cost_edit' cost.id %}"
+                  hx-target="#cost_admin_body"
+                  hx-swap="outerHTML">
+                {% csrf_token %}
+                <div class="admin-achievement-grid">
+                    <label class="ul-field ul-field--wide">
+                        <span>Name</span>
+                        <input type="text" name="name" value="{{ cost.name }}" required class="ul-input" placeholder="Electricity">
+                    </label>
+                    <label class="ul-field">
+                        <span>Monthly cost ($)</span>
+                        <input type="number" name="monthly_cost" value="{{ cost.monthly_cost }}" min="0" step="0.01" required class="ul-input">
+                    </label>
+                    <label class="ul-field">
+                        <span>Order</span>
+                        <input type="number" name="order" value="{{ cost.order }}" class="ul-input">
+                    </label>
+                    <label class="ul-field ul-field--wide">
+                        <span>Notes</span>
+                        <input type="text" name="notes" value="{{ cost.notes }}" class="ul-input">
+                    </label>
+                </div>
+                <div class="admin-achievement-toggles">
+                    <label class="ul-checkbox"><input type="checkbox" name="is_active" {% if cost.is_active %}checked{% endif %}> Active</label>
+                    <button type="submit" class="btn btn--sm btn--primary">Save</button>
+                </div>
+            </form>
+            <div class="admin-achievement-secondary">
+                <button type="button" class="btn btn--danger btn--sm"
+                        hx-delete="{% url 'site_admin_operating_cost_edit' cost.id %}"
+                        hx-target="#cost_admin_body"
+                        hx-swap="outerHTML"
+                        hx-confirm="Delete “{{ cost.name }}”? This removes it from all-time expense totals too. Unticking Active keeps its history instead.">
+                    Delete
+                </button>
+            </div>
+        </div>
+        {% empty %}
+        <p class="empty-text">No operating costs defined yet. Add the first one below.</p>
+        {% endfor %}
+    </div>
+
+    <div class="ul-section admin-achievement-create">
+        <h3 class="profile-section-title">Add an operating cost</h3>
+        <form hx-post="{% url 'site_admin_operating_cost_create' %}"
+              hx-target="#cost_admin_body"
+              hx-swap="outerHTML"
+              class="admin-achievement-grid">
+            {% csrf_token %}
+            <label class="ul-field ul-field--wide">
+                <span>Name</span>
+                <input type="text" name="name" required class="ul-input" placeholder="Electricity">
+            </label>
+            <label class="ul-field">
+                <span>Monthly cost ($)</span>
+                <input type="number" name="monthly_cost" min="0" step="0.01" required class="ul-input" placeholder="100.00">
+            </label>
+            <label class="ul-field">
+                <span>Order</span>
+                <input type="number" name="order" value="0" class="ul-input">
+            </label>
+            <label class="ul-field ul-field--wide">
+                <span>Notes</span>
+                <input type="text" name="notes" class="ul-input">
+            </label>
+            <div class="admin-achievement-toggles">
+                <label class="ul-checkbox"><input type="checkbox" name="is_active" checked> Active</label>
+                <button type="submit" class="btn btn--primary">Add operating cost</button>
+            </div>
+        </form>
+    </div>
+
+</div>
