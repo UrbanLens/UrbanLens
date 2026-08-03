@@ -70,7 +70,7 @@ def _section_context(request: HttpRequest) -> dict:
                 "pwyw_threshold_dollars": pricing.cents_to_dollars(threshold_cents) if threshold_cents else None,
             }
         )
-    subscriptions = RoleSubscription.objects.filter(user=request.user).exclude(status="canceled").select_related("role").order_by("-created")
+    subscriptions = RoleSubscription.objects.visible_for(request.user).select_related("role").order_by("-created")
     return {
         "stripe_configured": stripe_client.is_configured(),
         "role_rows": role_rows,

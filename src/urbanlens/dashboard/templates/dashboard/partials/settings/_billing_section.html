@@ -20,6 +20,9 @@
                     {% if not sub.threshold_met %}&mdash; this pledge doesn't currently clear the access threshold for {{ sub.role.name }}.{% endif %}
                     {% if sub.cancel_at_period_end %}&mdash; cancels {{ sub.current_period_end|date:"M j, Y" }}.{% elif sub.current_period_end %}&mdash; renews {{ sub.current_period_end|date:"M j, Y" }}.{% endif %}
                 {% endif %}
+                {% if sub.has_banked_access %}
+                &mdash; paid-ahead access through {{ sub.usage_covered_until|date:"M j, Y" }}{% if not sub.is_billable %} (this subscription is no longer active){% endif %}.
+                {% endif %}
             </p>
             <div class="settings-actions">
                 {% if sub.role.pay_what_you_want and sub.is_billable %}
@@ -30,7 +33,7 @@
                     <button type="submit" class="btn btn--ghost btn--sm">Update pledge</button>
                 </form>
                 {% endif %}
-                {% if not sub.cancel_at_period_end %}
+                {% if sub.is_billable and not sub.cancel_at_period_end %}
                 <form hx-post="{% url 'settings.billing.cancel' sub.pk %}" hx-target="#billing-settings-body" hx-swap="outerHTML"
                       hx-confirm="Cancel {{ sub.role.name|escapejs }} at the end of the current billing period?">
                     {% csrf_token %}

@@ -291,6 +291,13 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.sync_stripe_subscriptions",
         "schedule": 24 * 60 * 60,
     },
+    # Keeps a canceled pay-what-you-want subscription's banked-access balance counting
+    # down over time - invoice.payment_succeeded is the only other trigger, and it stops
+    # firing entirely once Stripe considers the subscription gone.
+    "pwyw-usage-ledger-sweep": {
+        "task": "urbanlens.dashboard.tasks.advance_pwyw_usage_ledgers",
+        "schedule": 24 * 60 * 60,
+    },
     "safety-checkin-due-reminders": {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
         "schedule": 5 * 60,

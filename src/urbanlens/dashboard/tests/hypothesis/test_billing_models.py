@@ -3,9 +3,12 @@ RoleSubscription's unique-active-per-role constraint, and granting_access_for().
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.contrib.auth.models import User
 from django.core.exceptions import ValidationError
 from django.db import IntegrityError, transaction
+from django.utils import timezone
 from model_bakery import baker
 import pytest
 
@@ -102,3 +105,78 @@ class RoleSubscriptionGrantingAccessForTests(TestCase):
     def test_past_due_does_not_grant_access(self) -> None:
         sub = baker.make(RoleSubscription, user=self.user, role=self.role, status=BillingSubscriptionStatus.PAST_DUE, threshold_met=True)
         self.assertNotIn(sub, RoleSubscription.objects.granting_access_for(self.user))
+
+    def test_canceled_with_unexpired_banked_access_grants_access(self) -> None:
+        sub = baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=self.role,
+            status=BillingSubscriptionStatus.CANCELED,
+            threshold_met=False,
+            usage_covered_until=timezone.now() + timedelta(days=1),
+        )
+        self.assertTrue(sub.grants_access)
+        self.assertIn(sub, RoleSubscription.objects.granting_access_for(self.user))
+
+    def test_canceled_with_expired_banked_access_does_not_grant_access(self) -> None:
+        sub = baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=self.role,
+            status=BillingSubscriptionStatus.CANCELED,
+            threshold_met=False,
+            usage_covered_until=timezone.now() - timedelta(days=1),
+        )
+        self.assertFalse(sub.grants_access)
+        self.assertNotIn(sub, RoleSubscription.objects.granting_access_for(self.user))
+
+    def test_active_but_under_threshold_with_unexpired_banked_access_grants_access(self) -> None:
+        """Banked runway also covers a still-active subscriber whose pledge is currently
+        under a dynamic threshold - being "still paying but under threshold" shouldn't be
+        worse off than being fully canceled."""
+        sub = baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=self.role,
+            status=BillingSubscriptionStatus.ACTIVE,
+            threshold_met=False,
+            usage_covered_until=timezone.now() + timedelta(days=1),
+        )
+        self.assertTrue(sub.grants_access)
+        self.assertIn(sub, RoleSubscription.objects.granting_access_for(self.user))
+
+
+class RoleSubscriptionGrantsAccessParityTests(TestCase):
+    """grants_access (the model property) and granting_access_for() (the queryset filter)
+    encode the same rule in two places and must agree, or a display path checking one and
+    an access-control path checking the other would silently drift apart."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.role = baker.make(SubscriptionRole)
+
+    def test_property_and_queryset_agree_across_status_threshold_and_banked_combinations(self) -> None:
+        now = timezone.now()
+        banked_offsets = [None, timedelta(days=1), timedelta(days=-1)]
+        for status in BillingSubscriptionStatus.values:
+            for threshold_met in (True, False):
+                for offset in banked_offsets:
+                    # A fresh user per combination: the uniqueness constraint only allows
+                    # one non-canceled RoleSubscription per (user, role), and most of the
+                    # statuses under test here are non-canceled.
+                    user = baker.make(User)
+                    sub = baker.make(
+                        RoleSubscription,
+                        user=user,
+                        role=self.role,
+                        status=status,
+                        threshold_met=threshold_met,
+                        usage_covered_until=(now + offset) if offset is not None else None,
+                    )
+                    in_queryset = RoleSubscription.objects.granting_access_for(user).filter(pk=sub.pk).exists()
+                    self.assertEqual(
+                        sub.grants_access,
+                        in_queryset,
+                        f"status={status!r} threshold_met={threshold_met!r} offset={offset!r}: "
+                        f"grants_access={sub.grants_access!r} but queryset membership={in_queryset!r}",
+                    )

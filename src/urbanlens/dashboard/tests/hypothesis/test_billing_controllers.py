@@ -8,14 +8,16 @@ test_billing_stripe_client.py's job).
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.billing import BillingCustomer, RoleSubscription
+from urbanlens.dashboard.models.billing import BillingCustomer, BillingSubscriptionStatus, RoleSubscription
 from urbanlens.dashboard.models.subscriptions import SubscriptionRole
 
 
@@ -38,6 +40,45 @@ class BillingSettingsSectionViewTests(TestCase):
         role_names = {row["role"].name for row in response.context["role_rows"]}
         self.assertIn("VIP", role_names)
         self.assertNotIn("Not for sale", role_names)
+
+    def test_canceled_subscription_with_unexpired_banked_access_is_visible(self) -> None:
+        self.client.force_login(self.user)
+        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
+        subscription = baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=role,
+            status=BillingSubscriptionStatus.CANCELED,
+            usage_covered_until=timezone.now() + timedelta(days=5),
+        )
+
+        response = self.client.get(reverse("settings.billing"))
+
+        self.assertIn(subscription, response.context["subscriptions"])
+        self.assertNotContains(response, reverse("settings.billing.cancel", args=[subscription.pk]))
+
+    def test_canceled_subscription_with_expired_banked_access_stays_excluded(self) -> None:
+        self.client.force_login(self.user)
+        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
+        subscription = baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=role,
+            status=BillingSubscriptionStatus.CANCELED,
+            usage_covered_until=timezone.now() - timedelta(days=1),
+        )
+
+        response = self.client.get(reverse("settings.billing"))
+
+        self.assertNotIn(subscription, response.context["subscriptions"])
+
+    def test_canceled_subscription_with_no_banked_access_stays_excluded(self) -> None:
+        self.client.force_login(self.user)
+        subscription = baker.make(RoleSubscription, user=self.user, status=BillingSubscriptionStatus.CANCELED)
+
+        response = self.client.get(reverse("settings.billing"))
+
+        self.assertNotIn(subscription, response.context["subscriptions"])
 
 
 class BillingCheckoutViewTests(TestCase):

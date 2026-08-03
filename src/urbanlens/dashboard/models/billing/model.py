@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import User
 from django.db.models import CASCADE, BooleanField, CharField, DateTimeField, ForeignKey, IntegerField, JSONField, OneToOneField, Q, TextChoices, UniqueConstraint
+from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.billing.meta import BillingSubscriptionStatus
@@ -38,6 +39,11 @@ class RoleSubscription(abstract.DashboardModel):
     cost-per-user each time Stripe reports a successful charge
     (``services.billing.webhooks``), so a pledge that used to clear the bar can stop
     granting the role's features without the subscription itself changing status.
+
+    Pay-what-you-want roles also accrue a usage ledger (``total_paid_cents``,
+    ``amount_used_cents``, ``usage_covered_until`` - see ``services.billing.banking``)
+    that can keep ``grants_access`` true independent of ``is_billable``/``threshold_met``,
+    for as long as cumulative overpayment covers each elapsed billing period's cost.
     """
 
     user = ForeignKey(User, on_delete=CASCADE, related_name="role_subscriptions")
@@ -51,6 +57,19 @@ class RoleSubscription(abstract.DashboardModel):
     cancel_at_period_end = BooleanField(default=False)
     canceled_at = DateTimeField(null=True, blank=True)
     threshold_met = BooleanField(default=True, help_text="Whether the current pledge clears the role's pay-what-you-want access threshold.")
+
+    # --- Pay-what-you-want usage ledger (see services.billing.banking) ---
+
+    total_paid_cents = IntegerField(default=0, help_text="Cumulative amount actually paid via Stripe invoices, ever. Pay-what-you-want roles only.")
+    amount_used_cents = IntegerField(
+        default=0, help_text="Cumulative reference cost 'spent' from total_paid_cents so far, one billing period at a time."
+    )
+    usage_covered_until = DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Point in time through which the usage ledger has confirmed sufficient balance - grants access "
+        "independent of live Stripe status, even after cancellation, for as long as cumulative overpayment covers it.",
+    )
 
     if TYPE_CHECKING:
         user_id: int
@@ -78,8 +97,13 @@ class RoleSubscription(abstract.DashboardModel):
         return self.status in (BillingSubscriptionStatus.ACTIVE, BillingSubscriptionStatus.TRIALING)
 
     @property
+    def has_banked_access(self) -> bool:
+        """Whether the pay-what-you-want usage ledger currently covers access, independent of Stripe status."""
+        return self.usage_covered_until is not None and self.usage_covered_until > timezone.now()
+
+    @property
     def grants_access(self) -> bool:
-        return self.is_billable and self.threshold_met
+        return (self.is_billable and self.threshold_met) or self.has_banked_access
 
     def __str__(self) -> str:
         return f"{self.user} → {self.role} (${self.pledged_amount_dollars}/mo, {self.status})"

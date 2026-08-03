@@ -111,6 +111,41 @@ class HandleCheckoutSessionCompletedTests(TestCase):
         webhooks.handle_event(self._event(metadata={"role_id": "999999"}))
         self.assertFalse(RoleSubscription.objects.exists())
 
+    def test_carries_forward_the_usage_ledger_from_a_prior_canceled_row(self) -> None:
+        pwyw_role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
+        from django.utils import timezone
+
+        covered_until = timezone.now() + timezone.timedelta(days=45)
+        baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=pwyw_role,
+            status=BillingSubscriptionStatus.CANCELED,
+            total_paid_cents=3000,
+            amount_used_cents=1500,
+            usage_covered_until=covered_until,
+        )
+
+        with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload(sub_id="sub_new")
+            webhooks.handle_event(self._event(subscription="sub_new", metadata={"role_id": str(pwyw_role.pk)}))
+
+        new_subscription = RoleSubscription.objects.get(stripe_subscription_id="sub_new")
+        self.assertEqual(new_subscription.total_paid_cents, 3000)
+        self.assertEqual(new_subscription.amount_used_cents, 1500)
+        self.assertEqual(new_subscription.usage_covered_until, covered_until)
+
+    def test_fresh_pwyw_subscription_with_no_prior_row_starts_the_ledger_at_zero(self) -> None:
+        pwyw_role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
+        with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload()
+            webhooks.handle_event(self._event(metadata={"role_id": str(pwyw_role.pk)}))
+
+        subscription = RoleSubscription.objects.get(stripe_subscription_id="sub_123")
+        self.assertEqual(subscription.total_paid_cents, 0)
+        self.assertEqual(subscription.amount_used_cents, 0)
+        self.assertIsNone(subscription.usage_covered_until)
+
 
 class HandleSubscriptionUpdatedTests(TestCase):
     def test_syncs_an_existing_subscription(self) -> None:
@@ -150,6 +185,37 @@ class HandleInvoicePaymentSucceededTests(TestCase):
 
         subscription.refresh_from_db()
         self.assertEqual(subscription.pledged_amount_cents, 900)
+
+    def test_banks_usage_ledger_for_a_pwyw_role(self) -> None:
+        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
+        subscription = baker.make(RoleSubscription, role=role, stripe_subscription_id="sub_123", pledged_amount_cents=1000)
+        with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload(unit_amount=1000)
+            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_123", "amount_paid": 1000}}})
+
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.total_paid_cents, 1000)
+        self.assertTrue(subscription.has_banked_access)
+
+    def test_does_not_bank_usage_ledger_for_a_fixed_price_role(self) -> None:
+        role = baker.make(SubscriptionRole, pay_what_you_want=False, monthly_price_cents=500)
+        subscription = baker.make(RoleSubscription, role=role, stripe_subscription_id="sub_123", pledged_amount_cents=500)
+        with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload(unit_amount=500)
+            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_123", "amount_paid": 500}}})
+
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.total_paid_cents, 0)
+
+    def test_missing_amount_paid_does_not_raise(self) -> None:
+        role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
+        subscription = baker.make(RoleSubscription, role=role, stripe_subscription_id="sub_123", pledged_amount_cents=1000)
+        with mock.patch("stripe.Subscription.retrieve") as mock_retrieve:
+            mock_retrieve.return_value.to_dict.return_value = _subscription_payload(unit_amount=1000)
+            webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {"subscription": "sub_123"}}})
+
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.total_paid_cents, 0)
 
     def test_no_subscription_on_invoice_is_a_no_op(self) -> None:
         webhooks.handle_event({"type": "invoice.payment_succeeded", "data": {"object": {}}})  # must not raise

@@ -2862,3 +2862,26 @@ def sync_stripe_subscriptions() -> int:
         sync_from_stripe_subscription(role_subscription, stripe_subscription)
         count += 1
     return count
+
+
+@shared_task
+def advance_pwyw_usage_ledgers() -> int:
+    """Advance every pay-what-you-want RoleSubscription's usage ledger.
+
+    invoice.payment_succeeded already ticks a subscription's ledger the moment a
+    payment lands (see services.billing.banking), but that's the only trigger while a
+    subscription is actively billed - a canceled subscription gets no further Stripe
+    events at all, so this daily sweep is what keeps its banked balance counting down
+    (and eventually running out) once the money stops coming in.
+
+    Returns:
+        How many pay-what-you-want subscriptions were checked.
+    """
+    from urbanlens.dashboard.models.billing import RoleSubscription
+    from urbanlens.dashboard.services.billing import banking
+
+    count = 0
+    for role_subscription in RoleSubscription.objects.filter(role__pay_what_you_want=True).select_related("role"):
+        banking.advance_usage_ledger(role_subscription)
+        count += 1
+    return count

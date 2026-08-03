@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 
 import stripe
 
-from urbanlens.dashboard.services.billing import pricing
+from urbanlens.dashboard.services.billing import banking, pricing
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.billing import RoleSubscription
@@ -79,9 +79,21 @@ def _handle_checkout_session_completed(session: dict) -> None:
         return
 
     stripe_subscription = stripe.Subscription.retrieve(subscription_id).to_dict()
+    defaults = {"user": user, "role": role, "pledged_amount_cents": 0}
+    if role.pay_what_you_want:
+        # Multiple RoleSubscription rows can exist per (user, role) over time (the
+        # uniqueness constraint only applies to non-canceled rows), so a resubscribe
+        # after canceling would otherwise start a fresh usage ledger from zero and
+        # orphan any banked balance the prior row had earned.
+        previous = RoleSubscription.objects.filter(user=user, role=role).order_by("-created").first()
+        if previous is not None:
+            defaults["total_paid_cents"] = previous.total_paid_cents
+            defaults["amount_used_cents"] = previous.amount_used_cents
+            defaults["usage_covered_until"] = previous.usage_covered_until
+
     role_subscription, _created = RoleSubscription.objects.get_or_create(
         stripe_subscription_id=subscription_id,
-        defaults={"user": user, "role": role, "pledged_amount_cents": 0},
+        defaults=defaults,
     )
     sync_from_stripe_subscription(role_subscription, stripe_subscription)
 
@@ -125,6 +137,7 @@ def _handle_invoice_payment_succeeded(invoice: dict) -> None:
     # source of truth for status/price/period that sync_from_stripe_subscription expects.
     stripe_subscription = stripe.Subscription.retrieve(subscription_id).to_dict()
     sync_from_stripe_subscription(role_subscription, stripe_subscription)
+    banking.apply_payment(role_subscription, invoice.get("amount_paid") or 0)
 
 
 def _handle_invoice_payment_failed(invoice: dict) -> None:

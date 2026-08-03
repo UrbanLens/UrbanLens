@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
+
 from django.contrib.auth.models import User
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -72,5 +75,33 @@ class PaidSubscriptionFeatureGrantTests(TestCase):
         self.assertNotIn(self.role, active_subscription_roles(self.user))
 
     def test_no_subscription_at_all_does_not_grant_the_feature(self) -> None:
+        self.assertFalse(user_has_feature(self.user, SiteFeature.NEARBY_RESEARCH))
+        self.assertNotIn(self.role, active_subscription_roles(self.user))
+
+    def test_canceled_subscription_with_unexpired_banked_access_still_grants_the_feature(self) -> None:
+        self.role.pay_what_you_want = True
+        self.role.save()
+        baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=self.role,
+            status=BillingSubscriptionStatus.CANCELED,
+            threshold_met=False,
+            usage_covered_until=timezone.now() + timedelta(days=10),
+        )
+        self.assertTrue(user_has_feature(self.user, SiteFeature.NEARBY_RESEARCH))
+        self.assertIn(self.role, active_subscription_roles(self.user))
+
+    def test_canceled_subscription_with_expired_banked_access_does_not_grant_the_feature(self) -> None:
+        self.role.pay_what_you_want = True
+        self.role.save()
+        baker.make(
+            RoleSubscription,
+            user=self.user,
+            role=self.role,
+            status=BillingSubscriptionStatus.CANCELED,
+            threshold_met=False,
+            usage_covered_until=timezone.now() - timedelta(days=1),
+        )
         self.assertFalse(user_has_feature(self.user, SiteFeature.NEARBY_RESEARCH))
         self.assertNotIn(self.role, active_subscription_roles(self.user))
