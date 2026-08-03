@@ -749,6 +749,7 @@
     }
     // Set by JS when the corresponding map shape is hovered (see
     // setBuildingHover() in map-annotations.ts) - a ring rather than a
+    
     // background swap so it stays visible on top of the checked/hover states above.
     &.is-hovered {
         box-shadow: inset 0 0 0 2px $color-blue-500;

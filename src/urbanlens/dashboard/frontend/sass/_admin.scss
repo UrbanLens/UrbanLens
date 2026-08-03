@@ -915,6 +915,49 @@ $subscription-list-cols: minmax(140px, 1.15fr) minmax(100px, .85fr) minmax(90px,
     margin-bottom: 1.5rem;
 }
 
+// -- External API spend report (site-admin costs page) -----------------------
+
+.cost-api-spend-summary {
+    margin-bottom: .85rem;
+}
+
+.cost-api-spend-list {
+    display: flex;
+    flex-direction: column;
+    border: 1px solid var(--ul-border);
+    border-radius: $radius-sm;
+    overflow: hidden;
+}
+
+.cost-api-spend-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    padding: .65rem 1rem;
+    border-bottom: 1px solid var(--ul-border);
+    font-size: .88rem;
+
+    &:last-child {
+        border-bottom: none;
+    }
+
+    &:nth-child(even) {
+        background: var(--ul-grey-0);
+    }
+}
+
+.cost-api-spend-name {
+    font-weight: 600;
+    color: var(--ul-grey-8);
+}
+
+.cost-api-spend-value {
+    font-variant-numeric: tabular-nums;
+    font-weight: 700;
+    color: var(--ul-grey-7);
+}
+
 .stats-chart-card {
     margin-bottom: 0 !important;
 }

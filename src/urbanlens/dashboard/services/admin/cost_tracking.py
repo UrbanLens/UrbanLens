@@ -84,6 +84,20 @@ def effective_monthly_cost(as_of: datetime.datetime | None = None) -> CostBreakd
     return CostBreakdown(hardware=hardware, operating=operating, api=api)
 
 
+def total_hardware_cost() -> Decimal:
+    """Return the total (non-amortized) replacement cost of every hardware component on record.
+
+    Unlike ``effective_monthly_cost().hardware``, this isn't divided by each component's
+    deprecation period - it's the actual amount spent, including retired components (the
+    money was already spent regardless of retirement, same convention as
+    ``total_recorded_expenses`` below).
+
+    Returns:
+        The all-time hardware total, in USD.
+    """
+    return CostComponent.objects.aggregate(total=Sum("replacement_cost"))["total"] or _ZERO
+
+
 def total_recorded_expenses(as_of: datetime.datetime | None = None) -> Decimal:
     """Return total money spent to date across every cost source.
 
@@ -101,7 +115,7 @@ def total_recorded_expenses(as_of: datetime.datetime | None = None) -> Decimal:
 
     as_of = as_of or timezone.now()
 
-    hardware_total = CostComponent.objects.aggregate(total=Sum("replacement_cost"))["total"] or _ZERO
+    hardware_total = total_hardware_cost()
     operating_total = sum(
         (cost.monthly_cost * cost.elapsed_months(as_of) for cost in OperatingCost.objects.all()),
         start=_ZERO,
@@ -247,3 +261,45 @@ def monthly_cost_series(months: int = 12, as_of: datetime.datetime | None = None
         cursor = next_cursor
 
     return {"labels": labels, "hardware": hardware, "operating": operating, "api": api}
+
+
+def api_spend_summary_30d() -> dict[str, list | int | Decimal | None]:
+    """Return the trailing-30-day external API spend, split by pricing status.
+
+    Only services with a confirmed per-call price (``ServiceDefaults.cost_per_call``)
+    contribute to the total - the rest are either free, priced in a way that doesn't
+    reduce to one number per call, or not priced here yet, and are only reflected in
+    ``unpriced_service_count``. Shared by the site-admin cost tracking page and the
+    public running-costs page.
+
+    Returns:
+        ``{"priced_services": [{"display_name": str, "cost_30d": Decimal}, ...],
+        "unpriced_service_count": int, "total_cost_30d": Decimal | None}``, with
+        ``priced_services`` sorted by cost descending.
+    """
+    from urbanlens.dashboard.models.api_call_log import ApiCallLog
+    from urbanlens.dashboard.services.core.rate_limiter import all_service_defaults
+
+    service_defaults = all_service_defaults()
+    summaries = {row["service"]: row for row in ApiCallLog.objects.summary_by_service()}
+
+    priced_services = []
+    unpriced_service_count = 0
+    total_cost_30d = None
+    for service, defaults in service_defaults.items():
+        if defaults.cost_per_call is None:
+            unpriced_service_count += 1
+            continue
+        row = summaries.get(service, {})
+        cost_30d = row.get("total_cost")
+        if cost_30d is None:
+            continue
+        total_cost_30d = cost_30d if total_cost_30d is None else total_cost_30d + cost_30d
+        priced_services.append({"display_name": defaults.display_name, "cost_30d": cost_30d})
+
+    priced_services.sort(key=lambda entry: entry["cost_30d"], reverse=True)
+    return {
+        "priced_services": priced_services,
+        "unpriced_service_count": unpriced_service_count,
+        "total_cost_30d": total_cost_30d,
+    }

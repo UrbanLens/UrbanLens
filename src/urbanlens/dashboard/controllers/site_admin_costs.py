@@ -25,6 +25,7 @@ from urbanlens.dashboard.models.costs import CostComponent, OperatingCost
 from urbanlens.dashboard.models.site_settings import SiteSettings
 from urbanlens.dashboard.services.admin.cost_tracking import (
     active_user_count,
+    api_spend_summary_30d,
     average_monthly_expense,
     cost_per_user,
     effective_monthly_cost,
@@ -59,6 +60,7 @@ class _CostAdminMixin(LoginRequiredMixin, PermissionRequiredMixin):
 def _admin_context(**extra: Any) -> dict[str, Any]:
     """Build the shared context for the site-admin cost tracking page and its body partial."""
     series = monthly_cost_series()
+    api_spend = api_spend_summary_30d()
 
     context: dict[str, Any] = {
         "components": CostComponent.objects.all(),
@@ -73,6 +75,9 @@ def _admin_context(**extra: Any) -> dict[str, Any]:
         "chart_operating": safe_json_for_script(series["operating"]),
         "chart_api": safe_json_for_script(series["api"]),
         "public_costs_page_enabled": SiteSettings.get_current().public_costs_page_enabled,
+        "priced_services": api_spend["priced_services"],
+        "unpriced_service_count": api_spend["unpriced_service_count"],
+        "total_cost_30d": api_spend["total_cost_30d"],
         "active": "costs",
     }
     context.update(extra)

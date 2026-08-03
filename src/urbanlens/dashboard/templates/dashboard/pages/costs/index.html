@@ -2,9 +2,19 @@
 
 {% block page_title %}Running Costs - {{ site_title|default:"UrbanLens" }}{% endblock %}
 
-{% block content %}
-
+{% block hero %}
 {% include "dashboard/partials/ui/_page_hero.html" with eyebrow="Transparency" title="What it costs to run UrbanLens" subtitle="A rough, ongoing estimate of everything behind the map: hardware, hosting, and the external APIs powering pin enrichment, search, and messaging." modifier="wide" %}
+{% endblock %}
+
+{% block subnav %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        {% include "dashboard/partials/ui/_public_pages_subnav.html" %}
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
 
 <section class="attr-section">
     <div class="attr-section-inner">
@@ -33,29 +43,9 @@
                     <i class="material-icons" style="color:#0891b2">memory</i>
                 </div>
                 <div class="stats-kpi-body">
-                    <div class="stats-kpi-value">${{ breakdown.hardware|floatformat:2 }}</div>
+                    <div class="stats-kpi-value">${{ total_hardware_cost|floatformat:2 }}</div>
                     <div class="stats-kpi-label">Hardware</div>
-                    <div class="stats-kpi-sub">amortized / mo</div>
-                </div>
-            </div>
-            <div class="stats-kpi-card">
-                <div class="stats-kpi-icon" style="background:rgba(217,119,6,.12)">
-                    <i class="material-icons" style="color:#d97706">bolt</i>
-                </div>
-                <div class="stats-kpi-body">
-                    <div class="stats-kpi-value">${{ breakdown.operating|floatformat:2 }}</div>
-                    <div class="stats-kpi-label">Operating</div>
-                    <div class="stats-kpi-sub">hosting, power &amp; more</div>
-                </div>
-            </div>
-            <div class="stats-kpi-card">
-                <div class="stats-kpi-icon" style="background:rgba(124,58,237,.12)">
-                    <i class="material-icons" style="color:#7c3aed">cloud</i>
-                </div>
-                <div class="stats-kpi-body">
-                    <div class="stats-kpi-value">${{ breakdown.api|floatformat:2 }}</div>
-                    <div class="stats-kpi-label">External APIs</div>
-                    <div class="stats-kpi-sub">last 30 days</div>
+                    <div class="stats-kpi-sub">all-time, not amortized</div>
                 </div>
             </div>
             {% if cost_per_user is not None %}
@@ -82,55 +72,8 @@
             </div>
         </div>
         <script type="application/json" id="cost-chart-data">
-            {"labels": {{ chart_labels|safe }}, "hardware": {{ chart_hardware|safe }}, "operating": {{ chart_operating|safe }}, "api": {{ chart_api|safe }}}
+            {"labels": {{ chart_labels|safe }}, "total": {{ chart_total|safe }}}
         </script>
-    </div>
-</section>
-
-<section class="attr-section attr-section--muted">
-    <div class="attr-section-inner">
-        <div class="attr-section-label">Last 30 days</div>
-        <h2 class="attr-section-title">
-            {% if total_cost_30d %}External API spend: ${{ total_cost_30d|floatformat:2 }}{% else %}No priced API usage yet{% endif %}
-        </h2>
-        <p class="attr-section-lead">
-            This is an estimate, not an invoice. It only covers services we have a confirmed
-            per-call price for below - {{ unpriced_service_count }} other integration{{ unpriced_service_count|pluralize }}
-            {{ unpriced_service_count|yesno:"are,is" }} either free, priced in a way that doesn't
-            reduce to one number per call, or simply not priced here yet, and so
-            {{ unpriced_service_count|pluralize:"isn't,aren't" }} reflected in the total above.
-            Actual spend may differ from what's shown.
-        </p>
-
-        {% if priced_services %}
-        <div class="attr-list">
-            {% for entry in priced_services %}
-            <div class="attr-list-item">
-                <div class="attr-list-main">
-                    <h3>{{ entry.display_name }}</h3>
-                </div>
-                <span class="attr-list-tag">${{ entry.cost_30d|floatformat:2 }}</span>
-            </div>
-            {% endfor %}
-        </div>
-        {% endif %}
-    </div>
-</section>
-
-<section class="attr-note-section">
-    <div class="attr-section-inner">
-        <div class="attr-note">
-            <i class="material-icons attr-note-icon" aria-hidden="true">info</i>
-            <div>
-                <h2 class="attr-note-title">Why this page exists</h2>
-                <p class="attr-note-body">
-                    UrbanLens leans on a lot of external services - see the
-                    <a href="{% url 'thanks' %}">Thanks &amp; Credits</a> page for the full list.
-                    Most are free or nearly free; a few are metered. We'd rather show a rough,
-                    honest number than none at all.
-                </p>
-            </div>
-        </div>
     </div>
 </section>
 
@@ -162,21 +105,19 @@
         data: {
             labels: data.labels,
             datasets: [
-                { label: 'Hardware', data: data.hardware, backgroundColor: '#0891b299', borderColor: '#0891b2', borderWidth: 1.5 },
-                { label: 'Operating', data: data.operating, backgroundColor: '#d9770699', borderColor: '#d97706', borderWidth: 1.5 },
-                { label: 'External APIs', data: data.api, backgroundColor: '#7c3aed99', borderColor: '#7c3aed', borderWidth: 1.5 },
+                { label: 'Total cost', data: data.total, backgroundColor: '#3949ab99', borderColor: '#3949ab', borderWidth: 1.5 },
             ],
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { display: true, labels: { color: labelColor } },
+                legend: { display: false },
                 tooltip: { backgroundColor: tooltipBg, titleColor: tooltipFg, bodyColor: tooltipFg, borderColor: gridColor, borderWidth: 1 },
             },
             scales: {
-                x: { stacked: true, ticks: { color: labelColor, maxRotation: 45 }, grid: { color: gridColor } },
-                y: { stacked: true, beginAtZero: true, ticks: { color: labelColor }, grid: { color: gridColor } },
+                x: { ticks: { color: labelColor, maxRotation: 45 }, grid: { color: gridColor } },
+                y: { beginAtZero: true, ticks: { color: labelColor }, grid: { color: gridColor } },
             },
         },
     });

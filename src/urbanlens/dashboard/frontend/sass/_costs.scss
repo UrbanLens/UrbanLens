@@ -24,14 +24,6 @@
 
     .attr-section {
         padding: 3.5rem 0;
-
-        &--muted {
-            background: #{$color-indigo-50};
-
-            .attr-section-title {
-                color: #{$color-grey-9};
-            }
-        }
     }
 
     .attr-section-label {
@@ -49,14 +41,6 @@
         letter-spacing: -.02em;
         color: var(--ul-grey-8);
         margin: 0 0 .85rem;
-
-        small {
-            display: block;
-            font-size: 1rem;
-            font-weight: 600;
-            color: var(--ul-grey-5);
-            margin-top: .35rem;
-        }
     }
 
     .attr-section-lead {
@@ -86,98 +70,5 @@
     .stats-chart-wrap {
         height: 20rem;
         padding: 1.25rem 1rem .5rem;
-    }
-
-    .attr-list {
-        display: flex;
-        flex-direction: column;
-        gap: .65rem;
-    }
-
-    .attr-list-item {
-        @include surface($radius: .75rem);
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        gap: 1rem;
-        padding: .9rem 1.1rem;
-
-        h3 {
-            font-size: .95rem;
-            font-weight: 700;
-            margin: 0;
-            color: var(--ul-grey-8);
-            overflow: hidden;
-            text-overflow: ellipsis;
-            white-space: nowrap;
-        }
-    }
-
-    .attr-list-main {
-        min-width: 0;
-        flex: 1 1 auto;
-    }
-
-    .attr-list-tag {
-        flex-shrink: 0;
-        font-size: .85rem;
-        font-weight: 700;
-        color: $color-indigo-600;
-        background: rgba($color-indigo-500, .1);
-        border-radius: 999px;
-        padding: .3rem .75rem;
-        line-height: 1.2;
-        font-variant-numeric: tabular-nums;
-    }
-
-    .attr-note-section {
-        padding: 0 0 3.5rem;
-    }
-
-    .attr-note {
-        display: flex;
-        align-items: flex-start;
-        gap: 1rem;
-        padding: 1.25rem 1.35rem;
-        border-radius: .85rem;
-        background: linear-gradient(135deg, rgba(31, 111, 235, .2), rgba(23, 185, 120, .15));
-        border: 1px solid rgba($color-indigo-500, .15);
-    }
-
-    .attr-note-icon {
-        color: $color-indigo-600;
-        font-size: 1.35rem;
-        margin-top: .1rem;
-    }
-
-    .attr-note-title {
-        font-size: 1rem;
-        font-weight: 700;
-        margin: 0 0 .35rem;
-        color: var(--ul-grey-8);
-    }
-
-    .attr-note-body {
-        font-size: .92rem;
-        line-height: 1.6;
-        margin: 0;
-        color: var(--ul-grey-7);
-
-        a {
-            font-weight: 600;
-        }
-    }
-}
-
-[data-theme="dark"] {
-    .page-costs {
-        .attr-section--muted {
-            background: rgba($color-indigo-900, .25);
-        }
-
-        .attr-list-tag {
-            color: $color-indigo-200;
-            background: rgba($color-indigo-300, .15);
-        }
     }
 }

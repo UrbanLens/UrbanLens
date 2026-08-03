@@ -95,6 +95,26 @@ Context: components, operating_costs, breakdown (CostBreakdown), total_recorded_
         </div>
     </div>
 
+    <div class="ul-section">
+        <h2 class="profile-section-title">External API Spend - Last 30 Days</h2>
+        <p class="stats-kpi-sub cost-api-spend-summary">
+            {% if total_cost_30d %}${{ total_cost_30d|floatformat:2 }} total{% else %}No priced API usage yet{% endif %}
+            - only services with a confirmed per-call price are counted below; {{ unpriced_service_count }} other integration{{ unpriced_service_count|pluralize }}
+            {{ unpriced_service_count|yesno:"are,is" }} either free, priced in a way that doesn't reduce to one number
+            per call, or simply not priced here yet.
+        </p>
+        {% if priced_services %}
+        <div class="cost-api-spend-list">
+            {% for entry in priced_services %}
+            <div class="cost-api-spend-row">
+                <span class="cost-api-spend-name">{{ entry.display_name }}</span>
+                <span class="cost-api-spend-value">${{ entry.cost_30d|floatformat:2 }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+
     <h2 class="profile-section-title">Depreciating Components</h2>
     <div class="admin-achievement-list">
         {% for component in components %}
