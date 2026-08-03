@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, ForeignKey, ImageField, Index, JSONField, ManyToManyField, TextField, URLField, UUIDField
+from django.db.models import CASCADE, SET_NULL, BigIntegerField, BooleanField, CharField, DateTimeField, DecimalField, FloatField, ForeignKey, ImageField, Index, JSONField, ManyToManyField, PositiveIntegerField, TextField, URLField, UUIDField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.abstract.choices import TextChoices
@@ -222,6 +222,24 @@ class Image(abstract.FrontendDashboardModel):
     # via the main site search; unlike Pin/Wiki labels, media labels have no
     # effect on map icons or filtering.
     labels = ManyToManyField("dashboard.Label", related_name="images", blank=True)
+    # Cached relevance score from REData's photo-scoring service
+    # (services.photos.redata_relevance) - "how likely is this really a photo of
+    # this place", a calibrated probability in [0.02, 0.98]. Never computed
+    # locally: set from the response to submitting this photo (POST /photos/)
+    # and left untouched afterward - REData caches its own score indefinitely
+    # and only ever changes it when a newer model is promoted, which this row
+    # doesn't proactively poll for. Null for any photo never submitted (no
+    # location, REData not configured, or submission still pending/failed) -
+    # ordering queries must treat null as "unknown", not "irrelevant".
+    redata_confidence = FloatField(null=True, blank=True)
+    # "heuristic" or "model" - which of REData's two scorers produced
+    # redata_confidence, kept mostly for admin/debugging visibility.
+    redata_scorer = CharField(max_length=10, null=True, blank=True)
+    # The trained model version that scored this photo, when redata_scorer is
+    # "model" - null both before scoring and whenever the heuristic scorer
+    # answered instead.
+    redata_model_version = PositiveIntegerField(null=True, blank=True)
+    redata_scored_at = DateTimeField(null=True, blank=True)
 
     if TYPE_CHECKING:
         pin_id: int | None

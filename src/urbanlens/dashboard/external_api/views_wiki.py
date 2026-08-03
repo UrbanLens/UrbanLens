@@ -39,6 +39,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.contrib.gis.geos import GEOSException
 from django.db import transaction
+from django.db.models import F
 from django.http import Http404
 from django.shortcuts import get_object_or_404
 from drf_spectacular.utils import extend_schema, extend_schema_view
@@ -775,7 +776,10 @@ class WikiGalleryView(PaginatedListMixin, WikiApiView):
         # out in Python so the page the paginator slices is the page that gets
         # returned; a Python-side `if image.image` would make pages short and
         # the count wrong.
-        images = Image.objects.filter(wiki=wiki).visible_to(profile).exclude(image="").order_by("-created", "-pk")
+        # Most-likely-relevant first (REData's cached confidence - see
+        # services.photos.redata_relevance), falling back to upload order for
+        # a photo REData hasn't scored yet.
+        images = Image.objects.filter(wiki=wiki).visible_to(profile).exclude(image="").order_by(F("redata_confidence").desc(nulls_last=True), "-created", "-pk")
         # The queryset is paginated, then rows are built for the page only.
         # Building rows first materialized the *entire* visible gallery and
         # resolved a storage URL per image on every request before the

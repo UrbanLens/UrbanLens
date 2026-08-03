@@ -13,7 +13,7 @@ user's storage quota like any other upload.
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urljoin, urlparse
 
 from django.core.files.base import ContentFile
@@ -61,6 +61,43 @@ _PANEL_KEY_TO_IMAGE_SOURCE = {
 
 class MaterializeError(RuntimeError):
     """Raised when a Media gallery item can't be downloaded or persisted."""
+
+
+def _translated_source(source: str) -> str:
+    """Translate a Media gallery panel key to its ``ImageSource`` value, falling back to ``UPLOAD``."""
+    translated = _PANEL_KEY_TO_IMAGE_SOURCE.get(source, source)
+    return translated if ImageSource.valid(translated) else ImageSource.UPLOAD
+
+
+def find_materialized_image(location: Location, source: str, url: str, *, page_url: str = "", pin: Pin | None = None, profile: Profile | None = None) -> Image | None:
+    """Look up an already-materialized ``Image`` row for a Media gallery item, without creating one.
+
+    Same identity :func:`materialize_media_item` dedupes on - used by
+    relevance-vote call sites (``controllers.pin``, ``controllers.wiki_media``)
+    that need to know whether a local copy already exists (e.g. to submit a
+    "not relevant" vote to REData) without materializing one just to check.
+
+    Args:
+        location: The shared Location the item belongs to.
+        source: A Media gallery panel key or ``ImageSource`` value.
+        url: The item's full-resolution image URL.
+        page_url: The item's page url, if the original materialize call was
+            given one - must match to find the same row (see ``source_url``
+            below).
+        pin: Narrows the lookup to a specific pin's own materialized copy,
+            mirroring :func:`materialize_media_item`'s pin-scoped dedupe.
+        profile: Required alongside ``pin`` for the same narrowed lookup.
+
+    Returns:
+        The matching ``Image`` row, or None if this item was never materialized.
+    """
+    source_url = page_url or url
+    django_source = _translated_source(source)
+    dedupe_filter: dict[str, Any] = {"location": location, "source": django_source, "source_url": source_url}
+    if pin is not None:
+        dedupe_filter["pin"] = pin
+        dedupe_filter["profile"] = profile
+    return Image.objects.filter(**dedupe_filter).first()
 
 
 def _filename_from_url(url: str) -> str:
@@ -186,10 +223,9 @@ def materialize_media_item(
     # filtering on the untranslated panel key here would never match a
     # previously materialized "loc"/"cris_building" item and re-download +
     # duplicate it on every subsequent vote.
-    translated_source = _PANEL_KEY_TO_IMAGE_SOURCE.get(source, source)
-    django_source = translated_source if ImageSource.valid(translated_source) else ImageSource.UPLOAD
+    django_source = _translated_source(source)
 
-    dedupe_filter = {"location": location, "source": django_source, "source_url": source_url}
+    dedupe_filter: dict[str, Any] = {"location": location, "source": django_source, "source_url": source_url}
     if pin is not None:
         dedupe_filter["pin"] = pin
         dedupe_filter["profile"] = profile
@@ -231,7 +267,7 @@ def materialize_media_item(
     checksum = compute_checksum(file_obj)
     file_obj.seek(0)
 
-    return Image.objects.create(
+    image = Image.objects.create(
         image=file_obj,
         location=location,
         wiki=wiki,
@@ -245,3 +281,8 @@ def materialize_media_item(
         checksum=checksum,
         file_size=len(content),
     )
+
+    from urbanlens.dashboard.services.photos.redata_relevance import queue_photo_submission
+
+    queue_photo_submission(image)
+    return image

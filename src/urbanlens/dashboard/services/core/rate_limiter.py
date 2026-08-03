@@ -100,6 +100,17 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=None,
         notes="Places API (New) via REData - permanently cached on REData's end. See services.apis.locations.places_resolution.",
     ),
+    "redata_photos": ServiceDefaults(
+        display_name="REData Photo Relevance",
+        # Each call is a batch (up to 200 photos / 1,000 votes / 1,000
+        # confidence lookups per REData's own limits), so real call volume
+        # stays low relative to photo/vote counts - generous but still bounded
+        # in case a burst of uploads or votes fires many small batches back to
+        # back. See services.photos.redata_relevance.
+        calls_per_minute=30,
+        calls_per_day=None,
+        notes="Photo submission/voting/confidence via POST /photos/, /photos/votes/, /photos/confidence/.",
+    ),
     "google_search": ServiceDefaults(
         display_name="Google Custom Search",
         calls_per_minute=10,

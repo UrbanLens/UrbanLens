@@ -796,6 +796,10 @@ def process_image_upload(self, image_id: int) -> bool:
         if image.profile is None or image.profile.generate_photo_keywords:
             _enqueue(generate_image_keywords, image_id)
 
+        from urbanlens.dashboard.services.photos.redata_relevance import queue_photo_submission
+
+        queue_photo_submission(image)
+
     update_task_progress(self, current=1, total=1, message="Upload metadata processed")
     return True
 
@@ -817,6 +821,71 @@ def generate_image_keywords(image_id: int) -> dict[str, int]:
     from urbanlens.dashboard.services.photos.photo_keywords import generate_keywords_for_image
 
     return generate_keywords_for_image(image_id)
+
+
+@shared_task
+def submit_redata_photos(image_ids: list[int]) -> bool:
+    """Submit photo observations to REData and cache the confidence scores it returns.
+
+    Enqueued from ``services.photos.redata_relevance.queue_photo_submission``
+    whenever a photo is uploaded, discovered from an external source
+    (Google Places business photos), or materialized from the Media gallery.
+    Best-effort like every other REData call site (e.g.
+    ``import_immich_photos``) - a REData outage is logged and swallowed
+    rather than retried, since a later submission (or the periodic photo
+    itself being re-saved) will pick it up.
+
+    Args:
+        image_ids: PKs of photos to submit - filtered to actual photos
+            (not video/document rows) with a resolved location.
+
+    Returns:
+        True when at least one photo was submitted.
+    """
+    from urbanlens.dashboard.models.images.model import Image, MediaKind
+    from urbanlens.dashboard.services.photos.redata_relevance import submit_photos
+
+    images = list(Image.objects.filter(pk__in=image_ids, media_type=MediaKind.PHOTO, location__isnull=False).select_related("location", "wiki"))
+    if not images:
+        return False
+    submit_photos(images)
+    return True
+
+
+@shared_task
+def submit_redata_photo_vote(image_id: int, profile_id: int, is_relevant: bool) -> bool:
+    """Submit one relevance vote on a photo to REData.
+
+    Enqueued from ``services.photos.redata_relevance.queue_relevance_vote``
+    whenever a user marks a materialized photo relevant or not relevant.
+    Best-effort - see ``submit_redata_photos``' docstring for why REData
+    outages aren't retried here.
+
+    Args:
+        image_id: PK of the photo being voted on.
+        profile_id: PK of the voting profile.
+        is_relevant: True for a relevant vote, False for not-relevant.
+
+    Returns:
+        True when the vote was recorded (REData knew about this photo).
+    """
+    from django.utils import timezone
+
+    from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.services.apis.photos.redata_photos_gateway import RedataPhotosGateway
+    from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+
+    image = Image.objects.filter(pk=image_id).first()
+    if image is None:
+        return False
+
+    vote = {"photo_id": str(image.uuid), "is_relevant": is_relevant, "voter_id": str(profile_id), "voted_at": timezone.now().isoformat()}
+    try:
+        response = RedataPhotosGateway().submit_votes([vote])
+    except GatewayRequestError as exc:
+        logger.warning("REData vote submission failed for image %s: %s", image_id, exc)
+        return False
+    return str(image.uuid) not in (response.get("unknown_photo_ids") or [])
 
 
 @shared_task(bind=True, max_retries=5)

@@ -55,3 +55,11 @@ class PhotosMediaPreviewTests(TestCase):
         baker.make(Image, pin=other_pin, profile=other.profile)
         response = self._get()
         self.assertEqual(response.status_code, 204)
+
+    def test_higher_redata_confidence_sorts_first_regardless_of_upload_order(self) -> None:
+        """services.photos.redata_relevance's cached confidence should rank an
+        older, more-confidently-relevant photo ahead of a newer, unscored one."""
+        older_but_confident = baker.make(Image, pin=self.pin, profile=self.profile, redata_confidence=0.9)
+        newer_but_unscored = baker.make(Image, pin=self.pin, profile=self.profile, redata_confidence=None)
+        body = self._get().content.decode()
+        self.assertLess(body.index(f'data-image-id="{older_but_confident.pk}"'), body.index(f'data-image-id="{newer_but_unscored.pk}"'))

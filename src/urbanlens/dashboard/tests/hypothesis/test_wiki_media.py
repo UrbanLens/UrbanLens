@@ -119,6 +119,40 @@ class WikiMediaVoteViewTests(TestCase):
         response = self._vote({"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True})
         self.assertEqual(response.json()["vote_score"], 2)
 
+    def test_voting_with_an_image_id_queues_a_redata_vote(self) -> None:
+        image = Image.objects.create(
+            image=SimpleUploadedFile("shared.jpg", b"bytes", content_type="image/jpeg"),
+            wiki=self.wiki,
+            location=self.location,
+            profile=self.profile,
+        )
+        with mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote:
+            response = self._vote({"source": "photos", "item_key": "a", "url": image.image.url, "is_relevant": True, "image_id": image.pk})
+        self.assertEqual(response.status_code, 200)
+        queue_vote.assert_called_once()
+        (voted_image, voted_profile), kwargs = queue_vote.call_args
+        self.assertEqual(voted_image.pk, image.pk)
+        self.assertEqual(voted_profile, self.profile)
+        self.assertEqual(kwargs, {"is_relevant": True})
+
+    def test_voting_with_an_image_id_from_another_location_is_ignored(self) -> None:
+        """A client-supplied image_id must be re-scoped to this wiki's location
+        before being trusted - otherwise a vote could be attached to an
+        unrelated photo elsewhere on the site."""
+        other_location = baker.make(Location)
+        other_image = Image.objects.create(image=SimpleUploadedFile("x.jpg", b"y", content_type="image/jpeg"), location=other_location, profile=self.profile)
+        with mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote:
+            response = self._vote({"source": "photos", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True, "image_id": other_image.pk})
+        self.assertEqual(response.status_code, 200)
+        queue_vote.assert_not_called()
+
+    def test_clearing_a_vote_does_not_queue_a_redata_vote(self) -> None:
+        image = Image.objects.create(image=SimpleUploadedFile("shared.jpg", b"bytes", content_type="image/jpeg"), wiki=self.wiki, location=self.location, profile=self.profile)
+        _mark(self.profile, self.location, "photos", "a", is_relevant=True)
+        with mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote:
+            self._vote({"source": "photos", "item_key": "a", "url": image.image.url, "is_relevant": None, "image_id": image.pk})
+        queue_vote.assert_not_called()
+
     def test_vote_404s_for_a_user_without_a_pin_at_the_location(self) -> None:
         stranger = baker.make(User)
         client = Client(enforce_csrf_checks=True)
@@ -163,6 +197,24 @@ class WikiMediaProviderViewTests(TestCase):
         body = response.content.decode()
         self.assertIn(shared.image.url, body)
         self.assertNotIn(unrelated.image.url, body)
+
+    def test_photos_are_ordered_by_vote_score_before_redata_confidence(self) -> None:
+        """A community upvote outranks a merely REData-confident, unvoted photo."""
+        upvoted_low_confidence = Image.objects.create(image=SimpleUploadedFile("a.jpg", b"a", content_type="image/jpeg"), wiki=self.wiki, location=self.location, profile=self.profile, redata_confidence=0.1)
+        unvoted_high_confidence = Image.objects.create(image=SimpleUploadedFile("b.jpg", b"b", content_type="image/jpeg"), wiki=self.wiki, location=self.location, profile=self.profile, redata_confidence=0.9)
+        _mark(self.profile, self.location, "photos", media_item_key(upvoted_low_confidence.image.url), is_relevant=True)
+
+        response = self.client.get(reverse("location.wiki.media", args=[self.location.slug, "photos"]))
+        body = response.content.decode()
+        self.assertLess(body.index(f'data-image-id="{upvoted_low_confidence.pk}"'), body.index(f'data-image-id="{unvoted_high_confidence.pk}"'))
+
+    def test_unvoted_photos_break_ties_by_redata_confidence(self) -> None:
+        lower_confidence = Image.objects.create(image=SimpleUploadedFile("a.jpg", b"a", content_type="image/jpeg"), wiki=self.wiki, location=self.location, profile=self.profile, redata_confidence=0.2)
+        higher_confidence = Image.objects.create(image=SimpleUploadedFile("b.jpg", b"b", content_type="image/jpeg"), wiki=self.wiki, location=self.location, profile=self.profile, redata_confidence=0.8)
+
+        response = self.client.get(reverse("location.wiki.media", args=[self.location.slug, "photos"]))
+        body = response.content.decode()
+        self.assertLess(body.index(f'data-image-id="{higher_confidence.pk}"'), body.index(f'data-image-id="{lower_confidence.pk}"'))
 
     def test_external_source_renders_cached_items_with_vote_scores(self) -> None:
         from urbanlens.dashboard.services.pins.external_data import get_panel_source

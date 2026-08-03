@@ -160,6 +160,7 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
         from urbanlens.dashboard.services.apis.locations import places_resolution
         from urbanlens.dashboard.services.apis.locations.places_resolution import PhotoNotFoundError
+        from urbanlens.dashboard.services.photos.redata_relevance import queue_photo_submission
         from urbanlens.UrbanLens.settings.app import settings as app_settings
 
         api_key = app_settings.google_unrestricted_api_key or ""
@@ -182,7 +183,8 @@ class PlacePhotoEnrichmentSource(_BackfillMarkerSource):
             except (PhotoNotFoundError, GatewayRequestError, requests.exceptions.RequestException) as exc:
                 logger.info("Place photo %s unavailable for location=%s: %s", photo_name, location.pk, exc)
                 continue
-            _save_enriched_image(location, content, source=ImageSource.GOOGLE_MAPS, source_url=page_url, max_dimension=_PLACE_PHOTO_MAX_DIMENSION)
+            image = _save_enriched_image(location, content, source=ImageSource.GOOGLE_MAPS, source_url=page_url, max_dimension=_PLACE_PHOTO_MAX_DIMENSION)
+            queue_photo_submission(image)
             created += 1
 
         LocationCache.set(location, self.marker_source, {"created": created, "found": len(photo_names)})

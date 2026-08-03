@@ -91,13 +91,18 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
         rendered_items = []
         for item in items:
             key = media_item_key(item.url)
+            local_image = local_images.get(item.url)
             rendered_items.append(
                 {
                     "item": item,
                     "key": key,
                     "is_relevant": my_marks.get(key),
                     "vote_score": scores.get(key, 0),
-                    "local_url": local_images[item.url].image.url if item.url in local_images else None,
+                    "local_url": local_image.image.url if local_image else None,
+                    # Only present once this item has a local copy - a vote on
+                    # a still-transient item has no REData photo_id to
+                    # attach to (see WikiMediaVoteView.post).
+                    "image_id": local_image.pk if local_image else None,
                 },
             )
 
@@ -126,10 +131,19 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
                     "image_id": img.pk,
                     "lat": img.latitude,
                     "lng": img.longitude,
+                    "_redata_confidence": img.redata_confidence,
+                    "_created": img.created,
                 },
             )
         if not rendered_items:
             return HttpResponse(status=204)
+
+        # Most relevant first: the community's own net vote score takes
+        # priority; REData's cached confidence (services.photos.redata_relevance)
+        # breaks ties among equally-voted photos - including the common case
+        # of no votes at all, where every score is otherwise 0 - falling back
+        # to upload recency for a photo REData hasn't scored yet.
+        rendered_items.sort(key=lambda entry: (entry["vote_score"], entry["_redata_confidence"] if entry["_redata_confidence"] is not None else -1, entry["_created"]), reverse=True)
 
         return render(request, "dashboard/partials/pins/pin_media_items.html", {"rendered_items": rendered_items, "source_key": "photos", "wiki_mode": True})
 
@@ -177,7 +191,9 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
     """
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
+        from urbanlens.dashboard.models.images.model import Image
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
+        from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
 
         location, _wiki, profile = resolve_visible_wiki(request, location_slug)
 
@@ -186,6 +202,7 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
             source = str(data["source"])[:30]
             url = str(data.get("url") or "")
             is_relevant = data.get("is_relevant")
+            image_id = data.get("image_id")
         except (KeyError, ValueError, TypeError):
             return JsonResponse({"error": "Invalid request data."}, status=400)
 
@@ -203,6 +220,12 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
                 item_key=item_key,
                 defaults={"is_relevant": bool(is_relevant)},
             )
+            # image_id is only trusted after re-scoping to this location - a
+            # client sending an id from elsewhere must not be able to attach
+            # a vote to an unrelated photo.
+            image = Image.objects.filter(pk=image_id, location=location).first() if image_id else None
+            if image is not None:
+                queue_relevance_vote(image, profile, is_relevant=bool(is_relevant))
 
         score = MediaRelevance.objects.vote_scores(location, source).get(item_key, 0)
         my_vote = None if is_relevant is None else bool(is_relevant)

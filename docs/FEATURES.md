@@ -108,6 +108,16 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   the wiki (`Image.wiki`) and a "Manage" tab for uploads. Thumbs-up/down are **community votes**
   (net score up − down, highest ranked first); because relevance is stored per-Location
   (`MediaRelevance`), a relevance mark made on any user's pin detail page already counts here
+- **REData photo relevance scoring** — every new photo (upload, Google Places business photo
+  backfill, or Media-gallery item materialized via "mark relevant"/"send to wiki") is submitted to
+  REData's photo-scoring service with whatever signal is available (capture/location coordinates,
+  capture date, uploader/photographer, wiki abandonment date); REData returns a calibrated
+  confidence ("is this really a photo of this place") cached on the `Image` row
+  (`services.photos.redata_relevance`). Relevant/not-relevant votes on a materialized photo are
+  forwarded too, as REData's training signal - never as a scoring input. The pin detail page's own-
+  photos preview and the wiki's Photos tab order by this confidence (vote score first on the wiki,
+  confidence breaking ties, including when nothing has been voted on at all); a REData outage or
+  missing configuration silently falls back to upload-recency ordering
 - **Wiki article auto-seeding** — a wiki with no article yet is automatically started from a
   confidently-matched Wikipedia article the first time one is cached for its location (converted
   to Markdown, with a required CC BY-SA attribution footer linking back to the source) - never

@@ -580,6 +580,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             The rendered ``pin_media_items.html`` fragment, or 204 when the
             pin has no photos of its own yet.
         """
+        from django.db.models import F
+
         from urbanlens.dashboard.models.images.model import Image
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
 
@@ -589,7 +591,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(status=404)
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        images = Image.objects.filter(pin=pin, profile=profile).exclude(image="").order_by("-created")[:_MEDIA_PHOTOS_PREVIEW_LIMIT]
+        # Most-likely-relevant first (REData's cached confidence - see
+        # services.photos.redata_relevance), falling back to upload order for
+        # a photo REData hasn't scored yet (no location at submission time,
+        # REData not configured, or the score just hasn't landed).
+        images = Image.objects.filter(pin=pin, profile=profile).exclude(image="").order_by(F("redata_confidence").desc(nulls_last=True), "-created")[:_MEDIA_PHOTOS_PREVIEW_LIMIT]
 
         rendered_items = [
             {
@@ -633,7 +639,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
         from urbanlens.dashboard.services.media.images import coerce_coordinates
-        from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
+        from urbanlens.dashboard.services.media.media_materialize import MaterializeError, find_materialized_image, materialize_media_item
+        from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -699,6 +706,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     image.save(update_fields=["latitude", "longitude"])
                     response["latitude"] = float(image.latitude)
                     response["longitude"] = float(image.longitude)
+                queue_relevance_vote(image, profile, is_relevant=True)
+        else:
+            # Marking "not relevant" never materializes a new copy - but if
+            # this item was already saved (e.g. an earlier "relevant" vote,
+            # or a wiki send), REData should hear about the reversal too.
+            existing_image = find_materialized_image(pin.location, source, url, page_url=page_url, pin=pin, profile=profile)
+            if existing_image is not None:
+                queue_relevance_vote(existing_image, profile, is_relevant=False)
         return JsonResponse(response)
 
     @action(detail=True, methods=["post"])

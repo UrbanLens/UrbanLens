@@ -338,7 +338,7 @@ Field *definitions* (shared across every entity type: pins, photos, profiles, ma
 
 `PUT /photos/{image_uuid}/labels/` — `photos:write` — full replacement. Request: `{labels:[...]}`(≤25, each ≤255 chars).
 
-`POST /photos/{image_uuid}/vote/` — `photos:write` — community relevance vote; only meaningful for a photo materialized into a Location's media gallery. Request: `{value: -1|0|1}`(0 withdraws) — response: `{score, your_vote}` — 400 if not gallery-backed.
+`POST /photos/{image_uuid}/vote/` — `photos:write` — community relevance vote; only meaningful for a photo materialized into a Location's media gallery. Request: `{value: -1|0|1}`(0 withdraws) — response: `{score, your_vote}` — 400 if not gallery-backed. A non-zero vote is also forwarded to REData's photo-relevance model as training signal (`services.photos.redata_relevance`), best-effort.
 
 `POST /photos/{image_uuid}/file/` — `photos:write` — files an unfiled photo onto an existing pin (logs a visit) or creates a new pin from coordinates. Request: `pin`(existing, optional) OR `latitude`/`longitude` + `name` — 409 if already filed; 403 if visit-history tracking off.
 
@@ -415,7 +415,7 @@ Every wiki-scoped handler resolves `location, wiki, profile = resolve_visible_wi
 
 ### Wiki Gallery
 
-`GET /wikis/{location_slug}/gallery/` — scopes: `wiki:read` — paginated shared photo gallery, filtered through uploader visibility + viewer's own photo filter — rows: `{id, url, caption, author, source_url, copyright, created}` — **read-only**; upload deferred (needs the async malware-scan handshake the comment-image path uses).
+`GET /wikis/{location_slug}/gallery/` — scopes: `wiki:read` — paginated shared photo gallery, filtered through uploader visibility + viewer's own photo filter — rows: `{id, url, caption, author, source_url, copyright, created}` — **read-only**; upload deferred (needs the async malware-scan handshake the comment-image path uses). Ordered by REData's cached photo-relevance confidence first, upload recency as the tiebreaker/fallback (`services.photos.redata_relevance`).
 
 ### Wiki Boundary, Cover Photo & Property Records
 

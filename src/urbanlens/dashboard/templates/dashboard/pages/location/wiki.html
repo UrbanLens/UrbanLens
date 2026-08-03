@@ -691,6 +691,7 @@
                 body: JSON.stringify({
                     source: itemEl.dataset.mediaSource, item_key: itemEl.dataset.mediaKey,
                     url: itemEl.dataset.mediaUrl, is_relevant: next,
+                    image_id: itemEl.dataset.imageId || null,
                 }),
             }).then(function (r) { return r.json(); }).then(function (data) {
                 if (data && typeof data.vote_score === 'number') {
