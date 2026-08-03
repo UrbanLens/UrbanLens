@@ -49,7 +49,7 @@
         "@tiptap/suggestion": "^3.28.0",
         "bun": "^1.0.15",
         "dotenv": "^17.4.2",
-        "dotenv-expand": "^13.0.0",
+        "dotenv-expand": "^1000.0.0",
         "exifr": "^7.1.3",
         "libsodium-wrappers-sumo": "^0.8.4",
         "sass": "^1.101.0",
