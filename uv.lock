@@ -4153,6 +4153,19 @@ wheels = [
 ]
 
 [[package]]
+name = "stripe"
+version = "15.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "requests" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b6/a0/52b623a5c07238af6282dfc07ba8c8a9b332f4d7ef69d0006e8a52e6b34d/stripe-15.3.1.tar.gz", hash = "sha256:2f9a8d961e5c2ec19149fb4e0b47d9709d014a68592cdb1f4efd044abc8d2359", size = 1516385, upload-time = "2026-07-16T00:47:46.829Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/eb/7a/58f266c262bbf903e2eca438ef752ed0fcc7273c9a4bc42edc20effa962f/stripe-15.3.1-py3-none-any.whl", hash = "sha256:f7c87a9a9072db7316e9ba497b4dbaa1dbae51f67ca201ba6155fe8b6487e5e3", size = 2173610, upload-time = "2026-07-16T00:47:45.173Z" },
+]
+
+[[package]]
 name = "thefuzz"
 version = "0.22.1"
 source = { registry = "https://pypi.org/simple" }
@@ -4515,6 +4528,7 @@ dependencies = [
     { name = "social-auth-app-django" },
     { name = "sqlalchemy" },
     { name = "statsmodels" },
+    { name = "stripe" },
     { name = "tiktoken" },
     { name = "typing-extensions" },
     { name = "webauthn" },
@@ -4618,6 +4632,7 @@ requires-dist = [
     { name = "social-auth-app-django", specifier = ">=5.9,<6.1" },
     { name = "sqlalchemy", specifier = "~=2.0.51" },
     { name = "statsmodels", specifier = "~=0.14.6" },
+    { name = "stripe", specifier = "~=15.3.0" },
     { name = "tiktoken", specifier = "~=0.13.0" },
     { name = "typing-extensions", specifier = ">=4.15,<4.17" },
     { name = "webauthn", specifier = "~=3.0.0" },

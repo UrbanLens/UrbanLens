@@ -186,13 +186,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     stripe_secret_key: str | None = Field(default=None, description="The Stripe secret API key (sk_...), for paid subscription checkout/billing-portal/webhook calls")
     stripe_webhook_secret: str | None = Field(default=None, description="The Stripe webhook signing secret (whsec_...), for verifying incoming /billing/webhooks/stripe/ requests")
 
-    # Note: there are deliberately no database_* fields here. DATABASES is built directly in
-    # settings/base.py from UL_DB_* environment variables (not the UL_ prefix + field-name
-    # convention pydantic-settings would derive, e.g. UL_DATABASE_HOST) and exposed back to
-    # callers via the `databases` property below. A prior set of database_* fields here was
-    # never actually read by anything and used a different, non-working env var prefix -
-    # removed rather than wired up, since fixing the prefix mismatch without a live deployment
-    # to verify against risked silently breaking existing UL_DB_* configurations.
+    # Note: DATABASES is built directly in
+    # settings/base.py from UL_DB_* environment variables
 
     _secrets: dict | None = None
     _environment: BaseEnvironment | None = None
