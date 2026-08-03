@@ -27,6 +27,7 @@ from urbanlens.dashboard.models.profile.meta import (
     PhotoSharingPreference,
     PhotoTaggingPreference,
     PhotoTakingPreference,
+    PhotoUsagePreference,
 )
 from urbanlens.dashboard.services.core.text_limits import MAX_ADDITIONAL_PREFERENCES_LENGTH, MAX_PREFERENCE_OTHER_LENGTH
 
@@ -39,6 +40,7 @@ _PREFERENCE_CHOICE_CLASSES = {
     "photo_taking_preference": PhotoTakingPreference,
     "photo_sharing_preference": PhotoSharingPreference,
     "photo_tagging_preference": PhotoTaggingPreference,
+    "photo_usage_preference": PhotoUsagePreference,
     "friend_request_preference": FriendRequestPreference,
     "meetup_preference": MeetupPreference,
     "exploring_with_others_preference": ExploringWithOthersPreference,

@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 # Django Imports
 from django.db.models import Q
@@ -42,6 +42,15 @@ GROUP_CONTENT = "Content"
 GROUP_EXPLORATION = "Exploration"
 GROUP_COMMUNITY = "Community"
 GROUP_STREAKS = "Streaks"
+
+
+class StreakSummaryRow(TypedDict):
+    """One :class:`ActivityKind`'s streak state, as returned by :func:`streak_summary`."""
+
+    kind: str
+    label: str
+    current: int
+    longest: int
 
 
 @dataclass(frozen=True)
@@ -479,7 +488,7 @@ def compute_values(profile: Profile, keys: Iterable[str] | None = None) -> dict[
     return {metric.key: metric.value_for(profile) for metric in selected}
 
 
-def streak_summary(profile: Profile, today: datetime.date | None = None) -> list[dict[str, object]]:
+def streak_summary(profile: Profile, today: datetime.date | None = None) -> list[StreakSummaryRow]:
     """Return per-kind streak state for a profile, for display on the profile page.
 
     Args:
@@ -494,7 +503,7 @@ def streak_summary(profile: Profile, today: datetime.date | None = None) -> list
 
     today = today or timezone.localdate()
     rows = {row.kind: row for row in ProfileStreak.objects.for_profile(profile)}
-    summary: list[dict[str, object]] = []
+    summary: list[StreakSummaryRow] = []
     for kind in ActivityKind:
         row = rows.get(kind.value)
         summary.append(

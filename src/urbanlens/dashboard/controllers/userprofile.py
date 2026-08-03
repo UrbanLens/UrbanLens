@@ -35,6 +35,7 @@ from urbanlens.dashboard.models.profile.meta import (
     PhotoSharingPreference,
     PhotoTaggingPreference,
     PhotoTakingPreference,
+    PhotoUsagePreference,
 )
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.auth.username import USERNAME_RE, username_is_taken
@@ -376,6 +377,7 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         "photo_taking_preference": PhotoTakingPreference,
         "photo_sharing_preference": PhotoSharingPreference,
         "photo_tagging_preference": PhotoTaggingPreference,
+        "photo_usage_preference": PhotoUsagePreference,
         "friend_request_preference": FriendRequestPreference,
         "meetup_preference": MeetupPreference,
         "exploring_with_others_preference": ExploringWithOthersPreference,

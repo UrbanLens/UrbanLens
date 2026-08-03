@@ -49,6 +49,7 @@ from urbanlens.dashboard.models.profile.meta import (
     PhotoSharingPreference,
     PhotoTaggingPreference,
     PhotoTakingPreference,
+    PhotoUsagePreference,
     SyncAliasesDirection,
     ThemeChoice,
     VisibilityChoice,
@@ -1972,6 +1973,8 @@ class ProfileDetailSerializer(serializers.Serializer):
     photo_sharing_preference_other = serializers.CharField(read_only=True, allow_blank=True)
     photo_tagging_preference = serializers.ChoiceField(choices=PhotoTaggingPreference.choices, read_only=True, allow_blank=True)
     photo_tagging_preference_other = serializers.CharField(read_only=True, allow_blank=True)
+    photo_usage_preference = serializers.ChoiceField(choices=PhotoUsagePreference.choices, read_only=True, allow_blank=True)
+    photo_usage_preference_other = serializers.CharField(read_only=True, allow_blank=True)
     friend_request_preference = serializers.ChoiceField(choices=FriendRequestPreference.choices, read_only=True, allow_blank=True)
     friend_request_preference_other = serializers.CharField(read_only=True, allow_blank=True)
     meetup_preference = serializers.ChoiceField(choices=MeetupPreference.choices, read_only=True, allow_blank=True)
@@ -2030,6 +2033,8 @@ class ProfileUpdateSerializer(serializers.Serializer):
     photo_sharing_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
     photo_tagging_preference = serializers.ChoiceField(choices=PhotoTaggingPreference.choices, required=False, allow_blank=True)
     photo_tagging_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
+    photo_usage_preference = serializers.ChoiceField(choices=PhotoUsagePreference.choices, required=False, allow_blank=True)
+    photo_usage_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
     friend_request_preference = serializers.ChoiceField(choices=FriendRequestPreference.choices, required=False, allow_blank=True)
     friend_request_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
     meetup_preference = serializers.ChoiceField(choices=MeetupPreference.choices, required=False, allow_blank=True)

@@ -13,10 +13,15 @@ class _MessagePrefixMixin:
     """
     Shared message-prefixing behavior for our custom TestCase/SimpleTestCase variants.
     """
+    # Deprecated, in favor of fn. Named with a leading underscore (unlike a
+    # plain "target"/"method_name") because those are exactly the attribute
+    # names test subclasses reach for on their own domain objects (see e.g.
+    # ProfileDetailVisibilityTests.target, a Profile) - an un-prefixed name
+    # here shadowed those, forcing mypy to widen every such attribute to
+    # "type | None" and flag every subsequent access as a union-attr error.
+    _message_target: type | None = None
     # Deprecated, in favor of fn
-    target: type | None = None
-    # Deprecated, in favor of fn
-    method_name: str | None = None
+    _message_method_name: str | None = None
 
     @property
     def class_name(self) -> str | None:
@@ -26,9 +31,9 @@ class _MessagePrefixMixin:
         Returns:
             str | None: The class name of the test case
         """
-        if self.target is None:
+        if self._message_target is None:
             return None
-        return self.target.__name__
+        return self._message_target.__name__
 
     @property
     def module_path(self) -> str | None:
@@ -38,9 +43,9 @@ class _MessagePrefixMixin:
         Returns:
             str | None: The module path (e.g. "core.tests.testcase")
         """
-        if self.target is None:
+        if self._message_target is None:
             return None
-        return self.target.__module__
+        return self._message_target.__module__
 
     def create_message(self, msg: str) -> str:
         """
@@ -81,8 +86,8 @@ class _MessagePrefixMixin:
         parts = []
         if self.class_name is not None:
             parts.append(f"{self.module_path}:{self.class_name}")
-        if self.method_name is not None:
-            parts.append(f"{self.method_name}()")
+        if self._message_method_name is not None:
+            parts.append(f"{self._message_method_name}()")
 
         if not parts:
             return ""

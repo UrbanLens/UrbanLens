@@ -39,6 +39,8 @@ _PROFILE_PRESENTATION_FIELDS = {
     "photo_sharing_preference_other",
     "photo_tagging_preference",
     "photo_tagging_preference_other",
+    "photo_usage_preference",
+    "photo_usage_preference_other",
     "friend_request_preference",
     "friend_request_preference_other",
     "meetup_preference",
@@ -229,7 +231,10 @@ class ProfileDetailVisibilityTests(TestCase):
         for is unchanged; only the door it comes through is.
         """
         settings_key, settings_raw = generate_api_key(self.user, "Settings client")
-        settings_key.scopes = [ApiKeyScope.SETTINGS_WRITE.value]
+        # PATCH requires both scopes - the response is always the full settings
+        # document (see AccountSettingsView), which a write-only credential has
+        # no business reading.
+        settings_key.scopes = [ApiKeyScope.SETTINGS_WRITE.value, ApiKeyScope.SETTINGS_READ.value]
         settings_key.save(update_fields=["scopes"])
 
         response = self.client.patch(

@@ -260,7 +260,7 @@ enabled/disabled per-install or per-service without a restart. Inventory at `/si
 - Multiple verified email addresses per account, for easier friend discovery
 - Social/community links on profile (site, Discord/Signal/etc.)
 - **Interaction preferences** — consent-style statements a profile can state about how they'd like
-  to be treated, on or off the site (taking/sharing/tagging photos of them, friend requests,
+  to be treated, on or off the site (taking/sharing/tagging/using photos of them, friend requests,
   meetups, exploring with others, plus a free-text "other preferences" note). Shown on the public
   profile page purely for informational, consent-based interactions - nothing here is technically
   enforced yet (see `Profile.PREFERENCE_FIELDS`/`interaction_preferences`). Each choice field shares

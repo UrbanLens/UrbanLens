@@ -214,12 +214,12 @@ class PinBulkEditView(LoginRequiredMixin, View):
                 continue
             raw_value = data[request_field]
             try:
-                value = int(raw_value)
+                int_value = int(raw_value)
             except (TypeError, ValueError):
                 return HttpResponse(f"{request_field} must be a percentage.", status=400)
-            if isinstance(raw_value, bool) or not 0 <= value <= 100:
+            if isinstance(raw_value, bool) or not 0 <= int_value <= 100:
                 return HttpResponse(f"{request_field} must be between 0 and 100.", status=400)
-            style_updates[model_field] = value
+            style_updates[model_field] = int_value
 
         description = data.get("description")
         if description is not None and str(description).strip():
@@ -233,8 +233,8 @@ class PinBulkEditView(LoginRequiredMixin, View):
         if style_updates:
             update_fields = [*style_updates, "updated"]
             for pin in pins:
-                for field, value in style_updates.items():
-                    setattr(pin, field, value)
+                for field, field_value in style_updates.items():
+                    setattr(pin, field, field_value)
                 pin.save(update_fields=update_fields)
 
         # rating lives on Review (one per profile/pin pair, see PinEditView.post

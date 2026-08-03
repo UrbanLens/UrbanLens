@@ -39,6 +39,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from urbanlens.dashboard.external_api.errors import MALFORMED_JSON_BODY_MESSAGE
 from urbanlens.dashboard.external_api.mixins import DualAuthJsonView
 from urbanlens.dashboard.models.account.model import AccountKdf, ApiKeyScope
 from urbanlens.dashboard.models.e2ee import ConversationKey, MessagingKeyBundle
@@ -222,7 +223,7 @@ class E2EEEnrollView(DualAuthJsonView):
         user = profile.user
         data = _json_body(request)
         if data is None:
-            return Response({"error": "Malformed JSON body"}, status=400)
+            return Response({"error": MALFORMED_JSON_BODY_MESSAGE}, status=400)
 
         if MessagingKeyBundle.objects.for_profile(profile).exists():
             return Response({"error": "A key bundle already exists for this account."}, status=409)
@@ -429,7 +430,7 @@ class E2EEConversationKeyView(DualAuthJsonView):
             return Response({"error": "Not found."}, status=404)
         data = _json_body(request)
         if data is None:
-            return Response({"error": "Malformed JSON body"}, status=400)
+            return Response({"error": MALFORMED_JSON_BODY_MESSAGE}, status=400)
 
         wrapped_for_me = data.get("wrapped_for_me", "")
         wrapped_for_partner = data.get("wrapped_for_partner", "")
@@ -503,7 +504,7 @@ class E2EERewrapView(DualAuthJsonView):
             return Response({"error": "Not enrolled."}, status=404)
         data = _json_body(request)
         if data is None:
-            return Response({"error": "Malformed JSON body"}, status=400)
+            return Response({"error": MALFORMED_JSON_BODY_MESSAGE}, status=400)
 
         password_wrapped = data.get("password_wrapped_secret", "")
         password_wrap_salt = data.get("password_wrap_salt", "")
@@ -672,7 +673,7 @@ class E2EEGroupKeyView(DualAuthJsonView):
         profile, group, _membership = resolved
         data = _json_body(request)
         if data is None:
-            return Response({"error": "Malformed JSON body"}, status=400)
+            return Response({"error": MALFORMED_JSON_BODY_MESSAGE}, status=400)
 
         wrapped = data.get("wrapped")
         if not isinstance(wrapped, dict) or not wrapped:
@@ -929,7 +930,7 @@ class E2EEResetView(DualAuthJsonView):
             return Response({"error": "Not enrolled."}, status=404)
         data = _json_body(request)
         if data is None:
-            return Response({"error": "Malformed JSON body"}, status=400)
+            return Response({"error": MALFORMED_JSON_BODY_MESSAGE}, status=400)
         if data.get("confirm") != RESET_CONFIRMATION:
             return Response({"error": "Missing confirmation"}, status=400)
         proof_error = _require_current_password_proof(profile.user, data)

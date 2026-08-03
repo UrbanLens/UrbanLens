@@ -235,7 +235,7 @@ class FriendRequestGateTests(TestCase):
         self.raw_key = _key_with_scopes(self.user, ApiKeyScope.SOCIAL_READ, ApiKeyScope.SOCIAL_WRITE)
         self.url = reverse("external_api:friends")
 
-    def _post(self, target: Profile) -> object:
+    def _post(self, target: Profile):
         """Send a friend request to ``target``."""
         return self.client.post(
             self.url,

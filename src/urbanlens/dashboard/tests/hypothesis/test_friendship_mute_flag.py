@@ -219,18 +219,18 @@ class MuteQuerySetTests(TestCase):
 class LegacyMutedRowRepairTests(TestCase):
     """The data migration's own logic, exercised directly.
 
-    ``0020_friendship_muted_flag`` decides what a legacy ``status='Muted'``
-    row *was* before it was muted, and that decision is the one part of this
-    change that cannot be re-derived from the schema afterwards. Running the
-    functions against the live app registry is enough: they are plain
-    ``(apps, schema_editor)`` callables that only issue DML, and the historical
-    model for ``Friendship`` at this point is field-identical to the current
-    one.
+    The ``0010_v0_6_0`` squash migration decides what a legacy
+    ``status='Muted'`` row *was* before it was muted, and that decision is the
+    one part of this change that cannot be re-derived from the schema
+    afterwards. Running the functions against the live app registry is
+    enough: they are plain ``(apps, schema_editor)`` callables that only
+    issue DML, and the historical model for ``Friendship`` at this point is
+    field-identical to the current one.
     """
 
     #: The migration module, imported by path because its name starts with a
     #: digit and so cannot appear in an ``import`` statement.
-    migration = importlib.import_module("urbanlens.dashboard.migrations.0020_friendship_muted_flag")
+    migration = importlib.import_module("urbanlens.dashboard.migrations.0010_v0_6_0")
 
     def setUp(self) -> None:
         """Create a legacy row in the pre-migration encoding."""

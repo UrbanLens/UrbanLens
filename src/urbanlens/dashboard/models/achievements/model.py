@@ -36,6 +36,8 @@ from urbanlens.dashboard.models.achievements.queryset import (
 if TYPE_CHECKING:
     import datetime
 
+    from django.db.models import Manager as DjangoManager
+
     from urbanlens.dashboard.models.profile import Profile
     from urbanlens.dashboard.services.achievements.metrics import Metric
 
@@ -109,7 +111,7 @@ class Achievement(abstract.PublicDashboardModel):
     objects = AchievementManager()
 
     if TYPE_CHECKING:
-        awards: object
+        awards: DjangoManager[UserAchievement]
 
     class Meta(abstract.PublicDashboardModel.Meta):
         db_table = "dashboard_achievements"

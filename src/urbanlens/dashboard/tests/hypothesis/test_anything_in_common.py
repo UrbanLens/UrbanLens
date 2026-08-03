@@ -18,6 +18,8 @@ Covers:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from django.urls import reverse
 from model_bakery import baker
 
@@ -29,6 +31,9 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.trips.trip_visibility import apply_trip_visibility_filter as _apply_trip_visibility_filter
+
+if TYPE_CHECKING:
+    from django.contrib.auth.models import User
 
 # Every option a friend must pass (everything except NO_ONE; ANYONE is trivial).
 _FRIEND_QUALIFYING_CHOICES = (
@@ -198,7 +203,7 @@ class ImageVisibilityFriendTests(TestCase):
         # The viewer's own filter must not interfere with these tests.
         self.viewer.viewer_photo_filter = VisibilityChoice.ANYONE
         self.viewer.save(update_fields=["viewer_photo_filter"])
-        self.image = baker.make("dashboard.Image", profile=self.uploader, pin=None, wiki=None)
+        self.image: Image = baker.make("dashboard.Image", profile=self.uploader, pin=None, wiki=None)
 
     def _set_upload_visibility(self, visibility: str) -> None:
         self.uploader.photo_upload_visibility = visibility
@@ -276,8 +281,8 @@ class FriendRequestVisibilityTests(TestCase):
 
     def setUp(self) -> None:
         super().setUp()
-        self.requester_user = baker.make("auth.User")
-        self.requester = self.requester_user.profile
+        self.requester_user: User = baker.make("auth.User")
+        self.requester: Profile = self.requester_user.profile
         self.target = _make_profile()
         self.client.force_login(self.requester_user)
 

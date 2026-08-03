@@ -38,6 +38,7 @@ from urbanlens.dashboard.models.profile.meta import (
     PhotoSharingPreference,
     PhotoTaggingPreference,
     PhotoTakingPreference,
+    PhotoUsagePreference,
     SyncAliasesDirection,
     ThemeChoice,
     VisibilityChoice,
@@ -180,6 +181,15 @@ class Profile(abstract.PublicDashboardModel):
         help_text="Whether you're OK with being tagged or identified in photos, on or off this site.",
     )
     photo_tagging_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
+
+    photo_usage_preference = CharField(
+        max_length=20,
+        choices=PhotoUsagePreference.choices,
+        blank=True,
+        default="",
+        help_text="Whether you're OK with people using your photos, on or off this site.",
+    )
+    photo_usage_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
 
     # Distinct from friend_request_visibility (below): that setting is a
     # technical gate on who *can* send a request, this is a social statement
@@ -687,6 +697,7 @@ class Profile(abstract.PublicDashboardModel):
         ("photo_taking_preference", "Taking Photos of Me"),
         ("photo_sharing_preference", "Sharing Photos of Me"),
         ("photo_tagging_preference", "Tagging Me in Photos"),
+        ("photo_usage_preference", "Using My Photos"),
         ("friend_request_preference", "Friend Requests"),
         ("meetup_preference", "Meetups"),
         ("exploring_with_others_preference", "Exploring with Others"),

@@ -22,9 +22,9 @@ What these tests pin down:
 from __future__ import annotations
 
 import base64
+from datetime import timedelta
 import json
 import os
-from datetime import timedelta
 
 from django.contrib.auth.models import User
 from django.test import Client
@@ -158,7 +158,7 @@ class CurrentPasswordProofUnderCredentialAuthTests(TestCase):
         self.profile = _profile_with_password()
         self.token = _token_for(self.profile.user, f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}")
 
-    def _post(self, url_name: str, payload: dict) -> object:
+    def _post(self, url_name: str, payload: dict):
         return self.client.post(
             reverse(url_name),
             data=json.dumps(payload),

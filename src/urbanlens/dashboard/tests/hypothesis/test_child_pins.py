@@ -204,6 +204,7 @@ class SearchLocalChildPinTests(TestCase):
         results = search_local("Morgue", self.profile)
         match = next((r for r in results if r.title == "Morgue Wing"), None)
         self.assertIsNotNone(match)
+        assert match is not None  # nosec B101
         self.assertTrue(match.is_child)
         self.assertIn("Asylum Grounds", match.subtitle)
 
@@ -211,6 +212,7 @@ class SearchLocalChildPinTests(TestCase):
         results = search_local("Asylum", self.profile)
         match = next((r for r in results if r.title == "Asylum Grounds"), None)
         self.assertIsNotNone(match)
+        assert match is not None  # nosec B101
         self.assertFalse(match.is_child)
 
 
@@ -637,7 +639,7 @@ class PinShareBundleTests(TestCase):
         self.grandchild = _make_pin(self.sender, name="Control Room", parent_pin=self.child)
 
     def _share(self, include_children: bool):
-        data = {"profile_id": self.recipient.pk}
+        data: dict[str, int | str] = {"profile_id": self.recipient.pk}
         if include_children:
             data["include_children"] = "1"
         return self.client.post(reverse("pin.share.send", kwargs={"pin_slug": self.root.slug}), data)

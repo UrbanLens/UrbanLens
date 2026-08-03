@@ -81,6 +81,7 @@ class ConsentPreferenceWording:
     YES_PLEASE = "Yes, please."
     PLEASE_DONT = "Please don't"
     PLEASE_ASK_FIRST = "Please ask first"
+    WITHOUT_FACE = "Only when my face isn't visible"
     OTHER_SPECIFY = "Other (please specify below)"
 
 
@@ -89,6 +90,7 @@ class PhotoTakingPreference(ConsentPreferenceWording, TextChoices):
 
     YES = "yes", ConsentPreferenceWording.YES_PLEASE
     NO = "no", ConsentPreferenceWording.PLEASE_DONT
+    WITHOUT_FACE = "without_face", ConsentPreferenceWording.WITHOUT_FACE
     ASK_FIRST = "ask_first", ConsentPreferenceWording.PLEASE_ASK_FIRST
     OTHER = "other", ConsentPreferenceWording.OTHER_SPECIFY
 
@@ -98,6 +100,7 @@ class PhotoSharingPreference(ConsentPreferenceWording, TextChoices):
 
     YES = "yes", ConsentPreferenceWording.YES_PLEASE
     NO = "no", ConsentPreferenceWording.PLEASE_DONT
+    WITHOUT_FACE = "without_face", ConsentPreferenceWording.WITHOUT_FACE
     BLUR_FACE = "blur_face", "Please blur my face"
     ASK_FIRST = "ask_first", ConsentPreferenceWording.PLEASE_ASK_FIRST
     OTHER = "other", ConsentPreferenceWording.OTHER_SPECIFY
@@ -108,8 +111,20 @@ class PhotoTaggingPreference(ConsentPreferenceWording, TextChoices):
 
     YES = "yes", ConsentPreferenceWording.YES_PLEASE
     NO = "no", ConsentPreferenceWording.PLEASE_DONT
+    WITHOUT_FACE = "without_face", ConsentPreferenceWording.WITHOUT_FACE
     ASK_FIRST = "ask_first", ConsentPreferenceWording.PLEASE_ASK_FIRST
     OTHER = "other", ConsentPreferenceWording.OTHER_SPECIFY
+
+
+class PhotoUsagePreference(ConsentPreferenceWording, TextChoices):
+    """Whether this profile consents to others using their photos, on or off this site."""
+
+    FEEL_FREE = "feel_free", "Feel free!"
+    WITH_ATTRIBUTION = "with_attribution", "With Attribution"
+    TELL_ME_ABOUT_IT = "tell_me_about_it", "As long as you tell me about it."
+    ASK_FIRST = "ask_first", "Ask first"
+    NO = "no", ConsentPreferenceWording.PLEASE_DONT
+    OTHER = "other", "Other (specify...)"
 
 
 class FriendRequestPreference(ConsentPreferenceWording, TextChoices):
@@ -138,5 +153,5 @@ class ExploringWithOthersPreference(ConsentPreferenceWording, TextChoices):
     """Whether this profile prefers to explore locations solo or with others."""
 
     YES = "yes", ConsentPreferenceWording.YES_PLEASE
-    PREFER_ALONE = "prefer_alone", "I prefer to explore alone."
+    PREFER_ALONE = "prefer_alone", "I prefer exploring alone."
     OTHER = "other", ConsentPreferenceWording.OTHER_SPECIFY
