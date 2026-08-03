@@ -7,7 +7,7 @@
 {% block subnav %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
-        {% include "dashboard/partials/profile/_profile_tabs.html" with active="edit" %}
+        {% include "dashboard/partials/profile/_profile_tabs.html" with active="edit" profile_slug=profile.slug %}
     </div>
 </div>
 {% endblock %}

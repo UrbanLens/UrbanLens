@@ -44,10 +44,12 @@ class GetStreetViewSingleTests(SimpleTestCase):
         ]
         gateway = self._gateway(session)
 
-        content, date = gateway.get_street_view_single(1.0, 2.0, radius=400)
+        content, date, pano_lat, pano_lng = gateway.get_street_view_single(1.0, 2.0, radius=400)
 
         self.assertEqual(content, _REAL_IMAGE_BYTES)
         self.assertEqual(date, "2024-01")
+        self.assertEqual(pano_lat, 1.0)
+        self.assertEqual(pano_lng, 2.0)
         image_call_params = session.get.call_args_list[1].kwargs["params"]
         self.assertEqual(image_call_params["radius"], 400)
 
@@ -61,7 +63,7 @@ class GetStreetViewSingleTests(SimpleTestCase):
         ]
         gateway = self._gateway(session)
 
-        content, _date = gateway.get_street_view_single(1.0, 2.0, radius=50, radius_increment=50, max_radius=200)
+        content, _date, _pano_lat, _pano_lng = gateway.get_street_view_single(1.0, 2.0, radius=50, radius_increment=50, max_radius=200)
 
         self.assertEqual(content, _REAL_IMAGE_BYTES)
         self.assertEqual(session.get.call_count, 4)
@@ -105,6 +107,6 @@ class GetStreetViewSingleTests(SimpleTestCase):
         ]
         gateway = self._gateway(session)
 
-        content, _date = gateway.get_street_view_single(1.0, 2.0, radius=50, radius_increment=50, max_radius=200)
+        content, _date, _pano_lat, _pano_lng = gateway.get_street_view_single(1.0, 2.0, radius=50, radius_increment=50, max_radius=200)
 
         self.assertEqual(content, _REAL_IMAGE_BYTES)

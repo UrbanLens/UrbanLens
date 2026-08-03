@@ -212,7 +212,7 @@ class StreetViewEnrichmentSource(_BackfillMarkerSource):
         gateway = GoogleMapsGateway(api_key=app_settings.google_unrestricted_api_key or "")
         found = False
         try:
-            content, _capture_date = gateway.get_street_view_single(float(location.latitude), float(location.longitude))
+            content, _capture_date, _pano_lat, _pano_lng = gateway.get_street_view_single(float(location.latitude), float(location.longitude))
         except (ValueError, requests.exceptions.RequestException) as exc:
             logger.info("Street View unavailable for location=%s: %s", location.pk, exc)
         else:

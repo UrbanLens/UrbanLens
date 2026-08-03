@@ -63,7 +63,7 @@ Context: components, operating_costs, breakdown (CostBreakdown), total_recorded_
             <div class="stats-kpi-body">
                 <div class="stats-kpi-value">{% if cost_per_user is not None %}${{ cost_per_user|floatformat:2 }}{% else %}&mdash;{% endif %}</div>
                 <div class="stats-kpi-label">Cost Per User</div>
-                <div class="stats-kpi-sub">{{ active_user_count }} active user{{ active_user_count|pluralize }}</div>
+                <div class="stats-kpi-sub" title="Logged in within the last 30 days with at least 2 pins">{{ active_user_count }} active user{{ active_user_count|pluralize }}</div>
             </div>
         </div>
     </div>

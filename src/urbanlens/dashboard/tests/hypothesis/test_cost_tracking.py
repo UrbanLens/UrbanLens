@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import timedelta
 from decimal import Decimal
 
+from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -21,6 +22,15 @@ from urbanlens.dashboard.services.admin.cost_tracking import (
     monthly_cost_series,
     total_recorded_expenses,
 )
+
+
+def _make_active_user(pin_count: int = 2) -> User:
+    """A user who logged in recently and has *pin_count* root pins - the
+    "active_user_count()" bar (see that function's docstring)."""
+    user = baker.make(User, is_active=True, last_login=timezone.now())
+    for _ in range(pin_count):
+        baker.make_recipe("dashboard.pin", profile=user.profile)
+    return user
 
 
 class CostComponentModelTests(TestCase):
@@ -133,15 +143,37 @@ class CostTrackingServiceTests(TestCase):
         self.assertEqual(average_monthly_expense(now), Decimal(100))
 
     def test_active_user_count_excludes_inactive_users(self) -> None:
-        baker.make("auth.User", is_active=True, _quantity=2)
+        _make_active_user()
+        _make_active_user()
         baker.make("auth.User", is_active=False)
         self.assertEqual(active_user_count(), 2)
+
+    def test_active_user_count_excludes_users_who_never_logged_in_recently(self) -> None:
+        _make_active_user()
+        stale_user = _make_active_user()
+        stale_user.last_login = timezone.now() - timedelta(days=31)
+        stale_user.save(update_fields=["last_login"])
+        self.assertEqual(active_user_count(), 1)
+
+    def test_active_user_count_excludes_users_with_fewer_than_two_root_pins(self) -> None:
+        _make_active_user()  # 2 pins
+        _make_active_user(pin_count=1)
+        _make_active_user(pin_count=0)
+        self.assertEqual(active_user_count(), 1)
+
+    def test_active_user_count_ignores_child_detail_pins(self) -> None:
+        # One root pin plus a nested detail pin is still only 1 "real" pin.
+        user = baker.make("auth.User", is_active=True, last_login=timezone.now())
+        root_pin = baker.make_recipe("dashboard.pin", profile=user.profile)
+        baker.make_recipe("dashboard.detail_pin", profile=user.profile, parent_pin=root_pin)
+        self.assertEqual(active_user_count(), 0)
 
     def test_cost_per_user_is_none_with_no_users(self) -> None:
         self.assertIsNone(cost_per_user())
 
     def test_cost_per_user_divides_effective_cost_by_active_users(self) -> None:
-        baker.make("auth.User", is_active=True, _quantity=2)
+        _make_active_user()
+        _make_active_user()
         OperatingCost.objects.create(name="Electricity", monthly_cost=Decimal(100))
 
         self.assertEqual(cost_per_user(), Decimal(50))

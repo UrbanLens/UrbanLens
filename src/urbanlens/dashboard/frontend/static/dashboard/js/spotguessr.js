@@ -904,6 +904,9 @@ async function startGame(mode) {
     body.append("geo_bounds", geoBounds);
   if (roundTimeLimit)
     body.append("round_time_limit_seconds", roundTimeLimit);
+  const labelId = el("sg-label-filter").value;
+  if (labelId)
+    body.append("label_id", labelId);
   for (const profileId of state.selectedInviteIds)
     body.append("invite_profile_ids", String(profileId));
   const response = await postForm(urls.start, body);
@@ -1040,12 +1043,16 @@ function activeFilterLabels() {
   const labels = [];
   if (el("sg-require-visited-all").checked)
     labels.push("Only places I've visited");
+  const labelFilter = el("sg-label-filter");
+  if (labelFilter.value)
+    labels.push(`Restricted to the "${labelFilter.selectedOptions[0]?.textContent}" label`);
   if (el("sg-restrict-area").checked && currentGeoBoundsGeoJson())
     labels.push("Restricted to a chosen area");
   return labels;
 }
 function clearActiveFilters() {
   el("sg-require-visited-all").checked = false;
+  el("sg-label-filter").value = "";
   clearAreaGeometry();
 }
 function showNoEligibleLocations() {
@@ -1098,6 +1105,7 @@ function applyLastConfig() {
   el("sg-use-aliases").checked = config.use_aliases;
   el("sg-require-visited-all").checked = config.require_visited_all;
   el("sg-round-time-limit").value = config.round_time_limit_seconds ? String(config.round_time_limit_seconds) : "";
+  el("sg-label-filter").value = config.label_id ? String(config.label_id) : "";
   if (config.geo_bounds_geojson) {
     el("sg-restrict-area").checked = true;
     el("sg-area-geo-bounds").value = JSON.stringify(config.geo_bounds_geojson);

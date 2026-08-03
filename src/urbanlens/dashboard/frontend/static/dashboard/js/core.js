@@ -50,6 +50,12 @@
   function escHtml(value) {
     return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
+  function matchesLabelFilter(kind, name, activeKind, query) {
+    const kindOk = !activeKind || kind === activeKind;
+    const q = query.toLowerCase().trim();
+    const searchOk = !q || name.toLowerCase().includes(q);
+    return kindOk && searchOk;
+  }
   function isSimpleGroups(groups) {
     if (!groups)
       return true;
@@ -74,9 +80,22 @@
     let chipJustDragged = false;
     let availJustDragged = false;
     let formulaGroups = null;
+    let activeKind = "";
+    let listQuery = "";
     const availButtons = () => Array.from(els.list.querySelectorAll(".fp-label-avail"));
     const availById = (id) => els.list.querySelector(`[data-label-id="${id}"]`);
     const labelTextForId = (id) => availById(id)?.dataset.labelText || String(id);
+    function isAvailVisible(btn) {
+      const id = btn.dataset.labelId || "";
+      if (labelState.has(id))
+        return false;
+      return matchesLabelFilter(btn.dataset.labelKind, btn.dataset.labelName || "", activeKind, listQuery);
+    }
+    function refreshAvailVisibility() {
+      availButtons().forEach((btn) => {
+        btn.style.display = isAvailVisible(btn) ? "" : "none";
+      });
+    }
     function quoteLabelName(label) {
       return /[\s\/\-\+\(\)]/.test(label) ? `"${label}"` : label;
     }
@@ -191,6 +210,7 @@
       }
     }
     function rebuild() {
+      refreshAvailVisibility();
       const isComplex = formulaGroups !== null && !isSimpleGroups(formulaGroups);
       if (isComplex) {
         els.selected.style.display = "none";
@@ -281,7 +301,6 @@
         return;
       }
       labelState.set(id, mode);
-      btn.style.display = "none";
       rebuild();
       onChange();
     }
@@ -296,18 +315,12 @@
     function removeLabel(id) {
       formulaGroups = null;
       labelState.delete(id);
-      const btn = availById(id);
-      if (btn)
-        btn.style.display = "";
       rebuild();
       onChange();
     }
     function clear() {
       labelState.clear();
       formulaGroups = null;
-      availButtons().forEach((btn) => {
-        btn.style.display = "";
-      });
       inclMode = "and";
       rebuild();
       onChange();
@@ -345,6 +358,14 @@
     });
     els.modeBtn?.addEventListener("click", toggleInclMode);
     els.formulaDisplayClear?.addEventListener("click", clear);
+    els.kindTabs?.querySelectorAll(".tad-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        els.kindTabs?.querySelectorAll(".tad-tab").forEach((t) => t.classList.remove("tad-tab--active"));
+        tab.classList.add("tad-tab--active");
+        activeKind = tab.dataset.tab || "";
+        refreshAvailVisibility();
+      });
+    });
     els.list.addEventListener("click", (e) => {
       const btn = e.target.closest(".fp-label-avail");
       if (!btn)
@@ -617,6 +638,7 @@
       function onFormulaChange() {
         const text = bar.value;
         if (!text.trim() && (formulaGroups !== null || labelState.size > 0)) {
+          listQuery = "";
           clear();
           if (sugg)
             sugg.hidden = true;
@@ -627,10 +649,8 @@
         const cursor = bar.selectionStart ?? text.length;
         const tok = currentToken(text, cursor);
         showSuggestions(tok.text);
-        availButtons().forEach((btn) => {
-          const q = tok.text.toLowerCase();
-          btn.style.display = !q || (btn.dataset.labelName || "").includes(q) ? "" : "none";
-        });
+        listQuery = tok.text.toLowerCase();
+        refreshAvailVisibility();
         if (errs) {
           if (tok.text && isDeadEnd(tok.text)) {
             errs.textContent = `No label matches "${tok.text}"`;
@@ -729,9 +749,6 @@
     })();
     function applyGroups(groups) {
       formulaGroups = groups;
-      availButtons().forEach((b) => {
-        b.style.display = "";
-      });
       labelState.clear();
       inclMode = "and";
       groups.forEach((g) => {
@@ -743,11 +760,6 @@
             inclMode = "or";
         }
       });
-      labelState.forEach((_mode, id) => {
-        const btn = availById(id);
-        if (btn)
-          btn.style.display = "none";
-      });
       rebuild();
       onChange();
     }
@@ -758,11 +770,6 @@
           labelState.set(key, "incl");
       }
       formulaGroups = null;
-      labelState.forEach((_mode, id) => {
-        const btn = availById(id);
-        if (btn)
-          btn.style.display = "none";
-      });
       rebuild();
     }
     return {
@@ -774,11 +781,12 @@
     };
   }
   function createChipPicker(options) {
-    const { chipsEl, searchEl, suggEl } = options;
+    const { chipsEl, searchEl, suggEl, tabsEl } = options;
     const maxSuggestions = options.maxSuggestions ?? 12;
     const onChange = options.onChange || (() => {});
     let candidates = [];
     let selected = [];
+    let activeKind = "";
     function renderChips() {
       chipsEl.innerHTML = "";
       selected.forEach((item) => {
@@ -798,9 +806,8 @@
       });
     }
     function renderSuggestions(query) {
-      const q = (query || "").toLowerCase().trim();
       const selectedIds = new Set(selected.map((s) => s.id));
-      const matches = candidates.filter((c) => !selectedIds.has(c.id) && (!q || c.name.toLowerCase().includes(q))).slice(0, maxSuggestions);
+      const matches = candidates.filter((c) => !selectedIds.has(c.id) && matchesLabelFilter(c.kind, c.name, activeKind, query)).slice(0, maxSuggestions);
       if (!matches.length) {
         suggEl.hidden = true;
         suggEl.innerHTML = "";
@@ -830,6 +837,15 @@
     searchEl.addEventListener("blur", () => setTimeout(() => {
       suggEl.hidden = true;
     }, 150));
+    tabsEl?.querySelectorAll(".tad-tab").forEach((tab) => {
+      tab.addEventListener("click", () => {
+        tabsEl.querySelectorAll(".tad-tab").forEach((t) => t.classList.remove("tad-tab--active"));
+        tab.classList.add("tad-tab--active");
+        activeKind = tab.dataset.tab || "";
+        searchEl.focus();
+        renderSuggestions(searchEl.value);
+      });
+    });
     return {
       setCandidates(list) {
         candidates = list || [];
@@ -843,6 +859,8 @@
         renderChips();
         searchEl.value = "";
         suggEl.hidden = true;
+        activeKind = "";
+        tabsEl?.querySelectorAll(".tad-tab").forEach((t, i) => t.classList.toggle("tad-tab--active", i === 0));
       },
       getSelectedIds() {
         return selected.map((s) => s.id);
@@ -3182,8 +3200,10 @@
         const circle = L.circle([lat, lng], { radius: item.geometry.radius, ...shapeOptions(item) });
         layers.push(circle);
       }
-      layers.forEach((l) => l.addTo(markupLayer));
+      const targetGroup = config.layerGroupFor?.(item) ?? markupLayer;
+      layers.forEach((l) => l.addTo(targetGroup));
       item._layers = layers;
+      item._group = targetGroup;
       layers.forEach((l) => {
         const interactive = l;
         if (!interactive.on)
@@ -3196,11 +3216,19 @@
         }
       });
     }
+    function clearRenderedMarkup() {
+      const groups = new Set([markupLayer]);
+      markupItems.forEach((item) => {
+        if (item._group)
+          groups.add(item._group);
+      });
+      groups.forEach((g) => g.clearLayers());
+    }
     function loadMarkup() {
       if (!markupJsonUrl)
         return;
       fetch(markupJsonUrl).then((r) => r.json()).then((data) => {
-        markupLayer.clearLayers();
+        clearRenderedMarkup();
         markupItems = [];
         (data.markup_items || []).forEach((item) => {
           renderMarkupItem(item);
@@ -3281,6 +3309,9 @@
       document.getElementById("markup-panel-width-label-text").textContent = isText ? "Font Size" : "Width";
       document.getElementById("markup-panel-security-row").hidden = isText;
       rebuildEditSwatch("markup-panel-border-swatches", "markup-panel-border", true, isText ? markupPalette : borderOnlyPalette);
+      const layerRow = document.getElementById("markup-panel-layer-row");
+      if (layerRow)
+        layerRow.hidden = true;
       const widthEl = document.getElementById("markup-panel-width");
       widthEl.min = isText ? "10" : "1";
       widthEl.max = isText ? "48" : "8";
@@ -3362,7 +3393,7 @@
     }
     function reloadMarkupAndOpenEdit(newUuid) {
       return fetch(markupJsonUrl).then((r) => r.json()).then((markupData) => {
-        markupLayer.clearLayers();
+        clearRenderedMarkup();
         markupItems = [];
         (markupData.markup_items || []).forEach((item) => {
           renderMarkupItem(item);
@@ -3440,7 +3471,10 @@
       item.fill_opacity = Number.parseInt(document.getElementById("markup-panel-fill-opacity").value, 10);
       item.border_opacity = Number.parseInt(document.getElementById("markup-panel-border-opacity").value, 10);
       item.security_indicator = isText ? "" : document.getElementById("markup-panel-security").value;
-      item._layers?.forEach((l) => markupLayer.removeLayer(l));
+      const layerSelect = document.getElementById("markup-panel-layer");
+      if (layerSelect)
+        item.layer_uuid = layerSelect.value || null;
+      item._layers?.forEach((l) => (item._group ?? markupLayer).removeLayer(l));
       renderMarkupItem(item);
       scheduleMarkupAutoSave(item);
     }
@@ -3467,7 +3501,8 @@
           stroke_width: item.stroke_width,
           fill_opacity: item.fill_opacity,
           border_opacity: item.border_opacity,
-          security_indicator: item.security_indicator
+          security_indicator: item.security_indicator,
+          layer_uuid: item.layer_uuid
         })
       }).catch(() => toast.error("Failed to save annotation changes."));
     }
@@ -3501,6 +3536,12 @@
       rebuildEditSwatch("markup-panel-border-swatches", "markup-panel-border", true, isText ? markupPalette : borderOnlyPalette);
       document.getElementById("markup-panel-security-row").hidden = isText;
       document.getElementById("markup-panel-security").value = item.security_indicator || "";
+      const layerSelect = document.getElementById("markup-panel-layer");
+      const layerRow = document.getElementById("markup-panel-layer-row");
+      if (layerSelect && layerRow) {
+        layerRow.hidden = layerSelect.options.length <= 1;
+        layerSelect.value = item.layer_uuid || "";
+      }
       document.getElementById("markup-panel-hint").hidden = true;
       document.getElementById("markup-panel-draw-actions").hidden = true;
       document.getElementById("markup-panel-edit-actions").hidden = false;
@@ -3524,6 +3565,15 @@
         loadMarkup();
         toast.success("Annotation deleted.");
       }).catch(() => toast.error("Failed to delete annotation."));
+    }
+    function setItemLayer(uuid, layerUuid) {
+      const item = markupItems.find((i) => i.uuid === uuid);
+      if (!item)
+        return;
+      item._layers?.forEach((l) => (item._group ?? markupLayer).removeLayer(l));
+      item.layer_uuid = layerUuid;
+      renderMarkupItem(item);
+      scheduleMarkupAutoSave(item);
     }
     map.on("zoomend", () => {
       const sz = arrowheadSize2();
@@ -3553,6 +3603,8 @@
       closeOrFinishDraw,
       deleteMarkupEdit,
       openMarkupEditDialog,
+      liveApplyMarkupEdit,
+      setItemLayer,
       getMarkupItems: () => markupItems,
       getShapesForExport: () => markupItems.map(markupItemToShapeSpec).filter((s) => s !== null),
       isDrawBusy: () => drawSession.isBusy()

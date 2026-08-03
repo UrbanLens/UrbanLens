@@ -8,7 +8,7 @@
 {% if profile.user == request.user %}
 <div class="ul-page-subnav">
     <div class="ul-page-subnav__inner">
-        {% include "dashboard/partials/profile/_profile_tabs.html" with active="profile" %}
+        {% include "dashboard/partials/profile/_profile_tabs.html" with active="profile" profile_slug=profile.slug %}
     </div>
 </div>
 {% endif %}

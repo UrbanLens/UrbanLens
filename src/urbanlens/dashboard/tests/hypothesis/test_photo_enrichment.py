@@ -23,9 +23,9 @@ from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.photos import photo_enrichment
 from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 from urbanlens.dashboard.services.apis.locations.places_resolution import PhotoNotFoundError
+from urbanlens.dashboard.services.photos import photo_enrichment
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 _MEDIA_ROOT = tempfile.mkdtemp(prefix="urbanlens-test-media-")
@@ -182,7 +182,7 @@ class StreetViewEnrichmentSourceTests(TestCase):
 
     def test_enrich_saves_an_image_when_coverage_exists(self) -> None:
         location = _make_location()
-        with mock.patch(f"{_GATEWAY_MODULE}.get_street_view_single", return_value=(_jpeg_bytes(), "2024-01")):
+        with mock.patch(f"{_GATEWAY_MODULE}.get_street_view_single", return_value=(_jpeg_bytes(), "2024-01", 1.0, 2.0)):
             result = self.source.enrich(location)
 
         self.assertTrue(result)

@@ -17,7 +17,7 @@
             Hardware &amp; infrastructure ${{ breakdown.hardware|floatformat:2 }}/mo (amortized) &middot;
             Operating costs ${{ breakdown.operating|floatformat:2 }}/mo &middot;
             External APIs ${{ breakdown.api|floatformat:2 }}/mo (last 30 days)
-            {% if cost_per_user is not None %} &middot; split across {{ active_user_count }} active user{{ active_user_count|pluralize }}{% endif %}.
+            {% if cost_per_user is not None %} &middot; split across {{ active_user_count }} active user{{ active_user_count|pluralize }} (logged in within 30 days, 2+ pins){% endif %}.
         </p>
         <div class="stats-chart-wrap" style="height:20rem">
             <canvas id="chart-public-cost-monthly"></canvas>

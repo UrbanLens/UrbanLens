@@ -809,6 +809,33 @@ function init(): void {
     };
     window._satShow = _satShow;
 
+    // The interactive embed (see street_view.html's .sv-embed) is a cross-origin
+    // iframe: Google renders its own "no imagery here" state (a blank/black scene)
+    // inside it, which our JS has no way to read to detect the failure directly.
+    // As a heuristic, give it this long to have shown *something* before assuming
+    // it's stuck on a blank scene and swapping to the static image we already know
+    // is real (it's how this slide's data was fetched in the first place) - a real
+    // pano loads its first tiles well within this window.
+    const SV_EMBED_FALLBACK_MS = 6000;
+
+    function _svSwapToStatic(slide: HTMLElement): void {
+        const iframe = slide.querySelector<HTMLIFrameElement>(".sv-embed");
+        const staticImg = slide.querySelector<HTMLImageElement>(".sv-img--fallback");
+        const btn = slide.querySelector<HTMLButtonElement>(".sv-embed-fallback-btn");
+        if (iframe) iframe.hidden = true;
+        if (staticImg) staticImg.hidden = false;
+        if (btn) btn.hidden = true;
+    }
+
+    function _svScheduleEmbedFallback(slide: HTMLElement): void {
+        const iframe = slide.querySelector<HTMLIFrameElement>(".sv-embed");
+        if (!iframe || iframe.hidden || iframe.dataset.svFallbackScheduled) return;
+        iframe.dataset.svFallbackScheduled = "1";
+        window.setTimeout(() => {
+            if (!iframe.hidden) _svSwapToStatic(slide);
+        }, SV_EMBED_FALLBACK_MS);
+    }
+
     let _svIdx = 0;
     function _svSlides(): HTMLElement[] {
         const c = document.getElementById("sv-carousel");
@@ -828,6 +855,7 @@ function init(): void {
         if (date) date.textContent = active.dataset.date || "";
         if (heading) heading.textContent = active.dataset.heading !== undefined ? `⇨ ${active.dataset.heading}°` : "";
         _svRebuildDots(slides.length);
+        _svScheduleEmbedFallback(active);
     }
     function _svRebuildDots(count: number): void {
         // Prev/next only make sense with more than one slide - the server
@@ -853,11 +881,7 @@ function init(): void {
     window._svShowStaticFallback = function (btn: HTMLButtonElement): void {
         const slide = btn.closest<HTMLElement>(".sv-slide");
         if (!slide) return;
-        const iframe = slide.querySelector<HTMLIFrameElement>(".sv-embed");
-        const staticImg = slide.querySelector<HTMLImageElement>(".sv-img--fallback");
-        if (iframe) iframe.hidden = true;
-        if (staticImg) staticImg.hidden = false;
-        btn.hidden = true;
+        _svSwapToStatic(slide);
     };
     window._svRemoveSlide = function (img: HTMLImageElement): void {
         const slide = img.closest<HTMLElement>(".sv-slide");

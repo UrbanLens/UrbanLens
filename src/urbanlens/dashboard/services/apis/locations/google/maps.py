@@ -416,6 +416,16 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
     ):
         """
         Get the closest Street View image to the given latitude and longitude.
+
+        Returns:
+            Tuple of ``(image_bytes, capture_date, pano_latitude, pano_longitude)`` -
+            the pano's own coordinates are returned alongside the image (rather than
+            just echoing back the input) since a widened search radius can resolve to
+            a pano some distance from the requested point.
+
+        Raises:
+            ValueError: No Street View imagery was found within ``max_radius``, or
+                the API returned a non-recoverable status.
         """
         street_view_url = "https://maps.googleapis.com/maps/api/streetview/metadata"
         logger.debug("Getting street view for %s, %s", redact_coordinate(latitude), redact_coordinate(longitude))
@@ -464,7 +474,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 if len(image_response.content) < 2000:
                     radius += radius_increment
                     continue
-                return image_response.content, metadata.get("date")
+                return image_response.content, metadata.get("date"), metadata["location"]["lat"], metadata["location"]["lng"]
 
             if status not in {"ZERO_RESULTS", "NOT_FOUND"}:
                 # Anything other than "genuinely no pano here yet" (e.g.
@@ -480,19 +490,21 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
 
         raise ValueError("No Street View imagery found within the maximum search radius.")
 
-    def _street_view_slide(self, image_bytes: bytes, capture_date: str) -> StreetViewSlide:
-        """Return a StreetViewSlide from the given image bytes and capture date."""
+    def _street_view_slide(self, image_bytes: bytes, capture_date: str, pano_latitude: float, pano_longitude: float) -> StreetViewSlide:
+        """Return a StreetViewSlide from the given image bytes, capture date, and the pano's actual coordinates."""
         image_b64 = base64.b64encode(image_bytes).decode("ascii")
         return StreetViewSlide(
             img_src=f"data:image/jpeg;base64,{image_b64}",
             source="Google Street View",
             date=capture_date or "Unknown",
+            latitude=pano_latitude,
+            longitude=pano_longitude,
         )
 
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
         """Yield Street View slides for the given latitude and longitude."""
-        image_bytes, capture_date = self.get_street_view_single(latitude, longitude, radius=int(radius))
-        yield self._street_view_slide(image_bytes, capture_date)
+        image_bytes, capture_date, pano_latitude, pano_longitude = self.get_street_view_single(latitude, longitude, radius=int(radius))
+        yield self._street_view_slide(image_bytes, capture_date, pano_latitude, pano_longitude)
 
     def calculate_heading(self, lat1, lng1, lat2, lng2):
         """

@@ -42,6 +42,13 @@ function readConfig(el) {
     showOnboardingTips: d.showOnboardingTips === "1"
   };
 }
+function readCustomLayers() {
+  try {
+    return JSON.parse(document.getElementById("custom-layers-data")?.textContent || "[]");
+  } catch {
+    return [];
+  }
+}
 function init() {
   const mapEl = document.getElementById("map");
   const configEl = document.getElementById("map-annotations-config");
@@ -309,6 +316,19 @@ function init() {
       map.removeLayer(nearbyLayer);
     }
   }
+  const customLayers = readCustomLayers();
+  const customLayerGroups = new Map;
+  const customLayerToggles = {};
+  customLayers.forEach((layer) => {
+    const group = L.layerGroup();
+    if (layer.default_visible)
+      group.addTo(map);
+    customLayerGroups.set(layer.uuid, group);
+    customLayerToggles[`layer-${layer.uuid}`] = {
+      isActive: () => map.hasLayer(group),
+      toggle: () => map.hasLayer(group) ? map.removeLayer(group) : group.addTo(map)
+    };
+  });
   createMapLayers(map, {
     root: document.getElementById("detail-map-layers"),
     apiKey: cfg.openweathermapApiKey || null,
@@ -330,7 +350,8 @@ function init() {
       nearby: {
         isActive: () => nearbyActive,
         toggle: () => setNearbyActive(!nearbyActive)
-      }
+      },
+      ...customLayerToggles
     }
   });
   const dpEditBase = cfg.detailPinEditUrlTemplate.replace("00000000-0000-0000-0000-000000000000/", "");
@@ -394,7 +415,7 @@ function init() {
     const countLabel = document.getElementById("detail-pin-count-label");
     const total = detailPins.length + toolbar.getMarkupItems().length + photoPanelItems.length;
     if (countLabel)
-      countLabel.textContent = `${total} Layer${total === 1 ? "" : "s"}`;
+      countLabel.textContent = `${total} Item${total === 1 ? "" : "s"}`;
     if (handle)
       handle.style.display = total ? "" : "none";
     refreshDetailPinSelectButton();
@@ -448,17 +469,26 @@ function init() {
       li.dataset.kind = "markup";
       const displayName = item.label || item.markup_type.charAt(0).toUpperCase() + item.markup_type.slice(1);
       const ownerMeta = item.owner_name ? `<span class="detail-pin-list-item-meta">in ${escHtml(item.owner_name)}</span>` : "";
+      const layerPicker = !item.owner_name && customLayers.length ? `<select class="detail-pin-list-item-layer" title="Layer" aria-label="Layer">
+                        <option value=""${item.layer_uuid ? "" : " selected"}>No layer</option>
+                        ${customLayers.map((layer) => `<option value="${escHtml(layer.uuid)}"${item.layer_uuid === layer.uuid ? " selected" : ""}>${escHtml(layer.name)}</option>`).join("")}
+                       </select>` : "";
       li.innerHTML = `
                 <span class="material-icons detail-pin-list-item-icon" style="color:${escHtml(item.color)}">${escHtml(markupIcon[item.markup_type] || "edit")}</span>
                 <span class="detail-pin-list-item-name">${escHtml(displayName)}</span>
                 ${ownerMeta}
+                ${layerPicker}
                 ${item.owner_name ? "" : `<button type="button" class="detail-pin-list-item-delete" title="Delete"><i class="material-symbols-outlined">close</i></button>`}`;
       li.addEventListener("click", (e) => {
-        if (e.target.closest(".detail-pin-list-item-delete"))
+        if (e.target.closest(".detail-pin-list-item-delete, .detail-pin-list-item-layer"))
           return;
         if (item.owner_name)
           return;
         toolbar.openMarkupEditDialog(item);
+      });
+      li.querySelector(".detail-pin-list-item-layer")?.addEventListener("click", (e) => e.stopPropagation());
+      li.querySelector(".detail-pin-list-item-layer")?.addEventListener("change", (e) => {
+        toolbar.setItemLayer(item.uuid, e.target.value || null);
       });
       li.querySelector(".detail-pin-list-item-delete")?.addEventListener("click", async (e) => {
         e.stopPropagation();
@@ -584,6 +614,28 @@ function init() {
     _satShow(idx >= 0 ? idx : 0);
   };
   window._satShow = _satShow;
+  const SV_EMBED_FALLBACK_MS = 6000;
+  function _svSwapToStatic(slide) {
+    const iframe = slide.querySelector(".sv-embed");
+    const staticImg = slide.querySelector(".sv-img--fallback");
+    const btn = slide.querySelector(".sv-embed-fallback-btn");
+    if (iframe)
+      iframe.hidden = true;
+    if (staticImg)
+      staticImg.hidden = false;
+    if (btn)
+      btn.hidden = true;
+  }
+  function _svScheduleEmbedFallback(slide) {
+    const iframe = slide.querySelector(".sv-embed");
+    if (!iframe || iframe.hidden || iframe.dataset.svFallbackScheduled)
+      return;
+    iframe.dataset.svFallbackScheduled = "1";
+    window.setTimeout(() => {
+      if (!iframe.hidden)
+        _svSwapToStatic(slide);
+    }, SV_EMBED_FALLBACK_MS);
+  }
   let _svIdx = 0;
   function _svSlides() {
     const c = document.getElementById("sv-carousel");
@@ -608,6 +660,7 @@ function init() {
     if (heading)
       heading.textContent = active.dataset.heading !== undefined ? `⇨ ${active.dataset.heading}°` : "";
     _svRebuildDots(slides.length);
+    _svScheduleEmbedFallback(active);
   }
   function _svRebuildDots(count) {
     const prev = document.querySelector("#sv-carousel .sv-prev");
@@ -633,13 +686,7 @@ function init() {
     const slide = btn.closest(".sv-slide");
     if (!slide)
       return;
-    const iframe = slide.querySelector(".sv-embed");
-    const staticImg = slide.querySelector(".sv-img--fallback");
-    if (iframe)
-      iframe.hidden = true;
-    if (staticImg)
-      staticImg.hidden = false;
-    btn.hidden = true;
+    _svSwapToStatic(slide);
   };
   window._svRemoveSlide = function(img) {
     const slide = img.closest(".sv-slide");
@@ -1115,12 +1162,14 @@ function init() {
     lineFinishTipDismissed: () => !cfg.showOnboardingTips,
     onBuildDetailList: () => buildDetailList(),
     onClearDetailPinHighlight: () => clearDetailPinHighlight(),
-    onCloseDetailPinPanel: () => closeDetailPinPanel()
+    onCloseDetailPinPanel: () => closeDetailPinPanel(),
+    layerGroupFor: (item) => item.layer_uuid && customLayerGroups.get(item.layer_uuid) || markupLayer
   });
   window.startMarkupDraw = toolbar.startMarkupDraw;
   window.startShapeDraw = toolbar.startShapeDraw;
   window.startTextPlacement = toolbar.startTextPlacement;
   window.closeMarkupPanel = toolbar.closeMarkupPanel;
+  window._liveApplyMarkupEdit = toolbar.liveApplyMarkupEdit;
   window._closeMarkupDraw = toolbar.closeOrFinishDraw;
   window.deleteMarkupEdit = toolbar.deleteMarkupEdit;
   window.openMarkupEditDialog = toolbar.openMarkupEditDialog;

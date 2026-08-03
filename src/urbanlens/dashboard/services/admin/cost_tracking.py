@@ -13,7 +13,7 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import User
-from django.db.models import Q, Sum
+from django.db.models import Count, Q, Sum
 from django.db.models.functions import TruncMonth
 from django.utils import timezone
 
@@ -24,6 +24,8 @@ if TYPE_CHECKING:
 
 _ZERO = Decimal(0)
 _API_COST_WINDOW_DAYS = 30
+_ACTIVE_USER_WINDOW_DAYS = 30
+_ACTIVE_USER_MIN_ROOT_PINS = 2
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,9 +141,28 @@ def average_monthly_expense(as_of: datetime.datetime | None = None) -> Decimal |
     return total_recorded_expenses(as_of) / months
 
 
-def active_user_count() -> int:
-    """Return the number of active user accounts, for cost-per-user calculations."""
-    return User.objects.filter(is_active=True).count()
+def active_user_count(as_of: datetime.datetime | None = None) -> int:
+    """Return the number of "active" users, for cost-per-user calculations.
+
+    An active user is one who logged in within the trailing 30 days *and* has placed
+    at least 2 (root) pins - a one-time signup who created an account and never
+    returned would otherwise dilute the per-user figure and understate the real cost
+    of an engaged user.
+
+    Args:
+        as_of: Point in time to evaluate the 30-day login window against; defaults to now.
+
+    Returns:
+        The number of active users.
+    """
+    as_of = as_of or timezone.now()
+    window_start = as_of - timedelta(days=_ACTIVE_USER_WINDOW_DAYS)
+    return (
+        User.objects.filter(is_active=True, last_login__gte=window_start)
+        .annotate(root_pin_count=Count("profile__pins", filter=Q(profile__pins__parent_pin__isnull=True), distinct=True))
+        .filter(root_pin_count__gte=_ACTIVE_USER_MIN_ROOT_PINS)
+        .count()
+    )
 
 
 def cost_per_user(as_of: datetime.datetime | None = None) -> Decimal | None:
@@ -153,7 +174,7 @@ def cost_per_user(as_of: datetime.datetime | None = None) -> Decimal | None:
     Returns:
         The per-user monthly cost, or None when there are no active users.
     """
-    users = active_user_count()
+    users = active_user_count(as_of)
     if not users:
         return None
     return effective_monthly_cost(as_of).total / users

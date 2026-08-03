@@ -78,7 +78,8 @@ class ProfileAchievementsView(LoginRequiredMixin, View):
                 "earned": earned[:PROFILE_GRID_LIMIT],
                 "earned_total": len(earned),
                 "remaining": max(0, len(earned) - PROFILE_GRID_LIMIT),
-                "streaks": [row for row in streak_summary(profile) if row["longest"]],
+                # A 1-day streak is just "you did something today" - not worth surfacing.
+                "streaks": [row for row in streak_summary(profile) if max(row["current"], row["longest"]) >= 2],
             },
         )
 

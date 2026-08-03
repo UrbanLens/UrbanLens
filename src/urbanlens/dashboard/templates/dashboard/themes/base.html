@@ -1806,6 +1806,17 @@
             catch (_) { return false; }
         }
 
+        // Sections the user has explicitly restored via the tools FAB this page
+        // load, even though they're still empty server-side. Unhiding always
+        // re-fires the section's hx-get (see 'ul:unhide' in hx-trigger below),
+        // and the freshly-swapped-in markup comes back with the same
+        // data-collapse-if-empty="true" - without this, the htmx:afterSettle
+        // -> _scanAll -> _applyState chain would immediately re-collapse it,
+        // flashing it visible for a moment. In-memory only (not localStorage),
+        // so it naturally resets on the next page load rather than staying
+        // stuck open forever.
+        var _forcedOpen = new Set();
+
         // Exposed so hx-trigger conditions on lazy-loaded sections can skip
         // firing their request entirely when the section is already hidden
         // (see the hx-trigger="load[...]" attributes on pin/wiki pages).
@@ -1831,7 +1842,10 @@
             // normally on top of it: expanding un-collapses for this view (see
             // the click handler below), and if the section is still empty next
             // visit, it re-collapses on its own rather than staying stuck open.
-            var collapsed = _isCollapsed(scope, section) || container.dataset.collapseIfEmpty === 'true';
+            // _forcedOpen overrides it for the current page load only (see
+            // definition above) so an explicit restore-from-FAB sticks.
+            var emptyByDefault = container.dataset.collapseIfEmpty === 'true' && !_forcedOpen.has(_key(scope, section));
+            var collapsed = _isCollapsed(scope, section) || emptyByDefault;
             container.classList.toggle('is-collapsed', collapsed);
             var btn = container.querySelector('.section-collapse-btn');
             if (btn) btn.setAttribute('aria-expanded', String(!collapsed));
@@ -1954,6 +1968,7 @@
                     var toggleBtn = section.querySelector('.section-collapse-btn');
                     if (toggleBtn) toggleBtn.setAttribute('aria-expanded', 'true');
                     _setCollapsed(scope, section.dataset.collapseSection, false);
+                    _forcedOpen.add(_key(scope, section.dataset.collapseSection));
                     // Section was hidden before its hx-get ever fired (see the
                     // hx-trigger="load[...]" skip condition) - its content was
                     // never loaded, so kick off that request now.

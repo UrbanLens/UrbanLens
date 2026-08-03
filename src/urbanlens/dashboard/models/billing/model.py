@@ -9,6 +9,7 @@ from django.contrib.auth.models import User
 from django.db.models import CASCADE, BooleanField, CharField, DateTimeField, ForeignKey, IntegerField, JSONField, OneToOneField, Q, TextChoices, UniqueConstraint
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.billing.meta import BillingSubscriptionStatus
 from urbanlens.dashboard.models.billing.queryset import BillingCustomerManager, RoleSubscriptionManager, StripeWebhookEventManager
 
 
@@ -25,19 +26,6 @@ class BillingCustomer(abstract.DashboardModel):
 
     def __str__(self) -> str:
         return f"{self.user} ({self.stripe_customer_id})"
-
-
-class BillingSubscriptionStatus(TextChoices):
-    """Mirrors Stripe's own ``Subscription.status`` values."""
-
-    INCOMPLETE = "incomplete", "Incomplete"
-    INCOMPLETE_EXPIRED = "incomplete_expired", "Incomplete (expired)"
-    ACTIVE = "active", "Active"
-    PAST_DUE = "past_due", "Past due"
-    CANCELED = "canceled", "Canceled"
-    UNPAID = "unpaid", "Unpaid"
-    TRIALING = "trialing", "Trialing"
-    PAUSED = "paused", "Paused"
 
 
 class RoleSubscription(abstract.DashboardModel):
