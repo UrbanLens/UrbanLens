@@ -348,6 +348,52 @@
     }
 }
 
+// Interaction Preferences section (profile/index.html) - a consent statement
+// list, so it reads as a label/value pair rather than the icon-led rows above.
+.profile-preferences-intro {
+    font-size: .85rem;
+    color: $text-muted;
+    margin: .25rem 0 1rem;
+}
+
+.profile-preferences-list {
+    display: flex;
+    flex-direction: column;
+    gap: .6rem;
+    margin: 0;
+}
+
+.profile-preference-item {
+    display: flex;
+    flex-wrap: wrap;
+    gap: .3rem .5rem;
+    font-size: .875rem;
+
+    dt {
+        color: $text-muted;
+        min-width: 11rem;
+    }
+
+    dd {
+        margin: 0;
+        color: $color-grey-0;
+        font-weight: 500;
+    }
+}
+
+.profile-preferences-notes {
+    font-size: .875rem;
+    color: $color-grey-0;
+    white-space: pre-wrap;
+    margin: 1rem 0 0;
+}
+
+.profile-preferences-edit-link {
+    display: inline-block;
+    margin-top: 1rem;
+    font-size: .82rem;
+}
+
 // Click-to-edit-in-place contact fields + birthday, inside .contact-info-item
 .profile-phone-editable,
 .profile-whatsapp-editable,
@@ -1131,6 +1177,10 @@
     input[type="text"] {
         width: calc(100% - 1rem);
     }
+}
+
+.edit-preference-other {
+    margin-top: .5rem;
 }
 
 .edit-label {

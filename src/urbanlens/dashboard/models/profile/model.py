@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 import math
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, ClassVar
 
 from django.contrib.auth.models import User
 from django.core.validators import MaxLengthValidator
@@ -27,9 +27,23 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
-from urbanlens.dashboard.models.profile.meta import DistanceUnit, GuidanceLevel, MapCenterMode, MapViewChoice, SyncAliasesDirection, ThemeChoice, VisibilityChoice
+from urbanlens.dashboard.models.profile.meta import (
+    DistanceUnit,
+    ExploringWithOthersPreference,
+    FriendRequestPreference,
+    GuidanceLevel,
+    MapCenterMode,
+    MapViewChoice,
+    MeetupPreference,
+    PhotoSharingPreference,
+    PhotoTaggingPreference,
+    PhotoTakingPreference,
+    SyncAliasesDirection,
+    ThemeChoice,
+    VisibilityChoice,
+)
 from urbanlens.dashboard.models.profile.queryset import ProfileManager
-from urbanlens.dashboard.services.core.text_limits import MAX_PROFILE_BIO_LENGTH
+from urbanlens.dashboard.services.core.text_limits import MAX_ADDITIONAL_PREFERENCES_LENGTH, MAX_PREFERENCE_OTHER_LENGTH, MAX_PROFILE_BIO_LENGTH
 
 if TYPE_CHECKING:
     from django.db.models import Manager as DjangoManager
@@ -132,6 +146,78 @@ class Profile(abstract.PublicDashboardModel):
     area = CharField(max_length=255, null=True, blank=True)
     birth_date = DateField(null=True, blank=True)
     started_exploring = DateField(null=True, blank=True)
+
+    # Interaction preferences. Public presentation, like bio/area above - shown
+    # on the profile page so other users know how this person prefers to be
+    # treated, on or off this site. Purely informational for now: nothing here
+    # is technically enforced (see PREFERENCE_FIELDS/preference_display below
+    # for the display-only surface this backs). Left blank rather than
+    # defaulted, so an unanswered preference is distinguishable from an
+    # explicit "yes" and the profile page can omit it entirely.
+    photo_taking_preference = CharField(
+        max_length=20,
+        choices=PhotoTakingPreference.choices,
+        blank=True,
+        default="",
+        help_text="Whether you're OK with people taking your photo, on or off this site.",
+    )
+    photo_taking_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
+
+    photo_sharing_preference = CharField(
+        max_length=20,
+        choices=PhotoSharingPreference.choices,
+        blank=True,
+        default="",
+        help_text="Whether you're OK with people sharing or posting your photo, on or off this site.",
+    )
+    photo_sharing_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
+
+    photo_tagging_preference = CharField(
+        max_length=20,
+        choices=PhotoTaggingPreference.choices,
+        blank=True,
+        default="",
+        help_text="Whether you're OK with being tagged or identified in photos, on or off this site.",
+    )
+    photo_tagging_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
+
+    # Distinct from friend_request_visibility (below): that setting is a
+    # technical gate on who *can* send a request, this is a social statement
+    # of when this profile *welcomes* one.
+    friend_request_preference = CharField(
+        max_length=20,
+        choices=FriendRequestPreference.choices,
+        blank=True,
+        default="",
+        help_text="When you're open to receiving friend requests.",
+    )
+    friend_request_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
+
+    meetup_preference = CharField(
+        max_length=20,
+        choices=MeetupPreference.choices,
+        blank=True,
+        default="",
+        help_text="Whether you're interested in meetups with other users.",
+    )
+    meetup_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
+
+    exploring_with_others_preference = CharField(
+        max_length=20,
+        choices=ExploringWithOthersPreference.choices,
+        blank=True,
+        default="",
+        help_text="Whether you prefer to explore locations solo or with others.",
+    )
+    exploring_with_others_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
+
+    additional_preferences = TextField(
+        blank=True,
+        default="",
+        max_length=MAX_ADDITIONAL_PREFERENCES_LENGTH,
+        validators=[MaxLengthValidator(MAX_ADDITIONAL_PREFERENCES_LENGTH)],
+        help_text="Anything else you'd like other users to know about interacting with you.",
+    )
 
     # Privacy settings
     profile_visibility = CharField(
@@ -591,6 +677,51 @@ class Profile(abstract.PublicDashboardModel):
     @property
     def full_name(self):
         return self.user.get_full_name()
+
+    # Registry pairing each interaction-preference field with its public label,
+    # so both the profile template and preference_display/interaction_preferences
+    # below can iterate them without a hard-coded per-field template block.
+    # Extend this tuple alongside a new pair of model fields to add another
+    # preference category - nothing else needs to change to surface it.
+    PREFERENCE_FIELDS: ClassVar[tuple[tuple[str, str], ...]] = (
+        ("photo_taking_preference", "Taking Photos of Me"),
+        ("photo_sharing_preference", "Sharing Photos of Me"),
+        ("photo_tagging_preference", "Tagging Me in Photos"),
+        ("friend_request_preference", "Friend Requests"),
+        ("meetup_preference", "Meetups"),
+        ("exploring_with_others_preference", "Exploring with Others"),
+    )
+
+    def preference_display(self, field: str) -> str:
+        """Return the human-readable value of one interaction-preference field.
+
+        Falls back to the paired ``<field>_other`` free-text note when the
+        stored choice is "other" and that note is non-blank; otherwise returns
+        the choice's display label, or "" when the preference is unset.
+
+        Args:
+            field: One of the field names in ``PREFERENCE_FIELDS``.
+
+        Returns:
+            The text to show for this preference, or "" if unanswered.
+        """
+        value = getattr(self, field)
+        if not value:
+            return ""
+        if value == "other":
+            other_text = getattr(self, f"{field}_other", "")
+            if other_text:
+                return other_text
+        return getattr(self, f"get_{field}_display")()
+
+    @property
+    def interaction_preferences(self) -> list[dict[str, str]]:
+        """This profile's answered interaction preferences, for display.
+
+        Omits any preference left unset entirely, rather than showing a
+        blank - see ``PREFERENCE_FIELDS`` for the field/label pairs.
+        """
+        return [{"field": field, "label": label, "value": self.preference_display(field)} for field, label in self.PREFERENCE_FIELDS if self.preference_display(field)]
 
     def _slugify_base(self) -> str:
         return self.user.username or "user"

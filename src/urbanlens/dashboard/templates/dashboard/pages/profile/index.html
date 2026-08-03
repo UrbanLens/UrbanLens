@@ -235,6 +235,38 @@
     {% endwith %}
     {% endif %}
 
+    {# -- Interaction preferences ---------------------------------------------- #}
+    {# Consent-based preferences the profile owner has stated for how they'd  #}
+    {# like others to interact with them, on or off this site. Shown to any   #}
+    {# viewer who can see the profile at all - purely informational, not      #}
+    {# gated by a separate visibility setting - and edited on the Edit        #}
+    {# Profile page, not inline here. #}
+    {% if profile.interaction_preferences or profile.additional_preferences %}
+    <div class="profile-section ul-section">
+        <h3 class="profile-section-title">Interaction Preferences</h3>
+        <p class="profile-preferences-intro">
+            {{ profile.first_name|default:profile.username }}'s preferences for being photographed, tagged, and
+            contacted - on this site and off it. These are informational only and aren't enforced by the site.
+        </p>
+        {% if profile.interaction_preferences %}
+        <dl class="profile-preferences-list">
+            {% for item in profile.interaction_preferences %}
+            <div class="profile-preference-item">
+                <dt>{{ item.label }}</dt>
+                <dd>{{ item.value }}</dd>
+            </div>
+            {% endfor %}
+        </dl>
+        {% endif %}
+        {% if profile.additional_preferences %}
+        <p class="profile-preferences-notes">{{ profile.additional_preferences }}</p>
+        {% endif %}
+        {% if profile.user == request.user %}
+        <a href="{% url 'profile.edit' %}" class="profile-preferences-edit-link">Edit your preferences</a>
+        {% endif %}
+    </div>
+    {% endif %}
+
     {# -- Additional account details (own profile only) - birth date, secondary #}
     {# emails, and other stored data that has nowhere else to be shown. Hidden #}
     {# entirely if there's neither a birthday nor a secondary email to show;   #}

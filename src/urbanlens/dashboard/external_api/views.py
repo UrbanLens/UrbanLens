@@ -3839,6 +3839,9 @@ class ProfileDetailView(ExternalApiView):
             "friendship_status": friendship.status if friendship else None,
             "contact": None,
             "visibility": None,
+            **{field: getattr(target, field) for field, _label in Profile.PREFERENCE_FIELDS},
+            **{f"{field}_other": getattr(target, f"{field}_other") for field, _label in Profile.PREFERENCE_FIELDS},
+            "additional_preferences": target.additional_preferences,
         }
 
         if target.can_view_contact_info(viewer):

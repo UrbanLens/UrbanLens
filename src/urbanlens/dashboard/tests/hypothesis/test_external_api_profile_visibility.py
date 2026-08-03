@@ -25,6 +25,29 @@ from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 #: through ``Profile.visibility_permits``. Everything else must 404.
 _STRANGER_PERMITTED = {VisibilityChoice.ANYONE}
 
+#: The full public-presentation surface ``ProfileUpdateSerializer`` accepts -
+#: bio/area/started_exploring plus the interaction-preference fields, which
+#: are shown on the profile page the same way. Shared by the two tests below
+#: that pin this exact set, so it only needs updating in one place.
+_PROFILE_PRESENTATION_FIELDS = {
+    "bio",
+    "area",
+    "started_exploring",
+    "photo_taking_preference",
+    "photo_taking_preference_other",
+    "photo_sharing_preference",
+    "photo_sharing_preference_other",
+    "photo_tagging_preference",
+    "photo_tagging_preference_other",
+    "friend_request_preference",
+    "friend_request_preference_other",
+    "meetup_preference",
+    "meetup_preference_other",
+    "exploring_with_others_preference",
+    "exploring_with_others_preference_other",
+    "additional_preferences",
+}
+
 
 def _bearer(raw_key: str) -> dict:
     """Build the Authorization header kwargs for the test client.
@@ -246,7 +269,7 @@ class ProfileDetailVisibilityTests(TestCase):
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.profile_visibility, VisibilityChoice.NO_ONE)
         self.assertTrue(self.profile.community_enabled)
-        self.assertEqual(set(ProfileUpdateSerializer().fields), {"bio", "area", "started_exploring"})
+        self.assertEqual(set(ProfileUpdateSerializer().fields), _PROFILE_PRESENTATION_FIELDS)
 
     def test_avatar_is_not_writable(self) -> None:
         """Avatar upload is deliberately out of scope for this surface."""
@@ -272,11 +295,11 @@ class ProfileSettingsOverlapTests(SimpleTestCase):
         overlap = set(ProfileUpdateSerializer().fields) & set(SettingsPatchSerializer().fields)
         self.assertEqual(overlap, set())
 
-    def test_the_profile_surface_is_exactly_the_three_presentation_fields(self) -> None:
-        """Pins the narrowed set, so a fourth field cannot creep back unnoticed."""
+    def test_the_profile_surface_is_exactly_the_presentation_fields(self) -> None:
+        """Pins the narrowed set, so an unreviewed field cannot creep back unnoticed."""
         from urbanlens.dashboard.external_api.serializers import ProfileUpdateSerializer
 
-        self.assertEqual(set(ProfileUpdateSerializer().fields), {"bio", "area", "started_exploring"})
+        self.assertEqual(set(ProfileUpdateSerializer().fields), _PROFILE_PRESENTATION_FIELDS)
 
     def test_every_gated_visibility_field_is_writable_only_through_settings(self) -> None:
         """The privacy fields the narrowing moved must still have a home."""

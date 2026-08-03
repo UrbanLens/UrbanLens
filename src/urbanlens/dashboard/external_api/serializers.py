@@ -40,9 +40,15 @@ from urbanlens.dashboard.models.pin_list.model import PinListItem
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS
 from urbanlens.dashboard.models.profile.meta import (
     DistanceUnit,
+    ExploringWithOthersPreference,
+    FriendRequestPreference,
     GuidanceLevel,
     MapCenterMode,
     MapViewChoice,
+    MeetupPreference,
+    PhotoSharingPreference,
+    PhotoTaggingPreference,
+    PhotoTakingPreference,
     SyncAliasesDirection,
     ThemeChoice,
     VisibilityChoice,
@@ -58,11 +64,13 @@ from urbanlens.dashboard.models.safety.model import (
 )
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.core.text_limits import (
+    MAX_ADDITIONAL_PREFERENCES_LENGTH,
     MAX_COMMENT_TEXT_LENGTH,
     MAX_FRIEND_REQUEST_MESSAGE_LENGTH,
     MAX_PIN_DESCRIPTION_LENGTH,
     MAX_PIN_LIST_DESCRIPTION_LENGTH,
     MAX_PIN_NOTE_LENGTH,
+    MAX_PREFERENCE_OTHER_LENGTH,
     MAX_PROFILE_BIO_LENGTH,
     MAX_TRIP_ACTIVITY_NOTES_LENGTH,
     MAX_TRIP_DESCRIPTION_LENGTH,
@@ -1955,6 +1963,22 @@ class ProfileDetailSerializer(serializers.Serializer):
     bio = serializers.CharField(read_only=True, allow_null=True)
     area = serializers.CharField(read_only=True, allow_null=True)
     started_exploring = serializers.DateField(read_only=True, allow_null=True)
+    #: Consent-style interaction preferences - see ``ProfileUpdateSerializer``
+    #: for why these are writable through this same public-presentation surface.
+    #: Blank means the profile hasn't answered that one.
+    photo_taking_preference = serializers.ChoiceField(choices=PhotoTakingPreference.choices, read_only=True, allow_blank=True)
+    photo_taking_preference_other = serializers.CharField(read_only=True, allow_blank=True)
+    photo_sharing_preference = serializers.ChoiceField(choices=PhotoSharingPreference.choices, read_only=True, allow_blank=True)
+    photo_sharing_preference_other = serializers.CharField(read_only=True, allow_blank=True)
+    photo_tagging_preference = serializers.ChoiceField(choices=PhotoTaggingPreference.choices, read_only=True, allow_blank=True)
+    photo_tagging_preference_other = serializers.CharField(read_only=True, allow_blank=True)
+    friend_request_preference = serializers.ChoiceField(choices=FriendRequestPreference.choices, read_only=True, allow_blank=True)
+    friend_request_preference_other = serializers.CharField(read_only=True, allow_blank=True)
+    meetup_preference = serializers.ChoiceField(choices=MeetupPreference.choices, read_only=True, allow_blank=True)
+    meetup_preference_other = serializers.CharField(read_only=True, allow_blank=True)
+    exploring_with_others_preference = serializers.ChoiceField(choices=ExploringWithOthersPreference.choices, read_only=True, allow_blank=True)
+    exploring_with_others_preference_other = serializers.CharField(read_only=True, allow_blank=True)
+    additional_preferences = serializers.CharField(read_only=True, allow_blank=True)
     is_self = serializers.BooleanField(read_only=True)
     #: Null when no relationship row exists at all.
     friendship_status = serializers.ChoiceField(choices=FriendshipStatus.choices, read_only=True, allow_null=True)
@@ -1967,10 +1991,10 @@ class ProfileDetailSerializer(serializers.Serializer):
 class ProfileUpdateSerializer(serializers.Serializer):
     """Validates a partial update to the caller's own profile.
 
-    Deliberately limited to the three fields that are *public presentation* -
-    what other people see on your profile page. Everything else a profile row
-    happens to carry is a setting, and settings are written through
-    ``PATCH /settings/`` behind the ``settings:write`` scope.
+    Deliberately limited to fields that are *public presentation* - what other
+    people see on your profile page. Everything else a profile row happens to
+    carry is a setting, and settings are written through ``PATCH /settings/``
+    behind the ``settings:write`` scope.
 
     That split is a privilege boundary, not tidiness. ``PATCH /profiles/{slug}/``
     is gated on ``social:write`` - the scope an app asks for to send friend
@@ -1983,6 +2007,14 @@ class ProfileUpdateSerializer(serializers.Serializer):
     ``settings:write`` exists to protect. ``ProfileSettingsOverlapTests`` asserts
     the two field sets stay disjoint so the overlap cannot creep back.
 
+    The interaction-preference fields (``photo_taking_preference`` and
+    friends, plus their ``_other`` free-text companions and the standalone
+    ``additional_preferences`` note) belong here for the same reason bio/area
+    do: they're consent statements shown on the public profile, not access
+    control, even though the website edits them from the Edit Profile page
+    rather than Settings. Nothing here is technically enforced - see
+    ``Profile.PREFERENCE_FIELDS``.
+
     Excludes ``avatar`` for a different reason: image upload is the Photos
     domain's problem (size limits, downscaling, quota) and wiring a second
     upload path through here would duplicate all of it. ``avatar_url`` stays
@@ -1992,6 +2024,19 @@ class ProfileUpdateSerializer(serializers.Serializer):
     bio = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=MAX_PROFILE_BIO_LENGTH)
     area = serializers.CharField(required=False, allow_blank=True, allow_null=True, max_length=255)
     started_exploring = serializers.DateField(required=False, allow_null=True)
+    photo_taking_preference = serializers.ChoiceField(choices=PhotoTakingPreference.choices, required=False, allow_blank=True)
+    photo_taking_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
+    photo_sharing_preference = serializers.ChoiceField(choices=PhotoSharingPreference.choices, required=False, allow_blank=True)
+    photo_sharing_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
+    photo_tagging_preference = serializers.ChoiceField(choices=PhotoTaggingPreference.choices, required=False, allow_blank=True)
+    photo_tagging_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
+    friend_request_preference = serializers.ChoiceField(choices=FriendRequestPreference.choices, required=False, allow_blank=True)
+    friend_request_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
+    meetup_preference = serializers.ChoiceField(choices=MeetupPreference.choices, required=False, allow_blank=True)
+    meetup_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
+    exploring_with_others_preference = serializers.ChoiceField(choices=ExploringWithOthersPreference.choices, required=False, allow_blank=True)
+    exploring_with_others_preference_other = serializers.CharField(required=False, allow_blank=True, max_length=MAX_PREFERENCE_OTHER_LENGTH)
+    additional_preferences = serializers.CharField(required=False, allow_blank=True, max_length=MAX_ADDITIONAL_PREFERENCES_LENGTH)
 
 
 class ProfileNoteSerializer(serializers.Serializer):

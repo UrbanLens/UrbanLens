@@ -65,3 +65,78 @@ class SyncAliasesDirection(TextChoices):
     TO_WIKI = "to_wiki", "Sync to wiki"
     FROM_WIKI = "from_wiki", "Sync from wiki"
     BOTH = "both", "Sync both ways"
+
+
+class ConsentPreferenceWording:
+    """Shared label text for the interaction-preference choice fields below.
+
+    A plain mixin, not itself an ``Enum`` - ``TextChoices`` can't be
+    subclassed once it already defines members, so members can't be shared
+    by inheritance the way regular class attributes can. Mixing this class
+    in instead lets the *wording* common to several fields (e.g. "Please ask
+    first") be edited in one place while each field still declares its own
+    member set.
+    """
+
+    YES_PLEASE = "Yes, please."
+    PLEASE_DONT = "Please don't"
+    PLEASE_ASK_FIRST = "Please ask first"
+    OTHER_SPECIFY = "Other (please specify below)"
+
+
+class PhotoTakingPreference(ConsentPreferenceWording, TextChoices):
+    """Whether this profile consents to having their photo taken, on or off this site."""
+
+    YES = "yes", ConsentPreferenceWording.YES_PLEASE
+    NO = "no", ConsentPreferenceWording.PLEASE_DONT
+    ASK_FIRST = "ask_first", ConsentPreferenceWording.PLEASE_ASK_FIRST
+    OTHER = "other", ConsentPreferenceWording.OTHER_SPECIFY
+
+
+class PhotoSharingPreference(ConsentPreferenceWording, TextChoices):
+    """Whether this profile consents to having their photo shared or posted, on or off this site."""
+
+    YES = "yes", ConsentPreferenceWording.YES_PLEASE
+    NO = "no", ConsentPreferenceWording.PLEASE_DONT
+    BLUR_FACE = "blur_face", "Please blur my face"
+    ASK_FIRST = "ask_first", ConsentPreferenceWording.PLEASE_ASK_FIRST
+    OTHER = "other", ConsentPreferenceWording.OTHER_SPECIFY
+
+
+class PhotoTaggingPreference(ConsentPreferenceWording, TextChoices):
+    """Whether this profile consents to being tagged or identified in photos, on or off this site."""
+
+    YES = "yes", ConsentPreferenceWording.YES_PLEASE
+    NO = "no", ConsentPreferenceWording.PLEASE_DONT
+    ASK_FIRST = "ask_first", ConsentPreferenceWording.PLEASE_ASK_FIRST
+    OTHER = "other", ConsentPreferenceWording.OTHER_SPECIFY
+
+
+class FriendRequestPreference(ConsentPreferenceWording, TextChoices):
+    """When this profile welcomes friend requests from other users.
+
+    A social preference statement only - who is actually permitted to send a
+    request is the separate ``friend_request_visibility`` setting.
+    """
+
+    YES = "yes", ConsentPreferenceWording.YES_PLEASE
+    MET_IN_PERSON = "met_in_person", "Only if we've met in person"
+    TALK_REGULARLY = "talk_regularly", "Only if we talk regularly"
+    MUTUAL_FRIENDS = "mutual_friends", "Only if we have mutual friends"
+    OTHER = "other", ConsentPreferenceWording.OTHER_SPECIFY
+
+
+class MeetupPreference(ConsentPreferenceWording, TextChoices):
+    """Whether this profile is interested in meeting other users in person."""
+
+    YES = "yes", ConsentPreferenceWording.YES_PLEASE
+    DISLIKE = "dislike", "I do not like meetups"
+    OTHER = "other", ConsentPreferenceWording.OTHER_SPECIFY
+
+
+class ExploringWithOthersPreference(ConsentPreferenceWording, TextChoices):
+    """Whether this profile prefers to explore locations solo or with others."""
+
+    YES = "yes", ConsentPreferenceWording.YES_PLEASE
+    PREFER_ALONE = "prefer_alone", "I prefer to explore alone."
+    OTHER = "other", ConsentPreferenceWording.OTHER_SPECIFY

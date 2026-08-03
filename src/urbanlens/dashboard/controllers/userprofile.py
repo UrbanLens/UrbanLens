@@ -28,12 +28,21 @@ from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.profile.meta import (
+    ExploringWithOthersPreference,
+    FriendRequestPreference,
+    MeetupPreference,
+    PhotoSharingPreference,
+    PhotoTaggingPreference,
+    PhotoTakingPreference,
+)
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.auth.username import USERNAME_RE, username_is_taken
 
 if TYPE_CHECKING:
     from uuid import UUID
 
+    from urbanlens.dashboard.models.abstract.choices import TextChoices
     from urbanlens.dashboard.models.profile.email import ProfileEmail
 
 logger = logging.getLogger(__name__)
@@ -360,6 +369,21 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
     _PROFILE_DATES = frozenset({"birth_date", "started_exploring"})
     _USER_FIELDS = frozenset({"first_name", "last_name"})
 
+    #: Interaction-preference choice fields, mapped to the TextChoices class
+    #: that validates them - see Profile.PREFERENCE_FIELDS for the same set
+    #: paired with its display label instead.
+    _PROFILE_PREFERENCE_CHOICES: dict[str, type[TextChoices]] = {
+        "photo_taking_preference": PhotoTakingPreference,
+        "photo_sharing_preference": PhotoSharingPreference,
+        "photo_tagging_preference": PhotoTaggingPreference,
+        "friend_request_preference": FriendRequestPreference,
+        "meetup_preference": MeetupPreference,
+        "exploring_with_others_preference": ExploringWithOthersPreference,
+    }
+    #: Free-text companions to the choices above, plus the standalone catch-all
+    #: note - all plain optional text, saved verbatim like _PROFILE_CONTACT.
+    _PROFILE_PREFERENCE_TEXT = frozenset({f"{field}_other" for field in _PROFILE_PREFERENCE_CHOICES}) | frozenset({"additional_preferences"})
+
     def get(self, request: HttpRequest) -> JsonResponse:
         """Username availability check."""
         if not request.user.is_authenticated:
@@ -446,6 +470,21 @@ class ProfileFieldUpdateView(LoginRequiredMixin, View):
         if field in self._PROFILE_TEXT:
             value = request.POST.get("value", "").strip()
             setattr(profile, field, value or None)
+            profile.save(update_fields=[field])
+            return JsonResponse({"ok": True})
+
+        if field in self._PROFILE_PREFERENCE_CHOICES:
+            value = request.POST.get("value", "").strip()
+            choices_cls = self._PROFILE_PREFERENCE_CHOICES[field]
+            if value and choices_cls.invalid(value):
+                return JsonResponse({"error": "Invalid choice."}, status=400)
+            setattr(profile, field, value)
+            profile.save(update_fields=[field])
+            return JsonResponse({"ok": True})
+
+        if field in self._PROFILE_PREFERENCE_TEXT:
+            value = request.POST.get("value", "").strip()
+            setattr(profile, field, value)
             profile.save(update_fields=[field])
             return JsonResponse({"ok": True})
 
@@ -551,11 +590,22 @@ class EditProfileView(LoginRequiredMixin, View):
         else:
             gravatar_preview_url = ""
 
+        preference_fields = [
+            {
+                "name": field_name,
+                "label": label,
+                "select": form[field_name],
+                "other_input": form[f"{field_name}_other"],
+            }
+            for field_name, label in Profile.PREFERENCE_FIELDS
+        ]
+
         return {
             "profile": profile,
             "can_view_contact": True,
             "preview_modes": preview_modes(),
             "form": form,
+            "preference_fields": preference_fields,
             "discord_form": discord_form,
             "social_links": get_profile_links(profile),
             "link_error": link_error,
