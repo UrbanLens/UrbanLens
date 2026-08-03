@@ -1081,12 +1081,9 @@
     }
 
     // Escape hatch when the interactive embed's own (client-side) API key/
-    // referrer restriction rejects the request, or it's just stuck on a blank
-    // "no imagery" scene - Google renders that state inside the cross-origin
-    // iframe itself, which our JS has no way to read directly. Auto-hidden by
-    // map-annotations.ts's own SV_EMBED_FALLBACK_MS timeout once that elapses
-    // (which also swaps to the static image), but stays clickable before then
-    // for a rejection that's visibly obvious before the timeout fires.
+    // referrer restriction rejects the request - Google renders its own raw
+    // rejection message inside that cross-origin iframe, which our JS has no
+    // way to detect, so this stays available rather than us trying to guess.
     .sv-embed-fallback-btn {
         @include btn-ghost;
         width: 100%;

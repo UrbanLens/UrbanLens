@@ -34,10 +34,11 @@
                 {# still fail - e.g. an unauthorized-referrer rejection page rendered #}
                 {# by Google itself, inside the iframe, which we have no way to detect #}
                 {# from our own JS since it's a same-origin-policy-protected #}
-                {# cross-origin frame. map-annotations.ts auto-swaps to the always- #}
-                {# available static image (already fetched successfully, or it #}
-                {# wouldn't be here) after a timeout with no way to confirm the embed #}
-                {# loaded; .sv-embed-fallback-btn below offers the same swap sooner. #}
+                {# cross-origin frame - there's no success signal either, so this can #}
+                {# only ever be a manual swap, never an automatic one on a timer. The #}
+                {# always-available static image (already fetched successfully, or it #}
+                {# wouldn't be here) is one click away via .sv-embed-fallback-btn #}
+                {# below rather than us silently trusting the embed to work. #}
                 {% with sv_lat=slide.latitude|default:pin.effective_latitude sv_lng=slide.longitude|default:pin.effective_longitude %}
                 {% if sv_lat and sv_lng %}
                 <iframe class="sv-embed"
