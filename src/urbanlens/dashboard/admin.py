@@ -5,6 +5,7 @@ from django.urls import reverse
 from urbanlens.dashboard.models.achievements import Achievement, ProfileStreak, UserAchievement
 from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
+from urbanlens.dashboard.models.billing import BillingCustomer, RoleSubscription, StripeWebhookEvent
 from urbanlens.dashboard.models.costs import CostComponent, OperatingCost
 from urbanlens.dashboard.models.facts import Fact, FactEvidence
 from urbanlens.dashboard.models.pin import Pin
@@ -346,3 +347,53 @@ class OperatingCostAdmin(admin.ModelAdmin):
     search_fields = ["name", "notes"]
     readonly_fields = ["created", "updated"]
     ordering = ["order", "name"]
+
+
+@admin.register(BillingCustomer)
+class BillingCustomerAdmin(admin.ModelAdmin):
+    """Admin for BillingCustomer - read-only view of Stripe customer links."""
+
+    list_display = ["user", "stripe_customer_id", "created"]
+    search_fields = ["user__username", "user__email", "stripe_customer_id"]
+    readonly_fields = ["user", "stripe_customer_id", "created", "updated"]
+    ordering = ["-created"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+
+@admin.register(RoleSubscription)
+class RoleSubscriptionAdmin(admin.ModelAdmin):
+    """Admin for RoleSubscription - read-only view of paid, Stripe-backed role subscriptions."""
+
+    list_display = ["user", "role", "status", "pledged_amount_dollars", "threshold_met", "current_period_end", "cancel_at_period_end"]
+    list_filter = ["status", "threshold_met", "cancel_at_period_end", "role"]
+    search_fields = ["user__username", "user__email", "stripe_subscription_id"]
+    readonly_fields = [field.name for field in RoleSubscription._meta.fields]  # noqa: SLF001
+    ordering = ["-created"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False
+
+
+@admin.register(StripeWebhookEvent)
+class StripeWebhookEventAdmin(admin.ModelAdmin):
+    """Admin for StripeWebhookEvent - read-only audit log of incoming Stripe webhook deliveries."""
+
+    list_display = ["event_type", "stripe_event_id", "processed_at", "created"]
+    list_filter = ["event_type"]
+    search_fields = ["stripe_event_id", "event_type"]
+    readonly_fields = ["stripe_event_id", "event_type", "payload", "processed_at", "created", "updated"]
+    ordering = ["-created"]
+
+    def has_add_permission(self, request: HttpRequest) -> bool:
+        return False
+
+    def has_change_permission(self, request: HttpRequest, obj=None) -> bool:
+        return False

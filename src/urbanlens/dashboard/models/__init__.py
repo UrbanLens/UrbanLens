@@ -8,6 +8,7 @@ from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit
 from urbanlens.dashboard.models.article import Article, ArticleRevision
 from urbanlens.dashboard.models.auto_removals import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
+from urbanlens.dashboard.models.billing import BillingCustomer, BillingSubscriptionStatus, RoleSubscription, StripeWebhookEvent
 from urbanlens.dashboard.models.boundary import Boundary, BoundarySource, BoundaryType
 from urbanlens.dashboard.models.boundary_vote import BoundaryVote
 from urbanlens.dashboard.models.cache import GeocodedLocation

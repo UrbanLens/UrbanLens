@@ -183,6 +183,8 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     twilio_auth_token: str | None = Field(default=None, description="The Twilio auth token")
     twilio_sms_from_number: str | None = Field(default=None, description="The Twilio phone number SMS notifications are sent from (E.164 format)")
     twilio_whatsapp_from_number: str | None = Field(default=None, description="The Twilio-approved WhatsApp sender number (E.164 format, without the 'whatsapp:' prefix)")
+    stripe_secret_key: str | None = Field(default=None, description="The Stripe secret API key (sk_...), for paid subscription checkout/billing-portal/webhook calls")
+    stripe_webhook_secret: str | None = Field(default=None, description="The Stripe webhook signing secret (whsec_...), for verifying incoming /billing/webhooks/stripe/ requests")
 
     # Note: there are deliberately no database_* fields here. DATABASES is built directly in
     # settings/base.py from UL_DB_* environment variables (not the UL_ prefix + field-name

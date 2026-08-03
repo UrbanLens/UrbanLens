@@ -285,6 +285,12 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.sweep_achievements",
         "schedule": 24 * 60 * 60,
     },
+    # Safety net for missed Stripe webhook deliveries - the core "did this
+    # charge clear the threshold" mechanic runs at webhook time, not here.
+    "stripe-subscriptions-sync": {
+        "task": "urbanlens.dashboard.tasks.sync_stripe_subscriptions",
+        "schedule": 24 * 60 * 60,
+    },
     "safety-checkin-due-reminders": {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
         "schedule": 5 * 60,

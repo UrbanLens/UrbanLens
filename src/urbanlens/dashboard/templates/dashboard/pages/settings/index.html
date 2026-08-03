@@ -1364,6 +1364,23 @@
         </div>
     </section>
 
+    {# -- Membership (paid subscriptions) ---------------------------------------- #}
+    <section class="settings-section ul-section" id="membership-settings-section">
+        <div class="settings-section-header">
+            <i class="material-symbols-outlined">workspace_premium</i>
+            <div>
+                <h2 class="settings-section-title">Membership</h2>
+                <p class="settings-section-desc">Subscribe to a paid role, or pledge any amount to support the site.</p>
+            </div>
+        </div>
+
+        <div class="settings-section-body">
+            <div hx-get="{% url 'settings.billing' %}" hx-trigger="load" hx-swap="outerHTML">
+                <p class="loading-text">Loading...</p>
+            </div>
+        </div>
+    </section>
+
     {# -- Storage --------------------------------------------------------------- #}
     <section class="settings-section ul-section" id="storage-settings-section">
         <div class="settings-section-header">

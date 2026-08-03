@@ -1,0 +1,87 @@
+{# Membership settings subsection - loaded via HTMX (BillingSettingsSectionView). #}
+{# Context: stripe_configured, role_rows, subscriptions, has_billing_customer, minimum_pledge_dollars #}
+<div id="billing-settings-body" class="settings-subsection-body">
+{% if not stripe_configured %}
+    <p class="settings-help">Paid subscriptions aren't configured on this server yet.</p>
+{% else %}
+
+    {% if subscriptions %}
+    <div class="settings-subsection" id="billing-current-subscriptions">
+        <h3 class="settings-subsection-title">
+            <i class="material-symbols-outlined">receipt_long</i>
+            Your subscriptions
+        </h3>
+        {% for sub in subscriptions %}
+        <div class="settings-field">
+            <strong>{{ sub.role.name }}</strong> &mdash; ${{ sub.pledged_amount_dollars }}/mo
+            <p class="settings-help">
+                {{ sub.get_status_display }}
+                {% if sub.is_billable %}
+                    {% if not sub.threshold_met %}&mdash; this pledge doesn't currently clear the access threshold for {{ sub.role.name }}.{% endif %}
+                    {% if sub.cancel_at_period_end %}&mdash; cancels {{ sub.current_period_end|date:"M j, Y" }}.{% elif sub.current_period_end %}&mdash; renews {{ sub.current_period_end|date:"M j, Y" }}.{% endif %}
+                {% endif %}
+            </p>
+            <div class="settings-actions">
+                {% if sub.role.pay_what_you_want and sub.is_billable %}
+                <form hx-post="{% url 'settings.billing.pledge' sub.pk %}" hx-target="#billing-settings-body" hx-swap="outerHTML" class="settings-field--inline">
+                    {% csrf_token %}
+                    <label for="pledge-{{ sub.pk }}">New monthly pledge ($)</label>
+                    <input type="number" min="{{ minimum_pledge_dollars }}" step="0.01" name="amount_dollars" id="pledge-{{ sub.pk }}" value="{{ sub.pledged_amount_dollars }}">
+                    <button type="submit" class="btn btn--ghost btn--sm">Update pledge</button>
+                </form>
+                {% endif %}
+                {% if not sub.cancel_at_period_end %}
+                <form hx-post="{% url 'settings.billing.cancel' sub.pk %}" hx-target="#billing-settings-body" hx-swap="outerHTML"
+                      hx-confirm="Cancel {{ sub.role.name|escapejs }} at the end of the current billing period?">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn--danger btn--sm">Cancel</button>
+                </form>
+                {% endif %}
+            </div>
+        </div>
+        {% endfor %}
+        {% if has_billing_customer %}
+        <form method="post" action="{% url 'settings.billing.portal' %}">
+            {% csrf_token %}
+            <button type="submit" class="btn btn--ghost">Manage billing &amp; payment method</button>
+        </form>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% for row in role_rows %}
+    <div class="settings-subsection">
+        <h3 class="settings-subsection-title">
+            <i class="material-symbols-outlined">workspace_premium</i>
+            {{ row.role.name }}
+        </h3>
+        {% if row.role.description %}<p class="settings-help">{{ row.role.description }}</p>{% endif %}
+        <form method="post" action="{% url 'settings.billing.checkout' %}" class="settings-field">
+            {% csrf_token %}
+            <input type="hidden" name="role_slug" value="{{ row.role.slug }}">
+            {% if row.role.pay_what_you_want %}
+            <label for="amount-{{ row.role.slug }}">Monthly pledge ($)</label>
+            <input type="number" min="{{ minimum_pledge_dollars }}" step="0.01" name="amount_dollars" id="amount-{{ row.role.slug }}"
+                   value="{{ row.role.monthly_price_dollars|default_if_none:'' }}" placeholder="{{ minimum_pledge_dollars }} or more" required>
+            {% if row.pwyw_threshold_dollars %}
+            <p class="settings-help">Pledges of ${{ row.pwyw_threshold_dollars }}/mo or more currently unlock {{ row.role.name }} - this can change month to month based on the site's running costs.</p>
+            {% else %}
+            <p class="settings-help">Any amount is welcome - this directly supports running the site.</p>
+            {% endif %}
+            <div class="settings-actions">
+                <button type="submit" class="btn btn--primary">Subscribe</button>
+            </div>
+            {% else %}
+            <div class="settings-actions">
+                <button type="submit" class="btn btn--primary">Subscribe &mdash; ${{ row.role.monthly_price_dollars }}/mo</button>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+    {% endfor %}
+    {% if not role_rows %}
+    <p class="settings-help">No paid subscription options are available right now.</p>
+    {% endif %}
+
+{% endif %}
+</div>

@@ -2828,3 +2828,37 @@ def sweep_achievements() -> int:
     from urbanlens.dashboard.services.achievements.evaluate import evaluate_all_profiles
 
     return evaluate_all_profiles()
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sync_stripe_subscriptions() -> int:
+    """Re-sync every non-canceled RoleSubscription's status/price/threshold from Stripe.
+
+    Webhooks (see controllers.billing_webhooks.StripeWebhookView) are the primary
+    mechanism for keeping RoleSubscription in sync - this is the nightly safety net for
+    deliveries Stripe couldn't complete (e.g. this server briefly unreachable exhausting
+    Stripe's own retry schedule). Pure drift correction, not load-bearing for the core
+    "did this charge clear the threshold" mechanic, which happens at webhook time.
+
+    Returns:
+        How many subscriptions were checked.
+    """
+    import stripe
+
+    from urbanlens.dashboard.models.billing import RoleSubscription
+    from urbanlens.dashboard.services.billing import stripe_client
+    from urbanlens.dashboard.services.billing.webhooks import sync_from_stripe_subscription
+
+    if not stripe_client.is_configured():
+        return 0
+
+    count = 0
+    for role_subscription in RoleSubscription.objects.not_canceled().select_related("role"):
+        try:
+            stripe_subscription = stripe.Subscription.retrieve(role_subscription.stripe_subscription_id).to_dict()
+        except stripe.StripeError:
+            logger.exception("sync_stripe_subscriptions: failed to retrieve %s", role_subscription.stripe_subscription_id)
+            continue
+        sync_from_stripe_subscription(role_subscription, stripe_subscription)
+        count += 1
+    return count

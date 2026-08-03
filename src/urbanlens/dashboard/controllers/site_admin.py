@@ -565,10 +565,17 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
 
         from urbanlens.dashboard.models.site_settings import SiteSettings
         from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, UserSubscription
+        from urbanlens.dashboard.services.admin.cost_tracking import cost_per_user
+        from urbanlens.dashboard.services.billing import stripe_client
 
         grants = UserSubscription.objects.granted_by_admin(request.user).select_related("user", "role")
         roles = SubscriptionRole.objects.all().annotate(
             active_grant_count=Count("user_subscriptions", filter=Q(user_subscriptions__revoked_at__isnull=True), distinct=True),
+            paid_subscriber_count=Count(
+                "paid_subscriptions",
+                filter=Q(paid_subscriptions__status__in=["active", "trialing"]),
+                distinct=True,
+            ),
         )
         return render(
             request,
@@ -581,6 +588,8 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
                 "site_settings": SiteSettings.get_current(),
                 "saved": request.GET.get("saved"),
                 "error": request.GET.get("error"),
+                "stripe_configured": stripe_client.is_configured(),
+                "current_cost_per_user": cost_per_user(),
             },
         )
 
@@ -681,6 +690,57 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
                 response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "role_email_limits", "role": role.slug}})
                 return response
             return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "email limits saved"}))
+
+        if action == "role_pricing":
+            from decimal import Decimal, InvalidOperation
+
+            from django.core.exceptions import ValidationError
+
+            from urbanlens.dashboard.services.billing.pricing import dollars_to_cents
+
+            role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))
+            if role is None:
+                if is_htmx:
+                    response = HttpResponse(status=404)
+                    response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": "Role not found - no changes saved."}})
+                    return response
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": "Role not found."}))
+
+            def _parse_dollars(field: str) -> int | None:
+                raw = (request.POST.get(field) or "").strip()
+                if raw == "":
+                    return None
+                return dollars_to_cents(Decimal(raw))
+
+            error_message: str | None = None
+            try:
+                role.monthly_price_cents = _parse_dollars("monthly_price_dollars")
+                role.pwyw_minimum_cents = _parse_dollars("pwyw_minimum_dollars")
+            except InvalidOperation:
+                error_message = "Prices must be numbers."
+            else:
+                role.pay_what_you_want = request.POST.get("pay_what_you_want") == "on"
+                role.pwyw_dynamic_threshold = request.POST.get("pwyw_dynamic_threshold") == "on"
+                try:
+                    role.full_clean(validate_unique=False)
+                except ValidationError as exc:
+                    error_message = " ".join(msg for messages_list in exc.message_dict.values() for msg in messages_list)
+
+            if error_message:
+                if is_htmx:
+                    response = HttpResponse(status=400)
+                    response["HX-Trigger"] = json.dumps({"showToast": {"level": "error", "message": error_message}})
+                    return response
+                return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"error": error_message}))
+
+            role.save(
+                update_fields=["monthly_price_cents", "pwyw_minimum_cents", "pay_what_you_want", "pwyw_dynamic_threshold", "updated"],
+            )
+            if is_htmx:
+                response = HttpResponse(status=204)
+                response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "role_pricing", "role": role.slug}})
+                return response
+            return HttpResponseRedirect(reverse("site_admin_subscriptions") + "?" + urlencode({"saved": "pricing saved"}))
 
         if action == "role_features":
             role = SubscriptionRole.objects.get_by_slug(request.POST.get("role_slug", ""))

@@ -3,10 +3,13 @@
 from __future__ import annotations
 
 from datetime import timedelta
+from decimal import Decimal
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.models import AnonymousUser, User
-from django.db.models import CASCADE, CharField, DateTimeField, ForeignKey, IntegerField, Q, TextChoices, UniqueConstraint
+from django.core.exceptions import ValidationError
+from django.core.validators import MinValueValidator
+from django.db.models import CASCADE, BooleanField, CharField, DateTimeField, ForeignKey, IntegerField, Q, TextChoices, UniqueConstraint
 from django.utils import timezone
 from django.utils.text import slugify
 
@@ -86,6 +89,38 @@ class SubscriptionRole(abstract.DashboardModel):
         help_text="Max user-triggered emails per 30 days for this role. Blank uses the site default; 0 means unlimited.",
     )
 
+    # --- Paid subscriptions (Stripe) ---
+
+    monthly_price_cents = IntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Fixed monthly price in cents, e.g. 500 for $5.00. Blank means not offered at a fixed price.",
+    )
+    pay_what_you_want = BooleanField(
+        default=False,
+        help_text="Let users choose their own monthly pledge instead of (or as well as) the fixed price above.",
+    )
+    pwyw_dynamic_threshold = BooleanField(
+        default=False,
+        help_text="Requires pay_what_you_want. Grants this role only in months the user's pledge meets or exceeds "
+        "the site's current cost-per-user (services.admin.cost_tracking.cost_per_user), recalculated at each "
+        "successful charge - not a fixed minimum.",
+    )
+    pwyw_minimum_cents = IntegerField(
+        null=True,
+        blank=True,
+        validators=[MinValueValidator(0)],
+        help_text="Static minimum pledge (cents) required to hold this role when pay_what_you_want is on and "
+        "pwyw_dynamic_threshold is off. Blank or 0 means any pledge grants it.",
+    )
+    stripe_product_id = CharField(
+        max_length=255,
+        blank=True,
+        help_text="Stripe Product id for this role, created lazily on first checkout. Prices are generated inline "
+        "per checkout/pledge instead of being pre-created, so editing monthly_price_cents needs no Stripe sync.",
+    )
+
     objects = SubscriptionRoleManager()
 
     class Meta(abstract.DashboardModel.Meta):
@@ -121,6 +156,35 @@ class SubscriptionRole(abstract.DashboardModel):
 
     def grants(self, feature: SiteFeature | str) -> bool:
         return str(feature) in self.feature_set
+
+    def clean(self) -> None:
+        super().clean()
+        errors: dict[str, str] = {}
+        if self.pwyw_dynamic_threshold and not self.pay_what_you_want:
+            errors["pwyw_dynamic_threshold"] = "Requires pay_what_you_want to be enabled."
+        if self.pwyw_dynamic_threshold and self.pwyw_minimum_cents:
+            errors["pwyw_minimum_cents"] = "Cannot be set together with pwyw_dynamic_threshold - the dynamic cost-per-user figure is used instead."
+        if errors:
+            raise ValidationError(errors)
+
+    @property
+    def monthly_price_dollars(self) -> Decimal | None:
+        """The fixed monthly price in dollars, or None when not offered at a fixed price."""
+        if self.monthly_price_cents is None:
+            return None
+        return Decimal(self.monthly_price_cents) / 100
+
+    @property
+    def pwyw_minimum_dollars(self) -> Decimal | None:
+        """The static PWYW minimum in dollars, or None when unset/not applicable."""
+        if not self.pwyw_minimum_cents:
+            return None
+        return Decimal(self.pwyw_minimum_cents) / 100
+
+    @property
+    def is_purchasable(self) -> bool:
+        """Whether users can pay for this role at all (fixed price or pay-what-you-want)."""
+        return self.monthly_price_cents is not None or self.pay_what_you_want
 
     def __str__(self) -> str:
         return self.name
@@ -195,6 +259,21 @@ class PendingSubscriptionGrant(abstract.DashboardModel):
         return int(self.duration_months)
 
 
+def _paid_subscription_roles(user: User) -> list[SubscriptionRole]:
+    """Roles the user currently holds via a paid (Stripe-backed) subscription.
+
+    Only counts ``RoleSubscription`` rows that are active/trialing *and* have
+    cleared their role's pay-what-you-want threshold (see
+    ``services.billing.pricing.role_pwyw_threshold_cents`` - re-evaluated at
+    each successful Stripe charge, so a dynamic-threshold role can silently
+    stop granting access without the row itself changing status).
+    """
+    from urbanlens.dashboard.models.billing import RoleSubscription
+
+    paid = RoleSubscription.objects.granting_access_for(user).select_related("role")
+    return [subscription.role for subscription in paid]
+
+
 def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeature | str) -> bool:
     """Return whether the user has the feature, via the site default or an active role.
 
@@ -214,22 +293,29 @@ def user_has_feature(user: AbstractBaseUser | AnonymousUser, feature: SiteFeatur
     if SiteSettings.get_current().grants(feature):
         return True
     subscriptions = UserSubscription.objects.active_for(user).select_related("role")
-    return any(subscription.role.grants(feature) for subscription in subscriptions)
+    if any(subscription.role.grants(feature) for subscription in subscriptions):
+        return True
+    return any(role.grants(feature) for role in _paid_subscription_roles(user))
 
 
 def active_subscription_roles(user: AbstractBaseUser | AnonymousUser) -> list[SubscriptionRole]:
-    """Return the subscription roles the user currently holds.
+    """Return the subscription roles the user currently holds, admin-granted or paid.
 
     Args:
         user: The user to look up; anonymous users hold no roles.
 
     Returns:
-        The roles of the user's active (unrevoked, unexpired) subscriptions.
+        The roles of the user's active (unrevoked, unexpired) admin grants, plus any
+        role currently held via a paid subscription that's cleared its access threshold.
+        Deduplicated by role.
     """
     if not isinstance(user, User) or not user.is_authenticated:
         return []
     subscriptions = UserSubscription.objects.active_for(user).select_related("role")
-    return [subscription.role for subscription in subscriptions]
+    roles = {subscription.role_id: subscription.role for subscription in subscriptions}
+    for role in _paid_subscription_roles(user):
+        roles.setdefault(role.pk, role)
+    return list(roles.values())
 
 
 def grant_subscription(user: User, role: SubscriptionRole, granted_by: User, months: int | None) -> UserSubscription:

@@ -380,6 +380,29 @@ counting via a `retired_at` timestamp rather than deletion, so all-time totals s
 - Calculations live in `services/admin/cost_tracking.py`, reused by both the admin and public
   views so the numbers can never drift apart.
 
+## Paid Subscriptions
+
+Users can pay to hold a `SubscriptionRole` directly via Stripe Checkout, instead of waiting for an
+admin grant. Per role, a site admin can independently enable any combination of:
+
+- **Fixed price**: a flat $/month.
+- **Pay-what-you-want (PWYW)**: the user picks any amount at or above Stripe's own $0.50 minimum;
+  any nonzero pledge holds the role (e.g. a generic "support the site" role).
+- **PWYW with a dynamic threshold**: same as above, but the role's features are only granted in
+  billing cycles where the pledge meets or exceeds the site's *current* cost-per-user
+  (`services.admin.cost_tracking.cost_per_user()`, the same figure shown on `/costs/`) - the
+  "pay over the running cost to get VIP" case. Recomputed at each successful charge, on the user's
+  own billing anniversary, so a pledge that used to clear the bar can silently stop granting
+  access without the subscription itself changing status.
+- A static PWYW minimum is also available as a non-dynamic alternative to the cost-per-user gate.
+
+Managed from **Settings → Membership** (checkout, pledge updates, cancellation, and a link to
+Stripe's hosted billing portal) and **Site Admin → Subscriptions** (per-role pricing). Stripe
+webhooks (`/billing/webhooks/stripe/`) keep `RoleSubscription` status/pledge/threshold in sync;
+a daily `sync_stripe_subscriptions` task re-syncs from Stripe as a safety net for missed
+deliveries. `user_has_feature()`/`active_subscription_roles()` treat an active, threshold-met
+paid subscription the same as an admin-issued grant. Service layer lives in `services/billing/`.
+
 ## Site Administration
 
 - `/site-admin/` panel: user management, site-wide settings, usage stats (KPIs, system, API),
