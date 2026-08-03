@@ -6,21 +6,62 @@ single unit after every mutation.
 Cards rather than table rows because each award is an independent form, and a
 form cannot span table cells without the browser hoisting it out of the table.
 
-Context: achievements (annotated with earned_count), metric_groups, metrics,
-         default_icon, default_color, form_errors (optional)
+Each card's medal doubles as its icon picker trigger, so choosing an icon (or
+a colour, via the small inline style patch on each swatch) previews live
+without any bespoke JS - see _achievements.scss's "Site-admin editor" section.
+
+Context: achievements (annotated with earned_count), stats, metric_groups,
+         metrics, icon_categories, color_choices, default_icon, default_color,
+         form_errors (optional)
 {% endcomment %}
 <div id="achievement_admin">
 
     {% if form_errors %}
-    <div class="ul-alert ul-alert--error" role="alert">
-        {% for field, errors in form_errors.items %}
-        <p><strong>{{ field }}:</strong> {{ errors|join:" " }}</p>
-        {% endfor %}
+    <div class="ul-notice ul-notice--danger" role="alert">
+        <i class="material-symbols-outlined">error</i>
+        <div>
+            {% for field, errors in form_errors.items %}
+            <p><strong>{{ field }}:</strong> {{ errors|join:" " }}</p>
+            {% endfor %}
+        </div>
     </div>
     {% endif %}
 
+    <div class="admin-home-quickstats admin-achievement-stats">
+        <div class="admin-home-quickstat">
+            <i class="material-symbols-outlined" style="color:#7c3aed">trophy</i>
+            <div>
+                <div class="admin-home-quickstat__value">{{ stats.total }}</div>
+                <div class="admin-home-quickstat__label">Achievements</div>
+            </div>
+        </div>
+        <div class="admin-home-quickstat">
+            <i class="material-symbols-outlined" style="color:#16a34a">toggle_on</i>
+            <div>
+                <div class="admin-home-quickstat__value">{{ stats.active }}</div>
+                <div class="admin-home-quickstat__label">Active</div>
+            </div>
+        </div>
+        <div class="admin-home-quickstat">
+            <i class="material-symbols-outlined" style="color:#d97706">visibility_off</i>
+            <div>
+                <div class="admin-home-quickstat__value">{{ stats.secret }}</div>
+                <div class="admin-home-quickstat__label">Secret</div>
+            </div>
+        </div>
+        <div class="admin-home-quickstat">
+            <i class="material-symbols-outlined" style="color:#0891b2">military_tech</i>
+            <div>
+                <div class="admin-home-quickstat__value">{{ stats.earned_total }}</div>
+                <div class="admin-home-quickstat__label">Awards granted</div>
+            </div>
+        </div>
+    </div>
+
     <div class="admin-achievement-list">
     {% for achievement in achievements %}
+        {% with achv_id_str=achievement.id|stringformat:"d" %}
+        {% with picker_id="achv-"|add:achv_id_str %}
         <div class="admin-achievement-card ul-section{% if not achievement.is_active %} is-inactive{% endif %}">
             <form hx-post="{% url 'site_admin_achievement_edit' achievement.id %}"
                   hx-target="#achievement_admin"
@@ -30,25 +71,37 @@ Context: achievements (annotated with earned_count), metric_groups, metrics,
                 {% csrf_token %}
 
                 <div class="admin-achievement-head">
-                    <span class="achievement__medal achievement__medal--sm"
-                          {% if achievement.color %}style="--achievement-color: {{ achievement.color }}"{% endif %}>
+                    {% with current_icon=achievement.icon show_upload=True field_name="icon" %}
+                    <div class="admin-achievement-medal" id="achv-medal-{{ picker_id }}"
+                         style="--achievement-color: {{ achievement.color|default:default_color }}">
                         {% if achievement.custom_icon %}
-                            <img class="achievement__image" src="{{ achievement.custom_icon.url }}" alt="">
-                        {% elif achievement.icon|is_material_icon %}
-                            <i class="material-symbols-outlined achievement__icon">{{ achievement.icon }}</i>
+                        {% include 'dashboard/partials/ui/_icon_picker.html' with current_custom_icon_url=achievement.custom_icon.url %}
                         {% else %}
-                            <span class="achievement__icon achievement__icon--emoji">{{ achievement.icon|default:"🏆" }}</span>
+                        {% include 'dashboard/partials/ui/_icon_picker.html' with current_custom_icon_url="" %}
                         {% endif %}
-                    </span>
+                    </div>
+                    {% endwith %}
+                    <input type="hidden" name="clear_custom_icon" id="edit-clear-custom-{{ picker_id }}" value="">
+
                     <div class="admin-achievement-titles">
                         <input type="text" name="name" value="{{ achievement.name }}" required
                                class="ul-input admin-achievement-name" aria-label="Award name">
-                        <input type="text" name="description" value="{{ achievement.description|default:'' }}"
-                               class="ul-input" placeholder="Description" aria-label="Description">
+                        <textarea name="description" class="ul-input admin-achievement-description" rows="2"
+                                  placeholder="What earns this award, shown under its name." aria-label="Description">{{ achievement.description|default:"" }}</textarea>
                     </div>
-                    <span class="admin-achievement-count" title="How many users have earned this">
-                        {{ achievement.earned_count }} earned
-                    </span>
+
+                    <div class="admin-achievement-head-meta">
+                        <span class="ul-chip admin-achievement-count" title="How many users have earned this">
+                            <i class="material-symbols-outlined">military_tech</i>
+                            {{ achievement.earned_count }} earned
+                        </span>
+                        {% if achievement.is_secret %}
+                        <span class="ul-chip" title="Hidden from users until they earn it">
+                            <i class="material-symbols-outlined">visibility_off</i>
+                            Secret
+                        </span>
+                        {% endif %}
+                    </div>
                 </div>
 
                 <div class="admin-achievement-grid">
@@ -69,30 +122,27 @@ Context: achievements (annotated with earned_count), metric_groups, metrics,
                         <input type="number" name="threshold" value="{{ achievement.threshold }}" min="1" step="1" class="ul-input">
                     </label>
                     <label class="ul-field">
-                        <span>Icon</span>
-                        <input type="text" name="icon" value="{{ achievement.icon|default:'' }}" class="ul-input"
-                               placeholder="trophy or 🏆">
-                    </label>
-                    <label class="ul-field">
-                        <span>Colour</span>
-                        <input type="color" name="color" value="{{ achievement.color|default:default_color }}">
-                    </label>
-                    <label class="ul-field">
-                        <span>Custom image</span>
-                        <input type="file" name="custom_icon" accept="image/*">
-                    </label>
-                    <label class="ul-field">
                         <span>Order</span>
                         <input type="number" name="order" value="{{ achievement.order }}" class="ul-input">
                     </label>
+                    <div class="ul-field ul-field--wide">
+                        <span>Colour</span>
+                        <div class="color-picker" id="achv-color-{{ picker_id }}">
+                            <input type="hidden" name="color" id="achv-color-value-{{ picker_id }}" value="{{ achievement.color|default:default_color }}">
+                            {% for hex, color_name in color_choices %}
+                            <button type="button"
+                                    class="color-swatch {% if achievement.color == hex %}selected{% endif %}"
+                                    data-color="{{ hex }}" title="{{ color_name }}" style="background:{{ hex }};"
+                                    onclick="pickColor('achv-color-{{ picker_id }}','achv-color-value-{{ picker_id }}','{{ hex }}',this); document.getElementById('achv-medal-{{ picker_id }}').style.setProperty('--achievement-color','{{ hex }}')">
+                            </button>
+                            {% endfor %}
+                        </div>
+                    </div>
                 </div>
 
                 <div class="admin-achievement-toggles">
                     <label class="ul-checkbox"><input type="checkbox" name="is_active" {% if achievement.is_active %}checked{% endif %}> Active</label>
                     <label class="ul-checkbox"><input type="checkbox" name="is_secret" {% if achievement.is_secret %}checked{% endif %}> Secret until earned</label>
-                    {% if achievement.custom_icon %}
-                    <label class="ul-checkbox"><input type="checkbox" name="clear_custom_icon"> Remove image</label>
-                    {% endif %}
                     <button type="submit" class="btn btn--sm btn--primary">Save</button>
                 </div>
             </form>
@@ -103,6 +153,7 @@ Context: achievements (annotated with earned_count), metric_groups, metrics,
                         hx-target="#achievement_admin"
                         hx-swap="outerHTML"
                         title="Grant this award now to everyone who already qualifies">
+                    <i class="material-symbols-outlined">sync</i>
                     Re-check all users
                 </button>
                 <button type="button" class="btn btn--danger btn--sm"
@@ -110,10 +161,12 @@ Context: achievements (annotated with earned_count), metric_groups, metrics,
                         hx-target="#achievement_admin"
                         hx-swap="outerHTML"
                         hx-confirm="Delete “{{ achievement.name }}”? Everyone who earned it loses it. Unticking Active keeps it on their profiles instead.">
+                    <i class="material-symbols-outlined">delete</i>
                     Delete
                 </button>
             </div>
         </div>
+        {% endwith %}{% endwith %}
     {% empty %}
         <p class="empty-text">No achievements defined yet. Create the first one below.</p>
     {% endfor %}
@@ -125,46 +178,58 @@ Context: achievements (annotated with earned_count), metric_groups, metrics,
               hx-target="#achievement_admin"
               hx-swap="outerHTML"
               hx-encoding="multipart/form-data"
-              class="admin-achievement-grid">
+              class="admin-achievement-create-form">
             {% csrf_token %}
-            <label class="ul-field">
-                <span>Name</span>
-                <input type="text" name="name" required class="ul-input" placeholder="Cartographer">
-            </label>
-            <label class="ul-field ul-field--wide">
-                <span>Description</span>
-                <input type="text" name="description" class="ul-input" placeholder="Saved 100 pins.">
-            </label>
-            <label class="ul-field">
-                <span>Metric</span>
-                <select name="metric" class="ul-input" required>
-                    {% for group, choices in metric_groups %}
-                    <optgroup label="{{ group }}">
-                        {% for value, label in choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
-                    </optgroup>
-                    {% endfor %}
-                </select>
-            </label>
-            <label class="ul-field">
-                <span>Threshold</span>
-                <input type="number" name="threshold" value="1" min="1" step="1" required class="ul-input">
-            </label>
-            <label class="ul-field">
-                <span>Icon</span>
-                <input type="text" name="icon" value="{{ default_icon }}" class="ul-input" placeholder="trophy or 🏆">
-            </label>
-            <label class="ul-field">
-                <span>Colour</span>
-                <input type="color" name="color" value="{{ default_color }}">
-            </label>
-            <label class="ul-field">
-                <span>Custom image</span>
-                <input type="file" name="custom_icon" accept="image/*">
-            </label>
-            <label class="ul-field">
-                <span>Order</span>
-                <input type="number" name="order" value="0" class="ul-input">
-            </label>
+
+            <div class="admin-achievement-head">
+                {% with current_icon=default_icon show_upload=True field_name="icon" %}
+                <div class="admin-achievement-medal" id="achv-medal-achv-new" style="--achievement-color: {{ default_color }}">
+                    {% include 'dashboard/partials/ui/_icon_picker.html' with picker_id="achv-new" %}
+                </div>
+                {% endwith %}
+                <input type="hidden" name="clear_custom_icon" id="edit-clear-custom-achv-new" value="">
+
+                <div class="admin-achievement-titles">
+                    <input type="text" name="name" required class="ul-input admin-achievement-name" placeholder="Cartographer" aria-label="Award name">
+                    <textarea name="description" class="ul-input admin-achievement-description" rows="2"
+                              placeholder="Saved 100 pins." aria-label="Description"></textarea>
+                </div>
+            </div>
+
+            <div class="admin-achievement-grid">
+                <label class="ul-field">
+                    <span>Metric</span>
+                    <select name="metric" class="ul-input" required>
+                        {% for group, choices in metric_groups %}
+                        <optgroup label="{{ group }}">
+                            {% for value, label in choices %}<option value="{{ value }}">{{ label }}</option>{% endfor %}
+                        </optgroup>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label class="ul-field">
+                    <span>Threshold</span>
+                    <input type="number" name="threshold" value="1" min="1" step="1" required class="ul-input">
+                </label>
+                <label class="ul-field">
+                    <span>Order</span>
+                    <input type="number" name="order" value="0" class="ul-input">
+                </label>
+                <div class="ul-field ul-field--wide">
+                    <span>Colour</span>
+                    <div class="color-picker" id="achv-color-achv-new">
+                        <input type="hidden" name="color" id="achv-color-value-achv-new" value="{{ default_color }}">
+                        {% for hex, color_name in color_choices %}
+                        <button type="button"
+                                class="color-swatch {% if default_color == hex %}selected{% endif %}"
+                                data-color="{{ hex }}" title="{{ color_name }}" style="background:{{ hex }};"
+                                onclick="pickColor('achv-color-achv-new','achv-color-value-achv-new','{{ hex }}',this); document.getElementById('achv-medal-achv-new').style.setProperty('--achievement-color','{{ hex }}')">
+                        </button>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+
             <div class="admin-achievement-toggles">
                 <label class="ul-checkbox"><input type="checkbox" name="is_active" checked> Active</label>
                 <label class="ul-checkbox"><input type="checkbox" name="is_secret"> Secret until earned</label>

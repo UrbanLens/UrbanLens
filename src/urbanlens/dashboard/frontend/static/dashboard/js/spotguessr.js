@@ -1,12 +1,12 @@
 import {
   createMapLayers
-} from "./article-wysiwyg-rarq1vf2.js";
+} from "./achievements-rarq1vf2.js";
 import {
   confirmAction,
   getCsrfToken,
   toast
-} from "./article-wysiwyg-5jnnp4sj.js";
-import"./article-wysiwyg-2vd5xdaq.js";
+} from "./achievements-5jnnp4sj.js";
+import"./achievements-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/spotguessr-format.ts
 var PANEL_NAMES = ["settings", "lobby", "game", "summary", "empty"];

@@ -249,6 +249,33 @@
   text-transform: uppercase;
 }
 
+// -- Shared site-admin CRUD form fields ----------------------------------------
+// `.ul-field`/`.ul-input`/`.ul-checkbox` back every site-admin create/edit form
+// built on the `.admin-achievement-grid` card pattern (achievements, cost
+// components) - defined here since achievements was the first page to use it.
+
+.ul-field {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+
+  > span:first-child {
+    color: var(--ul-grey-6);
+    font-size: .78rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    text-transform: uppercase;
+  }
+}
+
+.ul-field--wide {
+  grid-column: 1 / -1;
+}
+
+.ul-input {
+  @include ul-input;
+}
+
 // -- Site-admin editor --------------------------------------------------------
 
 .admin-achievement-list {
@@ -264,10 +291,75 @@
 }
 
 .admin-achievement-head {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   gap: .75rem;
   margin-bottom: .75rem;
+}
+
+// The medal doubles as the icon picker's trigger button, so picking an icon
+// (or a colour - see the swatch onclick in _achievement_rows.html) previews
+// live with no bespoke JS beyond the shared IconPicker/pickColor globals.
+.admin-achievement-medal {
+  --achievement-color: var(--ul-color-accent);
+  flex: 0 0 auto;
+  margin-top: .1rem;
+
+  .icon-picker-trigger {
+    align-items: center;
+    background: color-mix(in srgb, var(--achievement-color) 18%, transparent);
+    border: 2px solid color-mix(in srgb, var(--achievement-color) 55%, transparent);
+    border-radius: 50%;
+    display: flex;
+    height: 3rem;
+    justify-content: center;
+    min-width: 0;
+    overflow: hidden;
+    padding: 0;
+    position: relative;
+    width: 3rem;
+
+    &:hover,
+    &:focus {
+      background: color-mix(in srgb, var(--achievement-color) 26%, transparent);
+      border-color: var(--achievement-color);
+    }
+  }
+
+  .icon-picker-caret {
+    display: none;
+  }
+
+  .icon-picker-current {
+    align-items: center;
+    display: flex;
+    height: 100%;
+    justify-content: center;
+    width: 100%;
+  }
+
+  .icon-picker-current-mi {
+    color: var(--achievement-color);
+    font-size: 1.5rem !important;
+  }
+
+  .icon-picker-current-glyph {
+    font-size: 1.35rem;
+  }
+
+  .icon-picker-none-label {
+    color: var(--ul-grey-4);
+    font-size: .52rem;
+    line-height: 1.1;
+    text-align: center;
+    text-transform: uppercase;
+  }
+
+  .icon-picker-custom-preview {
+    height: 100%;
+    object-fit: cover;
+    width: 100%;
+  }
 }
 
 .admin-achievement-titles {
@@ -282,10 +374,21 @@
   font-weight: 600;
 }
 
-.admin-achievement-count {
-  color: var(--ul-grey-5);
+.admin-achievement-description {
+  min-height: 2.3rem;
+  resize: vertical;
+}
+
+.admin-achievement-head-meta {
+  align-items: flex-end;
+  display: flex;
   flex: 0 0 auto;
-  font-size: .78rem;
+  flex-direction: column;
+  gap: .3rem;
+}
+
+.admin-achievement-count {
+  flex: 0 0 auto;
   white-space: nowrap;
 }
 
@@ -295,12 +398,35 @@
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
 }
 
+.admin-achievement-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: .75rem;
+}
+
 .admin-achievement-toggles {
   align-items: center;
   display: flex;
   flex-wrap: wrap;
   gap: .75rem;
   margin-top: .75rem;
+
+  .ul-checkbox {
+    align-items: center;
+    color: var(--ul-grey-8);
+    cursor: pointer;
+    display: inline-flex;
+    font-size: .85rem;
+    font-weight: 500;
+    gap: .4rem;
+
+    input[type="checkbox"] {
+      accent-color: var(--primary-color);
+      cursor: pointer;
+      height: 16px;
+      width: 16px;
+    }
+  }
 }
 
 .admin-achievement-secondary {
@@ -309,6 +435,14 @@
   gap: .5rem;
   margin-top: .75rem;
   padding-top: .6rem;
+
+  .material-symbols-outlined {
+    font-size: 1rem;
+  }
+}
+
+.admin-achievement-stats {
+  margin-bottom: 1.25rem;
 }
 
 .admin-metric-list {

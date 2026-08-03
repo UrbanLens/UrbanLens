@@ -1,14 +1,14 @@
 import {
   createMapLayers,
   tileLayer
-} from "./article-wysiwyg-rarq1vf2.js";
+} from "./achievements-rarq1vf2.js";
 import {
   confirmAction,
   getCsrfToken,
   htmxProcess,
   toast
-} from "./article-wysiwyg-5jnnp4sj.js";
-import"./article-wysiwyg-2vd5xdaq.js";
+} from "./achievements-5jnnp4sj.js";
+import"./achievements-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/entries/map-annotations.ts
 function escHtml(s) {
@@ -67,6 +67,12 @@ function init() {
   const map = L.map("map", { scrollWheelZoom: false, attributionControl: false }).setView([mapCenterLat, mapCenterLng], 15);
   window.map = map;
   let buildingImportMap = null;
+  let buildingSelectMode = false;
+  let applyBuildingSelectMode = null;
+  window.toggleBuildingImportSelectMode = function() {
+    buildingSelectMode = !buildingSelectMode;
+    applyBuildingSelectMode?.(buildingSelectMode);
+  };
   function initBuildingImportDialog() {
     const dialog = document.getElementById("building-import-dialog");
     const mapElement = document.getElementById("building-import-map");
@@ -84,48 +90,54 @@ function init() {
     const previewMap = L.map(mapElement, { scrollWheelZoom: false, attributionControl: false }).setView([mapCenterLat, mapCenterLng], 16);
     buildingImportMap = previewMap;
     tileLayer("street").addTo(previewMap);
-    const pathsByKey = new Map;
-    const previewBounds = L.latLngBounds([]);
-    const selectedStyle = { color: "#2563eb", weight: 3, fillColor: "#3b82f6", fillOpacity: 0.45, opacity: 1 };
-    const unselectedStyle = { color: "#64748b", weight: 2, fillColor: "#94a3b8", fillOpacity: 0.12, opacity: 0.5 };
-    buildings.forEach((building) => {
-      const paths = [];
-      let preview = null;
-      if (building.geometry) {
-        preview = L.geoJSON(building.geometry, {
-          style: selectedStyle,
-          onEachFeature: (_feature, layer) => {
-            if (layer instanceof L.Path)
-              paths.push(layer);
-          }
-        }).addTo(previewMap);
-        const bounds = preview.getBounds();
-        if (bounds.isValid())
-          previewBounds.extend(bounds);
-      } else if (building.latitude != null && building.longitude != null) {
-        const point = L.circleMarker([building.latitude, building.longitude], { ...selectedStyle, radius: 8 }).addTo(previewMap);
-        preview = point;
-        paths.push(point);
-        previewBounds.extend(point.getLatLng());
-      }
-      preview?.bindTooltip(building.name || (building.building_number ? `Building ${building.building_number}` : "Unnamed building"));
-      pathsByKey.set(building.selection_key, paths);
-    });
-    if (previewBounds.isValid())
-      previewMap.fitBounds(previewBounds.pad(0.18), { maxZoom: 18 });
     const checkboxes = Array.from(form.querySelectorAll('input[name="building_keys"]'));
+    const checkboxByKey = new Map(checkboxes.map((checkbox) => [checkbox.value, checkbox]));
+    const rowByKey = new Map;
+    checkboxes.forEach((checkbox) => {
+      const row = checkbox.closest(".building-import-item");
+      if (row)
+        rowByKey.set(checkbox.value, row);
+    });
     const selectedCount = form.querySelector("[data-building-selected-count]");
     const selectAll = form.querySelector("[data-building-select-all]");
     const submit = form.querySelector("[data-building-import-submit]");
     const submitLabel = form.querySelector("[data-building-submit-label]");
     const isRestructure = form.dataset.restructure === "1";
     const canSubmitWithoutBuildings = Number.parseInt(form.dataset.nestableCount || "0", 10) > 0;
+    const pathsByKey = new Map;
+    const boundsByKey = new Map;
+    const previewBounds = L.latLngBounds([]);
+    const selectedStyle = { color: "#2563eb", weight: 3, fillColor: "#3b82f6", fillOpacity: 0.45, opacity: 1 };
+    const unselectedStyle = { color: "#64748b", weight: 2, fillColor: "#94a3b8", fillOpacity: 0.12, opacity: 0.5 };
+    const hoverStyle = { color: "#f97316", weight: 4 };
+    const styleForKey = (key) => checkboxByKey.get(key)?.checked ? selectedStyle : unselectedStyle;
+    let hoveredKey = null;
+    const setBuildingHover = (key) => {
+      if (hoveredKey === key)
+        return;
+      if (hoveredKey) {
+        rowByKey.get(hoveredKey)?.classList.remove("is-hovered");
+        pathsByKey.get(hoveredKey)?.forEach((path) => path.setStyle(styleForKey(hoveredKey)));
+      }
+      hoveredKey = key;
+      if (key) {
+        rowByKey.get(key)?.classList.add("is-hovered");
+        pathsByKey.get(key)?.forEach((path) => {
+          path.setStyle(hoverStyle);
+          path.bringToFront();
+        });
+      }
+    };
     const syncSelection = () => {
       let checked = 0;
       checkboxes.forEach((checkbox) => {
         if (checkbox.checked)
           checked += 1;
-        pathsByKey.get(checkbox.value)?.forEach((path) => path.setStyle(checkbox.checked ? selectedStyle : unselectedStyle));
+      });
+      pathsByKey.forEach((paths, key) => {
+        if (key === hoveredKey)
+          return;
+        paths.forEach((path) => path.setStyle(styleForKey(key)));
       });
       if (selectedCount)
         selectedCount.textContent = String(checked);
@@ -136,6 +148,52 @@ function init() {
       if (submitLabel && !isRestructure)
         submitLabel.textContent = `Add ${checked} building${checked === 1 ? "" : "s"}`;
     };
+    const toggleBuildingKey = (key) => {
+      const checkbox = checkboxByKey.get(key);
+      if (!checkbox)
+        return;
+      checkbox.checked = !checkbox.checked;
+      syncSelection();
+    };
+    buildings.forEach((building) => {
+      const paths = [];
+      let preview = null;
+      if (building.geometry) {
+        const geoJson = L.geoJSON(building.geometry, {
+          style: selectedStyle,
+          onEachFeature: (_feature, layer) => {
+            if (layer instanceof L.Path)
+              paths.push(layer);
+          }
+        }).addTo(previewMap);
+        preview = geoJson;
+        const bounds = geoJson.getBounds();
+        if (bounds.isValid()) {
+          previewBounds.extend(bounds);
+          boundsByKey.set(building.selection_key, bounds);
+        }
+      } else if (building.latitude != null && building.longitude != null) {
+        const point = L.circleMarker([building.latitude, building.longitude], { ...selectedStyle, radius: 8 }).addTo(previewMap);
+        preview = point;
+        paths.push(point);
+        previewBounds.extend(point.getLatLng());
+        boundsByKey.set(building.selection_key, L.latLngBounds(point.getLatLng(), point.getLatLng()));
+      }
+      preview?.bindTooltip(building.name || (building.building_number ? `Building ${building.building_number}` : "Unnamed building"));
+      preview?.on("mouseover", () => setBuildingHover(building.selection_key));
+      preview?.on("mouseout", () => setBuildingHover(null));
+      preview?.on("click", () => {
+        if (buildingSelectMode)
+          toggleBuildingKey(building.selection_key);
+      });
+      pathsByKey.set(building.selection_key, paths);
+    });
+    if (previewBounds.isValid())
+      previewMap.fitBounds(previewBounds.pad(0.18), { maxZoom: 18 });
+    rowByKey.forEach((row, key) => {
+      row.addEventListener("mouseenter", () => setBuildingHover(key));
+      row.addEventListener("mouseleave", () => setBuildingHover(null));
+    });
     checkboxes.forEach((checkbox) => checkbox.addEventListener("change", syncSelection));
     selectAll?.addEventListener("click", () => {
       const shouldCheck = checkboxes.some((checkbox) => !checkbox.checked);
@@ -145,6 +203,55 @@ function init() {
       syncSelection();
     });
     syncSelection();
+    buildingSelectMode = false;
+    const selectBtn = document.getElementById("select-building-import-button");
+    applyBuildingSelectMode = (active) => {
+      selectBtn?.classList.toggle("active", active);
+      mapElement.classList.toggle("select-mode", active);
+      if (active)
+        previewMap.dragging.disable();
+      else
+        previewMap.dragging.enable();
+    };
+    let dragRect = null;
+    mapElement.addEventListener("mousedown", (e) => {
+      if (!buildingSelectMode || e.button !== 0)
+        return;
+      const startLL = previewMap.mouseEventToLatLng(e);
+      const startX = e.clientX;
+      const startY = e.clientY;
+      let dragging = false;
+      function onMove(ev) {
+        if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6)
+          return;
+        dragging = true;
+        if (dragRect)
+          previewMap.removeLayer(dragRect);
+        dragRect = L.rectangle(L.latLngBounds(startLL, previewMap.mouseEventToLatLng(ev)), {
+          color: "#1E88E5",
+          weight: 2,
+          fillOpacity: 0.08,
+          dashArray: "4 4",
+          interactive: false
+        }).addTo(previewMap);
+      }
+      function onUp(ev) {
+        document.removeEventListener("mousemove", onMove);
+        if (dragRect) {
+          previewMap.removeLayer(dragRect);
+          dragRect = null;
+        }
+        if (!dragging)
+          return;
+        const bounds = L.latLngBounds(startLL, previewMap.mouseEventToLatLng(ev));
+        boundsByKey.forEach((buildingBounds, key) => {
+          if (bounds.intersects(buildingBounds))
+            toggleBuildingKey(key);
+        });
+      }
+      document.addEventListener("mousemove", onMove);
+      document.addEventListener("mouseup", onUp, { once: true });
+    });
     requestAnimationFrame(() => buildingImportMap?.invalidateSize());
   }
   window.openBuildingImportDialog = function() {

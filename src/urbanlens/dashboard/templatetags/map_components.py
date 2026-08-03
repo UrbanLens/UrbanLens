@@ -495,6 +495,17 @@ register_map_tool(
 )
 register_map_tool(
     MapToolSpec(
+        key="select_building_import",
+        icon="check_box",
+        aria_label="Select buildings",
+        tooltip="Click or drag on the map to include or exclude buildings",
+        tooltip_pos="below",
+        button_id="select-building-import-button",
+        onclick="toggleBuildingImportSelectMode()",
+    )
+)
+register_map_tool(
+    MapToolSpec(
         key="select_unlogged_visits",
         icon="check_box",
         aria_label="Select pins",

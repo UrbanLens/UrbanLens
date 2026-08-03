@@ -23,11 +23,13 @@ from urbanlens.dashboard.models.achievements.model import (
     Achievement,
     UserAchievement,
 )
+from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, ICON_CATEGORIES
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.services.achievements.evaluate import progress_for_profile
 from urbanlens.dashboard.services.achievements.metrics import all_metrics, grouped_metric_choices, streak_summary
 
 if TYPE_CHECKING:
+    from django.core.files.uploadedfile import UploadedFile
     from django.db.models import QuerySet
 
 logger = logging.getLogger(__name__)
@@ -135,16 +137,39 @@ def _achievement_rows() -> QuerySet[Achievement]:
 
 def _admin_context(**extra: Any) -> dict[str, Any]:
     """Build the shared context for the site-admin achievements page."""
+    achievements = list(_achievement_rows())
     context: dict[str, Any] = {
-        "achievements": _achievement_rows(),
+        "achievements": achievements,
+        "stats": {
+            "total": len(achievements),
+            "active": sum(1 for a in achievements if a.is_active),
+            "secret": sum(1 for a in achievements if a.is_secret),
+            "earned_total": UserAchievement.objects.count(),
+        },
         "metric_groups": grouped_metric_choices(),
         "metrics": all_metrics(),
+        "icon_categories": ICON_CATEGORIES,
+        "color_choices": COLOR_CHOICES,
         "default_icon": DEFAULT_ACHIEVEMENT_ICON,
         "default_color": DEFAULT_ACHIEVEMENT_COLOR,
         "active": "achievements",
     }
     context.update(extra)
     return context
+
+
+def _uploaded_custom_icon(request: HttpRequest) -> UploadedFile | None:
+    """Return the submitted custom-icon file, if any.
+
+    Mirrors ``labels._uploaded_custom_icon``: the icon picker partial names its
+    file input ``custom_icon-<picker_id>`` (scoped per widget instance), so the
+    create form and every row's edit form can share one page without their
+    uploads colliding on field name.
+    """
+    for field_name in request.FILES:
+        if field_name == "custom_icon" or field_name.startswith("custom_icon-"):
+            return request.FILES.get(field_name)
+    return None
 
 
 def _apply_form(achievement: Achievement, request: HttpRequest) -> None:
@@ -178,9 +203,15 @@ def _apply_form(achievement: Achievement, request: HttpRequest) -> None:
     achievement.is_active = request.POST.get("is_active") == "on"
     achievement.is_secret = request.POST.get("is_secret") == "on"
 
-    if uploaded := request.FILES.get("custom_icon"):
+    if uploaded := _uploaded_custom_icon(request):
+        from urbanlens.dashboard.models.images.model import MediaKind
+        from urbanlens.dashboard.services.media.images import image_upload_error
+
+        upload_error = image_upload_error(uploaded, MediaKind.PHOTO)
+        if upload_error:
+            raise ValidationError({"custom_icon": upload_error[0]})
         achievement.custom_icon = uploaded
-    elif request.POST.get("clear_custom_icon") == "on":
+    elif request.POST.get("clear_custom_icon"):
         achievement.custom_icon = None
 
     achievement.full_clean(exclude=["slug", "uuid"])

@@ -162,6 +162,20 @@ function init(): void {
     // opened before Leaflet is initialized so the map has measurable bounds.
     let buildingImportMap: L.Map | null = null;
 
+    // Map select tool (top-right toolbar button) - lets the user click, or
+    // drag a box over, buildings on the preview map to toggle their checkbox,
+    // mirroring the main map's/pin detail map's select-mode tools. The dialog
+    // body (and so the map + button) is HTMX-swapped fresh on every open, so
+    // the mode itself and its DOM side effects are tracked separately: the
+    // former survives across opens (reset below), the latter is rebound each
+    // time via `applyBuildingSelectMode`.
+    let buildingSelectMode = false;
+    let applyBuildingSelectMode: ((active: boolean) => void) | null = null;
+    window.toggleBuildingImportSelectMode = function (): void {
+        buildingSelectMode = !buildingSelectMode;
+        applyBuildingSelectMode?.(buildingSelectMode);
+    };
+
     function initBuildingImportDialog(): void {
         const dialog = document.getElementById("building-import-dialog") as HTMLDialogElement | null;
         const mapElement = document.getElementById("building-import-map");
@@ -181,36 +195,13 @@ function init(): void {
         buildingImportMap = previewMap;
         tileLayer("street").addTo(previewMap);
 
-        const pathsByKey = new Map<string, L.Path[]>();
-        const previewBounds = L.latLngBounds([]);
-        const selectedStyle: L.PathOptions = { color: "#2563eb", weight: 3, fillColor: "#3b82f6", fillOpacity: 0.45, opacity: 1 };
-        const unselectedStyle: L.PathOptions = { color: "#64748b", weight: 2, fillColor: "#94a3b8", fillOpacity: 0.12, opacity: 0.5 };
-
-        buildings.forEach((building) => {
-            const paths: L.Path[] = [];
-            let preview: L.Layer | null = null;
-            if (building.geometry) {
-                preview = L.geoJSON(building.geometry as Parameters<typeof L.geoJSON>[0], {
-                    style: selectedStyle,
-                    onEachFeature: (_feature, layer) => {
-                        if (layer instanceof L.Path) paths.push(layer);
-                    },
-                }).addTo(previewMap);
-                const bounds = (preview as L.GeoJSON).getBounds();
-                if (bounds.isValid()) previewBounds.extend(bounds);
-            } else if (building.latitude != null && building.longitude != null) {
-                const point = L.circleMarker([building.latitude, building.longitude], { ...selectedStyle, radius: 8 }).addTo(previewMap);
-                preview = point;
-                paths.push(point);
-                previewBounds.extend(point.getLatLng());
-            }
-            preview?.bindTooltip(building.name || (building.building_number ? `Building ${building.building_number}` : "Unnamed building"));
-            pathsByKey.set(building.selection_key, paths);
-        });
-
-        if (previewBounds.isValid()) previewMap.fitBounds(previewBounds.pad(0.18), { maxZoom: 18 });
-
         const checkboxes = Array.from(form.querySelectorAll<HTMLInputElement>('input[name="building_keys"]'));
+        const checkboxByKey = new Map(checkboxes.map((checkbox) => [checkbox.value, checkbox] as const));
+        const rowByKey = new Map<string, HTMLElement>();
+        checkboxes.forEach((checkbox) => {
+            const row = checkbox.closest<HTMLElement>(".building-import-item");
+            if (row) rowByKey.set(checkbox.value, row);
+        });
         const selectedCount = form.querySelector<HTMLElement>("[data-building-selected-count]");
         const selectAll = form.querySelector<HTMLButtonElement>("[data-building-select-all]");
         const submit = form.querySelector<HTMLButtonElement>("[data-building-import-submit]");
@@ -218,17 +209,93 @@ function init(): void {
         const isRestructure = form.dataset.restructure === "1";
         const canSubmitWithoutBuildings = Number.parseInt(form.dataset.nestableCount || "0", 10) > 0;
 
+        const pathsByKey = new Map<string, L.Path[]>();
+        const boundsByKey = new Map<string, L.LatLngBounds>();
+        const previewBounds = L.latLngBounds([]);
+        const selectedStyle: L.PathOptions = { color: "#2563eb", weight: 3, fillColor: "#3b82f6", fillOpacity: 0.45, opacity: 1 };
+        const unselectedStyle: L.PathOptions = { color: "#64748b", weight: 2, fillColor: "#94a3b8", fillOpacity: 0.12, opacity: 0.5 };
+        const hoverStyle: L.PathOptions = { color: "#f97316", weight: 4 };
+        const styleForKey = (key: string): L.PathOptions => (checkboxByKey.get(key)?.checked ? selectedStyle : unselectedStyle);
+
+        // Bidirectional hover sync between the row list and the map preview -
+        // row/shape pairs share `selection_key` via rowByKey/pathsByKey.
+        let hoveredKey: string | null = null;
+        const setBuildingHover = (key: string | null): void => {
+            if (hoveredKey === key) return;
+            if (hoveredKey) {
+                rowByKey.get(hoveredKey)?.classList.remove("is-hovered");
+                pathsByKey.get(hoveredKey)?.forEach((path) => path.setStyle(styleForKey(hoveredKey!)));
+            }
+            hoveredKey = key;
+            if (key) {
+                rowByKey.get(key)?.classList.add("is-hovered");
+                pathsByKey.get(key)?.forEach((path) => {
+                    path.setStyle(hoverStyle);
+                    path.bringToFront();
+                });
+            }
+        };
+
         const syncSelection = (): void => {
             let checked = 0;
             checkboxes.forEach((checkbox) => {
                 if (checkbox.checked) checked += 1;
-                pathsByKey.get(checkbox.value)?.forEach((path) => path.setStyle(checkbox.checked ? selectedStyle : unselectedStyle));
+            });
+            pathsByKey.forEach((paths, key) => {
+                if (key === hoveredKey) return;
+                paths.forEach((path) => path.setStyle(styleForKey(key)));
             });
             if (selectedCount) selectedCount.textContent = String(checked);
             if (selectAll) selectAll.textContent = checked === checkboxes.length ? "Uncheck all" : "Check all";
             if (submit) submit.disabled = checked === 0 && !canSubmitWithoutBuildings;
             if (submitLabel && !isRestructure) submitLabel.textContent = `Add ${checked} building${checked === 1 ? "" : "s"}`;
         };
+
+        const toggleBuildingKey = (key: string): void => {
+            const checkbox = checkboxByKey.get(key);
+            if (!checkbox) return;
+            checkbox.checked = !checkbox.checked;
+            syncSelection();
+        };
+
+        buildings.forEach((building) => {
+            const paths: L.Path[] = [];
+            let preview: L.Layer | null = null;
+            if (building.geometry) {
+                const geoJson = L.geoJSON(building.geometry as Parameters<typeof L.geoJSON>[0], {
+                    style: selectedStyle,
+                    onEachFeature: (_feature, layer) => {
+                        if (layer instanceof L.Path) paths.push(layer);
+                    },
+                }).addTo(previewMap);
+                preview = geoJson;
+                const bounds = geoJson.getBounds();
+                if (bounds.isValid()) {
+                    previewBounds.extend(bounds);
+                    boundsByKey.set(building.selection_key, bounds);
+                }
+            } else if (building.latitude != null && building.longitude != null) {
+                const point = L.circleMarker([building.latitude, building.longitude], { ...selectedStyle, radius: 8 }).addTo(previewMap);
+                preview = point;
+                paths.push(point);
+                previewBounds.extend(point.getLatLng());
+                boundsByKey.set(building.selection_key, L.latLngBounds(point.getLatLng(), point.getLatLng()));
+            }
+            preview?.bindTooltip(building.name || (building.building_number ? `Building ${building.building_number}` : "Unnamed building"));
+            preview?.on("mouseover", () => setBuildingHover(building.selection_key));
+            preview?.on("mouseout", () => setBuildingHover(null));
+            preview?.on("click", () => {
+                if (buildingSelectMode) toggleBuildingKey(building.selection_key);
+            });
+            pathsByKey.set(building.selection_key, paths);
+        });
+
+        if (previewBounds.isValid()) previewMap.fitBounds(previewBounds.pad(0.18), { maxZoom: 18 });
+
+        rowByKey.forEach((row, key) => {
+            row.addEventListener("mouseenter", () => setBuildingHover(key));
+            row.addEventListener("mouseleave", () => setBuildingHover(null));
+        });
 
         checkboxes.forEach((checkbox) => checkbox.addEventListener("change", syncSelection));
         selectAll?.addEventListener("click", () => {
@@ -239,6 +306,55 @@ function init(): void {
             syncSelection();
         });
         syncSelection();
+
+        // Fresh dialog open always starts out of select mode; wire this open's
+        // button/map/dragging up to the (persistent) toggle above.
+        buildingSelectMode = false;
+        const selectBtn = document.getElementById("select-building-import-button") as HTMLButtonElement | null;
+        applyBuildingSelectMode = (active: boolean): void => {
+            selectBtn?.classList.toggle("active", active);
+            mapElement.classList.toggle("select-mode", active);
+            if (active) previewMap.dragging.disable();
+            else previewMap.dragging.enable();
+        };
+
+        // Rectangle drag-select over building shapes, mirroring the detail-pin
+        // panel's multi-select tool (initDetailPinDragSelect below).
+        let dragRect: L.Rectangle | null = null;
+        mapElement.addEventListener("mousedown", (e: MouseEvent) => {
+            if (!buildingSelectMode || e.button !== 0) return;
+            const startLL = previewMap.mouseEventToLatLng(e);
+            const startX = e.clientX;
+            const startY = e.clientY;
+            let dragging = false;
+
+            function onMove(ev: MouseEvent): void {
+                if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
+                dragging = true;
+                if (dragRect) previewMap.removeLayer(dragRect);
+                dragRect = L.rectangle(L.latLngBounds(startLL, previewMap.mouseEventToLatLng(ev)), {
+                    color: "#1E88E5",
+                    weight: 2,
+                    fillOpacity: 0.08,
+                    dashArray: "4 4",
+                    interactive: false,
+                }).addTo(previewMap);
+            }
+            function onUp(ev: MouseEvent): void {
+                document.removeEventListener("mousemove", onMove);
+                if (dragRect) {
+                    previewMap.removeLayer(dragRect);
+                    dragRect = null;
+                }
+                if (!dragging) return;
+                const bounds = L.latLngBounds(startLL, previewMap.mouseEventToLatLng(ev));
+                boundsByKey.forEach((buildingBounds, key) => {
+                    if (bounds.intersects(buildingBounds)) toggleBuildingKey(key);
+                });
+            }
+            document.addEventListener("mousemove", onMove);
+            document.addEventListener("mouseup", onUp, { once: true });
+        });
 
         requestAnimationFrame(() => buildingImportMap?.invalidateSize());
     }
@@ -2454,6 +2570,7 @@ declare global {
         // opens the shared standalone map composer pre-scoped to this pin/wiki.
         _openMapScreenshot: () => void;
         openBuildingImportDialog: () => void;
+        toggleBuildingImportSelectMode: () => void;
 
         // Detail-pin/boundary functions, exposed for this page's own template onclick= attributes.
         _toggleDetailPinListPanel: () => void;

@@ -329,6 +329,22 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     # ------------------------------------------------------------------
 
     @property
+    def effective_latitude(self) -> float:
+        """Wiki marker latitude, as a float - mirrors ``Pin.effective_latitude``.
+
+        Child markers (``services.pins.pin_restructure.match_marker`` and
+        friends) are typed as ``Pin | Wiki`` and read this name off whichever
+        one they were handed; keeping the same name and float type here is
+        what lets that code stay marker-neutral.
+        """
+        return float(self.location.latitude)
+
+    @property
+    def effective_longitude(self) -> float:
+        """Wiki marker longitude, as a float. See ``effective_latitude``."""
+        return float(self.location.longitude)
+
+    @property
     def effective_date_last_active(self):
         """Date the place was last active, inferred from date_abandoned if unset."""
         if self.date_last_active is not None:

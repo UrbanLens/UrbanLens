@@ -2,8 +2,8 @@ import {
   confirmAction,
   getCsrfToken,
   toast
-} from "./article-wysiwyg-5jnnp4sj.js";
-import"./article-wysiwyg-2vd5xdaq.js";
+} from "./achievements-5jnnp4sj.js";
+import"./achievements-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/entries/trivia.ts
 var urls = window.TRIVIA_URLS;

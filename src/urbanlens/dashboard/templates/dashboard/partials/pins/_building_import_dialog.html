@@ -3,6 +3,7 @@ Shared body for the parcel-panel import action and the restructure offer. The
 enclosing dialog lives on the pin detail page so either HTMX-loaded button can
 replace this body, open it, and initialize its Leaflet preview afterwards.
 {% endcomment %}
+{% load map_components %}
 {% include "dashboard/partials/ui/_dialog_header.html" with title="Choose buildings to add" %}
 <form class="building-import-form"
       data-restructure="{{ restructure|yesno:'1,0' }}"
@@ -46,6 +47,7 @@ replace this body, open it, and initialize its Leaflet preview afterwards.
         </div>
         {% if rows %}
         <div class="building-import-map-wrap">
+            {% map_toolbar "select_building_import" panel_id="building-import-map-buttons" %}
             <div id="building-import-map" aria-label="Map of buildings to add"></div>
             <div class="building-import-attribution">Map data &copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></div>
         </div>

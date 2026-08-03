@@ -20,6 +20,7 @@ from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.plugins.builtin.parcel_buildings import (
     ParcelBuildingsEnrichmentSource,
     ParcelBuildingsPanelSource,
@@ -27,10 +28,10 @@ from urbanlens.dashboard.plugins.builtin.parcel_buildings import (
     building_rows,
     fetch_parcel_buildings,
 )
-from urbanlens.dashboard.services.pins.pin_restructure import match_marker
 from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
 from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
+from urbanlens.dashboard.services.pins.pin_restructure import match_marker
 
 _coord_counter = 0
 
@@ -259,6 +260,47 @@ class BuildingRowsTests(TestCase):
         self.assertEqual(rows[0]["child_name"], "Tool Shed")
         self.assertEqual(rows[0]["child_url"], "")
 
+    def test_no_boundary_polygon_means_no_filtering(self) -> None:
+        """Callers with no real boundary to test against (the default) get everything, as before."""
+        far_away = {"name": "Far Away", "latitude": 41.740, "longitude": -73.940}
+        rows = building_rows([far_away], [])
+        self.assertEqual([row["name"] for row in rows], ["Far Away"])
+
+    def test_boundary_polygon_drops_an_unmatched_building_outside_it(self) -> None:
+        boundary = _square_around(41.733, -73.930, size=0.001)
+        far_away = {"name": "Far Away", "latitude": 41.740, "longitude": -73.940}
+        rows = building_rows([_REDATA_BUILDINGS[0], far_away], [], boundary_polygon=boundary)
+        self.assertEqual([row["name"] for row in rows], ["Tool Shed"])
+
+    def test_boundary_polygon_keeps_a_matched_building_regardless_of_position(self) -> None:
+        """A building with a real child pin belongs on the list no matter what the parcel data says."""
+        boundary = _square_around(41.733, -73.930, size=0.001)
+        far_away = {"name": "Far Away", "latitude": 41.740, "longitude": -73.940}
+        child = self._pin_at(41.740, -73.940, name="Far Away Pin")
+        rows = building_rows([far_away], [child], boundary_polygon=boundary)
+        self.assertEqual(rows[0]["child_name"], "Far Away Pin")
+
+    def test_boundary_polygon_checks_the_real_footprint_over_the_centroid(self) -> None:
+        """REData's footprint - not its summary point - decides whether a building is on the parcel."""
+        boundary = _square_around(41.733, -73.930, size=0.001)
+        misleading_centroid = {
+            "name": "Footprint Outside",
+            "latitude": 41.733,
+            "longitude": -73.930,
+            "geometry": {
+                "type": "Polygon",
+                "coordinates": [[[-73.950, 41.750], [-73.949, 41.750], [-73.949, 41.751], [-73.950, 41.751], [-73.950, 41.750]]],
+            },
+        }
+        rows = building_rows([misleading_centroid], [], boundary_polygon=boundary)
+        self.assertEqual(rows, [])
+
+    def test_boundary_polygon_keeps_a_building_with_no_usable_coordinates(self) -> None:
+        """Never drop a record there's nothing to test containment against."""
+        boundary = _square_around(41.733, -73.930, size=0.001)
+        rows = building_rows([{"name": "No Coords"}], [], boundary_polygon=boundary)
+        self.assertEqual([row["name"] for row in rows], ["No Coords"])
+
 
 class ParcelBuildingsPanelViewTests(TestCase):
     """The pin detail page's "Buildings on this Property" endpoint."""
@@ -302,6 +344,75 @@ class ParcelBuildingsPanelViewTests(TestCase):
     def test_another_users_pin_is_not_reachable(self) -> None:
         other = baker.make(Pin, profile=baker.make(User).profile, location=_make_location(), slug="not-mine")
         self.assertEqual(self.client.get(reverse("pin.parcel_buildings", kwargs={"pin_slug": other.slug})).status_code, 404)
+
+    def test_a_building_outside_the_parcel_boundary_is_dropped(self) -> None:
+        lat, lng = float(self.location.latitude), float(self.location.longitude)
+        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_square_around(lat, lng))
+        inside = {"source": "cris", "name": "Inside Hall", "building_number": "1", "latitude": lat, "longitude": lng}
+        outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [inside, outside], "provider": "redata"})
+        body = self.client.get(self._url()).content.decode()
+        self.assertIn("Inside Hall", body)
+        self.assertNotIn("Outside Shed", body)
+
+    def test_an_out_of_boundary_building_with_a_child_pin_still_shows(self) -> None:
+        lat, lng = float(self.location.latitude), float(self.location.longitude)
+        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_square_around(lat, lng))
+        outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
+        baker.make(
+            Pin,
+            profile=self.user.profile,
+            parent_pin=self.pin,
+            pin_type=PinType.BUILDING,
+            slug="outside-shed",
+            location=baker.make(Location, latitude=lat + 1, longitude=lng + 1, google_place=None),
+        )
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [outside], "provider": "redata"})
+        self.assertContains(self.client.get(self._url()), "Outside Shed")
+
+    def test_without_a_real_boundary_nothing_is_filtered(self) -> None:
+        """No Boundary row exists at all - only the synthesized fallback circle - so nothing is dropped."""
+        lat, lng = float(self.location.latitude), float(self.location.longitude)
+        outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [outside], "provider": "redata"})
+        self.assertContains(self.client.get(self._url()), "Outside Shed")
+
+
+class WikiParcelBuildingsPanelViewTests(TestCase):
+    """The wiki page's own "Buildings on this Property" endpoint."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        self.location = _make_location()
+        baker.make(Pin, profile=self.user.profile, location=self.location)
+        self.wiki = baker.make(Wiki, location=self.location)
+
+    def _url(self) -> str:
+        return reverse("location.wiki.buildings", kwargs={"location_slug": self.location.slug})
+
+    def test_a_building_outside_the_parcel_boundary_is_dropped(self) -> None:
+        lat, lng = float(self.location.latitude), float(self.location.longitude)
+        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_square_around(lat, lng))
+        inside = {"source": "cris", "name": "Inside Hall", "building_number": "1", "latitude": lat, "longitude": lng}
+        outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [inside, outside], "provider": "redata"})
+        body = self.client.get(self._url()).content.decode()
+        self.assertIn("Inside Hall", body)
+        self.assertNotIn("Outside Shed", body)
+
+    def test_an_out_of_boundary_building_with_a_child_wiki_still_shows(self) -> None:
+        lat, lng = float(self.location.latitude), float(self.location.longitude)
+        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_square_around(lat, lng))
+        outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
+        baker.make(
+            Wiki,
+            parent_wiki=self.wiki,
+            location=baker.make(Location, latitude=lat + 1, longitude=lng + 1, google_place=None),
+        )
+        LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [outside], "provider": "redata"})
+        self.assertContains(self.client.get(self._url()), "Outside Shed")
 
 
 class PluginContributionsTests(SimpleTestCase):

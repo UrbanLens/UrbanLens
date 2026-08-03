@@ -34,6 +34,8 @@ from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_C
 from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource, PanelApiKind
 
 if TYPE_CHECKING:
+    from django.contrib.gis.geos import GEOSGeometry
+
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.locations.enrichment import EnrichmentSource
@@ -121,7 +123,7 @@ def _overpass_buildings(location: Location) -> list[dict[str, Any]]:
         return []
 
 
-def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None) -> list[dict[str, Any]]:
+def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None, boundary_polygon: GEOSGeometry | None = None) -> list[dict[str, Any]]:
     """Pair each known building with the child marker that already covers it.
 
     Shared by the pin detail panel and the wiki's equivalent view so both
@@ -139,6 +141,15 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None)
         url_for: Optional callable turning a matched child into a link target;
             omit for child wikis, which are markers on their parent's page
             rather than pages of their own.
+        boundary_polygon: The property's real (non-circle) boundary, when
+            known. REData's per-parcel building list isn't guaranteed to
+            align with our own boundary - a building that falls outside it is
+            dropped, unless a child marker already covers it (a pinned
+            building belongs on the list regardless of where the parcel data
+            says it sits). Pass None to skip this check entirely, which is
+            right wherever there's no real boundary to test against (only the
+            synthesized fallback circle) - filtering against an arbitrary
+            circle would drop real buildings for no reason.
 
     Returns:
         One row per building, sorted by building number then name, each with
@@ -163,6 +174,8 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None)
             # the same pin would otherwise claim several neighbouring
             # footprints and leave real ones looking unpinned.
             unmatched.remove(child)
+        elif boundary_polygon is not None and not _building_within(building, boundary_polygon):
+            continue
         geometry = building_footprint_geojson(building)
         rows.append(
             {
@@ -183,6 +196,36 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None)
         )
 
     return sorted(rows, key=_row_sort_key)
+
+
+def _building_within(building: dict[str, Any], boundary_polygon: GEOSGeometry) -> bool:
+    """Whether an unpinned building actually sits on the given boundary.
+
+    Prefers the building's own footprint (an intersection test, so a
+    structure straddling the boundary edge still counts) and falls back to
+    its centroid when the provider published only a point.
+
+    Args:
+        building: One cached building record.
+        boundary_polygon: The property's real boundary.
+
+    Returns:
+        True when the building overlaps the boundary, or has no usable
+        geometry to test at all (never silently drop a record we can't place).
+    """
+    from django.contrib.gis.geos import Point
+
+    from urbanlens.dashboard.services.pins.pin_restructure import building_footprint
+
+    footprint = building_footprint(building)
+    if footprint is not None:
+        return bool(boundary_polygon.intersects(footprint))
+
+    latitude, longitude = building.get("latitude"), building.get("longitude")
+    if latitude is None or longitude is None:
+        return True
+    point = Point(float(longitude), float(latitude), srid=4326)
+    return bool(boundary_polygon.intersects(point))
 
 
 def building_footprint_geojson(building: dict[str, Any]) -> dict[str, Any] | None:
@@ -307,7 +350,9 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
         if not buildings:
             return None
 
-        rows = building_rows(buildings, list(pin.detail_pins.select_related("location")))
+        from urbanlens.dashboard.services.pins.pin_restructure import property_polygon
+
+        rows = building_rows(buildings, list(pin.detail_pins.select_related("location")), boundary_polygon=property_polygon(pin))
         return {
             PanelApiKind.BUILDINGS.value: [
                 {

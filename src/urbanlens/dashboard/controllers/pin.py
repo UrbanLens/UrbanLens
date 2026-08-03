@@ -1800,6 +1800,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_rows
         from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
         from urbanlens.dashboard.services.pins.external_data import get_panel_source
+        from urbanlens.dashboard.services.pins.pin_restructure import property_polygon
 
         try:
             pin = Pin.objects.select_related("location", "profile").get(slug=pin_slug, profile__user=request.user)
@@ -1819,7 +1820,12 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(status=204)
 
         children = list(pin.detail_pins.select_related("location"))
-        rows = building_rows(buildings, children, url_for=lambda child: reverse("pin.details", kwargs={"pin_slug": child.slug or child.uuid}))
+        rows = building_rows(
+            buildings,
+            children,
+            url_for=lambda child: reverse("pin.details", kwargs={"pin_slug": child.slug or child.uuid}),
+            boundary_polygon=property_polygon(pin),
+        )
         return render(
             request,
             "dashboard/partials/pins/_parcel_buildings_panel.html",

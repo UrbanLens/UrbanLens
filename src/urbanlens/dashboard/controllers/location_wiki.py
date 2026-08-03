@@ -270,6 +270,10 @@ class WikiParcelBuildingsPanelView(LoginRequiredMixin, View):
         if not buildings:
             return HttpResponse(status=204)
 
+        boundary_polygon, boundary_source = Boundary.objects.resolve_for_wiki(wiki, BoundaryType.PROPERTY)
+        if boundary_source == "circle":
+            boundary_polygon = None
+
         return render(
             request,
             "dashboard/partials/pins/_parcel_buildings_panel.html",
@@ -277,7 +281,7 @@ class WikiParcelBuildingsPanelView(LoginRequiredMixin, View):
                 "section_id": "location-parcel-buildings-panel",
                 "icon": "apartment",
                 "title": "Buildings on this Property",
-                "rows": building_rows(buildings, list(wiki.child_wikis.select_related("location"))),
+                "rows": building_rows(buildings, list(wiki.child_wikis.select_related("location")), boundary_polygon=boundary_polygon),
             },
         )
 
