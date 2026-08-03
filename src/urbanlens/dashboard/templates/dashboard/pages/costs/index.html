@@ -8,19 +8,78 @@
 
 <section class="attr-section">
     <div class="attr-section-inner">
-        <div class="attr-section-label">Total to run UrbanLens</div>
-        <h2 class="attr-section-title">
-            ${{ breakdown.total|floatformat:2 }}/mo
-            {% if cost_per_user is not None %}(~${{ cost_per_user|floatformat:2 }}/user){% endif %}
-        </h2>
+        <div class="attr-section-label">Monthly costs</div>
+        <h2 class="attr-section-title">${{ breakdown.total|floatformat:2 }}/mo to keep UrbanLens running</h2>
         <p class="attr-section-lead">
-            Hardware &amp; infrastructure ${{ breakdown.hardware|floatformat:2 }}/mo (amortized) &middot;
-            Operating costs ${{ breakdown.operating|floatformat:2 }}/mo &middot;
-            External APIs ${{ breakdown.api|floatformat:2 }}/mo (last 30 days)
-            {% if cost_per_user is not None %} &middot; split across {{ active_user_count }} active user{{ active_user_count|pluralize }} (logged in within 30 days, 2+ pins){% endif %}.
+            That figure blends amortized hardware, ongoing hosting &amp; operating costs, and the
+            last 30 days of metered external API calls
+            {% if cost_per_user is not None %} - split across {{ active_user_count }} active user{{ active_user_count|pluralize }}
+            (logged in within 30 days, 2+ pins), it works out to roughly ${{ cost_per_user|floatformat:2 }} per user{% endif %}.
         </p>
-        <div class="stats-chart-wrap" style="height:20rem">
-            <canvas id="chart-public-cost-monthly"></canvas>
+
+        <div class="stats-kpi-grid">
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(57,73,171,.12)">
+                    <i class="material-icons" style="color:#3949ab">payments</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">${{ breakdown.total|floatformat:2 }}</div>
+                    <div class="stats-kpi-label">Total</div>
+                    <div class="stats-kpi-sub">per month</div>
+                </div>
+            </div>
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(8,145,178,.12)">
+                    <i class="material-icons" style="color:#0891b2">memory</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">${{ breakdown.hardware|floatformat:2 }}</div>
+                    <div class="stats-kpi-label">Hardware</div>
+                    <div class="stats-kpi-sub">amortized / mo</div>
+                </div>
+            </div>
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(217,119,6,.12)">
+                    <i class="material-icons" style="color:#d97706">bolt</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">${{ breakdown.operating|floatformat:2 }}</div>
+                    <div class="stats-kpi-label">Operating</div>
+                    <div class="stats-kpi-sub">hosting, power &amp; more</div>
+                </div>
+            </div>
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(124,58,237,.12)">
+                    <i class="material-icons" style="color:#7c3aed">cloud</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">${{ breakdown.api|floatformat:2 }}</div>
+                    <div class="stats-kpi-label">External APIs</div>
+                    <div class="stats-kpi-sub">last 30 days</div>
+                </div>
+            </div>
+            {% if cost_per_user is not None %}
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(22,163,74,.12)">
+                    <i class="material-icons" style="color:#16a34a">person</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">${{ cost_per_user|floatformat:2 }}</div>
+                    <div class="stats-kpi-label">Per user</div>
+                    <div class="stats-kpi-sub">{{ active_user_count }} active user{{ active_user_count|pluralize }}</div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="card costs-chart-card">
+            <div class="card-header">
+                <i class="material-symbols-outlined">bar_chart</i>
+                <span>Effective monthly cost - last 12 months</span>
+            </div>
+            <div class="stats-chart-wrap">
+                <canvas id="chart-public-cost-monthly"></canvas>
+            </div>
         </div>
         <script type="application/json" id="cost-chart-data">
             {"labels": {{ chart_labels|safe }}, "hardware": {{ chart_hardware|safe }}, "operating": {{ chart_operating|safe }}, "api": {{ chart_api|safe }}}
@@ -28,7 +87,7 @@
     </div>
 </section>
 
-<section class="attr-section">
+<section class="attr-section attr-section--muted">
     <div class="attr-section-inner">
         <div class="attr-section-label">Last 30 days</div>
         <h2 class="attr-section-title">
