@@ -312,6 +312,12 @@ Field *definitions* (shared across every entity type: pins, photos, profiles, ma
 
 ## Labels
 
+Every write below to a Tag or Category label (never Status, People, or Media) - including
+merges, and pin/location assignment changes made through any endpoint that touches
+`Pin.labels` - is transparently synced to REData's label-suggestion service in the background
+(`services.labels.redata_suggestions`); a REData outage or missing configuration is a silent
+no-op, never a failed request.
+
 `GET /labels/` — `LabelsView` — scopes: `labels:read` — paginated. Query: `kind`, `is_global`(bool), `q`(name icontains), `parent_uuid`, `with_counts`(opt-in) — response: `{uuid, name(own), effective_name(customized), description, kind, color/effective_color, icon/effective_icon, custom_icon_url, order, is_protected, allow_auto_tag, keywords, is_global, is_customized, is_editable, parent_uuids[], pin_count/location_count(only with with_counts), created, updated}`.
 
 `POST /labels/` — `labels:write` — request: name, description, kind(required), color, icon, order, allow_auto_tag, keywords, `parent_uuids[]`(≤50) — always created under caller's own profile (never global) — 400 if kind missing or parent uuid not visible.

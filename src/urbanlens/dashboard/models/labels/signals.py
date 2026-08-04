@@ -1,11 +1,19 @@
-"""Signals for Label - creates default user-specific labels when a Profile is created."""
+"""Signals for Label - default label creation, and REData label-suggestion taxonomy sync."""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db.models.signals import m2m_changed, post_delete, post_save, pre_save
+from django.dispatch import receiver
+
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
+from urbanlens.dashboard.models.labels.model import Label
+
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
+
+_SUGGESTABLE_KINDS = (KIND_TAG, KIND_CATEGORY)
 
 # Default category definitions mirror the keys in services/ai/keywords.py so that
 # auto-categorisation can match against labels the user actually owns.
@@ -174,3 +182,64 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
             kind=KIND_MEDIA,
             defaults={"icon": d["icon"], "color": d["color"], "order": d["order"]},
         )
+
+
+# -- REData label-suggestion taxonomy sync --------------------------------
+# Tag/category labels are created/edited/reparented/deleted from a couple
+# dozen call sites (organize CRUD, bulk edit/convert/merge, the external API,
+# default-label seeding above). Signals are the one choke point that sees
+# all of them - see services.labels.redata_suggestions' module docstring.
+
+
+@receiver(pre_save, sender=Label, dispatch_uid="label_remember_prior_kind_for_redata")
+def remember_prior_kind_for_redata(sender: type[Label], instance: Label, **kwargs) -> None:
+    """Stash the label's previously-saved kind so post_save can detect a kind change.
+
+    Only a tag/category<->status transition (via LabelEditView/LabelBulkConvertView's
+    kind conversion) needs this - see sync_redata_taxonomy_on_save.
+    """
+    instance.redata_prior_kind = Label.objects.filter(pk=instance.pk).values_list("kind", flat=True).first() if instance.pk else None
+
+
+@receiver(post_save, sender=Label, dispatch_uid="label_sync_redata_taxonomy")
+def sync_redata_taxonomy_on_save(sender: type[Label], instance: Label, created: bool, **kwargs) -> None:
+    """Upsert a tag/category label's REData definition, or retire one that just left that kind."""
+    from urbanlens.dashboard.services.labels.redata_suggestions import queue_label_definition_sync, queue_label_retirement
+
+    prior_kind = None if created else getattr(instance, "redata_prior_kind", None)
+    if instance.kind in _SUGGESTABLE_KINDS:
+        queue_label_definition_sync(instance)
+    elif prior_kind in _SUGGESTABLE_KINDS:
+        queue_label_retirement(instance)
+
+
+@receiver(post_delete, sender=Label, dispatch_uid="label_retire_redata_taxonomy_on_delete")
+def retire_redata_taxonomy_on_delete(sender: type[Label], instance: Label, **kwargs) -> None:
+    """Retire a deleted tag/category label's REData definition - REData has no hard delete."""
+    from urbanlens.dashboard.services.labels.redata_suggestions import queue_label_retirement
+
+    if instance.kind in _SUGGESTABLE_KINDS:
+        queue_label_retirement(instance)
+
+
+@receiver(m2m_changed, sender=Label.parents.through, dispatch_uid="label_parents_sync_redata_taxonomy")
+def sync_redata_taxonomy_on_reparent(sender, instance: Label, action: str, reverse: bool, pk_set: set[int] | None, **kwargs) -> None:
+    """Resync a label's REData definition after its parent set changes (parent_ids is part of it).
+
+    ``Label.parents`` is symmetrical=False self-M2M, so both directions are
+    real: ``child.parents.add(parent)`` (forward, instance is the child whose
+    own parent_ids changed) and ``parent.children.add(child)`` /
+    ``child.parents.add(parent)`` called from the parent side (reverse,
+    instance is the parent, pk_set holds the affected children's ids - it is
+    each child's definition that changed, not the parent's).
+    """
+    if action not in {"post_add", "post_remove", "post_clear"}:
+        return
+    from urbanlens.dashboard.services.labels.redata_suggestions import queue_label_definition_sync
+
+    if reverse:
+        children = Label.objects.filter(pk__in=pk_set or set(), kind__in=_SUGGESTABLE_KINDS)
+    else:
+        children = [instance] if instance.kind in _SUGGESTABLE_KINDS else []
+    for child in children:
+        queue_label_definition_sync(child)

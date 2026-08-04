@@ -61,6 +61,16 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
         # Don't hardcode strings
         return self.filter(kind="media")
 
+    def suggestable(self) -> Self:
+        """Return only tag/category labels - the sole kinds ever synced to REData's label-suggestion service.
+
+        Status, people, and media labels are never sent (per the explicit
+        product decision - see ``services.labels.redata_suggestions``).
+        """
+        from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
+
+        return self.filter(kind__in=(KIND_TAG, KIND_CATEGORY))
+
     def location_labels(self) -> Self:
         """Return only items assignable to pins/wikis (excludes 'user' and 'media', which attach elsewhere)."""
         # TODO: Don't hardcode 'user' string

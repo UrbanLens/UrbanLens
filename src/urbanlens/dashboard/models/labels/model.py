@@ -83,6 +83,8 @@ class Label(abstract.FrontendDashboardModel):
         profile_id: int | None
         pins: ManyToManyField[Pin, Pin]
         wikis: ManyToManyField[Wiki, Wiki]
+        # Transient bookkeeping for the pre/post-save REData-taxonomy kind-change hook.
+        redata_prior_kind: str | None
 
     objects = LabelManager()
 

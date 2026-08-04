@@ -1174,6 +1174,8 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
 
     @staticmethod
     def _ctx(profile: Profile, pin: Pin, pin_slug: str) -> dict:
+        from urbanlens.dashboard.services.labels.redata_suggestions import redata_labels_configured
+
         ctx = _membership_panel_ctx(
             profile,
             _pin_member_ids(pin),
@@ -1189,6 +1191,9 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
         # tabs (see _label_dialog.html), so this panel also needs the profile's lists.
         ctx["dialog_title"] = "Add to Pin"
         ctx["pin_lists"] = list(PinList.objects.for_profile(profile).order_by("name"))
+        # Lazily loaded (see label.pin_suggestions) rather than fetched here -
+        # a live REData call has no business blocking this panel's own render.
+        ctx["redata_labels_enabled"] = redata_labels_configured()
         return ctx
 
     def get(self, request: HttpRequest, pin_slug: str, *args, **kwargs) -> HttpResponse:
@@ -1217,6 +1222,28 @@ class LabelPinMembershipView(LoginRequiredMixin, View):
             request,
             _MEMBERSHIP_PANEL,
             self._ctx(profile, pin, pin_slug),
+        )
+
+
+class LabelPinSuggestionsView(LoginRequiredMixin, View):
+    """REData-suggested tag/category labels for a pin (HTMX, lazily loaded inside the Add Labels dialog)."""
+
+    def get(self, request: HttpRequest, pin_slug: str, *args, **kwargs) -> HttpResponse:
+        from urbanlens.dashboard.services.labels.redata_suggestions import get_suggestions
+
+        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+        suggestions = get_suggestions(pin) or []
+        member_ids = _pin_member_ids(pin)
+        rows = [(label, round(confidence * 100)) for label, confidence in suggestions if label.id not in member_ids]
+        return render(
+            request,
+            "dashboard/partials/labels/_label_suggestions.html",
+            {
+                "pin_slug": pin_slug,
+                "suggestions": rows,
+                "label_url_kind": _MEMBERSHIP_URL_KIND,
+                "panel_id": "category-panel",
+            },
         )
 
 

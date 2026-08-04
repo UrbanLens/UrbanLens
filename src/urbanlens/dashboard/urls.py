@@ -1096,6 +1096,11 @@ urlpatterns = [
         name="label.image",
     ),
     path(
+        "labels/pin/<slug:pin_slug>/suggestions/",
+        labels.LabelPinSuggestionsView.as_view(),
+        name="label.pin_suggestions",
+    ),
+    path(
         "friendship/",
         include(
             [

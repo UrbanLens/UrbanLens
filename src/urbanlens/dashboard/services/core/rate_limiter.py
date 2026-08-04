@@ -111,6 +111,16 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=None,
         notes="Photo submission/voting/confidence via POST /photos/, /photos/votes/, /photos/confidence/.",
     ),
+    "redata_labels": ServiceDefaults(
+        display_name="REData Label Suggestions",
+        # Taxonomy/assignment syncs are batched (up to 2,000 labels / 500
+        # locations per REData's own limits) and only fire on actual writes;
+        # suggestion lookups are one call per dialog open. Generous but still
+        # bounded, matching redata_photos.
+        calls_per_minute=30,
+        calls_per_day=None,
+        notes="Tag/category taxonomy + assignment sync and suggestions via POST /labels/, /labels/assignments/, /labels/suggest/.",
+    ),
     "google_search": ServiceDefaults(
         display_name="Google Custom Search",
         calls_per_minute=10,

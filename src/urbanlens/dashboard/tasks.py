@@ -888,6 +888,57 @@ def submit_redata_photo_vote(image_id: int, profile_id: int, is_relevant: bool) 
     return str(image.uuid) not in (response.get("unknown_photo_ids") or [])
 
 
+@shared_task
+def sync_redata_label_definitions(profile_ids: list[int], definitions: list[dict]) -> bool:
+    """Push tag/category label definitions into every listed profile's REData taxonomy.
+
+    Enqueued from ``services.labels.redata_suggestions.queue_label_definition_sync``/
+    ``queue_label_retirement`` whenever a tag/category label is created,
+    edited, reparented, or retired. Best-effort like every other REData task.
+
+    Args:
+        profile_ids: PKs of profiles whose taxonomy should receive
+            ``definitions`` (a global label maps to every profile; an
+            owned label maps to just its one owner).
+        definitions: Definition dicts built by
+            ``services.labels.redata_suggestions._label_definition``.
+
+    Returns:
+        True when at least one profile was targeted.
+    """
+    from urbanlens.dashboard.services.labels.redata_suggestions import sync_label_definitions
+
+    if not profile_ids or not definitions:
+        return False
+    sync_label_definitions(profile_ids, definitions)
+    return True
+
+
+@shared_task
+def sync_redata_pin_assignment(pin_id: int) -> bool:
+    """Push one pin's complete current tag/category label set to REData.
+
+    Enqueued from ``services.labels.redata_suggestions.queue_pin_assignment_sync``,
+    itself called from the ``Pin.labels`` ``m2m_changed`` signal - the single
+    choke point that sees every pin-tagging call site. Best-effort like
+    every other REData task.
+
+    Args:
+        pin_id: PK of the pin whose label set changed.
+
+    Returns:
+        True when the pin was found and had an owning profile.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.labels.redata_suggestions import sync_pin_assignment
+
+    pin = Pin.objects.filter(pk=pin_id).select_related("profile", "location").first()
+    if pin is None or pin.profile_id is None:
+        return False
+    sync_pin_assignment(pin)
+    return True
+
+
 @shared_task(bind=True, max_retries=5)
 def scan_comment_image(self, comment_id: int) -> bool:
     """Background malware-scan a newly-uploaded pin/wiki comment image.

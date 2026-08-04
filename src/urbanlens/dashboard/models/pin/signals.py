@@ -5,6 +5,7 @@ from django.db.models.signals import m2m_changed, post_delete, post_save, pre_sa
 from django.dispatch import receiver
 
 from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.reviews.model import Review
@@ -187,6 +188,39 @@ def propagate_visited_label_to_ancestors(sender, instance: Pin, action: str, pk_
         return
     for ancestor in instance.ancestor_chain():
         ancestor.labels.add(visited_label)
+
+
+@receiver(m2m_changed, sender=Pin.labels.through, dispatch_uid="pin_labels_sync_redata_assignments")
+def sync_redata_assignments_for_pin_labels(sender, instance, action: str, reverse: bool, pk_set: set[int] | None, **kwargs) -> None:
+    """Forward a pin's tag/category label set to REData whenever it changes.
+
+    ``Pin.labels`` is mutated from ~20 call sites across the codebase (manual
+    tagging, keyword/AI auto-tag, imports, label-merge, undo) - this
+    m2m_changed receiver is the one choke point that sees all of them,
+    forward (``pin.labels.add(label)``) and reverse
+    (``label.pins.add(pin)``, used by ``services.labels.merge``) alike.
+
+    Unlike ``refresh_map_pin_cache_for_labels`` above, ``reverse`` matters
+    here: in the reverse direction ``instance`` is the *Label*, not a Pin,
+    and ``pk_set`` holds the affected *pin* ids rather than label ids.
+    """
+    if action not in {"post_add", "post_remove", "post_clear"}:
+        return
+    from urbanlens.dashboard.services.labels.redata_suggestions import queue_pin_assignment_sync
+
+    if reverse:
+        # instance is the Label; only a tag/category label's own (dis)association
+        # with pins is worth resyncing - see redata_suggestions' module docstring.
+        if instance.kind not in {KIND_TAG, KIND_CATEGORY}:
+            return
+        pin_ids = pk_set or set()
+    else:
+        # instance is the Pin; always resync its current tag/category set
+        # regardless of which label kind changed - see queue_pin_assignment_sync.
+        pin_ids = {instance.pk}
+
+    for pin_id in pin_ids:
+        queue_pin_assignment_sync(pin_id)
 
 
 @receiver(post_save, sender=Review, dispatch_uid="review_refresh_map_pin_cache")

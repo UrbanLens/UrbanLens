@@ -118,6 +118,16 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   photos preview and the wiki's Photos tab order by this confidence (vote score first on the wiki,
   confidence breaking ties, including when nothing has been voted on at all); a REData outage or
   missing configuration silently falls back to upload-recency ordering
+- **REData label suggestions** — each profile's Tag and Category labels only (never Status,
+  People, or Media) are synced to REData as a private per-profile taxonomy whenever they're
+  created, edited, reparented, or deleted/converted away (retired, not hard-deleted), and a pin's
+  complete current tag/category set is resynced whenever it changes, from any of the ~20 call
+  sites that touch `Pin.labels` (`models.labels.signals`, the `Pin.labels` `m2m_changed` receiver
+  in `models.pin.signals`, `services.labels.redata_suggestions`). The pin detail page's "Add
+  Labels" dialog lazily loads a "Suggested for this place" section from REData's suggestion
+  endpoint, scored against that profile's own vocabulary; a management command
+  (`backfill_redata_labels`) primes REData with taxonomy/assignments that predate this
+  integration. A REData outage or missing configuration silently disables sync and suggestions
 - **Wiki article auto-seeding** — a wiki with no article yet is automatically started from a
   confidently-matched Wikipedia article the first time one is cached for its location (converted
   to Markdown, with a required CC BY-SA attribution footer linking back to the source) - never

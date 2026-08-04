@@ -1,0 +1,30 @@
+{% load dashboard_tags %}
+{# REData-suggested tag/category labels for a pin - lazily loaded by _label_dialog.html. #}
+<div class="tad-suggestions" id="tad-suggestions-{{ pin_slug }}">
+{% if suggestions %}
+<div class="tad-suggestions-header">
+    <i class="material-symbols-outlined">auto_awesome</i> Suggested for this place
+</div>
+<ul class="tag-dialog-list tad-suggestions-list">
+    {% for label, confidence in suggestions %}
+    <li class="tag-dialog-item tag-dialog-item--suggested" data-name="{{ label.name|lower }}" data-kind="{{ label.kind }}">
+        <form hx-post="{% url 'label.pin' label_kind=label_url_kind pin_slug=pin_slug %}" hx-target="#{{ panel_id }}" hx-swap="outerHTML">
+            {% csrf_token %}
+            <input type="hidden" name="label_id" value="{{ label.id }}">
+            <input type="hidden" name="action" value="add">
+            <button type="submit" class="tag-dialog-btn">
+                <span class="tag-dialog-icon">
+                    {% if label.icon %}
+                    {% if label.icon|is_material_icon %}<i class="material-icons" style="font-size:16px{% if label.color %};color:{{ label.color }}{% endif %}">{{ label.icon }}</i>
+                    {% else %}<span>{{ label.icon }}</span>{% endif %}
+                    {% else %}<i class="material-icons" style="font-size:16px;opacity:.3">label</i>{% endif %}
+                </span>
+                <span class="tag-dialog-name">{{ label.name }}</span>
+                <span class="tad-suggestion-confidence">{{ confidence }}%</span>
+            </button>
+        </form>
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
+</div>
