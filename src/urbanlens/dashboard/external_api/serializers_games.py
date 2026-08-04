@@ -37,6 +37,12 @@ if TYPE_CHECKING:
 #:
 #: ``image_url`` is the media-gate URL for the round's photo; fetching it needs
 #: ``media:read`` in addition to ``games:read``, exactly as any other photo does.
+#:
+#: ``street_view_lat``/``street_view_lng`` are a deliberate exception to "never
+#: the answer before a guess" - see ``services.spotguessr.street_view.StreetViewPanorama``'s
+#: docstring. A native client renders its own interactive panorama from them the
+#: same way the web client does; ``street_view_image`` stays listed alongside as
+#: a fallback for a client that would rather not embed a Maps SDK at all.
 ROUND_PAYLOAD_FIELDS: tuple[str, ...] = (
     "round_id",
     "session_id",
@@ -49,6 +55,8 @@ ROUND_PAYLOAD_FIELDS: tuple[str, ...] = (
     "image_url",
     "display_text",
     "street_view_image",
+    "street_view_lat",
+    "street_view_lng",
 )
 
 #: Exactly the keys an external client may see for its own guess's result. The
@@ -261,6 +269,8 @@ class SpotGuessrRoundSerializer(serializers.Serializer):
     image_url = serializers.CharField(read_only=True, required=False)
     display_text = serializers.CharField(read_only=True, required=False, allow_null=True)
     street_view_image = serializers.CharField(read_only=True, required=False, allow_null=True)
+    street_view_lat = serializers.FloatField(read_only=True, required=False)
+    street_view_lng = serializers.FloatField(read_only=True, required=False)
 
 
 class SpotGuessrSessionCreateResponseSerializer(serializers.Serializer):

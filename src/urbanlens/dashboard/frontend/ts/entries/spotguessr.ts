@@ -87,6 +87,13 @@ interface RoundPayload {
     image_url?: string;
     display_text?: string | null;
     street_view_image?: string | null;
+    // The panorama's own resolved coordinates - see street_view_lat's docstring
+    // on services.spotguessr.street_view.StreetViewPanorama for why this mode
+    // gets an explicit exception to "never reveal the answer before a guess":
+    // a real pan/zoom/walk-around panorama has to talk to Google directly, so
+    // the browser needs to know where to look.
+    street_view_lat?: number | null;
+    street_view_lng?: number | null;
 }
 
 interface RevealPayload {
@@ -190,6 +197,7 @@ const DEFAULT_ZOOM = 2;
 const pageEl = document.querySelector<HTMLElement>(".spotguessr-page");
 const myProfileId = Number(pageEl?.dataset.myProfileId ?? "0");
 const regionSearchUrl = pageEl?.dataset.regionSearchUrl ?? "";
+const googleMapsApiKey = pageEl?.dataset.googleMapsApiKey ?? "";
 
 // ---------------------------------------------------------------------------
 // Session/UI state - every mutable cross-function value lives on this one
@@ -217,6 +225,10 @@ interface SpotGuessrState {
     lastRevealedRoundId: number | null;
     ws: WebSocket | null;
     guessMap: L.Map | null;
+    // Reused across rounds/sessions via setPano() rather than torn down and
+    // recreated - same singleton-container convention as guessMap/areaMap
+    // below.
+    streetViewPanorama: google.maps.StreetViewPanorama | null;
     guessMarker: L.Marker | null;
     actualMarker: L.Marker | null;
     resultLine: L.Polyline | null;
@@ -250,6 +262,7 @@ const state: SpotGuessrState = {
     lastRevealedRoundId: null,
     ws: null,
     guessMap: null,
+    streetViewPanorama: null,
     guessMarker: null,
     actualMarker: null,
     resultLine: null,
@@ -880,6 +893,89 @@ async function refreshLobby(): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
+// Street View panorama - interactive pan/zoom/walk-around for street_view
+// mode rounds (google.maps.StreetViewPanorama), loaded lazily so players who
+// never touch this mode never pay for the script. See street_view_lat's
+// docstring on RoundPayload for why the pano's coordinates are safe to hand
+// the client here despite the round payload never revealing the answer
+// otherwise.
+// ---------------------------------------------------------------------------
+
+// Memoized so a second street_view round doesn't inject the <script> tag
+// again - module load, not per-call, is the right lifetime for this promise.
+let googleMapsLoadPromise: Promise<void> | null = null;
+
+function loadGoogleMapsScript(): Promise<void> {
+    if (googleMapsLoadPromise) return googleMapsLoadPromise;
+    googleMapsLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(googleMapsApiKey)}&v=weekly`;
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = () => reject(new Error("Failed to load the Google Maps JS API."));
+        document.head.appendChild(script);
+    });
+    return googleMapsLoadPromise;
+}
+
+// One-way switch for the round: once a player falls back to the static
+// image there is nothing further to fall back to, so the button that got
+// them here goes away too.
+function showStreetViewFallback(): void {
+    el("sg-street-view-pano").hidden = true;
+    el<HTMLButtonElement>("sg-street-view-fallback-btn").hidden = true;
+    el<HTMLImageElement>("sg-round-photo").hidden = false;
+}
+
+async function initStreetViewPanorama(lat: number, lng: number): Promise<void> {
+    const container = el("sg-street-view-pano");
+    const fallbackBtn = el<HTMLButtonElement>("sg-street-view-fallback-btn");
+    container.hidden = false;
+    fallbackBtn.hidden = false;
+    el<HTMLImageElement>("sg-round-photo").hidden = true;
+
+    if (!googleMapsApiKey) {
+        showStreetViewFallback();
+        return;
+    }
+
+    try {
+        await loadGoogleMapsScript();
+        // Resolved server-side too (services.spotguessr.street_view), but that
+        // only confirms coverage existed when the round was built - re-resolving
+        // here also gets us the pano id StreetViewPanorama needs, and gives a
+        // definitive client-side OK/not-OK signal a bare `position:` option
+        // wouldn't (silent failures here fall back to the static image).
+        const service = new google.maps.StreetViewService();
+        const response = await service.getPanorama({ location: { lat, lng }, radius: 75 });
+        const pano = response.data.location?.pano;
+        if (!pano) {
+            showStreetViewFallback();
+            return;
+        }
+        if (state.streetViewPanorama) {
+            state.streetViewPanorama.setPano(pano);
+        } else {
+            state.streetViewPanorama = new google.maps.StreetViewPanorama(container, {
+                pano,
+                addressControl: false,
+                fullscreenControl: false,
+                motionTracking: false,
+                showRoadLabels: false,
+            });
+        }
+        // The container was `hidden` (display:none) until just above, so the
+        // panorama needs a nudge to size itself correctly - same reason
+        // guessMap.invalidateSize() gets one at the end of renderRound().
+        setTimeout(() => {
+            if (state.streetViewPanorama) google.maps.event.trigger(state.streetViewPanorama, "resize");
+        }, 0);
+    } catch {
+        showStreetViewFallback();
+    }
+}
+
+// ---------------------------------------------------------------------------
 // Gameplay
 // ---------------------------------------------------------------------------
 
@@ -915,6 +1011,8 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
 
     if (round.mode === "named_place") {
         photo.hidden = true;
+        el("sg-street-view-pano").hidden = true;
+        el<HTMLButtonElement>("sg-street-view-fallback-btn").hidden = true;
         nameHeading.hidden = false;
         nameHeading.textContent = round.display_text ?? "";
         playEntrance(nameHeading, skipMotion);
@@ -922,11 +1020,21 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
     } else {
         nameHeading.hidden = true;
         pinSearchWrap.hidden = false;
-        photo.hidden = false;
         // street_view_image is a server-built data: URI (services.spotguessr.street_view);
         // image_url is a Django ImageField storage path. Neither is user-typed.
         photo.src = (round.mode === "street_view" ? round.street_view_image : round.image_url) ?? ""; // lgtm[js/xss,js/client-side-unvalidated-url-redirection]
-        playEntrance(photo, skipMotion);
+        if (round.mode === "street_view" && round.street_view_lat != null && round.street_view_lng != null) {
+            // initStreetViewPanorama sets container.hidden = false synchronously
+            // (before its first await), so the entrance animation below sees
+            // the un-hidden element even though the fetch it kicks off is async.
+            void initStreetViewPanorama(round.street_view_lat, round.street_view_lng);
+            playEntrance(el("sg-street-view-pano"), skipMotion);
+        } else {
+            photo.hidden = false;
+            el("sg-street-view-pano").hidden = true;
+            el<HTMLButtonElement>("sg-street-view-fallback-btn").hidden = true;
+            playEntrance(photo, skipMotion);
+        }
     }
 
     // The rail holds nothing but multiplayer scores and chat.
@@ -1724,6 +1832,7 @@ if (pageEl && shellEl) {
         onResize: () => {
             state.guessMap?.invalidateSize();
             state.areaMap?.invalidateSize();
+            if (state.streetViewPanorama) google.maps.event.trigger(state.streetViewPanorama, "resize");
         },
     });
 }
@@ -1756,4 +1865,5 @@ el("sg-join-lobby-btn").addEventListener("click", () => void joinLobby());
 el("sg-begin-btn").addEventListener("click", () => void beginGame());
 el("sg-invite-more-btn").addEventListener("click", () => void handleInviteMore());
 el("sg-end-game-btn").addEventListener("click", () => void endGameNow());
+el("sg-street-view-fallback-btn").addEventListener("click", showStreetViewFallback);
 void loadInitialSession();

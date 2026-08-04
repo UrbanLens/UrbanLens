@@ -10,6 +10,7 @@ these tests guard the registry's own contract directly.
 from __future__ import annotations
 
 from itertools import count
+from unittest.mock import patch
 
 from model_bakery import baker
 
@@ -18,10 +19,11 @@ from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.models.spotguessr.model import SpotGuessrMode
+from urbanlens.dashboard.models.spotguessr.model import GameRound, SpotGuessrMode
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.spotguessr import modes
-from urbanlens.dashboard.services.spotguessr.session import GameConfig
+from urbanlens.dashboard.services.spotguessr.session import GameConfig, start_solo_session
+from urbanlens.dashboard.services.spotguessr.street_view import StreetViewPanorama
 
 _coordinate_counter = count()
 
@@ -113,3 +115,37 @@ class BuildRoundTests(TestCase):
         assert content is not None
         self.assertIsNone(content.image)
         self.assertIsNotNone(content.display_text)
+
+
+class SerializeStreetViewTests(TestCase):
+    """The one mode whose round payload deliberately includes the answer's
+    coordinates - see StreetViewPanorama's docstring for why."""
+
+    def setUp(self) -> None:
+        self.profile = _make_profile()
+        self.location = _make_location()
+        session = start_solo_session(self.profile, SpotGuessrMode.STREET_VIEW, GameConfig())
+        self.round = GameRound.objects.create(session=session, sequence_index=0, location=self.location)
+        self.strategy = modes.get_strategy(SpotGuessrMode.STREET_VIEW)
+        assert self.strategy is not None
+
+    @patch("urbanlens.dashboard.services.spotguessr.street_view.candidate_street_view_for_location")
+    def test_includes_the_panoramas_own_coordinates_and_fallback_image(self, mock_candidate) -> None:
+        mock_candidate.return_value = StreetViewPanorama(latitude=42.65, longitude=-73.76, image="data:image/jpeg;base64,abc123")
+        data: dict = {}
+        self.strategy.serialize_round(self.round, data)
+        self.assertEqual(data["street_view_lat"], 42.65)
+        self.assertEqual(data["street_view_lng"], -73.76)
+        self.assertEqual(data["street_view_image"], "data:image/jpeg;base64,abc123")
+
+    @patch("urbanlens.dashboard.services.spotguessr.street_view.candidate_street_view_for_location")
+    def test_omits_every_field_when_coverage_is_no_longer_available(self, mock_candidate) -> None:
+        # Coverage was confirmed once already at round-creation time (build_round),
+        # but serialize_round re-fetches live on every call - a transient failure
+        # here must degrade gracefully, not crash a round the player is mid-guessing.
+        mock_candidate.return_value = None
+        data: dict = {}
+        self.strategy.serialize_round(self.round, data)
+        self.assertNotIn("street_view_lat", data)
+        self.assertNotIn("street_view_lng", data)
+        self.assertNotIn("street_view_image", data)

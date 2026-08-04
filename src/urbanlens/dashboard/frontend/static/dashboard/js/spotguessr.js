@@ -75,6 +75,7 @@ var DEFAULT_ZOOM = 2;
 var pageEl = document.querySelector(".spotguessr-page");
 var myProfileId = Number(pageEl?.dataset.myProfileId ?? "0");
 var regionSearchUrl = pageEl?.dataset.regionSearchUrl ?? "";
+var googleMapsApiKey = pageEl?.dataset.googleMapsApiKey ?? "";
 var state = {
   sessionId: null,
   currentRoundId: null,
@@ -89,6 +90,7 @@ var state = {
   lastRevealedRoundId: null,
   ws: null,
   guessMap: null,
+  streetViewPanorama: null,
   guessMarker: null,
   actualMarker: null,
   resultLine: null,
@@ -591,6 +593,63 @@ async function refreshLobby() {
   const lobby = await getJson(urlFor(urls.lobby, state.sessionId));
   renderLobbyParticipants(lobby.participants);
 }
+var googleMapsLoadPromise = null;
+function loadGoogleMapsScript() {
+  if (googleMapsLoadPromise)
+    return googleMapsLoadPromise;
+  googleMapsLoadPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${encodeURIComponent(googleMapsApiKey)}&v=weekly`;
+    script.async = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load the Google Maps JS API."));
+    document.head.appendChild(script);
+  });
+  return googleMapsLoadPromise;
+}
+function showStreetViewFallback() {
+  el("sg-street-view-pano").hidden = true;
+  el("sg-street-view-fallback-btn").hidden = true;
+  el("sg-round-photo").hidden = false;
+}
+async function initStreetViewPanorama(lat, lng) {
+  const container = el("sg-street-view-pano");
+  const fallbackBtn = el("sg-street-view-fallback-btn");
+  container.hidden = false;
+  fallbackBtn.hidden = false;
+  el("sg-round-photo").hidden = true;
+  if (!googleMapsApiKey) {
+    showStreetViewFallback();
+    return;
+  }
+  try {
+    await loadGoogleMapsScript();
+    const service = new google.maps.StreetViewService;
+    const response = await service.getPanorama({ location: { lat, lng }, radius: 75 });
+    const pano = response.data.location?.pano;
+    if (!pano) {
+      showStreetViewFallback();
+      return;
+    }
+    if (state.streetViewPanorama) {
+      state.streetViewPanorama.setPano(pano);
+    } else {
+      state.streetViewPanorama = new google.maps.StreetViewPanorama(container, {
+        pano,
+        addressControl: false,
+        fullscreenControl: false,
+        motionTracking: false,
+        showRoadLabels: false
+      });
+    }
+    setTimeout(() => {
+      if (state.streetViewPanorama)
+        google.maps.event.trigger(state.streetViewPanorama, "resize");
+    }, 0);
+  } catch {
+    showStreetViewFallback();
+  }
+}
 function renderRound(round, roundNumber) {
   state.currentRoundId = round.round_id;
   state.currentMode = round.mode;
@@ -611,6 +670,8 @@ function renderRound(round, roundNumber) {
   const skipMotion = shell?.reducedMotion() ?? false;
   if (round.mode === "named_place") {
     photo.hidden = true;
+    el("sg-street-view-pano").hidden = true;
+    el("sg-street-view-fallback-btn").hidden = true;
     nameHeading.hidden = false;
     nameHeading.textContent = round.display_text ?? "";
     playEntrance(nameHeading, skipMotion);
@@ -618,9 +679,16 @@ function renderRound(round, roundNumber) {
   } else {
     nameHeading.hidden = true;
     pinSearchWrap.hidden = false;
-    photo.hidden = false;
     photo.src = (round.mode === "street_view" ? round.street_view_image : round.image_url) ?? "";
-    playEntrance(photo, skipMotion);
+    if (round.mode === "street_view" && round.street_view_lat != null && round.street_view_lng != null) {
+      initStreetViewPanorama(round.street_view_lat, round.street_view_lng);
+      playEntrance(el("sg-street-view-pano"), skipMotion);
+    } else {
+      photo.hidden = false;
+      el("sg-street-view-pano").hidden = true;
+      el("sg-street-view-fallback-btn").hidden = true;
+      playEntrance(photo, skipMotion);
+    }
   }
   shell?.setRailAvailable(state.isMultiplayer);
   el("sg-date-field").hidden = !state.dateGuessingEnabled;
@@ -1256,6 +1324,8 @@ if (pageEl && shellEl) {
     onResize: () => {
       state.guessMap?.invalidateSize();
       state.areaMap?.invalidateSize();
+      if (state.streetViewPanorama)
+        google.maps.event.trigger(state.streetViewPanorama, "resize");
     }
   });
 }
@@ -1287,4 +1357,5 @@ el("sg-join-lobby-btn").addEventListener("click", () => void joinLobby());
 el("sg-begin-btn").addEventListener("click", () => void beginGame());
 el("sg-invite-more-btn").addEventListener("click", () => void handleInviteMore());
 el("sg-end-game-btn").addEventListener("click", () => void endGameNow());
+el("sg-street-view-fallback-btn").addEventListener("click", showStreetViewFallback);
 loadInitialSession();

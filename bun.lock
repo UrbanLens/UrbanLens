@@ -26,6 +26,7 @@
         "yarn": "^1.22.19",
       },
       "devDependencies": {
+        "@types/google.maps": "^3.65.4",
         "@types/leaflet": "^1.9.21",
         "@types/leaflet-draw": "^1.0.13",
         "@types/libsodium-wrappers-sumo": "^0.8.2",
@@ -153,6 +154,8 @@
     "@tiptap/suggestion": ["@tiptap/suggestion@3.28.0", "", { "peerDependencies": { "@floating-ui/dom": "^1.0.0", "@tiptap/core": "3.28.0", "@tiptap/pm": "3.28.0" } }, "sha512-24k0CvvazBeHAK2+WrV1n0uDBZBHNbDAq1K8b5KkWSxcAU7zSCytmApS1u7clRW5wg2xKNBdDhNhvk7KSm1kIA=="],
 
     "@types/geojson": ["@types/geojson@7946.0.16", "", {}, "sha512-6C8nqWur3j98U6+lXDfTUWIfgvZU+EumvpHKcYjujKH7woYyLj2sUmff0tRhrqM7BohUw7Pz3ZB1jj2gW9Fvmg=="],
+
+    "@types/google.maps": ["@types/google.maps@3.65.4", "", {}, "sha512-5mvL6keNtWL8jisY5ABjNCpczqGpP9SU9CgYYi7xK+rmy0PSVsDIS+4fM+q6HR1uihDj2k7F1KoHK7kSV5GBpQ=="],
 
     "@types/leaflet": ["@types/leaflet@1.9.21", "", { "dependencies": { "@types/geojson": "*" } }, "sha512-TbAd9DaPGSnzp6QvtYngntMZgcRk+igFELwR2N99XZn7RXUdKgsXMR+28bUO0rPsWp8MIu/f47luLIQuSLYv/w=="],
 

@@ -6,6 +6,7 @@ encodes.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import logging
 from typing import TYPE_CHECKING
 
@@ -19,14 +20,40 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def candidate_street_view_for_location(location: Location) -> str | None:
-    """Fetch a Street View image data URI for ``location``, or None if unavailable.
+@dataclass(frozen=True)
+class StreetViewPanorama:
+    """A candidate Street View panorama for a SpotGuessr round.
+
+    Attributes:
+        latitude: The panorama's own resolved latitude - may differ slightly
+            from ``location``'s coordinates, since coverage lookup can widen
+            its search radius to find the nearest pano.
+        longitude: The panorama's own resolved longitude.
+        image: A base64 ``data:`` URI static image, kept as a fallback for
+            the client-side interactive panorama (``google.maps.StreetViewPanorama``)
+            to fall back to if it fails to load.
+    """
+
+    latitude: float
+    longitude: float
+    image: str
+
+
+def candidate_street_view_for_location(location: Location) -> StreetViewPanorama | None:
+    """Fetch a Street View panorama for ``location``, or None if unavailable.
 
     Reuses the existing ``GoogleMapsGateway`` (the same server-side,
     cache-backed fetch already powering the pin-detail Street View
-    carousel), including its coverage-metadata check. The API key never
-    reaches the client - the gateway returns a base64 ``data:`` URI, not a
-    URL to call directly.
+    carousel), including its coverage-metadata check.
+
+    The returned panorama's coordinates are handed to the client so it can
+    render an interactive ``google.maps.StreetViewPanorama`` there (pan/zoom/
+    walk between connected panos) - unlike the rest of a SpotGuessr round
+    payload, this is a deliberate exception to "never reveal the answer
+    before a guess": true client-side panning requires the browser to talk
+    to Google directly, which is only possible if it knows where to look.
+    See "Street View mode" in docs/designs/drafts/spotguessr.md for the
+    trade-off this accepts (mirrors how GeoGuessr itself works).
 
     A paid, rate-limited external API sits on the critical path of picking
     a round here, so any failure (no coverage, network error, rate limit)
@@ -54,4 +81,7 @@ def candidate_street_view_for_location(location: Location) -> str | None:
         return None
     if not slides:
         return None
-    return slides[0].img_src
+    slide = slides[0]
+    if slide.latitude is None or slide.longitude is None:
+        return None
+    return StreetViewPanorama(latitude=slide.latitude, longitude=slide.longitude, image=slide.img_src)

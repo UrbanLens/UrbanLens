@@ -25,7 +25,8 @@
      data-game="spotguessr"
      data-my-profile-id="{{ my_profile_id }}"
      data-initial-session-id="{{ initial_session_id|default:'' }}"
-     data-region-search-url="{% url 'region_search.search' %}">
+     data-region-search-url="{% url 'region_search.search' %}"
+     data-google-maps-api-key="{{ google_maps_api_key|default:'' }}">
 
     <div class="ul-game-shell" id="sg-shell" data-game-shell>
 
@@ -93,6 +94,11 @@
                     <div class="ul-game-stage__media">
                         <figure class="ul-game-media">
                             <img id="sg-round-photo" class="ul-game-media__img spotguessr-round-photo" alt="Guess this location" hidden>
+                            <div id="sg-street-view-pano" class="ul-game-media__panorama" hidden></div>
+                            <button type="button" id="sg-street-view-fallback-btn" class="sg-street-view-fallback-btn" hidden
+                                    title="If the interactive view above isn't working, switch to a static image instead">
+                                Trouble viewing this? Show static image
+                            </button>
                             <h3 id="sg-round-name" class="ul-game-clue spotguessr-round-name" hidden></h3>
                         </figure>
                     </div>

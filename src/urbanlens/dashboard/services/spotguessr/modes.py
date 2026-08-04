@@ -129,7 +129,11 @@ def _build_street_view(location: Location, config: GameConfig, participants: lis
 def _serialize_street_view(round_: GameRound, data: dict[str, Any]) -> None:
     from urbanlens.dashboard.services.spotguessr import street_view
 
-    data["street_view_image"] = street_view.candidate_street_view_for_location(round_.location)
+    panorama = street_view.candidate_street_view_for_location(round_.location)
+    if panorama is not None:
+        data["street_view_lat"] = panorama.latitude
+        data["street_view_lng"] = panorama.longitude
+        data["street_view_image"] = panorama.image
 
 
 _STRATEGIES: dict[str, ModeStrategy] = {

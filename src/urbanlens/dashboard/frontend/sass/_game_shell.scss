@@ -544,6 +544,20 @@ body.page-games {
     &[hidden] { display: none !important; }
 }
 
+// Street View mode's interactive panorama (google.maps.StreetViewPanorama) -
+// sized the same way .ul-game-map fills .ul-game-mapwrap, since a flex child
+// with no intrinsic size collapses to 0x0 otherwise.
+.ul-game-media__panorama {
+    position: absolute;
+    inset: 0;
+
+    &.is-entering {
+        animation: ul-game-fade-in var(--ul-game-dur-panel) var(--ul-game-ease-reveal) both;
+    }
+
+    &[hidden] { display: none !important; }
+}
+
 .ul-game-mapwrap {
     position: relative;
     min-height: 0;

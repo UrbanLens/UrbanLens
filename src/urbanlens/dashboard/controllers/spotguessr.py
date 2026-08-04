@@ -47,6 +47,7 @@ from urbanlens.dashboard.services.spotguessr import (
     session as spotguessr_session,
 )
 from urbanlens.dashboard.services.spotguessr.social import visible_friend_ratings
+from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
 
@@ -297,6 +298,10 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
                 "urls": _url_templates(),
                 "my_profile_id": profile.pk,
                 "initial_session_id": initial_session_id,
+                # Client-side key for the Street View mode's interactive panorama
+                # (google.maps.StreetViewPanorama) - the public/browser-restricted
+                # key, not the unrestricted server-side one used to fetch imagery.
+                "google_maps_api_key": settings.google_public_api_key,
             },
         )
 

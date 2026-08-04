@@ -4,11 +4,19 @@
 
 [data-theme="dark"] {
 
-    @include input-selectors { 
-        color: var(--ul-grey-6); 
+    @include input-selectors {
+        color: var(--ul-grey-6);
     }
     @include input-selectors(":disabled", "[readonly=readonly]") {
         color: var(--ul-grey-5);
+    }
+
+    // Native <select> popups render with browser/OS chrome, not our CSS box -
+    // without this hint Chromium/Firefox can pop the option list in light
+    // chrome while still inheriting our (light-on-dark) text color above,
+    // producing illegible text.
+    select {
+        color-scheme: dark;
     }
 
     .tag-stat {

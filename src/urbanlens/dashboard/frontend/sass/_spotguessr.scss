@@ -293,6 +293,32 @@
     width: 100%;
 }
 
+// Escape hatch shown over the interactive Street View panorama - see
+// showStreetViewFallback() in spotguessr.ts. A definitive client-side
+// OK/not-OK signal (google.maps.StreetViewService) already swaps to the
+// static fallback image automatically; this button covers the cases that
+// signal can't catch (e.g. a key/referrer restriction that still resolves a
+// pano id but renders degraded), so it stays available rather than the game
+// trying to detect that too.
+#sg-street-view-fallback-btn {
+    position: absolute;
+    right: $space-sm;
+    bottom: $space-sm;
+    z-index: $z-dropdown;
+    padding: .3rem .7rem;
+    border: none;
+    border-radius: $radius-full;
+    background: var(--ul-game-canvas);
+    background: color-mix(in srgb, var(--ul-game-canvas) 78%, transparent);
+    color: inherit;
+    font-size: .75rem;
+    cursor: pointer;
+
+    &:hover {
+        background: var(--ul-game-canvas);
+    }
+}
+
 // The Named Place clue is the entire content of the round.
 .spotguessr-round-name {
     @include shell.clue;

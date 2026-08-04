@@ -523,13 +523,33 @@ search box entirely when `round.mode == "named_place"`.
 **Selection** (`services.spotguessr.street_view.candidate_street_view_for_location`): calls
 the existing `GoogleMapsGateway.get_street_view_single()` (`services/apis/locations/google/
 maps.py`) — the same server-side fetch already used for the pin-detail Street View carousel,
-including its coverage-metadata check and radius-expansion search. Returns a base64
-`data:image/jpeg;base64,...` URI (never a client-exposed API key, never a raw Google Maps
-embed) or `None` if there's no coverage nearby, in which case the location is excluded from
-this session's Street View rounds the same way an image-less location is excluded from
-Photos mode. Wrapped in a broad `except Exception` at the call site — this is a paid,
-rate-limited external API on the critical path of picking a round, and a transient failure
-must degrade to "try another location," never crash round generation.
+including its coverage-metadata check and radius-expansion search. Returns a
+`StreetViewPanorama` (the pano's own resolved coordinates, plus a base64
+`data:image/jpeg;base64,...` fallback image) or `None` if there's no coverage nearby, in which
+case the location is excluded from this session's Street View rounds the same way an
+image-less location is excluded from Photos mode. Wrapped in a broad `except Exception` at the
+call site — this is a paid, rate-limited external API on the critical path of picking a round,
+and a transient failure must degrade to "try another location," never crash round generation.
+
+**Interactive panorama (added 2026-08-04)** — the round payload's `street_view_lat`/
+`street_view_lng` (`modes._serialize_street_view`) are the panorama's own coordinates, sent to
+the client so it can render a real pan/zoom/walk-around `google.maps.StreetViewPanorama`
+(`frontend/ts/entries/spotguessr.ts`'s `initStreetViewPanorama`), loaded lazily against the
+`google_public_api_key`-restricted client key so a player who never touches this mode never
+pays for the script. This **supersedes** the "never a client-exposed API key, never a raw
+Google Maps embed" rule the mode originally shipped with above: a real pannable panorama has
+to talk to Google directly from the browser, which is only possible if the browser knows
+where to look — there is no way to proxy that server-side the way a single static image can
+be. This is a deliberate, scoped exception to "the pre-guess round payload never reveals the
+answer" (see `services.spotguessr.serializers.serialize_round`'s docstring and
+`tests/hypothesis/test_spotguessr_round_payload.py`): a determined player could read the
+panorama's coordinates from the network tab instead of guessing. Accepted trade-off — this is
+also just how real GeoGuessr itself works, and the alternative (fixed-heading static image
+swaps only) was rejected as a materially worse experience for what a casual, low-stakes beta
+game buys in return. `street_view_image` (the static fallback) is kept alongside the
+coordinates for `initStreetViewPanorama`'s own failure path (script load error, or
+`StreetViewService.getPanorama` resolving no pano id) and for external API clients that don't
+want to embed the Maps JS SDK at all — see `external_api.serializers_games.ROUND_PAYLOAD_FIELDS`.
 
 **Scoring**: point-based (`target_is_point = True`), using the *location's own* `point` as
 the target coordinate (there is no `Image` row to carry a more specific point — Street View
