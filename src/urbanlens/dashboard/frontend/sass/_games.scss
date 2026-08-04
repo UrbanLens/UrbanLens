@@ -121,61 +121,78 @@ $game-accents: (
     margin-bottom: 0;
 }
 
+// A flex row rather than a grid: it centers a partial last row (e.g. a fourth
+// game dangling alone), which `justify-content: center` on a grid container
+// cannot do since it only centers the track set, not per-row content.
 .games-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
-    gap: $space-md;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: $space-lg;
 }
 
+// Same poster-tile look as SpotGuessr's mode cards (`shell.mode-card`): a
+// full-bleed accent gradient rather than a neutral surface with an accent
+// hairline, so each entry reads as a distinct "box art" rather than a plain
+// list row.
 .games-card {
-    @include surface($radius-md, 1);
+    @include shell.mode-card;
+    --ul-game-mode: var(--ul-game-accent);
+    flex: 1 1 18rem;
+    max-width: 22rem;
+    min-height: 15rem;
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: $space-sm;
     padding: $space-lg;
-    // Accent hairline: the card's own colour key, before the icon disc reads.
-    border-top: 3px solid var(--ul-game-accent-line);
-    box-shadow: var(--ul-shadow-sm);
     text-decoration: none;
-    color: inherit;
-    transition:
-        transform var(--ul-game-dur-state) ease,
-        box-shadow var(--ul-game-dur-state) ease,
-        border-top-color var(--ul-game-dur-state) ease;
+    color: var(--ul-game-accent-contrast);
 
     &:hover,
     &:focus-visible {
-        box-shadow: var(--ul-game-glow);
-        border-top-color: var(--ul-game-accent);
-        color: inherit;
-    }
-
-    // The lift is hover-only: the shell's reduced-motion block neutralises
-    // `.games-card:hover`, and a keyboard user gets the ring instead.
-    &:hover {
-        transform: translateY(-3px);
-    }
-
-    &:focus-visible {
-        outline: none;
-        box-shadow: var(--ul-game-glow), 0 0 0 3px var(--ul-game-accent-ring);
+        color: var(--ul-game-accent-contrast);
     }
 
     &:active {
         transform: translateY(-1px);
     }
+
+    &:focus-visible {
+        outline: none;
+        box-shadow: var(--ul-game-glow), 0 0 0 3px color-mix(in srgb, var(--ul-game-accent-contrast) 55%, transparent);
+    }
+}
+
+// Oversized watermark of the game's own icon, bled off the bottom-right
+// corner - stand-in "box art" until/unless real artwork exists per game.
+.games-card-glyph {
+    position: absolute;
+    right: -1rem;
+    bottom: -1.75rem;
+    font-size: 8rem;
+    line-height: 1;
+    color: var(--ul-game-accent-contrast);
+    opacity: .14;
+    transform: rotate(-10deg);
+    pointer-events: none;
+    transition: transform var(--ul-game-dur-state) ease, opacity var(--ul-game-dur-state) ease;
+
+    .games-card:hover & {
+        transform: rotate(-4deg) scale(1.08);
+        opacity: .2;
+    }
 }
 
 .games-card-icon {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
     width: 3rem;
     height: 3rem;
     border-radius: 50%;
-    background: var(--ul-game-accent-soft);
-    color: var(--ul-game-accent-ink);
+    background: color-mix(in srgb, var(--ul-game-accent-contrast) 22%, transparent);
     transition: transform var(--ul-game-dur-state) ease;
 
     .material-symbols-outlined {
@@ -188,35 +205,40 @@ $game-accents: (
 }
 
 .games-card-title {
+    position: relative;
     margin: 0;
     font-size: 1.15rem;
+    font-weight: 700;
 }
 
 .games-card-description {
+    position: relative;
     margin: 0;
-    color: var(--ul-grey-7);
+    opacity: .9;
     font-size: .92rem;
     line-height: 1.5;
 }
 
 // An inert <span> inside the card's own <a>, so its motion is driven entirely
-// by the parent's hover/focus rather than its own.
+// by the parent's hover/focus rather than its own. The pill itself rides the
+// contrast colour rather than the accent - the card is already an accent
+// fill, so an accent-on-accent pill would disappear.
 .games-card-play {
-    @include shell.cta;
+    position: relative;
     margin-top: auto;
     align-self: flex-start;
     display: inline-flex;
     align-items: center;
     gap: $space-xs;
     padding: $space-xs $space-md;
-    border-style: solid;
-    border-width: 1px;
+    border: 1px solid color-mix(in srgb, var(--ul-game-accent-contrast) 32%, transparent);
     border-radius: $radius-full;
+    background: color-mix(in srgb, var(--ul-game-accent-contrast) 14%, transparent);
     font-size: .9rem;
+    font-weight: 700;
     transition:
         gap var(--ul-game-dur-state) ease,
-        background var(--ul-game-dur-state) ease,
-        box-shadow var(--ul-game-dur-state) ease;
+        background var(--ul-game-dur-state) ease;
 
     .material-symbols-outlined {
         font-size: 1.1rem;
@@ -225,6 +247,6 @@ $game-accents: (
     .games-card:hover &,
     .games-card:focus-visible & {
         gap: $space-sm;
-        background: var(--ul-game-accent-strong);
+        background: color-mix(in srgb, var(--ul-game-accent-contrast) 24%, transparent);
     }
 }

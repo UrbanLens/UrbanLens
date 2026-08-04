@@ -9,6 +9,7 @@ from django.db.models import (
     CASCADE,
     BooleanField,
     CharField,
+    Count,
     ForeignKey,
     ImageField,
     Index,
@@ -88,6 +89,9 @@ class Label(abstract.FrontendDashboardModel):
 
     objects = LabelManager()
 
+    # Per-instance memo for total_pin_count(); not a field.
+    _total_pins_memo: int | None = None
+
     def _get_customization(self) -> LabelCustomization | None:
         """Return this user's customization, if the queryset was prefetched."""
         cached: list[LabelCustomization] = getattr(self, "_user_customizations", [])
@@ -126,6 +130,41 @@ class Label(abstract.FrontendDashboardModel):
         """True if this user has explicitly set an icon override (bypasses custom_icon)."""
         c = self._get_customization()
         return c is not None and c.icon is not None
+
+    def total_pin_count(self) -> int:
+        """Return this label's pin count plus every descendant's pin count (full subtree).
+
+        Walks the full multi-level hierarchy via ``get_label_and_descendants``
+        (BFS, cycle-safe) rather than only direct children, matching how map/pin
+        filtering actually expands a parent label to its whole subtree.
+
+        Uses the annotated ``pin_count`` for this label when the queryset
+        supplied one (``LabelQuerySet.with_pin_counts()``); falls back to a DB
+        query otherwise. Descendant counts beyond the prefetched direct children
+        are always summed via a single aggregate query, since only the
+        direct-children prefetch carries its own annotation.
+
+        The result is memoized on the instance: an Organize label card reads it
+        up to three times (the compact badge, the stats column, and the "View on
+        map" button's empty check), and the BFS plus aggregate behind it is the
+        expensive part of that page.
+
+        Returns:
+            Total pins carried by this label or any label beneath it.
+        """
+        if self._total_pins_memo is not None:
+            return self._total_pins_memo
+
+        annotated: int | None = getattr(self, "pin_count", None)
+        total: int = annotated if annotated is not None else self.pins.count()
+
+        if self.pk is not None:
+            descendant_ids = self.get_label_and_descendants(self.pk) - {self.pk}
+            if descendant_ids:
+                total += Label.objects.filter(id__in=descendant_ids).aggregate(total=Count("pins"))["total"] or 0
+
+        self._total_pins_memo = total
+        return total
 
     @classmethod
     def initial_order_for_parents(

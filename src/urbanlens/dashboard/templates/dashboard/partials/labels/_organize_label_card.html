@@ -66,7 +66,8 @@
 
         <div class="tag-card-actions">
             {% if kind == 'tag' or kind == 'category' or kind == 'status' %}
-            <a class="btn btn--icon" title="View on map" href="{{ label.id|label_map_url }}"><i class="material-symbols-outlined">travel_explore</i></a>
+                {# While stats are deferred the subtree total isn't known yet, so the link stays live; the HTMX row re-fetch renders it disabled if it turns out to be empty. #}
+                {% if stats_pending or label|tag_total_pins %}<a class="btn btn--icon" title="View on map" href="{{ label.id|label_map_url }}"><i class="material-symbols-outlined">travel_explore</i></a>{% else %}<a class="btn btn--icon" title="No pins in this label or its sub-labels" aria-disabled="true"><i class="material-symbols-outlined">travel_explore</i></a>{% endif %}
             {% endif %}
             {% if kind != 'people' and not label.profile %}
                 <button type="button" class="btn btn--icon{% if label.is_customized %} btn-icon--active{% endif %}" title="Customize your display of this global label" hx-get="{% url 'label.customize' label_kind=kind label_id=label.id %}" hx-target="#label-edit-dialog-body" hx-swap="innerHTML"><i class="material-symbols-outlined">tune</i></button>

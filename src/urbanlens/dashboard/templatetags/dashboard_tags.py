@@ -160,32 +160,12 @@ def first_pin_directions_url(map_data: Any) -> str | None:
 def tag_total_pins(tag: Label) -> int:
     """Return this label's pin count plus every descendant's pin count (full subtree).
 
-    Walks the full multi-level hierarchy via ``Label.get_label_and_descendants``
-    (BFS, cycle-safe) rather than only direct children, matching how map/pin
-    filtering actually expands a parent label to its whole subtree.
+    Usage: {{ label|tag_total_pins }}
 
-    Uses the annotated ``pin_count`` for this label when available (set by
-    ``LabelQuerySet.with_pin_counts()``); falls back to a DB query otherwise.
-    Descendant counts beyond the prefetched direct children are always summed
-    via a single aggregate query, since only the direct-children prefetch
-    carries its own annotation.
+    Thin template wrapper over ``Label.total_pin_count`` - see there for how the
+    ``with_pin_counts()`` annotation is reused and the result memoized.
     """
-    from django.db.models import Count
-
-    from urbanlens.dashboard.models.labels.model import Label as _Label
-
-    total = getattr(tag, "pin_count", None)
-    if total is None:
-        total = tag.pins.count()
-    if tag.pk is None:
-        return total
-
-    descendant_ids = _Label.get_label_and_descendants(tag.pk) - {tag.pk}
-    if not descendant_ids:
-        return total
-
-    descendant_total = _Label.objects.filter(id__in=descendant_ids).aggregate(total=Count("pins"))["total"] or 0
-    return total + descendant_total
+    return tag.total_pin_count()
 
 
 @register.filter

@@ -35,6 +35,12 @@
         cursor: not-allowed;
 	}
 
+	// An <a> has no :disabled state - a link rendered inert (href dropped) flags
+	// itself with aria-disabled and greys out from here instead.
+	&[aria-disabled='true'] {
+		@include btn-disabled;
+	}
+
 	.material-symbols-outlined,
 	.material-icons {
 		font-size: 1.05em;

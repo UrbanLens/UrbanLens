@@ -12,16 +12,15 @@
 
 {% block content %}
 <div class="ul-game ul-game-hub">
-    {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="games-explainer" kicker="Why play" heading="The more you play, the more it helps organize and correct your data." body="Rounds ask you to place or confirm real pins from your map. Every guess helps surface mislabeled locations, missing coordinates, and other details worth double-checking on the wiki." %}
+    {% include "dashboard/partials/ui/_page_explainer.html" with explainer_id="games-explainer" kicker="Why play" heading="Playing helps improve the wiki." body="Rounds ask you to place or confirm real pins from your map. Every guess helps identify mislabeled locations, missing coordinates, and other details worth double-checking." %}
 
     <div class="games-grid">
         {% for game in games %}
         <a class="games-card" data-game="{{ game.url_name }}" href="{{ game.url }}">
+            <i class="material-symbols-outlined games-card-glyph" aria-hidden="true">{{ game.icon }}</i>
             <div class="games-card-icon"><i class="material-symbols-outlined" aria-hidden="true">{{ game.icon }}</i></div>
-            <div class="games-card-body">
-                <h2 class="games-card-title">{{ game.name }}</h2>
-                <p class="games-card-description">{{ game.description }}</p>
-            </div>
+            <h2 class="games-card-title">{{ game.name }}</h2>
+            <p class="games-card-description">{{ game.description }}</p>
             <span class="games-card-play">Play <i class="material-symbols-outlined" aria-hidden="true">arrow_forward</i></span>
         </a>
         {% endfor %}
