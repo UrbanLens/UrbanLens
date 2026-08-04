@@ -59,6 +59,17 @@ class MaterializeMediaItemTests(TestCase):
         self.assertEqual(image.caption, "A photo")
         self.assertTrue(image.checksum)
 
+    def test_overlong_caption_is_truncated_to_the_column_width(self) -> None:
+        """Regression: Wikimedia returns the full page description (sometimes
+        a multi-paragraph history) as the caption, which used to overflow
+        Image.caption's varchar(500) and raise DataError, losing the photo
+        entirely instead of saving it with a truncated caption."""
+        long_caption = "x" * 600
+        with mock.patch("urbanlens.dashboard.services.media.media_materialize.requests.get", return_value=_ok_response()):
+            image = materialize_media_item(location=self.location, profile=self.profile, source="wikimedia", url="https://example.test/photo.jpg", caption=long_caption)
+        self.assertEqual(len(image.caption), 500)
+        self.assertEqual(image.caption, "x" * 500)
+
     def test_sends_descriptive_user_agent(self) -> None:
         """Wikimedia Commons 403s the default python-requests UA; materialize
         must send the same descriptive UrbanLens agent the API gateways use."""

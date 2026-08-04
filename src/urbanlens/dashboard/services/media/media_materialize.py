@@ -58,6 +58,19 @@ _PANEL_KEY_TO_IMAGE_SOURCE = {
     "cris_building": ImageSource.CRIS,
 }
 
+_CAPTION_MAX_LENGTH = Image._meta.get_field("caption").max_length
+
+
+def _truncated_caption(caption: str) -> str | None:
+    """Fit a provider-supplied caption into ``Image.caption``'s column width.
+
+    Providers like Wikimedia return the full page description (sometimes a
+    multi-paragraph history), not a short caption - insert() truncated that
+    past ``varchar(500)`` and raised ``DataError`` instead of saving the photo.
+    """
+    caption = caption.strip()
+    return caption[:_CAPTION_MAX_LENGTH] or None
+
 
 class MaterializeError(RuntimeError):
     """Raised when a Media gallery item can't be downloaded or persisted."""
@@ -277,7 +290,7 @@ def materialize_media_item(
         source_url=source_url,
         media_source_key=source,
         media_item_key=item_key,
-        caption=caption.strip() or None,
+        caption=_truncated_caption(caption),
         checksum=checksum,
         file_size=len(content),
     )
