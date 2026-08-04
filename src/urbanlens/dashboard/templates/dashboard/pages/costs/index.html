@@ -29,23 +29,23 @@
 
         <div class="stats-kpi-grid">
             <div class="stats-kpi-card">
-                <div class="stats-kpi-icon" style="background:rgba(57,73,171,.12)">
-                    <i class="material-icons" style="color:#3949ab">payments</i>
-                </div>
-                <div class="stats-kpi-body">
-                    <div class="stats-kpi-value">${{ breakdown.total|floatformat:2 }}</div>
-                    <div class="stats-kpi-label">Total</div>
-                    <div class="stats-kpi-sub">per month</div>
-                </div>
-            </div>
-            <div class="stats-kpi-card">
                 <div class="stats-kpi-icon" style="background:rgba(8,145,178,.12)">
                     <i class="material-icons" style="color:#0891b2">memory</i>
                 </div>
                 <div class="stats-kpi-body">
                     <div class="stats-kpi-value">${{ total_hardware_cost|floatformat:2 }}</div>
                     <div class="stats-kpi-label">Hardware</div>
-                    <div class="stats-kpi-sub">all-time, not amortized</div>
+                    <div class="stats-kpi-sub">Servers, hard drives, networking</div>
+                </div>
+            </div>
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(57,73,171,.12)">
+                    <i class="material-icons" style="color:#3949ab">payments</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">${{ breakdown.total|floatformat:2 }}</div>
+                    <div class="stats-kpi-label">Expenses / month</div>
+                    <div class="stats-kpi-sub">APIs, utilities, etc</div>
                 </div>
             </div>
             {% if cost_per_user is not None %}

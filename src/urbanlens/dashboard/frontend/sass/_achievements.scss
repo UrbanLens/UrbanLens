@@ -196,30 +196,35 @@
   i {
     font-size: 1rem;
   }
-}
 
-// A live streak is the one thing on the page a user can lose today, so it gets
-// the only warm accent in the section.
-.achievement-streak--live {
-  background: var(--ul-color-warning-bg);
-  border-color: var(--ul-color-warning-border);
-  color: var(--ul-color-warning-text);
+  // A live streak is the one thing on the page a user can lose today, so it gets
+  // the only warm accent in the section.
+  &--live {
+    background: var(--ul-color-warning-bg);
+    border-color: var(--ul-color-warning-border);
+    color: var(--ul-color-warning-text);
 
-  i {
-    color: var(--ul-color-warning-icon);
+    i {
+      color: var(--ul-color-warning-icon);
+    }
+  }
+
+  &__value {
+    display: flex;
+    flex-direction: column;
+    font-weight: 600;
+  }
+
+  &__best {
+    font-weight: 400;
+    opacity: .7;
   }
 }
 
-.achievement-streak__value {
-  font-weight: 600;
-}
-
-.achievement-streak__best {
-  font-weight: 400;
-  opacity: .7;
-}
-
 .achievement-streaks--full .achievement-streak {
+  // The nested __best line makes __value two rows tall; keep the icon/label
+  // pinned to the top row instead of re-centering on the now-taller pill.
+  align-items: flex-start;
   font-size: .85rem;
   padding: .4rem .8rem;
 }

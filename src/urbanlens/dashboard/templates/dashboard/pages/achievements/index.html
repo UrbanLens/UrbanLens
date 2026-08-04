@@ -2,7 +2,7 @@
 
 {% block hero %}
 {% if is_owner %}
-    {% include "dashboard/partials/ui/_page_hero.html" with modifier="top" icon="trophy" title="Your Achievements" subtitle="Awards you have earned, and how close you are to the rest." back_url=profile_url back_label="Back to profile" %}
+    {% include "dashboard/partials/ui/_page_hero.html" with modifier="top" icon="trophy" title="Your Achievements" subtitle="Awards, streaks, and stats." back_url=profile_url back_label="Back to profile" %}
 {% else %}
     {% include "dashboard/partials/ui/_page_hero.html" with modifier="top" icon="trophy" title=subject.username|add:"'s Achievements" subtitle="Awards this explorer has earned." back_url=profile_url back_label="Back to profile" %}
 {% endif %}
