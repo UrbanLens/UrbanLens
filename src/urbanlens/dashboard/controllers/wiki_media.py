@@ -15,8 +15,16 @@ two deliberate differences:
   *aggregate* across every contributing profile as a net score (up - down) and
   sorts items highest-first. Because ``MediaRelevance`` is keyed by Location,
   a relevance mark made on any user's pin detail page already counts here - no
-  materialization and no schema change (see
+  schema change needed for the score itself (see
   ``MediaRelevanceQuerySet.vote_scores``).
+* **An up-vote also submits the item to the wiki.** Unlike the pin detail
+  page's "mark relevant" (which materializes onto the *pin*, private by
+  default), a wiki up-vote is cast on the wiki's own page, about an item the
+  voter is already looking at *as* a candidate wiki photo - so it's treated
+  as the same deliberate sharing action as the pin page's separate "Send to
+  wiki" button, not merely an opinion. See ``WikiMediaVoteView.post`` for why
+  this is the only thing that makes an externally-sourced photo eligible for
+  ``services.spotguessr.photos`` (its ``wiki__isnull=False`` gate) at all.
 """
 
 from __future__ import annotations
@@ -181,21 +189,33 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
 class WikiMediaVoteView(LoginRequiredMixin, View):
     """Cast, flip, or clear the viewer's community vote on one wiki Media item.
 
-    POST /location/<slug>/wiki/media/vote/  → ``{"my_vote": bool|null, "vote_score": int}``
+    POST /location/<slug>/wiki/media/vote/  →
+    ``{"my_vote": bool|null, "vote_score": int, "image_id"?: int, "image_url"?: str, "materialize_error"?: str}``
 
-    Unlike the pin detail page's relevance endpoint, a wiki vote does **not**
-    materialize the item into a durable ``Image`` row - the wiki shows external
-    media straight from the shared cache, and a community up-vote shouldn't
-    silently spend the voter's storage quota. It only records the vote and
-    returns the item's new net score so the grid can re-sort.
+    An up-vote (``is_relevant: true``) on an externally-sourced item (any
+    ``source`` other than ``"photos"``, which already lists real ``Image``
+    rows attached to this wiki - see ``WikiMediaProviderView._photos``) also
+    materializes it and attaches it to this wiki, exactly like the pin
+    detail page's "Send to wiki" bulk action - see the module docstring's
+    "An up-vote also submits the item to the wiki" bullet for why voting
+    here is treated as that same deliberate sharing action. This costs the
+    *voter's* storage quota (``materialize_media_item`` downloads and saves
+    it), same as any other materialize call. A failed download still keeps
+    the vote (the voter's opinion is worth keeping even if today's download
+    attempt failed) but is reported back via ``materialize_error`` so the
+    frontend can toast it. A down-vote or a cleared vote never materializes
+    anything - only an existing, already-materialized ``image_id`` supplied
+    by the client (re-scoped to this location) gets its REData signal
+    reversed.
     """
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
         from urbanlens.dashboard.models.images.model import Image
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
+        from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
         from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
 
-        location, _wiki, profile = resolve_visible_wiki(request, location_slug)
+        location, wiki, profile = resolve_visible_wiki(request, location_slug)
 
         try:
             data = json.loads(request.body or b"{}")
@@ -203,6 +223,8 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
             url = str(data.get("url") or "")
             is_relevant = data.get("is_relevant")
             image_id = data.get("image_id")
+            page_url = str(data.get("page_url") or "")
+            caption = str(data.get("caption") or "")
         except (KeyError, ValueError, TypeError):
             return JsonResponse({"error": "Invalid request data."}, status=400)
 
@@ -210,6 +232,7 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
         if not item_key:
             return JsonResponse({"error": "Missing item identity."}, status=400)
 
+        response: dict = {}
         if is_relevant is None:
             MediaRelevance.objects.for_gallery(profile, location, source).filter(item_key=item_key).delete()
         else:
@@ -220,13 +243,27 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
                 item_key=item_key,
                 defaults={"is_relevant": bool(is_relevant)},
             )
-            # image_id is only trusted after re-scoping to this location - a
-            # client sending an id from elsewhere must not be able to attach
-            # a vote to an unrelated photo.
-            image = Image.objects.filter(pk=image_id, location=location).first() if image_id else None
-            if image is not None:
-                queue_relevance_vote(image, profile, is_relevant=bool(is_relevant))
+            if is_relevant and source != "photos" and url:
+                try:
+                    image = materialize_media_item(location=location, profile=profile, source=source, url=url, page_url=page_url, caption=caption, wiki=wiki)
+                except MaterializeError as exc:
+                    # MaterializeError can embed raw requests/OSError text -
+                    # log it server-side and surface a generic message.
+                    logger.warning("WikiMediaVoteView: failed to materialize %s: %s", url, exc)
+                    response["materialize_error"] = "Could not save this photo."
+                else:
+                    response["image_id"] = image.pk
+                    response["image_url"] = image.image.url
+                    queue_relevance_vote(image, profile, is_relevant=True)
+            else:
+                # image_id is only trusted after re-scoping to this location - a
+                # client sending an id from elsewhere must not be able to attach
+                # a vote to an unrelated photo.
+                existing_image = Image.objects.filter(pk=image_id, location=location).first() if image_id else None
+                if existing_image is not None:
+                    queue_relevance_vote(existing_image, profile, is_relevant=bool(is_relevant))
 
         score = MediaRelevance.objects.vote_scores(location, source).get(item_key, 0)
         my_vote = None if is_relevant is None else bool(is_relevant)
-        return JsonResponse({"my_vote": my_vote, "vote_score": score})
+        response.update({"my_vote": my_vote, "vote_score": score})
+        return JsonResponse(response)

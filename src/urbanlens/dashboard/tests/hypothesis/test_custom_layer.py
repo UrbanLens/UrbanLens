@@ -179,8 +179,12 @@ class CustomLayerPinEndpointTests(TestCase):
     def test_create_layer(self) -> None:
         response = self.client.post(self._list_url(), {"name": "Tunnels", "color": "#F44336", "icon": "route"})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response["HX-Trigger"], "ul:custom-layers-changed")
         layer = CustomLayer.objects.get(parent_pin=self.pin)
+        trigger = json.loads(response["HX-Trigger"])
+        self.assertEqual(
+            trigger["ul:custom-layers-changed"]["layers"],
+            [{"uuid": str(layer.uuid), "name": "Tunnels", "icon": "route", "color": "#F44336", "default_visible": layer.default_visible}],
+        )
         self.assertEqual(layer.name, "Tunnels")
         self.assertEqual(layer.color, "#F44336")
         self.assertEqual(layer.icon, "route")

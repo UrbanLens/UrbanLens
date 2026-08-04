@@ -607,7 +607,7 @@ function init(): void {
     // Shared layers engine + panel - the exact same component as the main map
     // (see {% map_layers_panel %} in _map_annotations_panels.html). Details and
     // Photos are this page's own layer groups, registered as custom toggles.
-    createMapLayers(map, {
+    const mapLayersInstance = createMapLayers(map, {
         root: document.getElementById("detail-map-layers"),
         apiKey: cfg.openweathermapApiKey || null,
         defaultBase: cfg.defaultMapView,
@@ -630,6 +630,73 @@ function init(): void {
             },
             ...customLayerToggles,
         },
+    });
+
+    // Manage Layers dialog changes (create/rename/recolor/reorder/delete) fire
+    // this event with the fresh layer list (see custom_layers.py's
+    // _render_layer_list HX-Trigger). Re-sync the panel buttons, this map's
+    // LayerGroups, and the toggle engine in place so a change made in the
+    // dialog shows up immediately - no page reload needed. customLayers is
+    // mutated (not reassigned) since the markup layer-assignment dropdown
+    // above closes over this same array reference.
+    const customLayersMenu = document.querySelector<HTMLElement>("#detail-map-layers [data-layers-menu]");
+    const customLayersManageBtn = customLayersMenu?.querySelector<HTMLElement>(".map-layers-manage-btn") ?? null;
+
+    function customLayerButtonLabel(layer: CustomLayerEntry): string {
+        return `<span class="map-layer-thumb map-layer-thumb--icon"><i class="material-symbols-outlined">${escHtml(layer.icon || "layers")}</i></span><span>${escHtml(layer.name)}</span>`;
+    }
+
+    function syncCustomLayers(fresh: CustomLayerEntry[]): void {
+        const freshUuids = new Set(fresh.map((layer) => layer.uuid));
+
+        customLayers.filter((layer) => !freshUuids.has(layer.uuid)).forEach((layer) => {
+            const group = customLayerGroups.get(layer.uuid);
+            if (group && map.hasLayer(group)) map.removeLayer(group);
+            customLayerGroups.delete(layer.uuid);
+            customLayersMenu?.querySelector(`[data-map-layer="layer-${layer.uuid}"]`)?.remove();
+            customLayers.splice(customLayers.indexOf(layer), 1);
+        });
+
+        fresh.forEach((layer) => {
+            const key = `layer-${layer.uuid}`;
+            const existing = customLayers.find((l) => l.uuid === layer.uuid);
+            if (existing) {
+                Object.assign(existing, layer);
+            } else {
+                const group = L.layerGroup();
+                if (layer.default_visible) group.addTo(map);
+                customLayerGroups.set(layer.uuid, group);
+                mapLayersInstance.registerToggle(key, {
+                    isActive: () => map.hasLayer(group),
+                    toggle: () => (map.hasLayer(group) ? map.removeLayer(group) : group.addTo(map)),
+                });
+                customLayers.push(layer);
+            }
+
+            if (!customLayersMenu) return;
+            let btn = customLayersMenu.querySelector<HTMLButtonElement>(`[data-map-layer="${key}"]`);
+            if (!btn) {
+                btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "map-layer-btn";
+                btn.dataset.mapLayer = key;
+                btn.dataset.layerKind = "custom";
+                btn.addEventListener("click", () => mapLayersInstance.toggleCustom(key));
+            }
+            btn.innerHTML = customLayerButtonLabel(layer);
+            btn.setAttribute("aria-label", `Show or hide ${layer.name}`);
+            btn.setAttribute("data-tooltip", layer.name);
+            btn.setAttribute("data-tooltip-float", "true");
+            btn.setAttribute("data-tooltip-pos", "top");
+            // Re-insert in server order, right before the "Manage Layers" entry.
+            customLayersMenu.insertBefore(btn, customLayersManageBtn);
+        });
+
+        mapLayersInstance.syncButtons();
+    }
+
+    document.body.addEventListener("ul:custom-layers-changed", (e) => {
+        syncCustomLayers((e as CustomEvent).detail?.layers || []);
     });
 
     // URL base for detail pin edit/delete: strip the placeholder UUID off the end.

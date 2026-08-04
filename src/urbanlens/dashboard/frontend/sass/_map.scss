@@ -4338,6 +4338,84 @@ div.container .addr-search-bar {
 
 .map-layer-btn.active .map-layer-thumb img { opacity: 1; }
 
+// -- Manage Layers dialog ----------------------------------------------------
+// Body content for #custom-layers-dialog (see _custom_layers_list.html);
+// .ul-dialog-body on the wrapping div supplies the dialog's own padding.
+
+.custom-layer-manage-list {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+    margin: 0 0 1rem;
+    padding: 0;
+    list-style: none;
+}
+
+.custom-layer-manage-row {
+    display: flex;
+    align-items: center;
+    gap: .6rem;
+    padding: .4rem .5rem;
+    border-radius: 8px;
+    background: var(--ul-surface-raised);
+    border: 1px solid var(--ul-surface-raised-border);
+
+    > .material-symbols-outlined {
+        flex-shrink: 0;
+        font-size: 18px;
+        color: var(--ul-grey-6);
+    }
+}
+
+.custom-layer-manage-swatch {
+    flex-shrink: 0;
+    // Square, not the round dp-color-swatch look - this is a static
+    // indicator, not one of the clickable picker options it borrows CSS from.
+    border-radius: 5px;
+    cursor: default;
+
+    &:hover {
+        transform: none;
+    }
+}
+
+.custom-layer-manage-name {
+    flex: 1;
+    min-width: 0;
+    @include ul-input;
+    padding: .35rem .55rem;
+}
+
+.custom-layer-manage-empty {
+    padding: .75rem .5rem;
+    color: var(--ul-grey-5);
+    font-size: .85rem;
+    font-style: italic;
+}
+
+.custom-layer-manage-form {
+    display: flex;
+    flex-direction: column;
+    gap: .8rem;
+    padding-top: .75rem;
+    border-top: 1px solid var(--ul-surface-border);
+
+    .form-row {
+        @include form-row;
+    }
+
+    .form-actions {
+        display: flex;
+        justify-content: flex-end;
+    }
+}
+
+.custom-layer-manage-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: .75rem;
+}
+
 // -- Combined label filter section ---------------------------------------------
 
 .fp-label-selected {

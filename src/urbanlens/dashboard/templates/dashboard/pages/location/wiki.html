@@ -691,9 +691,18 @@
                 body: JSON.stringify({
                     source: itemEl.dataset.mediaSource, item_key: itemEl.dataset.mediaKey,
                     url: itemEl.dataset.mediaUrl, is_relevant: next,
+                    page_url: itemEl.dataset.mediaPageUrl || '', caption: itemEl.dataset.mediaCaption || '',
                     image_id: itemEl.dataset.imageId || null,
                 }),
             }).then(function (r) { return r.json(); }).then(function (data) {
+                if (data.materialize_error && window.toastr) toastr.warning("Vote saved, but couldn't save a local copy: " + data.materialize_error);
+                if (data.image_id) itemEl.dataset.imageId = data.image_id;
+                if (data.image_url) {
+                    itemEl.dataset.mediaUrl = data.image_url;
+                    itemEl.dataset.mediaThumb = data.image_url;
+                    var thumbImg = itemEl.querySelector('.media-item-thumb');
+                    if (thumbImg && thumbImg.tagName === 'IMG') thumbImg.src = data.image_url;
+                }
                 if (data && typeof data.vote_score === 'number') {
                     itemEl.dataset.voteScore = String(data.vote_score);
                     var b = itemEl.querySelector('.media-item-votes');

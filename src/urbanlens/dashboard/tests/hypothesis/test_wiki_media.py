@@ -98,9 +98,45 @@ class WikiMediaVoteViewTests(TestCase):
         )
 
     def test_upvote_records_mark_and_returns_score(self) -> None:
-        response = self._vote({"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True})
+        image = Image.objects.create(image=SimpleUploadedFile("materialized.jpg", b"bytes", content_type="image/jpeg"), wiki=None, location=self.location, profile=self.profile)
+        with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=image) as materialize:
+            response = self._vote({"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True})
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"my_vote": True, "vote_score": 1})
+        self.assertEqual(response.json(), {"my_vote": True, "vote_score": 1, "image_id": image.pk, "image_url": image.image.url})
+        self.assertTrue(MediaRelevance.objects.filter(profile=self.profile, location=self.location, source="wikimedia", item_key="a", is_relevant=True).exists())
+        materialize.assert_called_once_with(location=self.location, profile=self.profile, source="wikimedia", url="https://x/a.jpg", page_url="", caption="", wiki=self.wiki)
+
+    def test_upvote_passes_page_url_and_caption_through_to_materialize(self) -> None:
+        image = Image.objects.create(image=SimpleUploadedFile("materialized.jpg", b"bytes", content_type="image/jpeg"), wiki=None, location=self.location, profile=self.profile)
+        with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=image) as materialize:
+            self._vote({"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "page_url": "https://x/a", "caption": "A photo", "is_relevant": True})
+        materialize.assert_called_once_with(location=self.location, profile=self.profile, source="wikimedia", url="https://x/a.jpg", page_url="https://x/a", caption="A photo", wiki=self.wiki)
+
+    def test_upvoting_a_photos_tab_item_does_not_re_materialize_it(self) -> None:
+        """The 'photos' source key lists photos already attached to this wiki
+        (WikiMediaProviderView._photos) - its url is a local media path, not
+        an external provider url, so re-materializing it would be wrong."""
+        image = Image.objects.create(image=SimpleUploadedFile("shared.jpg", b"bytes", content_type="image/jpeg"), wiki=self.wiki, location=self.location, profile=self.profile)
+        with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item") as materialize:
+            response = self._vote({"source": "photos", "item_key": "a", "url": image.image.url, "is_relevant": True, "image_id": image.pk})
+        self.assertEqual(response.status_code, 200)
+        materialize.assert_not_called()
+
+    def test_downvote_never_materializes(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item") as materialize:
+            response = self._vote({"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": False})
+        self.assertEqual(response.status_code, 200)
+        materialize.assert_not_called()
+
+    def test_a_failed_materialize_still_records_the_vote_and_reports_the_error(self) -> None:
+        from urbanlens.dashboard.services.media.media_materialize import MaterializeError
+
+        with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", side_effect=MaterializeError("boom")):
+            response = self._vote({"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True})
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["materialize_error"], "Could not save this photo.")
+        self.assertEqual(body["my_vote"], True)
         self.assertTrue(MediaRelevance.objects.filter(profile=self.profile, location=self.location, source="wikimedia", item_key="a", is_relevant=True).exists())
 
     def test_clearing_a_vote_deletes_the_mark(self) -> None:
@@ -116,7 +152,9 @@ class WikiMediaVoteViewTests(TestCase):
         other = baker.make(User).profile
         _mark(other, self.location, "wikimedia", "a", True)
 
-        response = self._vote({"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True})
+        image = Image.objects.create(image=SimpleUploadedFile("materialized.jpg", b"bytes", content_type="image/jpeg"), wiki=None, location=self.location, profile=self.profile)
+        with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=image):
+            response = self._vote({"source": "wikimedia", "item_key": "a", "url": "https://x/a.jpg", "is_relevant": True})
         self.assertEqual(response.json()["vote_score"], 2)
 
     def test_voting_with_an_image_id_queues_a_redata_vote(self) -> None:

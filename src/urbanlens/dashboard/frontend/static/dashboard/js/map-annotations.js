@@ -436,7 +436,7 @@ function init() {
       toggle: () => map.hasLayer(group) ? map.removeLayer(group) : group.addTo(map)
     };
   });
-  createMapLayers(map, {
+  const mapLayersInstance = createMapLayers(map, {
     root: document.getElementById("detail-map-layers"),
     apiKey: cfg.openweathermapApiKey || null,
     defaultBase: cfg.defaultMapView,
@@ -460,6 +460,60 @@ function init() {
       },
       ...customLayerToggles
     }
+  });
+  const customLayersMenu = document.querySelector("#detail-map-layers [data-layers-menu]");
+  const customLayersManageBtn = customLayersMenu?.querySelector(".map-layers-manage-btn") ?? null;
+  function customLayerButtonLabel(layer) {
+    return `<span class="map-layer-thumb map-layer-thumb--icon"><i class="material-symbols-outlined">${escHtml(layer.icon || "layers")}</i></span><span>${escHtml(layer.name)}</span>`;
+  }
+  function syncCustomLayers(fresh) {
+    const freshUuids = new Set(fresh.map((layer) => layer.uuid));
+    customLayers.filter((layer) => !freshUuids.has(layer.uuid)).forEach((layer) => {
+      const group = customLayerGroups.get(layer.uuid);
+      if (group && map.hasLayer(group))
+        map.removeLayer(group);
+      customLayerGroups.delete(layer.uuid);
+      customLayersMenu?.querySelector(`[data-map-layer="layer-${layer.uuid}"]`)?.remove();
+      customLayers.splice(customLayers.indexOf(layer), 1);
+    });
+    fresh.forEach((layer) => {
+      const key = `layer-${layer.uuid}`;
+      const existing = customLayers.find((l) => l.uuid === layer.uuid);
+      if (existing) {
+        Object.assign(existing, layer);
+      } else {
+        const group = L.layerGroup();
+        if (layer.default_visible)
+          group.addTo(map);
+        customLayerGroups.set(layer.uuid, group);
+        mapLayersInstance.registerToggle(key, {
+          isActive: () => map.hasLayer(group),
+          toggle: () => map.hasLayer(group) ? map.removeLayer(group) : group.addTo(map)
+        });
+        customLayers.push(layer);
+      }
+      if (!customLayersMenu)
+        return;
+      let btn = customLayersMenu.querySelector(`[data-map-layer="${key}"]`);
+      if (!btn) {
+        btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "map-layer-btn";
+        btn.dataset.mapLayer = key;
+        btn.dataset.layerKind = "custom";
+        btn.addEventListener("click", () => mapLayersInstance.toggleCustom(key));
+      }
+      btn.innerHTML = customLayerButtonLabel(layer);
+      btn.setAttribute("aria-label", `Show or hide ${layer.name}`);
+      btn.setAttribute("data-tooltip", layer.name);
+      btn.setAttribute("data-tooltip-float", "true");
+      btn.setAttribute("data-tooltip-pos", "top");
+      customLayersMenu.insertBefore(btn, customLayersManageBtn);
+    });
+    mapLayersInstance.syncButtons();
+  }
+  document.body.addEventListener("ul:custom-layers-changed", (e) => {
+    syncCustomLayers(e.detail?.layers || []);
   });
   const dpEditBase = cfg.detailPinEditUrlTemplate.replace("00000000-0000-0000-0000-000000000000/", "");
   let detailPins = [];

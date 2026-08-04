@@ -9,6 +9,7 @@ itself. Layers never attach to a standalone ``MarkupMap``.
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -96,20 +97,24 @@ def _render_layer_list(request: HttpRequest, owner: Pin | Wiki, qs: QuerySet[Cus
         qs: The owner's CustomLayer queryset.
 
     Returns:
-        Rendered ``_custom_layers_list.html`` partial with
-        ``HX-Trigger: ul:custom-layers-changed`` so the host page can refresh.
+        Rendered ``_custom_layers_list.html`` partial with an
+        ``HX-Trigger: ul:custom-layers-changed`` payload carrying the fresh
+        layer list, so map-annotations.ts can re-sync the layers panel
+        buttons/toggles and the markup layer-assignment dropdown without a
+        full page reload.
     """
     is_pin = isinstance(owner, Pin)
     url_prefix = "pin.layers" if is_pin else "location.wiki.layers"
     owner_slug = owner.slug if is_pin else owner.location.slug
 
+    ordered_layers = list(qs.order_by("order", "created"))
     rows = [
         {
             "layer": layer,
             "edit_url": reverse(f"{url_prefix}.edit", args=[owner_slug, layer.uuid]),
             "reorder_url": reverse(f"{url_prefix}.reorder", args=[owner_slug, layer.uuid]),
         }
-        for layer in qs.order_by("order", "created")
+        for layer in ordered_layers
     ]
     response = render(
         request,
@@ -121,7 +126,22 @@ def _render_layer_list(request: HttpRequest, owner: Pin | Wiki, qs: QuerySet[Cus
             "custom_layer_icon_choices": CUSTOM_LAYER_ICON_CHOICES,
         },
     )
-    response["HX-Trigger"] = "ul:custom-layers-changed"
+    response["HX-Trigger"] = json.dumps(
+        {
+            "ul:custom-layers-changed": {
+                "layers": [
+                    {
+                        "uuid": str(layer.uuid),
+                        "name": layer.name,
+                        "icon": layer.icon or "layers",
+                        "color": layer.color,
+                        "default_visible": layer.default_visible,
+                    }
+                    for layer in ordered_layers
+                ],
+            },
+        }
+    )
     return response
 
 

@@ -3,6 +3,12 @@ Manage Layers dialog body - HTMX-swapped by every create/rename/recolor/
 reorder/delete action (see controllers/custom_layers.py's _render_layer_list).
 Rendered inside #custom-layers-dialog-body (see _map_annotations_panels.html).
 
+Every action below re-targets the whole #custom-layers-dialog-body (not just
+the <ul>) because the response is this entire template - ul + form + script.
+Swapping just the <ul> via outerHTML still splices the response's form/script
+siblings into the DOM alongside the ones already there, duplicating them on
+every single action.
+
 Reuses the .dp-color-picker/.dp-color-swatch/.dp-icon-picker/.dp-icon-btn CSS
 classes already defined for the detail-pin add form in this same directory -
 no new picker styling needed, just a small swatch-click script scoped to this
@@ -15,22 +21,22 @@ fragment (delegated, so it survives being HTMX-swapped back in).
         <i class="material-symbols-outlined">{{ row.layer.icon|default:"layers" }}</i>
         <input type="text" name="name" class="custom-layer-manage-name" value="{{ row.layer.name }}" maxlength="100"
                hx-post="{{ row.edit_url }}" hx-trigger="change"
-               hx-target="#custom-layer-manage-list" hx-swap="outerHTML"
+               hx-target="#custom-layers-dialog-body" hx-swap="innerHTML"
                aria-label="Layer name">
         <button type="button" class="btn btn--icon" title="Move up"
                 hx-post="{{ row.reorder_url }}" hx-vals='{"direction":"up"}'
-                hx-target="#custom-layer-manage-list" hx-swap="outerHTML">
+                hx-target="#custom-layers-dialog-body" hx-swap="innerHTML">
             <i class="material-symbols-outlined">arrow_upward</i>
         </button>
         <button type="button" class="btn btn--icon" title="Move down"
                 hx-post="{{ row.reorder_url }}" hx-vals='{"direction":"down"}'
-                hx-target="#custom-layer-manage-list" hx-swap="outerHTML">
+                hx-target="#custom-layers-dialog-body" hx-swap="innerHTML">
             <i class="material-symbols-outlined">arrow_downward</i>
         </button>
         <button type="button" class="btn btn--icon btn--danger" title="Delete layer"
                 hx-delete="{{ row.edit_url }}"
                 hx-confirm="Delete &quot;{{ row.layer.name }}&quot;? Its items move back to the base Markup layer - they are not deleted."
-                hx-target="#custom-layer-manage-list" hx-swap="outerHTML">
+                hx-target="#custom-layers-dialog-body" hx-swap="innerHTML">
             <i class="material-symbols-outlined">delete</i>
         </button>
     </li>
@@ -38,7 +44,7 @@ fragment (delegated, so it survives being HTMX-swapped back in).
     <li class="custom-layer-manage-empty">No custom layers yet - add one below.</li>
     {% endfor %}
 </ul>
-<form class="custom-layer-manage-form" hx-post="{{ create_url }}" hx-target="#custom-layer-manage-list" hx-swap="outerHTML">
+<form class="custom-layer-manage-form" hx-post="{{ create_url }}" hx-target="#custom-layers-dialog-body" hx-swap="innerHTML">
     {% csrf_token %}
     <div class="form-row">
         <label for="custom-layer-name-input">Layer name</label>
@@ -93,3 +99,6 @@ fragment (delegated, so it survives being HTMX-swapped back in).
     });
 })();
 </script>
+<div class="custom-layer-manage-footer">
+    <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Done</button>
+</div>
