@@ -1,0 +1,1375 @@
+// Shared game shell: the full-bleed chrome, HUD, stage, panels and rail that
+// SpotGuessr / Trivia / Consensus / the games hub all render inside, plus the
+// component mixins their own partials @include onto their existing class names.
+//
+// The per-game partials keep every class name in their DOM contract; the only
+// thing they take from here is the *body* of each component rule (via the
+// mixins at the bottom of this file). That keeps one source of truth for how a
+// score row, a chat log or a timer looks without renaming anything the
+// TypeScript writes or reads.
+//
+// Load order matters: this file must come after `page_hero` (so the hero
+// overrides below win) and before `spotguessr` / `trivia` / `consensus` /
+// `games` (so those can override shell defaults).
+@use 'sass:color';
+@use 'variables' as *;
+
+// -- Token contract -------------------------------------------------------------
+// Every --ul-game-* property is declared on `body`, including the ones derived
+// from --ul-game-accent. A derived property declared on :root would compute
+// against :root's accent and silently ignore the `body.page-<game>` override
+// below, so both halves have to sit on the same element.
+body {
+    // canvas + chrome
+    --ul-game-canvas: var(--ul-grey-0);
+    --ul-game-canvas-2: var(--ul-grey-1);
+    --ul-game-hud-bg: var(--ul-surface-1);
+    --ul-game-hud-bg: color-mix(in srgb, var(--ul-game-accent) 6%, var(--ul-surface-1));
+    --ul-game-hud-border: var(--ul-surface-1-border);
+    --ul-game-scrim: rgba(0, 0, 0, .5);
+    --ul-game-scrim: color-mix(in srgb, var(--ul-black) 52%, transparent);
+    --ul-game-row-bg: var(--ul-surface-2);
+    --ul-game-row-border: var(--ul-surface-2-border);
+
+    // accent - overridden per game further down
+    --ul-game-accent: var(--ul-primary-color);
+    --ul-game-accent-strong: var(--ul-primary-color);
+    --ul-game-accent-contrast: #{$color-grey-0a};
+    --ul-game-accent-ink: var(--ul-primary-color);
+
+    // accent derivatives
+    --ul-game-accent-soft: rgba(0, 0, 0, .06);
+    --ul-game-accent-soft: color-mix(in srgb, var(--ul-game-accent) 14%, transparent);
+    --ul-game-accent-line: var(--ul-grey-2a);
+    --ul-game-accent-line: color-mix(in srgb, var(--ul-game-accent) 38%, transparent);
+    --ul-game-accent-ring: rgba(0, 0, 0, .2);
+    --ul-game-accent-ring: color-mix(in srgb, var(--ul-game-accent) 32%, transparent);
+    --ul-game-glow: var(--ul-shadow-md);
+    --ul-game-glow: 0 1px 2px rgba(0, 0, 0, .06), 0 14px 36px color-mix(in srgb, var(--ul-game-accent) 18%, transparent);
+
+    // semantic state - correct/incorrect, deltas, medals. Never the accent.
+    --ul-game-good: var(--ul-color-success-text);
+    --ul-game-good-bg: var(--ul-color-success-bg);
+    --ul-game-good-border: var(--ul-color-success-border);
+    --ul-game-bad: var(--ul-color-danger-text);
+    --ul-game-bad-bg: var(--ul-color-danger-bg);
+    --ul-game-bad-border: var(--ul-color-danger-border);
+    --ul-game-flat: var(--ul-grey-6);
+
+    // The far end of a mode-card gradient. It shades away from the card's own
+    // text colour: in light mode the accent is dark and the label is white, so
+    // the ramp darkens; in dark mode the accent is light and the label is
+    // near-black, so darkening it would drop the label below AA and the ramp
+    // lightens instead.
+    --ul-game-mode-shade: #{$color-grey-10b};
+
+    // podium - mixed into the row surface so it inverts with the theme
+    --ul-game-medal-1: var(--ul-surface-2);
+    --ul-game-medal-1: color-mix(in srgb, #{$color-amber-300} 22%, var(--ul-surface-2));
+    --ul-game-medal-2: var(--ul-surface-2);
+    --ul-game-medal-2: color-mix(in srgb, #cfd8dc 26%, var(--ul-surface-2));
+    --ul-game-medal-3: var(--ul-surface-2);
+    --ul-game-medal-3: color-mix(in srgb, #d7a06a 22%, var(--ul-surface-2));
+
+    // metrics
+    --ul-game-hud-h: 3.25rem;
+    --ul-game-rail-w: 20rem;
+    --ul-game-pad: #{$space-sm};
+    --ul-game-stage-gap: #{$space-sm};
+    --ul-game-radius: #{$radius-md};
+    // vh first, dvh second: engines without dvh keep the vh value rather than
+    // collapsing the stage to zero height.
+    --ul-game-stage-min: 34vh;
+    --ul-game-stage-min: 34dvh;
+    // Recomputed at runtime from .app-nav's rect - the env indicator, the
+    // account-deletion banner and the dev toolbar all shift the nav down.
+    --ul-game-chrome-top: 4rem;
+    --ul-game-progress: 0;
+
+    // motion ladder
+    --ul-game-dur-micro: .12s;
+    --ul-game-dur-state: .15s;
+    --ul-game-dur-move: .22s;
+    --ul-game-dur-panel: .32s;
+    --ul-game-dur-reward: .5s;
+    --ul-game-ease-move: cubic-bezier(.4, 0, .2, 1);
+    --ul-game-ease-reveal: cubic-bezier(.2, .8, .2, 1);
+    --ul-game-ease-pop: cubic-bezier(.34, 1.56, .64, 1);
+
+    @include up($breakpoint-sm) {
+        --ul-game-hud-h: 3.75rem;
+        --ul-game-pad: #{$space-md};
+        --ul-game-stage-gap: #{$space-md};
+    }
+}
+
+html[data-theme="dark"] body {
+    --ul-game-mode-shade: #{$color-grey-0a};
+    --ul-game-hud-bg: var(--ul-surface-1);
+    --ul-game-hud-bg: color-mix(in srgb, var(--ul-game-accent) 9%, var(--ul-surface-1));
+    --ul-game-scrim: rgba(0, 0, 0, .66);
+    --ul-game-scrim: color-mix(in srgb, #{$color-grey-10b} 64%, transparent);
+    --ul-game-glow: var(--ul-shadow-md);
+    --ul-game-glow: 0 1px 2px rgba(0, 0, 0, .4), 0 14px 36px color-mix(in srgb, var(--ul-game-accent) 28%, transparent);
+    --ul-game-medal-1: color-mix(in srgb, #{$color-amber-300} 14%, var(--ul-surface-2));
+    --ul-game-medal-2: color-mix(in srgb, #cfd8dc 12%, var(--ul-surface-2));
+    --ul-game-medal-3: color-mix(in srgb, #d7a06a 14%, var(--ul-surface-2));
+}
+
+// -- Per-game accents -----------------------------------------------------------
+// The only per-game colour in the codebase. --ul-game-accent-contrast clears
+// 4.5:1 on an --ul-game-accent fill; --ul-game-accent-ink clears 4.5:1 on the
+// page canvas. Trivia's amber is fill-only: as small text on white it is
+// ~2.1:1, which is why its ink token is neutral grey rather than the accent.
+body.page-spotguessr {
+    --ul-game-accent: #{$color-teal-700};
+    --ul-game-accent-strong: #{$color-teal-900};
+    --ul-game-accent-contrast: #{$color-grey-0a};
+    --ul-game-accent-ink: #{$color-teal-700};
+    --ul-game-mode-photos: #{$color-teal-700};
+    --ul-game-mode-named_place: #{$color-cyan-800};
+    --ul-game-mode-street_view: #{$color-light-blue-800};
+}
+
+html[data-theme="dark"] body.page-spotguessr {
+    --ul-game-accent: #{$color-teal-300};
+    --ul-game-accent-strong: #{$color-teal-100};
+    --ul-game-accent-contrast: var(--ul-black);
+    --ul-game-accent-ink: #{$color-teal-300};
+    --ul-game-mode-photos: #{$color-teal-300};
+    --ul-game-mode-named_place: #{$color-cyan-300};
+    --ul-game-mode-street_view: #{$color-light-blue-300};
+}
+
+body.page-trivia {
+    --ul-game-accent: #{$color-amber-700};
+    --ul-game-accent-strong: #{$color-amber-900};
+    --ul-game-accent-contrast: var(--ul-black);
+    --ul-game-accent-ink: var(--ul-grey-9);
+}
+
+html[data-theme="dark"] body.page-trivia {
+    --ul-game-accent: #{$color-amber-500};
+    --ul-game-accent-strong: #{$color-amber-700};
+    --ul-game-accent-contrast: var(--ul-black);
+    --ul-game-accent-ink: #{$color-amber-300};
+}
+
+body.page-consensus {
+    --ul-game-accent: #{$color-indigo-500};
+    --ul-game-accent-strong: #{$color-indigo-800};
+    --ul-game-accent-contrast: #{$color-grey-0a};
+    --ul-game-accent-ink: #{$color-indigo-500};
+}
+
+html[data-theme="dark"] body.page-consensus {
+    --ul-game-accent: #{$color-indigo-300};
+    --ul-game-accent-strong: #{$color-indigo-200};
+    --ul-game-accent-contrast: var(--ul-black);
+    --ul-game-accent-ink: #{$color-indigo-200};
+}
+
+body.page-games {
+    --ul-game-accent: #{$color-deep-purple-500};
+    --ul-game-accent-strong: #{$color-deep-purple-700};
+    --ul-game-accent-contrast: #{$color-grey-0a};
+    --ul-game-accent-ink: #{$color-deep-purple-700};
+}
+
+html[data-theme="dark"] body.page-games {
+    --ul-game-accent: #{$color-deep-purple-300};
+    --ul-game-accent-strong: #{$color-deep-purple-100};
+    --ul-game-accent-contrast: var(--ul-black);
+    --ul-game-accent-ink: #{$color-deep-purple-300};
+}
+
+// -- Page-level: unlock full bleed ------------------------------------------------
+// base.html already emits `body.page-<page_name>`, so the container can be
+// widened without touching the theme template.
+body.page-spotguessr,
+body.page-trivia,
+body.page-consensus,
+body.page-games {
+    > div.container {
+        max-width: 100%;
+        padding: 0;
+    }
+}
+
+body.page-spotguessr,
+body.page-trivia,
+body.page-consensus,
+body.page-games {
+    .ul-page-hero--top {
+        height: auto;
+        min-height: 8.5rem;
+        padding-block: $space-lg $space-md;
+
+        @include up($breakpoint-sm) {
+            min-height: 10rem;
+        }
+    }
+}
+
+// -- Root -------------------------------------------------------------------------
+.ul-game {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    width: 100%;
+    margin: 0;
+
+    // Panels, HUD controls and every [data-*-only] wrapper set an explicit
+    // display, which beats the UA stylesheet's [hidden] rule regardless of
+    // specificity. One guard for the whole page root.
+    [hidden] {
+        display: none !important;
+    }
+}
+
+.ul-game-shell {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    padding: $space-md;
+    overscroll-behavior: none;
+
+    @include up($breakpoint-sm) {
+        padding: $space-md $space-lg $space-xl;
+    }
+}
+
+// -- HUD ---------------------------------------------------------------------------
+// Shown on every panel, not only while playing: it is the sole host of the
+// focus-mode, fullscreen and players/chat controls, and a host sitting in a
+// multiplayer waiting room needs all three before a round starts.
+.ul-game-hud {
+    display: grid;
+    position: relative;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    align-items: center;
+    gap: $space-sm;
+    padding: $bar-padding-y $bar-padding-x;
+    border-radius: $radius-md $radius-md 0 0;
+    background: var(--ul-game-hud-bg);
+    border: 1px solid var(--ul-game-hud-border);
+    border-bottom: 0;
+
+    &[hidden] {
+        display: none !important;
+    }
+
+    &__group {
+        display: flex;
+        align-items: center;
+        gap: $space-sm;
+        min-width: 0;
+
+        &--center { justify-content: center; }
+        &--trail { justify-content: flex-end; }
+    }
+
+    &__identity {
+        display: inline-flex;
+        align-items: center;
+        gap: $space-xs;
+        font-weight: 700;
+
+        i {
+            color: var(--ul-game-accent-ink);
+            font-size: 1.2rem;
+        }
+    }
+
+    &__name {
+        @include truncate;
+    }
+
+    &__round {
+        font-weight: 600;
+        color: var(--ul-grey-7);
+        white-space: nowrap;
+    }
+
+    &__score {
+        font-variant-numeric: tabular-nums;
+        font-weight: 800;
+        font-size: 1.05rem;
+
+        &.is-counting {
+            animation: ul-game-count-flare .45s var(--ul-game-ease-pop);
+        }
+    }
+
+    &__btn {
+        @include icon-btn(30px);
+
+        &[hidden] { display: none !important; }
+    }
+
+    &__progress {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: 3px;
+        background: var(--ul-game-accent-soft);
+        overflow: hidden;
+    }
+
+    &__progress-fill {
+        display: block;
+        height: 100%;
+        width: 100%;
+        background: var(--ul-game-accent);
+        transform: scaleX(var(--ul-game-progress, 0));
+        transform-origin: left;
+        transition: transform var(--ul-game-dur-panel) var(--ul-game-ease-move);
+    }
+
+    @include down($breakpoint-xs) {
+        grid-template-columns: minmax(0, 1fr) auto;
+
+        &__group--center {
+            grid-column: 1 / -1;
+            order: -1;
+        }
+
+        &__name { display: none; }
+    }
+}
+
+// Off a playing panel the HUD is a standalone bar - the body below it only
+// grows its own border once play starts.
+.ul-game-shell:not(.is-playing) .ul-game-hud {
+    border-radius: $radius-md;
+    border-bottom: 1px solid var(--ul-game-hud-border);
+}
+
+.ul-game-shell.is-playing .ul-game-hud {
+    animation: ul-game-hud-in .28s var(--ul-game-ease-reveal) both;
+}
+
+// -- Panel host ---------------------------------------------------------------------
+.ul-game-body {
+    position: relative;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+}
+
+.ul-game-shell.is-playing .ul-game-body {
+    overflow: hidden;
+    border: 1px solid var(--ul-game-hud-border);
+    border-top: 0;
+    border-radius: 0 0 $radius-md $radius-md;
+    background: var(--ul-game-canvas);
+}
+
+// -- Panels -------------------------------------------------------------------------
+.ul-game-panel {
+    display: flex;
+    flex-direction: column;
+    gap: $space-md;
+    flex: 1;
+    min-height: 0;
+    animation: ul-game-panel-in var(--ul-game-dur-panel) var(--ul-game-ease-reveal) both;
+
+    &[hidden] {
+        display: none !important;
+    }
+
+    // Held over the incoming panel for the length of its exit animation so the
+    // swap cross-fades instead of jumping.
+    &--leaving {
+        position: absolute;
+        inset: 0;
+        z-index: 1;
+        animation: ul-game-panel-out var(--ul-game-dur-move) ease forwards;
+    }
+
+    // The first screen of all three games. The card treatment lives here rather
+    // than in each game's own launcher class so /spotguessr, /trivia and
+    // /consensus open at the same width on the same surface.
+    &--launcher {
+        @include surface($radius-md, 1);
+        box-shadow: var(--ul-shadow-md);
+        max-width: 68rem;
+        width: 100%;
+        margin: $space-lg auto;
+        padding: $space-lg;
+        flex: 0 1 auto;
+
+        @include up($breakpoint-sm) {
+            padding: $space-xl;
+        }
+    }
+
+    &--sheet {
+        @include surface($radius-md, 1);
+        box-shadow: var(--ul-shadow-md);
+        max-width: 46rem;
+        width: 100%;
+        margin: $space-lg auto;
+        padding: $space-lg;
+        flex: 0 1 auto;
+    }
+
+    &--summary {
+        @include surface($radius-md, 1);
+        box-shadow: var(--ul-shadow-md);
+        max-width: 42rem;
+        width: 100%;
+        margin: $space-lg auto;
+        padding: $space-xl $space-lg;
+        align-items: center;
+        text-align: center;
+        flex: 0 1 auto;
+    }
+
+    &--play {
+        // The reveal overlay is absolutely positioned against this box.
+        position: relative;
+        display: grid;
+        padding: var(--ul-game-pad);
+        gap: var(--ul-game-stage-gap);
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-areas: 'stage';
+
+        @include up($breakpoint-md) {
+            .ul-game-shell.is-rail-open & {
+                grid-template-columns: minmax(0, 1fr) var(--ul-game-rail-w);
+                grid-template-areas: 'stage rail';
+            }
+        }
+    }
+
+    &__title {
+        margin: 0;
+        font-size: 1.35rem;
+        font-weight: 700;
+    }
+
+    &__footer {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: $space-md;
+        margin-top: auto;
+    }
+}
+
+// -- The stage ------------------------------------------------------------------------
+.ul-game-stage {
+    grid-area: stage;
+    position: relative;
+    display: grid;
+    gap: var(--ul-game-stage-gap);
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(var(--ul-game-stage-min), 1fr) minmax(var(--ul-game-stage-min), 1fr);
+
+    @include up($breakpoint-sm) {
+        grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr);
+    }
+
+    &--single {
+        grid-template-columns: minmax(0, 1fr);
+        grid-template-rows: minmax(0, 1fr);
+
+        @include up($breakpoint-sm) {
+            grid-template-columns: minmax(0, 1fr);
+        }
+    }
+
+    &__media {
+        min-height: 0;
+        display: flex;
+        animation: ul-game-stage-in .35s var(--ul-game-ease-reveal) both;
+    }
+
+    &__play {
+        min-height: 0;
+        display: grid;
+        grid-template-rows: minmax(0, 1fr) auto;
+        gap: $space-sm;
+        animation: ul-game-stage-in .35s var(--ul-game-ease-reveal) .06s both;
+    }
+
+    &::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        border-radius: var(--ul-game-radius);
+        opacity: 0;
+    }
+
+    &.is-flash-good::after { animation: ul-game-flash-good .6s ease-out; }
+    &.is-flash-bad::after { animation: ul-game-flash-bad .6s ease-out; }
+}
+
+.ul-game-media {
+    position: relative;
+    margin: 0;
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: var(--ul-game-radius);
+    background: var(--ul-game-canvas-2);
+}
+
+.ul-game-media__img {
+    max-width: 100%;
+    max-height: 100%;
+    width: auto;
+    height: auto;
+    object-fit: contain;
+
+    // Round 2..N swaps only the src on an element that is already visible, so
+    // without a re-applied class the new photo is a hard cut.
+    &.is-entering {
+        animation: ul-game-fade-in var(--ul-game-dur-panel) var(--ul-game-ease-reveal) both;
+    }
+
+    &[hidden] { display: none !important; }
+}
+
+.ul-game-mapwrap {
+    position: relative;
+    min-height: 0;
+    // A single-column stage centres its play items, which would collapse this
+    // wrapper to zero height - both its children are absolutely positioned.
+    align-self: stretch;
+    border-radius: var(--ul-game-radius);
+    overflow: hidden;
+    box-shadow: var(--ul-game-glow);
+
+    &[hidden] { display: none !important; }
+}
+
+.ul-game-map {
+    position: absolute;
+    inset: 0;
+}
+
+.ul-game-map-toolbar {
+    position: absolute;
+    left: $space-sm;
+    bottom: $space-sm;
+    z-index: $z-dropdown;
+    display: flex;
+    align-items: flex-end;
+    gap: $space-sm;
+    pointer-events: none;
+
+    > * {
+        pointer-events: auto;
+    }
+
+    // The shared layers component docks itself absolutely against the main map
+    // page's canvas (_map.scss). Inside a game toolbar it only has to be a flex
+    // item that still anchors its own flyout.
+    > .map-layers-panel {
+        position: relative;
+        bottom: auto;
+        left: auto;
+        z-index: auto;
+    }
+}
+
+// Sits over the map inside .ul-game-map-toolbar, so it needs its own backing to
+// stay legible against satellite tiles.
+.ul-game-map-attribution {
+    font-size: .68rem;
+    opacity: .8;
+    padding: .1rem .4rem;
+    border-radius: $radius-sm;
+    background: var(--ul-game-canvas);
+    background: color-mix(in srgb, var(--ul-game-canvas) 78%, transparent);
+
+    &:empty {
+        display: none;
+    }
+}
+
+.ul-game-dock {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: $space-sm;
+    animation: ul-game-dock-in .3s var(--ul-game-ease-reveal) .1s both;
+
+    &__field {
+        display: flex;
+        flex-direction: column;
+        gap: $space-xs;
+        flex: 1 1 12rem;
+        min-width: 0;
+
+        &[hidden] { display: none !important; }
+    }
+
+    .ul-game-cta {
+        flex: 0 0 auto;
+        margin-left: auto;
+    }
+}
+
+// Small uppercase label above a clue (e.g. Consensus's field name).
+.ul-game-eyebrow {
+    margin: 0;
+    font-size: .72rem;
+    font-weight: 700;
+    letter-spacing: .1em;
+    text-transform: uppercase;
+    color: var(--ul-grey-6);
+}
+
+// -- Reveal ---------------------------------------------------------------------------
+.ul-game-reveal {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    display: flex;
+    align-items: flex-end;
+    justify-content: center;
+    padding: var(--ul-game-pad);
+    background: var(--ul-game-scrim);
+    animation: ul-game-scrim-in .24s ease both;
+
+    &[hidden] {
+        display: none !important;
+    }
+
+    @include up($breakpoint-sm) {
+        align-items: center;
+    }
+
+    &__sheet {
+        @include surface($radius-md, 1);
+        box-shadow: var(--ul-shadow-lg);
+        width: 100%;
+        max-width: 34rem;
+        max-height: 100%;
+        overflow-y: auto;
+        padding: $space-lg;
+        display: flex;
+        flex-direction: column;
+        gap: $space-sm;
+        text-align: center;
+        animation: ul-game-reveal-in .34s var(--ul-game-ease-reveal) both;
+    }
+
+    &__detail {
+        margin: 0;
+        color: var(--ul-grey-7);
+        line-height: 1.5;
+    }
+
+    &__points {
+        font-size: 2.6rem;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+        color: var(--ul-game-accent-ink);
+
+        &.is-counting {
+            animation: ul-game-count-flare .45s var(--ul-game-ease-pop);
+        }
+    }
+
+    &--good &__sheet { border-color: var(--ul-game-good-border); }
+    &--bad &__sheet { border-color: var(--ul-game-bad-border); }
+}
+
+// -- Rail ------------------------------------------------------------------------------
+.ul-game-rail {
+    grid-area: rail;
+    display: flex;
+    flex-direction: column;
+    gap: $space-md;
+    min-height: 0;
+
+    &[hidden] {
+        display: none !important;
+    }
+
+    &__section {
+        display: flex;
+        flex-direction: column;
+        gap: $space-sm;
+        min-height: 0;
+        @include surface($radius-sm, 2);
+        padding: $space-sm;
+
+        &--chat {
+            flex: 1;
+            min-height: 8rem;
+        }
+
+        &[hidden] { display: none !important; }
+    }
+
+    &__title {
+        margin: 0;
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+        color: var(--ul-grey-7);
+        border-bottom: 2px solid var(--ul-game-accent-line);
+        padding-bottom: $space-xs;
+    }
+
+    // Below md the rail is a drawer over the stage rather than a column beside it.
+    @include down($breakpoint-md) {
+        position: absolute;
+        inset-block: 0;
+        right: 0;
+        z-index: 4;
+        width: min(22rem, 86vw);
+        padding: $space-md;
+        background: var(--ul-game-canvas);
+        box-shadow: var(--ul-shadow-lg);
+        transform: translateX(100%);
+        transition: transform var(--ul-game-dur-move) var(--ul-game-ease-move);
+
+        .ul-game-shell.is-rail-open & {
+            transform: translateX(0);
+        }
+    }
+}
+
+.ul-game-rail-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    border: 0;
+    background: var(--ul-game-scrim);
+    cursor: pointer;
+
+    &[hidden] {
+        display: none !important;
+    }
+
+    @include up($breakpoint-md) {
+        display: none !important;
+    }
+}
+
+// -- Hero stat rail ----------------------------------------------------------------------
+.ul-game-statrail {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: $space-sm;
+    margin-top: $space-sm;
+}
+
+// The hero gradient behind these chips is a pale wash in light mode, so a white
+// fill would leave them invisible there. They ride the theme-aware row tokens
+// instead, which invert with the rest of the shell.
+.ul-game-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0;
+    padding: $space-xs $space-md;
+    border-radius: $radius-full;
+    background: var(--ul-game-row-bg);
+    border: 1px solid var(--ul-game-row-border);
+
+    &--self {
+        background: var(--ul-game-accent-soft);
+        border-color: var(--ul-game-accent-line);
+        font-weight: 700;
+    }
+
+    &__label {
+        font-size: .7rem;
+        text-transform: uppercase;
+        letter-spacing: .05em;
+        opacity: .85;
+    }
+
+    &__value {
+        font-size: 1.05rem;
+        font-weight: 800;
+        font-variant-numeric: tabular-nums;
+    }
+
+    &__note {
+        font-size: .68rem;
+        opacity: .75;
+    }
+}
+
+// -- Shared subnav strip ------------------------------------------------------------------
+// _reset.scss paints every bare <nav> with a Materialize drop shadow that
+// .ul-subnav-tabs never resets.
+.ul-game-subnav {
+    box-shadow: none;
+}
+
+// -- Focus mode (tier 1) --------------------------------------------------------------------
+// CSS only, so iOS Safari - which has no Element.requestFullscreen - degrades
+// rather than breaking. The shell stays exactly where it is in the DOM; only
+// its painting box changes.
+body.ul-game-immersive {
+    overflow: hidden;
+
+    .ul-page-hero,
+    .ul-page-subnav,
+    .page-footer,
+    .tools-fab {
+        display: none;
+    }
+}
+
+.ul-game-shell.is-immersive {
+    position: fixed;
+    inset: var(--ul-game-chrome-top) 0 0 0;
+    z-index: 40;
+    padding: var(--ul-game-pad);
+    background: var(--ul-game-canvas);
+    overscroll-behavior: none;
+}
+
+// -- True fullscreen (tier 2) ------------------------------------------------------------
+// The fullscreen element is the shell itself, never a portalled node, so it
+// stays a descendant of .ul-game and keeps the [hidden] guard plus every
+// body.page-<game> custom property.
+.ul-game-shell:fullscreen,
+.ul-game-shell.is-fullscreen {
+    --ul-game-chrome-top: 0px;
+    --ul-game-pad: #{$space-md};
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    background: var(--ul-game-canvas);
+}
+
+.ul-game-shell:-webkit-full-screen {
+    --ul-game-chrome-top: 0px;
+    --ul-game-pad: #{$space-md};
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border-radius: 0;
+    background: var(--ul-game-canvas);
+}
+
+// Dialogs the games build in JS and mount into the shell (so they survive true
+// fullscreen) - see GameShell.mountOverlay.
+.ul-game-dialog {
+    @include dialog-base(28rem, 1);
+}
+
+// -- Keyframes --------------------------------------------------------------------------------
+@keyframes ul-game-fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes ul-game-panel-in {
+    from { opacity: 0; transform: translateY(10px) scale(.985); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes ul-game-panel-out {
+    from { opacity: 1; transform: none; }
+    to { opacity: 0; transform: translateY(-6px) scale(.985); }
+}
+
+@keyframes ul-game-hud-in {
+    from { opacity: 0; transform: translateY(-100%); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes ul-game-stage-in {
+    from { opacity: 0; transform: scale(.965); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes ul-game-dock-in {
+    from { opacity: 0; transform: translateY(14px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes ul-game-clue-in {
+    from { opacity: 0; letter-spacing: .06em; }
+    to { opacity: 1; letter-spacing: normal; }
+}
+
+@keyframes ul-game-scrim-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+@keyframes ul-game-reveal-in {
+    from { opacity: 0; transform: translateY(28px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes ul-game-pop {
+    0% { transform: scale(.4) rotate(-12deg); }
+    70% { transform: scale(1.06) rotate(0deg); }
+    100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes ul-game-count-flare {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.12); text-shadow: 0 0 .8rem var(--ul-game-accent-ring); }
+    100% { transform: scale(1); }
+}
+
+@keyframes ul-game-score-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.06); background: var(--ul-game-good-bg); }
+    100% { transform: scale(1); }
+}
+
+@keyframes ul-game-row-in {
+    from { opacity: 0; transform: translateX(-10px); }
+    to { opacity: 1; transform: none; }
+}
+
+@keyframes ul-game-timer-pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.08); }
+    100% { transform: scale(1); }
+}
+
+@keyframes ul-game-flash-good {
+    0% { opacity: 0; box-shadow: inset 0 0 0 0 var(--ul-game-good); }
+    40% { opacity: .9; box-shadow: inset 0 0 0 10px var(--ul-game-good); }
+    100% { opacity: 0; box-shadow: inset 0 0 0 0 var(--ul-game-good); }
+}
+
+@keyframes ul-game-flash-bad {
+    0% { opacity: 0; box-shadow: inset 0 0 0 0 var(--ul-game-bad); }
+    40% { opacity: .9; box-shadow: inset 0 0 0 10px var(--ul-game-bad); }
+    100% { opacity: 0; box-shadow: inset 0 0 0 0 var(--ul-game-bad); }
+}
+
+@keyframes ul-game-live-dot {
+    0% { opacity: 1; }
+    50% { opacity: .3; }
+    100% { opacity: 1; }
+}
+
+// Opacity only: Leaflet positions markers with an inline translate3d, which a
+// transform animation would fight. Do not add transform here.
+@keyframes ul-game-marker-drop {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+// -- Component mixins ------------------------------------------------------------------------
+// Per-game partials `@use 'game_shell' as shell;` and @include these onto their
+// OWN existing class names, so every id/class the TypeScript reads or writes
+// survives while the appearance has a single source of truth.
+
+@mixin hideable {
+    &[hidden] {
+        display: none !important;
+    }
+}
+
+@mixin hint {
+    margin: 0;
+    font-size: .9rem;
+    color: var(--ul-grey-7);
+    line-height: 1.5;
+}
+
+// The play panel is never re-mounted between rounds, so an animation declared
+// straight on the clue would fire once and never again. It hangs off a class
+// the round renderer re-applies instead - see playEntrance() in game-shell.ts.
+@mixin clue {
+    margin: 0;
+    text-align: center;
+    font-weight: 700;
+    font-size: clamp(1.4rem, 3.2vw, 2.4rem);
+    line-height: 1.25;
+    max-width: 26ch;
+    margin-inline: auto;
+    text-wrap: balance;
+    animation: none;
+
+    &.is-entering {
+        animation: ul-game-clue-in .35s var(--ul-game-ease-reveal) both;
+    }
+
+    @include hideable;
+}
+
+@mixin cta {
+    background: var(--ul-game-accent);
+    border-color: var(--ul-game-accent-strong);
+    color: var(--ul-game-accent-contrast);
+    font-weight: 700;
+    letter-spacing: .01em;
+    box-shadow: 0 2px 0 var(--ul-game-accent-strong);
+    transition: background var(--ul-game-dur-state) ease, box-shadow var(--ul-game-dur-state) ease, transform var(--ul-game-dur-micro) ease;
+
+    &:hover:not(:disabled) {
+        background: var(--ul-game-accent-strong);
+        color: var(--ul-game-accent-contrast);
+    }
+
+    &:active:not(:disabled) {
+        transform: translateY(1px);
+        box-shadow: none;
+    }
+
+    &:focus-visible {
+        box-shadow: 0 0 0 3px var(--ul-game-accent-ring);
+    }
+
+    &:disabled {
+        opacity: .55;
+        box-shadow: none;
+    }
+}
+
+@mixin scorelist {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: $space-xs;
+    min-height: 0;
+    overflow-y: auto;
+    @include hideable;
+}
+
+@mixin score-row {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: $space-sm;
+    padding: $space-xs $space-sm;
+    border-radius: $radius-sm;
+    background: var(--ul-game-row-bg);
+    border: 1px solid var(--ul-game-row-border);
+    animation: ul-game-row-in .28s ease-out calc(var(--ul-game-i, 0) * 55ms) backwards;
+
+    &--rank-1 { background: var(--ul-game-medal-1); }
+    &--rank-2 { background: var(--ul-game-medal-2); }
+    &--rank-3 { background: var(--ul-game-medal-3); }
+    &--pulse { animation: ul-game-score-pulse .5s ease-out; }
+    @include hideable;
+}
+
+@mixin score-rank {
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--ul-grey-7);
+    min-width: 1.6rem;
+}
+
+@mixin score-name {
+    font-weight: 600;
+    @include truncate;
+}
+
+@mixin score-subtitle {
+    font-size: .78rem;
+    color: var(--ul-grey-6);
+    @include truncate;
+
+    &:empty {
+        display: none;
+    }
+}
+
+@mixin score-points {
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+}
+
+@mixin delta {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+
+    &--up { color: var(--ul-game-good); }
+    &--down { color: var(--ul-game-bad); }
+    &--flat { color: var(--ul-game-flat); }
+    @include hideable;
+}
+
+@mixin lobby-status {
+    font-size: .75rem;
+    padding: .15rem .6rem;
+    border-radius: $radius-full;
+    background: var(--ul-surface-3);
+    color: var(--ul-grey-7);
+
+    &--joined {
+        background: var(--ul-game-good-bg);
+        color: var(--ul-game-good);
+        border: 1px solid var(--ul-game-good-border);
+    }
+}
+
+@mixin lobby-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: $space-xs;
+
+    li {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: $space-sm;
+        padding: $space-xs $space-sm;
+        border-radius: $radius-sm;
+        background: var(--ul-game-row-bg);
+        border: 1px solid var(--ul-game-row-border);
+        animation: ul-game-row-in .28s ease-out backwards;
+    }
+
+    @include hideable;
+}
+
+@mixin chat-log {
+    flex: 1;
+    min-height: 6rem;
+    max-height: 100%;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: .2rem;
+    font-size: .86rem;
+    padding-right: $space-xs;
+}
+
+@mixin chat-username {
+    font-weight: 700;
+    margin-right: .35rem;
+    color: var(--ul-game-accent-ink);
+}
+
+@mixin chat-form {
+    display: flex;
+    gap: $space-xs;
+
+    input {
+        @include ul-input;
+        flex: 1;
+        min-width: 0;
+    }
+}
+
+@mixin list-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: .1rem;
+    width: 100%;
+    text-align: left;
+    padding: $space-xs $space-sm;
+    border-radius: $radius-sm;
+    border: 1px solid var(--ul-game-row-border);
+    background: var(--ul-game-row-bg);
+    cursor: pointer;
+    transition: border-color var(--ul-game-dur-state) ease, background var(--ul-game-dur-state) ease;
+
+    &:hover {
+        border-color: var(--ul-game-accent);
+        background: var(--ul-game-accent-soft);
+    }
+
+    &:focus-visible {
+        box-shadow: 0 0 0 3px var(--ul-game-accent-ring);
+    }
+}
+
+@mixin vote-option {
+    @include list-btn;
+
+    &.is-selected {
+        border-color: var(--ul-game-accent);
+        background: var(--ul-game-accent-soft);
+    }
+}
+
+@mixin timer {
+    font-variant-numeric: tabular-nums;
+    font-weight: 800;
+    font-size: 1.1rem;
+    padding: .15rem .7rem;
+    border-radius: $radius-full;
+    background: var(--ul-surface-2);
+    border: 1px solid var(--ul-surface-2-border);
+    transition: background var(--ul-game-dur-state) ease, color var(--ul-game-dur-state) ease, border-color var(--ul-game-dur-state) ease;
+
+    &--urgent {
+        background: var(--ul-game-bad-bg);
+        border-color: var(--ul-game-bad-border);
+        color: var(--ul-game-bad);
+        animation: ul-game-timer-pulse 1s ease-in-out infinite;
+    }
+
+    @include hideable;
+}
+
+@mixin summary-icon {
+    font-size: 3.4rem;
+    color: var(--ul-game-accent-ink);
+    animation: ul-game-pop var(--ul-game-dur-reward) var(--ul-game-ease-pop) both;
+}
+
+@mixin empty-icon {
+    font-size: 3rem;
+    color: var(--ul-grey-5);
+}
+
+@mixin mode-card {
+    position: relative;
+    display: flex;
+    border-radius: $radius-md;
+    overflow: hidden;
+    border: 1px solid var(--ul-game-row-border);
+    background: var(--ul-game-mode);
+    background: linear-gradient(140deg, var(--ul-game-mode), color-mix(in srgb, var(--ul-game-mode) 62%, var(--ul-game-mode-shade)));
+    box-shadow: var(--ul-shadow-sm);
+    transition: transform var(--ul-game-dur-state) ease, box-shadow var(--ul-game-dur-state) ease;
+
+    &:hover {
+        transform: translateY(-3px);
+        box-shadow: var(--ul-game-glow);
+    }
+}
+
+@mixin mode-card-gear {
+    @include icon-btn(28px);
+    position: absolute;
+    top: $space-xs;
+    right: $space-xs;
+    background: rgba(0, 0, 0, .32);
+    background: color-mix(in srgb, #{$color-grey-10b} 32%, transparent);
+    color: #{$color-grey-0a};
+
+    &:hover {
+        background: rgba(0, 0, 0, .48);
+        background: color-mix(in srgb, #{$color-grey-10b} 48%, transparent);
+        color: #{$color-grey-0a};
+    }
+}
+
+@mixin reveal-points {
+    font-size: 2.6rem;
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    color: var(--ul-game-accent-ink);
+}
+
+@mixin dropzone {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: $space-sm;
+    padding: $space-sm;
+    border: 1px dashed var(--ul-game-accent-line);
+    border-radius: $radius-sm;
+    background: var(--ul-game-accent-soft);
+    cursor: pointer;
+    transition: border-color var(--ul-game-dur-state) ease, background var(--ul-game-dur-state) ease;
+
+    &:hover {
+        border-color: var(--ul-game-accent);
+    }
+
+    input[type="file"] {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        opacity: 0;
+        pointer-events: none;
+    }
+
+    @include hideable;
+}
+
+@mixin live {
+    display: inline-flex;
+    align-items: center;
+    gap: .4rem;
+    font-size: .78rem;
+    font-weight: 600;
+    color: var(--ul-grey-7);
+
+    &::before {
+        content: '';
+        width: .5rem;
+        height: .5rem;
+        border-radius: 50%;
+        background: var(--ul-game-accent);
+        animation: ul-game-live-dot 1.6s ease-in-out infinite;
+    }
+
+    @include hideable;
+}
+
+// -- Reduced motion --------------------------------------------------------------------------
+// One block for every game page. GameShell.reducedMotion() mirrors this query
+// in JS so panel swaps, count-ups and Leaflet camera moves match.
+@media (prefers-reduced-motion: reduce) {
+    body.page-spotguessr,
+    body.page-trivia,
+    body.page-consensus,
+    body.page-games {
+        --ul-game-dur-micro: .01ms;
+        --ul-game-dur-state: .01ms;
+        --ul-game-dur-move: .01ms;
+        --ul-game-dur-panel: .01ms;
+        --ul-game-dur-reward: .01ms;
+    }
+
+    .ul-game *,
+    .ul-game *::before,
+    .ul-game *::after,
+    .ul-page-hero--top *,
+    .games-card,
+    .games-card * {
+        animation-duration: .01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: .01ms !important;
+    }
+
+    // A perceptible, transform-free entrance rather than nothing at all.
+    .ul-game-panel,
+    .ul-game-reveal__sheet,
+    .ul-game-hud {
+        animation: ul-game-fade-in .15s ease both !important;
+    }
+
+    .ul-game-panel--leaving,
+    .ul-game-stage.is-flash-good::after,
+    .ul-game-stage.is-flash-bad::after {
+        animation: none !important;
+    }
+
+    .ul-page-hero--top {
+        transition: none !important;
+    }
+
+    .games-card:hover {
+        transform: none !important;
+    }
+}

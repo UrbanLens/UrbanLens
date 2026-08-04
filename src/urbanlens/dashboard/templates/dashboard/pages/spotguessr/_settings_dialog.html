@@ -108,13 +108,18 @@ starts a multiplayer lobby instead of a solo game.
             <div class="spotguessr-field">
                 <label>Invite friends (optional)</label>
             </div>
+            {% comment %}
+            The loading/error lines are siblings of #sg-friend-list, not children:
+            renderFriendCheckboxes() replaces that container's innerHTML, so
+            anything inside it is destroyed on the first successful load and the
+            retry path could never find its own button again.
+            {% endcomment %}
             <div id="sg-invite-wrap" class="spotguessr-invite-wrap">
-                <div id="sg-friend-list" class="spotguessr-friend-list">
-                    <p class="spotguessr-panel-hint" id="sg-friend-list-loading">Loading friends&hellip;</p>
-                    <p class="spotguessr-panel-hint" id="sg-friend-list-error" hidden>
-                        Couldn't load friends. <button type="button" class="btn btn--link" id="sg-friend-list-retry">Retry</button>
-                    </p>
-                </div>
+                <p class="spotguessr-panel-hint" id="sg-friend-list-loading">Loading friends&hellip;</p>
+                <p class="spotguessr-panel-hint" id="sg-friend-list-error" hidden>
+                    Couldn't load friends. <button type="button" class="btn btn--link" id="sg-friend-list-retry">Retry</button>
+                </p>
+                <div id="sg-friend-list" class="spotguessr-friend-list"></div>
             </div>
 
             <button type="submit" class="btn btn--primary btn--lg">Start playing</button>

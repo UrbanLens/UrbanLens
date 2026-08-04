@@ -27,6 +27,7 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
+from urbanlens.dashboard.controllers.games import GAMES, rating_stats
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -273,20 +274,24 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
             guessed_mode = own_rating.mode if own_rating is not None else SpotGuessrMode.PHOTOS
             _prewarm_solo_start(profile.pk, guessed_mode, preference.last_config)
 
+        friend_ratings = visible_friend_ratings(profile)
+
         return render(
             request,
             "dashboard/pages/spotguessr/index.html",
             {
                 "page_name": "spotguessr",
+                # The shared games subnav and hero (partials/games/) read these.
+                "games": GAMES,
+                "game_stats": rating_stats(own_rating, friend_ratings),
                 "own_rating": own_rating,
-                "friend_ratings": visible_friend_ratings(profile),
+                "friend_ratings": friend_ratings,
                 "show_ratings_to_friends": preference.show_ratings_to_friends,
                 "last_config": preference.last_config,
                 "min_rounds": spotguessr_session.MIN_ROUNDS_PER_SESSION,
                 "max_rounds": spotguessr_session.MAX_ROUNDS_PER_SESSION,
                 "default_rounds": spotguessr_session.DEFAULT_ROUNDS_PER_SESSION,
                 "round_time_limit_choices": spotguessr_session.ROUND_TIME_LIMIT_CHOICES,
-                "modes": SpotGuessrMode.choices,
                 "mode_cards": _mode_cards(),
                 "labels": Label.objects.location_labels().visible_to(profile).ordered(),
                 "urls": _url_templates(),

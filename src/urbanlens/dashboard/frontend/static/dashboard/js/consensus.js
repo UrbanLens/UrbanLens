@@ -1,4 +1,11 @@
 import {
+  createGameShell,
+  playEntrance
+} from "./achievements-vedkz711.js";
+import {
+  createMapLayers
+} from "./achievements-rarq1vf2.js";
+import {
   confirmAction,
   getCsrfToken,
   toast
@@ -58,10 +65,18 @@ var PANEL_IDS = {
   game: "cs-game-panel",
   summary: "cs-summary-panel"
 };
+var gameShell = null;
 function showPanel(name) {
+  if (gameShell) {
+    gameShell.showPanel(name);
+    return;
+  }
   for (const [key, id] of Object.entries(PANEL_IDS)) {
     el(id).hidden = key !== name;
   }
+}
+function reducedMotion() {
+  return gameShell?.reducedMotion() ?? false;
 }
 function el(id) {
   const found = document.getElementById(id);
@@ -89,6 +104,81 @@ async function postForm(url, data) {
 async function getJson(url) {
   const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
   return response.json();
+}
+async function withBusy(button, action) {
+  if (button) {
+    button.classList.add("is-loading");
+    button.disabled = true;
+  }
+  try {
+    return await action();
+  } finally {
+    if (button) {
+      button.classList.remove("is-loading");
+      button.disabled = false;
+    }
+  }
+}
+function optionalEl(id) {
+  return document.getElementById(id);
+}
+var LEVEL_SCALE_K = 100;
+var MAX_LEVEL = 500;
+function pointsRequiredForLevel(level) {
+  if (level < 1)
+    return 0;
+  return Math.round(LEVEL_SCALE_K * level * Math.log(level + 1));
+}
+function levelForPoints(points) {
+  let level = 1;
+  while (level < MAX_LEVEL && points >= pointsRequiredForLevel(level))
+    level += 1;
+  return level;
+}
+var progression = { basePoints: 0, sessionPoints: 0 };
+function renderProgression() {
+  const points = progression.basePoints + progression.sessionPoints;
+  const level = levelForPoints(points);
+  const floor = pointsRequiredForLevel(level - 1);
+  const ceiling = pointsRequiredForLevel(level);
+  const ratio = Math.min(1, Math.max(0, (points - floor) / Math.max(1, ceiling - floor)));
+  const levelEl = optionalEl("cs-level-value");
+  if (levelEl)
+    levelEl.textContent = String(level);
+  const pointsEl = optionalEl("cs-points-value");
+  if (pointsEl)
+    pointsEl.textContent = String(points);
+  const noteEl = optionalEl("cs-level-note");
+  if (noteEl)
+    noteEl.textContent = `${Math.max(0, ceiling - points)} pts to level ${level + 1}`;
+  const fillEl = optionalEl("cs-level-meter-fill");
+  if (fillEl)
+    fillEl.style.setProperty("--consensus-level-progress", String(ratio));
+}
+function setSessionPoints(total) {
+  if (total === progression.sessionPoints)
+    return;
+  progression.sessionPoints = total;
+  renderProgression();
+  const pointsEl = optionalEl("cs-points-value");
+  if (!pointsEl || reducedMotion())
+    return;
+  pointsEl.classList.remove("is-counting");
+  pointsEl.offsetWidth;
+  pointsEl.classList.add("is-counting");
+}
+function bankSessionPoints() {
+  if (progression.sessionPoints) {
+    progression.basePoints += progression.sessionPoints;
+    progression.sessionPoints = 0;
+  }
+  renderProgression();
+}
+function initProgression() {
+  const wrap = optionalEl("cs-progression");
+  progression.basePoints = Number(wrap?.dataset.points ?? "0") || 0;
+  progression.sessionPoints = 0;
+  renderProgression();
 }
 async function loadFriendOptions() {
   if (state.friendOptions.length)
@@ -150,25 +240,31 @@ function pickFriendsToInvite(available) {
   return new Promise((resolve) => {
     const chosen = new Set;
     const dialog = document.createElement("dialog");
-    dialog.className = "consensus-invite-more-dialog";
-    dialog.style.cssText = "max-width:22rem;width:90vw;padding:1.25rem;border-radius:0.5rem;border:1px solid rgba(0,0,0,0.15);";
+    dialog.className = "ul-dialog ul-game-dialog consensus-invite-more-dialog";
+    const header = document.createElement("div");
+    header.className = "dialog-header";
     const heading = document.createElement("h3");
     heading.textContent = "Invite more players";
-    heading.style.marginTop = "0";
+    header.appendChild(heading);
     const list = document.createElement("div");
-    list.style.cssText = "display:flex;flex-direction:column;gap:0.5rem;max-height:16rem;overflow-y:auto;margin:0.75rem 0;";
+    list.className = "consensus-friend-list";
     renderFriendCheckboxes(list, available, new Set, chosen);
     const actions = document.createElement("div");
-    actions.style.cssText = "display:flex;justify-content:flex-end;gap:0.5rem;";
+    actions.className = "dialog-footer";
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
+    cancelBtn.className = "btn btn--ghost";
     cancelBtn.textContent = "Cancel";
     const inviteBtn = document.createElement("button");
     inviteBtn.type = "button";
+    inviteBtn.className = "btn btn--primary";
     inviteBtn.textContent = "Invite";
     actions.append(cancelBtn, inviteBtn);
-    dialog.append(heading, list, actions);
-    document.body.appendChild(dialog);
+    dialog.append(header, list, actions);
+    if (gameShell)
+      gameShell.mountOverlay(dialog);
+    else
+      document.body.appendChild(dialog);
     const cleanup = (result) => {
       dialog.close();
       dialog.remove();
@@ -268,14 +364,35 @@ async function beginGame() {
 function ensureRoundMap() {
   if (state.roundMap)
     return state.roundMap;
-  state.roundMap = L.map("cs-round-map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(state.roundMap);
-  state.roundMap.on("click", (event) => {
+  const map = L.map("cs-round-map", { attributionControl: false }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+  createMapLayers(map, {
+    root: document.getElementById("cs-round-map-layers"),
+    onAttribution: (text) => {
+      const attributionEl = optionalEl("cs-round-map-attribution");
+      if (attributionEl)
+        attributionEl.textContent = text;
+    }
+  });
+  map.on("click", (event) => {
     if (state.currentFieldKind !== FIELD_KIND.PHOTO_COORDINATES)
       return;
     placeAnswerMarker(event.latlng);
   });
-  return state.roundMap;
+  state.roundMap = map;
+  return map;
+}
+function clearRoundMarkers() {
+  const map = state.roundMap;
+  if (!map)
+    return;
+  if (state.answerMarker) {
+    map.removeLayer(state.answerMarker);
+    state.answerMarker = null;
+  }
+  if (state.contextMarker) {
+    map.removeLayer(state.contextMarker);
+    state.contextMarker = null;
+  }
 }
 function placeAnswerMarker(latlng) {
   const map = ensureRoundMap();
@@ -288,14 +405,7 @@ function placeAnswerMarker(latlng) {
 }
 function resetRoundMap(latitude, longitude) {
   const map = ensureRoundMap();
-  if (state.answerMarker) {
-    map.removeLayer(state.answerMarker);
-    state.answerMarker = null;
-  }
-  if (state.contextMarker) {
-    map.removeLayer(state.contextMarker);
-    state.contextMarker = null;
-  }
+  clearRoundMarkers();
   if (latitude !== null && longitude !== null) {
     const latlng = L.latLng(latitude, longitude);
     state.contextMarker = L.marker(latlng, { opacity: 0.6 }).addTo(map);
@@ -304,6 +414,17 @@ function resetRoundMap(latitude, longitude) {
     map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
   }
   setTimeout(() => map.invalidateSize(), 0);
+}
+function setStageLayout(showPhoto, showMap) {
+  const media = optionalEl("cs-stage-media");
+  if (media)
+    media.hidden = !showPhoto;
+  const mapWrap = optionalEl("cs-round-mapwrap");
+  if (mapWrap)
+    mapWrap.hidden = !showMap;
+  const stage = document.querySelector("[data-game-stage]");
+  if (stage)
+    stage.classList.toggle("ul-game-stage--single", !showPhoto);
 }
 function updateAnswerAreaVisibility(fieldKind) {
   document.querySelectorAll("[data-field-only]").forEach((field) => {
@@ -369,16 +490,25 @@ function renderRound(round, roundNumber) {
   el("cs-round-live-indicator").hidden = true;
   el("cs-round-status").textContent = `Round ${roundNumber} of ${state.totalRounds}`;
   el("cs-round-field-label").textContent = round.field_label;
-  el("cs-round-wiki-name").textContent = round.wiki_name;
+  const skipMotion = gameShell?.reducedMotion() ?? false;
+  const wikiName = el("cs-round-wiki-name");
+  wikiName.textContent = round.wiki_name;
+  playEntrance(wikiName, skipMotion);
   el("cs-end-game-btn").hidden = !(state.isMultiplayer && state.hostProfileId === myProfileId);
+  gameShell?.setProgress(roundNumber, state.totalRounds);
+  gameShell?.setRailAvailable(state.isMultiplayer);
+  const isPhotoRound = round.field_kind === FIELD_KIND.PHOTO_COORDINATES;
   const photo = el("cs-round-photo");
-  if (round.field_kind === FIELD_KIND.PHOTO_COORDINATES && round.image_url) {
+  const showPhoto = isPhotoRound && Boolean(round.image_url);
+  if (showPhoto) {
     photo.src = round.image_url;
     photo.hidden = false;
+    playEntrance(photo, skipMotion);
   } else {
     photo.hidden = true;
     photo.removeAttribute("src");
   }
+  setStageLayout(showPhoto, isPhotoRound);
   updateAnswerAreaVisibility(round.field_kind);
   if (round.field_kind === FIELD_KIND.WIKI_INDOOR_OUTDOOR || round.field_kind === FIELD_KIND.WIKI_PIN_TYPE) {
     populateSelectOptions(round.field_kind);
@@ -387,7 +517,11 @@ function renderRound(round, roundNumber) {
   } else if (round.field_kind !== FIELD_KIND.PHOTO_COORDINATES) {
     el("cs-answer-text-input").value = "";
   }
-  resetRoundMap(round.latitude, round.longitude);
+  if (isPhotoRound) {
+    resetRoundMap(round.latitude, round.longitude);
+  } else {
+    clearRoundMarkers();
+  }
   el("cs-submit-answer-btn").disabled = true;
   el("cs-submit-answer-btn").hidden = false;
   el("cs-skip-btn").hidden = false;
@@ -418,8 +552,17 @@ async function submitAnswer() {
       return;
     payload = { value };
   }
-  const response = await postForm(urlFor(urls.answer, state.sessionId, state.currentRoundId), payload);
+  const button = el("cs-submit-answer-btn");
+  button.classList.add("is-loading");
+  button.disabled = true;
+  let response;
+  try {
+    response = await postForm(urlFor(urls.answer, state.sessionId, state.currentRoundId), payload);
+  } finally {
+    button.classList.remove("is-loading");
+  }
   if (response.error) {
+    button.disabled = false;
     toast.error(response.error);
     return;
   }
@@ -428,8 +571,17 @@ async function submitAnswer() {
 async function skipRound() {
   if (state.sessionId === null || state.currentRoundId === null)
     return;
-  const response = await postForm(urlFor(urls.skip, state.sessionId, state.currentRoundId), {});
+  const button = el("cs-skip-btn");
+  button.classList.add("is-loading");
+  button.disabled = true;
+  let response;
+  try {
+    response = await postForm(urlFor(urls.skip, state.sessionId, state.currentRoundId), {});
+  } finally {
+    button.classList.remove("is-loading");
+  }
   if (response.error) {
+    button.disabled = false;
     toast.error(response.error);
     return;
   }
@@ -458,6 +610,14 @@ async function uploadPhoto() {
   }
   toast.success("Photo uploaded - thanks for helping out!");
   input.value = "";
+  showChosenPhotoName();
+}
+function showChosenPhotoName() {
+  const label = optionalEl("cs-photo-upload-name");
+  if (!label)
+    return;
+  const file = el("cs-photo-upload-input").files?.[0];
+  label.textContent = file ? file.name : "Choose a photo…";
 }
 async function goToNextRound() {
   if (state.sessionId === null)
@@ -621,6 +781,9 @@ function renderReveal(data) {
   el("cs-reveal-title").textContent = revealTitle(data.resolution);
   renderResultsList(data.answers);
   updateScoreboardFromReveal(data.answers);
+  const mine = data.answers.find((answer) => answer.profile_id === myProfileId);
+  if (mine)
+    setSessionPoints(progression.sessionPoints + mine.points_awarded);
   const votePanel = el("cs-vote-panel");
   if (data.resolution === "vote_open" && data.vote_options?.length) {
     votePanel.hidden = false;
@@ -649,6 +812,9 @@ function showSummary(summary) {
   const roundWord = summary.total_rounds === 1 ? "round" : "rounds";
   el("cs-summary-heading").textContent = summary.status === "abandoned" ? "Game ended early" : "Game over!";
   el("cs-summary-subheading").textContent = `${summary.rounds_played} of ${summary.total_rounds} ${roundWord} played.`;
+  const mine = summary.participants.find((participant) => participant.profile_id === myProfileId);
+  if (mine)
+    setSessionPoints(mine.total_points_this_session);
   const list = el("cs-summary-scores");
   list.innerHTML = "";
   const sorted = [...summary.participants].sort((a, b) => b.total_points_this_session - a.total_points_this_session);
@@ -757,6 +923,7 @@ function initChat() {
   });
 }
 function _resetSessionState() {
+  bankSessionPoints();
   state.sessionId = null;
   state.currentRoundId = null;
   state.isMultiplayer = false;
@@ -812,7 +979,7 @@ async function endGameNow() {
   });
   if (!confirmed)
     return;
-  const response = await postForm(urlFor(urls.end, state.sessionId), {});
+  const response = await withBusy(el("cs-end-game-btn"), () => postForm(urlFor(urls.end, state.sessionId), {}));
   if (response.error) {
     toast.error(response.error);
     return;
@@ -847,17 +1014,35 @@ async function loadInitialSession() {
     renderRound(data.round, data.round.sequence_index + 1);
   }
 }
+function initGameShell() {
+  const shellEl = optionalEl("cs-shell");
+  if (!pageEl || !shellEl)
+    return;
+  gameShell = createGameShell({
+    root: pageEl,
+    shell: shellEl,
+    panels: PANEL_IDS,
+    playingPanels: ["game", "summary"],
+    onResize: () => state.roundMap?.invalidateSize()
+  });
+  gameShell.showPanel("settings");
+}
 function init() {
-  el("cs-start-form").addEventListener("submit", (event) => {
+  initGameShell();
+  initProgression();
+  const startForm = el("cs-start-form");
+  const startBtn = startForm.querySelector('button[type="submit"]');
+  startForm.addEventListener("submit", (event) => {
     event.preventDefault();
-    startGame();
+    withBusy(startBtn, startGame);
   });
   el("cs-submit-answer-btn").addEventListener("click", () => void submitAnswer());
   el("cs-skip-btn").addEventListener("click", () => void skipRound());
-  el("cs-photo-upload-btn").addEventListener("click", () => void uploadPhoto());
-  el("cs-join-lobby-btn").addEventListener("click", () => void joinLobby());
-  el("cs-begin-btn").addEventListener("click", () => void beginGame());
-  el("cs-invite-more-btn").addEventListener("click", () => void handleInviteMore());
+  el("cs-photo-upload-btn").addEventListener("click", () => void withBusy(el("cs-photo-upload-btn"), uploadPhoto));
+  el("cs-photo-upload-input").addEventListener("change", showChosenPhotoName);
+  el("cs-join-lobby-btn").addEventListener("click", () => void withBusy(el("cs-join-lobby-btn"), joinLobby));
+  el("cs-begin-btn").addEventListener("click", () => void withBusy(el("cs-begin-btn"), beginGame));
+  el("cs-invite-more-btn").addEventListener("click", () => void withBusy(el("cs-invite-more-btn"), handleInviteMore));
   el("cs-end-game-btn").addEventListener("click", () => void endGameNow());
   el("cs-play-again-btn").addEventListener("click", resetToSettings);
   el("cs-empty-state-settings-btn").addEventListener("click", resetToSettings);

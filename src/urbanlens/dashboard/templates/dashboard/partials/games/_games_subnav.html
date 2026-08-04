@@ -1,0 +1,28 @@
+{% comment %}
+Shared games tab strip, rendered in {% block subnav %} by the hub AND by every
+game page, so entering a game is never a one-way trip out of the nav.
+
+Requires in context:
+  games   - the GAMES registry (controllers/games.py); every game controller
+            passes it, so there is no second hardcoded list to drift.
+  active  - "games" on the hub, otherwise the current game's GameEntry.url_name.
+
+Usage:
+  {% include "dashboard/partials/games/_games_subnav.html" with active="spotguessr" %}
+{% endcomment %}
+<div class="ul-page-subnav">
+    <div class="ul-page-subnav__inner">
+        <nav class="ul-subnav-tabs ul-game-subnav" aria-label="Games">
+            <a href="{% url 'games.overview' %}" class="ul-subnav-tab{% if active == 'games' %} is-active{% endif %}"{% if active == 'games' %} aria-current="page"{% endif %}>
+                <i class="material-symbols-outlined">stadia_controller</i>
+                <span>All Games</span>
+            </a>
+            {% for game in games %}
+            <a href="{{ game.url }}" class="ul-subnav-tab ul-game-subnav__tab{% if active == game.url_name %} is-active{% endif %}" data-game="{{ game.url_name }}"{% if active == game.url_name %} aria-current="page"{% endif %}>
+                <i class="material-symbols-outlined">{{ game.icon }}</i>
+                <span>{{ game.name }}</span>
+            </a>
+            {% endfor %}
+        </nav>
+    </div>
+</div>

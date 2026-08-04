@@ -1,4 +1,8 @@
 import {
+  createGameShell,
+  playEntrance
+} from "./achievements-vedkz711.js";
+import {
   createMapLayers
 } from "./achievements-rarq1vf2.js";
 import {
@@ -9,13 +13,6 @@ import {
 import"./achievements-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/spotguessr-format.ts
-var PANEL_NAMES = ["settings", "lobby", "game", "summary", "empty"];
-function panelVisibility(active) {
-  const visibility = {};
-  for (const name of PANEL_NAMES)
-    visibility[name] = name === active;
-  return visibility;
-}
 function bonusSuffix(bonusPoints, bonusTiers) {
   return bonusPoints ? ` (+${bonusPoints} bonus: ${bonusTiers.join(", ")})` : "";
 }
@@ -112,11 +109,17 @@ var PANEL_IDS = {
   summary: "sg-summary-panel",
   empty: "sg-empty-state-panel"
 };
+var shell = null;
 function showPanel(name) {
-  const visibility = panelVisibility(name);
-  for (const [key, id] of Object.entries(PANEL_IDS)) {
-    el(id).hidden = !visibility[key];
-  }
+  shell?.showPanel(name);
+}
+function flareCount(target) {
+  if (shell?.reducedMotion())
+    return;
+  target.classList.remove("is-counting");
+  target.offsetWidth;
+  target.classList.add("is-counting");
+  target.addEventListener("animationend", () => target.classList.remove("is-counting"), { once: true });
 }
 function el(id) {
   const found = document.getElementById(id);
@@ -405,25 +408,34 @@ function pickFriendsToInvite(available) {
   return new Promise((resolve) => {
     const chosen = new Set;
     const dialog = document.createElement("dialog");
-    dialog.className = "spotguessr-invite-more-dialog";
-    dialog.style.cssText = "max-width:22rem;width:90vw;padding:1.25rem;border-radius:0.5rem;border:1px solid rgba(0,0,0,0.15);";
-    const heading = document.createElement("h3");
+    dialog.className = "ul-dialog ul-game-dialog spotguessr-invite-more-dialog";
+    const header = document.createElement("div");
+    header.className = "dialog-header";
+    const heading = document.createElement("span");
     heading.textContent = "Invite more players";
-    heading.style.marginTop = "0";
+    header.appendChild(heading);
+    const body = document.createElement("div");
+    body.className = "ul-dialog-body";
     const list = document.createElement("div");
-    list.style.cssText = "display:flex;flex-direction:column;gap:0.5rem;max-height:16rem;overflow-y:auto;margin:0.75rem 0;";
+    list.className = "spotguessr-invite-more-list";
     renderFriendCheckboxes(list, available, new Set, chosen);
+    body.appendChild(list);
     const actions = document.createElement("div");
-    actions.style.cssText = "display:flex;justify-content:flex-end;gap:0.5rem;";
+    actions.className = "dialog-footer";
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
+    cancelBtn.className = "btn btn--ghost";
     cancelBtn.textContent = "Cancel";
     const inviteBtn = document.createElement("button");
     inviteBtn.type = "button";
+    inviteBtn.className = "btn btn--primary";
     inviteBtn.textContent = "Invite";
     actions.append(cancelBtn, inviteBtn);
-    dialog.append(heading, list, actions);
-    document.body.appendChild(dialog);
+    dialog.append(header, body, actions);
+    if (shell)
+      shell.mountOverlay(dialog);
+    else
+      document.body.appendChild(dialog);
     const cleanup = (result) => {
       dialog.close();
       dialog.remove();
@@ -584,8 +596,11 @@ function renderRound(round, roundNumber) {
   state.currentMode = round.mode;
   state.currentRoundShowsImagery = round.shows_imagery;
   showPanel("game");
-  el("sg-reveal-panel").hidden = true;
+  const revealPanel = el("sg-reveal-panel");
+  revealPanel.hidden = true;
+  revealPanel.classList.remove("ul-game-reveal--good", "ul-game-reveal--bad");
   el("sg-round-status").textContent = `Round ${roundNumber} of ${state.totalRounds}`;
+  shell?.setProgress(roundNumber, state.totalRounds);
   state.displayedSessionScore = state.sessionScore;
   el("sg-score-status").textContent = state.isMultiplayer ? "" : `Score: ${state.sessionScore}`;
   el("sg-game-settings-btn").hidden = state.isMultiplayer;
@@ -593,17 +608,21 @@ function renderRound(round, roundNumber) {
   const photo = el("sg-round-photo");
   const nameHeading = el("sg-round-name");
   const pinSearchWrap = el("sg-pin-search-wrap");
+  const skipMotion = shell?.reducedMotion() ?? false;
   if (round.mode === "named_place") {
     photo.hidden = true;
     nameHeading.hidden = false;
     nameHeading.textContent = round.display_text ?? "";
+    playEntrance(nameHeading, skipMotion);
     pinSearchWrap.hidden = true;
   } else {
     nameHeading.hidden = true;
     pinSearchWrap.hidden = false;
     photo.hidden = false;
     photo.src = (round.mode === "street_view" ? round.street_view_image : round.image_url) ?? "";
+    playEntrance(photo, skipMotion);
   }
+  shell?.setRailAvailable(state.isMultiplayer);
   el("sg-date-field").hidden = !state.dateGuessingEnabled;
   el("sg-photo-feedback").hidden = true;
   el("sg-photo-feedback-thanks").hidden = true;
@@ -616,7 +635,7 @@ function animateCountUp(el2, from, to, durationMs = 700, formatter = (value) => 
   const pending = activeCountUps.get(el2);
   if (pending !== undefined)
     cancelAnimationFrame(pending);
-  if (from === to || durationMs <= 0) {
+  if (from === to || durationMs <= 0 || shell?.reducedMotion()) {
     el2.textContent = formatter(to);
     activeCountUps.delete(el2);
     return;
@@ -634,7 +653,11 @@ function animateCountUp(el2, from, to, durationMs = 700, formatter = (value) => 
   activeCountUps.set(el2, requestAnimationFrame(tick));
 }
 function animateLineDrawIn(map, from, to, durationMs = 600) {
-  const line = L.polyline([from, from], { color: "#e74c3c" }).addTo(map);
+  const line = L.polyline([from, from], { color: shell?.cssVar("bad") || "#e74c3c" }).addTo(map);
+  if (shell?.reducedMotion()) {
+    line.setLatLngs([from, to]);
+    return line;
+  }
   const start = performance.now();
   const tick = (now) => {
     const progress = Math.min(1, (now - start) / durationMs);
@@ -785,12 +808,13 @@ function drawRevealMarkers(actualLatLng) {
   const map = ensureGuessMap();
   state.actualMarker = L.marker(actualLatLng).addTo(map);
   dropInMarker(state.actualMarker);
+  const animate = !(shell?.reducedMotion() ?? false);
   if (state.guessMarker) {
     const guessLatLng = state.guessMarker.getLatLng();
-    map.fitBounds(L.latLngBounds([guessLatLng, actualLatLng]), { padding: [40, 40] });
+    map.fitBounds(L.latLngBounds([guessLatLng, actualLatLng]), { padding: [40, 40], animate, duration: 0.9 });
     state.resultLine = animateLineDrawIn(map, guessLatLng, actualLatLng);
   } else {
-    map.setView(actualLatLng, 14);
+    map.flyTo(actualLatLng, 14, { animate, duration: 0.9 });
   }
 }
 function updateRatingDeltaDisplay(delta) {
@@ -806,6 +830,12 @@ function updateRatingDeltaDisplay(delta) {
   badge.textContent = formatted.text;
   badge.className = `spotguessr-rating-delta spotguessr-rating-delta--${formatted.direction}`;
 }
+function setRevealVerdict(scored) {
+  const panel = el("sg-reveal-panel");
+  panel.classList.toggle("ul-game-reveal--good", scored);
+  panel.classList.toggle("ul-game-reveal--bad", !scored);
+  shell?.flashStage(scored ? "good" : "bad");
+}
 function showReveal(reveal) {
   clearRoundTimer();
   el("sg-submit-guess-btn").disabled = true;
@@ -815,11 +845,14 @@ function showReveal(reveal) {
     el("sg-score-status").textContent = "";
   } else {
     animateCountUp(el("sg-score-status"), state.displayedSessionScore, state.sessionScore, 700, (value) => `Score: ${Math.round(value)}`);
+    flareCount(el("sg-score-status"));
   }
   state.displayedSessionScore = state.sessionScore;
   showPhotoFeedbackIfApplicable();
   updateRatingDeltaDisplay(reveal.rating_delta);
   animateCountUp(el("sg-reveal-points-value"), 0, roundTotal);
+  flareCount(el("sg-reveal-points"));
+  setRevealVerdict(roundTotal > 0);
   const distanceKm = (reveal.distance_meters / 1000).toFixed(2);
   if (!reveal.revealed) {
     el("sg-reveal-panel").hidden = false;
@@ -857,6 +890,7 @@ function showBroadcastReveal(data) {
     el("sg-next-round-btn").hidden = true;
     const myResult = data.results.find((result) => result.profile_id === myProfileId);
     updateRatingDeltaDisplay(myResult?.rating_delta);
+    setRevealVerdict(myResult ? myResult.points + myResult.date_points + myResult.bonus_points > 0 : false);
   }
   updateScoreboardFromResults(data.results);
   renderResultsList(data.results);
@@ -1211,6 +1245,19 @@ async function loadInitialSession() {
   } else {
     renderRound(data.round, data.round.sequence_index + 1);
   }
+}
+var shellEl = document.getElementById("sg-shell");
+if (pageEl && shellEl) {
+  shell = createGameShell({
+    root: pageEl,
+    shell: shellEl,
+    panels: PANEL_IDS,
+    playingPanels: ["game", "summary"],
+    onResize: () => {
+      state.guessMap?.invalidateSize();
+      state.areaMap?.invalidateSize();
+    }
+  });
 }
 applyLastConfig();
 initRoundsSlider();

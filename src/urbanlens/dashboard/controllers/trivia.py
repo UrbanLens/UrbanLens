@@ -18,6 +18,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.controllers.games import GAMES, rating_stats
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import (
     PlayerTriviaRating,
@@ -101,13 +102,18 @@ class TriviaHomeView(LoginRequiredMixin, View):
         if raw_session_id and TriviaSessionParticipant.objects.filter(session_id=raw_session_id, profile=profile).exists():
             initial_session_id = raw_session_id
 
+        friend_ratings = social.visible_friend_ratings(profile)
+
         return render(
             request,
             "dashboard/pages/trivia/index.html",
             {
                 "page_name": "trivia",
+                # The shared games subnav and hero (partials/games/) read these.
+                "games": GAMES,
+                "game_stats": rating_stats(own_rating, friend_ratings),
                 "own_rating": own_rating,
-                "friend_ratings": social.visible_friend_ratings(profile),
+                "friend_ratings": friend_ratings,
                 "show_ratings_to_friends": preference.show_ratings_to_friends if preference else True,
                 "last_config": preference.last_config if preference else {},
                 "min_rounds": trivia_session.MIN_ROUNDS_PER_SESSION,

@@ -1,225 +1,293 @@
+@use 'variables' as *;
+@use 'game_shell' as shell;
+
+// Belt-and-braces alongside the shell's own `.ul-game [hidden]` guard: every
+// panel, dock and rail section below sets an explicit display, which beats the
+// UA stylesheet's [hidden] rule regardless of specificity.
 .trivia-page {
+    [hidden] {
+        display: none !important;
+    }
+
+    .ul-game-cta {
+        @include shell.cta;
+    }
+
+    // The play panel only allocates a `rail` grid column while the drawer is
+    // open; left in flow the closed rail is auto-placed into an implicit row
+    // beneath the stage. Below md the shell already takes it out of flow.
+    @include up($breakpoint-md) {
+        .ul-game-shell:not(.is-rail-open) .ul-game-rail {
+            display: none;
+        }
+    }
+}
+
+// -- Launcher ---------------------------------------------------------------------
+// The card surface, width and padding come from `.ul-game-panel--launcher`, so
+// all three games open on the same treatment.
+.trivia-launcher {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: $space-md;
 }
 
-.trivia-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem 1.25rem;
-}
-
-.trivia-header-title {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    font-size: 1.25rem;
-    font-weight: 600;
-}
-
-.trivia-ratings {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .5rem;
-}
-
-.trivia-rating-chip {
+#trivia-start-form {
     display: flex;
     flex-direction: column;
-    align-items: center;
-    padding: .35rem .75rem;
-    border-radius: .5rem;
-    background: var(--ul-surface-2, rgba(127, 127, 127, .12));
-    min-width: 4.5rem;
+    gap: $space-md;
+    align-items: flex-start;
+}
 
-    &--self {
+.trivia-field {
+    display: flex;
+    flex-direction: column;
+    gap: $space-xs;
+    width: 100%;
+    max-width: 24rem;
+
+    > span {
+        font-size: .82rem;
         font-weight: 600;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+        color: var(--ul-grey-7);
     }
 }
 
 .trivia-friends-toggle {
     display: flex;
     align-items: center;
-    gap: .4rem;
-    font-size: .85rem;
+    gap: $space-sm;
+    font-size: .88rem;
     white-space: nowrap;
-}
-
-.trivia-rating-label {
-    font-size: .7rem;
-    text-transform: uppercase;
-    opacity: .7;
-    letter-spacing: .03em;
-}
-
-.trivia-rating-value {
-    font-size: 1.1rem;
-    font-weight: 700;
-}
-
-.trivia-panel {
-    display: flex;
-    flex-direction: column;
-    gap: .75rem;
-    padding: 1.25rem;
-
-    h2 {
-        margin: 0;
-    }
+    cursor: pointer;
 }
 
 .trivia-panel-hint {
-    opacity: .75;
-    font-size: .9rem;
-}
-
-.trivia-field {
-    display: flex;
-    flex-direction: column;
-    gap: .25rem;
-    max-width: 24rem;
-}
-
-#trivia-start-form,
-#trivia-answer-form {
-    display: flex;
-    flex-direction: column;
-    gap: .75rem;
-    align-items: flex-start;
-}
-
-#trivia-answer-input {
-    width: 100%;
-    max-width: 24rem;
-}
-
-.trivia-round-index {
-    margin: 0;
-    opacity: .7;
-    font-size: .85rem;
-    text-transform: uppercase;
-    letter-spacing: .03em;
-}
-
-.trivia-vote-buttons {
-    display: flex;
-    gap: .5rem;
-}
-
-.trivia-summary-score {
-    white-space: pre-line;
+    @include shell.hint;
 }
 
 .trivia-invite-wrap {
     display: flex;
     flex-direction: column;
-    gap: .5rem;
-    padding: .75rem;
-    border-radius: .5rem;
-    background: var(--ul-surface-2, rgba(127, 127, 127, .06));
+    gap: $space-sm;
+    padding: $space-sm;
+    border-radius: $radius-sm;
+    border: 1px solid var(--ul-game-accent-line);
+    background: var(--ul-game-accent-soft);
     width: 100%;
     max-width: 24rem;
+    @include shell.hideable;
 }
 
 .trivia-friend-list {
     display: flex;
     flex-direction: column;
-    gap: .35rem;
-    max-height: 200px;
+    gap: $space-xs;
+    max-height: 12rem;
     overflow-y: auto;
 }
 
 .trivia-friend-option {
     display: flex;
     align-items: center;
-    gap: .5rem;
+    gap: $space-sm;
 }
 
+// -- Empty state ---------------------------------------------------------------------
+.trivia-empty-state-panel {
+    align-items: center;
+    text-align: center;
+}
+
+.trivia-empty-state-icon {
+    @include shell.empty-icon;
+}
+
+// -- Lobby ----------------------------------------------------------------------------
 .trivia-lobby-participants {
-    list-style: none;
-    margin: .75rem 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: .35rem;
+    @include shell.lobby-list;
 
-    li {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: .5rem;
-        padding: .5rem .75rem;
-        border-radius: .4rem;
-        background: var(--ul-surface-2, rgba(127, 127, 127, .08));
-
-        span:first-child {
-            margin-right: auto;
-        }
+    li span:first-child {
+        margin-right: auto;
     }
-}
-
-.trivia-kick-btn {
-    border: none;
-    background: transparent;
-    cursor: pointer;
-    font-size: 1.1rem;
-    line-height: 1;
-    padding: .1rem .4rem;
-    border-radius: .3rem;
-    opacity: .6;
-
-    &:hover {
-        opacity: 1;
-        background: rgba(220, 53, 69, .15);
-    }
-}
-
-.trivia-round-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: .5rem;
 }
 
 .trivia-lobby-status {
-    font-size: .75rem;
-    padding: .15rem .5rem;
-    border-radius: 1rem;
-    background: var(--ul-surface-3, rgba(127, 127, 127, .18));
-
-    &--joined {
-        background: rgba(46, 160, 67, .2);
-    }
+    @include shell.lobby-status;
 }
 
-.trivia-lobby-actions {
-    display: flex;
-    gap: .75rem;
-    flex-wrap: wrap;
+.trivia-kick-btn {
+    @include icon-btn-danger(26px);
+    font-size: 1.1rem;
+    line-height: 1;
 }
 
-.trivia-chat-log {
-    max-height: 160px;
-    overflow-y: auto;
+// -- HUD --------------------------------------------------------------------------------
+.trivia-round-index {
+    margin: 0;
+    font-size: .82rem;
+    font-weight: 700;
+    letter-spacing: .06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+// -- Round stage --------------------------------------------------------------------------
+.trivia-stage {
+    min-height: 0;
+}
+
+.trivia-prompt-wrap {
+    @include surface($radius-md, 1);
     display: flex;
     flex-direction: column;
-    gap: .25rem;
-    font-size: .85rem;
+    align-items: center;
+    justify-content: center;
+    gap: $space-md;
+    min-height: 0;
+    overflow-y: auto;
+    padding: $space-lg $space-md;
 
-    .trivia-chat-username {
-        font-weight: 600;
-        margin-right: .35rem;
+    @include up($breakpoint-sm) {
+        padding: $space-xl $space-lg;
     }
+}
+
+#trivia-prompt {
+    @include shell.clue;
+}
+
+#trivia-answer-input {
+    @include ul-input;
+    width: 100%;
+    font-size: 1.05rem;
+}
+
+// -- Reveal ---------------------------------------------------------------------------------
+.trivia-reveal-icon {
+    font-size: 3rem;
+    color: var(--ul-grey-6);
+    animation: ul-game-pop var(--ul-game-dur-reward) var(--ul-game-ease-pop) both;
+
+    &--good { color: var(--ul-game-good); }
+    &--bad { color: var(--ul-game-bad); }
+}
+
+.trivia-vote-buttons {
+    display: flex;
+    justify-content: center;
+    gap: $space-sm;
+}
+
+// The vote controls deliberately aren't `.btn btn--ghost`: that modifier paints
+// a fixed dark translucent fill that fails contrast on a light sheet.
+.trivia-vote-btn {
+    @include icon-btn(34px);
+    border: 1px solid var(--ul-game-row-border);
+    background: var(--ul-game-row-bg);
+    transition: border-color var(--ul-game-dur-state) ease, background var(--ul-game-dur-state) ease, color var(--ul-game-dur-state) ease;
+
+    &:focus-visible {
+        box-shadow: 0 0 0 3px var(--ul-game-accent-ring);
+    }
+
+    &.is-cast {
+        border-color: var(--ul-game-accent);
+        background: var(--ul-game-accent-soft);
+        color: var(--ul-game-accent-ink);
+    }
+
+    &:disabled {
+        opacity: .55;
+        cursor: default;
+    }
+}
+
+// -- Score rows ------------------------------------------------------------------------------
+// Both lists sit in centred parents (.ul-game-reveal__sheet / --summary), so
+// they have to claim the full width explicitly or they collapse to content.
+.trivia-score-list {
+    @include shell.scorelist;
+    width: 100%;
+    align-self: stretch;
+    text-align: left;
+    max-height: 14rem;
+}
+
+.trivia-score-card {
+    @include shell.score-row;
+
+    &--self {
+        border-color: var(--ul-game-accent-line);
+    }
+}
+
+.trivia-score-card-rank {
+    @include shell.score-rank;
+}
+
+.trivia-score-card-avatar-wrap {
+    display: flex;
+    align-items: center;
+}
+
+.trivia-score-card-name {
+    @include shell.score-name;
+}
+
+.trivia-score-card-points {
+    @include shell.score-points;
+}
+
+.trivia-score-card-status {
+    display: inline-flex;
+    font-size: 1.1rem;
+
+    &--correct { color: var(--ul-game-good); }
+    &--wrong { color: var(--ul-game-bad); }
+
+    &:empty {
+        display: none;
+    }
+}
+
+// -- Summary -----------------------------------------------------------------------------------
+.trivia-summary-icon {
+    @include shell.summary-icon;
+}
+
+// white-space is load-bearing: renderSummary writes a \n-joined solo/abandoned
+// line into this single element.
+.trivia-summary-score {
+    margin: 0;
+    white-space: pre-line;
+    font-size: 1.05rem;
+    line-height: 1.5;
+}
+
+// -- Rail: chat ------------------------------------------------------------------------------------
+.trivia-chat-log {
+    @include shell.chat-log;
+}
+
+.trivia-chat-username {
+    @include shell.chat-username;
 }
 
 .trivia-chat-form {
-    display: flex;
-    gap: .5rem;
+    @include shell.chat-form;
+}
 
-    input {
-        flex: 1;
+// -- JS-built invite dialog --------------------------------------------------------------------------
+// Sizing/chrome comes from .ul-game-dialog; only the scrolling picker is local.
+.trivia-invite-more-dialog {
+    .trivia-invite-more-list {
+        display: flex;
+        flex-direction: column;
+        gap: $space-sm;
+        max-height: 16rem;
+        overflow-y: auto;
     }
 }

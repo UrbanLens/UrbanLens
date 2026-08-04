@@ -20,6 +20,7 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
+from urbanlens.dashboard.controllers.games import GAMES
 from urbanlens.dashboard.models.consensus.model import (
     ConsensusAnswer,
     ConsensusFieldKind,
@@ -75,16 +76,31 @@ class ConsensusHomeView(LoginRequiredMixin, View):
         if raw_session_id and ConsensusSessionParticipant.objects.filter(session_id=raw_session_id, profile=profile).exists():
             initial_session_id = raw_session_id
 
+        profile_summary = serializers.serialize_consensus_profile(consensus_profile)
+        # points_for_next_level is the cumulative lifetime threshold for the next
+        # level, not the amount still owed - which is what the HUD badge shows.
+        points_to_next_level = max(0, profile_summary["points_for_next_level"] - profile_summary["total_points"])
+
         return render(
             request,
             "dashboard/pages/consensus/index.html",
             {
                 "page_name": "consensus",
-                "consensus_profile": serializers.serialize_consensus_profile(consensus_profile),
+                # The shared games subnav and hero (partials/games/) read these.
+                "games": GAMES,
+                "game_stats": [
+                    {"label": "Level", "value": profile_summary["level"], "note": "", "is_self": True},
+                    {
+                        "label": "Points",
+                        "value": profile_summary["total_points"],
+                        "note": f"{points_to_next_level} to next level",
+                        "is_self": False,
+                    },
+                ],
+                "consensus_profile": profile_summary,
                 "min_rounds": consensus_session.MIN_ROUNDS_PER_SESSION,
                 "max_rounds": consensus_session.MAX_ROUNDS_PER_SESSION,
                 "default_rounds": consensus_session.DEFAULT_ROUNDS_PER_SESSION,
-                "field_kinds": ConsensusFieldKind.choices,
                 "my_profile_id": profile.pk,
                 "initial_session_id": initial_session_id,
             },

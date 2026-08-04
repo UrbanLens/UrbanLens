@@ -16,6 +16,8 @@
  */
 import { getCsrfToken } from "../shared/csrf";
 import { confirmAction, toast } from "../shared/dialogs";
+import { createGameShell, playEntrance, type GameShell } from "../shared/game-shell";
+import { createMapLayers } from "../shared/map-layers";
 
 declare const L: typeof import("leaflet");
 
@@ -39,7 +41,6 @@ declare global {
             session_id_sentinel: string;
             round_id_sentinel: string;
         };
-        CONSENSUS_FIELD_KINDS: [string, string][];
     }
 }
 
@@ -215,10 +216,22 @@ const PANEL_IDS = {
 
 type PanelName = keyof typeof PANEL_IDS;
 
+// Assigned in init(); the fallback below keeps the page usable if the shell
+// element is ever missing, since every panel transition runs through here.
+let gameShell: GameShell | null = null;
+
 function showPanel(name: PanelName): void {
+    if (gameShell) {
+        gameShell.showPanel(name);
+        return;
+    }
     for (const [key, id] of Object.entries(PANEL_IDS)) {
         el(id).hidden = key !== name;
     }
+}
+
+function reducedMotion(): boolean {
+    return gameShell?.reducedMotion() ?? false;
 }
 
 function el<T extends HTMLElement = HTMLElement>(id: string): T {
@@ -249,6 +262,100 @@ async function postForm(url: string, data: Record<string, string> | URLSearchPar
 async function getJson(url: string): Promise<any> {
     const response = await fetch(url, { headers: { "X-Requested-With": "XMLHttpRequest" } });
     return response.json();
+}
+
+/** Runs `action` with `button` disabled and spinning, so no round-trip is silent. */
+async function withBusy<T>(button: HTMLButtonElement | null, action: () => Promise<T>): Promise<T> {
+    if (button) {
+        button.classList.add("is-loading");
+        button.disabled = true;
+    }
+    try {
+        return await action();
+    } finally {
+        if (button) {
+            button.classList.remove("is-loading");
+            button.disabled = false;
+        }
+    }
+}
+
+function optionalEl<T extends HTMLElement = HTMLElement>(id: string): T | null {
+    return document.getElementById(id) as T | null;
+}
+
+// ---------------------------------------------------------------------------
+// Lifetime progression (the HUD level badge / points / meter)
+//
+// The level curve mirrors services.consensus.points -
+// `threshold(n) = round(LEVEL_SCALE_K * n * ln(n + 1))`. It is transcribed here
+// for the same reason INDOOR_OUTDOOR_CHOICES above is: no endpoint returns a
+// refreshed profile summary, so without it the badge would show the values the
+// page loaded with for the rest of the session. Keep in sync if the curve moves.
+// ---------------------------------------------------------------------------
+
+const LEVEL_SCALE_K = 100;
+const MAX_LEVEL = 500;
+
+function pointsRequiredForLevel(level: number): number {
+    if (level < 1) return 0;
+    return Math.round(LEVEL_SCALE_K * level * Math.log(level + 1));
+}
+
+function levelForPoints(points: number): number {
+    let level = 1;
+    while (level < MAX_LEVEL && points >= pointsRequiredForLevel(level)) level += 1;
+    return level;
+}
+
+// basePoints is the server-rendered lifetime total; sessionPoints is whatever
+// the current session has added on top and is *set*, never accumulated blindly,
+// so a reveal-by-reveal running total and the authoritative summary figure
+// cannot double-count each other.
+const progression = { basePoints: 0, sessionPoints: 0 };
+
+function renderProgression(): void {
+    const points = progression.basePoints + progression.sessionPoints;
+    const level = levelForPoints(points);
+    const floor = pointsRequiredForLevel(level - 1);
+    const ceiling = pointsRequiredForLevel(level);
+    const ratio = Math.min(1, Math.max(0, (points - floor) / Math.max(1, ceiling - floor)));
+
+    const levelEl = optionalEl("cs-level-value");
+    if (levelEl) levelEl.textContent = String(level);
+    const pointsEl = optionalEl("cs-points-value");
+    if (pointsEl) pointsEl.textContent = String(points);
+    const noteEl = optionalEl("cs-level-note");
+    if (noteEl) noteEl.textContent = `${Math.max(0, ceiling - points)} pts to level ${level + 1}`;
+    const fillEl = optionalEl("cs-level-meter-fill");
+    if (fillEl) fillEl.style.setProperty("--consensus-level-progress", String(ratio));
+}
+
+function setSessionPoints(total: number): void {
+    if (total === progression.sessionPoints) return;
+    progression.sessionPoints = total;
+    renderProgression();
+    const pointsEl = optionalEl("cs-points-value");
+    if (!pointsEl || reducedMotion()) return;
+    pointsEl.classList.remove("is-counting");
+    void pointsEl.offsetWidth;
+    pointsEl.classList.add("is-counting");
+}
+
+/** Folds this session's earnings into the lifetime base, ready for the next game. */
+function bankSessionPoints(): void {
+    if (progression.sessionPoints) {
+        progression.basePoints += progression.sessionPoints;
+        progression.sessionPoints = 0;
+    }
+    renderProgression();
+}
+
+function initProgression(): void {
+    const wrap = optionalEl("cs-progression");
+    progression.basePoints = Number(wrap?.dataset.points ?? "0") || 0;
+    progression.sessionPoints = 0;
+    renderProgression();
 }
 
 // ---------------------------------------------------------------------------
@@ -318,29 +425,35 @@ function pickFriendsToInvite(available: FriendOption[]): Promise<Set<number>> {
     return new Promise((resolve) => {
         const chosen = new Set<number>();
         const dialog = document.createElement("dialog");
-        dialog.className = "consensus-invite-more-dialog";
-        dialog.style.cssText = "max-width:22rem;width:90vw;padding:1.25rem;border-radius:0.5rem;border:1px solid rgba(0,0,0,0.15);";
+        dialog.className = "ul-dialog ul-game-dialog consensus-invite-more-dialog";
 
+        const header = document.createElement("div");
+        header.className = "dialog-header";
         const heading = document.createElement("h3");
         heading.textContent = "Invite more players";
-        heading.style.marginTop = "0";
+        header.appendChild(heading);
 
         const list = document.createElement("div");
-        list.style.cssText = "display:flex;flex-direction:column;gap:0.5rem;max-height:16rem;overflow-y:auto;margin:0.75rem 0;";
+        list.className = "consensus-friend-list";
         renderFriendCheckboxes(list, available, new Set(), chosen);
 
         const actions = document.createElement("div");
-        actions.style.cssText = "display:flex;justify-content:flex-end;gap:0.5rem;";
+        actions.className = "dialog-footer";
         const cancelBtn = document.createElement("button");
         cancelBtn.type = "button";
+        cancelBtn.className = "btn btn--ghost";
         cancelBtn.textContent = "Cancel";
         const inviteBtn = document.createElement("button");
         inviteBtn.type = "button";
+        inviteBtn.className = "btn btn--primary";
         inviteBtn.textContent = "Invite";
         actions.append(cancelBtn, inviteBtn);
 
-        dialog.append(heading, list, actions);
-        document.body.appendChild(dialog);
+        dialog.append(header, list, actions);
+        // Into the shell, not document.body: a node outside the fullscreen
+        // element is not painted at all.
+        if (gameShell) gameShell.mountOverlay(dialog);
+        else document.body.appendChild(dialog);
 
         const cleanup = (result: Set<number>) => {
             dialog.close();
@@ -455,13 +568,36 @@ async function beginGame(): Promise<void> {
 
 function ensureRoundMap(): L.Map {
     if (state.roundMap) return state.roundMap;
-    state.roundMap = L.map("cs-round-map").setView(DEFAULT_CENTER, DEFAULT_ZOOM);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { attribution: "&copy; OpenStreetMap contributors" }).addTo(state.roundMap);
-    state.roundMap.on("click", (event) => {
+    const map = L.map("cs-round-map", { attributionControl: false }).setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+    // The shared layers engine, so this map offers the same bases (and the same
+    // dark-mode behaviour) as every other map in the app.
+    createMapLayers(map, {
+        root: document.getElementById("cs-round-map-layers"),
+        onAttribution: (text) => {
+            const attributionEl = optionalEl("cs-round-map-attribution");
+            if (attributionEl) attributionEl.textContent = text;
+        },
+    });
+    map.on("click", (event) => {
         if (state.currentFieldKind !== FIELD_KIND.PHOTO_COORDINATES) return;
         placeAnswerMarker(event.latlng);
     });
-    return state.roundMap;
+    state.roundMap = map;
+    return map;
+}
+
+/** Drops both markers without forcing the map into existence on a text round. */
+function clearRoundMarkers(): void {
+    const map = state.roundMap;
+    if (!map) return;
+    if (state.answerMarker) {
+        map.removeLayer(state.answerMarker);
+        state.answerMarker = null;
+    }
+    if (state.contextMarker) {
+        map.removeLayer(state.contextMarker);
+        state.contextMarker = null;
+    }
 }
 
 function placeAnswerMarker(latlng: L.LatLng): void {
@@ -476,14 +612,7 @@ function placeAnswerMarker(latlng: L.LatLng): void {
 
 function resetRoundMap(latitude: number | null, longitude: number | null): void {
     const map = ensureRoundMap();
-    if (state.answerMarker) {
-        map.removeLayer(state.answerMarker);
-        state.answerMarker = null;
-    }
-    if (state.contextMarker) {
-        map.removeLayer(state.contextMarker);
-        state.contextMarker = null;
-    }
+    clearRoundMarkers();
     if (latitude !== null && longitude !== null) {
         const latlng = L.latLng(latitude, longitude);
         state.contextMarker = L.marker(latlng, { opacity: 0.6 }).addTo(map);
@@ -501,6 +630,26 @@ function resetRoundMap(latitude: number | null, longitude: number | null): void 
 // possible widget is pre-rendered in the template and toggled via
 // [data-field-only], mirroring spotguessr.ts's [data-mode-only] pattern.
 // ---------------------------------------------------------------------------
+
+/**
+ * Shows only the stage columns this round needs.
+ *
+ * `#cs-round-map` itself is never hidden, re-parented or destroyed - Leaflet is
+ * handed the id string once and keeps the instance - so the wrapper carries the
+ * visibility instead.
+ *
+ * Args:
+ *     showPhoto: Whether this round has a photo to display.
+ *     showMap: Whether the map is part of answering this round.
+ */
+function setStageLayout(showPhoto: boolean, showMap: boolean): void {
+    const media = optionalEl("cs-stage-media");
+    if (media) media.hidden = !showPhoto;
+    const mapWrap = optionalEl("cs-round-mapwrap");
+    if (mapWrap) mapWrap.hidden = !showMap;
+    const stage = document.querySelector<HTMLElement>("[data-game-stage]");
+    if (stage) stage.classList.toggle("ul-game-stage--single", !showPhoto);
+}
 
 function updateAnswerAreaVisibility(fieldKind: string): void {
     document.querySelectorAll<HTMLElement>("[data-field-only]").forEach((field) => {
@@ -570,21 +719,37 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
     el("cs-round-live-indicator").hidden = true;
     el("cs-round-status").textContent = `Round ${roundNumber} of ${state.totalRounds}`;
     el("cs-round-field-label").textContent = round.field_label;
-    el("cs-round-wiki-name").textContent = round.wiki_name;
+    // The play panel stays mounted between rounds, so the clue and the photo
+    // only animate if the entrance is re-applied.
+    const skipMotion = gameShell?.reducedMotion() ?? false;
+    const wikiName = el("cs-round-wiki-name");
+    wikiName.textContent = round.wiki_name;
+    playEntrance(wikiName, skipMotion);
     // Ending early only makes sense for the host of a shared game - solo
     // play has "play again" for the same purpose already.
     el<HTMLButtonElement>("cs-end-game-btn").hidden = !(state.isMultiplayer && state.hostProfileId === myProfileId);
+    gameShell?.setProgress(roundNumber, state.totalRounds);
+    // The rail holds nothing but multiplayer scores and chat.
+    gameShell?.setRailAvailable(state.isMultiplayer);
 
+    const isPhotoRound = round.field_kind === FIELD_KIND.PHOTO_COORDINATES;
     const photo = el<HTMLImageElement>("cs-round-photo");
-    if (round.field_kind === FIELD_KIND.PHOTO_COORDINATES && round.image_url) {
+    const showPhoto = isPhotoRound && Boolean(round.image_url);
+    if (showPhoto) {
         // round.image_url is a Django ImageField storage path (Image.image.url), never
         // a user-typed value - see services.consensus.serializers.serialize_round.
-        photo.src = round.image_url; // lgtm[js/xss,js/client-side-unvalidated-url-redirection]
+        photo.src = round.image_url as string; // lgtm[js/xss,js/client-side-unvalidated-url-redirection]
         photo.hidden = false;
+        playEntrance(photo, skipMotion);
     } else {
         photo.hidden = true;
         photo.removeAttribute("src");
     }
+
+    // The map only answers a question on coordinate rounds; on the others it was
+    // a 260px inert decoration. Visibility is settled before resetRoundMap() so
+    // Leaflet is never constructed inside a display:none box.
+    setStageLayout(showPhoto, isPhotoRound);
 
     updateAnswerAreaVisibility(round.field_kind);
     if (round.field_kind === FIELD_KIND.WIKI_INDOOR_OUTDOOR || round.field_kind === FIELD_KIND.WIKI_PIN_TYPE) {
@@ -595,7 +760,11 @@ function renderRound(round: RoundPayload, roundNumber: number): void {
         el<HTMLInputElement>("cs-answer-text-input").value = "";
     }
 
-    resetRoundMap(round.latitude, round.longitude);
+    if (isPhotoRound) {
+        resetRoundMap(round.latitude, round.longitude);
+    } else {
+        clearRoundMarkers();
+    }
 
     el<HTMLButtonElement>("cs-submit-answer-btn").disabled = true;
     el<HTMLButtonElement>("cs-submit-answer-btn").hidden = false;
@@ -635,8 +804,20 @@ async function submitAnswer(): Promise<void> {
         payload = { value };
     }
 
-    const response = await postForm(urlFor(urls.answer, state.sessionId, state.currentRoundId), payload);
+    // Busy state is applied here rather than through withBusy: the success path
+    // hands off to renderRound, which deliberately re-disables this button for
+    // the next round, so only the failure path may re-enable it.
+    const button = el<HTMLButtonElement>("cs-submit-answer-btn");
+    button.classList.add("is-loading");
+    button.disabled = true;
+    let response: any;
+    try {
+        response = await postForm(urlFor(urls.answer, state.sessionId, state.currentRoundId), payload);
+    } finally {
+        button.classList.remove("is-loading");
+    }
     if (response.error) {
+        button.disabled = false;
         toast.error(response.error);
         return;
     }
@@ -645,8 +826,17 @@ async function submitAnswer(): Promise<void> {
 
 async function skipRound(): Promise<void> {
     if (state.sessionId === null || state.currentRoundId === null) return;
-    const response = await postForm(urlFor(urls.skip, state.sessionId, state.currentRoundId), {});
+    const button = el<HTMLButtonElement>("cs-skip-btn");
+    button.classList.add("is-loading");
+    button.disabled = true;
+    let response: any;
+    try {
+        response = await postForm(urlFor(urls.skip, state.sessionId, state.currentRoundId), {});
+    } finally {
+        button.classList.remove("is-loading");
+    }
     if (response.error) {
+        button.disabled = false;
         toast.error(response.error);
         return;
     }
@@ -676,6 +866,15 @@ async function uploadPhoto(): Promise<void> {
     }
     toast.success("Photo uploaded - thanks for helping out!");
     input.value = "";
+    showChosenPhotoName();
+}
+
+/** Mirrors the chosen file into the dropzone label, which hides the native input. */
+function showChosenPhotoName(): void {
+    const label = optionalEl("cs-photo-upload-name");
+    if (!label) return;
+    const file = el<HTMLInputElement>("cs-photo-upload-input").files?.[0];
+    label.textContent = file ? file.name : "Choose a photo…";
 }
 
 async function goToNextRound(): Promise<void> {
@@ -860,6 +1059,9 @@ function renderReveal(data: RevealBroadcast): void {
     renderResultsList(data.answers);
     updateScoreboardFromReveal(data.answers);
 
+    const mine = data.answers.find((answer) => answer.profile_id === myProfileId);
+    if (mine) setSessionPoints(progression.sessionPoints + mine.points_awarded);
+
     const votePanel = el("cs-vote-panel");
     if (data.resolution === "vote_open" && data.vote_options?.length) {
         votePanel.hidden = false;
@@ -901,6 +1103,11 @@ function showSummary(summary: SummaryPayload): void {
     const roundWord = summary.total_rounds === 1 ? "round" : "rounds";
     el("cs-summary-heading").textContent = summary.status === "abandoned" ? "Game ended early" : "Game over!";
     el("cs-summary-subheading").textContent = `${summary.rounds_played} of ${summary.total_rounds} ${roundWord} played.`;
+
+    // The summary is the authoritative figure for what this session earned, so
+    // it replaces (rather than adds to) any running total from the reveals.
+    const mine = summary.participants.find((participant) => participant.profile_id === myProfileId);
+    if (mine) setSessionPoints(mine.total_points_this_session);
 
     const list = el("cs-summary-scores");
     list.innerHTML = "";
@@ -1028,6 +1235,7 @@ function initChat(): void {
 // ---------------------------------------------------------------------------
 
 function _resetSessionState(): void {
+    bankSessionPoints();
     state.sessionId = null;
     state.currentRoundId = null;
     state.isMultiplayer = false;
@@ -1091,7 +1299,9 @@ async function endGameNow(): Promise<void> {
     });
     if (!confirmed) return;
 
-    const response = await postForm(urlFor(urls.end, state.sessionId), {});
+    // Busy state starts after the confirmation, not before it - a spinner
+    // running behind a modal reads as a stuck request.
+    const response = await withBusy(el<HTMLButtonElement>("cs-end-game-btn"), () => postForm(urlFor(urls.end, state.sessionId as number), {}));
     if (response.error) {
         toast.error(response.error);
         return;
@@ -1138,17 +1348,38 @@ async function loadInitialSession(): Promise<void> {
 // Init
 // ---------------------------------------------------------------------------
 
+function initGameShell(): void {
+    const shellEl = optionalEl("cs-shell");
+    if (!pageEl || !shellEl) return;
+    gameShell = createGameShell({
+        root: pageEl,
+        shell: shellEl,
+        panels: PANEL_IDS,
+        playingPanels: ["game", "summary"],
+        onResize: () => state.roundMap?.invalidateSize(),
+    });
+    // The launcher is where every session starts, and the shell needs to know
+    // which panel is live before the first transition.
+    gameShell.showPanel("settings");
+}
+
 function init(): void {
-    el("cs-start-form").addEventListener("submit", (event) => {
+    initGameShell();
+    initProgression();
+
+    const startForm = el<HTMLFormElement>("cs-start-form");
+    const startBtn = startForm.querySelector<HTMLButtonElement>('button[type="submit"]');
+    startForm.addEventListener("submit", (event) => {
         event.preventDefault();
-        void startGame();
+        void withBusy(startBtn, startGame);
     });
     el("cs-submit-answer-btn").addEventListener("click", () => void submitAnswer());
     el("cs-skip-btn").addEventListener("click", () => void skipRound());
-    el("cs-photo-upload-btn").addEventListener("click", () => void uploadPhoto());
-    el("cs-join-lobby-btn").addEventListener("click", () => void joinLobby());
-    el("cs-begin-btn").addEventListener("click", () => void beginGame());
-    el("cs-invite-more-btn").addEventListener("click", () => void handleInviteMore());
+    el("cs-photo-upload-btn").addEventListener("click", () => void withBusy(el<HTMLButtonElement>("cs-photo-upload-btn"), uploadPhoto));
+    el<HTMLInputElement>("cs-photo-upload-input").addEventListener("change", showChosenPhotoName);
+    el("cs-join-lobby-btn").addEventListener("click", () => void withBusy(el<HTMLButtonElement>("cs-join-lobby-btn"), joinLobby));
+    el("cs-begin-btn").addEventListener("click", () => void withBusy(el<HTMLButtonElement>("cs-begin-btn"), beginGame));
+    el("cs-invite-more-btn").addEventListener("click", () => void withBusy(el<HTMLButtonElement>("cs-invite-more-btn"), handleInviteMore));
     el("cs-end-game-btn").addEventListener("click", () => void endGameNow());
     el("cs-play-again-btn").addEventListener("click", resetToSettings);
     el("cs-empty-state-settings-btn").addEventListener("click", resetToSettings);

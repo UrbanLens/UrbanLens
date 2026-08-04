@@ -1,129 +1,164 @@
 {% extends 'dashboard/themes/base.html' %}
 {% load static %}
 
-{% block title %}Trivia{% endblock %}
+{% block page_title %}Trivia &middot; UrbanLens{% endblock %}
 
 {% block hero %}
-{% include "dashboard/partials/ui/_page_hero.html" with icon="quiz" title="Trivia" subtitle="Answer questions about the places you've pinned." modifier="top" %}
+{% include "dashboard/partials/games/_game_hero.html" with game_icon="quiz" game_title="Trivia" game_subtitle="Answer questions about the places you've pinned." %}
+{% endblock %}
+
+{% block subnav %}
+{% include "dashboard/partials/games/_games_subnav.html" with active="trivia" %}
 {% endblock %}
 
 {% block content %}
-<div class="trivia-page page-content" data-my-profile-id="{{ my_profile_id }}" data-initial-session-id="{{ initial_session_id|default:'' }}"
-     data-min-rounds="{{ min_rounds }}" data-max-rounds="{{ max_rounds }}" data-default-rounds="{{ default_rounds }}">
-    <div class="trivia-header card">
-        <div class="trivia-header-title">
-            <i class="material-symbols-outlined">quiz</i>
-            <span>Trivia</span>
-        </div>
-        <div class="trivia-ratings">
-            <div class="trivia-rating-chip trivia-rating-chip--self">
-                <span class="trivia-rating-label">Your rating</span>
-                <span class="trivia-rating-value">{{ own_rating.rating|default:"1500"|floatformat:0 }}</span>
-            </div>
-            {% for entry in friend_ratings %}
-            <div class="trivia-rating-chip">
-                <span class="trivia-rating-label">{{ entry.profile.username }}</span>
-                <span class="trivia-rating-value">{{ entry.rating.rating|default:"1500"|floatformat:0 }}</span>
-            </div>
-            {% endfor %}
-        </div>
-        <label class="trivia-friends-toggle">
-            <span class="ul-switch">
-                <input type="checkbox" id="trivia-show-ratings-to-friends" {% if show_ratings_to_friends %}checked{% endif %}>
-                <span class="ul-switch__track"></span>
-            </span>
-            <span>Show my rating to friends</span>
-        </label>
-    </div>
+<div class="ul-game trivia-page" data-game="trivia"
+     data-my-profile-id="{{ my_profile_id }}"
+     data-initial-session-id="{{ initial_session_id|default:'' }}">
 
-    <section id="trivia-settings-panel" class="trivia-panel card">
-        <h2>Play Trivia</h2>
-        <p class="trivia-panel-hint">
-            Questions are pulled only from places you've pinned. Only locations that
-            every invited player has pinned will be asked about.
-        </p>
-        <form id="trivia-start-form">
-            <label class="trivia-field">
-                <span>Difficulty</span>
-                <input type="range" id="trivia-difficulty" min="0" max="1" step="0.1" value="0.5">
-            </label>
-            <label class="trivia-field">
-                <span>Rounds</span>
-                <input type="number" id="trivia-total-rounds" min="{{ min_rounds }}" max="{{ max_rounds }}" value="{{ default_rounds }}">
-            </label>
-            <label class="trivia-friends-toggle">
-                <span class="ul-switch">
-                    <input type="checkbox" id="trivia-play-with-friends">
-                    <span class="ul-switch__track"></span>
+    <div class="ul-game-shell" id="trivia-shell" data-game-shell>
+
+        <header class="ul-game-hud" data-game-hud>
+            <div class="ul-game-hud__group ul-game-hud__group--lead">
+                <span class="ul-game-hud__identity">
+                    <i class="material-symbols-outlined">quiz</i>
+                    <span class="ul-game-hud__name">Trivia</span>
                 </span>
-                <span>Play with friends</span>
-            </label>
-            <div id="trivia-invite-wrap" class="trivia-invite-wrap" hidden>
-                <p class="trivia-panel-hint">Only locations every invited friend has also pinned will be asked about.</p>
-                <div id="trivia-friend-list" class="trivia-friend-list"></div>
             </div>
-            <button type="submit" class="btn btn--primary" id="trivia-start-btn">Start</button>
-        </form>
-    </section>
-
-    <section id="trivia-empty-state" class="trivia-panel card" hidden>
-        <p>None of your pinned locations have a trivia question yet. Pin a few more places with buildings on record, then try again.</p>
-    </section>
-
-    <section id="trivia-lobby-panel" class="trivia-panel card" hidden>
-        <h2>Waiting for players</h2>
-        <ul id="trivia-lobby-participants" class="trivia-lobby-participants"></ul>
-        <div class="trivia-lobby-actions">
-            <button type="button" class="btn btn--ghost" id="trivia-invite-more-btn" hidden>Invite more</button>
-            <button type="button" class="btn btn--ghost" id="trivia-join-lobby-btn" hidden>Join</button>
-            <button type="button" class="btn btn--primary" id="trivia-begin-btn" hidden>Start game</button>
-            <button type="button" class="btn btn--ghost" id="trivia-leave-lobby-btn" hidden>Leave</button>
-            <button type="button" class="btn btn--secondary btn--sm" id="trivia-end-game-lobby-btn" hidden>End game</button>
-        </div>
-    </section>
-
-    <section id="trivia-round-panel" class="trivia-panel card" hidden>
-        <div class="trivia-round-actions">
-            <button type="button" class="btn btn--ghost" id="trivia-leave-round-btn" hidden>Leave</button>
-            <button type="button" class="btn btn--secondary btn--sm" id="trivia-end-game-round-btn" hidden>End game</button>
-        </div>
-        <p class="trivia-round-index"></p>
-        <h2 id="trivia-prompt"></h2>
-        <form id="trivia-answer-form">
-            <input type="text" id="trivia-answer-input" autocomplete="off" placeholder="Your answer">
-            <button type="submit" class="btn btn--primary">Submit</button>
-        </form>
-        <div id="trivia-reveal" hidden>
-            <p id="trivia-reveal-result"></p>
-            <div class="trivia-vote-buttons">
-                <button type="button" class="btn btn--ghost" data-vote="upvote">
-                    <i class="material-symbols-outlined">thumb_up</i>
-                </button>
-                <button type="button" class="btn btn--ghost" data-vote="downvote">
-                    <i class="material-symbols-outlined">thumb_down</i>
-                </button>
-                <button type="button" class="btn btn--ghost" data-vote="report">
-                    <i class="material-symbols-outlined">flag</i>
-                </button>
+            <div class="ul-game-hud__group ul-game-hud__group--center">
+                <p id="trivia-round-index" class="trivia-round-index ul-game-hud__round" data-hud-when="round"></p>
             </div>
-            <button type="button" class="btn btn--primary" id="trivia-next-btn">Next</button>
+            <div class="ul-game-hud__group ul-game-hud__group--trail">
+                <span id="trivia-score" class="ul-game-hud__score" hidden></span>
+                <button type="button" class="btn btn--ghost btn--sm" id="trivia-leave-round-btn" data-hud-when="round" hidden>Leave</button>
+                <button type="button" class="btn btn--secondary btn--sm" id="trivia-end-game-round-btn" data-hud-when="round" hidden>End game</button>
+                {% include "dashboard/partials/games/_game_hud_controls.html" %}
+            </div>
+            <span class="ul-game-hud__progress" aria-hidden="true"><span class="ul-game-hud__progress-fill"></span></span>
+        </header>
+
+        <div class="ul-game-body" data-game-body>
+
+            <section id="trivia-settings-panel" class="ul-game-panel ul-game-panel--launcher">
+                <div class="trivia-launcher">
+                    <h2 class="ul-game-panel__title">Play Trivia</h2>
+                    <p class="trivia-panel-hint">
+                        Questions are pulled only from places you've pinned. Only locations that
+                        every invited player has pinned will be asked about.
+                    </p>
+                    <form id="trivia-start-form">
+                        <label class="trivia-field">
+                            <span>Difficulty</span>
+                            <input type="range" id="trivia-difficulty" min="0" max="1" step="0.1" value="0.5">
+                        </label>
+                        <label class="trivia-field">
+                            <span>Rounds</span>
+                            <input type="number" id="trivia-total-rounds" min="{{ min_rounds }}" max="{{ max_rounds }}" value="{{ default_rounds }}">
+                        </label>
+                        <label class="trivia-friends-toggle">
+                            <span class="ul-switch">
+                                <input type="checkbox" id="trivia-play-with-friends">
+                                <span class="ul-switch__track"></span>
+                            </span>
+                            <span>Play with friends</span>
+                        </label>
+                        <div id="trivia-invite-wrap" class="trivia-invite-wrap" hidden>
+                            <p class="trivia-panel-hint">Only locations every invited friend has also pinned will be asked about.</p>
+                            <div id="trivia-friend-list" class="trivia-friend-list"></div>
+                        </div>
+                        <button type="submit" class="btn btn--primary btn--lg ul-game-cta" id="trivia-start-btn">Start</button>
+                    </form>
+                    <div class="ul-game-panel__footer">
+                        <label class="trivia-friends-toggle">
+                            <span class="ul-switch">
+                                <input type="checkbox" id="trivia-show-ratings-to-friends" {% if show_ratings_to_friends %}checked{% endif %}>
+                                <span class="ul-switch__track"></span>
+                            </span>
+                            <span>Show my rating to friends</span>
+                        </label>
+                    </div>
+                </div>
+            </section>
+
+            <section id="trivia-empty-state" class="ul-game-panel ul-game-panel--sheet trivia-empty-state-panel" hidden>
+                <i class="material-symbols-outlined trivia-empty-state-icon">quiz</i>
+                <h2 class="ul-game-panel__title">Nothing to ask about yet</h2>
+                <p class="trivia-panel-hint">None of your pinned locations have a trivia question yet. Pin a few more places with buildings on record, then try again.</p>
+                <div class="ul-game-panel__footer">
+                    <button type="button" class="btn btn--primary ul-game-cta" id="trivia-empty-state-settings-btn">Back to setup</button>
+                </div>
+            </section>
+
+            <section id="trivia-lobby-panel" class="ul-game-panel ul-game-panel--sheet" hidden>
+                <h2 class="ul-game-panel__title">Waiting for players</h2>
+                <ul id="trivia-lobby-participants" class="trivia-lobby-participants"></ul>
+                <div class="ul-game-panel__footer">
+                    <button type="button" class="btn btn--ghost" id="trivia-invite-more-btn" hidden>Invite more</button>
+                    <button type="button" class="btn btn--ghost" id="trivia-join-lobby-btn" hidden>Join</button>
+                    <button type="button" class="btn btn--primary ul-game-cta" id="trivia-begin-btn" hidden>Start game</button>
+                    <button type="button" class="btn btn--ghost" id="trivia-leave-lobby-btn" hidden>Leave</button>
+                    <button type="button" class="btn btn--secondary btn--sm" id="trivia-end-game-lobby-btn" hidden>End game</button>
+                </div>
+            </section>
+
+            <section id="trivia-round-panel" class="ul-game-panel ul-game-panel--play" hidden>
+                <div class="ul-game-stage ul-game-stage--single" data-game-stage>
+                    <div class="ul-game-stage__play trivia-stage">
+                        <div class="trivia-prompt-wrap">
+                            <h2 id="trivia-prompt" class="ul-game-clue"></h2>
+                        </div>
+                        <form id="trivia-answer-form" class="ul-game-dock">
+                            <div class="ul-game-dock__field">
+                                <input type="text" id="trivia-answer-input" autocomplete="off" placeholder="Your answer">
+                            </div>
+                            <button type="submit" class="btn btn--primary btn--lg ul-game-cta">Submit</button>
+                        </form>
+                    </div>
+                </div>
+
+                <div id="trivia-reveal" class="ul-game-reveal" hidden>
+                    <div class="ul-game-reveal__sheet">
+                        <i id="trivia-reveal-icon" class="material-symbols-outlined trivia-reveal-icon" aria-hidden="true">hourglass_top</i>
+                        <p id="trivia-reveal-result" class="ul-game-reveal__detail"></p>
+                        <ul id="trivia-round-scores" class="trivia-score-list" hidden></ul>
+                        <div class="trivia-vote-buttons">
+                            <button type="button" class="trivia-vote-btn" data-vote="upvote" title="Good question" aria-label="Good question">
+                                <i class="material-symbols-outlined">thumb_up</i>
+                            </button>
+                            <button type="button" class="trivia-vote-btn" data-vote="downvote" title="Poor question" aria-label="Poor question">
+                                <i class="material-symbols-outlined">thumb_down</i>
+                            </button>
+                            <button type="button" class="trivia-vote-btn" data-vote="report" title="Report this question" aria-label="Report this question">
+                                <i class="material-symbols-outlined">flag</i>
+                            </button>
+                        </div>
+                        <button type="button" class="btn btn--primary btn--lg ul-game-cta" id="trivia-next-btn">Next</button>
+                    </div>
+                </div>
+
+                <aside class="ul-game-rail" id="trivia-rail" data-game-rail hidden>
+                    <div id="trivia-chat-panel" class="ul-game-rail__section ul-game-rail__section--chat trivia-chat-panel" hidden>
+                        <h4 class="ul-game-rail__title">Chat</h4>
+                        <div id="trivia-chat-log" class="trivia-chat-log"></div>
+                        <form id="trivia-chat-form" class="trivia-chat-form">
+                            <input type="text" id="trivia-chat-input" autocomplete="off" placeholder="Say something...">
+                            <button type="submit" class="btn btn--ghost btn--sm">Send</button>
+                        </form>
+                    </div>
+                </aside>
+                <button type="button" class="ul-game-rail-scrim" data-game-rail-scrim aria-label="Close players panel" hidden></button>
+            </section>
+
+            <section id="trivia-summary-panel" class="ul-game-panel ul-game-panel--summary" hidden>
+                <i class="material-symbols-outlined trivia-summary-icon">emoji_events</i>
+                <h2 class="ul-game-panel__title">Game over</h2>
+                <p id="trivia-summary-score" class="trivia-summary-score"></p>
+                <ul id="trivia-summary-scores" class="trivia-score-list" hidden></ul>
+                <button type="button" class="btn btn--primary btn--lg ul-game-cta" id="trivia-play-again-btn">Play again</button>
+            </section>
+
         </div>
-    </section>
-
-    <section id="trivia-summary-panel" class="trivia-panel card" hidden>
-        <h2>Game over</h2>
-        <p id="trivia-summary-score" class="trivia-summary-score"></p>
-        <button type="button" class="btn btn--primary" id="trivia-play-again-btn">Play again</button>
-    </section>
-
-    <section id="trivia-chat-panel" class="trivia-panel card" hidden>
-        <h2>Chat</h2>
-        <div id="trivia-chat-log" class="trivia-chat-log"></div>
-        <form id="trivia-chat-form" class="trivia-chat-form">
-            <input type="text" id="trivia-chat-input" autocomplete="off" placeholder="Say something...">
-            <button type="submit" class="btn btn--ghost">Send</button>
-        </form>
-    </section>
+    </div>
 </div>
 
 {{ urls|json_script:"trivia-urls" }}

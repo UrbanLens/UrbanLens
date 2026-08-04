@@ -1,4 +1,8 @@
 import {
+  createGameShell,
+  playEntrance
+} from "./achievements-vedkz711.js";
+import {
   confirmAction,
   getCsrfToken,
   toast
@@ -6,15 +10,33 @@ import {
 import"./achievements-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/entries/trivia.ts
+var PANEL_IDS = {
+  settings: "trivia-settings-panel",
+  empty: "trivia-empty-state",
+  lobby: "trivia-lobby-panel",
+  round: "trivia-round-panel",
+  summary: "trivia-summary-panel"
+};
+var PANEL_NAME_BY_ID = {
+  "trivia-settings-panel": "settings",
+  "trivia-empty-state": "empty",
+  "trivia-lobby-panel": "lobby",
+  "trivia-round-panel": "round",
+  "trivia-summary-panel": "summary"
+};
 var urls = window.TRIVIA_URLS;
 var pageEl = document.querySelector(".trivia-page");
 var myProfileId = Number(pageEl?.dataset.myProfileId ?? "0");
+var shell = null;
+var shellEl = null;
 var sessionId = null;
 var currentRound = null;
 var isMultiplayer = false;
 var hostProfileId = null;
 var ws = null;
 var friendOptions = [];
+var totalRounds = 0;
+var sessionPoints = 0;
 function urlFor(template, sessionIdValue, roundIdValue, questionIdValue) {
   let resolved = template;
   if (sessionIdValue !== undefined)
@@ -44,8 +66,25 @@ function el(id) {
   return found;
 }
 function showPanel(id) {
-  for (const panelId of ["trivia-settings-panel", "trivia-empty-state", "trivia-lobby-panel", "trivia-round-panel", "trivia-summary-panel"]) {
-    el(panelId).hidden = panelId !== id;
+  const name = PANEL_NAME_BY_ID[id];
+  if (!name) {
+    console.error(`[trivia] no shell panel registered for #${id}`);
+    return;
+  }
+  shell?.showPanel(name);
+}
+async function withBusy(button, work) {
+  if (button) {
+    button.disabled = true;
+    button.classList.add("is-loading");
+  }
+  try {
+    return await work();
+  } finally {
+    if (button) {
+      button.disabled = false;
+      button.classList.remove("is-loading");
+    }
   }
 }
 async function loadFriendOptions() {
@@ -85,25 +124,32 @@ async function initFriendPicker() {
 function pickFriendsToInvite(available) {
   return new Promise((resolve) => {
     const dialog = document.createElement("dialog");
-    dialog.className = "trivia-invite-more-dialog";
-    dialog.style.cssText = "max-width:22rem;width:90vw;padding:1.25rem;border-radius:0.5rem;border:1px solid rgba(0,0,0,0.15);";
+    dialog.className = "ul-dialog ul-game-dialog trivia-invite-more-dialog";
+    const header = document.createElement("div");
+    header.className = "dialog-header";
     const heading = document.createElement("h3");
     heading.textContent = "Invite more players";
-    heading.style.marginTop = "0";
+    header.appendChild(heading);
     const list = document.createElement("div");
-    list.style.cssText = "display:flex;flex-direction:column;gap:0.5rem;max-height:16rem;overflow-y:auto;margin:0.75rem 0;";
+    list.className = "trivia-invite-more-list";
     renderFriendCheckboxes(list, available, new Set);
     const actions = document.createElement("div");
-    actions.style.cssText = "display:flex;justify-content:flex-end;gap:0.5rem;";
+    actions.className = "dialog-footer";
     const cancelBtn = document.createElement("button");
     cancelBtn.type = "button";
+    cancelBtn.className = "btn btn--ghost";
     cancelBtn.textContent = "Cancel";
     const inviteBtn = document.createElement("button");
     inviteBtn.type = "button";
+    inviteBtn.className = "btn btn--primary";
     inviteBtn.textContent = "Invite";
     actions.append(cancelBtn, inviteBtn);
-    dialog.append(heading, list, actions);
-    document.body.appendChild(dialog);
+    dialog.append(header, list, actions);
+    if (shell) {
+      shell.mountOverlay(dialog);
+    } else {
+      document.body.appendChild(dialog);
+    }
     const cleanup = (result) => {
       dialog.close();
       dialog.remove();
@@ -174,6 +220,8 @@ function renderLobby(session) {
   sessionId = session.session_id;
   hostProfileId = session.host_profile_id;
   isMultiplayer = true;
+  if (session.total_rounds)
+    totalRounds = session.total_rounds;
   showPanel("trivia-lobby-panel");
   renderLobbyParticipants(session.participants);
   connectSessionSocket();
@@ -187,7 +235,8 @@ async function refreshLobby() {
 async function joinLobby() {
   if (sessionId === null)
     return;
-  const response = await postForm(urlFor(urls.join, sessionId), {});
+  const id = sessionId;
+  const response = await withBusy(el("trivia-join-lobby-btn"), () => postForm(urlFor(urls.join, id), {}));
   if (response.error) {
     toast.error(response.error);
     return;
@@ -197,8 +246,12 @@ async function joinLobby() {
 async function beginGame() {
   if (sessionId === null)
     return;
-  const payload = await postForm(urlFor(urls.begin, sessionId), {});
+  const id = sessionId;
+  const payload = await withBusy(el("trivia-begin-btn"), () => postForm(urlFor(urls.begin, id), {}));
   await handleStartOrRoundResponse(payload);
+}
+function setRailAvailable(on) {
+  shell?.setRailAvailable(on);
 }
 function connectSessionSocket() {
   if (ws || sessionId === null)
@@ -214,6 +267,7 @@ function connectSessionSocket() {
     ws = null;
   });
   el("trivia-chat-panel").hidden = false;
+  setRailAvailable(true);
   loadChatHistory();
 }
 function handleSocketMessage(data) {
@@ -235,7 +289,6 @@ function handleSocketMessage(data) {
       }
       break;
     case "session.started":
-      showPanel("trivia-round-panel");
       renderRound(data.round);
       break;
     case "round.revealed":
@@ -284,30 +337,148 @@ function initChat() {
     input.value = "";
   });
 }
+function avatarInitial(username) {
+  const first = username.trim().charAt(0);
+  return first ? first.toUpperCase() : "?";
+}
+function buildScoreRow(data, index) {
+  const row = document.createElement("li");
+  row.className = data.isSelf ? "trivia-score-card trivia-score-card--self" : "trivia-score-card";
+  if (data.rank !== null && data.rank <= 3)
+    row.classList.add(`trivia-score-card--rank-${data.rank}`);
+  row.style.setProperty("--ul-game-i", String(index));
+  const rank = document.createElement("span");
+  rank.className = "trivia-score-card-rank";
+  rank.textContent = data.rank !== null ? `#${data.rank}` : "";
+  const avatarWrap = document.createElement("span");
+  avatarWrap.className = "trivia-score-card-avatar-wrap";
+  if (data.avatarUrl) {
+    const img = document.createElement("img");
+    img.className = "friend-avatar-sm";
+    img.src = data.avatarUrl;
+    img.alt = data.username;
+    avatarWrap.appendChild(img);
+  } else {
+    const placeholder = document.createElement("span");
+    placeholder.className = "friend-avatar-sm friend-avatar-placeholder";
+    placeholder.textContent = avatarInitial(data.username);
+    avatarWrap.appendChild(placeholder);
+  }
+  const name = document.createElement("span");
+  name.className = "trivia-score-card-name";
+  name.textContent = data.username;
+  const status = document.createElement("span");
+  status.className = "trivia-score-card-status";
+  if (data.correct !== null) {
+    status.classList.add(data.correct ? "trivia-score-card-status--correct" : "trivia-score-card-status--wrong");
+    status.classList.add("material-symbols-outlined");
+    status.textContent = data.correct ? "check" : "close";
+  }
+  const points = document.createElement("span");
+  points.className = "trivia-score-card-points";
+  points.textContent = `${data.points} pts`;
+  row.append(rank, avatarWrap, name, status, points);
+  return row;
+}
+function renderRoundScores(results) {
+  const list = el("trivia-round-scores");
+  list.innerHTML = "";
+  if (results.length < 2) {
+    list.hidden = true;
+    return;
+  }
+  const ordered = results.slice().sort((a, b) => b.points - a.points);
+  ordered.forEach((result, index) => {
+    list.appendChild(buildScoreRow({
+      rank: index + 1,
+      username: result.username,
+      avatarUrl: result.avatar_url,
+      points: result.points,
+      correct: result.is_correct,
+      isSelf: result.profile_id === myProfileId
+    }, index));
+  });
+  list.hidden = false;
+}
 function updateRoundActionVisibility() {
   el("trivia-leave-round-btn").hidden = !isMultiplayer;
   el("trivia-end-game-round-btn").hidden = !(isMultiplayer && hostProfileId === myProfileId);
+}
+function setSessionPoints(points) {
+  sessionPoints = points;
+  const chip = el("trivia-score");
+  chip.hidden = false;
+  chip.textContent = `${sessionPoints} pts`;
+  chip.classList.remove("is-counting");
+  chip.offsetWidth;
+  chip.classList.add("is-counting");
+}
+function resetVoteButtons() {
+  for (const button of document.querySelectorAll("[data-vote]")) {
+    button.classList.remove("is-cast");
+    button.disabled = false;
+  }
+}
+function applyRevealVerdict(correct) {
+  const reveal = el("trivia-reveal");
+  reveal.classList.remove("ul-game-reveal--good", "ul-game-reveal--bad");
+  const icon = el("trivia-reveal-icon");
+  icon.classList.remove("trivia-reveal-icon--good", "trivia-reveal-icon--bad");
+  if (correct === null) {
+    icon.textContent = "hourglass_top";
+    return;
+  }
+  reveal.classList.add(correct ? "ul-game-reveal--good" : "ul-game-reveal--bad");
+  icon.classList.add(correct ? "trivia-reveal-icon--good" : "trivia-reveal-icon--bad");
+  icon.textContent = correct ? "check_circle" : "cancel";
+  shell?.flashStage(correct ? "good" : "bad");
 }
 function renderRound(round) {
   currentRound = round;
   sessionId = round.session_id;
   showPanel("trivia-round-panel");
-  el("trivia-round-index").textContent = `Question ${round.sequence_index + 1}`;
-  el("trivia-prompt").textContent = round.prompt;
+  const index = round.sequence_index + 1;
+  el("trivia-round-index").textContent = totalRounds > 0 ? `Question ${index} of ${totalRounds}` : `Question ${index}`;
+  shell?.setProgress(index, totalRounds);
+  const prompt = el("trivia-prompt");
+  prompt.textContent = round.prompt;
+  playEntrance(prompt, shell?.reducedMotion() ?? false);
   el("trivia-answer-input").value = "";
   el("trivia-answer-form").hidden = false;
   el("trivia-reveal").hidden = true;
+  applyRevealVerdict(null);
+  resetVoteButtons();
+  el("trivia-round-scores").hidden = true;
   el("trivia-answer-input").focus();
   updateRoundActionVisibility();
 }
 function renderSummary(summary) {
   const mine = summary.participants.find((participant) => participant.profile_id === myProfileId);
-  const lines = isMultiplayer ? summary.participants.slice().sort((a, b) => b.total_points - a.total_points).map((participant, index) => `${index + 1}. ${participant.username} - ${participant.total_points} pts`).join(`
-`) : mine ? `You scored ${mine.total_points} points across ${summary.rounds_played} rounds.` : `Finished - ${summary.rounds_played} rounds played.`;
   const prefix = summary.status === "abandoned" ? `Game ended early - not enough players remained.
 
 ` : "";
-  el("trivia-summary-score").textContent = prefix + lines;
+  const list = el("trivia-summary-scores");
+  list.innerHTML = "";
+  if (isMultiplayer && summary.participants.length) {
+    const ranked = summary.participants.slice().sort((a, b) => b.total_points - a.total_points);
+    ranked.forEach((participant, index) => {
+      list.appendChild(buildScoreRow({
+        rank: index + 1,
+        username: participant.username,
+        avatarUrl: participant.avatar_url,
+        points: participant.total_points,
+        correct: null,
+        isSelf: participant.profile_id === myProfileId
+      }, index));
+    });
+    list.hidden = false;
+    el("trivia-summary-score").textContent = `${prefix}${summary.rounds_played} of ${summary.total_rounds} rounds played.`;
+  } else {
+    list.hidden = true;
+    el("trivia-summary-score").textContent = mine ? `${prefix}You scored ${mine.total_points} points across ${summary.rounds_played} rounds.` : `${prefix}Finished - ${summary.rounds_played} rounds played.`;
+  }
+  if (mine)
+    setSessionPoints(mine.total_points);
   showPanel("trivia-summary-panel");
   if (ws) {
     ws.close();
@@ -319,11 +490,18 @@ function resetToSettings() {
   currentRound = null;
   isMultiplayer = false;
   hostProfileId = null;
+  totalRounds = 0;
+  sessionPoints = 0;
   if (ws) {
     ws.close();
     ws = null;
   }
   el("trivia-chat-panel").hidden = true;
+  setRailAvailable(false);
+  const chip = el("trivia-score");
+  chip.hidden = true;
+  chip.textContent = "";
+  shell?.setProgress(0, 0);
   showPanel("trivia-settings-panel");
 }
 async function leaveGame() {
@@ -392,6 +570,8 @@ async function handleStartOrRoundResponse(payload) {
   }
   if (payload.session_id)
     sessionId = payload.session_id;
+  if (payload.total_rounds)
+    totalRounds = payload.total_rounds;
   if (payload.finished) {
     renderSummary(payload.summary ?? await getJson(urlFor(urls.summary, sessionId ?? undefined)));
     return;
@@ -401,8 +581,8 @@ async function handleStartOrRoundResponse(payload) {
 }
 async function startGame() {
   const difficulty = el("trivia-difficulty").value;
-  const totalRounds = el("trivia-total-rounds").value;
-  const body = { difficulty, total_rounds: totalRounds };
+  const requestedRounds = el("trivia-total-rounds").value;
+  const body = { difficulty, total_rounds: requestedRounds };
   const params = new URLSearchParams(body);
   if (el("trivia-play-with-friends").checked) {
     const checked = Array.from(document.querySelectorAll("#trivia-friend-list input:checked"));
@@ -413,28 +593,40 @@ async function startGame() {
     for (const checkbox of checked)
       params.append("invite_profile_ids", checkbox.value);
   }
-  const response = await fetch(urls.start, {
-    method: "POST",
-    headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
-    body: params
+  totalRounds = Number(requestedRounds) || 0;
+  sessionPoints = 0;
+  const payload = await withBusy(el("trivia-start-btn"), async () => {
+    const response = await fetch(urls.start, {
+      method: "POST",
+      headers: { "X-CSRFToken": getCsrfToken(), "Content-Type": "application/x-www-form-urlencoded" },
+      body: params
+    });
+    return response.json();
   });
-  await handleStartOrRoundResponse(await response.json());
+  await handleStartOrRoundResponse(payload);
 }
 async function submitAnswer() {
   if (sessionId === null || currentRound === null)
     return;
+  const form = el("trivia-answer-form");
   const answer = el("trivia-answer-input").value;
   if (!answer.trim())
     return;
-  const payload = await postForm(urlFor(urls.answer, sessionId, currentRound.round_id), { answer });
+  const submitBtn = form.querySelector('button[type="submit"]');
+  const id = sessionId;
+  const roundId = currentRound.round_id;
+  const payload = await withBusy(submitBtn, () => postForm(urlFor(urls.answer, id, roundId), { answer }));
   if (payload.error) {
     toast.error(payload.error);
     return;
   }
-  el("trivia-answer-form").hidden = true;
+  form.hidden = true;
   const reveal = el("trivia-reveal");
   reveal.hidden = false;
   el("trivia-reveal-result").textContent = payload.revealed ? payload.is_correct ? `Correct! +${payload.points} points` : `Not quite - the answer was "${payload.answer ?? "unknown"}".` : "Answer submitted - waiting for the rest of the group...";
+  applyRevealVerdict(payload.revealed ? payload.is_correct : null);
+  if (payload.revealed && payload.points)
+    setSessionPoints(sessionPoints + payload.points);
   el("trivia-next-btn").hidden = !payload.revealed || isMultiplayer;
 }
 function showBroadcastReveal(data) {
@@ -445,18 +637,32 @@ function showBroadcastReveal(data) {
   reveal.hidden = false;
   const mine = data.results.find((result) => result.profile_id === myProfileId);
   el("trivia-reveal-result").textContent = mine ? mine.is_correct ? `Correct! +${mine.points} points. The answer was "${data.answer}".` : `Not quite - the answer was "${data.answer}".` : `The answer was "${data.answer}".`;
+  applyRevealVerdict(mine ? mine.is_correct : null);
+  if (mine?.is_correct && mine.points)
+    setSessionPoints(sessionPoints + mine.points);
+  renderRoundScores(data.results);
 }
-async function voteOnCurrentQuestion(kind) {
+async function voteOnCurrentQuestion(button, kind) {
   if (currentRound === null)
     return;
-  const payload = await postForm(urlFor(urls.vote, undefined, undefined, currentRound.question_id), { kind });
-  if (payload.error)
+  const questionId = currentRound.question_id;
+  const payload = await withBusy(button, () => postForm(urlFor(urls.vote, undefined, undefined, questionId), { kind }));
+  if (payload.error) {
     toast.error(payload.error);
+    return;
+  }
+  if (kind === "upvote" || kind === "downvote") {
+    for (const other of document.querySelectorAll('[data-vote="upvote"], [data-vote="downvote"]')) {
+      other.classList.remove("is-cast");
+    }
+  }
+  button.classList.add("is-cast");
 }
 async function goToNextRound() {
   if (sessionId === null)
     return;
-  const payload = await getJson(urlFor(urls.round, sessionId));
+  const id = sessionId;
+  const payload = await withBusy(el("trivia-next-btn"), () => getJson(urlFor(urls.round, id)));
   await handleStartOrRoundResponse(payload);
 }
 async function loadInitialSession() {
@@ -467,6 +673,8 @@ async function loadInitialSession() {
   isMultiplayer = true;
   const lobby = await getJson(urlFor(urls.lobby, sessionId));
   hostProfileId = lobby.host_profile_id;
+  if (lobby.total_rounds)
+    totalRounds = lobby.total_rounds;
   if (lobby.status === "lobby") {
     renderLobby(lobby);
     return;
@@ -481,6 +689,17 @@ async function loadInitialSession() {
   await handleStartOrRoundResponse(data);
 }
 function init() {
+  shellEl = document.getElementById("trivia-shell");
+  if (pageEl && shellEl) {
+    shell = createGameShell({
+      root: pageEl,
+      shell: shellEl,
+      panels: PANEL_IDS,
+      playingPanels: ["round", "summary"]
+    });
+  }
+  setRailAvailable(false);
+  showPanel("trivia-settings-panel");
   el("trivia-start-form").addEventListener("submit", (event) => {
     event.preventDefault();
     startGame();
@@ -490,7 +709,8 @@ function init() {
     submitAnswer();
   });
   el("trivia-next-btn").addEventListener("click", () => void goToNextRound());
-  el("trivia-play-again-btn").addEventListener("click", () => showPanel("trivia-settings-panel"));
+  el("trivia-play-again-btn").addEventListener("click", () => resetToSettings());
+  el("trivia-empty-state-settings-btn").addEventListener("click", () => showPanel("trivia-settings-panel"));
   el("trivia-join-lobby-btn").addEventListener("click", () => void joinLobby());
   el("trivia-begin-btn").addEventListener("click", () => void beginGame());
   el("trivia-invite-more-btn").addEventListener("click", () => void handleInviteMore());
@@ -499,7 +719,7 @@ function init() {
   el("trivia-leave-round-btn").addEventListener("click", () => void leaveGame());
   el("trivia-end-game-round-btn").addEventListener("click", () => void endGameNow());
   document.querySelectorAll("[data-vote]").forEach((button) => {
-    button.addEventListener("click", () => void voteOnCurrentQuestion(button.dataset.vote));
+    button.addEventListener("click", () => void voteOnCurrentQuestion(button, button.dataset.vote));
   });
   const ratingsToggle = document.getElementById("trivia-show-ratings-to-friends");
   ratingsToggle?.addEventListener("change", () => {

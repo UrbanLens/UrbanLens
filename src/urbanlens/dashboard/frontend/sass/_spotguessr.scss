@@ -1,115 +1,57 @@
 // SpotGuessr gameplay, multiplayer lobby, and chat (UL-391..UL-393).
-@use 'sass:color';
+//
+// Layout, chrome, motion and the shared component look all come from
+// _game_shell.scss - the rules here only bind that look onto SpotGuessr's own
+// class names (which the TypeScript reads and writes verbatim) and add what is
+// genuinely specific to this game: the three mode cards, the settings dialog,
+// and the area-restriction controls.
 @use 'variables' as *;
+@use 'game_shell' as shell;
 
 .spotguessr-page {
-    max-width: 960px;
-    margin: 1.25rem auto;
-    padding: 0 1rem;
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-
-    // Several elements below set an explicit `display` (flex/grid/etc.) with
-    // no [hidden] override - author CSS always beats the UA stylesheet's
-    // `[hidden] { display: none }`, regardless of specificity, so those
-    // elements silently ignored the `hidden` attribute entirely. This single
-    // rule guarantees `hidden` always wins on this page.
+    // Belt and braces alongside `.ul-game [hidden]`: several elements below set
+    // an explicit `display`, which beats the UA stylesheet's `[hidden]` rule
+    // regardless of specificity.
     [hidden] {
         display: none !important;
     }
-}
 
-.spotguessr-header {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 1rem;
-    padding: 1rem 1.25rem;
-}
-
-.spotguessr-header-title {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    font-size: 1.25rem;
-    font-weight: 600;
-}
-
-.spotguessr-ratings {
-    display: flex;
-    flex-wrap: wrap;
-    gap: .5rem;
-    flex: 1;
-}
-
-.spotguessr-rating-chip {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: .35rem .75rem;
-    border-radius: .5rem;
-    background: var(--ul-surface-2);
-    min-width: 4.5rem;
-
-    &--self {
-        font-weight: 600;
+    // The accent treatment for every primary action on the page. Scoped to the
+    // page so the other games can bind their own accent to the same class.
+    .ul-game-cta {
+        @include shell.cta;
     }
 }
 
-.spotguessr-rating-label {
-    font-size: .7rem;
-    opacity: .75;
-}
+// The play panel only names a `rail` grid area while the drawer is open. Without
+// this the closed rail would be auto-placed into an implicit row under the stage
+// on wide screens (below md it is an out-of-flow drawer, so it is unaffected).
+@include up($breakpoint-md) {
+    .spotguessr-page .ul-game-panel--play > .ul-game-rail {
+        display: none;
+    }
 
-.spotguessr-rating-value {
-    font-size: 1.1rem;
-}
-
-.spotguessr-friends-toggle {
-    display: flex;
-    align-items: center;
-    gap: .4rem;
-    font-size: .85rem;
-    white-space: nowrap;
-}
-
-.spotguessr-panel {
-    padding: 1.25rem;
-    // Applies to every top-level panel swap (lobby/game/summary/empty-state) -
-    // `hidden` toggling `display:none` on/off is enough to replay a CSS
-    // animation, so this alone gives every panel transition a consistent
-    // entrance without JS having to manage per-swap animation classes.
-    animation: spotguessr-fade-in .3s ease-out;
+    .spotguessr-page .ul-game-shell.is-rail-open .ul-game-panel--play > .ul-game-rail {
+        display: flex;
+    }
 }
 
 .spotguessr-panel-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: .5rem;
-
     h2 {
         margin: 0;
     }
 }
 
 .spotguessr-panel-hint {
-    opacity: .75;
-    font-size: .9rem;
+    @include shell.hint;
 }
 
 // -- Mode selection cards -----------------------------------------------------
 
-$spotguessr-mode-accents: (
-    'photos': $color-indigo-500,
-    'named_place': $color-teal-500,
-    'street_view': $color-purple-500,
-);
-
 .spotguessr-mode-cards {
     display: grid;
     grid-template-columns: 1fr;
-    gap: 1.25rem;
+    gap: $space-md;
 
     @include up($breakpoint-sm) {
         grid-template-columns: repeat(3, 1fr);
@@ -117,42 +59,35 @@ $spotguessr-mode-accents: (
 }
 
 .spotguessr-mode-card {
-    position: relative;
-    border-radius: $radius-md;
-    overflow: hidden;
-    transition: transform .15s, box-shadow .15s;
+    @include shell.mode-card;
 
-    &:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 16px rgba(0, 0, 0, .12);
-    }
+    // An in-family ramp off the page accent - see _game_shell.scss. The suffix
+    // is controllers.spotguessr's `card.accent`, i.e. a SpotGuessrMode value.
+    &--photos { --ul-game-mode: var(--ul-game-mode-photos); }
+    &--named_place { --ul-game-mode: var(--ul-game-mode-named_place); }
+    &--street_view { --ul-game-mode: var(--ul-game-mode-street_view); }
 }
 
 .spotguessr-card-gear {
-    @include icon-btn(32px);
-    position: absolute;
-    top: .6rem;
-    right: .6rem;
+    @include shell.mode-card-gear;
     z-index: 1;
-    background: rgba(0, 0, 0, .25);
-    color: #fff;
-
-    &:hover {
-        background: rgba(0, 0, 0, .4);
-    }
 }
 
 .spotguessr-mode-card-body {
     display: flex;
+    flex: 1;
     flex-direction: column;
     align-items: flex-start;
-    gap: .5rem;
+    gap: $space-sm;
     width: 100%;
-    padding: 1.5rem;
+    padding: $space-lg;
     border: none;
+    // The gradient lives on .spotguessr-mode-card now, so the button must not
+    // repaint over it with .btn--card's flat surface.
+    background: transparent;
     text-align: left;
     cursor: pointer;
-    color: #fff;
+    color: var(--ul-game-accent-contrast);
     font: inherit;
 }
 
@@ -163,7 +98,7 @@ $spotguessr-mode-accents: (
     width: 3rem;
     height: 3rem;
     border-radius: 50%;
-    background: rgba(255, 255, 255, .18);
+    background: color-mix(in srgb, var(--ul-game-accent-contrast) 22%, transparent);
 
     .material-symbols-outlined {
         font-size: 1.75rem;
@@ -184,26 +119,18 @@ $spotguessr-mode-accents: (
     margin-top: auto;
     display: flex;
     align-items: center;
-    gap: .25rem;
+    gap: $space-xs;
     font-weight: 600;
     font-size: .9rem;
 
     .material-symbols-outlined {
         font-size: 1.1rem;
-        transition: transform .15s;
+        transition: transform var(--ul-game-dur-state) ease;
     }
 }
 
 .spotguessr-mode-card-body:hover .spotguessr-mode-card-play .material-symbols-outlined {
     transform: translateX(3px);
-}
-
-@each $name, $accent in $spotguessr-mode-accents {
-    $accent-dark: color.adjust($accent, $lightness: -15%);
-
-    .spotguessr-mode-card--#{$name} .btn--card {
-        background: linear-gradient(135deg, $accent, $accent-dark);
-    }
 }
 
 // -- Settings dialog -----------------------------------------------------------
@@ -214,59 +141,17 @@ $spotguessr-mode-accents: (
     }
 }
 
-// -- Empty state -----------------------------------------------------------
-
-.spotguessr-empty-state-panel {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    text-align: center;
-    gap: .5rem;
-    padding: 3rem 1.5rem;
-}
-
-.spotguessr-empty-state-icon {
-    font-size: 3rem;
-    opacity: .5;
-    margin-bottom: .5rem;
-}
-
-.spotguessr-empty-state-filters {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: .4rem;
-    justify-content: center;
-
-    li {
-        font-size: .8rem;
-        padding: .2rem .6rem;
-        border-radius: 1rem;
-        background: var(--ul-surface-2);
-    }
-}
-
-.spotguessr-empty-state-actions {
-    display: flex;
-    gap: .75rem;
-    margin-top: .75rem;
-    flex-wrap: wrap;
-    justify-content: center;
-}
-
 .spotguessr-settings-form {
     display: flex;
     flex-direction: column;
-    gap: 1rem;
-    margin-top: .75rem;
+    gap: $space-md;
+    margin-top: $space-sm;
 }
 
 .spotguessr-field {
     display: flex;
     flex-direction: column;
-    gap: .35rem;
+    gap: $space-xs;
 
     &--switch {
         flex-direction: row;
@@ -275,221 +160,183 @@ $spotguessr-mode-accents: (
         label {
             display: flex;
             align-items: center;
-            gap: .6rem;
+            gap: $space-sm;
             cursor: pointer;
         }
     }
 }
 
+.spotguessr-friends-toggle {
+    display: flex;
+    align-items: center;
+    gap: $space-sm;
+    font-size: .85rem;
+    cursor: pointer;
+}
+
 .spotguessr-difficulty-group {
     display: flex;
-    gap: .6rem;
+    gap: $space-sm;
     flex-wrap: wrap;
 }
 
 .spotguessr-area-map-wrap {
     display: flex;
     flex-direction: column;
-    gap: .35rem;
+    gap: $space-xs;
 }
 
 .spotguessr-area-search {
     display: flex;
-    gap: .5rem;
+    gap: $space-sm;
 
     input {
         flex: 1;
+        min-width: 0;
     }
 }
 
 .spotguessr-area-search-results {
     display: flex;
     flex-direction: column;
-    gap: .3rem;
-    max-height: 160px;
+    gap: $space-xs;
+    max-height: 10rem;
     overflow-y: auto;
 }
 
 .spotguessr-area-search-result {
-    text-align: left;
-    background: var(--ul-surface-2);
-    border: 1px solid var(--ul-surface-2-border);
-    border-radius: .4rem;
-    padding: .4rem .6rem;
+    @include shell.list-btn;
     font-size: .82rem;
-    cursor: pointer;
-
-    &:hover {
-        border-color: var(--ul-primary-color);
-    }
 }
 
 .spotguessr-area-search-message {
     margin: 0;
     font-size: .82rem;
-    opacity: .75;
+    color: var(--ul-grey-7);
 }
 
-.spotguessr-area-map,
-.spotguessr-guess-map {
-    height: 260px;
-    border-radius: .5rem;
+.spotguessr-area-map {
+    height: 16rem;
+    border-radius: $radius-sm;
     overflow: hidden;
 }
 
-.spotguessr-game-status {
+.spotguessr-invite-wrap {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .5rem;
-    font-weight: 600;
-    margin-bottom: .75rem;
+    flex-direction: column;
+    gap: $space-sm;
+    padding: $space-sm;
+    border-radius: $radius-sm;
+    background: var(--ul-surface-2);
+}
 
-    // Fixed-width digits so #sg-score-status's animateCountUp() doesn't
-    // jitter the bar's layout as the digit count changes mid-animation.
-    #sg-score-status {
-        font-variant-numeric: tabular-nums;
+.spotguessr-friend-list {
+    display: flex;
+    flex-direction: column;
+    gap: $space-xs;
+    max-height: 12.5rem;
+    overflow-y: auto;
+
+    label {
+        display: flex;
+        align-items: center;
+        gap: $space-sm;
     }
 }
+
+// -- Empty state -----------------------------------------------------------
+
+.spotguessr-empty-state-panel {
+    align-items: center;
+    text-align: center;
+    gap: $space-sm;
+}
+
+.spotguessr-empty-state-icon {
+    @include shell.empty-icon;
+}
+
+.spotguessr-empty-state-filters {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: $space-xs;
+    justify-content: center;
+
+    li {
+        font-size: .8rem;
+        padding: .2rem .6rem;
+        border-radius: $radius-full;
+        background: var(--ul-surface-2);
+    }
+}
+
+.spotguessr-empty-state-actions {
+    display: flex;
+    gap: $space-sm;
+    margin-top: $space-sm;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+// -- In-play chrome -------------------------------------------------------------
 
 // Countdown for a session's configured round timer (GameConfig.round_time_limit_seconds) -
 // see updateRoundTimerDisplay() in spotguessr.ts.
 .spotguessr-round-timer {
-    font-variant-numeric: tabular-nums;
-    padding: .15rem .6rem;
-    border-radius: 1rem;
-    background: var(--ul-surface-2);
-
-    &--urgent {
-        background: rgba(220, 53, 69, .18);
-        color: $color-red-500;
-        animation: spotguessr-timer-pulse 1s ease-in-out infinite;
-    }
-}
-
-@keyframes spotguessr-timer-pulse {
-    0%, 100% {
-        opacity: 1;
-    }
-
-    50% {
-        opacity: .55;
-    }
-}
-
-.spotguessr-game-settings-btn {
-    @include icon-btn(28px);
-    margin-left: auto;
-}
-
-.spotguessr-game-layout {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1.25rem;
-
-    @media (max-width: 720px) {
-        grid-template-columns: 1fr;
-    }
-}
-
-.spotguessr-round-photo {
-    width: 100%;
-    max-height: 100%;
-    height: 100%;
-    object-fit: cover;
-    border-radius: .5rem;
-    background: var(--ul-surface-2);
-    animation: spotguessr-fade-in .3s ease-out;
-}
-
-.spotguessr-guess-col {
-    display: flex;
-    flex-direction: column;
-    gap: .75rem;
+    @include shell.timer;
 }
 
 .spotguessr-pin-search input {
     width: 100%;
 }
 
-.spotguessr-guess-map {
-    height: 320px;
+// The Named Place clue is the entire content of the round.
+.spotguessr-round-name {
+    @include shell.clue;
 }
 
-.spotguessr-guess-map-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: .5rem;
-    margin-top: .35rem;
-}
-
-.spotguessr-map-attribution {
-    font-size: .7rem;
-    opacity: .6;
-}
-
-.spotguessr-reveal-panel {
-    margin-top: 1.25rem;
-    padding-top: 1.25rem;
-    border-top: 1px solid var(--ul-border);
-    text-align: center;
-    animation: spotguessr-fade-in .3s ease-out;
-}
+// -- Reveal ----------------------------------------------------------------------
 
 // The big animated point counter on reveal (animateCountUp() in spotguessr.ts
 // ticks #sg-reveal-points-value up from 0) - the headline number of the
-// "reward loop" moment, distance/bonus breakdown stays in #sg-reveal-detail below.
+// "reward loop" moment; the distance/bonus breakdown stays in #sg-reveal-detail.
 .spotguessr-reveal-points {
     display: flex;
     align-items: baseline;
     justify-content: center;
-    gap: .4rem;
-    margin: .5rem 0;
-    animation: spotguessr-fade-in .35s ease-out .05s backwards;
+    gap: $space-xs;
+    margin: 0;
 }
 
 #sg-reveal-points-value {
-    font-size: 2.5rem;
-    font-weight: 800;
-    font-variant-numeric: tabular-nums;
-    color: var(--ul-primary-color);
+    @include shell.reveal-points;
 }
 
 .spotguessr-reveal-points-label {
     font-size: .95rem;
-    opacity: .7;
+    font-weight: 600;
+    color: var(--ul-grey-7);
     text-transform: uppercase;
     letter-spacing: .04em;
 }
 
-// Per-round Glicko-2 rating change, shown alongside points/distance on
-// reveal (services.spotguessr.ratings.RatingChange, serialized as
-// reveal.rating_delta) - see updateRatingDeltaDisplay() in spotguessr.ts.
+// Per-round Glicko-2 rating change, shown alongside points/distance on reveal
+// (services.spotguessr.ratings.RatingChange, serialized as reveal.rating_delta) -
+// see updateRatingDeltaDisplay() in spotguessr.ts, which reassigns className.
 .spotguessr-rating-delta {
-    display: inline-flex;
-    align-items: center;
-    gap: .3rem;
-    margin: .35rem 0 0;
-    font-weight: 700;
-    font-size: .95rem;
-    animation: spotguessr-fade-in .35s ease-out .1s backwards;
-
-    &--up {
-        color: $color-green-600;
-    }
-
-    &--down {
-        color: $color-red-500;
-    }
+    @include shell.delta;
+    margin: 0;
 }
 
 .spotguessr-photo-feedback {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: .5rem;
-    margin-top: .75rem;
+    flex-wrap: wrap;
+    gap: $space-sm;
 
     .btn {
         padding: .35rem .6rem;
@@ -497,158 +344,58 @@ $spotguessr-mode-accents: (
 }
 
 .spotguessr-reveal-results {
-    list-style: none;
-    margin: .75rem 0 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: .35rem;
+    @include shell.scorelist;
     text-align: left;
+    max-height: 14rem;
 }
 
-.spotguessr-round-name {
-    text-align: center;
-    font-size: 1.75rem;
-    padding: 2.5rem 1rem;
-    border-radius: .5rem;
-    background: var(--ul-surface-2);
-    animation: spotguessr-fade-in .3s ease-out;
-}
-
-.spotguessr-invite-wrap {
-    display: flex;
-    flex-direction: column;
-    gap: .5rem;
-    padding: .75rem;
-    border-radius: .5rem;
-    background: var(--ul-surface-2);
-}
-
-.spotguessr-friend-list {
-    display: flex;
-    flex-direction: column;
-    gap: .35rem;
-    max-height: 200px;
-    overflow-y: auto;
-
-    label {
-        display: flex;
-        align-items: center;
-        gap: .5rem;
-    }
-}
+// -- Lobby / rail ------------------------------------------------------------------
 
 .spotguessr-lobby-list {
-    list-style: none;
-    margin: .75rem 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: .35rem;
-
-    li {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        padding: .5rem .75rem;
-        border-radius: .4rem;
-        background: var(--ul-surface-2);
-    }
+    @include shell.lobby-list;
 }
 
 .spotguessr-lobby-status {
-    font-size: .75rem;
-    padding: .15rem .5rem;
-    border-radius: 1rem;
-    background: var(--ul-surface-3);
-
-    &--joined {
-        background: rgba(46, 160, 67, .2);
-    }
+    @include shell.lobby-status;
 }
 
 .spotguessr-lobby-actions {
     display: flex;
-    gap: .75rem;
+    gap: $space-sm;
     flex-wrap: wrap;
 }
 
 .spotguessr-scoreboard {
-    list-style: none;
-    margin: 0 0 1rem;
-    padding: 0;
-    display: flex;
-    flex-wrap: wrap;
-    gap: .5rem;
+    @include shell.scorelist;
+}
+
+.spotguessr-chat-log {
+    @include shell.chat-log;
+}
+
+.spotguessr-chat-username {
+    @include shell.chat-username;
+}
+
+.spotguessr-chat-form {
+    @include shell.chat-form;
 }
 
 // -- Summary/recap panel --------------------------------------------------------
 
 .spotguessr-summary-panel {
-    text-align: center;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: .25rem;
+    gap: $space-sm;
+    overflow-y: auto;
 
     .spotguessr-scoreboard {
-        justify-content: center;
-        margin-top: .75rem;
-    }
-
-    .btn {
-        margin-top: 1rem;
+        width: 100%;
+        text-align: left;
+        margin-top: $space-sm;
     }
 }
 
 .spotguessr-summary-icon {
-    font-size: 2.75rem;
-    color: $color-indigo-500;
-    animation: spotguessr-summary-icon-pop .5s cubic-bezier(.34, 1.56, .64, 1);
-}
-
-@keyframes spotguessr-summary-icon-pop {
-    0% {
-        opacity: 0;
-        transform: scale(.4) rotate(-15deg);
-    }
-
-    100% {
-        opacity: 1;
-        transform: scale(1) rotate(0);
-    }
-}
-
-.spotguessr-chat-panel {
-    margin-top: 1.25rem;
-    padding-top: 1rem;
-    border-top: 1px solid var(--ul-border);
-    display: flex;
-    flex-direction: column;
-    gap: .5rem;
-}
-
-.spotguessr-chat-log {
-    max-height: 160px;
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    gap: .25rem;
-    font-size: .85rem;
-
-    .spotguessr-chat-username {
-        font-weight: 600;
-        margin-right: .35rem;
-    }
-}
-
-.spotguessr-chat-form {
-    display: flex;
-    gap: .5rem;
-
-    input {
-        flex: 1;
-    }
+    @include shell.summary-icon;
 }
 
 // -- Score card ----------------------------------------------------------------
@@ -656,44 +403,24 @@ $spotguessr-mode-accents: (
 // the summary panel - see renderScoreCard()/renderScoreCardList() in spotguessr.ts.
 
 .spotguessr-score-card {
-    display: flex;
-    align-items: center;
-    gap: .5rem;
-    padding: .35rem .6rem;
-    border-radius: .5rem;
-    background: var(--ul-surface-2);
-    font-size: .85rem;
+    @include shell.score-row;
 
-    &--rank-1 {
-        background: rgba(255, 215, 0, .18);
-    }
-
-    &--rank-2 {
-        background: rgba(192, 192, 192, .18);
-    }
-
-    &--rank-3 {
-        background: rgba(205, 127, 50, .18);
-    }
-
+    // Solo sessions render a single "Your score: N pts" line built in JS, not a
+    // cloned template row, so it opts out of the ranked grid entirely.
     &--solo {
+        display: flex;
         flex-direction: column;
         justify-content: center;
         font-weight: 600;
         font-size: 1rem;
         background: none;
-    }
-
-    &--pulse {
-        animation: spotguessr-score-pulse .5s ease-out;
+        border-color: transparent;
     }
 }
 
 .spotguessr-score-card-rank {
-    font-weight: 700;
-    min-width: 1.5rem;
+    @include shell.score-rank;
     text-align: center;
-    opacity: .7;
 }
 
 .spotguessr-score-card-avatar-wrap {
@@ -704,102 +431,53 @@ $spotguessr-mode-accents: (
 .spotguessr-score-card-info {
     display: flex;
     flex-direction: column;
-    flex: 1;
     min-width: 0;
 }
 
 .spotguessr-score-card-name {
-    font-weight: 600;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    @include shell.score-name;
 }
 
 .spotguessr-score-card-subtitle {
-    font-size: .75rem;
-    opacity: .7;
-
-    &:empty {
-        display: none;
-    }
+    @include shell.score-subtitle;
 }
 
 .spotguessr-score-card-points {
-    font-weight: 700;
+    @include shell.score-points;
     white-space: nowrap;
-    // Fixed-width digits so animateCountUp() ticking the number up doesn't
-    // jitter the card's layout as the digit count changes mid-animation.
-    font-variant-numeric: tabular-nums;
 }
 
 .spotguessr-score-card-solo-value {
     font-variant-numeric: tabular-nums;
 }
 
-// Optional per-card rating-delta chip (reveal results and the summary
-// recap both populate it - the live scoreboard doesn't, so it stays empty
-// and collapsed via :empty there). See ScoreCardData.ratingDelta in spotguessr.ts.
+// Optional per-card rating-delta chip (reveal results and the summary recap both
+// populate it - the live scoreboard doesn't, so it stays empty and collapsed via
+// :empty there). renderScoreCard() reassigns this element's className.
 .spotguessr-score-card-rating-delta {
+    @include shell.delta;
     font-size: .75rem;
-    font-weight: 700;
     white-space: nowrap;
 
     &:empty {
         display: none;
     }
-
-    &--up {
-        color: $color-green-600;
-    }
-
-    &--down {
-        color: $color-red-500;
-    }
 }
 
-@keyframes spotguessr-fade-in {
-    from {
-        opacity: 0;
-        transform: translateY(6px);
-    }
+// -- Mid-game "invite more players" dialog ---------------------------------------
+// Built in JS (pickFriendsToInvite) and mounted into the shell so it survives
+// true fullscreen; only its friend list needs a rule of its own.
 
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
+.spotguessr-invite-more-list {
+    display: flex;
+    flex-direction: column;
+    gap: $space-sm;
+    max-height: 16rem;
+    overflow-y: auto;
 }
 
-@keyframes spotguessr-score-pulse {
-    0% {
-        transform: scale(1);
-    }
-
-    30% {
-        transform: scale(1.06);
-        background: rgba(46, 160, 67, .3);
-    }
-
-    100% {
-        transform: scale(1);
-    }
-}
-
-// Applied to a Leaflet marker's own icon element (marker.getElement()) when
-// the actual-location marker is placed on reveal. Opacity-only deliberately -
-// Leaflet positions markers via an inline `transform: translate3d(...)`, and
-// a CSS animation on `transform` would fight that (or, with fill-mode set,
-// permanently strand the marker at the animation's final offset instead of
-// its real map position) - opacity has no such conflict.
+// Applied to a Leaflet marker's own icon element (marker.getElement()) when the
+// actual-location marker is placed on reveal.
 .spotguessr-marker-drop {
-    animation: spotguessr-marker-drop .4s ease-out;
-}
-
-@keyframes spotguessr-marker-drop {
-    from {
-        opacity: 0;
-    }
-
-    to {
-        opacity: 1;
-    }
+    animation: ul-game-marker-drop .4s ease-out;
 }

@@ -1,0 +1,16 @@
+{% comment %}
+The shared game hero, rendered in {% block hero %}. Replaces the three
+duplicated in-content header cards (.spotguessr-header / .trivia-header /
+.consensus-header), which repeated the hero's own icon and title a few lines
+below it.
+
+Params (passed through to _game_hero_body.html via the include's context):
+  game_icon     - material-symbols-outlined ligature
+  game_title    - heading text
+  game_subtitle - supporting line below the heading
+  game_stats    - optional; supplied by the controller, see _game_hero_body.html
+
+Usage:
+  {% include "dashboard/partials/games/_game_hero.html" with game_icon="quiz" game_title="Trivia" game_subtitle="..." %}
+{% endcomment %}
+{% include "dashboard/partials/ui/_page_hero.html" with modifier="top" body_template="dashboard/partials/games/_game_hero_body.html" %}
