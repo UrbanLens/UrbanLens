@@ -28,6 +28,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, wikis_hidden_by_pin_move
 
+from .place_helpers import official_geometry
+
 
 def _square(lng: float, lat: float, delta: float) -> MultiPolygon:
     ring = (
@@ -50,7 +52,7 @@ class PinMoveWikiLossTests(TestCase):
         self.client.force_login(self.user)
 
         self.wiki_location = Location.objects.create(latitude=40.0, longitude=-74.0)
-        Boundary.objects.create(location=self.wiki_location, generated_polygon=_square(-74.0, 40.0, 0.003))
+        official_geometry(self.wiki_location, _square(-74.0, 40.0, 0.003))
         self.wiki = baker.make(Wiki, location=self.wiki_location, name="Old Asylum")
 
         # The owner's pin sits inside the wiki's boundary, on its own Location.
@@ -136,7 +138,7 @@ class WikisHiddenByPinMoveServiceTests(TestCase):
         super().setUp()
         self.profile = baker.make(User).profile
         self.wiki_location = Location.objects.create(latitude=40.0, longitude=-74.0)
-        Boundary.objects.create(location=self.wiki_location, generated_polygon=_square(-74.0, 40.0, 0.003))
+        official_geometry(self.wiki_location, _square(-74.0, 40.0, 0.003))
         self.wiki = baker.make(Wiki, location=self.wiki_location, name="Old Asylum")
 
     def test_lists_the_wiki_a_move_would_hide(self) -> None:
@@ -190,7 +192,7 @@ class WikisHiddenByPinMoveServiceTests(TestCase):
         """Nothing to lose if they never had access - and listing it would leak
         that the wiki exists at all."""
         far_wiki_location = Location.objects.create(latitude=10.0, longitude=20.0)
-        Boundary.objects.create(location=far_wiki_location, generated_polygon=_square(20.0, 10.0, 0.003))
+        official_geometry(far_wiki_location, _square(20.0, 10.0, 0.003))
         baker.make(Wiki, location=far_wiki_location, name="Somewhere Else")
         pin = baker.make(Pin, profile=self.profile, location=Location.objects.create(latitude=40.0005, longitude=-74.0005))
 

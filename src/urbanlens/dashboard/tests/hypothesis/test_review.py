@@ -8,13 +8,12 @@ Covers:
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from urbanlens.core.tests.testcase import TestCase
+from django.core.exceptions import ValidationError
+from django.db import IntegrityError, transaction
 from hypothesis import HealthCheck, given, settings
 from model_bakery import baker
 
-from django.core.exceptions import ValidationError
-from django.db import IntegrityError, transaction
-
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.reviews.model import Review
@@ -97,9 +96,8 @@ class ReviewUniqueConstraintTests(TestCase):
         rating2: int,
     ) -> None:
         baker.make(Review, profile=self.profile, pin=self.pin, rating=rating1)
-        with self.assertRaises((IntegrityError, ValidationError)):
-            with transaction.atomic():
-                baker.make(Review, profile=self.profile, pin=self.pin, rating=rating2)
+        with self.assertRaises((IntegrityError, ValidationError)), transaction.atomic():
+            baker.make(Review, profile=self.profile, pin=self.pin, rating=rating2)
 
     @given(valid_rating)
     @_db_settings

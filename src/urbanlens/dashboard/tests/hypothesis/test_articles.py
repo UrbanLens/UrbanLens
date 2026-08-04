@@ -13,8 +13,8 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.wiki.articles import diff_revisions, render_article, save_article
 from urbanlens.dashboard.services.global_search import GlobalSearchEngine
+from urbanlens.dashboard.services.wiki.articles import diff_revisions, render_article, save_article
 
 
 class EditorDisplayNameTests(SimpleTestCase):

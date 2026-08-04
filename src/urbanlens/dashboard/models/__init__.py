@@ -80,6 +80,7 @@ from urbanlens.dashboard.models.pin_merge_suggestions import PinMergeSuggestion,
 from urbanlens.dashboard.models.pin_share import ExposureSource, LocationExposure, PinShare, PinShareOrigin, PinShareStatus
 from urbanlens.dashboard.models.pin_suggestions import PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.pin_tombstone import PinTombstone
+from urbanlens.dashboard.models.place import GrantReason, Place, PlaceAccessGrant, PlaceKind, PlaceRelation, PlaceStatus
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.models.profile.email import ProfileEmail
 from urbanlens.dashboard.models.profile.nickname import ProfileNickname

@@ -105,11 +105,10 @@ def _overpass_buildings(location: Location) -> list[dict[str, Any]]:
         Building records, or ``[]`` when there's no real boundary to search
         inside or Overpass found nothing.
     """
-    from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
     from urbanlens.dashboard.services.apis.locations.boundaries.overpass import OverpassGateway
+    from urbanlens.dashboard.services.places.scope import parcel_polygon_for_location
 
-    row = Boundary.objects.row_for_location(location, BoundaryType.PROPERTY)
-    polygon = row.drawn_or_generated_polygon if row is not None else None
+    polygon = parcel_polygon_for_location(location)
     if polygon is None:
         return []
 

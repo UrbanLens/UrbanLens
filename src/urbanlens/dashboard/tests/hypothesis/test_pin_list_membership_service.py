@@ -15,8 +15,7 @@ The view-level tests stay plain, per this repo's rule that ``@given`` and
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase

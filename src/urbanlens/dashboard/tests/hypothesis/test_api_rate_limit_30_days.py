@@ -19,8 +19,8 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit.model import ApiRateLimit
-from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDefaults, ServiceDisabledError, check_rate_limit
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
+from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError, RequestCancelledError, ServiceDefaults, ServiceDisabledError, check_rate_limit
 
 
 def _log_call(service: str, *, days_ago: float = 0.0) -> ApiCallLog:

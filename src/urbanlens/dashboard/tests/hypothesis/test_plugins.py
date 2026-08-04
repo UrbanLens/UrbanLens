@@ -20,8 +20,8 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.plugins import UrbanLensPlugin, plugin_registry
 from urbanlens.dashboard.plugins.hooks import HookRegistry
 from urbanlens.dashboard.plugins.registry import PluginRegistry
-from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.locations.name_resolution import NameProvider
 
 # -- HookRegistry ----------------------------------------------------------------
 

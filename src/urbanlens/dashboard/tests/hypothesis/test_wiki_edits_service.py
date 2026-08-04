@@ -14,8 +14,7 @@ from __future__ import annotations
 from datetime import date
 
 from django.contrib.auth.models import User
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -42,7 +41,7 @@ def _parses_as_date(value: str) -> bool:
     from datetime import datetime
 
     try:
-        datetime.strptime(value, "%Y-%m-%d")  # noqa: DTZ007 - date-only field, no tz involved
+        datetime.strptime(value, "%Y-%m-%d")
     except ValueError:
         return False
     return True

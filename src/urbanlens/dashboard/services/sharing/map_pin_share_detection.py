@@ -307,13 +307,13 @@ def _boundaries_for_pins(pins: list[Pin], boundary_type: str) -> dict[int, GEOSG
     A batched counterpart to ``Boundary.objects.effective_polygon_for_pin``
     for callers that need it for many pins at once - calling that per pin
     (as ``detect_shared_pins`` used to) is an N+1: each call issues its own
-    "own row" / "wiki row" / "location-default row" queries. This instead
-    fetches each of those in one bulk query for the whole batch and resolves
-    every pin's polygon from the resulting dicts.
+    "own row" / "place" / "wiki row" queries. This instead fetches each of
+    those in one bulk query for the whole batch and resolves every pin's
+    polygon from the resulting dicts.
 
-    This mirrors ``BoundaryManager.resolve_for_pin``'s property-boundary
-    order (own row -> wiki row -> location-default row -> circle fallback)
-    but *without* the parent-pin inheritance branch, which is safe here only
+    This mirrors ``BoundaryManager.resolve_for_pin``'s property-boundary order
+    (own row -> scope gate -> wiki row -> place -> circle fallback) but
+    *without* the parent-pin inheritance branch, which is safe here only
     because every candidate pin is guaranteed to be a root pin
     (``_candidate_pins`` filters ``parent_pin__isnull=True``) - a detail pin
     would need that branch and should not use this helper.
@@ -346,7 +346,7 @@ def _boundaries_for_pins(pins: list[Pin], boundary_type: str) -> dict[int, GEOSG
             wiki_by_pin_id[pin.pk] = wiki
 
     wiki_boundary_by_wiki_id = Boundary.objects.rows_by_wiki_id((wiki.pk for wiki in wiki_by_pin_id.values()), boundary_type)
-    location_boundary_by_location_id = Boundary.objects.rows_by_location_id(
+    place_polygon_by_location_id = Boundary.objects.official_polygons_by_location_id(
         (pin.location_id for pin in pins if pin.location_id),
         boundary_type,
     )
@@ -362,21 +362,28 @@ def _boundaries_for_pins(pins: list[Pin], boundary_type: str) -> dict[int, GEOSG
                 result[pin.pk] = own_row.generated_polygon
                 continue
 
+        # Scope gate, exactly as in resolve_for_pin: a placed marker that
+        # declines to draw this kind of boundary must not then fall through to
+        # a wiki shape or a circle standing in for one.
+        placed = pin.location_id in place_polygon_by_location_id if pin.location_id else False
+        scoped = place_polygon_by_location_id.get(pin.location_id) if placed else None
+        if placed and scoped is None:
+            continue
+
         wiki = wiki_by_pin_id.get(pin.pk)
         wiki_row = wiki_boundary_by_wiki_id.get(wiki.pk) if wiki is not None else None
         if wiki_row is not None and wiki_row.drawn_or_generated_polygon:
             result[pin.pk] = wiki_row.drawn_or_generated_polygon
             continue
 
-        if pin.location_id:
-            location_row = location_boundary_by_location_id.get(pin.location_id)
-            if location_row is not None and location_row.generated_polygon:
-                result[pin.pk] = location_row.generated_polygon
-                continue
-            if boundary_type == _DETECTION_BOUNDARY_TYPE:
-                circle = circle_for_coordinates(pin.location.latitude, pin.location.longitude)
-                if circle is not None:
-                    result[pin.pk] = circle
+        if scoped is not None:
+            result[pin.pk] = scoped
+            continue
+
+        if pin.location_id and boundary_type == _DETECTION_BOUNDARY_TYPE:
+            circle = circle_for_coordinates(pin.location.latitude, pin.location.longitude)
+            if circle is not None:
+                result[pin.pk] = circle
     return result
 
 

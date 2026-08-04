@@ -4,21 +4,19 @@ No database access - all tests exercise pure Python logic.
 """
 from __future__ import annotations
 
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.ai.functions import estimate_combined_tokens, estimate_tokens
 from urbanlens.dashboard.services.ai.message import AssistantMessage, MessageQueue, SystemMessage, UserMessage
 from urbanlens.dashboard.services.ai.meta import MAX_TOKENS, SHORTEST_MESSAGE
 
-
 _hyp = settings(max_examples=100, deadline=None)
 _hyp_light = settings(max_examples=50, deadline=None)
 
 # Strategy: ASCII printable text without leading/trailing whitespace
 _word = st.text(
-    alphabet=st.characters(min_codepoint=65, max_codepoint=122, blacklist_characters='\\`'),
+    alphabet=st.characters(min_codepoint=65, max_codepoint=122, blacklist_characters="\\`"),
     min_size=1,
     max_size=20,
 )

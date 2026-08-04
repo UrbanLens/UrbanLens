@@ -65,9 +65,8 @@ class CleanupVestigialAssetsTests(SimpleTestCase):
         with TemporaryDirectory() as tmp:
             media_root = Path(tmp)
 
-            with mock.patch("urbanlens.dashboard.services.import_export.vestigial_assets.django_settings.MEDIA_ROOT", str(media_root)):
-                with self.assertNoLogs("urbanlens.dashboard.services.import_export.vestigial_assets", level="WARNING"):
-                    result = cleanup_vestigial_assets(now=now)
+            with mock.patch("urbanlens.dashboard.services.import_export.vestigial_assets.django_settings.MEDIA_ROOT", str(media_root)), self.assertNoLogs("urbanlens.dashboard.services.import_export.vestigial_assets", level="WARNING"):
+                result = cleanup_vestigial_assets(now=now)
 
             self.assertEqual(result.total, 0)
             self.assertTrue((media_root / "exports").is_dir())

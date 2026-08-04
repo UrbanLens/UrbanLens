@@ -42,46 +42,39 @@ class BoundarySource(TextChoices):
 
 
 class Boundary(abstract.DashboardModel):
-    """A typed spatial boundary (property or building) for a place.
+    """A spatial boundary owned by a pin, a wiki, or a provider vote.
 
-    Three kinds of Boundary rows exist, distinguished by which FK is set:
+    **Official geometry does not live here.** It lives on ``Place.geometry``,
+    written only by the provider chain and boundary voting. That split is the
+    whole point: this table is where user- and community-drawn shapes live, and
+    the access predicate never reads it, so "a drawn polygon can never widen
+    what you can see" is a property of the schema rather than a filter every
+    query has to remember to apply.
 
-    Location default (location=<Location>, pin=None, wiki=None, profile=None):
-        Shared, API-generated geometry for a physical place. One per
-        (location, boundary_type). ``generated_polygon`` is filled lazily by
-        the boundary provider chain; ``generated_at`` marks that the chain ran
-        (even when it found nothing), and is periodically refreshed in the
-        background once it's older than ``SiteSettings.boundary_cache_days``
-        (see ``services.locations.boundaries``). These rows are the only ones
-        used for point→location matching, and only via ``generated_polygon``
-        so a user-drawn shape can never inflate a location's match area.
+    Three kinds of row remain, distinguished by which FK is set:
 
-    Source candidate (location=<Location>, source="redata"|"overpass", pin=None, wiki=None, profile=None):
-        A per-provider copy of a location's externally-sourced property
-        geometry, kept so users can vote on which provider's boundary is most
-        accurate (see ``services.geo.boundary_voting``). One per (location,
-        boundary_type, source). Candidates never participate in
-        point→location matching directly - the winning candidate's polygon is
-        materialized onto the canonical location-default row (``source=""``),
-        which every matching path already consumes.
+    Source candidate (place=<Place>, source="redata"|"overpass", pin/wiki/profile=None):
+        A per-provider offer for one place's official parcel geometry, kept so
+        the community can vote on which provider is most accurate (see
+        ``services.geo.boundary_voting``). One per (place, boundary_type,
+        source). Candidates never match anything directly - the winner's
+        polygon is materialised onto ``Place.geometry``.
 
     Wiki boundary (wiki=<Wiki>, pin=None):
-        Community-drawn customization made on the wiki page. Overrides the
-        location default for display. Keyed by wiki so it survives the wiki
-        being repointed to a new Location after a coordinate edit.
+        Community-drawn customisation made on the wiki page. Display only.
 
     Pin boundary (pin=<Pin>, profile=pin.profile):
-        A user's personal customization made on the pin detail page. Overrides
-        everything else for that pin's map display.
+        A user's personal customisation made on the pin detail page, or the
+        auto-refitted child-pin bounds when ``generated_from_children`` is set.
+        Display only, and only for that pin's own map.
 
-    When no property boundary exists at all, the effective boundary is a
-    circle of ``default_radius_meters`` around the location's coordinates.
-    Building boundaries have no such fallback - absence means "no known
-    building here".
+    When nothing else applies, a property boundary falls back to a circle of
+    ``default_radius_meters`` around the location's coordinates. Building
+    boundaries have no such fallback - absence means "no known building here".
 
     Use ``Boundary.objects.effective_polygon_for_pin`` /
-    ``effective_polygon_for_wiki`` to resolve display geometry, including
-    detail-pin inheritance rules.
+    ``effective_polygon_for_wiki`` to resolve display geometry, including the
+    place lookup and detail-pin inheritance rules.
     """
 
     boundary_type = CharField(max_length=20, choices=BoundaryType.choices, default=BoundaryType.PROPERTY)
@@ -118,6 +111,17 @@ class Boundary(abstract.DashboardModel):
         blank=True,
         related_name="boundaries",
     )
+    # Set on source-candidate rows only. Candidates are per-provider offers for
+    # one real-world thing's official geometry, so they belong to the Place, not
+    # to whichever Location happened to trigger the fetch - that per-Location
+    # anchoring is what used to give one campus 125 copies of its own parcel.
+    place = ForeignKey(
+        "dashboard.Place",
+        on_delete=CASCADE,
+        null=True,
+        blank=True,
+        related_name="boundary_candidates",
+    )
     # Community customization keyed by wiki. None for location defaults and pin rows.
     wiki = ForeignKey(
         "dashboard.Wiki",
@@ -150,16 +154,12 @@ class Boundary(abstract.DashboardModel):
         pin_id: int | None
         profile_id: int | None
         location_id: int | None
-
-    @property
-    def is_location_default(self) -> bool:
-        """True if this is the shared location-default row (no pin, wiki, profile, or source)."""
-        return self.pin_id is None and self.wiki_id is None and self.profile_id is None and not self.source
+        place_id: int | None
 
     @property
     def is_source_candidate(self) -> bool:
         """True if this is a per-provider candidate row for boundary voting."""
-        return bool(self.source) and self.pin_id is None and self.wiki_id is None and self.profile_id is None
+        return bool(self.source) and self.place_id is not None and self.pin_id is None and self.wiki_id is None and self.profile_id is None
 
     @property
     def coordinate_location(self):
@@ -200,7 +200,7 @@ class Boundary(abstract.DashboardModel):
         elif self.wiki_id:
             owner = f"wiki={self.wiki_id}"
         elif self.source:
-            owner = f"location={self.location_id}, source={self.source}"
+            owner = f"place={self.place_id}, source={self.source}"
         else:
             owner = f"location={self.location_id}"
         return f"Boundary({self.boundary_type}, {owner})"
@@ -211,13 +211,8 @@ class Boundary(abstract.DashboardModel):
         verbose_name_plural = "boundaries"
         constraints = [
             UniqueConstraint(
-                fields=["location", "boundary_type"],
-                condition=Q(pin__isnull=True, wiki__isnull=True, profile__isnull=True, source=""),
-                name="boundary_unique_location_default",
-            ),
-            UniqueConstraint(
-                fields=["location", "boundary_type", "source"],
-                condition=Q(pin__isnull=True, wiki__isnull=True, profile__isnull=True) & ~Q(source=""),
+                fields=["place", "boundary_type", "source"],
+                condition=Q(place__isnull=False, pin__isnull=True, wiki__isnull=True, profile__isnull=True) & ~Q(source=""),
                 name="boundary_unique_source_candidate",
             ),
             UniqueConstraint(

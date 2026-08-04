@@ -1,3 +1,4 @@
+{% load dashboard_tags %}
 <div id="location-detail-pins-panel" class="card wiki-card wiki-detail-pins">
     <div class="card-header">
         <i class="material-symbols-outlined">push_pin</i>
@@ -18,14 +19,7 @@
         <li class="detail-pin-wiki-item detail-pin-type--{{ dp.pin_type }}"
             id="wiki-dp-{{ dp.uuid }}">
             <span class="detail-pin-type-icon material-icons"
-                  {% if dp.color %}style="color:{{ dp.color }}"{% endif %}>
-                {% if dp.icon %}{{ dp.icon }}
-                {% elif dp.pin_type == "building" %}business
-                {% elif dp.pin_type == "entrance" %}door_front
-                {% elif dp.pin_type == "poi" %}star
-                {% elif dp.pin_type == "danger" %}warning
-                {% else %}place{% endif %}
-            </span>
+                  {% if dp.color %}style="color:{{ dp.color }}"{% endif %}>{% if dp.icon %}{{ dp.icon }}{% else %}{{ dp.pin_type|pin_type_icon }}{% endif %}</span>
             <div class="detail-pin-wiki-info">
                 <span class="detail-pin-wiki-name">{{ dp.name }}</span>
                 {% if dp.description %}

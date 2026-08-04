@@ -21,6 +21,7 @@ in context, plus the wiki/linking context used by the overview panel.
         {% if pin.parent_pin %}
         <p class="ul-page-hero__eyebrow">
             <i class="material-symbols-outlined">subdirectory_arrow_right</i> Child pin
+            {% include "dashboard/partials/ui/_scope_badge.html" %}
         </p>
         <h1 id="pin-detail-hero-title" class="ul-page-hero__title">
             <a class="pin-detail-hero-parent-link" href="{% url 'pin.details' pin.parent_pin.slug|default:pin.parent_pin.uuid %}"
@@ -36,6 +37,7 @@ in context, plus the wiki/linking context used by the overview panel.
         {% else %}
         <p class="ul-page-hero__eyebrow">
             <i class="material-symbols-outlined">place</i> Pin
+            {% include "dashboard/partials/ui/_scope_badge.html" %}
         </p>
         <h1 id="pin-detail-hero-title" class="ul-page-hero__title">
             <span class="pin-name-editable" tabindex="0" role="button"
@@ -52,7 +54,7 @@ in context, plus the wiki/linking context used by the overview panel.
 
     {% if user.profile.community_enabled %}
         {% if pin.location and pin.location.slug %}
-            {% if pin.location.wiki and pin.location.wiki.officially_created %}
+            {% if pin.community_wiki %}
             <aside class="pin-hero-wiki-box" id="pin-location-section">
                 <i class="material-symbols-outlined">public</i>
                 <div class="pin-hero-wiki-box-info">
@@ -64,7 +66,7 @@ in context, plus the wiki/linking context used by the overview panel.
                     </a>
                 </div>
                 <div class="pin-hero-wiki-box-actions">
-                    {% if overlapping_location_count > 1 %}
+                    {% if competing_location_count %}
                     <button type="button" class="btn pin-loc-change-btn"
                             hx-get="{% url 'pin.link' pin.slug %}"
                             hx-target="#pin-location-picker"

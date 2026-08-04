@@ -90,31 +90,101 @@ There's also `UniqueConstraint(fields=["location", "profile"], condition=Q(paren
 — a user can only have one top-level pin per Location (sub-pins via `parent_pin` are exempt).
 TODO NOTE From Jess: I could be mistaken, but I think there shouldn't be an exception for sub-pins. Sub-pins will be nearby, of course, but the coordinates won't be exactly, precisely the same. This exception allows for two pins to precisely overlap on a map, which surely not very helpful.
 
-## Boundary matching only trusts the auto-generated polygon
+## Matching reads `Place.geometry`, and nothing else
 
-`Boundary.generated_polygon` (from external building-footprint APIs) is the only polygon used by
-`get_for_point`/`get_all_for_point`/`within_bounding_box`. The user-editable `polygon` field is
-for *display* only and is deliberately excluded from matching logic — otherwise a user could
-inflate their boundary to claim overlap with other pins/areas.
+Official geometry lives on `Place`, written only by the provider chain and boundary voting. The
+`Boundary` table is now *only* user- and community-drawn shapes (plus per-provider voting
+candidates), and no access or matching path reads it at all — so "a drawn polygon can never widen
+what you can see" is a property of the schema rather than a filter every query has to remember to
+apply. `Boundary.objects.resolve_for_*` still consults those drawn rows, because they are for
+display.
 
-## Parcel vs. building scope — counted from children, never from the parcel data
+## Place is the answer to "is this the same place?"
 
-A Pin (and its Wiki) has always doubled as both *the parcel* and *the building*, because for an
-ordinary place those are the same thing. On a campus they are not: the pin at
-`41.73315, -73.93037` was rendering "TOOL SHED (1937) — NON-CONTRIBUTING, Building Number 154"
-from NY SHPO's CRIS inventory, because `CrisBuildingPanelSource` took the *first*
-`resource_type == "building"` match inside a 200 m radius. `services/locations/site_scope.py`
-is the one place that decides which a marker is.
+`Location` is an exact coordinate; `Place` is the real-world parcel or building that coordinate
+stands on, and it is what wikis, official geometry, boundary votes, and access all hang off.
+`Location.place` is a *resolved cache*, recomputed whenever geometry changes — never an identity,
+so a provider correcting a boundary can move a location between places without disturbing pin,
+share, or wiki provenance.
 
-Two rules, in order. **An explicit choice wins**: `pin_type_is_user_provided` marks a type the
-user actually picked, mirroring how `name_is_user_provided` guards `Pin.name`. **Otherwise, count
-the children typed as buildings** — two or more (`MULTI_BUILDING_THRESHOLD`) makes the parent a
-parcel.
+Before Place, geometry hung off each Location and was fetched by point lookup. Importing 124
+buildings onto one campus therefore created 124 Locations each holding its own copy of the *same
+parcel polygon* — so every point on the campus sat inside 125 boundaries at once. That one cause
+produced three separate-looking bugs: visitors told that 124 other locations covered their pin, a
+building's page drawing the whole parcel, and one property accumulating 125 wikis.
 
-What is deliberately *not* a rule: "REData says this parcel has several buildings." That signal is
-real, and it drives the "would you like to add pins for the buildings here?" offer — but on its own
-it would silently reclassify a house with a detached garage, so it never flips scope by itself. The
-user accepting the offer creates the child pins, and *those* flip it.
+Load-bearing details:
+
+- **Most specific wins**, ordered by cached `area_sqm`. A footprint is always smaller than the
+  parcel around it, so area ordering subsumes "deepest in the tree" without walking it, and stays
+  deterministic for two overlapping unrelated parcels.
+- **`Place.geometry` is nullable.** A building nobody has a footprint for still gets a place: it
+  keeps identity, lineage, and its own wiki, and can never be resolved onto.
+- **Aggregates are excluded from resolution entirely** (`PlaceQuerySet.resolvable`), which is what
+  makes strict earning unbypassable rather than merely unlikely — a pin in a gap between a site's
+  parcels cannot land on the site itself.
+- **A placeless coordinate behaves exactly as it always did**: circle fallback for display,
+  exact-Location pin for wiki access.
+
+## Access is per *domain*, and only `MEMBER_OF` edges gate anything
+
+A **domain** is a parcel plus everything `PART_OF` it, denormalised onto `Place.domain_root` so the
+predicate is one indexed equality test. It is indivisible: a pin anywhere in it grants every wiki
+in it, in *either* direction. Organising a property into its 124 buildings is an organisational
+act and must not change who can see what — the alternative hides content from people who already
+had the property, purely because someone pressed a button.
+
+`MEMBER_OF` (a split's superseded campus, or a site spanning several tax parcels) is the only
+access boundary. Such a parent is earned only by holding access to *every* member, because its
+knowledge genuinely exceeds any one child's. Earning is recursive over *access*, not over literal
+pins, so completing one tier can complete the tier above it.
+
+`PlaceAccessGrant` covers what containment can no longer prove. It is written by exactly two
+callers — the Place backfill migration and split processing — and by no API surface. That
+snapshot is what makes automatic split and site detection safe: a false positive costs a redundant
+row, never someone's access.
+
+Consequence worth knowing: a newcomer who pins one building of a *multi-parcel* campus gets that
+parcel's domain but not the campus, and sees no hint the campus wiki exists. That is the strict
+rule working as intended; existing holders keep it via backfill grants.
+
+## Parcel vs. building scope — derived from the place, not asserted per pin
+
+A Pin (and its Wiki) doubles as both *the parcel* and *the building* for an ordinary house, because
+those are the same thing there. On a campus they are not: the pin at `41.73315, -73.93037` was
+rendering "TOOL SHED (1937) — NON-CONTRIBUTING, Building Number 154" from NY SHPO's CRIS inventory,
+because `CrisBuildingPanelSource` took the *first* `resource_type == "building"` match inside a
+200 m radius. `services/places/scope.py` is the one place that decides which a marker is, and
+`site_scope.is_site_scope` reads it.
+
+Rules, in order. **An explicit choice wins**: `pin_type_is_user_provided` marks a type the user
+actually picked, mirroring how `name_is_user_provided` guards `Pin.name`. **Otherwise it is derived
+from the resolved place**: a marker on a property holding `MULTI_BUILDING_THRESHOLD` or more
+buildings commits to describing the grounds or one structure; a marker on a single-building
+property stays `LOCATION_MARKER`, which is not "unknown" but the honest answer.
+
+`Pin.pin_type` / `Wiki.pin_type` are caches of that derivation, refreshed by
+`site_scope.reclassify_markers_on_place`. Deriving from the place and fanning out matters: scope is
+a fact about the *property*, so importing buildings retypes **every user's** marker on it, not just
+the marker belonging to whoever pressed the button — and it can't drift when buildings are added or
+removed later.
+
+What is deliberately *not* a rule: "REData says this parcel has several buildings." That signal
+drives the "would you like to add pins for the buildings here?" offer, but on its own it would
+silently reclassify a house with a detached garage. Accepting the offer creates the building
+*places*, and those flip it.
+
+**What each scope draws** (`services/places/scope.py::place_polygon`) — the answer to "a building's
+page shouldn't show the parcel":
+
+| Marker | PROPERTY | BUILDING |
+|---|---|---|
+| Building on a multi-building property | *nothing* | its footprint |
+| Building on an ordinary property | its parcel | its footprint |
+| Parcel / site | its outline | *nothing* |
+
+The two "nothing" cells are the point. A building on a campus is not about the 200 acres it sits
+on, and a campus marker must not pick one of its 124 structures to represent it.
 
 Consequences worth knowing:
 
@@ -160,6 +230,11 @@ Load-bearing details:
   doesn't resurrect the prompt on the one pin they explicitly declined.
 - **The plan is recomputed on apply**, never trusted from the rendered page, so anything pinned or
   nested between render and click is simply skipped.
+- **The import persists each building as a `Place` first**, from the footprint it already holds,
+  and attaches each new child pin's Location to its place directly rather than resolving by
+  containment. Two reasons: a point lookup for a building returns the *parcel* when no footprint
+  provider covers it (which is how 124 markers each ended up claiming to be the whole hospital),
+  and a building centroid can legitimately fall outside its own concave footprint.
 - **A spent poll budget still offers what's known.** The nesting half doesn't depend on the REData
   lookup, so a slow/unavailable parcel fetch degrades to "offer the nesting" rather than hiding the
   whole suggestion.
@@ -170,12 +245,18 @@ Load-bearing details:
 
 `services/wiki/wiki_merge.py` is the exception to this codebase's usual "ask first" pattern for
 structural changes. Two community wikis are independent, user-initiated pages - nothing stops
-someone wiki-ing a building before anyone's wiki-ed the campus it sits on. Once both have a real
-property boundary, `reconcile_wiki_nesting` re-parents the smaller under the bigger automatically,
+someone wiki-ing a building before anyone's wiki-ed the campus it sits on. Once both resolve onto
+places, `reconcile_wiki_nesting` re-parents the child's wiki under the ancestor's automatically,
 per the ROADMAP's explicit "without needing user confirmation." It runs from the single choke
-point every boundary-generation call site shares (`services.locations.boundaries.
-generate_location_boundaries`), checking both directions - does a bigger wiki now contain me, and
-do any smaller ones now sit inside me - so it converges regardless of creation order.
+point every place-resolution call site shares (`services.locations.boundaries.
+generate_location_boundaries`), checking both directions - does an ancestor place have a wiki, and
+do any of my direct children have root wikis - so it converges regardless of creation order.
+
+Nesting follows **place lineage**, not geometry: the hierarchy was already decided when the places
+were provisioned, so this walks one FK chain instead of sorting every containing polygon by area,
+and it cannot disagree with the access model, which reads the same edges. A wiki on a coordinate no
+provider knows has no lineage to walk, so it falls back to containment against official place
+outlines (`_containing_root_wiki_by_geometry`).
 
 Load-bearing details:
 

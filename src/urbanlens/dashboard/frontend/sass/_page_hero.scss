@@ -612,3 +612,37 @@
         min-height: 14.5rem;
     }
 }
+
+// Parcel-or-building scope, shown in the eyebrow of both detail pages
+// whenever a marker commits to describing one or the other. Deliberately
+// absent for the neutral default, where the parcel and the building are the
+// same thing and a badge would only add noise.
+// See services.places.scope.SCOPE_BADGES.
+.ul-scope-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: .25rem;
+    margin-left: .5rem;
+    padding: .1rem .45rem;
+    border-radius: 999px;
+    border: 1px solid currentcolor;
+    letter-spacing: .08em;
+    vertical-align: middle;
+    cursor: help;
+
+    .material-symbols-outlined {
+        font-size: 1em;
+    }
+
+    &--parcel {
+        color: $color-purple-300;
+    }
+
+    &--building {
+        color: $color-blue-500;
+    }
+
+    &--danger {
+        color: $color-red-500;
+    }
+}

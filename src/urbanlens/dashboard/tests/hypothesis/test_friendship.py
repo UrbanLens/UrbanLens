@@ -22,11 +22,10 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from django.core.exceptions import ObjectDoesNotExist
 from django.db import IntegrityError, transaction
-from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile
@@ -187,9 +186,8 @@ class FriendshipUniqueConstraintTests(TestCase):
 
     def test_duplicate_friendship_raises_integrity_error(self) -> None:
         _make_requested(self.profile_a, self.profile_b)
-        with self.assertRaises(IntegrityError):
-            with transaction.atomic():
-                _make_requested(self.profile_a, self.profile_b)
+        with self.assertRaises(IntegrityError), transaction.atomic():
+            _make_requested(self.profile_a, self.profile_b)
 
     def test_reversed_direction_does_not_conflict(self) -> None:
         """A→B and B→A are separate friendship rows (unique_together is directional)."""

@@ -16,7 +16,6 @@ from urllib.parse import parse_qs, urlparse
 import requests
 
 from urbanlens.core.tests.testcase import SimpleTestCase
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.auth.google_oauth import (
     GOOGLE_AUTH_URL,
     build_authorization_url,
@@ -25,6 +24,7 @@ from urbanlens.dashboard.services.auth.google_oauth import (
     refresh_access_token,
     revoke_token,
 )
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 
 def _id_token(claims: dict) -> str:
@@ -57,16 +57,14 @@ class TokenExchangeTests(SimpleTestCase):
 
     def test_failed_exchange_raises_gateway_error(self) -> None:
         response = Mock(status_code=400, text='{"error": "invalid_grant"}')
-        with patch("urbanlens.dashboard.services.auth.google_oauth.requests.post", return_value=response):
-            with self.assertRaises(GatewayRequestError):
-                exchange_code_for_tokens("cid", "secret", "bad-code", "https://app.example/callback")
+        with patch("urbanlens.dashboard.services.auth.google_oauth.requests.post", return_value=response), self.assertRaises(GatewayRequestError):
+            exchange_code_for_tokens("cid", "secret", "bad-code", "https://app.example/callback")
 
     def test_failed_refresh_raises_gateway_error(self) -> None:
         """Callers branch on this to prompt a reconnect when access was revoked."""
         response = Mock(status_code=400, text='{"error": "invalid_grant"}')
-        with patch("urbanlens.dashboard.services.auth.google_oauth.requests.post", return_value=response):
-            with self.assertRaises(GatewayRequestError):
-                refresh_access_token("cid", "secret", "revoked-refresh-token")
+        with patch("urbanlens.dashboard.services.auth.google_oauth.requests.post", return_value=response), self.assertRaises(GatewayRequestError):
+            refresh_access_token("cid", "secret", "revoked-refresh-token")
 
     def test_successful_refresh_returns_the_payload(self) -> None:
         response = Mock(status_code=200, json=Mock(return_value={"access_token": "fresh"}))

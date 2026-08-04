@@ -21,6 +21,8 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 
+from .test_places_campus import square as _square
+
 
 def _profile() -> Profile:
     return baker.make(User).profile
@@ -118,7 +120,13 @@ class PinRelinkViewTests(TestCase):
 
 
 class ConflictingLocationsPayloadTests(TestCase):
-    """MapController.post_add_pin's conflicting_locations payload."""
+    """MapController.post_add_pin's conflicting_locations payload.
+
+    Two *unrelated* parcels whose recorded outlines overlap - the only case
+    that still produces a choice now that everything inside one property
+    resolves to one place. The smaller wins resolution; the larger is offered
+    as the alternative the user may have meant.
+    """
 
     def setUp(self) -> None:
         baker.make(User)  # bootstrap site admin
@@ -126,38 +134,43 @@ class ConflictingLocationsPayloadTests(TestCase):
         self.profile = Profile.objects.get(user=self.user)
         self.client.force_login(self.user)
 
+    def _overlapping_places(self, latitude: float, longitude: float):
+        """A tight parcel and a looser one covering the same coordinate."""
+        from urbanlens.dashboard.models.place.model import PlaceKind
+
+        from .place_helpers import make_place
+
+        tight = make_place(PlaceKind.PARCEL, _square(longitude, latitude, 0.002))
+        loose = make_place(PlaceKind.PARCEL, _square(longitude, latitude, 0.01))
+        return tight, loose
+
     def test_candidate_with_existing_pin_gets_existing_pin_url(self) -> None:
-        current = baker.make(Location, latitude="41.00", longitude="-73.00")
-        other = baker.make(Location, latitude="41.001", longitude="-73.001")
+        _tight, loose = self._overlapping_places(41.0, -73.0)
+        other = baker.make(Location, latitude="41.008", longitude="-73.008")
+        self.assertEqual(other.place, loose)
         existing_pin = baker.make(Pin, profile=self.profile, location=other, name="Old Mill")
 
-        with (
-            mock.patch("urbanlens.dashboard.controllers.maps.Location.objects.get_or_create", return_value=(current, False)),
-            mock.patch.object(type(Location.objects), "get_all_for_point", return_value=[current, other]),
-        ):
-            response = self.client.post(
-                reverse("pin.add"),
-                {"name": "New Pin", "latitude": "41.00", "longitude": "-73.00"},
-            )
+        response = self.client.post(
+            reverse("pin.add"),
+            {"name": "New Pin", "latitude": "41.00", "longitude": "-73.00"},
+        )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()
         entries = {entry["uuid"]: entry for entry in payload["conflicting_locations"]}
         self.assertIn(existing_pin.slug, entries[str(other.uuid)]["existing_pin_url"])
-        self.assertNotIn("existing_pin_url", entries[str(current.uuid)])
+        current_uuid = next(uuid for uuid, entry in entries.items() if entry["is_current"])
+        self.assertNotIn("existing_pin_url", entries[current_uuid])
 
     def test_candidate_with_no_existing_pin_omits_the_field(self) -> None:
-        current = baker.make(Location, latitude="41.10", longitude="-73.10")
-        other = baker.make(Location, latitude="41.101", longitude="-73.101")
+        _tight, loose = self._overlapping_places(41.1, -73.1)
+        other = baker.make(Location, latitude="41.108", longitude="-73.108")
+        self.assertEqual(other.place, loose)
 
-        with (
-            mock.patch("urbanlens.dashboard.controllers.maps.Location.objects.get_or_create", return_value=(current, False)),
-            mock.patch.object(type(Location.objects), "get_all_for_point", return_value=[current, other]),
-        ):
-            response = self.client.post(
-                reverse("pin.add"),
-                {"name": "New Pin", "latitude": "41.10", "longitude": "-73.10"},
-            )
+        response = self.client.post(
+            reverse("pin.add"),
+            {"name": "New Pin", "latitude": "41.10", "longitude": "-73.10"},
+        )
 
         self.assertEqual(response.status_code, 200)
         payload = response.json()

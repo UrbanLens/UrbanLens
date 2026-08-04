@@ -25,7 +25,6 @@ from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.profile.profile_photos import attachment_points_for_image, strip_photos_for_owner, strip_photos_visible_to
 
-
 _coord_counter = 0
 
 

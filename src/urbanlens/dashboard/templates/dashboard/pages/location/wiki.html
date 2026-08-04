@@ -73,20 +73,18 @@
         <i class="material-icons wiki-lcn-icon">info</i>
         <div class="wiki-lcn-body">
             <strong>
-                {{ other_locations|length }} other location{{ other_locations|length|pluralize }}
-                {% if other_locations|length == 1 %}covers{% else %}cover{% endif %}
-                the same area as your pin.
+                Your pin also falls inside {{ other_locations|length }} other
+                propert{{ other_locations|length|pluralize:"y,ies" }}.
             </strong>
-            Your pin is currently linked here. You may want to switch to one of these instead:
+            Their recorded boundaries overlap here, so it isn't clear which one you meant.
+            Your pin is currently linked to this one:
             <div class="wiki-lcn-list">
                 {% for other in other_locations %}
                 <span class="wiki-lcn-item">
-                    {# Not a link to other's own wiki page - the viewer hasn't pinned #}
-                    {# `other` yet, and a wiki page 404s for anyone without a pin at   #}
-                    {# its location (see resolve_visible_wiki) by design, so this can  #}
-                    {# never resolve until after the Switch button below relinks the  #}
-                    {# pin there first. #}
-                    <span class="wiki-lcn-link">{{ other.display_name }}</span>
+                    {# Every candidate here is one the viewer can already open - #}
+                    {# services.places.ambiguity filters to their accessible domains, #}
+                    {# so naming one can never disclose a place they haven't found. #}
+                    <a class="wiki-lcn-link" href="{% url 'location.wiki' location_slug=other.slug %}">{{ other.display_name }}</a>
                     {% if user_pin %}
                     <button type="button" class="wiki-lcn-switch-btn"
                             hx-post="{% url 'pin.link.to' user_pin.slug other.slug %}"

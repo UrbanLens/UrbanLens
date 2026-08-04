@@ -39,6 +39,8 @@ _db_settings = settings(
     suppress_health_check=[HealthCheck.too_slow, HealthCheck.filter_too_much],
 )
 
+from .place_helpers import official_geometry
+
 
 class GetExactOrCreateTests(TestCase):
     """``Location.objects.get_exact_or_create`` keys on stored precision."""
@@ -120,7 +122,7 @@ class ChildWikiCoordinateCollisionTests(TestCase):
         self.client.force_login(self.user)
 
         self.location = Location.objects.create(latitude=40.0, longitude=-74.0)
-        Boundary.objects.create(location=self.location, generated_polygon=_square(-74.0, 40.0, 0.01))
+        official_geometry(self.location, _square(-74.0, 40.0, 0.01))
         self.wiki = baker.make(Wiki, location=self.location, name="Old Asylum")
         baker.make(Pin, profile=self.profile, location=self.location)
 

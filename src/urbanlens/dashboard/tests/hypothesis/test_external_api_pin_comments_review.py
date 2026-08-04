@@ -9,8 +9,7 @@ only wiki access must not reach them.
 from __future__ import annotations
 
 from django.contrib.auth.models import User
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase

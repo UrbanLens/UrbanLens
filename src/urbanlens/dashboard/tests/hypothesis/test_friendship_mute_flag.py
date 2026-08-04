@@ -29,8 +29,7 @@ import importlib
 
 from django.apps import apps as django_apps
 from django.urls import reverse
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase

@@ -13,8 +13,8 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.services.profile.avatar_colors import PALETTE_SIZE, assign_avatar_colors
 from urbanlens.dashboard.services.messaging.group_chats import create_group_chat
+from urbanlens.dashboard.services.profile.avatar_colors import PALETTE_SIZE, assign_avatar_colors
 
 
 def _profile() -> Profile:

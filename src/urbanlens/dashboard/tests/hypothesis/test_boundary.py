@@ -1,15 +1,18 @@
 """Tests for the Boundary model, its resolution chain, and the BoundaryController.
 
-Boundary generalizes the old Campus model: typed (property/building) spatial
-regions keyed by Location (shared defaults), Wiki (community drawings), or Pin
-(personal drawings). Resolution rules under test:
+Boundary now holds only *drawn* geometry - community drawings keyed by Wiki and
+personal ones keyed by Pin, plus per-provider voting candidates keyed by Place.
+Official outlines live on ``Place``, which is why nothing in this table can
+influence matching or access any more.
 
-- Pin property: pin row → parent pin (detail pins) → wiki row → location
-  generated → circle fallback.
-- Pin building: pin row → parent building only when the pin sits inside it →
-  (root pins) wiki row → location generated → None (no circle).
-- Point→location matching uses only ``generated_polygon`` on location-default
-  rows (anti-abuse: user drawings never affect matching).
+Resolution rules under test:
+
+- Scope gate first: a marker that isn't about this kind of boundary answers
+  nothing, rather than falling through to somebody else's shape.
+- Then whose version of it: pin row -> wiki row -> place outline -> circle
+  fallback (property only; a missing building means "no known building").
+- Parent inheritance applies only to placeless detail pins, and only when the
+  pin actually stands inside the parent's polygon.
 """
 
 from __future__ import annotations
@@ -22,6 +25,10 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+from urbanlens.dashboard.models.place.model import PlaceKind
+from urbanlens.dashboard.services.places import resolution
+
+from .test_places_campus import make_place
 
 
 def _square(lng: float, lat: float, delta: float) -> MultiPolygon:
@@ -46,14 +53,15 @@ class BoundaryModelTests(TestCase):
     def setUp(self):
         self.location = baker.make("dashboard.Location", latitude="40.000000", longitude="-74.000000")
 
-    def test_is_location_default(self) -> None:
-        row = baker.make("dashboard.Boundary", location=self.location, wiki=None, pin=None, profile=None)
-        self.assertTrue(row.is_location_default)
+    def test_is_source_candidate(self) -> None:
+        place = make_place(PlaceKind.PARCEL, _BIG)
+        row = baker.make("dashboard.Boundary", place=place, location=None, wiki=None, pin=None, profile=None, source="redata")
+        self.assertTrue(row.is_source_candidate)
 
-    def test_pin_row_is_not_location_default(self) -> None:
+    def test_pin_row_is_not_a_source_candidate(self) -> None:
         pin = baker.make("dashboard.Pin", location=self.location)
         row = baker.make("dashboard.Boundary", location=self.location, pin=pin, profile=pin.profile)
-        self.assertFalse(row.is_location_default)
+        self.assertFalse(row.is_source_candidate)
 
     def test_drawn_polygon_wins_over_generated(self) -> None:
         row = baker.make("dashboard.Boundary", location=self.location, polygon=_SMALL, generated_polygon=_BIG)
@@ -82,22 +90,22 @@ class BoundaryQuerySetTests(TestCase):
         self.location = baker.make("dashboard.Location", latitude="40.000000", longitude="-74.000000")
         self.pin = baker.make("dashboard.Pin", location=self.location)
         self.wiki = baker.make("dashboard.Wiki", location=self.location)
-        self.default_row = baker.make("dashboard.Boundary", location=self.location, boundary_type=BoundaryType.PROPERTY)
+        self.place = make_place(PlaceKind.PARCEL, _BIG)
+        self.candidate_row = baker.make("dashboard.Boundary", place=self.place, location=None, boundary_type=BoundaryType.PROPERTY, source="redata")
         self.wiki_row = baker.make("dashboard.Boundary", wiki=self.wiki, location=self.location, boundary_type=BoundaryType.PROPERTY)
         self.pin_row = baker.make("dashboard.Boundary", pin=self.pin, profile=self.pin.profile, location=self.location, boundary_type=BoundaryType.BUILDING)
 
-    def test_location_defaults_excludes_wiki_and_pin_rows(self) -> None:
-        defaults = list(Boundary.objects.location_defaults())
-        self.assertIn(self.default_row, defaults)
-        self.assertNotIn(self.wiki_row, defaults)
-        self.assertNotIn(self.pin_row, defaults)
+    def test_source_candidates_exclude_wiki_and_pin_rows(self) -> None:
+        candidates = list(Boundary.objects.source_candidates_for_place(self.place))
+        self.assertIn(self.candidate_row, candidates)
+        self.assertNotIn(self.wiki_row, candidates)
+        self.assertNotIn(self.pin_row, candidates)
 
     def test_of_type_filters_by_boundary_type(self) -> None:
         self.assertIn(self.pin_row, Boundary.objects.of_type(BoundaryType.BUILDING))
-        self.assertNotIn(self.default_row, Boundary.objects.of_type(BoundaryType.BUILDING))
+        self.assertNotIn(self.candidate_row, Boundary.objects.of_type(BoundaryType.BUILDING))
 
     def test_row_lookups(self) -> None:
-        self.assertEqual(Boundary.objects.row_for_location(self.location, BoundaryType.PROPERTY), self.default_row)
         self.assertEqual(Boundary.objects.row_for_wiki(self.wiki, BoundaryType.PROPERTY), self.wiki_row)
         self.assertEqual(Boundary.objects.row_for_pin(self.pin, BoundaryType.BUILDING), self.pin_row)
         self.assertIsNone(Boundary.objects.row_for_pin(self.pin, BoundaryType.PROPERTY))
@@ -115,17 +123,21 @@ class PinPropertyResolutionTests(TestCase):
         self.assertEqual(source, "circle")
         self.assertTrue(polygon.contains(Point(-74.0, 40.0, srid=4326)))
 
-    def test_location_generated_beats_circle(self) -> None:
-        baker.make("dashboard.Boundary", location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_BIG)
+    def test_place_outline_beats_circle(self) -> None:
+        place = make_place(PlaceKind.PARCEL, _BIG)
+        resolution.resolve_location_place(self.location)
+        self.pin.refresh_from_db()
         polygon, source = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.PROPERTY)
-        self.assertEqual(source, "generated")
-        self.assertEqual(polygon.wkt, _BIG.wkt)
+        self.assertEqual(source, "place")
+        self.assertEqual(polygon.wkt, place.geometry.wkt)
 
-    def test_wiki_drawing_beats_location_generated(self) -> None:
+    def test_wiki_drawing_beats_the_place_outline(self) -> None:
+        make_place(PlaceKind.PARCEL, _BIG)
+        resolution.resolve_location_place(self.location)
+        self.pin.refresh_from_db()
         wiki = baker.make("dashboard.Wiki", location=self.location)
         self.pin.wiki = wiki
         self.pin.save(update_fields=["wiki"])
-        baker.make("dashboard.Boundary", location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_BIG)
         baker.make("dashboard.Boundary", wiki=wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_MEDIUM)
 
         polygon, source = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.PROPERTY)
@@ -141,7 +153,9 @@ class PinPropertyResolutionTests(TestCase):
         self.assertEqual(source, "wiki")
 
     def test_pin_drawing_beats_everything(self) -> None:
-        baker.make("dashboard.Boundary", location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_BIG)
+        make_place(PlaceKind.PARCEL, _BIG)
+        resolution.resolve_location_place(self.location)
+        self.pin.refresh_from_db()
         baker.make("dashboard.Boundary", pin=self.pin, profile=self.pin.profile, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_SMALL)
 
         polygon, source = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.PROPERTY)
@@ -252,10 +266,14 @@ class PinBuildingResolutionTests(TestCase):
         self.assertIsNone(polygon)
         self.assertIsNone(source)
 
-    def test_location_generated_building_applies_to_root_pin(self) -> None:
-        baker.make("dashboard.Boundary", location=self.location, boundary_type=BoundaryType.BUILDING, generated_polygon=_SMALL)
-        _polygon, source = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.BUILDING)
-        self.assertEqual(source, "generated")
+    def test_the_place_footprint_applies_to_a_root_pin(self) -> None:
+        parcel = make_place(PlaceKind.PARCEL, _BIG)
+        make_place(PlaceKind.BUILDING, _SMALL, parent=parcel)
+        resolution.resolve_location_place(self.location)
+        self.pin.refresh_from_db()
+        polygon, source = Boundary.objects.resolve_for_pin(self.pin, BoundaryType.BUILDING)
+        self.assertEqual(source, "place")
+        self.assertEqual(polygon.wkt, _SMALL.wkt)
 
     def test_detail_pin_inside_parent_building_inherits_it(self) -> None:
         baker.make("dashboard.Boundary", pin=self.pin, profile=self.pin.profile, location=self.location, boundary_type=BoundaryType.BUILDING, polygon=_SMALL)
@@ -296,8 +314,10 @@ class WikiResolutionTests(TestCase):
         self.assertIsNone(polygon)
         self.assertIsNone(source)
 
-    def test_wiki_drawing_beats_location_generated(self) -> None:
-        baker.make("dashboard.Boundary", location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_BIG)
+    def test_wiki_drawing_beats_the_place_outline(self) -> None:
+        place = make_place(PlaceKind.PARCEL, _BIG)
+        self.wiki.place = place
+        self.wiki.save(update_fields=["place"])
         baker.make("dashboard.Boundary", wiki=self.wiki, location=self.location, boundary_type=BoundaryType.PROPERTY, polygon=_MEDIUM)
 
         polygon, source = Boundary.objects.resolve_for_wiki(self.wiki, BoundaryType.PROPERTY)
@@ -306,20 +326,21 @@ class WikiResolutionTests(TestCase):
 
 
 class LocationMatchingTests(TestCase):
-    """Point→location matching uses location-default generated polygons only."""
+    """Point matching resolves onto a Place, and answers with its whole domain."""
 
     def setUp(self):
         self.location = baker.make("dashboard.Location", latitude="40.000000", longitude="-74.000000")
 
-    def test_generated_polygon_matches_point(self) -> None:
+    def test_a_point_on_the_place_matches_every_location_on_it(self) -> None:
         from urbanlens.dashboard.models.location.model import Location
 
-        baker.make("dashboard.Boundary", location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_BIG)
+        make_place(PlaceKind.PARCEL, _BIG)
+        resolution.resolve_location_place(self.location)
         matches = Location.objects.get_all_for_point(40.0005, -74.0005)
         self.assertIn(self.location, matches)
 
     def test_user_drawing_never_affects_matching(self) -> None:
-        """Anti-abuse rule: an inflated community drawing must not capture pins."""
+        """Anti-abuse rule, now structural: matching never reads Boundary."""
         from urbanlens.dashboard.models.location.model import Location
 
         wiki = baker.make("dashboard.Wiki", location=self.location)
@@ -346,8 +367,10 @@ class BoundaryControllerTests(TestCase):
         self.user = baker.make("auth.User")
         self.location = baker.make("dashboard.Location", latitude="40.000000", longitude="-74.000000")
         self.pin = baker.make("dashboard.Pin", profile=self.user.profile, location=self.location, slug="test-pin-boundary")
-        baker.make("dashboard.Boundary", location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_BIG, generated_at="2026-07-01T00:00:00Z")
-        baker.make("dashboard.Boundary", location=self.location, boundary_type=BoundaryType.BUILDING, generated_polygon=_SMALL, generated_at="2026-07-01T00:00:00Z")
+        self.parcel = make_place(PlaceKind.PARCEL, _BIG)
+        self.building = make_place(PlaceKind.BUILDING, _SMALL, parent=self.parcel)
+        resolution.resolve_location_place(self.location)
+        self.pin.refresh_from_db()
 
     def _request(self, method="get", data=None):
         if method == "post":
@@ -364,15 +387,19 @@ class BoundaryControllerTests(TestCase):
         response = BoundaryController().get_boundaries(self._request(), self.pin.slug)
         payload = json.loads(response.content)
 
-        self.assertEqual(payload["boundaries"]["property"]["source"], "generated")
-        self.assertEqual(payload["boundaries"]["building"]["source"], "generated")
+        self.assertEqual(payload["boundaries"]["property"]["source"], "place")
+        self.assertEqual(payload["boundaries"]["building"]["source"], "place")
         self.assertEqual(payload["boundaries"]["property"]["polygon"], json.loads(_BIG.geojson))
         self.assertFalse(payload["pending"])
 
     def test_get_schedules_generation_when_not_yet_ran(self) -> None:
         from urbanlens.dashboard.controllers.boundary import BoundaryController
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.place.model import Place
 
-        Boundary.objects.location_defaults().delete()
+        Place.objects.all().delete()
+        Location.objects.filter(pk=self.location.pk).update(place=None, place_resolved_at=None)
+        self.pin.refresh_from_db()
         with mock.patch("urbanlens.dashboard.controllers.boundary.schedule_panel_fetch", return_value=True) as schedule:
             response = BoundaryController().get_boundaries(self._request(), self.pin.slug)
 
@@ -418,7 +445,7 @@ class BoundaryControllerTests(TestCase):
         payload = json.loads(response.content)
 
         self.assertFalse(Boundary.objects.filter(pin=self.pin, boundary_type=BoundaryType.PROPERTY).exists())
-        self.assertEqual(payload["boundaries"]["property"]["source"], "generated")
+        self.assertEqual(payload["boundaries"]["property"]["source"], "place")
 
     def test_detail_buildings_included_in_payload(self) -> None:
         from urbanlens.dashboard.controllers.boundary import BoundaryController

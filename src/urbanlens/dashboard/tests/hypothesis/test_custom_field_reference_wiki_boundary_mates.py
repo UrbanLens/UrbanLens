@@ -24,6 +24,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.custom_fields.custom_field_references import referenceable_queryset, resolve_reference
 
+from .place_helpers import official_geometry
+
 
 def _square(lng: float, lat: float, delta: float) -> MultiPolygon:
     ring = (
@@ -44,7 +46,7 @@ class ReferenceableWikiQuerysetBoundaryMateTests(TestCase):
         self.user = baker.make(User)
         self.profile = self.user.profile
         self.wiki_location = Location.objects.create(latitude=40.0, longitude=-74.0)
-        Boundary.objects.create(location=self.wiki_location, generated_polygon=_square(-74.0, 40.0, 0.003))
+        official_geometry(self.wiki_location, _square(-74.0, 40.0, 0.003))
         self.wiki = baker.make(Wiki, location=self.wiki_location)
 
     def test_exact_location_pin_wiki_is_referenceable(self) -> None:

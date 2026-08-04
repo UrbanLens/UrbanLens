@@ -27,6 +27,8 @@ from urbanlens.dashboard.services.wiki.wiki_merge import (
     wiki_property_polygon,
 )
 
+from .place_helpers import nest_by_containment, official_geometry
+
 _coord_counter = 0
 
 #: Sizes (degrees, half-width of the square boundary) used throughout this
@@ -71,16 +73,19 @@ def _square(latitude: float, longitude: float, size: float) -> MultiPolygon:
 
 
 def _make_wiki_with_boundary(*, size: float | None, near: Wiki | None = None, near_offset: float = _NEAR_OFFSET) -> Wiki:
-    """A wiki whose location-default PROPERTY boundary is a real polygon of the given size.
+    """A wiki anchored to a place whose official outline is a square of ``size``.
 
-    ``size=None`` leaves the boundary row unset entirely (no ``generated_at``),
-    exercising ``resolve_for_wiki``'s circle fallback. ``near`` places the new
-    wiki ``near_offset`` degrees from another wiki's own coordinate (never
-    identical - Location's (lat, lng) pair must be unique) - a "building"
-    passed the "campus" it should nest inside of, for example. Callers pairing
-    two boundary sizes closer together than the default (e.g. WING_SIZE as the
-    container) must pass a tighter ``near_offset`` themselves - see the
-    module-level size/offset comments.
+    ``size=None`` leaves the wiki placeless, exercising ``resolve_for_wiki``'s
+    circle fallback. ``near`` places the new wiki ``near_offset`` degrees from
+    another wiki's own coordinate (never identical - Location's (lat, lng) pair
+    must be unique) - a "building" passed the "campus" it should nest inside
+    of, for example. Callers pairing two boundary sizes closer together than
+    the default (e.g. WING_SIZE as the container) must pass a tighter
+    ``near_offset`` themselves - see the module-level size/offset comments.
+
+    The place lineage is built from containment here (see
+    ``place_helpers.nest_by_containment``), standing in for what the provider
+    chain produces for real. Nesting reads that lineage, not the geometry.
     """
     if near is not None:
         location = baker.make(
@@ -93,11 +98,10 @@ def _make_wiki_with_boundary(*, size: float | None, near: Wiki | None = None, ne
         location = _make_location()
     wiki = baker.make(Wiki, location=location, name=f"Wiki {location.pk}")
     if size is not None:
-        Boundary.objects.create(
-            location=location,
-            boundary_type=BoundaryType.PROPERTY,
-            generated_polygon=_square(float(location.latitude), float(location.longitude), size),
-        )
+        place = official_geometry(location, _square(float(location.latitude), float(location.longitude), size))
+        nest_by_containment(place)
+        Wiki.objects.filter(pk=wiki.pk).update(place=place)
+        wiki.refresh_from_db()
     return wiki
 
 
@@ -272,12 +276,13 @@ class GenerateLocationBoundariesIntegrationTests(TestCase):
     def test_reconciliation_runs_after_boundary_generation(self) -> None:
         from urbanlens.dashboard.services.locations.boundaries import generate_location_boundaries
 
+        from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
+
         location = _make_location()
         baker.make(Wiki, location=location, name="Some Wiki")
         with (
-            patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain") as mock_chain_cls,
+            patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=ResolvedBoundaries()),
             patch("urbanlens.dashboard.services.wiki.wiki_merge.reconcile_wiki_nesting_for_location") as mock_reconcile,
         ):
-            mock_chain_cls.return_value.get_boundaries.return_value.polygon_for.return_value = None
             generate_location_boundaries(location)
         mock_reconcile.assert_called_once_with(location)

@@ -87,7 +87,7 @@ class PinWikiCreateView(LoginRequiredMixin, View):
         # Community Wiki" button stays stuck in its stale pre-creation state
         # (and doesn't turn into a link to the new wiki) until a full reload.
         # Same fix PinOverviewView already needed for the slug-backfill case.
-        hero_html = _pin_hero_oob(request, pin, overlapping_location_count=overview_context["overlapping_location_count"])
+        hero_html = _pin_hero_oob(request, pin, competing_location_count=overview_context["competing_location_count"])
         response = HttpResponse(overview_html + hero_html)
         response["HX-Trigger"] = f'{{"wikiCreated": {{"created": {created_flag}}}}}'
         return response

@@ -709,15 +709,12 @@ class BoundaryPanelSource(PanelSource):
     def is_ready(self, pin: Pin) -> bool:
         """True when the provider chain has run for the pin's Location.
 
-        ``generated_at`` is stamped even when no polygon was found, so a
+        ``place_resolved_at`` is stamped even when nothing was found, so a
         fruitless run doesn't retrigger the chain on every page view.
         """
-        from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
-
         if pin.location_id is None:
             return True
-        row = Boundary.objects.row_for_location(pin.location, BoundaryType.PROPERTY)
-        return row is not None and row.generated_at is not None
+        return pin.location.place_resolved_at is not None
 
     def fetch(self, pin: Pin) -> None:
         """Run the boundary provider chain and persist generated polygons.

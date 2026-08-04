@@ -11,12 +11,11 @@ parents M2M.  Key invariants:
 """
 from __future__ import annotations
 
-from urbanlens.core.tests.testcase import TestCase
-from hypothesis import HealthCheck, assume, given, settings
-from hypothesis import strategies as st
+from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from model_bakery import baker
 
-from urbanlens.dashboard.models.labels.model import Label, KIND_TAG
+from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.labels.model import KIND_TAG, Label
 
 _db_settings = settings(
     max_examples=30,

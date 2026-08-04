@@ -28,6 +28,7 @@ from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.apis.calendar.google import ACTIVITY_ID_EVENT_PROPERTY, TRIP_UUID_EVENT_PROPERTY, CalendarEventNotFoundError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.dashboard.services.trips.calendar_sync import (
     DEFAULT_ACTIVITY_EVENT_DURATION,
     activity_to_event_body,
@@ -40,7 +41,6 @@ from urbanlens.dashboard.services.trips.calendar_sync import (
     remove_trip_from_calendar,
     trip_to_event_body,
 )
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 _DATES = st.dates(min_value=datetime.date(1990, 1, 1), max_value=datetime.date(2100, 1, 1))
 

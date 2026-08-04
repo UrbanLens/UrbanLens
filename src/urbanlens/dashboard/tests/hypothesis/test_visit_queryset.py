@@ -5,12 +5,10 @@ All tests require the database - records are created with model_bakery.
 from __future__ import annotations
 
 from django.utils import timezone
-
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-
 
 # ---------------------------------------------------------------------------
 # Helpers

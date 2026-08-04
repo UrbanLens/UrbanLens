@@ -55,10 +55,14 @@ class PinType(TextChoices):
 
     ``PARCEL`` and ``BUILDING`` are the two that drive scope: a parcel is the
     grounds of a place (a campus, a lot) and is described by the buildings
-    nested under it, while a building is a single structure described by its
-    own building-level records. ``LOCATION_MARKER`` is the "unspecified"
-    default - a pin left on it is classified automatically (see
-    ``services.locations.site_scope``).
+    standing on it, while a building is a single structure described by its
+    own building-level records.
+
+    ``LOCATION_MARKER`` is not "unknown" - it is the honest answer for an
+    ordinary property, where the parcel and the building are the same thing
+    and singling out either would be inventing a distinction. It is also the
+    default, and is derived automatically from the place a marker resolves
+    onto (see ``services.places.scope``).
     """
 
     LOCATION_MARKER = "location", "Location"
@@ -68,6 +72,29 @@ class PinType(TextChoices):
     POINT_OF_INTEREST = "poi", "Point of Interest"
     DANGER = "danger", "Danger"
     OTHER = "other", "Other"
+
+    @property
+    def icon(self) -> str:
+        """The Material Symbols glyph for this type.
+
+        One mapping, shared by the detail-pin lists, the child-wiki list, and
+        the type badge on both detail pages - the three places that previously
+        each carried their own ``{% if %}`` ladder and could drift apart.
+        """
+        return PIN_TYPE_ICONS.get(self.value, "push_pin")
+
+
+#: Material Symbols glyph per :class:`PinType`. Module-level so templates can
+#: reach it through the ``pin_type_icon`` filter without instantiating the enum.
+PIN_TYPE_ICONS: dict[str, str] = {
+    PinType.LOCATION_MARKER.value: "place",
+    PinType.PARCEL.value: "apartment",
+    PinType.BUILDING.value: "business",
+    PinType.ENTRANCE.value: "door_front",
+    PinType.POINT_OF_INTEREST.value: "star",
+    PinType.DANGER.value: "warning",
+    PinType.OTHER.value: "more_horiz",
+}
 
 
 class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel):
@@ -688,6 +715,23 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         if winning:
             return winning.effective_color
         return None
+
+    @property
+    def community_wiki(self):
+        """The community page for the place this pin stands on, if there is one.
+
+        Not the same as ``self.wiki``, which is a cache set only when a pin is
+        explicitly linked, nor as ``self.location.wiki``, which is the page
+        anchored to this exact coordinate. Resolving through the *place* is
+        what lets the second person to pin a property see the page the first
+        one created, instead of being offered a "Create Community Wiki" button
+        for a wiki that already exists.
+        """
+        from urbanlens.dashboard.models.wiki.model import Wiki
+
+        if self.wiki_id and self.wiki is not None and self.wiki.officially_created:
+            return self.wiki
+        return Wiki.objects.get_for_location(self.location) if self.location_id else None
 
     @property
     def effective_name(self) -> str:

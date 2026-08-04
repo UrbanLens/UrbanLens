@@ -30,8 +30,10 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.pins import pin_restructure
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE, is_site_scope
+from urbanlens.dashboard.services.pins import pin_restructure
+
+from .place_helpers import official_geometry
 
 _coord_counter = 0
 
@@ -137,7 +139,7 @@ class NestableRootPinTests(TestCase):
         self.profile = self.user.profile
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.profile, location=self.location, slug="campus")
-        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_parcel_polygon())
+        official_geometry(self.location, _parcel_polygon())
 
     def _root_pin_at(self, latitude: float, longitude: float, **kwargs) -> Pin:
         return baker.make(Pin, profile=self.profile, location=baker.make(Location, latitude=latitude, longitude=longitude, google_place=None), **kwargs)
@@ -245,7 +247,7 @@ class RestructureOfferGatingTests(TestCase):
         from urbanlens.dashboard.services.pins.external_data import MAX_POLL_ATTEMPTS
 
         pin = baker.make(Pin, profile=self.user.profile, location=_make_location(), slug="slow-parcel")
-        Boundary.objects.create(location=pin.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_parcel_polygon())
+        official_geometry(pin.location, _parcel_polygon())
         baker.make(Pin, profile=self.user.profile, location=baker.make(Location, latitude=41.7330, longitude=-73.9300, google_place=None), name="Inside")
 
         response = self.client.get(reverse("pin.restructure.offer", kwargs={"pin_slug": pin.slug}), {"attempt": str(MAX_POLL_ATTEMPTS)})
@@ -270,7 +272,7 @@ class RestructureOfferContentTests(TestCase):
         self.client.force_login(self.user)
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
-        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_parcel_polygon())
+        official_geometry(self.location, _parcel_polygon())
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
         baker.make(Pin, profile=self.user.profile, location=baker.make(Location, latitude=41.7338, longitude=-73.9306, google_place=None), name="Gatehouse")
         self.url = reverse("pin.restructure.offer", kwargs={"pin_slug": self.pin.slug})
@@ -328,7 +330,7 @@ class RestructureApplyTests(TestCase):
         self.client.force_login(self.user)
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
-        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_parcel_polygon())
+        official_geometry(self.location, _parcel_polygon())
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
         self.stray = baker.make(
             Pin,
@@ -466,7 +468,7 @@ class BuildingImportPanelActionTests(TestCase):
         self.client.force_login(self.user)
         self.location = _make_location()
         self.pin = baker.make(Pin, profile=self.user.profile, location=self.location, slug="campus")
-        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_parcel_polygon())
+        official_geometry(self.location, _parcel_polygon())
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
         self.url = reverse("pin.buildings.import", kwargs={"pin_slug": self.pin.slug})
 

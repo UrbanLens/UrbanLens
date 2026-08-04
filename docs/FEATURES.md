@@ -14,13 +14,21 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   it points to (canonical name, address, coordinates, Google CID). See `docs/NOTES.md` for why
   this split exists.
 - Pin types: location, parcel, building, entrance, POI, danger, other
-- **Parcel vs. building scope** — a pin (or wiki) with two or more child markers typed as
-  buildings describes the *grounds* those buildings sit on, not a structure, so its
-  building-level cards (CRIS Building USN Point, Building Attributes, Building Characteristics)
-  suppress themselves and a "Buildings on this Property" list stands in for them. Child markers
-  are typed automatically - the detail-pin dialog's Type select defaults to "Auto", and a marker
-  landing on a known building footprint becomes a building, while entrances and landmarks don't.
-  An explicitly chosen type always wins. See `docs/NOTES.md`.
+- **Place** — one row per real-world parcel or building, and the unit everything shared hangs off:
+  official geometry, the community wiki, boundary votes, and access. A coordinate resolves onto the
+  most specific place containing it, so two people pinning opposite ends of one property share its
+  page, its community, and its "places in common" entry without either coordinate being discarded.
+  Buildings sit `PART_OF` their parcel; a split campus or a multi-parcel site sits above its parts
+  via `MEMBER_OF`. See `docs/NOTES.md` and `docs/designs/place-consolidation.md`.
+- **Parcel vs. building scope** — on a property holding several buildings, a marker commits to
+  describing either the *grounds* or one structure. A parcel-scoped marker suppresses its
+  building-level cards (CRIS Building USN Point, Building Attributes, Building Characteristics) in
+  favour of a "Buildings on this Property" list, and draws only the parcel; a building-scoped
+  marker draws only its own footprint, and its wiki is created with that footprint as its boundary.
+  On an ordinary single-building property neither distinction exists, so markers stay neutral and
+  both outlines are drawn. Scope is derived from the place and applies to *every* user's marker on
+  it; an explicitly chosen type always wins. A badge in the page header names the scope whenever it
+  isn't the neutral default. See `docs/NOTES.md`.
 - **"Organize this property?"** — one suggestion, shown once the first time you open a pin's detail
   page, covering both halves of the same question: create a sub pin per building here (named and
   numbered from REData's county GIS + NY SHPO CRIS, or OpenStreetMap, and mirrored as child wikis
@@ -44,11 +52,13 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   the receiving side's own pin at the other end still dedupe correctly, since both fall inside the
   same footprint even though they're farther apart than the fallback proximity radius covers.
   Non-building markers (entrances, hazards, POIs) are always proximity-matched
-- **Community wikis nest themselves automatically** — when two independently-created wikis'
-- **Community wikis nest themselves automatically** — when two independently-created wikis'
-  boundaries turn out to nest (a building's wiki inside a campus's, once both have a real property
-  boundary), the smaller becomes a child of the bigger with no confirmation needed - re-parenting
-  only, nothing else moves, since a wiki's Location never changes. See `docs/NOTES.md`.
+- **Community wikis nest themselves automatically** — when two independently-created wikis turn out
+  to describe a place and something inside it (a building's wiki inside a campus's), the inner one
+  becomes a child of the outer with no confirmation needed - re-parenting only, nothing else moves.
+  Nesting follows place lineage, so it agrees with access by construction. See `docs/NOTES.md`.
+- **One wiki per place** — creating a wiki for a coordinate that already has one, however far apart
+  the two coordinates are on the same property, returns the existing page instead of a second one.
+  A viewer who has earned the page reaches it from their own location's URL.
 - Add pins by map click, coordinate entry, or place search/autocomplete; drag to reposition
 - Pin list view alongside the map (particularly useful while searching/filtering); "Add these pins to a list" bulk action from the pin list panel adds all currently-visible/filtered pins to a trip or saved collection at once
 - Bulk pin operations: multi-select, bulk edit (description, rating, labels, parent pin), bulk merge, bulk delete (with undo)

@@ -5,16 +5,15 @@ This file adds: user, status, relationship_type, has_permission.
 """
 from __future__ import annotations
 
-from urbanlens.core.tests.testcase import TestCase
 from model_bakery import baker
 
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.meta import (
     FriendshipStatus,
     FriendshipType,
     Permission,
 )
 from urbanlens.dashboard.models.friendship.model import Friendship
-
 
 _DEFAULTS = dict(
     relationship_type=FriendshipType.FRIEND,

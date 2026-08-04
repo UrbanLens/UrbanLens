@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import GEOSGeometry, MultiPolygon, Polygon
@@ -22,7 +23,6 @@ from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
-from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
@@ -32,10 +32,15 @@ from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_L
 from urbanlens.dashboard.services.geo.boundary_voting import BoundaryVoteError, boundary_vote_context, cast_boundary_vote, has_consensus
 from urbanlens.dashboard.services.locations import site_scope
 from urbanlens.dashboard.services.pins.public_pins import PublicVoteError, cast_public_vote, public_vote_context
+from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locations
+from urbanlens.dashboard.services.places.scope import scope_badge
 from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit
+
+if TYPE_CHECKING:
+    from urbanlens.dashboard.models.location.model import Location
 
 logger = logging.getLogger(__name__)
 
@@ -121,14 +126,11 @@ class LocationWikiView(LoginRequiredMixin, View):
         # The requesting user's own pin for this location (used for the back-link).
         user_pin = location.pins.filter(profile=profile).first()
 
-        # Other Locations whose bounding box also covers the user's pin point.
-        # These are potential alternative associations the user may prefer.
-        if user_pin:
-            lat = user_pin.effective_latitude
-            lng = user_pin.effective_longitude
-            other_locations = Location.objects.within_bounding_box(float(lat), float(lng)).exclude(pk=location.pk).order_by("official_name") if lat is not None and lng is not None else Location.objects.none()
-        else:
-            other_locations = Location.objects.none()
+        # Places that genuinely compete for the user's pin coordinate - two
+        # unrelated parcels whose county geometry overlaps. Not the buildings
+        # on this property, which are the same place and answer as one; see
+        # services.places.ambiguity for why this is now almost always empty.
+        other_locations = [candidate for candidate in competing_wiki_locations(user_pin, profile) if candidate.pk != location.pk]
 
         from urbanlens.dashboard.models.labels.model import COLOR_CHOICES
         from urbanlens.dashboard.models.pin.model import PinType
@@ -173,12 +175,13 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "wiki_cover_candidates": wiki_cover_candidates,
                 "can_delete_wiki": wiki.can_be_deleted_by(profile),
                 "is_site_scope": site_scope.is_site_scope(wiki),
+                **scope_badge(wiki),
                 "wiki_comment_count": wiki.comments.count(),
                 "pin_count_display": pin_count_display,
                 "first_pinned": first_pinned,
                 "wiki_stats": [_wiki_stat_context(wiki, field, profile) for field in WikiStatField.values],
                 "public_vote": public_vote_context(location, profile),
-                "boundary_vote": boundary_vote_context(location, profile),
+                "boundary_vote": boundary_vote_context(location.place, profile),
                 "user_pin": user_pin,
                 "other_locations": other_locations,
                 "page_name": "location-wiki",
@@ -506,7 +509,7 @@ class BoundaryVoteView(LoginRequiredMixin, View):
             boundary_id = 0
 
         try:
-            vote = cast_boundary_vote(location, profile, boundary_id)
+            vote = cast_boundary_vote(location.place, profile, boundary_id)
         except BoundaryVoteError as exc:
             return JsonResponse({"error": exc.safe_message}, status=400)
 
@@ -514,7 +517,7 @@ class BoundaryVoteView(LoginRequiredMixin, View):
             {
                 "ok": True,
                 "my_vote_id": vote.boundary_id,
-                "has_consensus": has_consensus(location),
+                "has_consensus": has_consensus(location.place),
             },
         )
 

@@ -13,6 +13,7 @@ the hero's fixed height has no room to fit everything at once that small.
 {% endcomment %}
 <p class="ul-page-hero__eyebrow wiki-eyebrow">
     <i class="material-symbols-outlined">public</i> Community Wiki
+    {% include "dashboard/partials/ui/_scope_badge.html" %}
 </p>
 <h1 class="ul-page-hero__title wiki-title">{{ wiki.name }}</h1>
 {% if location.address %}

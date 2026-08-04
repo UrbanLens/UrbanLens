@@ -40,11 +40,11 @@ from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.apis.calendar.google import CalendarNotConfiguredError
-from urbanlens.dashboard.services.trips.calendar_sync import export_trip_to_calendar
-from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.auth.google_oauth import GoogleAuthExpiredError
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.trips.calendar_sync import export_trip_to_calendar
 
 _TRIP_SCOPES = [ApiKeyScope.TRIPS_READ.value, ApiKeyScope.TRIPS_WRITE.value]
 

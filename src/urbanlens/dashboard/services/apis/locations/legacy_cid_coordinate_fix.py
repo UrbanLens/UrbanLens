@@ -91,8 +91,8 @@ LEGACY_COORDINATE_CUTOFF = datetime(2026, 7, 25, tzinfo=UTC)
 
 #: How far apart two parsed coordinate pairs may be and still be considered the
 #: same place, in degrees (~11 m). Wide enough to absorb the rounding loss of
-#: DMS/DDM -> decimal conversion, far tighter than the 50 m radius that
-#: ``Location.objects.get_nearby_or_create`` already treats as one place.
+#: DMS/DDM -> decimal conversion, and narrow enough that two genuinely
+#: different pins never collapse into one.
 _COORDINATE_MATCH_TOLERANCE = 1e-4
 
 #: Ceiling on how many of a profile's coordinate-named legacy pins are parsed

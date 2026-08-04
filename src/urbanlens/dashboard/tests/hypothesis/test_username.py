@@ -10,13 +10,13 @@ from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.services.social_auth.pipeline import generate_sso_username
 from urbanlens.dashboard.services.auth.username import (
     USERNAME_RE,
     UsernameGenerator,
     normalize_username_key,
     username_is_taken,
 )
+from urbanlens.dashboard.services.social_auth.pipeline import generate_sso_username
 
 
 class NormalizeUsernameKeyTests(SimpleTestCase):

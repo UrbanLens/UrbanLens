@@ -36,6 +36,8 @@ from urbanlens.dashboard.services.device_scan.clustering import (
     weighted_radius_meters,
 )
 
+from .place_helpers import official_geometry
+
 _LAT = st.floats(min_value=-80, max_value=80, allow_nan=False, allow_infinity=False)
 _LNG = st.floats(min_value=-170, max_value=170, allow_nan=False, allow_infinity=False)
 _WEIGHT = st.floats(min_value=1e-6, max_value=1000, allow_nan=False, allow_infinity=False)
@@ -164,7 +166,7 @@ class _ClusteringDbTestCase(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.wiki_location = Location.objects.create(latitude=0.0, longitude=0.0)
-        Boundary.objects.create(location=self.wiki_location, generated_polygon=_square(0.0, 0.0, 0.01))
+        official_geometry(self.wiki_location, _square(0.0, 0.0, 0.01))
         self.wiki = baker.make(Wiki, location=self.wiki_location)
         self.device, _created = ScannedDevice.objects.get_or_create_for_mac("AA:BB:CC:DD:EE:FF")
         self.upload = DeviceScanUpload.objects.create()

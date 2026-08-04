@@ -31,6 +31,8 @@ from urbanlens.dashboard.services.device_scan.ingestion import ingest_scan_uploa
 from urbanlens.dashboard.services.device_scan.pipeline import process_scan_upload
 from urbanlens.dashboard.tasks import process_device_scan_upload
 
+from .place_helpers import official_geometry
+
 
 def _square(lng: float, lat: float, delta: float) -> MultiPolygon:
     ring = (
@@ -64,7 +66,7 @@ class _DeviceScanWikiTestCase(TestCase):
     def setUp(self) -> None:
         super().setUp()
         self.location = Location.objects.create(latitude=0.0, longitude=0.0)
-        Boundary.objects.create(location=self.location, generated_polygon=_square(0.0, 0.0, 0.01))
+        official_geometry(self.location, _square(0.0, 0.0, 0.01))
         self.wiki = baker.make(Wiki, location=self.location)
 
 
@@ -135,9 +137,14 @@ class ProcessScanUploadTypeRoutingTests(_DeviceScanWikiTestCase):
         self.assertEqual(WikiDeviceMarker.objects.count(), 0)
 
     def test_multiple_overlapping_wikis_each_get_their_own_marker(self) -> None:
+        """Two unrelated places whose county geometry overlaps - the rare real case."""
+        from urbanlens.dashboard.models.place.model import PlaceKind
+
+        from .place_helpers import make_place
+
+        other_place = make_place(PlaceKind.PARCEL, _square(0.0, 0.0, 0.02))
         other_location = Location.objects.create(latitude=0.0002, longitude=0.0002)
-        Boundary.objects.create(location=other_location, generated_polygon=_square(0.0, 0.0, 0.02))
-        other_wiki = baker.make(Wiki, location=other_location)
+        other_wiki = baker.make(Wiki, location=other_location, place=other_place)
 
         self._run(device_type_guess=DeviceType.CAMERA)
 

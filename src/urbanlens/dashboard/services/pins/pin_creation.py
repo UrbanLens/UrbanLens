@@ -237,14 +237,35 @@ def create_pin_for_profile(
         # this profile's pins) - see resolve_child_pin_location.
         location = resolve_child_pin_location(profile, lat_f, lon_f, defaults={"official_name": place_canonical_name})
     else:
-        # Fuzzy 50m-radius dedup (not exact-coordinate get_or_create): GPS jitter between two
-        # drops at the same real place must consolidate onto the same Location, matching every
-        # other top-level Location-resolution path in the app (viewset.py, import_data.py).
-        location, _ = Location.objects.get_nearby_or_create(lat_f, lon_f, threshold_meters=50, defaults={"official_name": place_canonical_name})
+        # The user's exact coordinate is kept, always. Consolidating two drops
+        # at one place is the *place's* job now: they resolve onto the same
+        # parcel and share its wiki, its community, and its "places in common"
+        # entry without either coordinate being thrown away. The old 50 m snap
+        # discarded whichever coordinate arrived second, including when the
+        # first belonged to a different user.
+        location, _ = Location.objects.get_exact_or_create(lat_f, lon_f, defaults={"official_name": place_canonical_name})
 
-    # Locations whose bounding box also covers this point - when more than one
-    # matches, the caller offers the user a choice (see below).
-    all_locations = list(Location.objects.get_all_for_point(lat_f, lon_f))
+    # Resolve what this coordinate stands on, from geometry already known. No
+    # provider is called here - provisioning stays in the background task, so
+    # a drop never waits on a county GIS lookup.
+    from urbanlens.dashboard.services.places.ambiguity import competing_places, representative_locations
+    from urbanlens.dashboard.services.places.resolution import resolve_location_place
+
+    if location.place_resolved_at is None:
+        resolve_location_place(location)
+
+    # One root pin per property, still - the guarantee the old 50 m snap was
+    # really providing, now expressed against the property itself instead of
+    # against whichever coordinate happened to be recorded first.
+    if new_parent is None and location.place_id and Pin.objects.filter(profile=profile, parent_pin__isnull=True, location__place_id=location.place_id).exists():
+        raise PinCreationError("You already have a pin on this property.")
+
+    # The chosen location, plus any property this coordinate could plausibly
+    # mean instead - so a caller can still treat "more than one" as "there is
+    # a real choice here". Competitors are almost always absent: everything
+    # inside one property is the same answer, not a rival one.
+    rivals = competing_places(lat_f, lon_f, location.place if location.place_id else None)
+    all_locations = [location, *[candidate for candidate in representative_locations(rivals) if candidate.pk != location.pk]]
 
     from urbanlens.dashboard.models.wiki.model import Wiki
 

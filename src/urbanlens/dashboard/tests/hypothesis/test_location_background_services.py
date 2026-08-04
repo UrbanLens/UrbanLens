@@ -113,8 +113,8 @@ class PlaceNameResolverChainTests(SimpleTestCase):
 
     def test_google_places_resolver_handles_rate_limit_errors(self) -> None:
         """A rate-limited Google Places call must degrade gracefully, not raise into the caller (TODO: "ugly error page")."""
-        from urbanlens.dashboard.services.locations.google import GooglePlacesNameResolver
         from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+        from urbanlens.dashboard.services.locations.google import GooglePlacesNameResolver
 
         with (
             mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),
@@ -126,8 +126,8 @@ class PlaceNameResolverChainTests(SimpleTestCase):
             self.assertIsNone(GooglePlacesNameResolver().resolve(40.0, -74.0))
 
     def test_google_geocoding_resolver_handles_rate_limit_errors(self) -> None:
-        from urbanlens.dashboard.services.locations.google import GoogleGeocodingNameResolver
         from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+        from urbanlens.dashboard.services.locations.google import GoogleGeocodingNameResolver
 
         with (
             mock.patch("urbanlens.dashboard.services.locations.google.settings.google_unrestricted_api_key", "key"),

@@ -4,8 +4,8 @@ Import these instead of re-declaring primitives in each test module.
 """
 from __future__ import annotations
 
+from datetime import UTC, date, datetime, timezone
 import decimal
-from datetime import date, datetime, timezone
 
 from hypothesis import strategies as st
 
@@ -33,16 +33,16 @@ nonempty_name = st.text(alphabet=_printable_alphabet, min_size=1, max_size=255).
 # Keep values inside valid geographic ranges.
 
 latitude = st.decimals(
-    min_value=decimal.Decimal("-90"),
-    max_value=decimal.Decimal("90"),
+    min_value=decimal.Decimal(-90),
+    max_value=decimal.Decimal(90),
     places=6,
     allow_nan=False,
     allow_infinity=False,
 )
 
 longitude = st.decimals(
-    min_value=decimal.Decimal("-180"),
-    max_value=decimal.Decimal("180"),
+    min_value=decimal.Decimal(-180),
+    max_value=decimal.Decimal(180),
     places=6,
     allow_nan=False,
     allow_infinity=False,
@@ -89,7 +89,7 @@ reasonable_date = st.dates(min_value=date(1900, 1, 1), max_value=date(2100, 12, 
 reasonable_datetime = st.datetimes(
     min_value=datetime(1900, 1, 1),
     max_value=datetime(2100, 12, 31),
-    timezones=st.just(timezone.utc),
+    timezones=st.just(UTC),
 )
 
 # Ordered pair (start ≤ end).

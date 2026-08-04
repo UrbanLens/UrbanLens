@@ -1,13 +1,15 @@
-"""Automatic parent/child nesting between community Wikis whose boundaries nest.
+"""Automatic parent/child nesting between community Wikis, following place lineage.
 
-Nothing stops someone from creating a wiki for a
-building and, later, creating one for the campus that building
-sits on. Once both have a real property boundary, they are no longer two
-unrelated places: it is a parcel and one of its buildings. This merge should
-happen "without needing user
-confirmation".
+Nothing stops someone from creating a wiki for a building and, later, creating
+one for the campus that building sits on. They are not two unrelated places: it
+is a parcel and one of its buildings, and the places already say so. This merge
+should happen "without needing user confirmation".
 
-Reconciliation runs after a Location's boundaries are (re)generated. It is
+Nesting therefore reads the lineage rather than re-deriving it from geometry -
+same answer, one FK walk instead of an area-sorted containment query, and it
+cannot disagree with the access model, which reads the same edges.
+
+Reconciliation runs after a Location is (re)resolved onto a place. It is
 idempotent.
 """
 
@@ -15,8 +17,6 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
-
-from django.contrib.gis.db.models.functions import Area
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -44,50 +44,89 @@ def wiki_property_polygon(wiki: Wiki):
     return polygon if source != "circle" else None
 
 
-def _root_wikis_inside(polygon, *, exclude_pk: int):
-    """Other root wikis whose location falls inside a polygon, smallest boundary first.
+def _nestable_child_wikis(wiki: Wiki):
+    """Root wikis that belong under this one.
+
+    Lineage first: the wikis of this place's direct children. Only direct
+    children - a grandchild attaches to its own parent when that level
+    reconciles, which is what keeps the tree a tree rather than flattening
+    every descendant onto the outermost ancestor.
+
+    For a placeless wiki there is no lineage, so this falls back to root wikis
+    standing inside its official outline.
 
     Args:
-        polygon: The candidate parent's property polygon.
-        exclude_pk: PK to never match against itself.
+        wiki: The candidate parent.
 
     Returns:
         A list of candidate child :class:`Wiki` rows.
     """
     from urbanlens.dashboard.models.wiki.model import Wiki
 
+    if wiki.place_id is not None:
+        return list(Wiki.objects.filter(parent_wiki__isnull=True, place__parent_id=wiki.place_id).exclude(pk=wiki.pk).select_related("location", "place"))
+
+    polygon = wiki_property_polygon(wiki)
+    if polygon is None:
+        return []
     return list(
-        Wiki.objects.filter(parent_wiki__isnull=True, location__point__within=polygon).exclude(pk=exclude_pk).select_related("location"),
+        Wiki.objects.filter(parent_wiki__isnull=True, place__isnull=True, location__point__within=polygon).exclude(pk=wiki.pk).select_related("location", "place"),
     )
 
 
 def _containing_root_wiki(wiki: Wiki) -> Wiki | None:
-    """The tightest-fitting root wiki whose property boundary contains this wiki's location.
+    """The wiki of the nearest ancestor place that has one.
 
-    Several candidates can contain the same point (a building inside a wing
-    inside a campus); the smallest by real-world area is the immediate parent,
-    not the outermost ancestor - the outer ones will absorb it in turn on
-    their own next reconciliation.
+    Nesting follows place lineage, not geometry. The hierarchy was already
+    decided when the places were provisioned - a building is ``PART_OF`` its
+    parcel, a parcel is ``MEMBER_OF`` the site it belongs to - so walking one
+    FK chain gives the tightest fit directly, instead of re-deriving it by
+    sorting every containing polygon by area on every reconciliation.
 
     Args:
         wiki: The wiki looking for a bigger container.
 
     Returns:
-        The best-fit containing root wiki, or None.
+        The nearest ancestor's wiki, or None.
     """
-    from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.places.lineage import ancestors_of
 
-    candidate = (
-        Boundary.objects.location_defaults()
-        .filter(boundary_type=BoundaryType.PROPERTY, generated_polygon__contains=wiki.location.point)
-        .exclude(location_id=wiki.location_id)
-        .filter(location__wiki__isnull=False, location__wiki__parent_wiki__isnull=True)
-        .annotate(area=Area("generated_polygon"))
-        .order_by("area")
-        .select_related("location__wiki")
-        .first()
-    )
-    return candidate.location.wiki if candidate is not None else None
+    if wiki.place_id is None or wiki.place is None:
+        return _containing_root_wiki_by_geometry(wiki)
+
+    ancestor_ids = [ancestor.pk for ancestor in ancestors_of(wiki.place)]
+    if not ancestor_ids:
+        return None
+    by_place = {candidate.place_id: candidate for candidate in Wiki.objects.filter(place_id__in=ancestor_ids).select_related("location", "place")}
+    for place_id in ancestor_ids:
+        if (candidate := by_place.get(place_id)) is not None:
+            return candidate
+    return None
+
+
+def _containing_root_wiki_by_geometry(wiki: Wiki) -> Wiki | None:
+    """Lineage-free fallback for wikis on coordinates no provider knows.
+
+    A placeless wiki has no lineage to walk, so containment against other
+    wikis' *place* outlines is the only signal left. Still restricted to
+    official geometry - a community drawing must not be able to adopt anyone.
+
+    Args:
+        wiki: The placeless wiki looking for a container.
+
+    Returns:
+        The smallest containing root wiki, or None.
+    """
+    from urbanlens.dashboard.models.place.model import Place
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    if wiki.location_id is None or wiki.location.point is None:
+        return None
+    container = Place.objects.resolve_for_point(wiki.location.latitude, wiki.location.longitude)
+    if container is None:
+        return None
+    return Wiki.objects.filter(place=container, parent_wiki__isnull=True).exclude(pk=wiki.pk).select_related("location", "place").first()
 
 
 def _absorb(parent: Wiki, child: Wiki) -> None:
@@ -123,20 +162,18 @@ def reconcile_wiki_nesting(wiki: Wiki) -> int:
 
     Two independent checks, run in order:
 
-    1. Does a bigger root wiki's property boundary now contain this wiki's
-       location? If so, this wiki becomes its child - impossible to create a
-       cycle here, since the candidate parent is always root.
-    2. Do any *other* root wikis' locations now fall inside this wiki's own
-       property boundary? If so, they become this wiki's children (guarded
-       against a cycle regardless, in case of degenerate identical-geometry
-       boundaries).
+    1. Does an ancestor place of this wiki's place have a wiki? If so, this
+       wiki becomes its child.
+    2. Do any of this place's direct children have root wikis? If so, they
+       become this wiki's children (guarded against a cycle regardless, in
+       case of degenerate lineage).
 
     Args:
-        wiki: The wiki whose boundary was just (re)generated.
+        wiki: The wiki whose place was just (re)resolved.
 
     Returns:
-        How many wikis were newly nested (0, 1, or 2 - this wiki plus however
-        many it absorbed).
+        How many wikis were newly nested (0, 1, or more - this wiki plus
+        however many it absorbed).
     """
     from urbanlens.dashboard.models.wiki.model import Wiki
 
@@ -147,22 +184,20 @@ def reconcile_wiki_nesting(wiki: Wiki) -> int:
     # that search and silently overwrite a just-established, tighter parent
     # with an outer one. Every real call site already passes a freshly loaded
     # wiki, so this is a no-op extra read for them and a guard for the rest.
-    wiki = Wiki.objects.select_related("location").get(pk=wiki.pk)
+    wiki = Wiki.objects.select_related("location", "place", "place__parent").get(pk=wiki.pk)
     merged = 0
 
     if wiki.parent_wiki_id is None:
         parent = _containing_root_wiki(wiki)
-        if parent is not None and not wiki.would_create_cycle(parent):
+        if parent is not None and parent.pk != wiki.pk and not wiki.would_create_cycle(parent):
             _absorb(parent, wiki)
             merged += 1
 
-    polygon = wiki_property_polygon(wiki)
-    if polygon is not None:
-        for candidate in _root_wikis_inside(polygon, exclude_pk=wiki.pk):
-            if candidate.would_create_cycle(wiki):
-                continue
-            _absorb(wiki, candidate)
-            merged += 1
+    for candidate in _nestable_child_wikis(wiki):
+        if candidate.would_create_cycle(wiki):
+            continue
+        _absorb(wiki, candidate)
+        merged += 1
 
     return merged
 

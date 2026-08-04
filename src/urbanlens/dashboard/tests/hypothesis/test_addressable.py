@@ -5,12 +5,10 @@ pure Python properties on AddressableMixin.
 """
 from __future__ import annotations
 
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.location.model import Location
-
 
 # -- Strategies -----------------------------------------------------------------
 

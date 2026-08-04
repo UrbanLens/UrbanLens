@@ -24,8 +24,8 @@ from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
-from urbanlens.dashboard.services.social.connections import recommendable_strangers, suggest_mutual_connection
 from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities, resolve_visible_identity
+from urbanlens.dashboard.services.social.connections import recommendable_strangers, suggest_mutual_connection
 
 
 def _profile(*, visibility: str = VisibilityChoice.ANYTHING_IN_COMMON, allow_recs: bool = True) -> Profile:

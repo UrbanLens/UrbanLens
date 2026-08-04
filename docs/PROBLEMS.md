@@ -4,6 +4,28 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
 to pick up without re-discovering the problem from scratch.
 
+## DANGEROUS: `delete_low_engagement_wikis` deletes *every* wiki - its filter is commented out
+
+`management/commands/delete_low_engagement_wikis.py:62` is a commented-out line:
+
+```python
+#.filter(Q(pin_owner_count__lte=MAX_PIN_OWNERS) | Q(user_edit_count=0))
+```
+
+so the queryset it builds is every `Wiki` in the database. With `--yes` the command deletes all
+of them (cascading to child wikis, edits, and related records). The dry-run report still prints
+each wiki's real `pin_owners`/`user_edits` counts, so the output *looks* like it selected
+correctly - a wiki with `pin_owners=3 user_edits=1` is listed and then deleted.
+
+Committed that way (not a working-tree edit - `git show HEAD` confirms), so it has been live for
+a while. Two tests already encode the intended behaviour and currently fail because of it:
+`test_delete_low_engagement_wikis.py::DeleteLowEngagementWikisTests::test_no_matches_reports_and_deletes_nothing`
+and `::test_wiki_kept_with_enough_pin_owners_and_a_user_edit`.
+
+Found 2026-08-04 during the Place refactor; deliberately not fixed there, since a destructive
+command's behaviour should not change as a side effect of an unrelated refactor. The fix looks
+like uncommenting the line, but someone should confirm it wasn't disabled on purpose first.
+
 ## `.badge--muted` is used everywhere but never defined
 
 Found 2026-07-31 while building the PinImportFailure review queue. `_pin_suggestion_card.html`,

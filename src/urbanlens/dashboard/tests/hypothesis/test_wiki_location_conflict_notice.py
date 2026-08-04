@@ -1,8 +1,15 @@
-"""The wiki page's "other location" conflict notice must not link to the other
-location's own wiki page - a wiki page 404s for anyone without a pin there
-(see services.wiki.wiki_access.resolve_visible_wiki), and the whole premise of this
-notice is that the viewer's pin is NOT at that other location yet. Only the
-"Switch" button (which relinks the pin first) can ever actually get there.
+"""The wiki page's "other property" conflict notice.
+
+This notice used to list every Location whose boundary covered the viewer's
+pin - which, on a property with imported buildings, meant every building on it,
+none of which was a competing answer. Since resolution onto a single ``Place``,
+the list holds only genuinely competing properties (two unrelated parcels whose
+county geometry overlaps), and ``services.places.ambiguity`` filters those to
+domains the viewer can already reach.
+
+That filter is what makes linking the candidates safe. Before it, a name here
+had to render as inert text: a wiki page 404s for anyone without access, and
+the whole premise of the notice was that the viewer wasn't there yet.
 """
 
 from __future__ import annotations
@@ -32,11 +39,12 @@ class WikiLocationConflictNoticeTests(SimpleTestCase):
             },
         )
 
-    def test_other_location_name_is_not_a_link(self) -> None:
+    def test_other_property_name_links_to_its_wiki(self) -> None:
+        """Safe only because the candidate list is pre-filtered to what the
+        viewer can already open - see the module docstring."""
         other = _fake_location()
         html = self._render([other])
-        self.assertNotIn(f'href="/dashboard/location/{other.slug}/wiki/"', html)
-        self.assertIn('<span class="wiki-lcn-link">', html)
+        self.assertIn(f'href="/dashboard/location/{other.slug}/wiki/"', html)
         # display_name contains quote characters (a DMS coordinate string),
         # which get HTML-escaped on render - compare against the escaped form.
         self.assertIn(escape(other.display_name), html)

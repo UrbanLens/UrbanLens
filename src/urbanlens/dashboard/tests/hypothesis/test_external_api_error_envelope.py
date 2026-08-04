@@ -38,8 +38,7 @@ from django.core.cache import cache
 from django.http import Http404
 from django.test import override_settings
 from django.urls import path, reverse
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from model_bakery import baker
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.response import Response

@@ -1,3 +1,4 @@
+{% load dashboard_tags %}
 <div id="detail-pins-panel" class="detail-pins-panel card">
     <div class="card-header">
         <i class="material-symbols-outlined">{% if is_site_scope %}apartment{% else %}push_pin{% endif %}</i>
@@ -19,13 +20,7 @@
         {% for dp in detail_pins %}
         <li class="detail-pin-item detail-pin-type--{{ dp.pin_type }}"
             id="detail-pin-{{ dp.uuid }}">
-            <span class="detail-pin-type-icon material-icons">
-                {% if dp.pin_type == "building" %}business
-                {% elif dp.pin_type == "entrance" %}door_front
-                {% elif dp.pin_type == "poi" %}star
-                {% elif dp.pin_type == "danger" %}warning
-                {% else %}place{% endif %}
-            </span>
+            <span class="detail-pin-type-icon material-icons">{{ dp.pin_type|pin_type_icon }}</span>
             <div class="detail-pin-info">
                 <span class="detail-pin-name">{{ dp.effective_name }}</span>
                 {% if dp.description %}

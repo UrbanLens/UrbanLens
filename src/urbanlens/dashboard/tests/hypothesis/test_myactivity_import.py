@@ -35,7 +35,7 @@ _DIRECTIONS_ENTRY = (
     '<div class="header-cell mdl-cell mdl-cell--12-col"><p class="mdl-typography--title">Maps<br></p></div>'
     '<div class="content-cell mdl-cell mdl-cell--6-col mdl-typography--body-1">Directions to '
     '<a href="https://www.google.com/maps/dir//39.2043118,-84.5693664/@39.1634871,-84.6103491,13z/'
-    "data=!3m1!4b1!4m4!4m3!1m0!1m1!4e1\">2360 Kipling Ave</a><br>Current location<br>"
+    'data=!3m1!4b1!4m4!4m3!1m0!1m1!4e1">2360 Kipling Ave</a><br>Current location<br>'
     "39.2043118,-84.56936639999999<br>Jul 3, 2026, 1:18:25 PM EDT<br></div>"
     '<div class="content-cell mdl-cell mdl-cell--6-col mdl-typography--text-right"></div>'
     '<div class="content-cell mdl-cell mdl-cell--12-col mdl-typography--caption"><b>Products:</b><br>'

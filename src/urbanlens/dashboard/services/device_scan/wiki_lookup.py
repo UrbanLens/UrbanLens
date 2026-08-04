@@ -11,31 +11,24 @@ if TYPE_CHECKING:
 
 
 def wikis_containing_point(point: Point) -> list[Wiki]:
-    """Every wiki (including child wikis) whose official boundary contains *point*.
+    """Every wiki (including child wikis) whose official geometry contains *point*.
 
-    Reuses the exact location-default-boundary containment query already
-    proven in ``services.wiki.wiki_access.wikis_hidden_by_pin_move``: only
-    ``generated_polygon`` on a boundary with no owning pin/wiki/profile and no
-    per-provider ``source`` is ever consulted, never a user-editable one, so
-    this can't be gamed by inflating a boundary. Child wikis are included for
-    free - each has its own ``Location``/boundary, just like a top-level one.
+    Reads ``Place.geometry``, which only the provider chain and boundary voting
+    ever write - never a user- or community-drawn shape, so a device sighting
+    can't be attributed to somebody's inflated drawing. A scan on a campus
+    legitimately lands on both the building it was taken in and the parcel
+    around it, so the whole containing lineage is returned rather than only the
+    most specific match: each wiki records the sighting at its own scope.
 
     Args:
         point: The device's estimated location (SRID 4326).
 
     Returns:
         Matching wikis, each with its ``location`` pre-selected. Empty when
-        the point falls inside no wiki's boundary at all.
+        the point falls inside no known place at all.
     """
-    from urbanlens.dashboard.models.boundary.model import Boundary
+    from urbanlens.dashboard.models.place.model import Place
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-    location_ids = Boundary.objects.filter(
-        pin__isnull=True,
-        wiki__isnull=True,
-        profile__isnull=True,
-        source="",
-        location__wiki__isnull=False,
-        generated_polygon__contains=point,
-    ).values_list("location_id", flat=True)
-    return list(Wiki.objects.filter(location_id__in=location_ids).select_related("location"))
+    place_ids = Place.objects.current().filter(geometry__isnull=False, geometry__contains=point, wiki__isnull=False).values_list("pk", flat=True)
+    return list(Wiki.objects.filter(place_id__in=place_ids).select_related("location", "place"))

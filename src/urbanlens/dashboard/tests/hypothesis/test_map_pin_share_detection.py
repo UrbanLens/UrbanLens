@@ -15,12 +15,12 @@ from hypothesis import given, settings, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.sharing.map_pin_share_detection import (
+    arrow_points_toward as _arrow_points_toward,
     bearing_degrees,
     geometry_to_geos,
     is_zoomed_in,
     viewport_bounds,
 )
-from urbanlens.dashboard.services.sharing.map_pin_share_detection import arrow_points_toward as _arrow_points_toward
 from urbanlens.dashboard.tests.hypothesis.strategies import coord_pair_float, lat_float, lon_float, two_distant_coord_pairs
 
 

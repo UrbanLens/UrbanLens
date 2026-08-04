@@ -107,8 +107,12 @@ def _overview_context(pin: Pin) -> dict:
         ("emergency", "Emergency"),
     ]
 
-    lat, lng = pin.effective_latitude, pin.effective_longitude
-    overlapping_location_count = Location.objects.get_all_for_point(float(lat), float(lng)).count() if lat is not None and lng is not None else 0
+    # Only genuinely competing properties count as a reason to offer a switch.
+    # This used to be "every Location covering this point", which on a campus
+    # meant every building on it - all the same place, none of them a choice.
+    from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locations
+
+    competing_location_count = len(competing_wiki_locations(pin, pin.profile))
 
     from urbanlens.dashboard.services.ai.link_extraction import ai_extract_button_context
 
@@ -120,7 +124,7 @@ def _overview_context(pin: Pin) -> dict:
         "detail_pin_icon_choices": detail_pin_icon_choices,
         "color_choices": COLOR_CHOICES,
         "security_level_choices": SecurityLevel.choices,
-        "overlapping_location_count": overlapping_location_count,
+        "competing_location_count": competing_location_count,
         **ai_extract_button_context(pin.profile.user, pin.profile, pin),
         "pin_security_values": [
             ("fences", "Fences", pin.fences),
@@ -135,7 +139,7 @@ def _overview_context(pin: Pin) -> dict:
     }
 
 
-def _pin_hero_oob(request, pin: Pin, *, overlapping_location_count: int) -> str:
+def _pin_hero_oob(request, pin: Pin, *, competing_location_count: int) -> str:
     """Render the pin detail page hero as an out-of-band HTMX swap.
 
     The hero (with its Community Wiki box) lives in base.html's
@@ -145,6 +149,8 @@ def _pin_hero_oob(request, pin: Pin, *, overlapping_location_count: int) -> str:
     showing "no wiki" until a full reload, even though the location now has
     a slug and could show the create-wiki button.
     """
+    from urbanlens.dashboard.services.places.scope import scope_badge
+
     cover_image = pin.cover_photo.image if pin.cover_photo and pin.cover_photo.image else None
     return render_to_string(
         request=request,
@@ -159,7 +165,11 @@ def _pin_hero_oob(request, pin: Pin, *, overlapping_location_count: int) -> str:
             "modifier": "top",
             "hero_image_url": cover_image.url if cover_image else None,
             "hero_cover_key": "pin",
-            "overlapping_location_count": overlapping_location_count,
+            "competing_location_count": competing_location_count,
+            # The hero carries the parcel/building badge, so an out-of-band
+            # swap has to rebuild it too or organising a property would blank
+            # the badge until the next full page load.
+            **scope_badge(pin),
         },
     )
 
@@ -194,7 +204,7 @@ class PinOverviewView(LoginRequiredMixin, View):
                 safely_enqueue_task(resolve_location_place_name, pin.location_id)
         overview_context = _overview_context(pin)
         overview_html = render_to_string(request=request, template_name="dashboard/partials/pins/pin_overview_partial.html", context=overview_context)
-        hero_html = _pin_hero_oob(request, pin, overlapping_location_count=overview_context["overlapping_location_count"])
+        hero_html = _pin_hero_oob(request, pin, competing_location_count=overview_context["competing_location_count"])
         return HttpResponse(overview_html + hero_html)
 
 
@@ -527,11 +537,13 @@ class PinRelinkView(LoginRequiredMixin, View):
             return result
         pin = result
 
-        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locations
 
-        lat = pin.effective_latitude
-        lng = pin.effective_longitude
-        locations = Location.objects.get_all_for_point(float(lat), float(lng)) if lat is not None and lng is not None else Location.objects.none()
+        # The pin's current location plus any genuinely competing property.
+        # Every other location covering this point describes the same place -
+        # switching between them would change nothing a user can perceive.
+        locations = [pin.location] if pin.location_id else []
+        locations += [candidate for candidate in competing_wiki_locations(pin, pin.profile) if candidate.pk != pin.location_id]
         return render(
             request,
             "dashboard/partials/pins/pin_location_picker.html",

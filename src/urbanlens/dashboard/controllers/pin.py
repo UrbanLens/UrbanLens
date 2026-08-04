@@ -202,6 +202,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.services.admin.debug_overlay import can_view_debug_overlay
         from urbanlens.dashboard.services.locations.site_scope import is_site_scope
+        from urbanlens.dashboard.services.places.scope import scope_badge
 
         # Whether this pin covers a whole parcel/site rather than one building,
         # in which case the building-level cards suppress themselves and the
@@ -277,6 +278,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "parent_pin": pin.parent_pin,
                 "has_child_pins": pin.detail_pins.exists(),
                 "is_site_scope": site_scope,
+                **scope_badge(pin),
                 "include_children": include_children,
                 "can_view_debug_overlay": can_view_debug_overlay(request.user),
                 "google_maps_api_key": settings.google_unrestricted_api_key,

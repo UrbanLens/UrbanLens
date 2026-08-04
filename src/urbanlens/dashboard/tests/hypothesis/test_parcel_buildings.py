@@ -33,6 +33,8 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import Pr
 from urbanlens.dashboard.services.locations.site_scope import PARCEL_BUILDINGS_CACHE_SOURCE
 from urbanlens.dashboard.services.pins.pin_restructure import match_marker
 
+from .place_helpers import official_geometry
+
 _coord_counter = 0
 
 _REDATA_BUILDINGS = [
@@ -93,10 +95,7 @@ class FetchParcelBuildingsTests(TestCase):
         mock_overpass.assert_not_called()
 
     def test_falls_back_to_overpass_inside_the_property_boundary(self) -> None:
-        Boundary.objects.create(
-            location=self.location,
-            boundary_type=BoundaryType.PROPERTY,
-            generated_polygon=_square_around(float(self.location.latitude), float(self.location.longitude)),
+        official_geometry(self.location, _square_around(float(self.location.latitude), float(self.location.longitude)),
         )
         osm = [{"name": "Powerhouse", "building_number": "", "latitude": 41.7331, "longitude": -73.9301, "osm_id": 5, "source": "osm"}]
         with (
@@ -128,10 +127,7 @@ class FetchParcelBuildingsTests(TestCase):
             self.assertEqual(fetch_parcel_buildings(self.location), {})
 
     def test_overpass_failure_is_swallowed(self) -> None:
-        Boundary.objects.create(
-            location=self.location,
-            boundary_type=BoundaryType.PROPERTY,
-            generated_polygon=_square_around(float(self.location.latitude), float(self.location.longitude)),
+        official_geometry(self.location, _square_around(float(self.location.latitude), float(self.location.longitude)),
         )
         with (
             patch.object(RedataGateway, "__post_init__", lambda _self: None),
@@ -347,7 +343,7 @@ class ParcelBuildingsPanelViewTests(TestCase):
 
     def test_a_building_outside_the_parcel_boundary_is_dropped(self) -> None:
         lat, lng = float(self.location.latitude), float(self.location.longitude)
-        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_square_around(lat, lng))
+        official_geometry(self.location, _square_around(lat, lng))
         inside = {"source": "cris", "name": "Inside Hall", "building_number": "1", "latitude": lat, "longitude": lng}
         outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [inside, outside], "provider": "redata"})
@@ -357,7 +353,7 @@ class ParcelBuildingsPanelViewTests(TestCase):
 
     def test_an_out_of_boundary_building_with_a_child_pin_still_shows(self) -> None:
         lat, lng = float(self.location.latitude), float(self.location.longitude)
-        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_square_around(lat, lng))
+        official_geometry(self.location, _square_around(lat, lng))
         outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
         baker.make(
             Pin,
@@ -394,7 +390,7 @@ class WikiParcelBuildingsPanelViewTests(TestCase):
 
     def test_a_building_outside_the_parcel_boundary_is_dropped(self) -> None:
         lat, lng = float(self.location.latitude), float(self.location.longitude)
-        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_square_around(lat, lng))
+        official_geometry(self.location, _square_around(lat, lng))
         inside = {"source": "cris", "name": "Inside Hall", "building_number": "1", "latitude": lat, "longitude": lng}
         outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": [inside, outside], "provider": "redata"})
@@ -404,7 +400,7 @@ class WikiParcelBuildingsPanelViewTests(TestCase):
 
     def test_an_out_of_boundary_building_with_a_child_wiki_still_shows(self) -> None:
         lat, lng = float(self.location.latitude), float(self.location.longitude)
-        Boundary.objects.create(location=self.location, boundary_type=BoundaryType.PROPERTY, generated_polygon=_square_around(lat, lng))
+        official_geometry(self.location, _square_around(lat, lng))
         outside = {"source": "cris", "name": "Outside Shed", "building_number": "2", "latitude": lat + 1, "longitude": lng + 1}
         baker.make(
             Wiki,

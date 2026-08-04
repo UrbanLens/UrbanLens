@@ -71,6 +71,30 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
     user-visible wiki?" lookup; it deliberately ignores draft rows.
     """
 
+    def existing_for_location(self, location: Location | None) -> Wiki | None:
+        """The Wiki describing what this Location stands on, draft or official.
+
+        Checks the Location's own row first, then the *place* it resolved onto.
+        The second lookup is the dedup that matters: two people pinning
+        opposite ends of one property get two Locations, and without it they
+        would get two community pages for one real-world thing.
+
+        Args:
+            location: The shared Location to look up (None-safe).
+
+        Returns:
+            The Wiki, or None.
+        """
+        if location is None:
+            return None
+        try:
+            return location.wiki
+        except ObjectDoesNotExist:
+            pass
+        if location.place_id is None:
+            return None
+        return self.filter(place_id=location.place_id).first()
+
     def get_for_location(self, location: Location | None) -> Wiki | None:
         """Return the location's *official* Wiki, or None when it has no visible wiki yet.
 
@@ -84,13 +108,12 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
         Returns:
             The official Wiki, or None.
         """
-        if location is None:
-            return None
-        try:
-            wiki = location.wiki
-        except ObjectDoesNotExist:
-            return None
-        return wiki if wiki.officially_created else None
+        wiki = self.existing_for_location(location)
+        return wiki if (wiki is not None and wiki.officially_created) else None
+
+    def _placeholder_name(self, location: Location) -> str:
+        """The fallback wiki name for a location with no official name."""
+        return f"Unnamed Location in {location.area_label}" if location.area_label else "Unnamed Location"
 
     def get_or_create_for_location(self, location: Location, defaults: dict | None = None) -> tuple[Wiki, bool]:
         """Return the Wiki for a Location, creating it (as official) if absent.
@@ -111,15 +134,12 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
         Returns:
             Tuple of (Wiki, created).
         """
-        try:
-            return location.wiki, False
-        except ObjectDoesNotExist:
-            pass
+        if (existing := self.existing_for_location(location)) is not None:
+            return existing, False
 
         defaults = dict(defaults or {})
-        placeholder = f"Unnamed Location in {location.area_label}" if location.area_label else "Unnamed Location"
-        name = defaults.pop("name", None) or location.official_name or placeholder
-        wiki = self.create(location=location, name=name, **defaults)
+        name = defaults.pop("name", None) or location.official_name or self._placeholder_name(location)
+        wiki = self.create(location=location, place_id=location.place_id, name=name, **defaults)
         return wiki, True
 
     def get_or_create_draft_for_location(self, location: Location) -> tuple[Wiki, bool]:
@@ -138,13 +158,10 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
         Returns:
             Tuple of (Wiki, created).
         """
-        try:
-            return location.wiki, False
-        except ObjectDoesNotExist:
-            pass
+        if (existing := self.existing_for_location(location)) is not None:
+            return existing, False
 
-        placeholder = f"Unnamed Location in {location.area_label}" if location.area_label else "Unnamed Location"
-        wiki = self.create(location=location, name=location.official_name or placeholder, officially_created=False)
+        wiki = self.create(location=location, place_id=location.place_id, name=location.official_name or self._placeholder_name(location), officially_created=False)
         return wiki, True
 
     def claim_for_location(self, location: Location, profile: Profile) -> tuple[Wiki, bool]:
@@ -171,11 +188,15 @@ class WikiManager(abstract.PublicDashboardManager.from_queryset(WikiQuerySet)):
             creation (seed content, enqueue enrichment) - and False for the
             third.
         """
-        try:
-            wiki = location.wiki
-        except ObjectDoesNotExist:
-            placeholder = f"Unnamed Location in {location.area_label}" if location.area_label else "Unnamed Location"
-            wiki = self.create(location=location, name=location.official_name or placeholder, created_by=profile, officially_created=True)
+        wiki = self.existing_for_location(location)
+        if wiki is None:
+            wiki = self.create(
+                location=location,
+                place_id=location.place_id,
+                name=location.official_name or self._placeholder_name(location),
+                created_by=profile,
+                officially_created=True,
+            )
             return wiki, True
 
         if wiki.officially_created:

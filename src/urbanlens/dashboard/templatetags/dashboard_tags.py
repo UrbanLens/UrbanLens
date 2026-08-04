@@ -449,3 +449,16 @@ def subscription_role_choices():
     from urbanlens.dashboard.models.subscriptions import SubscriptionRole
 
     return SubscriptionRole.objects.all()
+
+
+@register.filter
+def pin_type_icon(pin_type: str) -> str:
+    """The Material Symbols glyph for a ``PinType`` value.
+
+    Usage: ``{{ pin.pin_type|pin_type_icon }}``. Backed by the single mapping
+    on the enum itself, so the detail-pin list, the child-wiki list, and the
+    scope badge on both detail pages can't drift apart.
+    """
+    from urbanlens.dashboard.models.pin.model import PIN_TYPE_ICONS
+
+    return PIN_TYPE_ICONS.get(pin_type, "push_pin")

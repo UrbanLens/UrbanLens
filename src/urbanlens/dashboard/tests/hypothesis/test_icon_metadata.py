@@ -29,7 +29,7 @@ class IconKeywordConsistencyTests(TestCase):
 
     def test_keywords_are_lowercase_space_separated(self) -> None:
         for icon, keywords in ICON_KEYWORDS.items():
-            self.assertEqual(keywords, keywords.lower(), f"keywords for {ascii(icon)} must be lowercase")
+            self.assertEqual(keywords, keywords.lower(), f"keywords for {icon!a} must be lowercase")
             self.assertNotIn("\n", keywords)
 
     def test_icon_keywords_filter_returns_registered_terms(self) -> None:

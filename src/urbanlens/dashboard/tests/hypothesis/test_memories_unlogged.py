@@ -193,7 +193,7 @@ class MemoriesVisitsViewTests(TestCase):
         highlight, matching the trip detail page's UX."""
         _make_pin(self.profile, last_visited=_aware(2024, 6, 1), name="My Place")
         response = self.client.get(reverse("memories.visits"))
-        self.assertContains(response, 'data-bulk-date')
+        self.assertContains(response, "data-bulk-date")
         self.assertContains(response, "Log visit on this date")
         self.assertContains(response, "cardSelector: '.unlogged-card'")
 

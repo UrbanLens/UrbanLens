@@ -42,6 +42,7 @@ from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.place.model import Place
 
 logger = logging.getLogger(__name__)
 
@@ -189,22 +190,27 @@ def generation_lock_key(location_id: int) -> str:
 
 
 def generation_status(location: Location) -> tuple[bool, bool]:
-    """Fetch the location-default property row once; return (ran, stale).
+    """Return (ran, stale) for a Location's place resolution.
 
     ``boundary_generation_ran`` and ``boundary_generation_stale`` answer
-    related questions off the exact same row, so every caller that needs both
+    related questions off the same state, so every caller that needs both
     (``schedule_location_boundary_generation``, the refresh gate in
     ``tasks.generate_boundaries_for_location``) goes through here instead of
-    calling both public functions and fetching the row twice.
+    calling both public functions and reading it twice.
+
+    ``place_resolved_at`` - not the place itself - is what marks that the
+    chain ran, so a coordinate the providers genuinely know nothing about is
+    asked about once and then left alone until it goes stale, rather than
+    re-queried on every page view.
     """
-    from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
-    row = Boundary.objects.row_for_location(location, BoundaryType.PROPERTY)
-    if row is None or row.generated_at is None:
+    if location.place_resolved_at is None:
         return False, False
     max_age_days = SiteSettings.get_current().boundary_cache_days
-    stale = timezone.now() - row.generated_at > timedelta(days=max_age_days)
+    generated_at = location.place.geometry_generated_at if (location.place_id and location.place is not None) else None
+    reference = generated_at or location.place_resolved_at
+    stale = timezone.now() - reference > timedelta(days=max_age_days)
     return True, stale
 
 
@@ -287,87 +293,58 @@ def schedule_location_boundary_generation(location: Location, profile=None) -> b
     return True
 
 
-def generate_location_boundaries(location: Location, *, name: str | None = None) -> ResolvedBoundaries:
-    """Run the provider chain for a Location and persist the generated geometry.
+def generate_location_boundaries(location: Location, *, name: str | None = None) -> Place | None:
+    """Resolve a Location onto a real-world place, provisioning geometry if needed.
 
-    Writes both location-default Boundary rows (property and building),
-    stamping ``generated_at`` even when nothing was found so the chain is not
-    re-run on every page view (until it goes stale - see
-    ``boundary_generation_stale``). ``generated_polygon`` is overwritten
-    whenever this run's chain actually found a polygon - both on first
-    generation and on every later refresh, so a refresh can replace a stale
-    circle-fallback or an earlier provider's answer with better data. A run
-    that finds nothing leaves a previously-generated polygon alone rather than
-    erasing good data over a transient provider hiccup. This is still safe
-    against concurrent generation for the same Location: nothing here reads
-    the row's prior geometry before deciding what to write, and the caller-side
-    single-flight lock (``schedule_location_boundary_generation``) keeps
-    concurrent runs rare regardless. The one deliberate exception is boundary
-    voting: when votes exist, ``apply_winning_boundary`` overwrites the
-    canonical property polygon with the winning candidate's - both are
-    externally-sourced geometry, so the "never let user drawings into
-    matching" invariant holds either way.
+    The single choke point every boundary-generation call site funnels through
+    (wiki creation, the pin detail page's boundary panel, the wiki page's own
+    scheduler). It answers "what is this coordinate standing on?" rather than
+    "what shape should I draw here?", which is the change that stops one
+    property accumulating a copy of its own outline per person who pinned it.
+
+    Cheap by default: if a known place already contains the coordinate, no
+    provider is called at all. That is the common case on any property more
+    than one person has pinned, and the reason importing 124 buildings onto a
+    campus now costs one parcel lookup rather than 124.
+
+    A run that finds nothing leaves any previously-generated geometry alone
+    rather than erasing good data over a transient provider hiccup, and stamps
+    ``Location.place_resolved_at`` regardless so the chain is not re-run on
+    every page view (until it goes stale - see ``boundary_generation_stale``).
 
     The chain's heavy steps (downloading and gunzipping building-footprint
     shards, shapely geometry work) mean this belongs in a Celery worker, never
     on the request path.
 
     Args:
-        location: The Location to generate default boundaries for.
+        location: The Location to place.
         name: Optional place name hint; defaults to the location's official name.
 
     Returns:
-        The ResolvedBoundaries from the provider chain.
+        The resolved place, or None when no provider knows this coordinate.
     """
-    from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+    from urbanlens.dashboard.services.places.provisioning import ensure_place_for_location
 
-    latitude = float(location.latitude)
-    longitude = float(location.longitude)
-    resolved = BoundaryProviderChain().get_boundaries(latitude, longitude, name=name or location.official_name or None)
-    now = timezone.now()
-    for boundary_type in (BoundaryType.PROPERTY, BoundaryType.BUILDING):
-        row, _created = Boundary.objects.get_or_create_location_default(location, boundary_type)
-        updates: dict = {"generated_at": now, "updated": now}
-        polygon = resolved.polygon_for(boundary_type)
-        if polygon is not None:
-            updates["generated_polygon"] = polygon
-        Boundary.objects.filter(pk=row.pk).update(**updates)
+    place = ensure_place_for_location(location, name=name)
+    if location.place_resolved_at is None:
+        # Nothing resolved and nothing provisioned: still record that we asked,
+        # so an unknown coordinate is queried once rather than on every view.
+        from urbanlens.dashboard.services.places.resolution import attach_location
 
-    # Persist one candidate row per property-capable provider that answered,
-    # so users can vote on which official boundary is most accurate. Unlike
-    # the canonical rows above, candidate geometry refreshes freely - it is
-    # never user-drawn, so a newer provider answer can only be better data.
-    for service_key, polygon in resolved.property_candidates:
-        source = PROVIDER_BOUNDARY_SOURCES.get(service_key)
-        if source is None:
-            continue
-        candidate, _created = Boundary.objects.get_or_create(
-            location=location,
-            boundary_type=BoundaryType.PROPERTY,
-            source=source,
-            pin=None,
-            wiki=None,
-            profile=None,
-            defaults={"generated_polygon": polygon, "generated_at": now},
-        )
-        Boundary.objects.filter(pk=candidate.pk).update(generated_polygon=polygon, generated_at=now, updated=now)
+        attach_location(location, None)
 
-    # Re-apply the community's boundary vote (if any) now that candidates may
-    # have changed - the winning candidate's polygon is materialized onto the
-    # canonical property row so every matching path respects the vote.
-    from urbanlens.dashboard.services.geo.boundary_voting import apply_winning_boundary
-
-    apply_winning_boundary(location)
-
-    # A wiki's property polygon can only newly exist or change right here -
-    # this is the single choke point every boundary-generation call site
-    # (wiki creation, the pin detail page's boundary panel, the wiki page's
-    # own scheduler) funnels through, so it is also the right place to check
-    # whether this location's wiki (if any) now nests under - or now contains
-    # - another one. A no-op for the overwhelming majority of locations, which
-    # have no wiki at all.
+    # A place's outline can only newly exist or change right here, so this is
+    # also the right point to re-derive what the markers standing on it are,
+    # and to check whether this location's wiki (if any) now nests under - or
+    # now contains - another one. Both are no-ops for the overwhelming
+    # majority of locations, which have no wiki and no siblings.
+    from urbanlens.dashboard.services.locations.site_scope import reclassify_markers_on_place
     from urbanlens.dashboard.services.wiki.wiki_merge import reconcile_wiki_nesting_for_location
 
+    if place is not None:
+        reclassify_markers_on_place(place)
+        if place.parcel is not None and place.parcel.pk != place.pk:
+            reclassify_markers_on_place(place.parcel)
     reconcile_wiki_nesting_for_location(location)
 
-    return resolved
+    return place

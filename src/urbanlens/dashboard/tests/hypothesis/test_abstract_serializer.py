@@ -7,13 +7,11 @@ from __future__ import annotations
 
 import unittest
 
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 from rest_framework import serializers as drf_serializers
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.abstract.serializer import Serializer
-
 
 _hyp = settings(max_examples=50, deadline=None)
 

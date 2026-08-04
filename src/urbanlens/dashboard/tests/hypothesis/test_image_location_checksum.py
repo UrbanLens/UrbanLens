@@ -10,8 +10,8 @@ Covers:
 
 from __future__ import annotations
 
-import io
 from decimal import Decimal
+import io
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import RequestFactory
@@ -59,7 +59,7 @@ class EffectiveCoordinateTests(TestCase):
     """Image.effective_latitude/longitude prefer own GPS, then the linked Location."""
 
     def test_own_gps_wins(self):
-        location = baker.prepare("dashboard.Location", latitude=Decimal("1"), longitude=Decimal("2"))
+        location = baker.prepare("dashboard.Location", latitude=Decimal(1), longitude=Decimal(2))
         img = Image(latitude=_LAT, longitude=_LNG, location=location)
         self.assertEqual(img.effective_latitude, _LAT)
         self.assertEqual(img.effective_longitude, _LNG)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import math
-from typing import TYPE_CHECKING, Any, Self
+from typing import TYPE_CHECKING, Self
 
 from django.contrib.gis.geos import Point, Polygon
 
@@ -16,7 +16,6 @@ if TYPE_CHECKING:
     from django.contrib.gis.geos import GEOSGeometry
 
     from urbanlens.dashboard.models.boundary.model import Boundary
-    from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.wiki.model import Wiki
 
@@ -115,19 +114,9 @@ class BoundaryQuerySet(abstract.DashboardQuerySet):
         """Boundaries of one type (property or building)."""
         return self.filter(boundary_type=boundary_type)
 
-    def location_defaults(self) -> Self:
-        """Location-default boundaries (no pin, no wiki, no profile, no source).
-
-        These are the shared, API-generated rows used for point matching.
-        Per-provider source-candidate rows (``source`` set) are excluded: they
-        exist only for boundary voting, and the winning candidate's geometry
-        is materialized onto these canonical rows instead.
-        """
-        return self.filter(pin__isnull=True, wiki__isnull=True, profile__isnull=True, location__isnull=False, source="")
-
-    def source_candidates_for_location(self, location) -> Self:
-        """Per-provider candidate boundaries for a location (see boundary voting)."""
-        return self.filter(pin__isnull=True, wiki__isnull=True, profile__isnull=True, location=location).exclude(source="")
+    def source_candidates_for_place(self, place) -> Self:
+        """Per-provider candidate boundaries for a place (see boundary voting)."""
+        return self.filter(pin__isnull=True, wiki__isnull=True, profile__isnull=True, place=place).exclude(source="")
 
     def for_profile(self, profile) -> Self:
         """Pin-scoped boundaries belonging to a given profile."""
@@ -136,10 +125,6 @@ class BoundaryQuerySet(abstract.DashboardQuerySet):
     def for_wiki(self, wiki) -> Self:
         """Wiki-customized boundaries for a given wiki."""
         return self.filter(wiki=wiki, pin__isnull=True)
-
-    def for_location(self, location) -> Self:
-        """Location-default boundaries for a given location."""
-        return self.location_defaults().filter(location=location)
 
     def for_pin(self, pin) -> Self:
         """Pin-scoped boundaries for a specific pin."""
@@ -158,27 +143,6 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
     inherited from a parent pin, neither of which maps to a stored row.
     """
 
-    def get_or_create_location_default(self, location: Location, boundary_type: str, defaults: dict[str, Any] | None = None):
-        """Get or create the shared location-default boundary row of one type.
-
-        Args:
-            location: The Location the boundary describes.
-            boundary_type: A :class:`BoundaryType` value.
-            defaults: Optional field overrides for row creation.
-
-        Returns:
-            Tuple of (Boundary, created).
-        """
-        return self.get_or_create(
-            location=location,
-            boundary_type=boundary_type,
-            pin=None,
-            wiki=None,
-            profile=None,
-            source="",
-            defaults=dict(defaults or {}),
-        )
-
     def row_for_wiki(self, wiki: Wiki, boundary_type: str):
         """The wiki-customized boundary row of one type, or None."""
         return self.for_wiki(wiki).of_type(boundary_type).with_coordinate_location().first()
@@ -186,10 +150,6 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
     def row_for_pin(self, pin: Pin, boundary_type: str):
         """The pin's own boundary row of one type, or None."""
         return self.filter(pin=pin, boundary_type=boundary_type).with_coordinate_location().first()
-
-    def row_for_location(self, location: Location, boundary_type: str):
-        """The location-default boundary row of one type, or None."""
-        return self.for_location(location).of_type(boundary_type).with_coordinate_location().first()
 
     # ------------------------------------------------------------------
     # Batched row lookups
@@ -229,21 +189,35 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
             return {}
         return {row.wiki_id: row for row in self.filter(wiki_id__in=wiki_ids, boundary_type=boundary_type)}
 
-    def rows_by_location_id(self, location_ids: Iterable[int], boundary_type: str) -> dict[int, Boundary]:
-        """Bulk-fetch location-default boundary rows of one type, keyed by location id.
+    def official_polygons_by_location_id(self, location_ids: Iterable[int], boundary_type: str) -> dict[int, GEOSGeometry | None]:
+        """Bulk-resolve each location's official place outline, keyed by location id.
+
+        The batched counterpart to the place step of :meth:`resolve_for_pin`,
+        for callers resolving many markers at once.
+
+        A **missing key** means the location has no place at all, and the
+        caller should continue down the wiki/circle fallback chain. A key
+        mapping to **None** means the location has a place that deliberately
+        contributes nothing for this type (a building asked for its parcel),
+        and the caller must stop - falling through would draw exactly the
+        outline the scope rule just refused.
 
         Args:
             location_ids: Primary keys of the locations to look up.
             boundary_type: A :class:`BoundaryType` value.
 
         Returns:
-            Dict mapping location id to its default Boundary row, for
-            locations that have one.
+            Dict mapping location id to a polygon or None, for placed
+            locations only.
         """
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.services.places.scope import place_polygon
+
         location_ids = list(location_ids)
         if not location_ids:
             return {}
-        return {row.location_id: row for row in self.location_defaults().filter(location_id__in=location_ids, boundary_type=boundary_type)}
+        rows = Location.objects.filter(pk__in=location_ids, place__isnull=False).select_related("place", "place__parent")
+        return {location.pk: place_polygon(location.place, boundary_type) for location in rows}
 
     # ------------------------------------------------------------------
     # Effective-polygon resolution
@@ -252,8 +226,13 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
     def resolve_for_wiki(self, wiki: Wiki, boundary_type: str) -> tuple[GEOSGeometry | None, str | None]:
         """Resolve the polygon to display for a wiki page, with its source.
 
-        Order: wiki-customized row → location-default generated polygon →
+        Scope first (a wiki anchored to a building draws the footprint, not
+        the parcel), then wiki-customized row → the wiki's place outline →
         circle fallback (property only; buildings have no fallback shape).
+
+        Scoping here is what makes "the boundary used when creating a wiki for
+        a building is the building's" true by construction rather than by
+        every call site remembering to ask for the right type.
 
         Args:
             wiki: The Wiki whose boundary is being displayed.
@@ -261,35 +240,45 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
 
         Returns:
             Tuple of (polygon, source) where source is one of "wiki",
-            "generated", "circle", or (None, None) when nothing applies.
+            "place", "circle", or (None, None) when nothing applies.
         """
         from urbanlens.dashboard.models.boundary.model import BoundaryType
+        from urbanlens.dashboard.services.places.scope import place_polygon
+
+        # A wiki with no place anchor of its own still displays at a location,
+        # and that location knows what it stands on - so fall back to it rather
+        # than dropping to a circle.
+        place = wiki.place if wiki.place_id else (wiki.location.place if (wiki.location_id and wiki.location is not None and wiki.location.place_id) else None)
+        scoped = place_polygon(place, boundary_type) if place is not None else None
+        if place is not None and scoped is None:
+            return None, None
 
         if (row := self.row_for_wiki(wiki, boundary_type)) and row.drawn_or_generated_polygon:
             return row.drawn_or_generated_polygon, "wiki"
-        if wiki.location_id:
-            if (row := self.row_for_location(wiki.location, boundary_type)) and row.generated_polygon:
-                return row.generated_polygon, "generated"
-            if boundary_type == BoundaryType.PROPERTY:
-                circle = circle_for_coordinates(wiki.location.latitude, wiki.location.longitude)
-                if circle is not None:
-                    return circle, "circle"
+        if scoped is not None:
+            return scoped, "place"
+        if wiki.location_id and boundary_type == BoundaryType.PROPERTY:
+            circle = circle_for_coordinates(wiki.location.latitude, wiki.location.longitude)
+            if circle is not None:
+                return circle, "circle"
         return None, None
 
     def resolve_for_pin(self, pin: Pin, boundary_type: str) -> tuple[GEOSGeometry | None, str | None]:
         """Resolve the polygon that applies to a pin, with its source.
 
-        Property order: pin's own row → parent pin's effective property, but
-        only when this pin sits inside it (a detail pin placed outside its
-        parent's property must not inherit that property's boundary) →
-        wiki-customized row → location-default generated polygon → circle
-        fallback around the location's coordinates.
+        Two questions, in that order. **Should this marker draw this kind of
+        boundary at all?** A marker standing on a footprint on a
+        multi-building property is not about the 200-acre parcel under it, so
+        a property request answers nothing - see
+        ``services.places.scope.place_polygon``. Then, **whose version of that
+        shape?**: the pin's own drawing → the community's → the official
+        outline → a circle.
 
-        Building order: pin's own row → parent pin's effective building, but
-        only when this pin sits inside it (detail pins for other buildings on
-        the property must not inherit the main building) → for root pins,
-        wiki-customized row → location-default generated polygon. No circle
-        fallback: a missing building boundary means "no known building".
+        Parent inheritance survives only for **placeless** pins, where no
+        provider knows the coordinate and a detail pin genuinely has nothing
+        else to fall back on. It is still gated on the pin standing inside the
+        parent's polygon, so a detail pin for a different structure never
+        inherits the main one.
 
         Args:
             pin: The Pin to resolve a boundary for.
@@ -297,10 +286,11 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
 
         Returns:
             Tuple of (polygon, source) where source is one of "pin",
-            "inherited", "wiki", "generated", "circle", or (None, None) when
-            nothing applies.
+            "generated", "place", "inherited", "wiki", "circle", or
+            (None, None) when nothing applies.
         """
         from urbanlens.dashboard.models.boundary.model import BoundaryType
+        from urbanlens.dashboard.services.places.scope import place_polygon
 
         if row := self.row_for_pin(pin, boundary_type):
             if row.polygon:
@@ -308,7 +298,12 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
             if row.generated_polygon:
                 return row.generated_polygon, "generated"
 
-        if pin.parent_pin_id and (parent_pin := pin.parent_pin) is not None:
+        place = pin.location.place if (pin.location_id and pin.location is not None and pin.location.place_id) else None
+        scoped = place_polygon(place, boundary_type) if place is not None else None
+        if place is not None and scoped is None:
+            return None, None
+
+        if scoped is None and pin.parent_pin_id and (parent_pin := pin.parent_pin) is not None:
             parent_polygon, _parent_source = self.resolve_for_pin(parent_pin, boundary_type)
             if parent_polygon is not None:
                 point = self._pin_point(pin)
@@ -320,7 +315,7 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
                 return None, None
             # Property: a detail pin outside the parent's property boundary
             # (or whose parent has none) falls through to its own
-            # wiki/location/circle chain below, using its own Location.
+            # wiki/circle chain below, using its own Location.
 
         # Prefer the pin's explicitly chosen wiki; fall back to the location's
         # wiki for pins that were never explicitly linked (e.g. bulk imports).
@@ -329,13 +324,12 @@ class BoundaryManager(abstract.DashboardManager.from_queryset(BoundaryQuerySet))
         wiki = pin.wiki if pin.wiki_id else (Wiki.objects.get_for_location(pin.location) if pin.location_id else None)
         if wiki is not None and (row := self.row_for_wiki(wiki, boundary_type)) and row.drawn_or_generated_polygon:
             return row.drawn_or_generated_polygon, "wiki"
-        if pin.location_id:
-            if (row := self.row_for_location(pin.location, boundary_type)) and row.generated_polygon:
-                return row.generated_polygon, "generated"
-            if boundary_type == BoundaryType.PROPERTY:
-                circle = circle_for_coordinates(pin.location.latitude, pin.location.longitude)
-                if circle is not None:
-                    return circle, "circle"
+        if scoped is not None:
+            return scoped, "place"
+        if pin.location_id and boundary_type == BoundaryType.PROPERTY:
+            circle = circle_for_coordinates(pin.location.latitude, pin.location.longitude)
+            if circle is not None:
+                return circle, "circle"
         return None, None
 
     def effective_polygon_for_wiki(self, wiki: Wiki, boundary_type: str) -> GEOSGeometry | None:

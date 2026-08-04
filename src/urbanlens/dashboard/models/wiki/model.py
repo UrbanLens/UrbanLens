@@ -110,10 +110,23 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         related_name="wikis",
     )
 
-    # The shared address/coordinate row this page describes.
+    # The shared address/coordinate row this page displays at, and routes by
+    # (/location/<slug>/wiki/). Coordinates and address are read from here.
     location = OneToOneField(
         "dashboard.Location",
         on_delete=RESTRICT,
+        related_name="wiki",
+    )
+    # The real-world thing this page is *about*, and the unit of dedup: one
+    # community page per parcel or building, however many coordinates people
+    # pinned it at. Location can't do that job - two users pinning opposite
+    # ends of the same property get two Locations and would get two wikis.
+    # Null for a coordinate no provider knows, which behaves as it always has.
+    place = OneToOneField(
+        "dashboard.Place",
+        on_delete=SET_NULL,
+        null=True,
+        blank=True,
         related_name="wiki",
     )
     # Self-referential FK for community sub-markers ("child wikis") nested
@@ -167,6 +180,7 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
 
     if TYPE_CHECKING:
         location_id: int
+        place_id: int | None
         parent_wiki_id: int | None
         created_by_id: int | None
         cover_photo_id: int | None
@@ -201,7 +215,13 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         return instance
 
     def save(self, *args, **kwargs) -> None:
-        """Save the wiki, keeping the alias list in sync with the name.
+        """Save the wiki, adopting its location's place and syncing its aliases.
+
+        A wiki describes whatever its location stands on, so an unset ``place``
+        adopts the location's on first save. Skipped when that place already
+        has a wiki - the OneToOne is the dedup rule, and the right way to reach
+        an existing page is ``Wiki.objects.existing_for_location``, not a
+        second row racing it.
 
         The alias list is the full set of names the place has ever been known
         by, including the current one - so whenever a meaningful ``name`` is
@@ -216,6 +236,12 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         update_fields = kwargs.get("update_fields")
         if update_fields is None or "name" in update_fields:
             self.name = sanitize_name(self.name) or ""
+        if self.place_id is None and self.location_id and update_fields is None:
+            from urbanlens.dashboard.models.location.model import Location
+
+            place_id = Location.objects.filter(pk=self.location_id).values_list("place_id", flat=True).first()
+            if place_id is not None and not type(self).objects.filter(place_id=place_id).exclude(pk=self.pk).exists():
+                self.place_id = place_id
         super().save(*args, **kwargs)
         if update_fields is not None and "name" not in update_fields:
             return

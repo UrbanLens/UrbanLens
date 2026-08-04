@@ -342,6 +342,15 @@ def select_buildings(buildings: list[dict[str, Any]], selection_keys: list[str])
 def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
     """Create a child pin for each given building, in one transaction.
 
+    Persists each building as its own ``Place`` first, from the footprint this
+    import already holds. That ordering is what makes the rest of the app
+    behave: the child pins then resolve onto their own structures rather than
+    onto the parcel, so each building's page draws its own outline, its wiki
+    gets its own boundary, and the property stops looking like 124 overlapping
+    copies of itself. Turning a property into a multi-building one also
+    re-derives what every marker on it is - including other users' - since
+    that is a fact about the place, not about whoever pressed the button.
+
     Args:
         pin: The parent pin.
         buildings: Building records to create pins for.
@@ -349,11 +358,27 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
     Returns:
         How many child pins were created.
     """
+    from urbanlens.dashboard.services.locations.site_scope import reclassify_markers_on_place
     from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
+    from urbanlens.dashboard.services.places import provisioning
+    from urbanlens.dashboard.services.places.resolution import attach_location
+
+    selected = buildings[:MAX_RESTRUCTURE_ITEMS]
+    place = pin.location.place if (pin.location_id and pin.location.place_id) else None
+    parcel = place.parcel if place is not None else None
+
+    # Places are provisioned for *every* building known on the parcel, not just
+    # the ones this user chose to pin. How many buildings stand on a property
+    # is a fact about the property; which of them somebody pinned is a fact
+    # about that person. Conflating the two would make a campus stop reading as
+    # a campus because one user only imported one of its structures.
+    known = site_scope.parcel_buildings(pin.location) or selected
+    places = provisioning.ensure_building_places(parcel, known, provider="redata")
+    place_by_key = {building_selection_key(record): places[index] for index, record in enumerate(known) if index in places}
 
     created = 0
     with transaction.atomic():
-        for building in buildings[:MAX_RESTRUCTURE_ITEMS]:
+        for building in selected:
             name = building_name(building)
             try:
                 location = resolve_child_pin_location(pin.profile, building["latitude"], building["longitude"])
@@ -363,6 +388,13 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
                 # skip rather than stacking a second marker on it.
                 logger.debug("create_building_pins: skipping building already pinned at its exact point")
                 continue
+            # Attached directly rather than resolved by containment: this
+            # import knows which structure each marker is for, and a building
+            # centroid can legitimately fall outside its own (concave)
+            # footprint. Containment would quietly hand those back to the
+            # parcel, and the marker would describe the whole property again.
+            if (building_place := place_by_key.get(building_selection_key(building))) is not None:
+                attach_location(location, building_place)
             Pin.objects.create(
                 name=name or None,
                 # Derived from a building record, not typed by the user, so
@@ -382,6 +414,11 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
                 detail_bg_opacity=BUILDING_PIN_BG_OPACITY,
             )
             created += 1
+
+    if parcel is not None:
+        reclassify_markers_on_place(parcel)
+        for place in places.values():
+            reclassify_markers_on_place(place)
     return created
 
 
@@ -430,25 +467,39 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
     from urbanlens.dashboard.controllers.detail_pins import _location_for_child_wiki
     from urbanlens.dashboard.models.wiki.model import Wiki
     from urbanlens.dashboard.models.wiki_edit import WikiEdit
+    from urbanlens.dashboard.services.places import provisioning
 
     try:
         wiki = pin.location.wiki
     except ObjectDoesNotExist:
         return 0
 
+    selected = buildings[:MAX_RESTRUCTURE_ITEMS]
+    wiki_place = wiki.place if wiki.place_id else None
+    parcel = wiki_place.parcel if wiki_place is not None else None
+    known = site_scope.parcel_buildings(pin.location) or selected
+    places = provisioning.ensure_building_places(parcel, known, provider="redata")
+    place_by_key = {building_selection_key(record): places[index] for index, record in enumerate(known) if index in places}
+
     unmatched = list(wiki.child_wikis.select_related("location"))
     created = 0
     with transaction.atomic():
-        for building in buildings[:MAX_RESTRUCTURE_ITEMS]:
+        for building in selected:
             existing = match_marker(building, unmatched)
             if existing is not None:
                 unmatched.remove(existing)
+                continue
+            place = place_by_key.get(building_selection_key(building))
+            # One wiki per place is the whole dedup rule, so a building that
+            # already has a page gets that page rather than a second one.
+            if place is not None and Wiki.objects.filter(place=place).exists():
                 continue
             Wiki.objects.create(
                 name=building_name(building) or wiki.name,
                 pin_type=PinType.BUILDING,
                 pin_type_is_user_provided=False,
                 parent_wiki=wiki,
+                place=place,
                 location=_location_for_child_wiki(building["latitude"], building["longitude"]),
             )
             created += 1

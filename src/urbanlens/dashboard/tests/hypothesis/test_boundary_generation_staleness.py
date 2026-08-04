@@ -1,7 +1,12 @@
-"""Tests for the boundary generation TTL: boundary_generation_stale, the
+"""Tests for the place-resolution TTL.
 
-schedule_location_boundary_generation gate, and generate_location_boundaries'
-refresh-overwrite behavior.
+``boundary_generation_stale``, the ``schedule_location_boundary_generation``
+gate, and ``generate_location_boundaries``' refresh-overwrite behaviour.
+
+Staleness now keys off ``Location.place_resolved_at`` (stamped even when the
+providers found nothing, so an unknown coordinate is asked about once rather
+than on every page view) and, when a place was found,
+``Place.geometry_generated_at``.
 """
 
 from __future__ import annotations
@@ -15,8 +20,8 @@ from hypothesis import given, settings as hyp_settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.location.model import Location
+from urbanlens.dashboard.models.place.model import Place, PlaceKind
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.locations.boundaries import (
     ResolvedBoundaries,
@@ -27,6 +32,22 @@ from urbanlens.dashboard.services.locations.boundaries import (
 )
 
 _hyp = hyp_settings(max_examples=30, deadline=None)
+
+
+def _resolved(location: Location, *, age_days: float, polygon=None) -> Location:
+    """Point a Location at a place resolved ``age_days`` ago.
+
+    ``polygon=None`` models the real "the providers were asked and had nothing"
+    case: the location is stamped as resolved but sits on no known place.
+    """
+    stamped = timezone.now() - timedelta(days=age_days)
+    place = None
+    if polygon is not None:
+        place = Place.objects.create(kind=PlaceKind.PARCEL, geometry=polygon, geometry_generated_at=stamped)
+        Place.objects.filter(pk=place.pk).update(domain_root=place.pk)
+    Location.objects.filter(pk=location.pk).update(place=place, place_resolved_at=stamped)
+    location.refresh_from_db()
+    return location
 
 
 def _square(lon: float, lat: float, size: float = 0.001) -> MultiPolygon:
@@ -42,9 +63,7 @@ class BoundaryGenerationStaleTests(TestCase):
         location = baker.make(Location, latitude=42.65, longitude=-73.75)
         if age_days is None:
             return location
-        row, _created = Boundary.objects.get_or_create_location_default(location, BoundaryType.PROPERTY)
-        Boundary.objects.filter(pk=row.pk).update(generated_polygon=polygon, generated_at=timezone.now() - timedelta(days=age_days))
-        return location
+        return _resolved(location, age_days=age_days, polygon=polygon)
 
     def test_never_generated_is_not_stale(self):
         location = self._make_location_with_row(age_days=None)
@@ -84,9 +103,7 @@ class ScheduleLocationBoundaryGenerationGateTests(TestCase):
 
     def _make_stale_location(self, *, age_days: float) -> Location:
         location = baker.make(Location, latitude=42.65, longitude=-73.75)
-        row, _created = Boundary.objects.get_or_create_location_default(location, BoundaryType.PROPERTY)
-        Boundary.objects.filter(pk=row.pk).update(generated_polygon=_square(-73.75, 42.65), generated_at=timezone.now() - timedelta(days=age_days))
-        return location
+        return _resolved(location, age_days=age_days, polygon=_square(-73.75, 42.65))
 
     def test_never_run_schedules_generation(self):
         location = baker.make(Location, latitude=42.65, longitude=-73.75)
@@ -122,50 +139,48 @@ class ScheduleLocationBoundaryGenerationGateTests(TestCase):
 class GenerateLocationBoundariesRefreshTests(TestCase):
     """A refresh run overwrites generated_polygon with new geometry, but never with nothing."""
 
-    def test_refresh_replaces_a_stale_circle_fallback_with_real_geometry(self):
+    def test_refresh_fills_in_geometry_for_a_place_that_had_none(self):
         location = baker.make(Location, latitude=42.65, longitude=-73.75)
-        row, _created = Boundary.objects.get_or_create_location_default(location, BoundaryType.PROPERTY)
-        Boundary.objects.filter(pk=row.pk).update(generated_polygon=None, generated_at=timezone.now() - timedelta(days=90))
+        _resolved(location, age_days=90, polygon=None)
 
         new_polygon = _square(-73.75, 42.65)
         resolved = ResolvedBoundaries(property_polygon=new_polygon, building_polygon=None)
         with patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=resolved):
-            generate_location_boundaries(location)
+            place = generate_location_boundaries(location)
 
-        row.refresh_from_db()
-        assert row.generated_polygon is not None
-        self.assertEqual(row.generated_polygon.wkb, new_polygon.wkb)
+        assert place is not None and place.geometry is not None
+        self.assertEqual(place.geometry.wkb, new_polygon.wkb)
+        location.refresh_from_db()
         self.assertFalse(boundary_generation_stale(location))
 
     def test_refresh_replaces_older_geometry_with_newer_geometry(self):
         location = baker.make(Location, latitude=42.65, longitude=-73.75)
-        row, _created = Boundary.objects.get_or_create_location_default(location, BoundaryType.PROPERTY)
         old_polygon = _square(-73.75, 42.65)
-        Boundary.objects.filter(pk=row.pk).update(generated_polygon=old_polygon, generated_at=timezone.now() - timedelta(days=90))
+        place = _resolved(location, age_days=90, polygon=old_polygon).place
 
-        new_polygon = _square(-73.76, 42.66)
+        new_polygon = _square(-73.7502, 42.6502)
         resolved = ResolvedBoundaries(property_polygon=new_polygon, building_polygon=None)
         with patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=resolved):
             generate_location_boundaries(location)
 
-        row.refresh_from_db()
-        assert row.generated_polygon is not None
-        self.assertEqual(row.generated_polygon.wkb, new_polygon.wkb)
+        place.refresh_from_db()
+        assert place.geometry is not None
+        self.assertEqual(place.geometry.wkb, new_polygon.wkb)
 
     def test_a_fruitless_refresh_leaves_existing_geometry_alone(self):
         """A transient provider hiccup on refresh must not erase previously-good geometry."""
         location = baker.make(Location, latitude=42.65, longitude=-73.75)
-        row, _created = Boundary.objects.get_or_create_location_default(location, BoundaryType.PROPERTY)
         old_polygon = _square(-73.75, 42.65)
-        Boundary.objects.filter(pk=row.pk).update(generated_polygon=old_polygon, generated_at=timezone.now() - timedelta(days=90))
+        place = _resolved(location, age_days=90, polygon=old_polygon).place
 
         resolved = ResolvedBoundaries(property_polygon=None, building_polygon=None)
         with patch("urbanlens.dashboard.services.locations.boundaries.BoundaryProviderChain.get_boundaries", return_value=resolved):
             generate_location_boundaries(location)
 
-        row.refresh_from_db()
-        assert row.generated_polygon is not None
-        self.assertEqual(row.generated_polygon.wkb, old_polygon.wkb)
-        # generated_at is still stamped, so the location isn't retried on every page view.
+        place.refresh_from_db()
+        assert place.geometry is not None
+        self.assertEqual(place.geometry.wkb, old_polygon.wkb)
+        # place_resolved_at is still stamped, so it isn't retried on every view.
+        location.refresh_from_db()
         self.assertTrue(boundary_generation_ran(location))
         self.assertFalse(boundary_generation_stale(location))

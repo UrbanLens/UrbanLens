@@ -19,8 +19,8 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.api_call_log.model import ApiCallLog
-from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults, _RateLimitedSession
 from urbanlens.dashboard.services.admin.site_admin import add_user_to_site_admin_group
+from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults, _RateLimitedSession
 
 
 class ServiceDefaultsCostPerCallTests(SimpleTestCase):

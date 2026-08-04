@@ -261,9 +261,8 @@ class ResolveTripMemberTests(TestCase):
     def test_a_real_profile_off_the_trip_is_not_found(self) -> None:
         """Regression guard for the global profile-enumeration defect."""
         for kwargs in ({"slug": self.outsider.slug}, {"profile_id": self.outsider.pk}, {"slug": str(self.outsider.uuid)}):
-            with self.subTest(**kwargs):
-                with self.assertRaises(TripNotFoundError):
-                    resolve_trip_member(self.trip, **kwargs)
+            with self.subTest(**kwargs), self.assertRaises(TripNotFoundError):
+                resolve_trip_member(self.trip, **kwargs)
 
     def test_a_nonexistent_handle_is_not_found(self) -> None:
         """A missing profile and an off-trip one are indistinguishable."""

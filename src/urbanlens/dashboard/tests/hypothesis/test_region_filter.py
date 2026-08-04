@@ -22,8 +22,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
-from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
 from urbanlens.dashboard.services.geo.geo import dissolve_polygons
+from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
 
 
 def _square(lng: float, lat: float, delta: float) -> Polygon:
