@@ -39,6 +39,7 @@ from urbanlens.dashboard.models.profile.meta import (
 )
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.services.auth.username import USERNAME_RE, username_is_taken
+from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -297,7 +298,7 @@ class CommonPinsView(LoginRequiredMixin, View):
             "other_profile_url": reverse("profile.view_user", args=[other.slug]),
             "common_pins_subtitle": f"Pins you and {other.username} have both saved.",
             "common_pins": my_pins,
-            "common_pins_json": json.dumps([pin.to_detail_json() for pin in my_pins]),
+            "common_pins_json": safe_json_for_script([pin.to_detail_json() for pin in my_pins]),
         }
         return render(request, "dashboard/pages/profile/common_pins.html", context)
 

@@ -187,3 +187,32 @@ class ProfileViewCommonPinsContextTests(TestCase):
         _befriend(self.alice, self.bob)
         response = self.client.get(reverse("profile.view_user", args=[self.bob.ensure_slug()]))
         self.assertFalse(response.context["can_view_common_pins"])
+
+
+class CommonPinsJsonXssTests(TestCase):
+    """CommonPinsView embeds `common_pins_json` inline via `|safe` (common_pins.html:25).
+
+    A pin description reaching that `<script type="application/json">` block unescaped could
+    contain a literal `</script>` and break out of it, injecting arbitrary markup/script -
+    the same class of bug covered for map pages in test_map_xss.py.
+    """
+
+    _SCRIPT_BREAKOUT_PAYLOAD = "</script><script>alert(document.domain)</script>"
+
+    def setUp(self):
+        self.alice = _make_profile()
+        self.bob = _make_profile()
+        self.client = Client()
+        self.client.force_login(self.alice.user)
+        _befriend(self.alice, self.bob)
+
+    def test_malicious_pin_description_is_not_embedded_raw(self):
+        location = _share_pin(self.alice, self.bob)
+        Pin.objects.filter(profile=self.alice, location=location).update(description=self._SCRIPT_BREAKOUT_PAYLOAD)
+
+        response = self.client.get(reverse("profile.common_pins", args=[self.bob.ensure_slug()]))
+
+        body = response.content.decode()
+        self.assertNotIn(self._SCRIPT_BREAKOUT_PAYLOAD, body)
+        # The description must still be present, just safely encoded for a JS/JSON context.
+        self.assertIn("script\\u003E", body)

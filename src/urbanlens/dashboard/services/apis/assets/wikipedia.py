@@ -391,7 +391,15 @@ class WikipediaGateway(Gateway):
         mid-sentence) so the result is always well-formed and never ends on a
         dangling heading.
         """
-        safe_html = nh3.clean(raw_html, tags=_ALLOWED_TAGS, clean_content_tags=_CLEAN_CONTENT_TAGS, attributes={})
+        # attribute_filter is required alongside attributes={} - nh3/ammonia keeps a hardcoded
+        # "generic" attribute set (title, lang, ...) on every tag regardless of the allowlist.
+        safe_html = nh3.clean(
+            raw_html,
+            tags=_ALLOWED_TAGS,
+            clean_content_tags=_CLEAN_CONTENT_TAGS,
+            attributes={},
+            attribute_filter=lambda tag, attr, value: None,  # noqa: ARG005
+        )
         root = lxml_html.fromstring(f"<div>{safe_html}</div>")
 
         kept: list[lxml_html.HtmlElement] = []
