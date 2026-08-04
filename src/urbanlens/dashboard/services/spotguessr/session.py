@@ -535,7 +535,7 @@ def generate_round_content(
         if location is None:
             return None  # nothing eligible left at all
 
-        content = strategy.build_round(location, config)
+        content = strategy.build_round(location, config, participants)
         if content is None:
             excluded_ids.append(location.pk)
             continue  # this location has nothing usable for this mode yet - try another

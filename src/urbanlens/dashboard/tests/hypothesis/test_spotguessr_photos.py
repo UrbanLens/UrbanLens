@@ -68,6 +68,28 @@ class CandidateImageForLocationPrivacyTests(TestCase):
         baker.make(Image, location=other_location, wiki=other_wiki, media_type=MediaKind.PHOTO)
         self.assertIsNone(candidate_image_for_location(location))
 
+    def test_a_photo_with_no_wiki_attachment_is_eligible_for_its_own_pins_solo_profile(self) -> None:
+        location = _make_location()
+        profile = _make_profile()
+        pin = baker.make(Pin, profile=profile, location=location)
+        image = baker.make(Image, location=location, pin=pin, profile=profile, media_type=MediaKind.PHOTO, wiki=None)
+        self.assertEqual(candidate_image_for_location(location, solo_profile=profile), image)
+
+    def test_a_photo_with_no_wiki_attachment_is_not_eligible_for_a_different_profiles_solo_profile(self) -> None:
+        location = _make_location()
+        pin_owner = _make_profile()
+        other_profile = _make_profile()
+        pin = baker.make(Pin, profile=pin_owner, location=location)
+        baker.make(Image, location=location, pin=pin, profile=pin_owner, media_type=MediaKind.PHOTO, wiki=None)
+        self.assertIsNone(candidate_image_for_location(location, solo_profile=other_profile))
+
+    def test_a_safety_checkin_photo_is_never_eligible_even_with_a_solo_profile(self) -> None:
+        location = _make_location()
+        profile = _make_profile()
+        checkin = baker.make(SafetyCheckin, profile=profile)
+        baker.make(Image, location=location, safety_checkin=checkin, profile=profile, media_type=MediaKind.PHOTO, wiki=None)
+        self.assertIsNone(candidate_image_for_location(location, solo_profile=profile))
+
 
 class CandidateImageForLocationRelevanceTests(TestCase):
     """Only externally-sourced wiki photos are relevance-gated - personal uploads have no relevance identity at all."""

@@ -22,6 +22,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.location.model import Location
+    from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.spotguessr.model import GameRound
     from urbanlens.dashboard.services.spotguessr.scoring import RoundTarget
     from urbanlens.dashboard.services.spotguessr.session import GameConfig
@@ -52,12 +53,15 @@ class ModeStrategy:
             by ``services.spotguessr.relevance`` and serialized onto every
             round payload so the frontend never has to hardcode its own copy
             of "which modes show a photo".
-        build_round: Given an eligible ``Location`` and the session's
-            ``GameConfig``, returns the mode-specific ``RoundContent`` for
-            that location, or ``None`` if this location has nothing usable
-            for this mode yet (e.g. no photo, no name/alias, no Street View
-            coverage) - the caller should exclude it and try another
-            candidate rather than treat that as a hard error.
+        build_round: Given an eligible ``Location``, the session's
+            ``GameConfig``, and its joined participants, returns the
+            mode-specific ``RoundContent`` for that location, or ``None`` if
+            this location has nothing usable for this mode yet (e.g. no
+            photo, no name/alias, no Street View coverage) - the caller
+            should exclude it and try another candidate rather than treat
+            that as a hard error. Most strategies ignore the participant
+            list; Photos mode uses it to tell a single-participant session
+            apart from a multiplayer one (see ``_build_photos``).
         serialize_round: Mutates a round's outbound JSON payload in place,
             adding whatever fields this mode's ``RoundPayload`` needs
             (``image_url``, ``display_text``, ``street_view_image``, ...).
@@ -67,14 +71,22 @@ class ModeStrategy:
 
     mode: str
     shows_imagery: bool
-    build_round: Callable[[Location, GameConfig], RoundContent | None]
+    build_round: Callable[[Location, GameConfig, list[Profile]], RoundContent | None]
     serialize_round: Callable[[GameRound, dict[str, Any]], None]
 
 
-def _build_photos(location: Location, config: GameConfig) -> RoundContent | None:
+def _build_photos(location: Location, config: GameConfig, participants: list[Profile]) -> RoundContent | None:
     from urbanlens.dashboard.services.spotguessr import photos, scoring
 
-    image = photos.candidate_image_for_location(location, allow_arbitrary_external_photos=config.allow_arbitrary_external_photos)
+    # A solo player may see their own pin photos for this location (never a
+    # wiki-only restriction for them - see photos.candidate_image_for_location's
+    # solo_profile arg); anything with 2+ joined participants stays wiki-only.
+    solo_profile = participants[0] if len(participants) == 1 else None
+    image = photos.candidate_image_for_location(
+        location,
+        allow_arbitrary_external_photos=config.allow_arbitrary_external_photos,
+        solo_profile=solo_profile,
+    )
     if image is None:
         return None
     return RoundContent(target=scoring.resolve_target(location, image), image=image)
@@ -93,7 +105,7 @@ def _serialize_photos(round_: GameRound, data: dict[str, Any]) -> None:
         data["image_url"] = round_.image.image.url
 
 
-def _build_named_place(location: Location, config: GameConfig) -> RoundContent | None:
+def _build_named_place(location: Location, config: GameConfig, participants: list[Profile]) -> RoundContent | None:
     from urbanlens.dashboard.services.spotguessr import named_place, scoring
 
     display_text = named_place.candidate_name_for_location(location, use_aliases=config.use_aliases)
@@ -106,7 +118,7 @@ def _serialize_named_place(round_: GameRound, data: dict[str, Any]) -> None:
     data["display_text"] = round_.display_text
 
 
-def _build_street_view(location: Location, config: GameConfig) -> RoundContent | None:
+def _build_street_view(location: Location, config: GameConfig, participants: list[Profile]) -> RoundContent | None:
     from urbanlens.dashboard.services.spotguessr import scoring, street_view
 
     if street_view.candidate_street_view_for_location(location) is None:
