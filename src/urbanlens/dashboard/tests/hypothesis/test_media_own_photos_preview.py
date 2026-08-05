@@ -73,3 +73,26 @@ class PhotosMediaPreviewTests(TestCase):
         newer_but_unscored = baker.make(Image, pin=self.pin, profile=self.profile, image=_uploaded_photo("newer.png"), redata_confidence=None)
         body = self._get().content.decode()
         self.assertLess(body.index(f'data-image-id="{older_but_confident.pk}"'), body.index(f'data-image-id="{newer_but_unscored.pk}"'))
+
+    def test_photo_materialized_from_a_provider_is_excluded(self) -> None:
+        """A photo materialized from an external Media-gallery provider (e.g.
+        via "Mark relevant" or "Send to wiki") already renders as its own live
+        tile in that provider's panel - see
+        services.media.media_relevance.local_images_for_gallery_items, which
+        swaps that tile's thumbnail for this same cached copy. Including it
+        here too would show the same photo twice in the combined grid."""
+        baker.make(Image, pin=self.pin, profile=self.profile, image=_uploaded_photo(), media_source_key="wikimedia", media_item_key="abc123")
+        response = self._get()
+        self.assertEqual(response.status_code, 204)
+
+    def test_plain_upload_still_renders_alongside_a_materialized_photo(self) -> None:
+        plain = baker.make(Image, pin=self.pin, profile=self.profile, image=_uploaded_photo("plain.png"))
+        materialized = baker.make(Image, pin=self.pin, profile=self.profile, image=_uploaded_photo("materialized.png"), media_source_key="wikimedia", media_item_key="abc123")
+        body = self._get().content.decode()
+        self.assertIn(f'data-image-id="{plain.pk}"', body)
+        self.assertNotIn(f'data-image-id="{materialized.pk}"', body)
+
+    def test_own_photo_tile_has_no_manage_in_mine_tab_hint(self) -> None:
+        baker.make(Image, pin=self.pin, profile=self.profile, image=_uploaded_photo())
+        body = self._get().content.decode()
+        self.assertNotIn("Manage in the", body)

@@ -582,7 +582,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             The rendered ``pin_media_items.html`` fragment, or 204 when the
             pin has no photos of its own yet.
         """
-        from django.db.models import F
+        from django.db.models import F, Q
 
         from urbanlens.dashboard.models.images.model import Image
         from urbanlens.dashboard.services.apis.assets.base import MediaItem
@@ -597,7 +597,18 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # services.photos.redata_relevance), falling back to upload order for
         # a photo REData hasn't scored yet (no location at submission time,
         # REData not configured, or the score just hasn't landed).
-        images = Image.objects.filter(pin=pin, profile=profile).exclude(image="").order_by(F("redata_confidence").desc(nulls_last=True), "-created")[:_MEDIA_PHOTOS_PREVIEW_LIMIT]
+        # Excludes anything materialized from an external provider
+        # (media_source_key set - see services.media.media_materialize): that
+        # item already has its own live tile in the provider's panel, which
+        # renders its cached local copy via
+        # services.media.media_relevance.local_images_for_gallery_items -
+        # including it here too would show the same photo twice.
+        images = (
+            Image.objects.filter(pin=pin, profile=profile)
+            .filter(Q(media_source_key="") | Q(media_source_key__isnull=True))
+            .exclude(image="")
+            .order_by(F("redata_confidence").desc(nulls_last=True), "-created")[:_MEDIA_PHOTOS_PREVIEW_LIMIT]
+        )
 
         rendered_items = [
             {
