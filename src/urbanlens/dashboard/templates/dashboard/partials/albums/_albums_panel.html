@@ -8,7 +8,7 @@ Expects (from controllers.albums._photos_context):
   loose_images - photos not in any of this owner's albums
   create_url   - POST target for creating a new album
   context_type - "pin" or "wiki", for text that differs between the two
-  album_kind_choices - AlbumKind.choices, for the create form's kind select
+  album_kind_specs - AlbumKindSpec list, for the create form's kind select
 {% endcomment %}
 <div id="albums-panel" class="albums-panel" data-refresh-url="{{ create_url }}">
 
@@ -29,13 +29,13 @@ Expects (from controllers.albums._photos_context):
     <input type="text" name="name" class="album-create-name" maxlength="100" required
            placeholder="Album name (e.g. Interior, 2019 visit)">
     <select name="kind" class="album-create-kind" aria-label="Album type">
-      {% for value, label in album_kind_choices %}
-      <option value="{{ value }}">{{ label }}</option>
+      {% for spec in album_kind_specs %}
+      <option value="{{ spec.kind }}">{{ spec.label }}</option>
       {% endfor %}
     </select>
     <button type="submit" class="btn btn--primary">Create</button>
     <p class="album-create-hint settings-help">
-      A Timelapse album holds shots of the same scene from the same angle, so they can be rendered to video later.
+      {% for spec in album_kind_specs %}{% if spec.badge %}<strong>{{ spec.label }}:</strong> {{ spec.help_text }}{% endif %}{% endfor %}
     </p>
   </form>
 

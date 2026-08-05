@@ -19,11 +19,7 @@ Expects (from controllers.albums.AlbumDetailView):
       <i class="material-symbols-outlined">arrow_back</i> All albums
     </button>
     <h3 class="albums-panel-title">
-      {% if album.kind == "timelapse" %}
-      <i class="material-symbols-outlined">timelapse</i>
-      {% else %}
-      <i class="material-symbols-outlined">photo_library</i>
-      {% endif %}
+      <i class="material-symbols-outlined">{{ album.spec.icon }}</i>
       {{ album.name }}
       <span class="albums-count">{{ photo_count }}</span>
     </h3>

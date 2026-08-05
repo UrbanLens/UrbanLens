@@ -212,7 +212,7 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
         from urbanlens.dashboard.models.images.model import Image
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
-        from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
+        from urbanlens.dashboard.services.media.media_relevance import record_relevant_and_cache
         from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
 
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
@@ -235,6 +235,26 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
         response: dict = {}
         if is_relevant is None:
             MediaRelevance.objects.for_gallery(profile, location, source).filter(item_key=item_key).delete()
+        elif is_relevant and source != "photos" and url:
+            # An explicit click overrides any prior vote. The "photos" panel
+            # lists photos already attached to this wiki, so it falls to the
+            # branch below, which reuses the client's own image_id instead of
+            # re-downloading a local file.
+            result = record_relevant_and_cache(
+                location=location,
+                profile=profile,
+                source=source,
+                url=url,
+                page_url=page_url,
+                caption=caption,
+                wiki=wiki,
+                item_key=item_key,
+            )
+            if result.error:
+                response["materialize_error"] = result.error
+            elif result.image is not None:
+                response["image_id"] = result.image.pk
+                response["image_url"] = result.image.image.url
         else:
             MediaRelevance.objects.update_or_create(
                 profile=profile,
@@ -243,25 +263,12 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
                 item_key=item_key,
                 defaults={"is_relevant": bool(is_relevant)},
             )
-            if is_relevant and source != "photos" and url:
-                try:
-                    image = materialize_media_item(location=location, profile=profile, source=source, url=url, page_url=page_url, caption=caption, wiki=wiki)
-                except MaterializeError as exc:
-                    # MaterializeError can embed raw requests/OSError text -
-                    # log it server-side and surface a generic message.
-                    logger.warning("WikiMediaVoteView: failed to materialize %s: %s", url, exc)
-                    response["materialize_error"] = "Could not save this photo."
-                else:
-                    response["image_id"] = image.pk
-                    response["image_url"] = image.image.url
-                    queue_relevance_vote(image, profile, is_relevant=True)
-            else:
-                # image_id is only trusted after re-scoping to this location - a
-                # client sending an id from elsewhere must not be able to attach
-                # a vote to an unrelated photo.
-                existing_image = Image.objects.filter(pk=image_id, location=location).first() if image_id else None
-                if existing_image is not None:
-                    queue_relevance_vote(existing_image, profile, is_relevant=bool(is_relevant))
+            # image_id is only trusted after re-scoping to this location - a
+            # client sending an id from elsewhere must not be able to attach
+            # a vote to an unrelated photo.
+            existing_image = Image.objects.filter(pk=image_id, location=location).first() if image_id else None
+            if existing_image is not None:
+                queue_relevance_vote(existing_image, profile, is_relevant=bool(is_relevant))
 
         score = MediaRelevance.objects.vote_scores(location, source).get(item_key, 0)
         my_vote = None if is_relevant is None else bool(is_relevant)

@@ -10,13 +10,14 @@ validation.
 
 from __future__ import annotations
 
+from collections import defaultdict
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.models.album.model import Album, AlbumItem
 from urbanlens.dashboard.models.pin.model import Pin
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Collection, Sequence
 
     from django.db.models import QuerySet
 
@@ -37,8 +38,27 @@ def owner_kwargs(owner: Pin | Wiki) -> dict:
     return {"parent_pin": owner} if isinstance(owner, Pin) else {"parent_wiki": owner}
 
 
+def album_owner(album: Album) -> Pin | Wiki:
+    """Return whichever parent owns *album*.
+
+    Args:
+        album: The album to resolve.
+
+    Returns:
+        The owning Pin or Wiki.
+
+    Raises:
+        ValueError: The album has neither parent set, which the create paths
+            never produce.
+    """
+    owner = album.parent_pin or album.parent_wiki
+    if owner is None:
+        raise ValueError(f"Album {album.pk} has no parent pin or wiki.")
+    return owner
+
+
 def albums_for_owner(owner: Pin | Wiki) -> QuerySet[Album]:
-    """Every album belonging to *owner*, with items prefetched for counts/covers.
+    """Every album belonging to *owner*.
 
     Args:
         owner: The Pin or Wiki whose albums to list.
@@ -46,7 +66,76 @@ def albums_for_owner(owner: Pin | Wiki) -> QuerySet[Album]:
     Returns:
         The owner's albums, in the model's default (name) order.
     """
-    return Album.objects.filter(**owner_kwargs(owner)).select_related("cover_image").prefetch_related("items__image")
+    return Album.objects.filter(**owner_kwargs(owner)).select_related("cover_image")
+
+
+def _visible_image_ids(image_ids: Collection[int], viewer: Profile | None) -> set[int]:
+    """Which of *image_ids* this viewer may see.
+
+    Resolved in one query for the whole set - ``visible_to`` computes the
+    viewer's allowed-uploader set on every call, so running it per album would
+    repeat that work once per album on the Photos tab.
+
+    Args:
+        image_ids: Candidate image primary keys.
+        viewer: The browsing profile, or None for anonymous.
+
+    Returns:
+        The subset the viewer is allowed to see.
+    """
+    from urbanlens.dashboard.models.images.model import Image
+
+    if not image_ids:
+        return set()
+    return set(Image.objects.filter(pk__in=image_ids).visible_to(viewer).values_list("pk", flat=True))
+
+
+def _order_for_display(album: Album, images: list[Image]) -> list[Image]:
+    """Apply *album*'s effective ordering to an already-item-ordered list.
+
+    Args:
+        album: The album the images belong to.
+        images: Its images, in ``AlbumItem`` (order, created) sequence.
+
+    Returns:
+        The same images, newest-first unless the album is manually ordered.
+    """
+    if album.manual_order:
+        return images
+    return sorted(images, key=lambda image: image.created, reverse=True)
+
+
+def albums_with_images(owner: Pin | Wiki, viewer: Profile | None) -> list[tuple[Album, list[Image]]]:
+    """Every album of *owner* paired with its viewer-visible photos.
+
+    Costs a fixed three queries (albums, memberships, visibility) no matter
+    how many albums there are - the Photos tab renders a cover and a count for
+    each one, and resolving those per album is an N+1.
+
+    Args:
+        owner: The Pin or Wiki whose albums to list.
+        viewer: The browsing profile, for the photo-visibility gate.
+
+    Returns:
+        ``(album, images)`` pairs in album order, each image carrying an
+        ``album_item_id`` attribute for the membership row.
+    """
+    albums = list(albums_for_owner(owner))
+    if not albums:
+        return []
+
+    items = list(AlbumItem.objects.filter(album_id__in=[album.pk for album in albums]).select_related("image").order_by("order", "created"))
+    visible_ids = _visible_image_ids({item.image_id for item in items}, viewer)
+
+    by_album: dict[int, list[Image]] = defaultdict(list)
+    for item in items:
+        if item.image_id not in visible_ids:
+            continue
+        image = item.image
+        image.album_item_id = item.pk
+        by_album[item.album_id].append(image)
+
+    return [(album, _order_for_display(album, by_album.get(album.pk, []))) for album in albums]
 
 
 def eligible_images_for(owner: Pin | Wiki, viewer: Profile | None) -> QuerySet[Image]:
@@ -86,21 +175,17 @@ def album_images(album: Album, viewer: Profile | None) -> list[Image]:
         an ``album_item_id`` attribute so templates can address the membership
         row (for removal/reordering) without a second lookup.
     """
-    from urbanlens.dashboard.models.images.model import Image
-
-    items = list(AlbumItem.objects.for_album(album).select_related("image"))
-    visible_ids = set(Image.objects.filter(pk__in=[item.image_id for item in items]).visible_to(viewer).values_list("pk", flat=True))
-
-    visible_items = [item for item in items if item.image_id in visible_ids]
-    if not album.manual_order:
-        visible_items.sort(key=lambda item: item.image.created, reverse=True)
+    items = list(AlbumItem.objects.for_album(album).select_related("image").order_by("order", "created"))
+    visible_ids = _visible_image_ids({item.image_id for item in items}, viewer)
 
     images = []
-    for item in visible_items:
+    for item in items:
+        if item.image_id not in visible_ids:
+            continue
         image = item.image
         image.album_item_id = item.pk
         images.append(image)
-    return images
+    return _order_for_display(album, images)
 
 
 def loose_images_for(owner: Pin | Wiki, viewer: Profile | None) -> QuerySet[Image]:
@@ -196,12 +281,30 @@ def reorder_album_items(album: Album, item_ids: Sequence[int]) -> int:
     return len(updated)
 
 
+def cover_from_images(album: Album, images: list[Image]) -> Image | None:
+    """Pick *album*'s cover out of an already-resolved image list.
+
+    Prefers the explicitly chosen ``cover_image``, but only when it's actually
+    among the photos this viewer can see - otherwise (and when none is set)
+    falls back to the first photo in display order. Takes the list rather than
+    re-querying so batched callers don't pay per album.
+
+    Args:
+        album: The album to pick a cover for.
+        images: Its viewer-visible photos, in display order.
+
+    Returns:
+        The cover photo, or None for an empty album.
+    """
+    if album.cover_image_id is not None:
+        for image in images:
+            if image.pk == album.cover_image_id:
+                return image
+    return images[0] if images else None
+
+
 def album_cover(album: Album, viewer: Profile | None) -> Image | None:
     """The photo to show as *album*'s cover.
-
-    Prefers the explicitly chosen ``cover_image``, but only when the viewer is
-    allowed to see it - otherwise (and when none is set) falls back to the
-    first photo in the album's own display order.
 
     Args:
         album: The album to pick a cover for.
@@ -210,9 +313,4 @@ def album_cover(album: Album, viewer: Profile | None) -> Image | None:
     Returns:
         The cover photo, or None for an empty album.
     """
-    images = album_images(album, viewer)
-    if album.cover_image_id is not None:
-        for image in images:
-            if image.pk == album.cover_image_id:
-                return image
-    return images[0] if images else None
+    return cover_from_images(album, album_images(album, viewer))

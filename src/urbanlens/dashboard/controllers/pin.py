@@ -652,7 +652,8 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
         from urbanlens.dashboard.services.media.images import coerce_coordinates
-        from urbanlens.dashboard.services.media.media_materialize import MaterializeError, find_materialized_image, materialize_media_item
+        from urbanlens.dashboard.services.media.media_materialize import find_materialized_image
+        from urbanlens.dashboard.services.media.media_relevance import record_relevant_and_cache
         from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
 
         try:
@@ -693,25 +694,23 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             MediaRelevance.objects.for_gallery(profile, pin.location, source).filter(item_key=item_key).delete()
             return JsonResponse({"is_relevant": None})
 
-        MediaRelevance.objects.update_or_create(
-            profile=profile,
-            location=pin.location,
-            source=source,
-            item_key=item_key,
-            defaults={"is_relevant": bool(is_relevant)},
-        )
-
         response: dict = {"is_relevant": bool(is_relevant)}
         if is_relevant:
-            try:
-                image = materialize_media_item(location=pin.location, profile=profile, source=source, url=url, page_url=page_url, caption=caption, pin=pin)
-            except MaterializeError as exc:
-                # MaterializeError can embed raw requests/OSError text (e.g. a
-                # failed download), which isn't safe to return verbatim - log
-                # it server-side and surface a generic message instead.
-                logger.warning("media_relevance: failed to materialize %s: %s", url, exc)
-                response["materialize_error"] = "Could not save this photo."
-            else:
+            # An explicit click overrides any prior vote for this profile.
+            result = record_relevant_and_cache(
+                location=pin.location,
+                profile=profile,
+                source=source,
+                url=url,
+                page_url=page_url,
+                caption=caption,
+                pin=pin,
+                item_key=item_key,
+            )
+            if result.error:
+                response["materialize_error"] = result.error
+            elif result.image is not None:
+                image = result.image
                 response["image_id"] = image.pk
                 response["image_url"] = image.image.url
                 if coordinates is not None:
@@ -719,8 +718,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     image.save(update_fields=["latitude", "longitude"])
                     response["latitude"] = float(image.latitude)
                     response["longitude"] = float(image.longitude)
-                queue_relevance_vote(image, profile, is_relevant=True)
         else:
+            MediaRelevance.objects.update_or_create(
+                profile=profile,
+                location=pin.location,
+                source=source,
+                item_key=item_key,
+                defaults={"is_relevant": False},
+            )
             # Marking "not relevant" never materializes a new copy - but if
             # this item was already saved (e.g. an earlier "relevant" vote,
             # or a wiki send), REData should hear about the reversal too.

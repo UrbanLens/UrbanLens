@@ -11,6 +11,7 @@ and only for display/ranking purposes.
 
 from __future__ import annotations
 
+from enum import StrEnum
 import logging
 from typing import TYPE_CHECKING, NamedTuple
 
@@ -142,23 +143,47 @@ def toggle_media_vote(image: Image, profile: Profile, *, value: int) -> int:
     return MediaRelevance.objects.vote_scores(image.location, source).get(item_key, 0)
 
 
+#: Generic message shown when a download fails. ``MaterializeError`` can embed
+#: raw requests/OSError text, which isn't safe to return verbatim, so every
+#: caller surfaces this instead and logs the real reason server-side.
+MATERIALIZE_ERROR_MESSAGE = "Could not save this photo."
+
+
+class VotePolicy(StrEnum):
+    """How a "relevant" mark should treat a vote the profile already cast.
+
+    Attributes:
+        EXPLICIT: The user deliberately clicked "relevant" - overwrite whatever
+            they had before, including a previous down-vote.
+        IMPLIED: Relevance is a side effect of some other action (adding the
+            item to an album, say). A side effect must never silently reverse
+            a deliberate down-vote, so those are left alone.
+    """
+
+    EXPLICIT = "explicit"
+    IMPLIED = "implied"
+
+
 class RelevantCacheResult(NamedTuple):
     """Outcome of :func:`record_relevant_and_cache`.
 
     Attributes:
         image: The materialized local copy, or None when nothing was cached
-            (either the caller had already voted the item down, or the
-            download failed).
+            (the vote was declined, materialization was skipped, the download
+            failed, or it was deferred to a worker).
         voted: Whether a "relevant" vote was recorded by this call.
-        declined: True when the caller had already voted this item *not*
-            relevant, so their vote was left alone.
+        declined: True when an :attr:`VotePolicy.IMPLIED` call found an
+            existing down-vote and left it alone.
         error: A user-safe message when materialization failed, else None.
+        queued: True when the download was handed to a Celery worker instead
+            of run inline, so ``image`` is not populated yet.
     """
 
     image: Image | None
     voted: bool
     declined: bool
     error: str | None
+    queued: bool = False
 
 
 def record_relevant_and_cache(
@@ -171,28 +196,37 @@ def record_relevant_and_cache(
     caption: str = "",
     pin=None,
     wiki=None,
+    item_key: str = "",
+    policy: VotePolicy = VotePolicy.EXPLICIT,
+    materialize: bool = True,
 ) -> RelevantCacheResult:
     """Mark a transient gallery item relevant and cache a local copy of it.
 
-    Used where relevance is implied by an action rather than clicked directly -
-    adding an external media item to an album, for instance. Unlike an explicit
-    thumbs-up, an implied vote must not override a deliberate one: if this
-    profile already voted the item *not* relevant, their vote stands and
-    nothing is cached (``declined=True``).
+    The one place the "write a MediaRelevance row, then download the item"
+    sequence lives - shared by the pin and wiki vote endpoints and by the
+    album add path, so the three can't drift.
 
-    A failed download still leaves the vote in place, matching what the
-    pin/wiki vote endpoints already do - the user's opinion is worth keeping
-    even when the fetch didn't work.
+    A failed download still leaves the vote in place: the user's opinion that
+    this item matters is worth keeping even when today's fetch didn't work.
 
     Args:
         location: The location whose gallery the item belongs to.
-        profile: The profile whose implied vote this is.
+        profile: The voting profile.
         source: Provider panel key (e.g. ``"wikimedia"``).
         url: The item's full-resolution image url.
         page_url: Optional provider page url, for attribution.
         caption: Optional caption carried from the gallery tile.
         pin: Cache the copy against this Pin (personal save), if given.
         wiki: Cache the copy against this Wiki (shared save), if given.
+        item_key: The gallery tile's own item key. Defaults to hashing *url*,
+            but a caller that already has one must pass it: a panel is free to
+            key an item by something other than its image url, and writing the
+            vote under a different key than the caller reads the score back
+            with would silently lose it.
+        policy: Whether this is a deliberate click or an implied side effect -
+            see :class:`VotePolicy`.
+        materialize: Set False to record the vote without downloading (the
+            ``photos`` panel is already local, so there's nothing to fetch).
 
     Returns:
         A :class:`RelevantCacheResult`.
@@ -200,13 +234,14 @@ def record_relevant_and_cache(
     from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
     from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
 
-    item_key = media_item_key(url)
+    item_key = item_key or media_item_key(url)
     if not item_key:
         return RelevantCacheResult(image=None, voted=False, declined=False, error="Missing item identity.")
 
-    existing = MediaRelevance.objects.for_gallery(profile, location, source).filter(item_key=item_key).first()
-    if existing is not None and not existing.is_relevant:
-        return RelevantCacheResult(image=None, voted=False, declined=True, error=None)
+    if policy is VotePolicy.IMPLIED:
+        existing = MediaRelevance.objects.for_gallery(profile, location, source).filter(item_key=item_key).first()
+        if existing is not None and not existing.is_relevant:
+            return RelevantCacheResult(image=None, voted=False, declined=True, error=None)
 
     MediaRelevance.objects.update_or_create(
         profile=profile,
@@ -216,6 +251,18 @@ def record_relevant_and_cache(
         defaults={"is_relevant": True},
     )
 
+    if not materialize:
+        return RelevantCacheResult(image=None, voted=True, declined=False, error=None)
+
+    # Only pass the owner that's actually set - materialize_media_item scopes
+    # its dedupe lookup on whichever of pin/wiki it receives, so handing it an
+    # explicit None would be a different call than the owner-specific one.
+    owner_kwargs = {}
+    if pin is not None:
+        owner_kwargs["pin"] = pin
+    if wiki is not None:
+        owner_kwargs["wiki"] = wiki
+
     try:
         image = materialize_media_item(
             location=location,
@@ -224,14 +271,11 @@ def record_relevant_and_cache(
             url=url,
             page_url=page_url,
             caption=caption,
-            wiki=wiki,
-            pin=pin,
+            **owner_kwargs,
         )
     except MaterializeError as exc:
-        # MaterializeError can embed raw requests/OSError text - log it
-        # server-side and surface a generic message, same as the vote endpoints.
         logger.warning("record_relevant_and_cache: failed to materialize %s: %s", url, exc)
-        return RelevantCacheResult(image=None, voted=True, declined=False, error="Could not save this photo.")
+        return RelevantCacheResult(image=None, voted=True, declined=False, error=MATERIALIZE_ERROR_MESSAGE)
 
     queue_relevance_vote(image, profile, is_relevant=True)
     return RelevantCacheResult(image=image, voted=True, declined=False, error=None)

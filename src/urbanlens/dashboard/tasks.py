@@ -3007,3 +3007,65 @@ def advance_pwyw_usage_ledgers() -> int:
         banking.advance_usage_ledger(role_subscription)
         count += 1
     return count
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
+    """Download an external media item and file the local copy into an album.
+
+    The relevance vote is written synchronously by the request that queues
+    this (it's a cheap DB write, and it's the part that must not be lost), so
+    this task only owns the slow half: the HTTP download. Splitting it that
+    way means a broker outage or a dead provider costs the user their photo,
+    not their vote.
+
+    Args:
+        album_id: PK of the Album to file the photo into.
+        profile_id: PK of the Profile the download is attributed to.
+        source: Provider panel key (e.g. ``"wikimedia"``).
+        url: The item's full-resolution image url.
+        page_url: Optional provider page url, for attribution.
+        caption: Optional caption carried from the gallery tile.
+
+    Returns:
+        PK of the materialized Image, or None if the album/profile vanished or
+        the download failed.
+    """
+    from urbanlens.dashboard.models.album.model import Album
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
+    from urbanlens.dashboard.services.photos.albums import add_images_to_album, album_owner
+    from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
+
+    album = Album.objects.filter(pk=album_id).select_related("parent_pin", "parent_wiki").first()
+    profile = Profile.objects.filter(pk=profile_id).first()
+    if album is None or profile is None:
+        logger.info("cache_media_item_into_album: album %s or profile %s no longer exists", album_id, profile_id)
+        return None
+
+    owner = album_owner(album)
+    location = getattr(owner, "location", None)
+    if location is None:
+        logger.info("cache_media_item_into_album: album %s has no location to attach media to", album_id)
+        return None
+
+    is_pin = album.parent_pin_id is not None
+    try:
+        image = materialize_media_item(
+            location=location,
+            profile=profile,
+            source=source,
+            url=url,
+            page_url=page_url,
+            caption=caption,
+            pin=owner if is_pin else None,
+            wiki=None if is_pin else owner,
+        )
+    except MaterializeError:
+        # The vote is already recorded and stays; only the download is lost.
+        logger.warning("cache_media_item_into_album: failed to materialize %s for album %s", url, album_id)
+        return None
+
+    add_images_to_album(album, [image], profile)
+    queue_relevance_vote(image, profile, is_relevant=True)
+    return image.pk

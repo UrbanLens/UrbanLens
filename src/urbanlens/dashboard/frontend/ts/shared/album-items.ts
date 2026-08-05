@@ -11,6 +11,14 @@ import Sortable from "sortablejs";
 import { getCsrfToken } from "./csrf";
 import { toast } from "./dialogs";
 
+/**
+ * How long to wait before re-rendering after the server queues a download.
+ * Long enough for a typical provider fetch to land, short enough that the
+ * photo doesn't feel lost. A miss is harmless - the next panel render picks
+ * it up either way.
+ */
+const QUEUED_REFRESH_DELAY_MS = 4000;
+
 let albumSortable: Sortable | null = null;
 
 function albumPanel(): HTMLElement | null {
@@ -116,6 +124,7 @@ document.addEventListener("click", (event) => {
  * services.media.media_relevance.record_relevant_and_cache.
  */
 window.albumAddExternalMedia = async (addUrl, media) => {
+    toast.info("Saving photo...");
     try {
         const result = await postJson(addUrl, { media });
         if (result.declined) {
@@ -124,6 +133,13 @@ window.albumAddExternalMedia = async (addUrl, media) => {
         }
         if (result.error) {
             toast.error(result.error as string);
+            return;
+        }
+        if (result.queued) {
+            // The download runs on a worker; give it a moment, then re-render
+            // so the photo shows up without the user having to reload.
+            toast.success((result.message as string) || "Saving this photo - it'll appear shortly.");
+            window.setTimeout(refreshPanel, QUEUED_REFRESH_DELAY_MS);
             return;
         }
         toast.success("Added to album.");

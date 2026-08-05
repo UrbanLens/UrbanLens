@@ -15,6 +15,7 @@ to video) is built.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from django.db.models import CASCADE, SET_NULL, BooleanField, CharField, ForeignKey, Index, IntegerField, TextChoices, TextField
@@ -33,6 +34,62 @@ class AlbumKind(TextChoices):
 
     PLAIN = "plain", "Album"
     TIMELAPSE = "timelapse", "Timelapse"
+
+
+@dataclass(frozen=True, slots=True)
+class AlbumKindSpec:
+    """Per-kind presentation and behaviour, so adding a kind is a one-place change.
+
+    Attributes:
+        kind: The :class:`AlbumKind` this describes.
+        icon: Material Symbols icon name for the album's tile and header.
+        label: Human-readable name, used in the create form's type picker.
+        help_text: One-line explanation shown beside the type picker.
+        badge: Whether the tile shows a kind badge. Plain albums don't - a
+            badge on every album would carry no information.
+        prefers_manual_order: Whether new albums of this kind start in
+            manual-order mode. A timelapse is a sequence, so its order is the
+            point; a plain album is a grouping and defaults to newest-first.
+    """
+
+    kind: str
+    icon: str
+    label: str
+    help_text: str
+    badge: bool
+    prefers_manual_order: bool
+
+
+ALBUM_KIND_SPECS: dict[str, AlbumKindSpec] = {
+    AlbumKind.PLAIN: AlbumKindSpec(
+        kind=AlbumKind.PLAIN,
+        icon="photo_library",
+        label="Album",
+        help_text="A plain grouping of photos.",
+        badge=False,
+        prefers_manual_order=False,
+    ),
+    AlbumKind.TIMELAPSE: AlbumKindSpec(
+        kind=AlbumKind.TIMELAPSE,
+        icon="timelapse",
+        label="Timelapse",
+        help_text="Shots of the same scene from the same angle, in sequence, so they can be rendered to video later.",
+        badge=True,
+        prefers_manual_order=True,
+    ),
+}
+
+
+def album_kind_spec(kind: str) -> AlbumKindSpec:
+    """Return the spec for *kind*, falling back to plain for an unknown value.
+
+    Args:
+        kind: An :class:`AlbumKind` value.
+
+    Returns:
+        The matching :class:`AlbumKindSpec`.
+    """
+    return ALBUM_KIND_SPECS.get(kind, ALBUM_KIND_SPECS[AlbumKind.PLAIN])
 
 
 class Album(abstract.PublicDashboardModel):
@@ -75,6 +132,11 @@ class Album(abstract.PublicDashboardModel):
         items: DjangoManager[AlbumItem]
 
     objects = AlbumManager()
+
+    @property
+    def spec(self) -> AlbumKindSpec:
+        """This album's kind spec, so templates don't branch on ``kind`` by hand."""
+        return album_kind_spec(self.kind)
 
     @property
     def photo_count(self) -> int:

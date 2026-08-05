@@ -10,6 +10,7 @@ optional-URL-kwarg pattern so one view class serves both routes.
 from __future__ import annotations
 
 import json
+import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -18,14 +19,17 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
-from urbanlens.dashboard.models.album.model import Album, AlbumKind
+from urbanlens.dashboard.models.album.model import ALBUM_KIND_SPECS, Album, AlbumKind, album_kind_spec
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 from urbanlens.dashboard.services.core.text_limits import MAX_ALBUM_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.media.media_relevance import MATERIALIZE_ERROR_MESSAGE
 from urbanlens.dashboard.services.photos.albums import (
     add_images_to_album,
     album_images,
-    albums_for_owner,
+    albums_with_images,
+    cover_from_images,
     eligible_images_for,
     loose_images_for,
     owner_kwargs,
@@ -39,6 +43,8 @@ if TYPE_CHECKING:
     from django.http import HttpRequest
 
     from urbanlens.dashboard.models.wiki.model import Wiki
+
+logger = logging.getLogger(__name__)
 
 _MAX_ALBUM_NAME_LENGTH = 100
 
@@ -97,33 +103,31 @@ def _url_prefix(owner: Pin | Wiki) -> str:
     return "pin.albums" if isinstance(owner, Pin) else "location.wiki.albums"
 
 
-def _album_row(owner: Pin | Wiki, album: Album, viewer: Profile | None) -> dict:
+def _album_row(owner: Pin | Wiki, album: Album, images: list) -> dict:
     """Build one album's template payload, with its action URLs pre-reversed.
 
     URLs are built here (by positional ``args``) rather than in-template
     because ``{% url %}`` can't take a dynamic view name plus dynamic kwargs -
     same reasoning as ``custom_layers._render_layer_list``.
 
-    ``images`` is resolved once and both the cover and the count are derived
-    from it, so a viewer who can't see some of an album's photos gets a count
-    that matches what they're actually shown.
+    Takes *images* already resolved so batched callers don't re-query per
+    album; the cover and count are both derived from it, which also keeps the
+    count honest for a viewer who can't see every photo in the album.
 
     Args:
         owner: The Pin or Wiki the album belongs to.
         album: The album to describe.
-        viewer: The browsing profile, for the photo-visibility gate.
+        images: The album's viewer-visible photos, in display order.
 
     Returns:
         Dict consumed by ``_album_card.html``/``_album_detail.html``.
     """
     prefix = _url_prefix(owner)
     slug = _owner_slug(owner)
-    images = album_images(album, viewer)
-    cover = next((image for image in images if image.pk == album.cover_image_id), None) or (images[0] if images else None)
     return {
         "album": album,
         "images": images,
-        "cover": cover,
+        "cover": cover_from_images(album, images),
         "photo_count": len(images),
         "detail_url": reverse(f"{prefix}.detail", args=[slug, album.slug]),
         "edit_url": reverse(f"{prefix}.edit", args=[slug, album.slug]),
@@ -134,11 +138,10 @@ def _album_row(owner: Pin | Wiki, album: Album, viewer: Profile | None) -> dict:
     }
 
 
-def _photos_context(request: HttpRequest, owner: Pin | Wiki, viewer: Profile | None) -> dict:
+def _photos_context(owner: Pin | Wiki, viewer: Profile | None) -> dict:
     """Assemble the Photos subpage context: albums first, then loose photos.
 
     Args:
-        request: The current HttpRequest.
         owner: The Pin or Wiki whose photos to show.
         viewer: The browsing profile, for the photo-visibility gate.
 
@@ -146,7 +149,7 @@ def _photos_context(request: HttpRequest, owner: Pin | Wiki, viewer: Profile | N
         Template context for ``_albums_panel.html``.
     """
     is_pin = isinstance(owner, Pin)
-    rows = [_album_row(owner, album, viewer) for album in albums_for_owner(owner)]
+    rows = [_album_row(owner, album, images) for album, images in albums_with_images(owner, viewer)]
     return {
         "album_rows": rows,
         "loose_images": list(loose_images_for(owner, viewer)),
@@ -154,13 +157,13 @@ def _photos_context(request: HttpRequest, owner: Pin | Wiki, viewer: Profile | N
         "context_type": "pin" if is_pin else "wiki",
         "pin": owner if is_pin else None,
         "wiki": None if is_pin else owner,
-        "album_kind_choices": AlbumKind.choices,
+        "album_kind_specs": list(ALBUM_KIND_SPECS.values()),
     }
 
 
 def _render_photos_panel(request: HttpRequest, owner: Pin | Wiki, viewer: Profile | None) -> HttpResponse:
     """Re-render the whole Photos panel, for HTMX swaps after any mutation."""
-    return render(request, "dashboard/partials/albums/_albums_panel.html", _photos_context(request, owner, viewer))
+    return render(request, "dashboard/partials/albums/_albums_panel.html", _photos_context(owner, viewer))
 
 
 def _parse_body(request: HttpRequest) -> dict:
@@ -229,7 +232,16 @@ class AlbumPhotosView(LoginRequiredMixin, View):
         if kind not in AlbumKind.values:
             kind = AlbumKind.PLAIN
 
-        Album.objects.create(name=name, description=description, kind=kind, profile=profile, **owner_kwargs(owner))
+        Album.objects.create(
+            name=name,
+            description=description,
+            kind=kind,
+            # A timelapse is a sequence, so it starts manually ordered; a plain
+            # grouping doesn't. See AlbumKindSpec.prefers_manual_order.
+            manual_order=album_kind_spec(kind).prefers_manual_order,
+            profile=profile,
+            **owner_kwargs(owner),
+        )
         return _render_photos_panel(request, owner, profile)
 
 
@@ -254,7 +266,7 @@ class AlbumDetailView(LoginRequiredMixin, View):
         """
         owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        row = _album_row(owner, album, profile)
+        row = _album_row(owner, album, album_images(album, profile))
         filed_ids = {image.pk for image in row["images"]}
         row["available_images"] = [image for image in eligible_images_for(owner, profile) if image.pk not in filed_ids]
         row["back_url"] = reverse(_url_prefix(owner), args=[_owner_slug(owner)])
@@ -391,7 +403,13 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
         return JsonResponse(response)
 
     def _add_external(self, owner: Pin | Wiki, album: Album, profile: Profile, media: dict) -> dict:
-        """Vote an external gallery item relevant, cache it, and file it.
+        """Vote an external gallery item relevant, then cache and file it.
+
+        The vote is written inline because it's a cheap DB write and it's the
+        part that must not be lost. The download is handed to a Celery worker,
+        since it blocks on a remote server for up to 15s and the user is
+        waiting on this response. If the broker is unreachable the download
+        falls back to running inline rather than silently never happening.
 
         Args:
             owner: The Pin or Wiki that owns the album.
@@ -402,30 +420,48 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
         Returns:
             Partial response dict describing the outcome.
         """
-        from urbanlens.dashboard.services.media.media_relevance import record_relevant_and_cache
+        from urbanlens.dashboard.services.media.media_relevance import VotePolicy, record_relevant_and_cache
+        from urbanlens.dashboard.tasks import cache_media_item_into_album
 
         is_pin = isinstance(owner, Pin)
         location = owner.location
         if location is None:
             return {"error": "This place has no location to attach media to."}
 
-        result = record_relevant_and_cache(
+        source = str(media.get("source") or "")[:30]
+        url = str(media["url"])
+        page_url = str(media.get("page_url") or "")
+        caption = str(media.get("caption") or "")
+
+        # Record the vote without downloading, so an already-down-voted item is
+        # rejected before any work is queued.
+        vote = record_relevant_and_cache(
             location=location,
             profile=profile,
-            source=str(media.get("source") or "")[:30],
-            url=str(media["url"]),
-            page_url=str(media.get("page_url") or ""),
-            caption=str(media.get("caption") or ""),
+            source=source,
+            url=url,
+            page_url=page_url,
+            caption=caption,
             pin=owner if is_pin else None,
             wiki=None if is_pin else owner,
+            policy=VotePolicy.IMPLIED,
+            materialize=False,
         )
-        if result.declined:
+        if vote.declined:
             return {"declined": True, "message": "You already marked this photo as not relevant."}
-        if result.image is None:
-            return {"error": result.error or "Could not save this photo."}
+        if vote.error:
+            return {"error": vote.error}
 
-        added = add_images_to_album(album, [result.image], profile)
-        return {"added": added, "image_id": result.image.pk}
+        queued = safely_enqueue_task(cache_media_item_into_album, album.pk, profile.pk, source, url, page_url=page_url, caption=caption)
+        if queued is not None:
+            return {"queued": True, "message": "Saving this photo - it'll appear in the album shortly."}
+
+        # Broker unreachable: do it inline so the add still completes.
+        logger.warning("AlbumAddPhotosView: broker unavailable, materializing %s inline", url)
+        result = cache_media_item_into_album(album.pk, profile.pk, source, url, page_url=page_url, caption=caption)
+        if result is None:
+            return {"error": MATERIALIZE_ERROR_MESSAGE}
+        return {"added": 1, "image_id": result}
 
 
 class AlbumRemovePhotosView(LoginRequiredMixin, View):

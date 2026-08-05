@@ -5,16 +5,19 @@ from __future__ import annotations
 
 from unittest import mock
 
+from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.models.album.model import Album, AlbumItem, AlbumKind
+from urbanlens.dashboard.models.album.model import ALBUM_KIND_SPECS, Album, AlbumItem, AlbumKind, album_kind_spec
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
 from urbanlens.dashboard.services.photos.albums import (
     add_images_to_album,
     album_cover,
     album_images,
+    albums_with_images,
     eligible_images_for,
     loose_images_for,
     remove_images_from_album,
@@ -189,6 +192,122 @@ class AlbumCoverTests(TestCase):
         self.assertEqual(album_cover(self.album, self.pin.profile).pk, ordered[-1].pk)
 
 
+class AlbumKindSpecTests(TestCase):
+    """Kind behaviour is data-driven, so adding a kind is a one-place change."""
+
+    def test_every_kind_has_a_spec(self) -> None:
+        for value in AlbumKind.values:
+            self.assertIn(value, ALBUM_KIND_SPECS)
+
+    def test_unknown_kind_falls_back_to_plain(self) -> None:
+        self.assertEqual(album_kind_spec("not-a-kind").kind, AlbumKind.PLAIN)
+
+    def test_plain_albums_carry_no_badge(self) -> None:
+        self.assertFalse(album_kind_spec(AlbumKind.PLAIN).badge)
+
+    def test_timelapse_prefers_manual_order(self) -> None:
+        """A timelapse is a sequence, so its order is the point."""
+        self.assertTrue(album_kind_spec(AlbumKind.TIMELAPSE).prefers_manual_order)
+        self.assertFalse(album_kind_spec(AlbumKind.PLAIN).prefers_manual_order)
+
+    def test_album_exposes_its_own_spec(self) -> None:
+        pin = baker.make_recipe("dashboard.pin")
+        album = Album.objects.create(name="Series", kind=AlbumKind.TIMELAPSE, profile=pin.profile, parent_pin=pin)
+        self.assertEqual(album.spec.icon, "timelapse")
+
+
+class AlbumBatchingTests(TestCase):
+    """albums_with_images resolves every album in a fixed number of queries."""
+
+    def test_query_count_does_not_grow_with_album_count(self) -> None:
+        """The invariant is constancy, not a specific number.
+
+        ``visible_to`` issues several queries of its own to build the viewer's
+        allowed-uploader set, and that's free to change - what must not change
+        is that resolving eight albums costs the same as resolving two.
+        """
+        pin, images = _pin_with_photos(4)
+        for index in range(2):
+            album = Album.objects.create(name=f"A{index}", profile=pin.profile, parent_pin=pin)
+            add_images_to_album(album, images, pin.profile)
+
+        with CaptureQueriesContext(connection) as two_albums:
+            self.assertEqual(len(albums_with_images(pin, pin.profile)), 2)
+
+        for index in range(2, 8):
+            album = Album.objects.create(name=f"A{index}", profile=pin.profile, parent_pin=pin)
+            add_images_to_album(album, images, pin.profile)
+
+        with CaptureQueriesContext(connection) as eight_albums:
+            self.assertEqual(len(albums_with_images(pin, pin.profile)), 8)
+
+        self.assertEqual(len(eight_albums), len(two_albums))
+
+    def test_batched_result_matches_the_single_album_path(self) -> None:
+        pin, images = _pin_with_photos(3)
+        album = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin, manual_order=True)
+        add_images_to_album(album, images, pin.profile)
+        reorder_album_items(album, list(reversed(list(AlbumItem.objects.for_album(album).values_list("pk", flat=True)))))
+        album.refresh_from_db()
+
+        batched = {a.pk: imgs for a, imgs in albums_with_images(pin, pin.profile)}
+        self.assertEqual(
+            [img.pk for img in batched[album.pk]],
+            [img.pk for img in album_images(album, pin.profile)],
+        )
+
+    def test_empty_owner_short_circuits_to_one_query(self) -> None:
+        """No albums means no membership or visibility work at all."""
+        pin = baker.make_recipe("dashboard.pin")
+        with self.assertNumQueries(1):
+            self.assertEqual(albums_with_images(pin, pin.profile), [])
+
+
+class CacheMediaItemIntoAlbumTaskTests(TestCase):
+    """The Celery task owns only the download half; the vote is already written."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin = baker.make_recipe("dashboard.pin")
+        self.album = Album.objects.create(name="Interior", profile=self.pin.profile, parent_pin=self.pin)
+
+    def _run(self):
+        from urbanlens.dashboard.tasks import cache_media_item_into_album
+
+        return cache_media_item_into_album(self.album.pk, self.pin.profile.pk, "wikimedia", "https://example.test/p.jpg")
+
+    def test_files_the_materialized_image_into_the_album(self) -> None:
+        fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+        with (
+            mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image),
+            mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote,
+        ):
+            result = self._run()
+
+        self.assertEqual(result, fake_image.pk)
+        self.assertTrue(AlbumItem.objects.filter(album=self.album, image=fake_image).exists())
+        queue_vote.assert_called_once()
+
+    def test_a_failed_download_returns_none_without_raising(self) -> None:
+        from urbanlens.dashboard.services.media.media_materialize import MaterializeError
+
+        with mock.patch(
+            "urbanlens.dashboard.services.media.media_materialize.materialize_media_item",
+            side_effect=MaterializeError("boom"),
+        ):
+            self.assertIsNone(self._run())
+        self.assertEqual(AlbumItem.objects.for_album(self.album).count(), 0)
+
+    def test_a_deleted_album_is_a_no_op(self) -> None:
+        album_id = self.album.pk
+        self.album.delete()
+        from urbanlens.dashboard.tasks import cache_media_item_into_album
+
+        with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item") as materialize:
+            self.assertIsNone(cache_media_item_into_album(album_id, self.pin.profile.pk, "wikimedia", "https://example.test/p.jpg"))
+        materialize.assert_not_called()
+
+
 class ExternalMediaAlbumAddTests(TestCase):
     """Adding an external media item to an album implies a 'relevant' vote and caches it."""
 
@@ -200,16 +319,19 @@ class ExternalMediaAlbumAddTests(TestCase):
         self.url = "https://example.test/photo.jpg"
         self.source = "wikimedia"
 
-    def _call(self):
-        from urbanlens.dashboard.services.media.media_relevance import record_relevant_and_cache
+    def _call(self, **overrides):
+        from urbanlens.dashboard.services.media.media_relevance import VotePolicy, record_relevant_and_cache
 
-        return record_relevant_and_cache(
-            location=self.location,
-            profile=self.profile,
-            source=self.source,
-            url=self.url,
-            pin=self.pin,
-        )
+        kwargs = {
+            "location": self.location,
+            "profile": self.profile,
+            "source": self.source,
+            "url": self.url,
+            "pin": self.pin,
+            "policy": VotePolicy.IMPLIED,
+        }
+        kwargs.update(overrides)
+        return record_relevant_and_cache(**kwargs)
 
     def test_records_a_relevant_vote_and_caches(self) -> None:
         fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.profile)
@@ -279,6 +401,41 @@ class ExternalMediaAlbumAddTests(TestCase):
         self.assertIsNotNone(result.error)
         # The raw exception text must not reach the user.
         self.assertNotIn("boom", result.error)
+        self.assertTrue(
+            MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)).is_relevant
+        )
+
+    def test_explicit_policy_overrides_a_prior_downvote(self) -> None:
+        """An explicit thumbs-up is deliberate, so it replaces an earlier down-vote."""
+        from urbanlens.dashboard.services.media.media_relevance import VotePolicy
+
+        MediaRelevance.objects.create(
+            profile=self.profile,
+            location=self.location,
+            source=self.source,
+            item_key=media_item_key(self.url),
+            is_relevant=False,
+        )
+        fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.profile)
+        with (
+            mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image),
+            mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote"),
+        ):
+            result = self._call(policy=VotePolicy.EXPLICIT)
+
+        self.assertFalse(result.declined)
+        self.assertTrue(result.voted)
+        vote = MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url))
+        self.assertTrue(vote.is_relevant)
+
+    def test_materialize_false_records_the_vote_without_downloading(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item") as materialize:
+            result = self._call(materialize=False)
+
+        self.assertTrue(result.voted)
+        self.assertIsNone(result.image)
+        self.assertIsNone(result.error)
+        materialize.assert_not_called()
         self.assertTrue(
             MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)).is_relevant
         )

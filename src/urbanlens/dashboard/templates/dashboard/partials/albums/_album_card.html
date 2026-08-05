@@ -16,9 +16,9 @@ Expects:
         <i class="material-symbols-outlined">photo_library</i>
       </span>
       {% endif %}
-      {% if row.album.kind == "timelapse" %}
-      <span class="album-card-kind" data-tooltip="Timelapse album" data-tooltip-pos="top">
-        <i class="material-symbols-outlined">timelapse</i>
+      {% if row.album.spec.badge %}
+      <span class="album-card-kind" data-tooltip="{{ row.album.spec.label }} album" data-tooltip-pos="top">
+        <i class="material-symbols-outlined">{{ row.album.spec.icon }}</i>
       </span>
       {% endif %}
     </span>
