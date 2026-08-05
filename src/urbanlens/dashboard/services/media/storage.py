@@ -96,7 +96,11 @@ def get_storage_used_bytes(profile: Profile) -> int:
     """Total bytes of stored uploads counted against a profile's quota.
 
     Rows predating the ``file_size`` field are skipped until their size is
-    lazily backfilled by ``process_image_upload``.
+    lazily backfilled by ``process_image_upload``. Rows carrying a
+    ``quota_exempt_reason`` are skipped permanently - cached external media
+    and community-rewarded contributions are storage the whole site benefits
+    from, so no single user is charged for them (see
+    ``services.media.quota_rewards``).
 
     Args:
         profile: The profile whose usage to sum.
@@ -106,7 +110,25 @@ def get_storage_used_bytes(profile: Profile) -> int:
     """
     from urbanlens.dashboard.models.images.model import Image
 
-    total = Image.objects.filter(profile=profile).aggregate(total=Sum("file_size"))["total"]
+    total = Image.objects.filter(profile=profile, quota_exempt_reason="").aggregate(total=Sum("file_size"))["total"]
+    return int(total or 0)
+
+
+def get_exempt_bytes(profile: Profile) -> int:
+    """Total bytes this profile stores that don't count against their quota.
+
+    Surfaced in the storage settings so a user can see the benefit rather
+    than just an unexplained gap between their file list and their usage bar.
+
+    Args:
+        profile: The profile whose exempt storage to sum.
+
+    Returns:
+        The number of exempt bytes.
+    """
+    from urbanlens.dashboard.models.images.model import Image
+
+    total = Image.objects.filter(profile=profile).exclude(quota_exempt_reason="").aggregate(total=Sum("file_size"))["total"]
     return int(total or 0)
 
 
@@ -381,6 +403,7 @@ def get_storage_settings_context(profile: Profile) -> dict:
     return {
         "storage_quota_bytes": quota_bytes,
         "storage_used_bytes": used_bytes,
+        "storage_exempt_bytes": get_exempt_bytes(profile),
         "storage_remaining_bytes": remaining_bytes,
         "storage_percent_used": percent_used,
         "storage_entitled_dimension": entitled_dimension,

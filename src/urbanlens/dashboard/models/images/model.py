@@ -90,6 +90,26 @@ class MediaKind(TextChoices):
     DOCUMENT = "document", "Document"
 
 
+class QuotaExemption(TextChoices):
+    """Why a stored file's bytes don't count against its uploader's quota.
+
+    The empty default means "counts normally". Both exemptions exist to avoid
+    charging a user for storage the whole community benefits from:
+
+    ``EXTERNAL_MEDIA`` is a locally cached copy of someone else's photo, kept
+    so the gallery doesn't depend on a provider's URL staying alive. The
+    person who happened to upvote it didn't author it and shouldn't pay for
+    caching it.
+
+    ``COMMUNITY_CONTRIBUTION`` is a user's own photo, shared to a wiki, that
+    enough other people marked relevant - the quota bonus is the reward for
+    contributing it. See ``services.media.quota_rewards``.
+    """
+
+    EXTERNAL_MEDIA = "external_media", "Cached external media"
+    COMMUNITY_CONTRIBUTION = "community", "Community-valued contribution"
+
+
 class Image(abstract.FrontendDashboardModel):
     """A photo, video, or document uploaded by a user, attached to a pin, community wiki, or safety check-in."""
 
@@ -231,6 +251,14 @@ class Image(abstract.FrontendDashboardModel):
     # Nullable because rows predating this field are backfilled lazily by
     # process_image_upload; usage sums simply skip unmeasured rows until then.
     file_size = BigIntegerField(null=True, blank=True)
+    # Why this row's bytes don't count against its profile's storage quota
+    # (empty = they do). See services.media.quota_rewards, which is the only
+    # thing that should set it, and QuotaExemption for what each value means.
+    # Materialized rather than recomputed because the community-contribution
+    # case is a one-way reward: a photo that earned its exemption keeps it
+    # even if voters later change their minds, so a user's stored photos can
+    # never retroactively push them over quota.
+    quota_exempt_reason = CharField(max_length=20, blank=True, default="", choices=QuotaExemption.choices, db_index=True)
     # Full EXIF metadata captured from the original upload BEFORE any
     # downscaling or format conversion, so nothing is lost if the stored file
     # is re-encoded. Keys are human-readable tag names; values are

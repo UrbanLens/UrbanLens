@@ -224,6 +224,15 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Default storage quota (GB)",
         validators=[MinValueValidator(0), MaxValueValidator(1_000_000)],
     )
+    community_photo_quota_bonus_votes = IntegerField(
+        default=5,
+        help_text=(
+            "How many other users must mark one of a user's wiki-shared photos as relevant before that photo stops counting against their storage quota. "
+            "The uploader's own vote never counts. Set to 0 to turn the reward off."
+        ),
+        verbose_name="Relevant votes earning a quota bonus",
+        validators=[MinValueValidator(0), MaxValueValidator(10_000)],
+    )
     image_downscale_enabled = BooleanField(
         default=True,
         help_text="Downscale uploaded photos that exceed the maximum dimension below, to save storage space. The original EXIF metadata is always preserved on the image record.",

@@ -1416,6 +1416,12 @@
                 {% else %}
                 <p class="storage-usage__text"><strong>{{ storage_used_bytes|filesizeformat }}</strong> used &middot; your storage is unlimited</p>
                 {% endif %}
+                {% if storage_exempt_bytes %}
+                <p class="storage-usage__exempt settings-help">
+                    <i class="material-symbols-outlined">volunteer_activism</i>
+                    A further {{ storage_exempt_bytes|filesizeformat }} is stored free: photos the community found useful, and cached copies of other people's photos.
+                </p>
+                {% endif %}
             </div>
 
             <form method="post" class="settings-form" id="storage-form">

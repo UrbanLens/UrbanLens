@@ -898,6 +898,20 @@
     }
 }
 
+// Storage stored free for the user - community-rewarded contributions and
+// cached external media. See services.media.quota_rewards.
+.storage-usage__exempt {
+    display: flex;
+    align-items: center;
+    gap: .35rem;
+    margin: .35rem 0 0;
+
+    .material-symbols-outlined {
+        font-size: 1rem;
+        color: var(--primary-color);
+    }
+}
+
 .storage-estimate {
     font-style: italic;
     margin-top: .5rem;

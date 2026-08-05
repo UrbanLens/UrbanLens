@@ -213,6 +213,7 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.images.model import Image
         from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
         from urbanlens.dashboard.services.media.media_relevance import record_relevant_and_cache
+        from urbanlens.dashboard.services.media.quota_rewards import refresh_community_quota_bonus
         from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
 
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
@@ -269,6 +270,8 @@ class WikiMediaVoteView(LoginRequiredMixin, View):
             existing_image = Image.objects.filter(pk=image_id, location=location).first() if image_id else None
             if existing_image is not None:
                 queue_relevance_vote(existing_image, profile, is_relevant=bool(is_relevant))
+                if is_relevant:
+                    refresh_community_quota_bonus(existing_image)
 
         score = MediaRelevance.objects.vote_scores(location, source).get(item_key, 0)
         my_vote = None if is_relevant is None else bool(is_relevant)

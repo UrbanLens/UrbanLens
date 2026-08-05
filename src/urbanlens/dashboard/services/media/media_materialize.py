@@ -6,8 +6,13 @@ Images, ...) renders straight from each provider's live results (see
 what keeps browsing it cheap. Two actions need a real, durable photo though:
 sending an item to the community wiki, and setting it as a cover photo. Both
 funnel through :func:`materialize_media_item`, which downloads the item once
-and creates (or reuses) an ``Image`` row for it, counted against the acting
-user's storage quota like any other upload.
+and creates (or reuses) an ``Image`` row for it.
+
+Rows created here are exempt from the acting user's storage quota
+(``QuotaExemption.EXTERNAL_MEDIA``): the cache exists so the gallery survives
+a provider's URL rotting, and the user who upvoted an item into it didn't
+author the photo. Only the per-item ``_MAX_DOWNLOAD_BYTES`` cap applies. See
+``services.media.quota_rewards``.
 """
 
 from __future__ import annotations
@@ -19,10 +24,9 @@ from urllib.parse import urljoin, urlparse
 from django.core.files.base import ContentFile
 import requests
 
-from urbanlens.dashboard.models.images.model import Image, ImageSource
+from urbanlens.dashboard.models.images.model import Image, ImageSource, QuotaExemption
 from urbanlens.dashboard.models.images.relevance import media_item_key
 from urbanlens.dashboard.services.media.images import compute_checksum
-from urbanlens.dashboard.services.media.storage import quota_error_for_upload
 from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url
 
 if TYPE_CHECKING:
@@ -277,14 +281,14 @@ def materialize_media_item(
     if not content:
         raise MaterializeError(f"{url} returned no image data.")
 
-    quota_error = quota_error_for_upload(profile, len(content))
-    if quota_error:
-        raise MaterializeError(quota_error)
-
     file_obj = ContentFile(content, name=_filename_from_url(url))
     checksum = compute_checksum(file_obj)
     file_obj.seek(0)
 
+    # Deliberately not quota-checked. This is a cached copy of someone else's
+    # photo, kept so the gallery survives the provider's URL rotting - the
+    # user who upvoted it into the cache didn't author it and isn't charged
+    # for it. The per-item _MAX_DOWNLOAD_BYTES cap still applies.
     image = Image.objects.create(
         image=file_obj,
         location=location,
@@ -298,6 +302,7 @@ def materialize_media_item(
         caption=_truncated_caption(caption),
         checksum=checksum,
         file_size=len(content),
+        quota_exempt_reason=QuotaExemption.EXTERNAL_MEDIA,
     )
 
     from urbanlens.dashboard.services.photos.redata_relevance import queue_photo_submission

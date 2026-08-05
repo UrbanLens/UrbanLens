@@ -136,9 +136,12 @@ def toggle_media_vote(image: Image, profile: Profile, *, value: int) -> int:
             item_key=item_key,
             defaults={"is_relevant": value == 1},
         )
+        from urbanlens.dashboard.services.media.quota_rewards import refresh_community_quota_bonus
         from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
 
         queue_relevance_vote(image, profile, is_relevant=value == 1)
+        if value == 1:
+            refresh_community_quota_bonus(image)
 
     return MediaRelevance.objects.vote_scores(image.location, source).get(item_key, 0)
 
