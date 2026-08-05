@@ -4,6 +4,19 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
 to pick up without re-discovering the problem from scratch.
 
+## OPEN 2026-08-05: `bun run build` (`bin/build-frontend.ts`) fails with "Formats besides 'esm' are not implemented"
+
+Found while verifying a photo-thumbnail zoom-scaling fix in `map-annotations.ts`. `bun run build`
+bundles every entry successfully, then errors out on that message and exits 1 without writing the
+final static output for at least `achievements.js`/`article-wysiwyg.js`/etc. (the earlier committed
+static files stay in place from the last successful build, so the app itself isn't visibly broken -
+this is a fresh-build/CI concern, not a runtime one). Confirmed pre-existing and unrelated to any
+in-progress change by `git stash`-ing all working-tree edits and re-running: identical failure on
+a clean `@release/v_0_7_0` checkout. Not yet root-caused - worth checking whether one of the entry
+points (or a plugin in `bin/build-frontend.ts`) requests a non-ESM output format that this Bun
+version's bundler no longer supports. `bun run typecheck` and `bun run test:ts` are unaffected and
+both still work normally.
+
 ## DANGEROUS: `delete_low_engagement_wikis` deletes *every* wiki - its filter is commented out
 
 `management/commands/delete_low_engagement_wikis.py:62` is a commented-out line:

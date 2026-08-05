@@ -706,7 +706,7 @@ function init(): void {
     let detailPins: DetailPinEntry[] = [];
     let highlightedDpUuid: string | null = null;
     let photoPanelItems: PhotoPanelItem[] = [];
-    const photoMarkers: Record<number, { marker: L.Marker; url: string; lat: number; lng: number }> = {};
+    const photoMarkers: Record<number, { marker: L.Marker; url: string; lat: number; lng: number; highlighted: boolean }> = {};
 
     function hexToRgb(hex: string): string {
         const r = Number.parseInt(hex.slice(1, 3), 16);
@@ -1588,6 +1588,19 @@ function init(): void {
     });
 
     // -- Photo panel -----------------------------------------------------------
+    // Base thumbnail size at zoom 16+, halving every 4 zoom levels below that so
+    // thumbnails don't cover a huge chunk of the map when zoomed far out.
+    const PHOTO_MARKER_BASE_SIZE = 44;
+    const PHOTO_MARKER_MIN_SIZE = 14;
+    const PHOTO_MARKER_HOVER_SCALE = 56 / 44;
+
+    function photoMarkerSize(highlighted?: boolean): number {
+        const z = map.getZoom();
+        const scale = 2 ** ((z - 16) * 0.5);
+        const base = Math.max(PHOTO_MARKER_MIN_SIZE, Math.min(PHOTO_MARKER_BASE_SIZE, Math.round(PHOTO_MARKER_BASE_SIZE * scale)));
+        return highlighted ? Math.round(base * PHOTO_MARKER_HOVER_SCALE) : base;
+    }
+
     function makePhotoIcon(url: string, size: number, highlighted?: boolean): L.DivIcon {
         const shadow = highlighted ? "0 0 0 3px #2563eb, 0 3px 10px rgba(0,0,0,.45)" : "0 2px 6px rgba(0,0,0,.35)";
         return L.divIcon({
@@ -1602,7 +1615,7 @@ function init(): void {
         if (photoMarkers[imgId]) photoLayer.removeLayer(photoMarkers[imgId]!.marker);
         // Photos belonging to a child pin (ownerName) are display-only on this
         // map - they're repositioned from their own pin's page.
-        const marker = L.marker([lat, lng], { icon: makePhotoIcon(url, 44, false), draggable: !ownerName });
+        const marker = L.marker([lat, lng], { icon: makePhotoIcon(url, photoMarkerSize(false), false), draggable: !ownerName });
         if (ownerName) marker.bindTooltip(`Photo from ${ownerName}`, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
         marker.on("dragend", () => {
             const pos = marker.getLatLng();
@@ -1637,8 +1650,16 @@ function init(): void {
         // be on the currently rendered gallery page.
         marker.on("click", () => window.galleryOpenLightbox?.(imgId, { url }));
         marker.addTo(photoLayer);
-        photoMarkers[imgId] = { marker, url, lat, lng };
+        photoMarkers[imgId] = { marker, url, lat, lng, highlighted: false };
     }
+
+    // Rescale photo thumbnails when the user zooms in/out so they don't cover
+    // a disproportionate area of the map when zoomed far out.
+    map.on("zoomend", () => {
+        Object.values(photoMarkers).forEach((entry) => {
+            entry.marker.setIcon(makePhotoIcon(entry.url, photoMarkerSize(entry.highlighted), entry.highlighted));
+        });
+    });
 
     window._galleryAddMarker = (img) => {
         if (!photoPanelItems.find((p) => p.id === img.id)) photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true });
@@ -1660,8 +1681,8 @@ function init(): void {
     window._galleryHighlightMarker = (imgId, on) => {
         const entry = photoMarkers[imgId];
         if (entry) {
-            const sz = on ? 56 : 44;
-            entry.marker.setIcon(makePhotoIcon(entry.url, sz, on));
+            entry.highlighted = !!on;
+            entry.marker.setIcon(makePhotoIcon(entry.url, photoMarkerSize(entry.highlighted), entry.highlighted));
             if (on) map.panTo([entry.lat, entry.lng]);
         }
         document.querySelectorAll<HTMLElement>(".photo-panel-item").forEach((li) => {
