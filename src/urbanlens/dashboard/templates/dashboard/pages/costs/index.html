@@ -24,7 +24,9 @@
             That figure blends amortized hardware, ongoing hosting &amp; operating costs, and the
             last 30 days of metered external API calls
             {% if cost_per_user is not None %} - split across {{ active_user_count }} active user{{ active_user_count|pluralize }}
-            (logged in within 30 days, 2+ pins), it works out to roughly ${{ cost_per_user|floatformat:2 }} per user{% endif %}.
+            (logged in within 30 days, 2+ pins), it works out to roughly ${{ cost_per_user|floatformat:2 }} per user{% endif %}{% if cost_per_supporter is not None %}, while the
+            {{ active_supporter_count }} paying supporter{{ active_supporter_count|pluralize }} currently covering it effectively
+            shoulder about ${{ cost_per_supporter|floatformat:2 }} each{% endif %}.
         </p>
 
         <div class="stats-kpi-grid">
@@ -57,6 +59,18 @@
                     <div class="stats-kpi-value">${{ cost_per_user|floatformat:2 }}</div>
                     <div class="stats-kpi-label">Per user</div>
                     <div class="stats-kpi-sub">{{ active_user_count }} active user{{ active_user_count|pluralize }}</div>
+                </div>
+            </div>
+            {% endif %}
+            {% if cost_per_supporter is not None %}
+            <div class="stats-kpi-card">
+                <div class="stats-kpi-icon" style="background:rgba(219,39,119,.12)">
+                    <i class="material-icons" style="color:#db2777">volunteer_activism</i>
+                </div>
+                <div class="stats-kpi-body">
+                    <div class="stats-kpi-value">${{ cost_per_supporter|floatformat:2 }}</div>
+                    <div class="stats-kpi-label">Per supporter</div>
+                    <div class="stats-kpi-sub">{{ active_supporter_count }} paying supporter{{ active_supporter_count|pluralize }}</div>
                 </div>
             </div>
             {% endif %}

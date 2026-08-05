@@ -194,6 +194,47 @@ def cost_per_user(as_of: datetime.datetime | None = None) -> Decimal | None:
     return effective_monthly_cost(as_of).total / users
 
 
+def active_supporter_count(as_of: datetime.datetime | None = None) -> int:
+    """Return the number of distinct users currently holding a paying subscription.
+
+    A "supporter" is a user with at least one ``RoleSubscription`` currently granting
+    access (see ``RoleSubscriptionQuerySet.currently_granting``) - active/trialing with
+    its role's pay-what-you-want threshold cleared, or coasting on unexpired banked
+    usage-ledger coverage. Deduplicated by user, since one user can hold more than one
+    paid role. Unlike ``active_user_count``, admin-granted (non-billed) ``UserSubscription``
+    rows don't count here - this is specifically "people currently paying", to contrast
+    against the general active-user population.
+
+    Args:
+        as_of: Point in time to evaluate against; defaults to now.
+
+    Returns:
+        The number of distinct paying supporters.
+    """
+    from urbanlens.dashboard.models.billing import RoleSubscription
+
+    return RoleSubscription.objects.currently_granting(as_of).values("user_id").distinct().count()
+
+
+def cost_per_supporter(as_of: datetime.datetime | None = None) -> Decimal | None:
+    """Return the current effective monthly cost divided by paying supporters.
+
+    Intentionally a much larger figure than ``cost_per_user`` - most users never pay,
+    so this highlights how much of the site's real cost each paying supporter is
+    effectively covering.
+
+    Args:
+        as_of: Point in time to evaluate against; defaults to now.
+
+    Returns:
+        The per-supporter monthly cost, or None when there are no current supporters.
+    """
+    supporters = active_supporter_count(as_of)
+    if not supporters:
+        return None
+    return effective_monthly_cost(as_of).total / supporters
+
+
 def _advance_month(cursor: datetime.datetime) -> datetime.datetime:
     """Return the first moment of the calendar month after *cursor*."""
     if cursor.month == 12:

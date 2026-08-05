@@ -9,6 +9,8 @@ from django.db.models import Q
 from urbanlens.dashboard.models import abstract
 
 if TYPE_CHECKING:
+    import datetime
+
     from django.contrib.auth.models import User
 
     from urbanlens.dashboard.models.billing.model import BillingCustomer, RoleSubscription, StripeWebhookEvent
@@ -39,13 +41,28 @@ class RoleSubscriptionQuerySet(abstract.DashboardQuerySet["RoleSubscription"]):
         Returns:
             Matching subscriptions.
         """
+        return self.filter(user=user).currently_granting()
+
+    def currently_granting(self, as_of: datetime.datetime | None = None) -> Self:
+        """Rows currently entitling whichever user they belong to, without a per-user filter.
+
+        Same criteria as ``granting_access_for``, minus the ``user=`` filter - meant for
+        sitewide aggregates (e.g. counting distinct paying supporters) rather than looking
+        up one user's own access.
+
+        Args:
+            as_of: Point in time to evaluate the banked-coverage expiry against; defaults to now.
+
+        Returns:
+            Matching subscriptions.
+        """
         from django.utils import timezone
 
         from urbanlens.dashboard.models.billing.model import BillingSubscriptionStatus
 
-        return self.filter(user=user).filter(
-            Q(status__in=(BillingSubscriptionStatus.ACTIVE, BillingSubscriptionStatus.TRIALING), threshold_met=True)
-            | Q(usage_covered_until__gt=timezone.now())
+        as_of = as_of or timezone.now()
+        return self.filter(
+            Q(status__in=(BillingSubscriptionStatus.ACTIVE, BillingSubscriptionStatus.TRIALING), threshold_met=True) | Q(usage_covered_until__gt=as_of)
         )
 
     def visible_for(self, user: User) -> Self:

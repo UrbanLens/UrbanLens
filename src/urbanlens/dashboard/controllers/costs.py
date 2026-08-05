@@ -26,11 +26,14 @@ class CostsView(TemplateView):
 
         Returns:
             Template context including ``breakdown``, ``total_hardware_cost``,
-            ``cost_per_user``, ``active_user_count``, and the monthly total chart series.
+            ``cost_per_user``, ``active_user_count``, ``cost_per_supporter``,
+            ``active_supporter_count``, and the monthly total chart series.
         """
         from urbanlens.dashboard.models.site_settings import SiteSettings
         from urbanlens.dashboard.services.admin.cost_tracking import (
+            active_supporter_count,
             active_user_count,
+            cost_per_supporter,
             cost_per_user,
             effective_monthly_cost,
             monthly_cost_series,
@@ -50,6 +53,8 @@ class CostsView(TemplateView):
         context["total_hardware_cost"] = total_hardware_cost()
         context["cost_per_user"] = cost_per_user()
         context["active_user_count"] = active_user_count()
+        context["cost_per_supporter"] = cost_per_supporter()
+        context["active_supporter_count"] = active_supporter_count()
         context["chart_labels"] = safe_json_for_script(series["labels"])
         context["chart_total"] = safe_json_for_script(
             [h + o + a for h, o, a in zip(series["hardware"], series["operating"], series["api"], strict=True)]

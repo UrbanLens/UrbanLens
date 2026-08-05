@@ -12,11 +12,15 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.api_call_log import ApiCallLog
+from urbanlens.dashboard.models.billing import BillingSubscriptionStatus, RoleSubscription
 from urbanlens.dashboard.models.costs.model import CostComponent, OperatingCost
 from urbanlens.dashboard.models.site_settings import SiteSettings
+from urbanlens.dashboard.models.subscriptions import SubscriptionRole
 from urbanlens.dashboard.services.admin.cost_tracking import (
+    active_supporter_count,
     active_user_count,
     average_monthly_expense,
+    cost_per_supporter,
     cost_per_user,
     effective_monthly_cost,
     monthly_cost_series,
@@ -178,6 +182,53 @@ class CostTrackingServiceTests(TestCase):
 
         self.assertEqual(cost_per_user(), Decimal(50))
 
+    def test_active_supporter_count_counts_currently_granting_subscriptions(self) -> None:
+        role = baker.make(SubscriptionRole)
+        user = baker.make(User)
+        baker.make(RoleSubscription, user=user, role=role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=True)
+        self.assertEqual(active_supporter_count(), 1)
+
+    def test_active_supporter_count_excludes_threshold_not_met(self) -> None:
+        role = baker.make(SubscriptionRole)
+        user = baker.make(User)
+        baker.make(RoleSubscription, user=user, role=role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=False)
+        self.assertEqual(active_supporter_count(), 0)
+
+    def test_active_supporter_count_excludes_canceled(self) -> None:
+        role = baker.make(SubscriptionRole)
+        user = baker.make(User)
+        baker.make(RoleSubscription, user=user, role=role, status=BillingSubscriptionStatus.CANCELED, threshold_met=True)
+        self.assertEqual(active_supporter_count(), 0)
+
+    def test_active_supporter_count_deduplicates_a_user_with_multiple_roles(self) -> None:
+        user = baker.make(User)
+        for _ in range(2):
+            role = baker.make(SubscriptionRole)
+            baker.make(RoleSubscription, user=user, role=role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=True)
+        self.assertEqual(active_supporter_count(), 1)
+
+    def test_cost_per_supporter_is_none_with_no_supporters(self) -> None:
+        self.assertIsNone(cost_per_supporter())
+
+    def test_cost_per_supporter_divides_effective_cost_by_supporters(self) -> None:
+        role = baker.make(SubscriptionRole)
+        user = baker.make(User)
+        baker.make(RoleSubscription, user=user, role=role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=True)
+        OperatingCost.objects.create(name="Electricity", monthly_cost=Decimal(100))
+
+        self.assertEqual(cost_per_supporter(), Decimal(100))
+
+    def test_cost_per_supporter_is_higher_than_cost_per_user_when_supporters_are_a_minority(self) -> None:
+        # Two active users, only one of whom pays - cost-per-supporter should be
+        # noticeably higher than cost-per-user, which is the whole point of the stat.
+        _make_active_user()
+        paying_user = _make_active_user()
+        role = baker.make(SubscriptionRole)
+        baker.make(RoleSubscription, user=paying_user, role=role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=True)
+        OperatingCost.objects.create(name="Electricity", monthly_cost=Decimal(100))
+
+        self.assertGreater(cost_per_supporter(), cost_per_user())
+
     def test_monthly_cost_series_shape(self) -> None:
         series = monthly_cost_series(months=3)
         self.assertEqual(len(series["labels"]), 3)
@@ -320,6 +371,27 @@ class PublicCostsViewTests(TestCase):
         response = self.client.get(reverse("costs"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "100.00")
+
+    def test_page_shows_cost_per_supporter_when_there_are_supporters(self) -> None:
+        settings_obj = SiteSettings.get_current()
+        settings_obj.public_costs_page_enabled = True
+        settings_obj.save(update_fields=["public_costs_page_enabled"])
+
+        role = baker.make(SubscriptionRole)
+        user = baker.make(User)
+        baker.make(RoleSubscription, user=user, role=role, status=BillingSubscriptionStatus.ACTIVE, threshold_met=True)
+        OperatingCost.objects.create(name="Electricity", monthly_cost=Decimal(100))
+
+        response = self.client.get(reverse("costs"))
+        self.assertContains(response, "Per supporter")
+
+    def test_page_hides_cost_per_supporter_when_there_are_none(self) -> None:
+        settings_obj = SiteSettings.get_current()
+        settings_obj.public_costs_page_enabled = True
+        settings_obj.save(update_fields=["public_costs_page_enabled"])
+
+        response = self.client.get(reverse("costs"))
+        self.assertNotContains(response, "Per supporter")
 
     def test_footer_link_hidden_when_disabled(self) -> None:
         response = self.client.get(reverse("about"))
