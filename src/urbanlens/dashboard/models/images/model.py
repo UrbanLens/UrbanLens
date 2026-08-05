@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import posixpath
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
@@ -13,6 +14,33 @@ from urbanlens.dashboard.models.images.queryset import ImageManager
 
 if TYPE_CHECKING:
     from decimal import Decimal
+
+# Room for "pin_images/" (11 chars) plus the ~8-character suffix
+# Storage.get_available_name appends on a filename collision, comfortably
+# inside the field's max_length below. Uploaded filenames are arbitrary and
+# unbounded - a browser drag-drop, a device-scan import, or a Media-gallery
+# URL can each hand over a name well past 100 characters, which overflowed
+# the field's old default max_length (100) outright and raised
+# SuspiciousFileOperation instead of storing the file.
+_UPLOAD_STEM_LIMIT = 80
+_UPLOAD_EXT_LIMIT = 12
+
+
+def pin_image_upload_path(instance: Image, filename: str) -> str:
+    """Storage path for an uploaded Image file, trimming an overlong name to fit.
+
+    Not underscore-prefixed despite being an internal helper - Django
+    migrations serialize a callable ``upload_to`` by importable reference, so
+    this needs to read as public to both ruff and any future migration.
+
+    Only the stem is trimmed, not the extension, and the trim always comes
+    from the end - the filename's *prefix* must survive into storage for
+    ``services.media.images.is_camera_generated_filename`` to keep recognizing
+    camera-named uploads (e.g. ``PXL_20260709_123456.jpg``) for its
+    author-attribution heuristic.
+    """
+    stem, ext = posixpath.splitext(filename)
+    return f"pin_images/{stem[:_UPLOAD_STEM_LIMIT]}{ext[:_UPLOAD_EXT_LIMIT]}"
 
 
 class ImageSource(TextChoices):
@@ -65,7 +93,7 @@ class MediaKind(TextChoices):
 class Image(abstract.FrontendDashboardModel):
     """A photo, video, or document uploaded by a user, attached to a pin, community wiki, or safety check-in."""
 
-    image = ImageField(upload_to="pin_images/")
+    image = ImageField(upload_to=pin_image_upload_path, max_length=255)
     media_type = CharField(max_length=10, choices=MediaKind.choices, default=MediaKind.PHOTO, db_index=True)
     # Provenance for the Media gallery's per-source tabs (see ImageSource). Only
     # meaningful once a row exists; almost every Image row is a plain upload.

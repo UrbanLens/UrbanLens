@@ -114,9 +114,14 @@ def find_materialized_image(location: Location, source: str, url: str, *, page_u
 
 
 def _filename_from_url(url: str) -> str:
-    """Best-effort filename for the downloaded content, defaulting when unclear."""
+    """Best-effort filename for the downloaded content, defaulting when unclear.
+
+    Left untruncated - ``Image.image``'s ``upload_to`` trims an overlong name
+    to fit the field itself, so every writer doesn't need its own copy of
+    that logic.
+    """
     name = urlparse(url).path.rsplit("/", 1)[-1]
-    return name[:100] if name and "." in name else _DEFAULT_FILENAME
+    return name if name and "." in name else _DEFAULT_FILENAME
 
 
 def fetch_with_revalidated_redirects(

@@ -622,9 +622,14 @@ class SuggestionPhotoError(RuntimeError):
 
 
 def _filename_from_url(url: str) -> str:
-    """Best-effort filename for a downloaded photo, defaulting when unclear."""
+    """Best-effort filename for a downloaded photo, defaulting when unclear.
+
+    Left untruncated - ``Image.image``'s ``upload_to`` trims an overlong name
+    to fit the field itself, so every writer doesn't need its own copy of
+    that logic.
+    """
     name = urlparse(url).path.rsplit("/", 1)[-1]
-    return name[:100] if name and "." in name else _DEFAULT_PHOTO_FILENAME
+    return name if name and "." in name else _DEFAULT_PHOTO_FILENAME
 
 
 def _download_photo_bytes(url: str) -> bytes:
