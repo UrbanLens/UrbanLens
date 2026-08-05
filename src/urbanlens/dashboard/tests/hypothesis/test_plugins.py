@@ -220,10 +220,7 @@ class BuiltinDiscoveryTests(SimpleTestCase):
             "google_maps",
             "google_places",
             "esri",
-            "nasa_gibs",
-            "mapbox",
-            "bing_maps",
-            "open_aerial_map",
+            "redata_imagery",
             "mapillary",
             "kartaview",
         }
@@ -259,17 +256,12 @@ class BuiltinDiscoveryTests(SimpleTestCase):
             satellite,
             [
                 "GoogleMapsGateway",
-                "AzureMapsRenderGateway",
                 "EsriGateway",
-                "NasaGibsGateway",
-                "MapboxGateway",
-                "BingMapsGateway",
-                "OpenAerialMapGateway",
-                "OpenTopoMapGateway",
+                "RedataSatelliteProvider",
             ],
         )
         street = [type(p).__name__ for p in plugin_registry.street_view_providers()]
-        self.assertEqual(street, ["GoogleMapsGateway", "MapillaryGateway", "KartaViewGateway", "PanoramaxGateway"])
+        self.assertEqual(street, ["GoogleMapsGateway", "MapillaryStreetViewProvider", "KartaViewStreetViewProvider", "PanoramaxStreetViewProvider"])
 
     def test_unknown_panel_source_is_rejected_cleanly(self) -> None:
         from urbanlens.dashboard.services.pins.external_data import get_panel_source, schedule_panel_fetch

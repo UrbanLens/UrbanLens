@@ -293,8 +293,7 @@ def _google_maps_api_key() -> str:
     Deliberately does not raise when unset - most of GoogleMapsGateway's own
     methods (file-format parsing in particular) never touch the network, and
     the ones that do (e.g. ``_generate_satellite_slides``) already check
-    ``self.api_key`` themselves before making a request, matching how
-    BingMapsGateway/MapboxGateway treat their own optional keys.
+    ``self.api_key`` themselves before making a request.
     """
     return settings.google_unrestricted_api_key or ""
 

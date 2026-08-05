@@ -74,7 +74,7 @@ if TYPE_CHECKING:
     from django.http import HttpRequest
 
     from urbanlens.dashboard.controllers.comments import _ReactionData
-    from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
+    from urbanlens.dashboard.services.apis.weather.forecast import ForecastSlot
 
 logger = logging.getLogger(__name__)
 
@@ -1399,13 +1399,19 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
         return JsonResponse({"results": results})
 
 
-def _build_activity_forecasts(activities: list[TripActivity], gateway: OpenWeatherMapGateway) -> list[dict]:
-    """For each activity, find the closest 3-hourly forecast slot at its location/time.
+def _build_activity_forecasts(activities: list[TripActivity]) -> list[dict]:
+    """For each activity, find the closest forecast slot at its location/time.
+
+    Tries REData first, then the direct OpenWeatherMap/Open-Meteo chain - see
+    ``services.apis.locations.weather_resolution.get_raw_forecast_slots``.
 
     Returns a list of dicts with keys:
       activity, location_name, scheduled_at, slot, no_coords, out_of_range
     """
-    cache: dict[tuple[float, float], list[dict] | None] = {}
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+    from urbanlens.dashboard.services.apis.locations.weather_resolution import get_raw_forecast_slots
+
+    cache: dict[tuple[float, float], list[ForecastSlot] | None] = {}
     results = []
 
     for act in activities:
@@ -1429,8 +1435,8 @@ def _build_activity_forecasts(activities: list[TripActivity], gateway: OpenWeath
         key = (round(coords[0], 2), round(coords[1], 2))
         if key not in cache:
             try:
-                cache[key] = gateway.get_raw_forecast(*coords)
-            except requests.RequestException:
+                cache[key] = get_raw_forecast_slots(*coords)
+            except (requests.RequestException, LocationContextUnavailableError):
                 logger.warning("Weather fetch failed for coords %s", key)
                 cache[key] = None
 
@@ -1474,11 +1480,6 @@ class TripWeatherView(LoginRequiredMixin, View):
         """
         from collections import defaultdict
 
-        from urbanlens.dashboard.services.apis.weather.gateway import (
-            OpenWeatherMapGateway,
-        )
-        from urbanlens.UrbanLens.settings.app import settings as app_settings
-
         profile, _ = Profile.objects.get_or_create(user=request.user)
         result = trip_or_not_found(request, trip_slug, profile)
         if isinstance(result, HttpResponse):
@@ -1490,8 +1491,6 @@ class TripWeatherView(LoginRequiredMixin, View):
 
         if not profile.external_apis_enabled:
             error = "External weather lookups are turned off in your settings."
-        elif not app_settings.openweathermap_api_key:
-            error = "Weather API key not configured."
         else:
             today = datetime.date.today()
             activities = [act for act in _activity_qs(trip) if act.status != TripActivity.STATUS_COMPLETED and (act.scheduled_at is None or act.scheduled_at.date() >= today)]
@@ -1499,8 +1498,7 @@ class TripWeatherView(LoginRequiredMixin, View):
                 pass  # no upcoming activities - leave error/grouped empty to hide the section
             else:
                 try:
-                    gateway = OpenWeatherMapGateway()
-                    activity_forecasts = _build_activity_forecasts(activities, gateway)
+                    activity_forecasts = _build_activity_forecasts(activities)
                     # Drop activities with nothing useful to show (no location data,
                     # or too far outside the 5-day forecast window) instead of
                     # rendering an empty "No location data"/"Outside 5-day forecast"

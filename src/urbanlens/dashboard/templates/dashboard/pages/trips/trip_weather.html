@@ -41,20 +41,17 @@
                             <div class="trip-weather-activity-forecast">
                                 {% with s=af.slot %}
                                 <div class="trip-weather-slot-inline">
-                                    <img class="trip-weather-slot-icon"
-                                        src="https://openweathermap.org/img/wn/{{ s.weather.0.icon }}@2x.png"
-                                        alt="{{ s.weather.0.description }}"
-                                        loading="lazy">
+                                    <i class="material-symbols-outlined trip-weather-slot-icon">{{ s.icon }}</i>
                                     <div class="trip-weather-slot-temps">
-                                        <span class="trip-weather-slot-temp">{{ s.main.temp|floatformat:0 }}°F</span>
-                                        <span class="trip-weather-slot-feels">Feels {{ s.main.feels_like|floatformat:0 }}°</span>
+                                        <span class="trip-weather-slot-temp">{{ s.temp|floatformat:0 }}°F</span>
+                                        {% if s.feels_like %}<span class="trip-weather-slot-feels">Feels {{ s.feels_like|floatformat:0 }}°</span>{% endif %}
                                     </div>
                                     <div class="trip-weather-slot-right">
-                                        <p class="trip-weather-slot-desc">{{ s.weather.0.description|capfirst }}</p>
+                                        <p class="trip-weather-slot-desc">{{ s.condition }}</p>
                                         <div class="trip-weather-slot-meta">
-                                            <span title="Humidity"><i class="material-symbols-outlined">water_drop</i> {{ s.main.humidity }}%</span>
-                                            <span title="Wind"><i class="material-symbols-outlined">air</i> {{ s.wind.speed|floatformat:0 }} mph</span>
-                                            {% if s.pop %}<span title="Precipitation probability"><i class="material-symbols-outlined">umbrella</i> {% widthratio s.pop 1 100 %}%</span>{% endif %}
+                                            {% if s.humidity %}<span title="Humidity"><i class="material-symbols-outlined">water_drop</i> {{ s.humidity }}%</span>{% endif %}
+                                            {% if s.wind_speed %}<span title="Wind"><i class="material-symbols-outlined">air</i> {{ s.wind_speed|floatformat:0 }} mph</span>{% endif %}
+                                            {% if s.precipitation_probability %}<span title="Precipitation probability"><i class="material-symbols-outlined">umbrella</i> {{ s.precipitation_probability }}%</span>{% endif %}
                                         </div>
                                     </div>
                                 </div>

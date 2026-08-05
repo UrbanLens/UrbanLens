@@ -145,6 +145,14 @@ urlpatterns = [
         ),
         name="terms",
     ),
+    path(
+        "privacy/",
+        TemplateView.as_view(
+            template_name="dashboard/pages/legal/privacy.html",
+            extra_context={"page_name": "privacy"},
+        ),
+        name="privacy",
+    ),
     path("thanks/", thanks.ThanksView.as_view(), name="thanks"),
     path("costs/", costs.CostsView.as_view(), name="costs"),
     path("billing/webhooks/stripe/", billing_webhooks.StripeWebhookView.as_view(), name="billing.stripe_webhook"),

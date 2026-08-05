@@ -4,8 +4,9 @@ Covers MediaPanelSource.search_terms(), MediaProvider.get_media()'s cache
 lookup, and the per-provider flags that keep archive searches on-topic - the
 fix for LOC/Smithsonian/Internet Archive returning irrelevant nationwide
 results for a pin with no real landmark name (just its street address as a
-fallback "name"). See services.apis.assets.loc.LOCJsonGateway and
-services.locations.naming.is_address_derived_name.
+fallback "name"). See
+services.apis.locations.redata_reference_documents_gateway.LibraryOfCongressMediaProvider
+and services.locations.naming.is_address_derived_name.
 """
 
 from __future__ import annotations
@@ -18,9 +19,11 @@ from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
-from urbanlens.dashboard.services.apis.assets.internet_archive import InternetArchiveGateway
-from urbanlens.dashboard.services.apis.assets.loc import LOCJsonGateway
-from urbanlens.dashboard.services.apis.assets.smithsonian import SmithsonianGateway
+from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import (
+    InternetArchiveMediaProvider,
+    LibraryOfCongressMediaProvider,
+    SmithsonianMediaProvider,
+)
 from urbanlens.dashboard.services.pins.external_data import MediaPanelSource
 
 if TYPE_CHECKING:
@@ -156,14 +159,14 @@ class MediaProviderCacheKeyTests(SimpleTestCase):
         self.assertTrue(from_cache)
 
 
-class LOCJsonGatewayRelevanceFlagsTests(SimpleTestCase):
+class LibraryOfCongressMediaProviderRelevanceFlagsTests(SimpleTestCase):
     """Regression guard for LOC's specific configuration."""
 
     def test_reject_address_derived_names_is_enabled(self) -> None:
-        self.assertTrue(LOCJsonGateway.reject_address_derived_names)
+        self.assertTrue(LibraryOfCongressMediaProvider.reject_address_derived_names)
 
     def test_include_address_is_disabled(self) -> None:
-        self.assertFalse(LOCJsonGateway.include_address)
+        self.assertFalse(LibraryOfCongressMediaProvider.include_address)
 
     def test_reject_address_derived_names_defaults_off_for_other_providers(self) -> None:
         """Only LOC opts in - other providers' relevance ranking may handle a
@@ -171,61 +174,63 @@ class LOCJsonGatewayRelevanceFlagsTests(SimpleTestCase):
         self.assertFalse(_BareGateway.reject_address_derived_names)
 
 
-class InternetArchiveGatewayRelevanceFlagsTests(SimpleTestCase):
+class InternetArchiveMediaProviderRelevanceFlagsTests(SimpleTestCase):
     """Regression guard: Internet Archive has the same word-independent-OR
     relevance ranking symptom as LOC (a generic street-type word like "Road"
     coincidentally matches unrelated nationwide items), fixed the same way.
 
-    The gateway's own query construction and result filtering - the larger
-    half of that fix - are covered in ``test_internet_archive_relevance``."""
+    Unlike the deleted direct gateway, REData now builds the actual upstream
+    query (including any phrase-quoting archive.org's parser needs) - this
+    provider just passes a clean, unquoted name + locality as ``q``."""
 
     def test_include_address_is_disabled(self) -> None:
-        self.assertFalse(InternetArchiveGateway.include_address)
+        self.assertFalse(InternetArchiveMediaProvider.include_address)
 
     def test_reject_address_derived_names_is_enabled(self) -> None:
-        self.assertTrue(InternetArchiveGateway.reject_address_derived_names)
+        self.assertTrue(InternetArchiveMediaProvider.reject_address_derived_names)
 
     def test_search_with_country_is_disabled(self) -> None:
-        self.assertFalse(InternetArchiveGateway.search_with_country)
+        self.assertFalse(InternetArchiveMediaProvider.search_with_country)
 
-    def test_name_and_locality_are_quoted(self) -> None:
-        """The gateway splits the term back into a name phrase and a locality
-        phrase; unquoted, they'd be an undifferentiated bag of words."""
-        self.assertTrue(InternetArchiveGateway.quote_name)
-        self.assertTrue(InternetArchiveGateway.quote_locality)
+    def test_name_and_locality_are_not_quoted(self) -> None:
+        """Quoting is now REData's job (per its own ``query_styles`` per
+        provider) - double-quoting here would be quoting REData's own quoting."""
+        self.assertFalse(InternetArchiveMediaProvider.quote_name)
+        self.assertFalse(InternetArchiveMediaProvider.quote_locality)
 
     def test_address_is_actually_omitted_from_the_query(self) -> None:
         """The exact reported scenario: name "Summit Road" pulled in unrelated
-        nationwide results once the street address was included unquoted."""
+        nationwide results once the street address was included."""
         loc = _location(street_number="1000", route="I-75 Nb Expy", locality="Cincinnati", administrative_area_level_1="OH", official_name="Summit Road")
         pin = _pin(loc)
-        terms = MediaPanelSource.search_terms(pin, InternetArchiveGateway())
-        self.assertEqual(terms, ['"Summit Road" "Cincinnati OH"'])
+        terms = MediaPanelSource.search_terms(pin, InternetArchiveMediaProvider())
+        self.assertEqual(terms, ["Summit Road Cincinnati OH"])
 
 
-class SmithsonianGatewayRelevanceFlagsTests(SimpleTestCase):
+class SmithsonianMediaProviderRelevanceFlagsTests(SimpleTestCase):
     """Regression guard: Smithsonian returned irrelevant nationwide results
     for the same word-independent-OR relevance ranking reason as LOC/Internet
     Archive, compounded by an unquoted "United States" contributing noise as
     its own free-standing term across a ~19M-object US federal collection."""
 
     def test_reject_address_derived_names_is_enabled(self) -> None:
-        self.assertTrue(SmithsonianGateway.reject_address_derived_names)
+        self.assertTrue(SmithsonianMediaProvider.reject_address_derived_names)
 
     def test_include_address_is_disabled(self) -> None:
-        self.assertFalse(SmithsonianGateway.include_address)
+        self.assertFalse(SmithsonianMediaProvider.include_address)
 
     def test_search_with_country_is_disabled(self) -> None:
-        self.assertFalse(SmithsonianGateway.search_with_country)
+        self.assertFalse(SmithsonianMediaProvider.search_with_country)
 
-    def test_quote_name_is_enabled(self) -> None:
-        self.assertTrue(SmithsonianGateway.quote_name)
+    def test_name_and_locality_are_not_quoted(self) -> None:
+        """Smithsonian's Solr-family parser needs quotes, but REData applies
+        them server-side now (per its own ``query_styles``) - quoting here too
+        would double-apply it on top of REData's."""
+        self.assertFalse(SmithsonianMediaProvider.quote_name)
+        self.assertFalse(SmithsonianMediaProvider.quote_locality)
 
-    def test_quote_locality_is_enabled(self) -> None:
-        self.assertTrue(SmithsonianGateway.quote_locality)
-
-    def test_query_is_quoted_name_and_locality_without_address_or_country(self) -> None:
+    def test_query_is_a_clean_name_and_locality_without_address_or_country(self) -> None:
         loc = _location(street_number="1000", route="I-75 Nb Expy", locality="Cincinnati", administrative_area_level_1="OH", official_name="Summit Road")
         pin = _pin(loc)
-        terms = MediaPanelSource.search_terms(pin, SmithsonianGateway(api_key="test-key"))
-        self.assertEqual(terms, ['"Summit Road" "Cincinnati OH"'])
+        terms = MediaPanelSource.search_terms(pin, SmithsonianMediaProvider())
+        self.assertEqual(terms, ["Summit Road Cincinnati OH"])

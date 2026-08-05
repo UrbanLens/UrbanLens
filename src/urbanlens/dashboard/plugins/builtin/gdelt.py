@@ -1,11 +1,20 @@
-"""GDELT plugin: geocoded global news panel for pinned locations."""
+"""GDELT plugin: geocoded global news panel for pinned locations, via REData.
+
+REData's ``/search/news/`` already wraps GDELT's DOC 2.0 API (see
+``../REData/docs/api-reference.md``, "GET /search/news/ - news-article
+search") - there is no local fallback, so this panel is REData-only. One
+casualty of the move: REData's endpoint answers only the article list, not
+GDELT's separate ``tonechart`` sentiment histogram this panel used to show as
+a "coverage leans negative/positive" fact - that mode isn't part of REData's
+public contract, so the tone fact is dropped rather than reimplemented here.
+"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
-from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.pins.external_data import InfoPanelSource
 
 if TYPE_CHECKING:
@@ -13,8 +22,27 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.pins.external_data import PanelSource
 
 
+def _format_gdelt_date(raw: str | None) -> str:
+    """Format GDELT's compact ``YYYYMMDDTHHMMSSZ`` ``seendate`` as ``YYYY-MM-DD``.
+
+    REData's normalized news-search results pass this field through
+    unparsed (see ``RedataSearchGateway.search_news``); UrbanLens's own,
+    now-retired GDELT gateway used to do this same reformatting locally.
+
+    Args:
+        raw: The raw ``date`` field from a REData news-search result.
+
+    Returns:
+        A ``YYYY-MM-DD`` string, or ``"Undated"`` when ``raw`` is too short
+        to contain a date.
+    """
+    if not raw or len(raw) < 8:
+        return "Undated"
+    return f"{raw[0:4]}-{raw[4:6]}-{raw[6:8]}"
+
+
 class GdeltPanelSource(InfoPanelSource):
-    """Recent news coverage of the pin's location, via GDELT."""
+    """Recent news coverage of the pin's location, via REData's GDELT-backed search."""
 
     key = "gdelt"
     cache_source = "gdelt"
@@ -22,40 +50,35 @@ class GdeltPanelSource(InfoPanelSource):
     icon = "newspaper"
     title = "News"
 
+    def gate(self, pin: Pin) -> bool:
+        """Requires REData - there is no local GDELT fallback."""
+        return redata_configured()
+
     def fetch(self, pin: Pin) -> None:
-        """Search GDELT for news mentioning the pin's name and cache the results."""
+        """Search REData's news endpoint for the pin's name and cache the results."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.search.gdelt import GdeltGateway
+        from urbanlens.dashboard.services.apis.locations.redata_search_gateway import RedataNewsSearchGateway
 
         search_term = pin.get_unique_search_name(quote_name=True)
-        gateway = GdeltGateway()
-        articles = gateway.search_articles(search_term, limit=10) if search_term else []
-        tone = gateway.get_tone_summary(search_term) if search_term else None
-        LocationCache.set(pin.location, self.cache_source, {"articles": articles, "tone": tone}, query_key=search_term or "")
+        articles = RedataNewsSearchGateway().search_news(search_term, max_results=10) if search_term else []
+        LocationCache.set(pin.location, self.cache_source, {"articles": articles}, query_key=search_term or "")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """Build the article list from GDELT's name-search results."""
+        """Build the article list from REData's news-search results."""
         articles = (data or {}).get("articles") or []
         if not articles:
             return None
 
         # ai_extract: news articles are real content pages about the place, so
         # they offer the AI field-extraction button (see _simple_info_panel.html).
-        meta = [{"label": article.get("date") or "Undated", "value": article.get("title") or article.get("domain") or "", "href": article.get("url") or "", "ai_extract": True} for article in articles[:8]]
-
-        facts = []
-        tone = (data or {}).get("tone")
-        if tone:
-            average_tone = tone.get("average_tone") or 0
-            if average_tone <= -5:
-                skew = "leans negative"
-            elif average_tone >= 5:
-                skew = "leans positive"
-            else:
-                skew = "neutral"
-            facts.append({"icon": "sentiment_satisfied", "text": f"Coverage tone {skew} (avg {average_tone:+.1f} across {tone.get('article_count')} articles)"})
-
-        return {"facts": facts, "meta": meta}
+        # GDELT has no real snippet, so REData puts the source domain there
+        # instead (see RedataSearchGateway.search_news) - used here as the
+        # title fallback, same as the old local gateway's "domain" field.
+        meta = [
+            {"label": _format_gdelt_date(article.get("date")), "value": article.get("title") or article.get("snippet") or "", "href": article.get("link") or "", "ai_extract": True}
+            for article in articles[:8]
+        ]
+        return {"meta": meta}
 
     def debug_count(self, data: dict) -> int:
         """Number of articles found."""
@@ -63,32 +86,12 @@ class GdeltPanelSource(InfoPanelSource):
 
 
 class GdeltPlugin(UrbanLensPlugin):
-    """GDELT geocoded global news search for pinned locations."""
+    """GDELT geocoded global news search for pinned locations, via REData."""
 
     name: ClassVar[str] = "gdelt"
     verbose_name: ClassVar[str] = "GDELT News"
-    description: ClassVar[str] = "Free, keyless global news search (GDELT Project DOC 2.0 API) - shows recent news coverage mentioning the pin's location."
+    description: ClassVar[str] = "Recent news coverage mentioning the pin's location, via REData's GDELT-backed news search."
     author: ClassVar[str] = "UrbanLens"
-
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the GDELT DOC API."""
-        return {
-            "gdelt": ServiceDefaults(
-                display_name="GDELT News",
-                calls_per_minute=10,
-                calls_per_day=500,
-                # GDELT's own stated guidance: no more than 1 request every 5
-                # seconds per client. calls_per_minute alone doesn't guarantee
-                # that spacing (a rolling count still allows a burst within
-                # budget), hence the explicit min_interval_seconds.
-                min_interval_seconds=5.0,
-                notes=(
-                    "Free, keyless API. Be conservative - shared public infrastructure. GDELT asks "
-                    "high-traffic users to switch to the bulk Web NGrams dataset instead of the search "
-                    "APIs - see https://blog.gdeltproject.org/using-the-new-web-ngrams-dataset-to-find-relevant-coverage/"
-                ),
-            ),
-        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the GDELT pin-detail panel."""

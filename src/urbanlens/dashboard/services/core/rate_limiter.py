@@ -121,6 +121,29 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=None,
         notes="Tag/category taxonomy + assignment sync and suggestions via POST /labels/, /labels/assignments/, /labels/suggest/.",
     ),
+    "redata_geocode": ServiceDefaults(
+        display_name="REData Geocoding",
+        # Shares REData's single 1,000 req/hour "lookup" pool (see the
+        # api-reference.md rate-limiting section) with weather/imagery/
+        # elevation/hazards/etc. below - deliberately conservative on our own
+        # side since this rate limiter has no cross-service shared-budget
+        # concept and every one of them draws from the same REData-side pool.
+        calls_per_minute=20,
+        calls_per_day=None,
+        notes="Forward/reverse geocoding via GET /geocode/, /geocode/reverse/. See services.apis.locations.geocode_resolution.",
+    ),
+    "redata_weather": ServiceDefaults(
+        display_name="REData Weather",
+        calls_per_minute=20,
+        calls_per_day=None,
+        notes="Current conditions/forecast/sun times via GET /weather/ - every registered provider (Open-Meteo, OpenWeatherMap) in one call. See services.apis.locations.weather_resolution.",
+    ),
+    "redata_routing": ServiceDefaults(
+        display_name="REData Routing",
+        calls_per_minute=20,
+        calls_per_day=None,
+        notes="Route/drive-time legs via POST /routes/ (as_given capability only). See services.apis.locations.routing_resolution.",
+    ),
     "google_search": ServiceDefaults(
         display_name="Google Custom Search",
         calls_per_minute=10,
@@ -143,24 +166,12 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=24_000,
         notes="Free API. Load is distributed across several public Overpass instances, and any instance that errors/times out is dropped until the next day. Each logical lookup may spend more than one call when it fails over.",
     ),
-    "brave_search": ServiceDefaults(
-        display_name="Brave Search API",
-        calls_per_minute=10,
-        calls_per_day=200,
-        notes="Free tier: 2,000 queries/month.",
-    ),
     "digital_commonwealth": ServiceDefaults(
         display_name="Digital Commonwealth",
         calls_per_minute=10,
         calls_per_day=200,
         usa_only=True,
         notes="Massachusetts-based digital archive. Free API.",
-    ),
-    "routexl": ServiceDefaults(
-        display_name="RouteXL",
-        calls_per_minute=5,
-        calls_per_day=50,
-        notes="Route optimisation. Usage may be billed.",
     ),
     "news": ServiceDefaults(
         display_name="News API",
@@ -179,13 +190,6 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=10,
         calls_per_day=200,
         notes="Requires OAuth2. Free for non-commercial use via Earth Engine sign-up.",
-    ),
-    "openhistoricalmap": ServiceDefaults(
-        display_name="OpenHistoricalMap",
-        calls_per_minute=1,
-        calls_per_day=500,
-        min_interval_seconds=1.0,
-        notes="Free, no key required. OSM-based historic map data. Nominatim: 1 req/second hard limit.",
     ),
     "wayback_machine": ServiceDefaults(
         display_name="Internet Archive Wayback Machine",

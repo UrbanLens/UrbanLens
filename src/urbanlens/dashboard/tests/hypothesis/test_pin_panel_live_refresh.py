@@ -70,7 +70,7 @@ class PinPanelLiveRefreshTests(TestCase):
     def test_other_generic_panels_never_fire(self) -> None:
         """Only epa_echo_detail is known to have a side effect - every other
         InfoPanelSource-backed panel must stay silent even on a poll."""
-        LocationCache.set(self.pin.location, "photon", {"name": "Old Mill", "kind_label": "Building"}, query_key="")
+        LocationCache.set(self.pin.location, "photon", {"locality": "Old Mill"}, query_key="")
         response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "photon"]), {"attempt": "1"})
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("HX-Trigger", response)

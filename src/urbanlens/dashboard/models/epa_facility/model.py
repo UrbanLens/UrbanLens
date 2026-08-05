@@ -29,14 +29,19 @@ class EpaFacility(abstract.DashboardModel):
     never expired or re-fetched automatically - only enriched further as more
     is learned about them.
 
-    ``latitude``/``longitude`` are only populated once a Detailed Facility
-    Report has actually been fetched (``detail_fetched_at`` set) - ECHO's
-    nearby-search listing alone includes a latitude but not a longitude (see
-    ``EpaEchoGateway.get_nearby_facilities``), so a search-only row can't yet
-    support a real distance check. A row with ``detail_fetched_at`` set but
-    still-null coordinates is also meaningful: ECHO's DFR genuinely has no
-    coordinates for that facility (no Permits data), so it can never be an
-    exact-site match - recording that saves re-fetching it to re-rule it out.
+    ``latitude``/``longitude`` are only populated once full facility detail
+    has actually been fetched (``detail_fetched_at`` set) via
+    ``record_detail_result`` - ``record_search_result`` alone (a facility
+    merely sighted in a search result, with no known coordinates yet) leaves
+    them null, so a search-only row can't yet support a real distance check.
+    ``plugins.builtin.epa_echo``'s current REData-backed fetch always has full
+    detail (including coordinates) up front and so only ever calls
+    ``record_detail_result`` - ``record_search_result`` remains valid,
+    independently-tested model API for a future source that only offers a
+    coordinate-less search step. A row with ``detail_fetched_at`` set but
+    still-null coordinates is also meaningful: the source genuinely has no
+    coordinates for that facility, so it can never be an exact-site match -
+    recording that saves re-fetching it to re-rule it out.
     """
 
     registry_id = models.CharField(max_length=50, unique=True, db_index=True)

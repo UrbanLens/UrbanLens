@@ -143,7 +143,7 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   to Markdown, with a required CC BY-SA attribution footer linking back to the source) - never
   overwrites an existing article, seeded or human-written (`services.wiki.wiki_seed`,
   `models.cache.signals`)
-- Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, Photon, EPA ECHO, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering, an admin-only drag-to-reorder priority list (Site Admin), and Google Places demoted to fallback-only (only considered when no other source has a candidate) - individual users cannot override the ordering
+- Place-name resolution across multiple sources (Google Places, OSM/Nominatim, NPS, **Azure Maps**, Wikipedia, OpenStreetMap) with agreement-based priority ordering, an admin-only drag-to-reorder priority list (Site Admin), and Google Places demoted to fallback-only (only considered when no other source has a candidate) - individual users cannot override the ordering
 - Boundary drawing — property/building polygons per pin, generated automatically from a typed
   provider chain (`services.locations.boundaries.BoundaryProviderChain`) trying, in order:
   REData's authoritative county GIS parcel/building geometry (`RedataBoundaryProvider`, US-only,
@@ -156,38 +156,52 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 
 ## External Data Enrichment (Pin Detail Page)
 
-On-demand, cached lookups shown as panels on the pin detail page:
+On-demand, cached lookups shown as panels on the pin detail page. Many of these are now backed by
+REData (`../REData`, a standalone service reached via `UL_REDATA_API_URL`/`UL_REDATA_API_KEY`)
+rather than calling their upstream provider directly - REData pools rate limits/credentials across
+every UrbanLens deployment and normalizes each provider family's response shape. A handful of
+integrations central to this app's own purpose (Nominatim, Esri, OpenWeatherMap/Open-Meteo, OSRM)
+keep a direct implementation as a fallback for when REData isn't configured or fails; most others
+were removed outright in favor of REData-only (no direct fallback); a few (Wikimedia Commons,
+Nominatim's own OSM extratags, Azure Maps' geocode+POI panel, USGS Historical Topo Maps) stay
+direct-only because REData's contract can't reproduce what they show:
 
 - **Wikipedia** — best-matching article
-- **Wikimedia Commons**, **Smithsonian Open Access**, **Library of Congress** — archival photos/media
-- **Web Images (SearXNG)** — broad web-image search across many engines (Flickr, imgur, Pinterest,
-  DeviantArt, Openverse, Unsplash, …) via a self-hosted SearXNG instance, using an aggressive
+- **Wikimedia Commons** — archival photos/media, direct (REData has no equivalent provider)
+- **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData
+- **Web Images** — broad web-image search across many engines (Flickr, imgur, Pinterest,
+  DeviantArt, Openverse, Unsplash, …) via REData's web-search image mode, using an aggressive
   three-clause relevance query (all non-nickname aliases · state/country + municipality · the site's
   urbex/abandoned subject vocabulary) so a same-named place or operating business elsewhere is
-  excluded; requires `UL_SEARXNG_BASE_URL` (`plugins.builtin.searxng_images`)
-- **National Park Service** (USA) — nearby park info
+  excluded (`plugins.builtin.searxng_images`)
+- **National Park Service** (USA) — nearest park info, via REData
+- **Yelp** — nearby business details, via REData
 - **LoopNet** (USA) — commercial real-estate listings
 - **Property Records** (USA) — county parcel ownership/tax/sale-history lookup, retrieved from
-  REData (`../REData`, a standalone service) via `RedataGateway`
+  REData via `RedataGateway`
   (`services.apis.property_records.redata_gateway`); populates the wiki's Ownership and Sale
   History cards with `OFFICIAL`-sourced records in addition to a details card. Coverage varies by
-  county. Requires `UL_REDATA_API_URL`/`UL_REDATA_API_KEY` to be configured
-- **USGS Historical Topo Maps** (USA) — historical topographic maps
-- **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim structured data and Photon nearest-feature lookup)
-- **Regional Data** — US Census, Wildlife, Seismic, and EPA data loaded on demand per sub-tab
+  county
+- **USGS Historical Topo Maps** (USA) — historical topographic maps, direct-only (a gallery of
+  individually-dated scans, a shape REData's imagery contract doesn't offer)
+- **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim
+  structured data, kept direct-only for its OSM extratags REData doesn't normalize; Photon
+  nearest-feature lookup, via REData)
+- **Regional Data** — US Census, Wildlife (iNaturalist), Seismic (USGS earthquakes), and EPA data
+  loaded on demand per sub-tab; the Wildlife/Seismic/EPA nearby-facility lookups are via REData
 - **Building Characteristics** — structured property/building data (appears for commercial and historic properties)
 - **Buildings on this Property** — every structure standing on the parcel, with names and building
   numbers from REData (county GIS building-footprint layers plus NY SHPO CRIS), falling back to
   OpenStreetMap footprints inside the property boundary. Each row links to the sub pin covering
   that building, or offers to create the ones that have none (`plugins.builtin.parcel_buildings`).
   Also shown on the wiki page
-- **News** — web news results scoped to the location (appears for notable locations)
-- **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available. Falls back to the free, keyless Open-Meteo API when OpenWeatherMap isn't configured or fails
-- **Sunrise/sunset & golden hour** — always via Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the pin detail page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
-- Satellite imagery carousel: Google Maps, Esri (incl. Wayback historical imagery), NASA GIBS,
-  Mapbox, Bing Maps, OpenAerialMap
-- Street-view carousel: Google Street View, Mapillary, KartaView
-- Web/image search panels (Google/Brave search, Google Image Search)
+- **News** — recent news coverage scoped to the location (appears for notable locations), via
+  REData's GDELT-backed search
+- **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available. Via REData when configured, falling back to a direct OpenWeatherMap/Open-Meteo call
+- **Sunrise/sunset & golden hour** — via REData when configured, falling back to direct Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the pin detail page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
+- Satellite imagery carousel: Google Maps and Esri (incl. up to 5 historical Wayback releases) are
+  direct; additional providers (NASA GIBS, Mapbox, Bing Maps, OpenAerialMap, OpenTopoMap) via REData
+- Street-view carousel: Google Street View is direct; Mapillary, KartaView, and Panoramax are via REData
 - Debug overlay (admin-only) to inspect raw external-API responses per panel
 
 All external integrations are cached (DB-backed, per-Location) and rate-limited per service, with

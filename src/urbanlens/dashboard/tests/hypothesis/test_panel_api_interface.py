@@ -163,11 +163,11 @@ class InfoPanelApiPayloadTests(TestCase):
 
     def test_payload_is_derived_from_render_context(self) -> None:
         """The same facts the web card shows, under the info key."""
-        LocationCache.set(self.pin.location, "photon", {"name": "Tool Shed", "osm_value": "historic_building", "city": "Poughkeepsie"}, query_key="")
+        LocationCache.set(self.pin.location, "photon", {"locality": "Poughkeepsie", "region": "New York", "country": "United States"}, query_key="")
         payload = self.source.api_payload(self.pin)
         assert payload is not None
-        self.assertEqual(payload[PanelApiKind.INFO.value]["heading_name"], "Tool Shed")
-        self.assertIn("Historic Building", payload[PanelApiKind.INFO.value]["chips"])
+        self.assertEqual(payload[PanelApiKind.INFO.value]["heading_name"], "Poughkeepsie")
+        self.assertIn({"label": "Region", "value": "New York"}, payload[PanelApiKind.INFO.value]["meta"])
 
     def test_empty_render_context_yields_none(self) -> None:
         """A settled-but-useless result is omitted, mirroring the web panel's 204."""
@@ -511,7 +511,7 @@ class BespokeInfoPanelApiPayloadTests(TestCase):
         self._cache(
             source,
             {
-                "fullName": "Gateway National Recreation Area",
+                "full_name": "Gateway National Recreation Area",
                 "description": "A park.",
                 "url": "https://www.nps.gov/gate/",
                 "designation": "National Recreation Area",
@@ -531,7 +531,7 @@ class BespokeInfoPanelApiPayloadTests(TestCase):
     def test_nps_activity_chips_are_capped(self) -> None:
         """Dozens of activity tags stop characterizing a place and become noise."""
         source = NpsPanelSource()
-        self._cache(source, {"fullName": "Big Park", "activities": [{"name": f"Activity {index}"} for index in range(30)]})
+        self._cache(source, {"full_name": "Big Park", "activities": [{"name": f"Activity {index}"} for index in range(30)]})
         payload = source.api_payload(self.pin)
         assert payload is not None
         self.assertEqual(len(payload[PanelApiKind.INFO.value]["chips"]), 8)

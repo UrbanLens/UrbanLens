@@ -521,15 +521,17 @@ def prefetch_location_external_data(location_id: int, google_place_id: str | Non
         except Exception:
             logger.exception("prefetch_location_external_data: Wikipedia lookup failed for location %s", location_id)
 
-    # NPS: caches the park the location sits inside, if any. Non-US coordinates
-    # are filtered out (before any network call) by find_park_containing_location.
-    from urbanlens.UrbanLens.settings.app import settings as app_settings
+    # NPS: caches the nearest park unit to the location, if any is within
+    # REData's search radius (see plugins.builtin.nps for why this is a
+    # proximity search rather than the boundary-containment lookup this used
+    # to be).
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
-    if app_settings.nps_api_key and LocationCache.get_fresh(location, "nps") is None:
+    if redata_configured() and LocationCache.get_fresh(location, "nps") is None:
         try:
-            from urbanlens.dashboard.services.apis.parks.nps.parks import NPSGateway
+            from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import RedataNationalParksGateway
 
-            park = NPSGateway().find_park_containing_location(lat, lng)
+            park = RedataNationalParksGateway().find_nearest_park(lat, lng)
             LocationCache.set(location, "nps", park or {}, query_key=f"{lat:.5f},{lng:.5f}")
             logger.info("prefetch_location_external_data: cached NPS for location %s", location_id)
         except Exception:

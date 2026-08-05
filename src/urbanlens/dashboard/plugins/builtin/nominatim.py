@@ -1,4 +1,18 @@
-"""Nominatim plugin: OpenStreetMap place metadata panel on the pin detail page."""
+"""Nominatim plugin: OpenStreetMap place metadata panel on the pin detail page.
+
+Deliberately kept direct-only (no REData resolution-module wrapper), unlike
+most other single-provider integrations migrated to REData: this panel's
+value is Nominatim's own rich OSM extratags (wikidata/wikipedia tags,
+old-name aliases, opening hours, kind classification, ...), which REData's
+cross-provider ``/geocode/reverse/`` contract deliberately does not promote
+to normalized top-level fields (see ``../REData/docs/api-reference.md``:
+"Vendor-shaped extras ... stay in attributes"). Reconstructing this panel's
+shape from an unspecified per-provider ``attributes`` blob would be guesswork
+rather than a documented contract, so this stays a direct OpenStreetMap
+Nominatim integration. Forward geocoding (address -> coordinates, used by pin
+creation) is a much thinner contract and *is* REData-first - see
+``services.apis.locations.geocode_resolution``.
+"""
 
 from __future__ import annotations
 

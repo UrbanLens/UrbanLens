@@ -636,7 +636,7 @@ class MediaPanelSource(GalleryMediaSource):
             # narrowing power (just a house number and a generic street-type
             # word), so a provider whose relevance ranking treats query words
             # as independent OR terms is skipped entirely rather than fed a
-            # guaranteed-noisy query (see LOCJsonGateway).
+            # guaranteed-noisy query (see LibraryOfCongressMediaProvider).
             if fallback_name and is_address_derived_name(fallback_name, pin.location):
                 return []
 

@@ -405,8 +405,17 @@ class ComputeActivityIndexMapTests(SimpleTestCase):
 # _build_activity_forecasts
 # ---------------------------------------------------------------------------
 
+_GET_RAW_FORECAST_SLOTS = "urbanlens.dashboard.services.apis.locations.weather_resolution.get_raw_forecast_slots"
+
+
 class BuildActivityForecastsTests(SimpleTestCase):
-    """_build_activity_forecasts matches activities to weather slots."""
+    """_build_activity_forecasts matches activities to weather slots.
+
+    ``get_raw_forecast_slots`` (REData-first, OWM/Open-Meteo-fallback - see
+    ``services.apis.locations.weather_resolution``) is mocked directly rather
+    than a gateway instance, since ``_build_activity_forecasts`` no longer
+    picks a provider itself.
+    """
 
     def _make_activity(self, lat=51.5, lng=-0.12, scheduled_at=None, status="proposed"):
         act = MagicMock()
@@ -420,15 +429,10 @@ class BuildActivityForecastsTests(SimpleTestCase):
         act.status = status
         return act
 
-    def _make_gateway(self, slots=None):
-        gw = MagicMock()
-        gw.get_raw_forecast.return_value = slots or []
-        return gw
-
     def test_activity_without_scheduled_at_gets_no_slot(self):
         act = self._make_activity(scheduled_at=None)
-        gw = self._make_gateway()
-        results = _build_activity_forecasts([act], gw)
+        with patch(_GET_RAW_FORECAST_SLOTS, return_value=[]):
+            results = _build_activity_forecasts([act])
         self.assertEqual(len(results), 1)
         self.assertIsNone(results[0]["slot"])
 
@@ -438,50 +442,49 @@ class BuildActivityForecastsTests(SimpleTestCase):
         act.lng_override = None
         act.pin = None
         act.location = None
-        gw = self._make_gateway()
-        results = _build_activity_forecasts([act], gw)
+        with patch(_GET_RAW_FORECAST_SLOTS, return_value=[]):
+            results = _build_activity_forecasts([act])
         self.assertTrue(results[0]["no_coords"])
 
     def test_slot_matched_when_within_36_hours(self):
         target = datetime.datetime(2025, 7, 4, 12, 0)
         slot_time = datetime.datetime(2025, 7, 4, 12, 0)
-        slot = {"date": slot_time, "temp": 22, "description": "Sunny"}
+        slot = {"date": slot_time, "temp": 22, "condition": "Sunny"}
         act = self._make_activity(scheduled_at=target)
-        gw = self._make_gateway(slots=[slot])
-        results = _build_activity_forecasts([act], gw)
+        with patch(_GET_RAW_FORECAST_SLOTS, return_value=[slot]):
+            results = _build_activity_forecasts([act])
         self.assertIsNotNone(results[0]["slot"])
         self.assertEqual(results[0]["slot"]["temp"], 22)
 
     def test_out_of_range_when_gap_exceeds_36h(self):
         target = datetime.datetime(2025, 7, 4, 12, 0)
         slot_time = datetime.datetime(2025, 7, 6, 18, 0)  # ~54h gap
-        slot = {"date": slot_time, "temp": 15, "description": "Cloudy"}
+        slot = {"date": slot_time, "temp": 15, "condition": "Cloudy"}
         act = self._make_activity(scheduled_at=target)
-        gw = self._make_gateway(slots=[slot])
-        results = _build_activity_forecasts([act], gw)
+        with patch(_GET_RAW_FORECAST_SLOTS, return_value=[slot]):
+            results = _build_activity_forecasts([act])
         self.assertTrue(results[0]["out_of_range"])
 
     def test_gateway_exception_returns_no_slot(self):
         import requests as req_lib
         target = datetime.datetime(2025, 7, 4, 12, 0)
         act = self._make_activity(scheduled_at=target)
-        gw = MagicMock()
-        gw.get_raw_forecast.side_effect = req_lib.RequestException("timeout")
-        results = _build_activity_forecasts([act], gw)
+        with patch(_GET_RAW_FORECAST_SLOTS, side_effect=req_lib.RequestException("timeout")):
+            results = _build_activity_forecasts([act])
         self.assertIsNone(results[0]["slot"])
 
     def test_coords_cached_across_same_location(self):
         target = datetime.datetime(2025, 7, 4, 12, 0)
-        slot = {"date": target, "temp": 20, "description": "Clear"}
-        gw = self._make_gateway(slots=[slot])
+        slot = {"date": target, "temp": 20, "condition": "Clear"}
         # Two activities at the same rounded coords
         acts = [
             self._make_activity(lat=51.5, lng=-0.12, scheduled_at=target),
             self._make_activity(lat=51.5, lng=-0.12, scheduled_at=target),
         ]
-        _build_activity_forecasts(acts, gw)
-        # Gateway should only be called once for the same coord pair
-        self.assertEqual(gw.get_raw_forecast.call_count, 1)
+        with patch(_GET_RAW_FORECAST_SLOTS, return_value=[slot]) as get_slots:
+            _build_activity_forecasts(acts)
+        # The resolver should only be called once for the same coord pair
+        self.assertEqual(get_slots.call_count, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -519,8 +522,7 @@ class TripWeatherViewFiltersEmptyForecastsTests(TestCase):
             location=None,
         )
 
-        with patch("urbanlens.UrbanLens.settings.app.settings.openweathermap_api_key", "fake-key"):
-            resp = self.client_.get(self._url())
+        resp = self.client_.get(self._url())
 
         self.assertEqual(resp.status_code, 200)
         self.assertEqual(resp.context["grouped"], [])
@@ -542,17 +544,16 @@ class TripWeatherViewFiltersEmptyForecastsTests(TestCase):
         )
         slot = {
             "date": target.replace(tzinfo=None),
-            "main": {"temp": 20, "feels_like": 18, "humidity": 50},
-            "weather": [{"icon": "01d", "description": "Clear"}],
-            "wind": {"speed": 5},
+            "temp": 20,
+            "condition": "Clear",
+            "icon": "wb_sunny",
+            "humidity": 50,
+            "wind_speed": 5,
+            "feels_like": 18,
+            "precipitation_probability": None,
         }
-        gw = MagicMock()
-        gw.get_raw_forecast.return_value = [slot]
 
-        with (
-            patch("urbanlens.UrbanLens.settings.app.settings.openweathermap_api_key", "fake-key"),
-            patch("urbanlens.dashboard.services.apis.weather.gateway.OpenWeatherMapGateway", return_value=gw),
-        ):
+        with patch(_GET_RAW_FORECAST_SLOTS, return_value=[slot]):
             resp = self.client_.get(self._url())
 
         self.assertEqual(resp.status_code, 200)
@@ -583,17 +584,16 @@ class TripWeatherViewFiltersEmptyForecastsTests(TestCase):
         )
         slot = {
             "date": target.replace(tzinfo=None),
-            "main": {"temp": 20, "feels_like": 18, "humidity": 50},
-            "weather": [{"icon": "01d", "description": "Clear"}],
-            "wind": {"speed": 5},
+            "temp": 20,
+            "condition": "Clear",
+            "icon": "wb_sunny",
+            "humidity": 50,
+            "wind_speed": 5,
+            "feels_like": 18,
+            "precipitation_probability": None,
         }
-        gw = MagicMock()
-        gw.get_raw_forecast.return_value = [slot]
 
-        with (
-            patch("urbanlens.UrbanLens.settings.app.settings.openweathermap_api_key", "fake-key"),
-            patch("urbanlens.dashboard.services.apis.weather.gateway.OpenWeatherMapGateway", return_value=gw),
-        ):
+        with patch(_GET_RAW_FORECAST_SLOTS, return_value=[slot]):
             resp = self.client_.get(self._url())
 
         grouped = resp.context["grouped"]

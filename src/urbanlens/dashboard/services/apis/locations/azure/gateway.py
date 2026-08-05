@@ -67,11 +67,6 @@ def azure_maps_request(
 class AzureMapsGateway(Gateway):
     """Base gateway for the Azure Maps Search and Geocoding REST APIs.
 
-    ``AzureMapsRenderGateway`` (satellite/static imagery) can't subclass this
-    directly since it must also inherit ``SatelliteViewProvider``; it holds
-    its own copy of ``subscription_key`` and calls :func:`azure_maps_request`
-    the same way instead.
-
     Requires: ``UL_AZURE_MAPS_SUBSCRIPTION_KEY`` - a subscription key from an
     Azure Maps account (Azure Portal -> your Azure Maps account ->
     Authentication).

@@ -1,12 +1,14 @@
 """Drive-time legs between consecutive trip activities (UL-60 slice).
 
-Routed with the OSRM gateway and cached aggressively: road distances between
-two fixed places don't change, so a leg is fetched live at most once and then
-served from cache for weeks. Renders are budgeted - a panel render performs at
-most a couple of live routing calls and simply omits the legs it couldn't
-fetch yet; the next render fills them in from a warmer cache. This keeps the
-activities panel fast even for long itineraries, and keeps OSRM usage inside
-its (self-imposed) rate limits.
+Routed via REData when configured, falling back to the direct OSRM gateway
+otherwise (see ``services.apis.locations.routing_resolution``), and cached
+aggressively either way: road distances between two fixed places don't
+change, so a leg is fetched live at most once and then served from cache for
+weeks. Renders are budgeted - a panel render performs at most a couple of
+live routing calls and simply omits the legs it couldn't fetch yet; the next
+render fills them in from a warmer cache. This keeps the activities panel
+fast even for long itineraries, and keeps routing usage inside its
+(self-imposed) rate limits.
 """
 
 from __future__ import annotations
@@ -18,7 +20,7 @@ from typing import TYPE_CHECKING
 
 from django.core.cache import cache
 
-from urbanlens.dashboard.services.apis.routing.osrm import OSRMGateway
+from urbanlens.dashboard.services.apis.locations.routing_resolution import get_route_between
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 
 if TYPE_CHECKING:
@@ -100,7 +102,6 @@ def compute_legs(sequence: list[tuple[int, tuple[float, float]]], *, max_live_ca
         stop. Unroutable or not-yet-fetched pairs are absent.
     """
     legs: dict[int, TripLeg] = {}
-    gateway: OSRMGateway | None = None
     live_calls = 0
 
     for (_, origin), (activity_id, destination) in itertools.pairwise(sequence):
@@ -114,12 +115,10 @@ def compute_legs(sequence: list[tuple[int, tuple[float, float]]], *, max_live_ca
             if live_calls >= max_live_calls:
                 continue
             live_calls += 1
-            if gateway is None:
-                gateway = OSRMGateway()
             try:
-                cached = gateway.get_route_between(origin, destination)
+                cached = get_route_between(origin, destination)
             except GatewayRequestError:
-                logger.debug("OSRM leg lookup rate-limited/unavailable", exc_info=True)
+                logger.debug("Routing leg lookup rate-limited/unavailable", exc_info=True)
                 continue
             if cached is None or cached.get("duration_seconds") is None or cached.get("distance_meters") is None:
                 cache.set(key, _UNROUTABLE, _UNROUTABLE_CACHE_TTL)

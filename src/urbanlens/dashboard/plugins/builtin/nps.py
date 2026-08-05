@@ -1,10 +1,23 @@
-"""National Park Service plugin: nearby-park panel on the pin detail page."""
+"""National Park Service plugin: nearby-park panel on the pin detail page.
+
+Backed by REData's local NPS catalog (``services.apis.locations.redata_national_parks_gateway``),
+a pure proximity search rather than the boundary-containment lookup this
+project used before (the direct NPS Developer API + an ArcGIS point-in-polygon
+query, now removed - REData has no raw-coordinate containment endpoint of its
+own, only one keyed by a REData parcel uuid this project doesn't otherwise
+resolve for most pins). The panel and enrichment source below therefore show
+the nearest NPS unit within REData's search radius, not strictly a park the
+pin is inside - a real precision tradeoff of this migration, worth knowing if
+a pin near a park's edge shows that park despite technically sitting just
+outside its boundary.
+"""
 
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 from urbanlens.dashboard.services.core.rate_limiter import ServiceDefaults
 from urbanlens.dashboard.services.geo.geo_boundary import USA
 from urbanlens.dashboard.services.locations.enrichment import LocationCacheEnrichmentSource
@@ -40,51 +53,49 @@ class NpsPanelSource(LocationCachePanelSource):
     # inventing an NPS-shaped response only this one plugin's clients know.
     api_kinds: ClassVar[frozenset[PanelApiKind]] = frozenset({PanelApiKind.INFO})
 
-    def fetch(self, pin: Pin) -> None:
-        """Cache NPS details for the park the pin sits inside, if any.
+    def gate(self, pin: Pin) -> bool:
+        """Requires REData to be configured."""
+        return redata_configured()
 
-        The panel is about the pinned place *being in* a national park, so the
-        result comes from a boundary-containment check -- not a proximity
-        search. When the pin falls outside every NPS unit an empty result is
-        cached, which keeps the panel hidden.
-        """
+    def fetch(self, pin: Pin) -> None:
+        """Cache the nearest NPS park unit to the pin, if any is within REData's search radius."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
-        from urbanlens.dashboard.services.apis.parks.nps.parks import NPSGateway
+        from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import RedataNationalParksGateway
 
         location = pin.location
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        park = NPSGateway().find_park_containing_location(lat, lng)
+        park = RedataNationalParksGateway().find_nearest_park(lat, lng)
         query_key = f"{lat:.5f},{lng:.5f}"
         LocationCache.set(location, self.cache_source, park or {}, query_key=query_key)
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
-        """The containing NPS unit as an information card, or None.
+        """The nearest NPS unit as an information card, or None.
 
         Mirrors ``PinController.nps_info``'s own emptiness rule: a cached
-        payload with no ``fullName`` means the fetch ran and the pin sits
-        outside every NPS unit, which is a settled "nothing here" rather than
-        a pending state - the web panel 204s on it and the API omits it.
+        payload with no ``full_name`` means the fetch ran and found no park
+        unit within range - a settled "nothing here" rather than a pending
+        state - the web panel 204s on it and the API omits it.
 
         Args:
             pin: The pin whose panel is being read.
 
         Returns:
-            ``{"info": {...}}``, or None when nothing has landed yet or the
-            pin is not inside a park.
+            ``{"info": {...}}``, or None when nothing has landed yet or no
+            park unit was found within range.
         """
         data = self.cached_data(pin)
-        if not data or not data.get("fullName"):
+        if not data or not data.get("full_name"):
             return None
 
         park_url = data.get("url") or ""
         images = data.get("images") or []
         first_image = images[0] if isinstance(images, list) and images else {}
-        meta = [{"label": label, "value": data[key]} for key, label in (("designation", "Designation"), ("states", "States"), ("parkCode", "Park Code")) if data.get(key)]
+        meta = [{"label": label, "value": data[key]} for key, label in (("designation", "Designation"), ("states", "States"), ("park_code", "Park Code")) if data.get(key)]
 
         return {
             PanelApiKind.INFO.value: info_card(
-                heading_name=data.get("fullName"),
+                heading_name=data.get("full_name"),
                 chips=[activity.get("name") for activity in (data.get("activities") or [])[:_MAX_ACTIVITY_CHIPS] if isinstance(activity, dict)],
                 meta=meta,
                 header_link={"url": park_url, "label": "View on NPS.gov"} if park_url else None,
@@ -96,22 +107,20 @@ class NpsPanelSource(LocationCachePanelSource):
 
 
 class NpsEnrichmentSource(LocationCacheEnrichmentSource):
-    """Background-fills the containing-national-park cache (a name/alias source) per Location."""
+    """Background-fills the nearest-national-park cache (a name/alias source) per Location."""
 
     key: ClassVar[str] = "nps"
     verbose_name: ClassVar[str] = "National Park Service"
     cache_source: ClassVar[str] = "nps"
-    service_keys: ClassVar[tuple[str, ...]] = ("nps",)
+    service_keys: ClassVar[tuple[str, ...]] = ("redata_national_parks",)
     geo_boundary: ClassVar[GeoBoundary | None] = USA
 
     def gate(self) -> bool:
-        """Requires the NPS API key."""
-        from urbanlens.UrbanLens.settings.app import settings as app_settings
-
-        return bool(app_settings.nps_api_key)
+        """Requires REData to be configured."""
+        return redata_configured()
 
     def fetch(self, location: Location) -> tuple[dict | None, str]:
-        """Look up the NPS unit containing a location, if any.
+        """Look up the nearest NPS unit to a location, if any is within range.
 
         Args:
             location: The location to check.
@@ -119,31 +128,31 @@ class NpsEnrichmentSource(LocationCacheEnrichmentSource):
         Returns:
             Tuple of (park payload or None, coordinate query key).
         """
-        from urbanlens.dashboard.services.apis.parks.nps.parks import NPSGateway
+        from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import RedataNationalParksGateway
 
         lat = float(location.latitude or 0)
         lng = float(location.longitude or 0)
-        park = NPSGateway().find_park_containing_location(lat, lng)
+        park = RedataNationalParksGateway().find_nearest_park(lat, lng)
         return park, f"{lat:.5f},{lng:.5f}"
 
 
 class NpsPlugin(UrbanLensPlugin):
-    """National Park Service information for pinned locations."""
+    """National Park Service information for pinned locations, via REData."""
 
     name: ClassVar[str] = "nps"
     verbose_name: ClassVar[str] = "National Park Service"
-    description: ClassVar[str] = "Shows nearby US national park information on the pin detail page. USA only."
+    description: ClassVar[str] = "Shows nearby US national park information on the pin detail page, via REData's local NPS catalog. USA only."
     author: ClassVar[str] = "UrbanLens"
 
     def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the NPS API."""
+        """Rate-limit defaults for REData's national-park catalog lookup."""
         return {
-            "nps": ServiceDefaults(
-                display_name="National Park Service API",
-                calls_per_minute=10,
-                calls_per_day=500,
+            "redata_national_parks": ServiceDefaults(
+                display_name="REData (national park catalog)",
+                calls_per_minute=120,
+                calls_per_day=10000,
                 usa_only=True,
-                notes="Free API. USA only - NPS covers US national parks exclusively.",
+                notes="Our own standalone REData service, not a third-party budget - just a sanity ceiling.",
             ),
         }
 
@@ -152,9 +161,9 @@ class NpsPlugin(UrbanLensPlugin):
         return [NpsPanelSource()]
 
     def get_name_providers(self) -> list[NameProvider]:
-        """Contribute the containing park's name as a place-name candidate."""
-        return [LocationCacheNameProvider(source="nps", cache_source="nps", keys=("fullName", "name"), verbose_name="National Park Service")]
+        """Contribute the nearest park's name as a place-name candidate."""
+        return [LocationCacheNameProvider(source="nps", cache_source="nps", keys=("full_name",), verbose_name="National Park Service")]
 
     def get_enrichment_sources(self) -> list[EnrichmentSource]:
-        """Contribute the containing-park cache to scheduled background enrichment."""
+        """Contribute the nearest-park cache to scheduled background enrichment."""
         return [NpsEnrichmentSource()]

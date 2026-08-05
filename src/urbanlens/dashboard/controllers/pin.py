@@ -1452,14 +1452,16 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         HTMX partial: National Park Service information for the pin's location.
 
-        Shows the NPS unit whose boundary *contains* the pin's coordinates, if
-        any -- the panel is about the pinned place being inside a national park,
-        not merely near one. Requires an NPS API key.
+        Shows the nearest NPS unit to the pin's coordinates within REData's
+        local-catalog search radius (a proximity search, not strict boundary
+        containment - see ``plugins.builtin.nps``). Requires REData to be
+        configured.
         """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
-        if not settings.nps_api_key:
-            logger.debug("nps_info: NPS API key not configured, skipping pin %s", pin_slug)
+        if not redata_configured():
+            logger.debug("nps_info: REData not configured, skipping pin %s", pin_slug)
             return HttpResponse(status=204)
 
         try:
@@ -1531,20 +1533,21 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             }
 
         if source_key == "photon":
-            if not data.get("name"):
+            heading_key = next((key for key in ("locality", "region", "country") if data.get(key)), None)
+            if heading_key is None:
                 return None
             fields = []
-            street_parts = [data[key] for key in ("housenumber", "street") if data.get(key)]
+            street_parts = [data[key] for key in ("house_number", "street") if data.get(key)]
             if street_parts:
                 fields.append({"label": "Street", "value": " ".join(street_parts)})
-            for key, label in (("locality", "Locality"), ("district", "District"), ("city", "City"), ("county", "County"), ("state", "State"), ("country", "Country"), ("postcode", "Postal Code")):
-                if data.get(key):
+            for key, label in (("locality", "Locality"), ("region", "Region"), ("country", "Country"), ("postal_code", "Postal Code")):
+                if key != heading_key and data.get(key):
                     fields.append({"label": label, "value": data[key]})
             return {
-                "heading_name": data.get("name"),
-                "chips": [data["osm_value"].replace("_", " ").title()] if data.get("osm_value") else [],
+                "heading_name": data[heading_key],
+                "chips": [],
                 "fields": fields,
-                "footer_link": {"url": data["osm_url"], "label": "View raw OSM entry"} if data.get("osm_url") else None,
+                "footer_link": None,
             }
 
         if source_key == "overture_building_attributes":
@@ -2040,12 +2043,13 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         """
         Returns the weather forecast for a pin.
 
-        Tries OpenWeatherMap first when a key is configured; falls back to the
-        free, keyless Open-Meteo gateway when it isn't configured or its call
-        fails, so the widget still works out of the box. Both providers
-        render through the same normalized ``ForecastSlot`` shape.
+        Tries REData first when configured (one call covers every registered
+        provider); otherwise falls back to OpenWeatherMap when a key is
+        configured, then the free, keyless Open-Meteo gateway - see
+        ``services.apis.locations.weather_resolution``. Every path renders
+        through the same normalized ``ForecastSlot`` shape.
         """
-        from urbanlens.dashboard.services.apis.weather.forecast import owm_item_to_slot
+        from urbanlens.dashboard.services.apis.locations.weather_resolution import get_forecast_slots, get_sun_times
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if not profile.external_apis_enabled:
@@ -2060,29 +2064,10 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         if not pin.location or not pin.location.latitude or not pin.location.longitude:
             return HttpResponse("Pin does not have valid coordinates", status=400)
 
-        forecast = None
-        if settings.openweathermap_api_key:
-            from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
-
-            try:
-                raw_forecast = OpenWeatherMapGateway().get_weather_forecast(pin.location.latitude, pin.location.longitude)
-            except Exception:
-                logger.warning("OpenWeatherMap forecast failed for pin %s, falling back to Open-Meteo", pin_slug, exc_info=True)
-                raw_forecast = None
-            if raw_forecast:
-                forecast = [slot for item in raw_forecast if (slot := owm_item_to_slot(item)) is not None]
-
-        from urbanlens.dashboard.services.apis.weather.open_meteo import OpenMeteoGateway
-
-        if not forecast:
-            forecast = OpenMeteoGateway().get_weather_forecast(float(pin.location.latitude), float(pin.location.longitude))
-
+        latitude, longitude = float(pin.location.latitude), float(pin.location.longitude)
+        forecast = get_forecast_slots(latitude, longitude)
         logger.debug("forecast_data: %s", forecast)
-
-        # Always via Open-Meteo (UL-345), independent of which provider
-        # served the temperature/condition forecast above - OpenWeatherMap's
-        # 5-day/3-hour endpoint doesn't carry sunrise/sunset.
-        sun_times = OpenMeteoGateway().get_sun_times(float(pin.location.latitude), float(pin.location.longitude))
+        sun_times = get_sun_times(latitude, longitude)
 
         return render(request, "dashboard/pages/location/weather.html", {"forecast": forecast, "sun_times": sun_times})
 

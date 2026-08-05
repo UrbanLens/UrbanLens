@@ -2667,9 +2667,9 @@ a.trip-activity-name {
 }
 
 .trip-weather-slot-icon {
-    width: 46px;
-    height: 46px;
-    object-fit: contain;
+    font-size: 2.5rem;
+    line-height: 1;
+    color: var(--ul-primary-color);
     flex-shrink: 0;
 }
 

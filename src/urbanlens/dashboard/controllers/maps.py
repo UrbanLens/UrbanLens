@@ -2,7 +2,6 @@ import contextlib
 from datetime import datetime
 import json
 import logging
-import operator
 from typing import Any
 import urllib.parse
 import urllib.request
@@ -918,39 +917,27 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             logger.debug("Google Places skipped: zoom %d < minimum %d", zoom, GOOGLE_MIN_ZOOM)
 
         # -- National Park Service --------------------------------------------
-        if use_nps and settings.nps_api_key:
+        # REData's /parks/nearby/ is a pure local-catalog read, already
+        # distance-sorted and limited server-side - unlike the direct NPS API
+        # this replaced, there's no "cache all ~475 parks for 24h and filter
+        # locally" trick needed (the outer django_cache_key above already
+        # caches this whole combined places result).
+        redata_configured = bool(settings.redata_api_url and settings.redata_api_key)
+        if use_nps and redata_configured:
             try:
-                from urbanlens.dashboard.services.apis.parks.nps.parks import (
-                    NPSGateway,
-                    _haversine_km as _nps_haversine,
-                    _parse_lat_long as _nps_parse_lat_long,
-                )
+                from urbanlens.dashboard.services.apis.locations.redata_national_parks_gateway import RedataNationalParksGateway
 
-                nps_cache_key = "ul_nps_all_parks"
-                all_parks = django_cache.get(nps_cache_key)
-                if all_parks is None:
-                    nps_gw = NPSGateway()
-                    all_parks = nps_gw.search_parks(limit=500)
-                    django_cache.set(nps_cache_key, all_parks, 86400)
-
-                # Filter cached park list by distance without re-hitting the API.
-                nearby_parks: list[tuple[float, dict]] = []
-                for park in all_parks or []:
-                    park_lat, park_lng = _nps_parse_lat_long(park.get("latLong", ""))
-                    if park_lat is None or park_lng is None:
-                        continue
-                    dist = _nps_haversine(lat, lng, park_lat, park_lng)
-                    if dist <= 100.0:
-                        nearby_parks.append((dist, park))
-                nearby_parks.sort(key=operator.itemgetter(0))
-                for _dist, park in nearby_parks[:20]:
-                    park_lat, park_lng = _nps_parse_lat_long(park.get("latLong", ""))
+                # Omits radius_meters - REData's own 100km default for this endpoint
+                # (RedataNationalParksGateway.DEFAULT_RADIUS_METERS) is exactly what this
+                # layer wants too.
+                nearby_parks = RedataNationalParksGateway().find_parks_near(lat, lng, limit=20)
+                for park in nearby_parks:
                     places.append(
                         {
-                            "place_id": f"nps_{park.get('parkCode', '')}",
-                            "name": park.get("fullName", ""),
-                            "lat": park_lat,
-                            "lng": park_lng,
+                            "place_id": f"nps_{park.get('park_code', '')}",
+                            "name": park.get("full_name", ""),
+                            "lat": park.get("latitude"),
+                            "lng": park.get("longitude"),
                             "source": "nps",
                             "description": park.get("description", ""),
                             "url": park.get("url", ""),

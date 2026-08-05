@@ -41,6 +41,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.core.cache import cache
+import requests
 
 from urbanlens.dashboard.services.ai.factory import get_gateway
 from urbanlens.dashboard.services.ai.json_answer import parse_json_answer
@@ -53,6 +54,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import Trip, TripActivity
+    from urbanlens.dashboard.services.apis.weather.forecast import ForecastSlot
 
 logger = logging.getLogger(__name__)
 
@@ -250,15 +252,11 @@ def _vote_counts(activity_ids: list[int]) -> dict[int, tuple[int, int]]:
 
 def _weather_summary(activities: list[TripActivity], requester: Profile) -> tuple[list[dict], str]:
     """Daily condition/temperature summary for the trip's date range, or an explanation why not."""
-    import requests as requests_lib
-
-    from urbanlens.dashboard.services.apis.weather.gateway import OpenWeatherMapGateway
-    from urbanlens.UrbanLens.settings.app import settings as app_settings
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError
+    from urbanlens.dashboard.services.apis.locations.weather_resolution import get_raw_forecast_slots
 
     if not requester.external_apis_enabled:
         return [], "Weather skipped - external lookups are off in your settings."
-    if not app_settings.openweathermap_api_key:
-        return [], "Weather unavailable - no provider configured."
 
     # (activity, scheduled_at) pairs keep scheduled_at's non-None type intact
     # for every use below, rather than re-narrowing `activity.scheduled_at`
@@ -272,9 +270,8 @@ def _weather_summary(activities: list[TripActivity], requester: Profile) -> tupl
         return [], "No activity with a known location to fetch weather for."
 
     try:
-        gateway = OpenWeatherMapGateway()
-        slots = gateway.get_raw_forecast(*coords)
-    except (requests_lib.RequestException, ValueError):
+        slots = get_raw_forecast_slots(*coords)
+    except (requests.RequestException, LocationContextUnavailableError, ValueError):
         logger.warning("Weather lookup failed for trip AI suggestions", exc_info=True)
         return [], "Weather lookup failed."
     if not slots:
@@ -282,7 +279,7 @@ def _weather_summary(activities: list[TripActivity], requester: Profile) -> tupl
 
     start = min(scheduled_at.date() for _activity, scheduled_at in dated)
     end = max(scheduled_at.date() for _activity, scheduled_at in dated)
-    by_day: dict[datetime.date, list[dict]] = {}
+    by_day: dict[datetime.date, list[ForecastSlot]] = {}
     for slot in slots:
         slot_date = slot.get("date")
         if slot_date is None:
@@ -292,13 +289,13 @@ def _weather_summary(activities: list[TripActivity], requester: Profile) -> tupl
             by_day.setdefault(day, []).append(slot)
 
     if not by_day:
-        return [], "Trip dates are outside the 5-day forecast window."
+        return [], "Trip dates are outside the forecast window."
 
     days = []
     for day in sorted(by_day):
         day_slots = by_day[day]
-        temps = [slot["main"]["temp"] for slot in day_slots if slot.get("main", {}).get("temp") is not None]
-        conditions = [slot["weather"][0]["main"] for slot in day_slots if slot.get("weather")]
+        temps = [slot["temp"] for slot in day_slots]
+        conditions = [slot["condition"] for slot in day_slots]
         condition = max(set(conditions), key=conditions.count) if conditions else "Unknown"
         days.append({"date": day.isoformat(), "condition": condition, "low": round(min(temps)) if temps else None, "high": round(max(temps)) if temps else None})
     return days, ""

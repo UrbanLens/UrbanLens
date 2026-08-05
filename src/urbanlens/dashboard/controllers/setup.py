@@ -177,6 +177,18 @@ def _build_feature_groups(app_settings) -> list[dict]:
             ],
         },
         {
+            "label": "REData",
+            "icon": "hub",
+            "items": [
+                {
+                    "name": "REData",
+                    "description": "Unified backend for geocoding, weather, routing, imagery, points of interest, elevation, hazards, nature observations, news search, and more",
+                    "env_var": "UL_REDATA_API_URL + UL_REDATA_API_KEY",
+                    "configured": bool(app_settings.redata_api_url and app_settings.redata_api_key),
+                },
+            ],
+        },
+        {
             "label": "Maps & Geocoding",
             "icon": "map",
             "items": [
@@ -205,12 +217,6 @@ def _build_feature_groups(app_settings) -> list[dict]:
             "icon": "travel_explore",
             "items": [
                 {
-                    "name": "Brave Search",
-                    "description": "Privacy-focused web search results on pin pages",
-                    "env_var": "UL_BRAVE_SEARCH_API_KEY",
-                    "configured": bool(app_settings.brave_search_api_key),
-                },
-                {
                     "name": "Google Search",
                     "description": "Google Custom Search for pin-related web results",
                     "env_var": "UL_GOOGLE_DOMAIN_RESTRICTED_API_KEY + UL_GOOGLE_SEARCH_TENANT",
@@ -227,24 +233,6 @@ def _build_feature_groups(app_settings) -> list[dict]:
                     "description": "Current and historical weather data for pin locations",
                     "env_var": "UL_OPENWEATHERMAP_API_KEY",
                     "configured": bool(app_settings.openweathermap_api_key),
-                },
-            ],
-        },
-        {
-            "label": "History & Culture",
-            "icon": "museum",
-            "items": [
-                {
-                    "name": "Smithsonian Institution",
-                    "description": "Historical photos and records from Smithsonian collections",
-                    "env_var": "UL_SMITHSONIAN_API_KEY",
-                    "configured": bool(app_settings.smithsonian_api_key),
-                },
-                {
-                    "name": "National Park Service",
-                    "description": "NPS park information for locations near national parks",
-                    "env_var": "UL_NPS_API_KEY",
-                    "configured": bool(app_settings.nps_api_key),
                 },
             ],
         },

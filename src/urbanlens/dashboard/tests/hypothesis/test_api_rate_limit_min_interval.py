@@ -2,9 +2,12 @@
 
 Covers ApiRateLimit.min_interval_seconds/last_call_at, ServiceDefaults' matching
 field, _reserve_call()'s new spacing check, SiteAdminApiLimitsView's POST
-handling of the new form field, and the GDELT/Nominatim defaults that motivated
-this feature - a rolling per-minute *count* doesn't guarantee even spacing
-between calls, which is what these providers actually require.
+handling of the new form field, and the Nominatim default that motivated this
+feature - a rolling per-minute *count* doesn't guarantee even spacing between
+calls, which is what these providers actually require. GDELT's own spacing
+requirement moved with it when the GDELT panel was rewired to REData's
+``/search/news/`` - REData is the one calling GDELT directly now, so the
+concern is REData's to pace, not this registry's.
 """
 
 from __future__ import annotations
@@ -116,15 +119,3 @@ class ApiLimitsAdminPageMinIntervalFieldTests(TestCase):
         )
         self.cfg.refresh_from_db()
         self.assertIsNone(self.cfg.min_interval_seconds)
-
-
-class ConfiguredMinIntervalDefaultsTests(SimpleTestCase):
-    """Regression guard for the two services that motivated this feature."""
-
-    def test_openhistoricalmap_requires_nominatim_spacing(self) -> None:
-        self.assertEqual(SERVICE_REGISTRY["openhistoricalmap"].min_interval_seconds, 1.0)
-
-    def test_gdelt_requires_gdelt_spacing(self) -> None:
-        from urbanlens.dashboard.plugins.builtin.gdelt import GdeltPlugin
-
-        self.assertEqual(GdeltPlugin().get_service_defaults()["gdelt"].min_interval_seconds, 5.0)

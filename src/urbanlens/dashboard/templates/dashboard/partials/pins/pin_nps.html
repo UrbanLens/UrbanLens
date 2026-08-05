@@ -17,7 +17,7 @@
         {% with img=park.images.0 %}
         {% if img.url %}
         <div class="nps-image-wrap">
-            <img class="nps-image" src="{{ img.url }}" alt="{{ img.altText|default:park.fullName }}" loading="lazy"
+            <img class="nps-image" src="{{ img.url }}" alt="{{ img.altText|default:park.full_name }}" loading="lazy"
                  onerror="this.closest('.nps-image-wrap').style.display='none'">
             {% if img.caption %}
             <p class="nps-image-caption">{{ img.caption }}</p>
@@ -30,9 +30,9 @@
         <div class="nps-text">
             <h4 class="nps-park-name">
                 {% if park.url %}
-                <a href="{{ park.url }}" target="_blank" rel="noopener noreferrer">{{ park.fullName }}</a>
+                <a href="{{ park.url }}" target="_blank" rel="noopener noreferrer">{{ park.full_name }}</a>
                 {% else %}
-                {{ park.fullName }}
+                {{ park.full_name }}
                 {% endif %}
             </h4>
 
@@ -49,8 +49,8 @@
             </div>
             {% endif %}
 
-            {% if park.operatingHours %}
-            {% with hours=park.operatingHours.0 %}
+            {% if park.operating_hours %}
+            {% with hours=park.operating_hours.0 %}
             {% if hours.standardHours %}
             <div class="nps-hours">
                 <i class="material-symbols-outlined">schedule</i>

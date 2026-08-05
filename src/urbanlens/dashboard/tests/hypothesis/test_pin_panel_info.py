@@ -83,13 +83,13 @@ class PanelInfoDispatchTests(TestCase):
         LocationCache.set(
             self.pin.location,
             "photon",
-            {"name": "Test Building", "osm_value": "historic_building", "city": "Poughkeepsie"},
+            {"locality": "Poughkeepsie", "region": "New York"},
             query_key="",
         )
         response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "photon"]))
         self.assertEqual(response.status_code, 200)
-        self.assertContains(response, "Test Building")
         self.assertContains(response, "Poughkeepsie")
+        self.assertContains(response, "New York")
 
     def test_list_shaped_panel_renders_its_items(self) -> None:
         LocationCache.set(
@@ -119,7 +119,7 @@ class PanelAiExtractButtonTests(TestCase):
         LocationCache.set(
             self.pin.location,
             "gdelt",
-            {"articles": [{"date": "2024-01-01", "title": "Mill fire investigated", "url": "https://news.example.com/mill-fire"}]},
+            {"articles": [{"date": "20240101T120000Z", "title": "Mill fire investigated", "link": "https://news.example.com/mill-fire"}]},
             query_key="",
         )
 
@@ -143,12 +143,12 @@ class PanelAiExtractButtonTests(TestCase):
         self.assertContains(response, "https://news.example.com/mill-fire")
 
     def test_unflagged_links_never_get_the_button(self) -> None:
-        """photon's footer_link doesn't opt in, so no button renders even with the feature."""
+        """photon never sets a footer_link, so no button renders even with the feature."""
         self._grant_ai()
         LocationCache.set(
             self.pin.location,
             "photon",
-            {"name": "Test Building", "osm_url": "https://www.openstreetmap.org/node/1"},
+            {"locality": "Test Building"},
             query_key="",
         )
         response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "photon"]))

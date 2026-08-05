@@ -3,6 +3,13 @@
 Each plugin contributes one :class:`~urbanlens.dashboard.services.pins.external_data.MediaPanelSource`,
 which the gallery fetches independently so a slow provider never blocks the
 others.
+
+Smithsonian, Library of Congress and Internet Archive are all now REData-backed
+(``services.apis.locations.redata_reference_documents_gateway`` - see that
+module's docstring) and no longer call their archive directly. Wikimedia
+Commons is intentionally untouched: REData's ``/reference-documents/search/``
+has no ``wikimedia``/``wikimedia_commons`` provider today, so there is nothing
+to migrate it to.
 """
 
 from __future__ import annotations
@@ -22,27 +29,14 @@ class SmithsonianPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "smithsonian"
     verbose_name: ClassVar[str] = "Smithsonian Open Access"
-    description: ClassVar[str] = "Adds Smithsonian Open Access archive media to the pin detail page's Media gallery. USA-centric."
+    description: ClassVar[str] = "Adds Smithsonian Open Access archive media to the pin detail page's Media gallery. USA-centric. Via REData."
     author: ClassVar[str] = "UrbanLens"
-
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the Smithsonian API."""
-        return {
-            "smithsonian": ServiceDefaults(
-                display_name="Smithsonian Open Access",
-                calls_per_minute=20,
-                calls_per_day=500,
-                usa_only=True,
-                notes="Free API. USA-centric archive.",
-            ),
-        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the Smithsonian media-gallery provider."""
-        from urbanlens.dashboard.services.apis.assets.smithsonian import SmithsonianGateway
-        from urbanlens.UrbanLens.settings.app import settings
+        from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import SmithsonianMediaProvider
 
-        return [MediaPanelSource("smithsonian", SmithsonianGateway.service_key, lambda: SmithsonianGateway(api_key=settings.smithsonian_api_key or ""))]
+        return [MediaPanelSource("smithsonian", SmithsonianMediaProvider.service_key, SmithsonianMediaProvider)]
 
 
 class WikimediaPlugin(UrbanLensPlugin):
@@ -76,26 +70,14 @@ class LibraryOfCongressPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "library_of_congress"
     verbose_name: ClassVar[str] = "Library of Congress"
-    description: ClassVar[str] = "Adds Library of Congress archive media to the pin detail page's Media gallery. USA-centric."
+    description: ClassVar[str] = "Adds Library of Congress archive media to the pin detail page's Media gallery. USA-centric. Via REData."
     author: ClassVar[str] = "UrbanLens"
-
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the Library of Congress API."""
-        return {
-            "library_of_congress": ServiceDefaults(
-                display_name="Library of Congress",
-                calls_per_minute=10,
-                calls_per_day=200,
-                usa_only=True,
-                notes="Free API. USA-centric archive.",
-            ),
-        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the Library of Congress media-gallery provider."""
-        from urbanlens.dashboard.services.apis.assets.loc import LOCJsonGateway
+        from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import LibraryOfCongressMediaProvider
 
-        return [MediaPanelSource("loc", LOCJsonGateway.service_key, LOCJsonGateway)]
+        return [MediaPanelSource("loc", LibraryOfCongressMediaProvider.service_key, LibraryOfCongressMediaProvider)]
 
 
 class InternetArchivePlugin(UrbanLensPlugin):
@@ -103,22 +85,11 @@ class InternetArchivePlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "internet_archive"
     verbose_name: ClassVar[str] = "Internet Archive"
-    description: ClassVar[str] = "Free, keyless, open-source full-text/media search across archive.org's books, photos, newspapers, and recordings for the pin detail page's Media gallery."
+    description: ClassVar[str] = "Free, open-source full-text/media search across archive.org's books, photos, newspapers, and recordings for the pin detail page's Media gallery. Via REData."
     author: ClassVar[str] = "UrbanLens"
-
-    def get_service_defaults(self) -> dict[str, ServiceDefaults]:
-        """Rate-limit defaults for the Internet Archive search API."""
-        return {
-            "internet_archive": ServiceDefaults(
-                display_name="Internet Archive",
-                calls_per_minute=20,
-                calls_per_day=1000,
-                notes="Free, keyless, open-source (archive.org).",
-            ),
-        }
 
     def get_panel_sources(self) -> list[PanelSource]:
         """Contribute the Internet Archive media-gallery provider."""
-        from urbanlens.dashboard.services.apis.assets.internet_archive import InternetArchiveGateway
+        from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import InternetArchiveMediaProvider
 
-        return [MediaPanelSource("internet_archive", InternetArchiveGateway.service_key, InternetArchiveGateway)]
+        return [MediaPanelSource("internet_archive", InternetArchiveMediaProvider.service_key, InternetArchiveMediaProvider)]

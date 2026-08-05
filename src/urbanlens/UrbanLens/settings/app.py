@@ -160,21 +160,12 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     apple_maps_api_key: str | None = Field(default=None, description="The apple maps JWT (pre-generated from Apple Developer private key)")
     usgs_api_key: str | None = Field(default=None, description="The USGS M2M application token (from EarthExplorer account settings)")
     usgs_username: str | None = Field(default=None, description="The USGS EarthExplorer username (required alongside usgs_api_key for M2M auth)")
-    mapbox_api_key: str | None = Field(default=None, description="The Mapbox public access token (pk.* token)")
-    bing_maps_api_key: str | None = Field(default=None, description="The Bing Maps API key (from Azure portal)")
     azure_maps_subscription_key: str | None = Field(default=None, description="The Azure Maps subscription key (Azure Portal -> Azure Maps account -> Authentication)")
     ollama_base_url: str | None = Field(default=None, description="Base URL of a self-hosted Ollama server (e.g. http://localhost:11434) for local, free AI photo-keyword generation")
     ollama_vision_model: str = Field(default="llava", description="Ollama vision model name used for photo keyword generation")
-    mapillary_access_token: str | None = Field(default=None, description="The Mapillary client access token")
-    brave_search_api_key: str | None = Field(default=None, description="The Brave Search API key")
-    searxng_base_url: str | None = Field(default=None, description="Base URL of a self-hosted or trusted SearXNG instance (e.g. https://searx.example.com), no API key required")
-    searxng_image_engines: Annotated[list[str], NoDecode] = Field(default_factory=list, description="Override the SearXNG image engines queried by the Web Images media provider (comma-separated engine names as configured in the instance's settings.yml); empty uses the built-in default list")
     mojeek_api_key: str | None = Field(default=None, description="The Mojeek Search API key")
     marginalia_api_key: str | None = Field(default=None, description="The Marginalia Search API key ('public' is Marginalia's own shared testing key when unset)")
-    smithsonian_api_key: str | None = Field(default=None, description="The smithsonian key")
-    yelp_api_key: str | None = Field(default=None, description="The Yelp Fusion API key (private key, server-side only)")
     openweathermap_api_key: str | None = Field(default=None, description="The openweathermap key")
-    nps_api_key: str | None = Field(default=None, description="The national park service api key")
     redata_api_url: str | None = Field(default=None, description="Base URL of the REData property-records service (e.g. https://redata.example.com), no trailing slash needed")
     redata_api_key: str | None = Field(default=None, description="Bearer API key for REData's external API - needs at least the parcels:read scope")
     discord_client_secret: str | None = Field(default=None, description="The discord client secret")
@@ -263,7 +254,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     def django(self) -> LazySettings:
         return conf.settings
 
-    @field_validator("allowed_hosts", "plugin_modules", "disabled_plugins", "searxng_image_engines", mode="before")
+    @field_validator("allowed_hosts", "plugin_modules", "disabled_plugins", mode="before")
     @classmethod
     def _split_comma_separated(cls, value: Any) -> Any:
         """Allow list-valued settings to be provided as comma-separated strings via env vars."""
