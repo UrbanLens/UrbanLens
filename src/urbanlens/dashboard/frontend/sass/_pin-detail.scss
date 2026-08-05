@@ -5158,43 +5158,7 @@ body.page-location-details .pin-detail-grid {
     font-family: inherit;
 }
 
-// -- Pin hierarchy: breadcrumb, floating actions menu, child-pin content labels --
-
-// "Child pin of {parent}" breadcrumb at the top of a child pin's detail page.
-.pin-parent-breadcrumb {
-    display: inline-flex;
-    align-items: center;
-    gap: .4rem;
-    align-self: flex-start;
-    padding: .35rem .8rem .35rem .6rem;
-    border-radius: 999px;
-    background: var(--ul-color-accent-bg, rgba(30, 136, 229, .1));
-    border: 1px solid var(--ul-surface-border);
-    color: var(--ul-grey-8);
-    font-size: .85rem;
-    text-decoration: none;
-    transition: border-color .12s, background .12s, top .3s ease, right .3s ease;
-
-    i {
-        font-size: 1.05rem;
-        color: var(--primary-color);
-    }
-
-    &:hover {
-        border-color: var(--primary-color);
-        background: var(--ul-color-accent-bg, rgba(30, 136, 229, .16));
-    }
-
-    // Once the header has scrolled out of view, tuck the breadcrumb into the
-    // top-right corner instead - mirrors the wiki page's `.wiki-notice--pinned`.
-    &.pin-parent-breadcrumb--pinned {
-        position: fixed;
-        top: 0.2rem;
-        right: 0.5rem;
-        z-index: 999;
-        box-shadow: 0px 5px 20px rgba(0, 0, 0, 0.35);
-    }
-}
+// -- Pin hierarchy: floating actions menu, child-pin content labels --
 
 // Floating actions menu: bottom-right, follows the user as they scroll.
 .pin-actions-fab {

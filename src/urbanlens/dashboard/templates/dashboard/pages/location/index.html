@@ -150,15 +150,6 @@
          hx-timeout="25000"></div>
     {% endif %}
 
-    {% if parent_pin %}
-    {# -- Child pin: obvious way back up to the parent -------------------- #}
-    <a class="pin-parent-breadcrumb" href="{% url 'pin.details' parent_pin.slug|default:parent_pin.uuid %}"
-       title="This is a child pin - open its parent pin">
-        <i class="material-symbols-outlined">arrow_back</i>
-        <span>Child pin of <strong>{{ parent_pin.effective_name }}</strong></span>
-    </a>
-    {% endif %}
-
     {# -- Title + details (swappable) ------------------------------------ #}
     <div id="pin-overview"
          hx-get="{% url 'pin.overview' pin.slug %}"
@@ -1077,24 +1068,6 @@
 <script type="module" src="{% static 'dashboard/js/map-annotations.js' %}"></script>
 <script>
 
-
-    // -- Pin the "child pin of" breadcrumb to the corner once it scrolls away --
-    (function initPinParentBreadcrumbScroll() {
-        const breadcrumb = document.querySelector('.pin-parent-breadcrumb');
-        const header = document.querySelector('.app-nav');
-        if (!breadcrumb || !header) return;
-        let ticking = false;
-        function update() {
-            ticking = false;
-            breadcrumb.classList.toggle('pin-parent-breadcrumb--pinned', header.getBoundingClientRect().bottom <= 0);
-        }
-        window.addEventListener('scroll', function () {
-            if (ticking) return;
-            ticking = true;
-            requestAnimationFrame(update);
-        }, { passive: true });
-        update();
-    }());
 
     // -- Pin detail onboarding ------------------------------------------------
     (function initPinDetailOnboarding() {
