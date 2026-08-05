@@ -2015,6 +2015,8 @@ class SavedFiltersView(PaginatedListMixin, ExternalApiView):
             profile=profile,
             name=data["name"],
             icon=data.get("icon") or "bookmark",
+            color=data.get("color") or "",
+            opacity=data.get("opacity", 100),
             criteria=criteria,
             order=data.get("order", 0),
         )
@@ -2073,6 +2075,10 @@ class SavedFilterDetailView(ExternalApiView):
             saved_filter.name = data["name"]
         if "icon" in data:
             saved_filter.icon = data["icon"] or "bookmark"
+        if "color" in data:
+            saved_filter.color = data["color"] or ""
+        if "opacity" in data:
+            saved_filter.opacity = data["opacity"]
         if "criteria" in data:
             saved_filter.criteria = data["criteria"]
         if "order" in data:

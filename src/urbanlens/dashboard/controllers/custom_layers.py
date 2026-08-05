@@ -83,6 +83,51 @@ def _get_layer(request: HttpRequest, pin_slug: str | None, location_slug: str | 
     return owner, qs, get_object_or_404(qs, uuid=layer_uuid)
 
 
+def _share_layer_to_wiki(pin_layer: CustomLayer, profile: Profile) -> tuple[CustomLayer | None, bool]:
+    """Copy a pin-scoped layer's name/color/icon into a wiki-scoped layer.
+
+    Never creates the wiki itself (same rule ``services.pins.pin_wiki_sync``
+    follows for sending pins to a wiki) and never duplicates: if a wiki layer
+    with the same name already exists, that one is reused rather than adding
+    a second copy on repeat clicks.
+
+    Args:
+        pin_layer: The pin-scoped ``CustomLayer`` to share.
+        profile: The profile to attribute a newly-created wiki layer to.
+
+    Returns:
+        Tuple of (the wiki-scoped layer, whether it was newly created). The
+        layer is ``None`` when the pin's location has no community wiki yet.
+
+    Raises:
+        ValueError: If ``pin_layer`` isn't pin-scoped.
+    """
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    if pin_layer.parent_pin is None:
+        raise ValueError("_share_layer_to_wiki requires a pin-scoped layer")
+
+    wiki = Wiki.objects.get_for_location(pin_layer.parent_pin.location)
+    if wiki is None:
+        return None, False
+
+    wiki_layers = CustomLayer.objects.for_wiki(wiki)
+    existing = wiki_layers.filter(name__iexact=pin_layer.name).first()
+    if existing is not None:
+        return existing, False
+
+    next_order = (wiki_layers.order_by("-order").values_list("order", flat=True).first() or 0) + 1
+    new_layer = CustomLayer.objects.create(
+        name=pin_layer.name,
+        color=pin_layer.color,
+        icon=pin_layer.icon,
+        order=next_order,
+        profile=profile,
+        parent_wiki=wiki,
+    )
+    return new_layer, True
+
+
 def _render_layer_list(request: HttpRequest, owner: Pin | Wiki, qs: QuerySet[CustomLayer]) -> HttpResponse:
     """Render the manage-layers list partial, with an ``HX-Trigger`` for the map JS.
 
@@ -113,6 +158,7 @@ def _render_layer_list(request: HttpRequest, owner: Pin | Wiki, qs: QuerySet[Cus
             "layer": layer,
             "edit_url": reverse(f"{url_prefix}.edit", args=[owner_slug, layer.uuid]),
             "reorder_url": reverse(f"{url_prefix}.reorder", args=[owner_slug, layer.uuid]),
+            "share_url": reverse("pin.layers.share_to_wiki", args=[owner_slug, layer.uuid]) if is_pin else None,
         }
         for layer in ordered_layers
     ]
@@ -293,3 +339,41 @@ class CustomLayerReorderView(LoginRequiredMixin, View):
                 CustomLayer.objects.bulk_update([layer, neighbor], ["order"])
 
         return _render_layer_list(request, owner, qs)
+
+
+class CustomLayerShareToWikiView(LoginRequiredMixin, View):
+    """Copy a pin-scoped layer's name/color/icon into the location's wiki.
+
+    POST /map/pin/<pin_slug>/layers/<layer_uuid>/share-to-wiki/
+
+    Pin-only - there's no wiki-side equivalent, since sharing only ever flows
+    from a personal layer up to the shared wiki, never the other way.
+    """
+
+    def post(self, request: HttpRequest, layer_uuid: str, pin_slug: str) -> HttpResponse:
+        """Share the layer, then re-render the (unchanged) pin-scoped layer list with a toast.
+
+        Args:
+            request: HttpRequest.
+            layer_uuid: UUID of the pin-scoped layer to share.
+            pin_slug: Slug of the parent pin.
+
+        Returns:
+            Re-rendered layer list with a ``showToast`` HX-Trigger describing
+            the outcome (shared, already shared, or no wiki yet).
+        """
+        owner, qs, layer = _get_layer(request, pin_slug, None, layer_uuid)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        wiki_layer, created = _share_layer_to_wiki(layer, profile)
+        response = _render_layer_list(request, owner, qs)
+        if wiki_layer is None:
+            toast = {"level": "info", "message": "This property has no community wiki yet."}
+        elif created:
+            toast = {"level": "success", "message": f'Shared "{layer.name}" to the community wiki.'}
+        else:
+            toast = {"level": "info", "message": f'"{layer.name}" is already on the community wiki.'}
+        triggers = json.loads(response["HX-Trigger"])
+        triggers["showToast"] = toast
+        response["HX-Trigger"] = json.dumps(triggers)
+        return response

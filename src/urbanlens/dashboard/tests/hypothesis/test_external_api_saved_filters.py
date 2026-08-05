@@ -263,3 +263,50 @@ class SavedFilterDetailTests(SavedFilterApiTestCase):
         derived.refresh_from_db()
         self.assertIsNone(derived.source_saved_filter)
         self.assertEqual(derived.smart_filter, {"min_rating": 3})
+
+
+class SavedFilterColorOpacityApiTests(SavedFilterApiTestCase):
+    """color/opacity round-trip through create and PATCH."""
+
+    def test_create_persists_color_and_opacity(self) -> None:
+        response = self.client.post(
+            _BASE,
+            {"name": "Rated", "criteria": {"min_rating": 4}, "color": "#F44336", "opacity": 60},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+        self.assertEqual(response.status_code, 201)
+        body = response.json()
+        self.assertEqual(body["color"], "#F44336")
+        self.assertEqual(body["opacity"], 60)
+
+    def test_create_rejects_an_unrecognized_color(self) -> None:
+        response = self.client.post(
+            _BASE,
+            {"name": "Rated", "criteria": {"min_rating": 4}, "color": "javascript:alert(1)"},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_create_rejects_out_of_range_opacity(self) -> None:
+        response = self.client.post(
+            _BASE,
+            {"name": "Rated", "criteria": {"min_rating": 4}, "opacity": 500},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_patch_updates_color_and_opacity(self) -> None:
+        saved_filter = self._make_filter()
+        response = self.client.patch(
+            f"{_BASE}{saved_filter.uuid}/",
+            {"color": "#4CAF50", "opacity": 25},
+            content_type="application/json",
+            **_bearer(self.raw_key),
+        )
+        self.assertEqual(response.status_code, 200)
+        saved_filter.refresh_from_db()
+        self.assertEqual(saved_filter.color, "#4CAF50")
+        self.assertEqual(saved_filter.opacity, 25)

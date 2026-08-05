@@ -21,10 +21,11 @@ DOM, the OOB fragment is simply ignored by htmx.
     <div class="sf-toolbar-viewport">
         <div class="sf-toolbar-track" id="sf-toolbar-track">
             {% for filter in saved_filters %}
-            <button type="button" class="map-btn-icon sf-toolbar-btn" id="sf-toolbar-btn-{{ filter.uuid }}"
+            <button type="button" class="map-btn-icon sf-toolbar-btn{% if filter.color %} sf-toolbar-btn--colored{% endif %}" id="sf-toolbar-btn-{{ filter.uuid }}"
                     data-filter-uuid="{{ filter.uuid }}" data-criteria="{{ filter.criteria_json }}"
                     data-tooltip="{{ filter.name }}" data-tooltip-float="true" data-tooltip-pos="above"
                     aria-label="Toggle saved filter: {{ filter.name }}"
+                    {% if filter.color %}style="background:{{ filter.color|hex_to_rgba:filter.opacity }}"{% endif %}
                     onclick="toggleToolbarSavedFilter(this)">
                 {% if filter.icon|is_material_icon %}
                 <i class="material-symbols-outlined">{{ filter.icon }}</i>

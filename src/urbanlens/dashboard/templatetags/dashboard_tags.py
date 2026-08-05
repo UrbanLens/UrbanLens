@@ -328,6 +328,28 @@ def is_material_icon(value: str | None) -> bool:
 
 
 @register.filter
+def hex_to_rgba(hex_value: str | None, opacity_pct: int | str = 100) -> str:
+    """Convert a ``#RRGGBB`` hex color plus a 0-100 opacity into a CSS ``rgba(...)`` string.
+
+    Used to tint a swatch/thumbnail background from a user-chosen accent color at a
+    given opacity, e.g. saved filter buttons and custom layer thumbnails.
+
+    Usage: style="background:{{ filter.color|hex_to_rgba:filter.opacity }}"
+
+    Returns:
+        An ``rgba(r,g,b,a)`` string, or ``""`` if ``hex_value`` isn't a valid hex color.
+    """
+    if not hex_value or not re.match(r"^#[0-9a-fA-F]{6}$", str(hex_value)):
+        return ""
+    try:
+        alpha = max(0, min(100, int(opacity_pct))) / 100
+    except (TypeError, ValueError):
+        alpha = 1.0
+    r, g, b = (int(hex_value[i : i + 2], 16) for i in (1, 3, 5))
+    return f"rgba({r},{g},{b},{alpha})"
+
+
+@register.filter
 def is_icon_url(value: str | None) -> bool:
     """Return True if value is a URL pointing at an uploaded custom icon image.
 

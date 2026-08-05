@@ -562,6 +562,11 @@ urlpatterns = [
                                 name="pin.layers.reorder",
                             ),
                             path(
+                                "<slug:pin_slug>/layers/<uuid:layer_uuid>/share-to-wiki/",
+                                custom_layers.CustomLayerShareToWikiView.as_view(),
+                                name="pin.layers.share_to_wiki",
+                            ),
+                            path(
                                 "<slug:pin_slug>/overview/",
                                 pin_edit.PinOverviewView.as_view(),
                                 name="pin.overview",

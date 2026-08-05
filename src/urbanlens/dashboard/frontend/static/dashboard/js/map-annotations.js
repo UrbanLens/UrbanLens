@@ -464,7 +464,8 @@ function init() {
   const customLayersMenu = document.querySelector("#detail-map-layers [data-layers-menu]");
   const customLayersManageBtn = customLayersMenu?.querySelector(".map-layers-manage-btn") ?? null;
   function customLayerButtonLabel(layer) {
-    return `<span class="map-layer-thumb map-layer-thumb--icon"><i class="material-symbols-outlined">${escHtml(layer.icon || "layers")}</i></span><span>${escHtml(layer.name)}</span>`;
+    const tint = layer.color ? ` style="background:rgba(${hexToRgb(layer.color)},.18)"` : "";
+    return `<span class="map-layer-thumb map-layer-thumb--icon"${tint}><i class="material-symbols-outlined">${escHtml(layer.icon || "layers")}</i></span><span>${escHtml(layer.name)}</span>`;
   }
   function syncCustomLayers(fresh) {
     const freshUuids = new Set(fresh.map((layer) => layer.uuid));

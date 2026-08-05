@@ -33,6 +33,14 @@ fragment (delegated, so it survives being HTMX-swapped back in).
                 hx-target="#custom-layers-dialog-body" hx-swap="innerHTML">
             <i class="material-symbols-outlined">arrow_downward</i>
         </button>
+        {% if row.share_url %}
+        <button type="button" class="btn btn--icon" title="Share to wiki"
+                hx-post="{{ row.share_url }}"
+                hx-confirm="Share &quot;{{ row.layer.name }}&quot; with this location's community wiki? Anyone with wiki access will be able to add items to it."
+                hx-target="#custom-layers-dialog-body" hx-swap="innerHTML">
+            <i class="material-symbols-outlined">public</i>
+        </button>
+        {% endif %}
         <button type="button" class="btn btn--icon btn--danger" title="Delete layer"
                 hx-delete="{{ row.edit_url }}"
                 hx-confirm="Delete &quot;{{ row.layer.name }}&quot;? Its items move back to the base Markup layer - they are not deleted."

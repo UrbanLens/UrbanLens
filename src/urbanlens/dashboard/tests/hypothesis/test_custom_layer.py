@@ -292,6 +292,75 @@ class CustomLayerPinEndpointTests(TestCase):
         edit_url = reverse("pin.layers.edit", args=[self.pin.slug, other_layer.uuid])
         self.assertEqual(self.client.post(edit_url, {"name": "Hijacked"}).status_code, 404)
 
+    def test_dialog_body_offers_a_share_url_only_for_pin_scoped_rows(self) -> None:
+        layer = CustomLayer.objects.create(name="Tunnels", parent_pin=self.pin, profile=self.profile)
+        response = self.client.get(self._list_url())
+        self.assertContains(response, reverse("pin.layers.share_to_wiki", args=[self.pin.slug, layer.uuid]))
+
+
+class CustomLayerShareToWikiTests(TestCase):
+    """POST /map/pin/<pin_slug>/layers/<layer_uuid>/share-to-wiki/."""
+
+    def setUp(self) -> None:
+        self.location, self.wiki = _location_with_wiki()
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.pin = baker.make("dashboard.Pin", profile=self.profile, location=self.location)
+
+    def _share_url(self, layer):
+        return reverse("pin.layers.share_to_wiki", args=[self.pin.slug, layer.uuid])
+
+    def test_shares_a_copy_with_matching_name_color_and_icon(self) -> None:
+        layer = CustomLayer.objects.create(name="Tunnels", color="#F44336", icon="route", parent_pin=self.pin, profile=self.profile)
+        response = self.client.post(self._share_url(layer))
+        self.assertEqual(response.status_code, 200)
+
+        wiki_layer = CustomLayer.objects.get(parent_wiki=self.wiki)
+        self.assertEqual(wiki_layer.name, "Tunnels")
+        self.assertEqual(wiki_layer.color, "#F44336")
+        self.assertEqual(wiki_layer.icon, "route")
+        self.assertEqual(wiki_layer.profile_id, self.profile.pk)
+        # The original pin-scoped layer is untouched, not moved.
+        layer.refresh_from_db()
+        self.assertEqual(layer.parent_pin_id, self.pin.pk)
+
+    def test_sharing_the_same_layer_twice_does_not_duplicate(self) -> None:
+        layer = CustomLayer.objects.create(name="Tunnels", parent_pin=self.pin, profile=self.profile)
+        self.client.post(self._share_url(layer))
+        self.client.post(self._share_url(layer))
+        self.assertEqual(CustomLayer.objects.filter(parent_wiki=self.wiki, name="Tunnels").count(), 1)
+
+    def test_sharing_with_no_community_wiki_creates_nothing(self) -> None:
+        pin = baker.make("dashboard.Pin", profile=self.profile)  # own Location, no Wiki
+        layer = CustomLayer.objects.create(name="Tunnels", parent_pin=pin, profile=self.profile)
+        response = self.client.post(reverse("pin.layers.share_to_wiki", args=[pin.slug, layer.uuid]))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(CustomLayer.objects.filter(parent_wiki__isnull=False).exists())
+        trigger = json.loads(response["HX-Trigger"])
+        self.assertEqual(trigger["showToast"]["level"], "info")
+
+    def test_share_toast_reports_success(self) -> None:
+        layer = CustomLayer.objects.create(name="Tunnels", parent_pin=self.pin, profile=self.profile)
+        response = self.client.post(self._share_url(layer))
+        trigger = json.loads(response["HX-Trigger"])
+        self.assertEqual(trigger["showToast"]["level"], "success")
+
+    def test_other_users_pin_layer_404s(self) -> None:
+        other_user = baker.make("auth.User")
+        other_pin = baker.make("dashboard.Pin", profile=other_user.profile)
+        other_layer = CustomLayer.objects.create(name="Not yours", parent_pin=other_pin, profile=other_user.profile)
+        share_url = reverse("pin.layers.share_to_wiki", args=[other_pin.slug, other_layer.uuid])
+        self.assertEqual(self.client.post(share_url).status_code, 404)
+
+    def test_wiki_scoped_layers_have_no_share_route(self) -> None:
+        from django.urls import NoReverseMatch
+        import pytest
+
+        layer = CustomLayer.objects.create(name="Wiki layer", parent_wiki=self.wiki, profile=self.profile)
+        with pytest.raises(NoReverseMatch):
+            reverse("location.wiki.layers.share_to_wiki", args=[self.location.slug, layer.uuid])
+
 
 class CustomLayerWikiEndpointTests(TestCase):
     """Wiki-scoped manage-layers endpoints: shared edit access, not creator-only."""

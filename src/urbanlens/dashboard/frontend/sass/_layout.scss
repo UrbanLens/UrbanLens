@@ -431,6 +431,13 @@ div.section {
             filter: grayscale(0);
             opacity: 1;
         }
+
+        // A user-chosen color is the whole point of setting one - grayscale/dimming
+        // it away at rest (same as an icon-less filter) would hide it until hover.
+        &.sf-toolbar-btn--colored {
+            filter: none;
+            opacity: .85;
+        }
     }
 }
 

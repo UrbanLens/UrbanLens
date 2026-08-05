@@ -643,7 +643,8 @@ function init(): void {
     const customLayersManageBtn = customLayersMenu?.querySelector<HTMLElement>(".map-layers-manage-btn") ?? null;
 
     function customLayerButtonLabel(layer: CustomLayerEntry): string {
-        return `<span class="map-layer-thumb map-layer-thumb--icon"><i class="material-symbols-outlined">${escHtml(layer.icon || "layers")}</i></span><span>${escHtml(layer.name)}</span>`;
+        const tint = layer.color ? ` style="background:rgba(${hexToRgb(layer.color)},.18)"` : "";
+        return `<span class="map-layer-thumb map-layer-thumb--icon"${tint}><i class="material-symbols-outlined">${escHtml(layer.icon || "layers")}</i></span><span>${escHtml(layer.name)}</span>`;
     }
 
     function syncCustomLayers(fresh: CustomLayerEntry[]): void {

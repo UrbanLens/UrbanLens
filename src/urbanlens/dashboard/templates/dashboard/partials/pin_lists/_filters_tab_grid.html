@@ -5,7 +5,7 @@
     <a class="pin-list-card saved-filter-card" data-search="{{ filter.name|lower }}"
        href="{% url 'saved_filters.detail' filter.uuid %}" title="Open {{ filter.name }} - view matching pins and edit every option">
         <div class="pin-list-card-header">
-            <span class="pin-list-card-icon">
+            <span class="pin-list-card-icon"{% if filter.color %} style="background:{{ filter.color|hex_to_rgba:filter.opacity }}"{% endif %}>
                 {% if filter.icon|is_material_icon %}
                 <i class="material-symbols-outlined">{{ filter.icon }}</i>
                 {% elif filter.icon %}

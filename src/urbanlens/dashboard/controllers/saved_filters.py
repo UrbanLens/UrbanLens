@@ -12,7 +12,7 @@ from django.shortcuts import get_object_or_404, render
 from django.views import View
 
 from urbanlens.dashboard.forms.search import SearchForm
-from urbanlens.dashboard.models.labels.meta import ICON_CATEGORIES
+from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
@@ -29,6 +29,17 @@ if TYPE_CHECKING:
 _SECTION_TEMPLATE = "dashboard/partials/pins/_saved_filters_section.html"
 _TOOLBAR_TEMPLATE = "dashboard/partials/map/_saved_filters_toolbar.html"
 _FORM_DIALOG_TEMPLATE = "dashboard/partials/pin_lists/_saved_filter_form_dialog.html"
+_ALLOWED_COLORS = {hex_value for hex_value, _label in COLOR_CHOICES}
+
+
+def _clamp_opacity(raw: str | None) -> int:
+    """Parse a submitted opacity value, clamped to [0, 100] with a 100 fallback."""
+    if raw is None:
+        return 100
+    try:
+        return max(0, min(100, int(raw)))
+    except ValueError:
+        return 100
 
 
 def _render_section(request, profile: Profile) -> HttpResponse:
@@ -104,7 +115,16 @@ class SavedFilterCreateView(LoginRequiredMixin, View):
             return HttpResponse("No active filters to save.", status=400)
 
         icon = (request.POST.get("icon") or "bookmark").strip()
-        SavedFilter.objects.create(profile=profile, name=name, icon=icon, criteria=criteria, order=profile.saved_filters.count())
+        color = request.POST.get("color") or ""
+        SavedFilter.objects.create(
+            profile=profile,
+            name=name,
+            icon=icon,
+            color=color if color in _ALLOWED_COLORS else "",
+            opacity=_clamp_opacity(request.POST.get("opacity")),
+            criteria=criteria,
+            order=profile.saved_filters.count(),
+        )
         return _render_section(request, profile)
 
 
@@ -154,6 +174,9 @@ def _build_filter_form_context(profile: Profile, filter_uuid) -> dict:
         "selected_exclude_tag_ids": initial.get("exclude_tags", []),
         "icon_categories": ICON_CATEGORIES,
         "current_icon": saved_filter.icon if saved_filter else "bookmark",
+        "color_choices": COLOR_CHOICES,
+        "current_color": saved_filter.color if saved_filter else "",
+        "current_opacity": saved_filter.opacity if saved_filter else 100,
     }
 
 
@@ -205,10 +228,13 @@ class SavedFilterEditView(LoginRequiredMixin, View):
         if not criteria:
             return JsonResponse({"ok": False, "error": "No active filters to save."}, status=400)
 
+        color = request.POST.get("color") or ""
         saved_filter.name = name
         saved_filter.icon = (request.POST.get("icon") or "bookmark").strip()
+        saved_filter.color = color if color in _ALLOWED_COLORS else ""
+        saved_filter.opacity = _clamp_opacity(request.POST.get("opacity"))
         saved_filter.criteria = criteria
-        saved_filter.save(update_fields=["name", "icon", "criteria", "updated"])
+        saved_filter.save(update_fields=["name", "icon", "color", "opacity", "criteria", "updated"])
 
         # Refreshes every PinList still pointing at this filter, resolving the
         # matching pin ids once and reusing them across all of them - see

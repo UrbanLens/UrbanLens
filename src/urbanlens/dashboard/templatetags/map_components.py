@@ -49,6 +49,8 @@ class MapLayerSpec:
         thumb_alt: Alt text for the thumbnail image.
         icon: Material Symbols icon name used in the compact strip variant
             and as the thumbnail fallback.
+        color: Optional accent hex color (e.g. a CustomLayer's chosen color)
+            tinted behind the icon in the icon-only thumbnail variant.
         button_id: Explicit DOM id (kept stable for tests/automation).
     """
 
@@ -60,6 +62,7 @@ class MapLayerSpec:
     icon: str
     thumb: str = ""
     thumb_alt: str = ""
+    color: str = ""
     button_id: str = field(default="")
 
     def __post_init__(self) -> None:
@@ -297,6 +300,7 @@ def custom_layer_button(layer: Any) -> MapLayerSpec:
         aria_label=f"Show or hide {layer.name}",
         tooltip=layer.name,
         icon=layer.icon or "layers",
+        color=layer.color,
         button_id=f"custom-layer-{layer.uuid}-button",
     )
 

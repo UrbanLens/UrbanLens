@@ -1267,12 +1267,17 @@ class PinListMarkupMapResponseSerializer(serializers.Serializer):
     markup_map_uuid = serializers.UUIDField(read_only=True)
 
 
+_ALLOWED_SAVED_FILTER_COLORS = {hex_value for hex_value, _label in COLOR_CHOICES}
+
+
 class SavedFilterSerializer(serializers.Serializer):
     """One of the caller's saved main-map filters."""
 
     uuid = serializers.UUIDField(read_only=True)
     name = serializers.CharField(read_only=True)
     icon = serializers.CharField(read_only=True, allow_blank=True)
+    color = serializers.CharField(read_only=True, allow_blank=True)
+    opacity = serializers.IntegerField(read_only=True)
     criteria = serializers.JSONField(read_only=True, help_text=CRITERIA_HELP_TEXT)
     order = serializers.IntegerField(read_only=True)
     created = serializers.DateTimeField(read_only=True)
@@ -1284,8 +1289,26 @@ class SavedFilterWriteSerializer(serializers.Serializer):
 
     name = serializers.CharField(max_length=100)
     icon = serializers.CharField(required=False, allow_blank=True, max_length=64)
+    color = serializers.CharField(required=False, allow_blank=True, max_length=20)
+    opacity = serializers.IntegerField(required=False, min_value=0, max_value=100)
     criteria = serializers.JSONField(required=False, help_text=CRITERIA_HELP_TEXT)
     order = serializers.IntegerField(required=False)
+
+    def validate_color(self, value):
+        """Reject any hex not in the shared saved-filter/label/custom-layer color palette.
+
+        Args:
+            value: The submitted color.
+
+        Returns:
+            The validated color.
+
+        Raises:
+            serializers.ValidationError: If it isn't blank or an allowed hex.
+        """
+        if value and value not in _ALLOWED_SAVED_FILTER_COLORS:
+            raise serializers.ValidationError("Not a recognized color.")
+        return value
 
     def validate_criteria(self, value):
         """Require a JSON object, since every consumer indexes it by key.
