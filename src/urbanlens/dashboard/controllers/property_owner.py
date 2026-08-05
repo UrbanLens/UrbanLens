@@ -162,7 +162,15 @@ def _parse_sale_price_and_date(request: HttpRequest) -> tuple[Decimal | None, da
 
 
 def _render_pin_ownership_panel(request: HttpRequest, pin: Pin, error: str | None = None) -> HttpResponse:
-    """Render the pin detail page's private Ownership card."""
+    """Render the pin detail page's private Ownership card.
+
+    Ungated: ``PinOwner`` has no ``source`` field because private per-pin
+    records are definitionally user-entered (see ``OwnerSource``'s docstring).
+    Putting a subscription in front of a user's own notes would be taking
+    something away rather than offering something - only the county-sourced
+    records UrbanLens looks up *for* them are gated (see
+    ``services.property.owner_access``).
+    """
     response = render(
         request,
         "dashboard/partials/pins/_ownership_panel.html",
@@ -241,12 +249,19 @@ class PinOwnerRemoveView(LoginRequiredMixin, View):
 
 
 def _render_pin_sale_tab(request: HttpRequest, pin: Pin, error: str | None = None) -> HttpResponse:
-    """Render the pin detail page's private Sale History tab."""
+    """Render the pin detail page's private Sale History tab.
+
+    Goes through the same row builder as the wiki tab purely so one template
+    shape serves both; nothing is ever withheld here, since a pin's parties
+    are ``PinOwner`` rows and those are always user-entered.
+    """
+    from urbanlens.dashboard.services.property.owner_access import sale_rows
+
     response = render(
         request,
         "dashboard/partials/pins/_property_sale_tab.html",
         {
-            "sales": PinPropertySale.objects.for_pin(pin).prefetch_related("previous_owners", "new_owners"),
+            "sales": sale_rows(PinPropertySale.objects.for_pin(pin).prefetch_related("previous_owners", "new_owners"), request.user),
             "show_official_badge": False,
             "obj_slug": pin.slug,
             "url_add": "pin.sales",
@@ -306,12 +321,22 @@ class PinPropertySaleDeleteView(LoginRequiredMixin, View):
 
 
 def _render_wiki_ownership_panel(request: HttpRequest, location: Location, error: str | None = None) -> HttpResponse:
-    """Render the wiki page's shared Ownership card."""
+    """Render the wiki page's shared Ownership card.
+
+    Officially-sourced owners (looked up from county records via REData) are
+    filtered out for a viewer without ``SiteFeature.PROPERTY_OWNERS`` - see
+    ``services.property.owner_access``. Community-contributed rows are
+    everyone's, and are shown regardless.
+    """
+    from urbanlens.dashboard.services.property.owner_access import visible_owners, withheld_official_count
+
+    all_owners = list(WikiOwner.objects.for_location(location))
     response = render(
         request,
         "dashboard/partials/pins/_ownership_panel.html",
         {
-            "owners": WikiOwner.objects.for_location(location),
+            "owners": visible_owners(all_owners, request.user),
+            "withheld_official_count": withheld_official_count(all_owners, request.user),
             "panel_id": "location-ownership-panel",
             "collapse_scope": "wiki",
             "show_official_badge": True,
@@ -385,12 +410,19 @@ class WikiOwnerRemoveView(LoginRequiredMixin, View):
 
 
 def _render_wiki_sale_tab(request: HttpRequest, location: Location, error: str | None = None) -> HttpResponse:
-    """Render the wiki page's shared Sale History tab."""
+    """Render the wiki page's shared Sale History tab.
+
+    Party names are filtered the same way the Ownership panel's are: a deed's
+    grantor/grantee written from county records is an ``OFFICIAL`` owner, so
+    leaving this tab ungated would hand back exactly what that panel withholds.
+    """
+    from urbanlens.dashboard.services.property.owner_access import sale_rows
+
     response = render(
         request,
         "dashboard/partials/pins/_property_sale_tab.html",
         {
-            "sales": WikiPropertySale.objects.for_location(location).prefetch_related("previous_owners", "new_owners"),
+            "sales": sale_rows(WikiPropertySale.objects.for_location(location).prefetch_related("previous_owners", "new_owners"), request.user),
             "show_official_badge": True,
             "obj_slug": location.slug,
             "url_add": "location.wiki.sales",

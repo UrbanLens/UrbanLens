@@ -96,6 +96,14 @@
         <p class="po-panel-empty">No owner information yet.</p>
         {% endif %}
 
+        {% if withheld_official_count %}
+        <p class="po-panel-locked">
+            <i class="material-symbols-outlined">lock</i>
+            {{ withheld_official_count }} official owner record{{ withheld_official_count|pluralize }} on file from county
+            assessor data. <a href="{% url 'settings.billing' %}">Subscribe</a> to see owner names and contact details.
+        </p>
+        {% endif %}
+
         <form class="po-add-form" hidden
               hx-post="{% url url_add obj_slug %}"
               hx-target="#{{ panel_id }}"

@@ -42,6 +42,14 @@ class SiteFeature(TextChoices):
     # nearby-regulated-facilities list) - separate from each plugin's own
     # unconditional "data about this exact pin" card, which everyone gets.
     NEARBY_RESEARCH = "nearby_research", "Nearby research data"
+    # Owner identity/contact details UrbanLens looked up *for* the user from
+    # county assessor records (via REData) - the paid data feed, and the part
+    # of a property record that names a private individual. Deliberately scoped
+    # to automatically-sourced records only: a user's own private PinOwner
+    # notes, and WikiOwner rows the community typed in themselves, are the
+    # users' own contributions and stay visible to everyone (see
+    # ``services.property.owner_access``).
+    PROPERTY_OWNERS = "property_owners", "Official property owner names & contact info"
     # Gates access to features still under active development, but stable enough
     # for general (VIP) use - a single flag reused across every in-progress
     # feature, rather than one SiteFeature per beta, so a feature can graduate

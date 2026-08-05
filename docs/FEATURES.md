@@ -187,7 +187,10 @@ direct-only because REData's contract can't reproduce what they show:
   REData via `RedataGateway`
   (`services.apis.property_records.redata_gateway`); populates the wiki's Ownership and Sale
   History cards with `OFFICIAL`-sourced records in addition to a details card. Coverage varies by
-  county
+  county. **Owner names and contact details from those `OFFICIAL` records are subscriber-only**
+  (`SiteFeature.PROPERTY_OWNERS`, enforced in `services.property.owner_access`) - the parcel, tax,
+  assessment and district facts stay open to everyone, as do a user's own private `PinOwner` notes
+  and any `WikiOwner` the community typed in themselves
 - **USGS Historical Topo Maps** (USA) — historical topographic maps, direct-only (a gallery of
   individually-dated scans, a shape REData's imagery contract doesn't offer)
 - **Nominatim/OpenStreetMap** — reverse geocoding and place metadata (two panels: Nominatim

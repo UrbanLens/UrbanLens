@@ -197,8 +197,16 @@ _BUILDING_CHARACTERISTIC_LABELS: tuple[tuple[str, str], ...] = (
 )
 
 
-def _render_available(data: dict[str, Any]) -> dict[str, Any]:
-    """Build the info-panel context for a successful record."""
+def _render_available(data: dict[str, Any], *, show_owner: bool) -> dict[str, Any]:
+    """Build the info-panel context for a successful record.
+
+    Args:
+        data: The cached property-record payload.
+        show_owner: Whether this viewer may see the owner's name. County
+            assessor data is the paid half of this card - the parcel/tax
+            facts stay unconditional, the private individual's name does not
+            (see ``services.property.owner_access``).
+    """
     meta = [{"label": "Address", "value": data["situs_address"]}] if data.get("situs_address") else []
     if data.get("apn"):
         meta.append({"label": "APN / Parcel ID", "value": data["apn"]})
@@ -253,8 +261,15 @@ def _render_available(data: dict[str, Any]) -> dict[str, Any]:
 
     # footer_link = {"url": data["source"]["url"], "label": f"View on {data['source']['provider']}"} if data["source"].get("url") else None
 
+    owner_names = data.get("owner_name") or []
+    if owner_names and not show_owner:
+        # Named rather than silently dropped: "this parcel has a recorded
+        # owner you can't see" is a different (and honest) statement from
+        # "no owner on record", and the second would read as missing data.
+        chips.append("Owner on record - subscribers only")
+
     return {
-        "heading_name": ", ".join(data.get("owner_name") or []) or None,
+        "heading_name": (", ".join(owner_names) or None) if show_owner else None,
         "chips": chips,
         "meta": meta,
     }
@@ -300,11 +315,18 @@ class PropertyRecordsPanelSource(CoordinateGatedInfoPanelSource):
             _write_official_owners_and_sales(pin.location, payload)
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
-        """Render the found record, the manual-lookup pointer card, or nothing (204)."""
+        """Render the found record, the manual-lookup pointer card, or nothing (204).
+
+        The owner's name is shown only to a viewer entitled to it - see
+        ``services.property.owner_access.viewer_of`` for who that is, and why
+        an unresolvable viewer withholds the name rather than showing it.
+        """
+        from urbanlens.dashboard.services.property.owner_access import can_see_official_owners, viewer_of
+
         if not data:
             return None
         if data.get("available"):
-            return _render_available(data)
+            return _render_available(data, show_owner=can_see_official_owners(viewer_of(pin)))
         if data.get("reason") in (REASON_MANUAL_ONLY, REASON_BLOCKED):
             return _render_manual_only(data)
         return None

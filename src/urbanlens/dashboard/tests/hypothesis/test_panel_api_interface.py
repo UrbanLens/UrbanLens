@@ -321,9 +321,18 @@ class ParcelBuildingsApiPayloadTests(TestCase):
         self.profile = baker.make(User).profile
         self.pin: Pin = baker.make_recipe("dashboard.pin", profile=self.profile)
         self.source = ParcelBuildingsPanelSource()
+        # Both buildings have to actually sit on the parcel. `building_rows`
+        # drops a building that falls outside the property's real boundary,
+        # and a boundary gets derived as soon as this pin has a child - so a
+        # "second building" parked 200km away (as this fixture used to be)
+        # silently vanished from the payload the moment a test added one,
+        # rather than being reported as the unpinned building it stands for.
+        # Tool Shed therefore sits at the parcel pin's own coordinates: inside
+        # any boundary derived from it, and far enough from the Powerhouse
+        # child pin not to be matched to it.
         self.buildings = [
             {"name": "Powerhouse", "building_number": "9", "source": "cris", "latitude": 40.0010, "longitude": -74.0010, "geometry": _FOOTPRINT},
-            {"name": "Tool Shed", "building_number": "154", "source": "osm", "latitude": 41.5, "longitude": -75.5},
+            {"name": "Tool Shed", "building_number": "154", "source": "osm", "latitude": float(self.pin.location.latitude), "longitude": float(self.pin.location.longitude)},
         ]
 
     def _cache(self, provider: str = "redata") -> None:

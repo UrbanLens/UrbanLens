@@ -1906,20 +1906,28 @@ fan-out with its own paging/rate story, not another field-name correction.
 just `:read` - a read-only key 403s on all three and therefore yields zero attachments no
 matter how correct this code is.
 
-## Pre-existing test failures found while fixing CRIS media (2026-08-05)
+## Pre-existing test failures found while fixing CRIS media (2026-08-05) - FIXED
 
-15 tests in `dashboard/tests/hypothesis/` fail on a clean `9a8c0f14` checkout, unrelated to that
-work (verified by running them from a detached worktree at HEAD). Two independent causes:
+15 tests in `dashboard/tests/hypothesis/` failed on a clean `9a8c0f14` checkout, unrelated to that
+work (confirmed by running them from a detached worktree at HEAD). All three causes are now fixed:
 
-- **`test_delete_low_engagement_wikis.py` (11 tests)** - every one dies on
-  `CommandError: Unknown command: 'delete_low_engagement_wikis'`. There is no such management
-  command anywhere in `src/urbanlens` (`dashboard/management/commands/` holds only the backfill,
-  `diagnose_places_api` and `provision_mobile_oauth_client` commands). The test file describes the
-  intended retention policy in detail - enough pin owners plus a real, non-reverted user edit keeps
-  a wiki, everything else is deletable, dry-run by default - so this reads as a command that was
-  planned and tested but never written (or removed without its tests).
-- **`test_sun_times.py` (3 tests)** - the weather panel makes a real outbound call the test doesn't
-  mock, tripping `core/testing_network.py`'s guard (`Attempted to connect to '208.102.189.146'`).
-  A missing patch in the test, not a product bug.
-- **`test_panel_api_interface.py::ParcelBuildingsApiPayloadTests::test_covering_child_pin_is_reported_by_uuid_and_name`** -
-  one failure in the parcel-buildings API payload; not investigated.
+- **`test_delete_low_engagement_wikis.py` (11 tests)** - every one died on
+  `CommandError: Unknown command: 'delete_low_engagement_wikis'`. The management command simply did
+  not exist; the tests specified it completely (two independent criteria - at most 2 distinct pin
+  owners, or no surviving user edit - dry run by default, `--yes` to delete, cascade to child
+  wikis) and it has now been written to match. Its docstring references a
+  `services.visits.safety.destination_wiki_activity` precedent that also does not exist anywhere in
+  the tree, so the "active user edit" rule was instead mirrored from `WikiEditQuerySet.active` and
+  `services.achievements.metrics`, which agree on it.
+- **`test_sun_times.py` (3 tests)** - written before the weather chain gained its REData-first
+  chokepoint (`services.apis.locations.weather_resolution`). They patched only the direct
+  Open-Meteo/OpenWeatherMap gateways, so on any machine with REData credentials configured the view
+  made a real outbound call and tripped `core/testing_network.py`'s guard. They now switch REData
+  off explicitly, pinning the direct-provider branch they were always about; REData's own branch
+  stays covered in `test_weather_resolution.py`.
+- **`test_panel_api_interface.py::ParcelBuildingsApiPayloadTests`** - the fixture placed the parcel's
+  "second building" 200 km away. `building_rows` correctly drops a building outside the property's
+  real boundary, and a boundary gets *derived* as soon as the pin has a child - so the moment a test
+  added a covering child pin, the far-away building vanished from the payload and `unpinned_count`
+  read 0. Product code was right; the fixture now puts both buildings on the parcel.
+

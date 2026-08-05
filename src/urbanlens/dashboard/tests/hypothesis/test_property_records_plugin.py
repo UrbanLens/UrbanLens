@@ -25,7 +25,7 @@ class PanelRenderContextTests(SimpleTestCase):
     def setUp(self) -> None:
         super().setUp()
         self.source = PropertyRecordsPanelSource()
-        self.pin = None  # render_context doesn't actually use pin for this source.
+        self.pin = None  # No viewer to resolve - see test_an_unresolvable_viewer_never_gets_the_owner_name.
 
     def test_empty_data_yields_none(self) -> None:
         self.assertIsNone(self.source.render_context(self.pin, {}))
@@ -59,7 +59,12 @@ class PanelRenderContextTests(SimpleTestCase):
         self.assertEqual(ctx["chips"], ["Manual lookup required"])
         self.assertTrue(any(entry["href"] == "https://example.gov/assessor" for entry in ctx["meta"]))
 
-    def test_available_record_shows_the_owner_and_no_chips_when_nothing_notable(self) -> None:
+    def test_an_unresolvable_viewer_never_gets_the_owner_name(self) -> None:
+        """The owner name is subscriber-only county assessor data, so a call
+        with no viewer to check entitlement against withholds it rather than
+        publishing a private individual's name by default. Which viewers *do*
+        see it is covered in ``test_property_owner_access.py``, which has real
+        pins to check against."""
         data = {
             "available": True,
             "situs_address": "123 Main St",
@@ -75,8 +80,8 @@ class PanelRenderContextTests(SimpleTestCase):
         }
         ctx = self.source.render_context(self.pin, data)
         assert ctx is not None
-        self.assertEqual(ctx["heading_name"], "Jane Smith")
-        self.assertEqual(ctx["chips"], [])
+        self.assertIsNone(ctx["heading_name"])
+        self.assertEqual(ctx["chips"], ["Owner on record - subscribers only"])
 
     def test_delinquent_tax_history_adds_a_chip(self) -> None:
         data = {
