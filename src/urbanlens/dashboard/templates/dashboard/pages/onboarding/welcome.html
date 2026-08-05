@@ -121,7 +121,8 @@
                     {{ form.tos_agreed }}
                     <span>
                         I have read and agree to the
-                        <a href="{% url 'terms' %}" target="_blank" rel="noopener">Terms of Service</a>.
+                        <a href="{% url 'terms' %}" target="_blank" rel="noopener">Terms of Service</a> and
+                        <a href="{% url 'privacy' %}" target="_blank" rel="noopener">Privacy Policy</a>.
                     </span>
                 </label>
                 {% if form.tos_agreed.errors %}

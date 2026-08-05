@@ -1,8 +1,8 @@
 @use 'variables' as *;
 
-// -- Terms of Service page -------------------------------------------------------
+// -- Terms of Service / Privacy Policy pages ---------------------------------------
 
-.page-terms {
+.page-terms, .page-privacy {
 
     > div.container {
         max-width: 100%;
@@ -134,7 +134,7 @@
 }
 
 [data-theme="dark"] {
-    .page-terms {
+    .page-terms, .page-privacy {
         .terms-title,
         h1, h2, h3, h4, h5, h6 {
             color: var(--ul-grey-9);

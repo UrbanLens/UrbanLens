@@ -1,0 +1,232 @@
+{% extends 'dashboard/themes/base.html' %}
+{% load static %}
+
+{% block content %}
+
+{# -- Hero ----------------------------------------------------------------- #}
+<section class="terms-hero">
+    <div class="terms-hero-inner">
+        <p class="terms-eyebrow">Legal</p>
+        <h1 class="terms-title">Privacy Policy</h1>
+        <p class="terms-subtitle">Last updated August 4, 2026.</p>
+    </div>
+</section>
+
+{# -- Plain-language summary ------------------------------------------------- #}
+<section class="terms-section">
+    <div class="terms-section-inner">
+        <div class="terms-tldr">
+            <div class="terms-tldr-label">
+                <i class="material-symbols-outlined">summarize</i> The short version
+            </div>
+            <p>
+                UrbanLens is built and run by one person, not a company.
+                The site collects only what's needed to run: your account info, the
+                content you create, and (if you sign in with Google or Discord) the basic profile
+                details those providers share. Your content is private by
+                default and only visible to people you choose to share it with. We don't sell
+                your data, we don't run ads, and we don't track you with analytics. 
+                Read the full policy below for the details.
+            </p>
+        </div>
+    </div>
+</section>
+
+{# -- Full policy -------------------------------------------------------------- #}
+<section class="terms-list-section">
+    <div class="terms-section-inner">
+
+        <div class="terms-item">
+            <div class="terms-item-num">1</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Who this policy covers</h3>
+                <p>
+                    This policy explains what information UrbanLens ("the site", "we", "us") collects when
+                    you use the site, why we collect it, and how it's stored and shared. It applies to
+                    everyone who creates an account or otherwise uses UrbanLens. See also our
+                    <a href="{% url 'terms' %}">Terms of Service</a> and <a href="{% url 'values' %}">Values</a>,
+                    which describe the principles this policy is built around.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">2</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Information you give us directly</h3>
+                <p>
+                    When you create an account, we store your username, email address, and password
+                    (hashed, never in plain text). As you use the site, we store the content you
+                    create: pins, notes, photos, trip plans, wiki edits, messages,
+                    reviews, and similar content. This is the core information the site is built to hold,
+                    and it stays private to you unless you explicitly share it. We encrypt as much of it
+                    as we can, while keeping the site functional.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">3</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Signing in with Google or Discord</h3>
+                <p>
+                    If you sign in using Google or Discord instead of a password, that provider shares
+                    basic profile information with us to create and authenticate your account - typically
+                    your name, email address, and profile picture from Google, or your username, user ID,
+                    and email address from Discord. We use this information only to set up and sign you
+                    into your UrbanLens account. We never post to your Google or Discord account, request
+                    access beyond basic profile information, or use this data for anything other than
+                    authentication. Our use of information received from Google APIs adheres to the
+                    <a href="https://developers.google.com/terms/api-services-user-data-policy" target="_blank" rel="noopener noreferrer">Google API Services User Data Policy</a>.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">4</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Who can see your content</h3>
+                <p>
+                    Pins, notes, photos, and other content you create are private by default. Nothing you
+                    create is visible to another user, including the site owner, until you take an
+                    explicit action to share it - by inviting a friend, posting to a trip, or otherwise
+                    changing a sharing setting. Even friend requests don't reveal whether an account exists
+                    until the request is accepted.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">5</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Information sent to research APIs</h3>
+                <p>
+                    Many of the site's research tools (search, imagery, elevation, weather, wildlife data,
+                    historical records, and similar lookups) work by sending a location's coordinates or a
+                    place name to third-party APIs and returning what they know about that spot. These
+                    requests only ever include the coordinates or search terms needed to answer the
+                    lookup - never your name, account, or other identifying information. You can turn
+                    these lookups off entirely from onboarding or your account settings.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">6</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Connected photo services</h3>
+                <p>
+                    If you connect a third-party photo service (such as Flickr, Immich, or Google Photos)
+                    to import media, we store the access token needed to talk to that service, encrypted
+                    at rest. We only use that connection to import the photos you request - we don't browse
+                    or sync your library in the background beyond what you ask for, and you can disconnect
+                    a service at any time from your settings, which removes the stored token.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">7</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Cookies and tracking</h3>
+                <p>
+                    We use a session cookie to keep you signed in and a CSRF cookie to protect forms -
+                    that's it. We don't run third-party analytics, advertising, or tracking scripts, and we
+                    don't store your IP address. There's nothing on this site designed to track you
+                    across the web.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">8</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">How we store and protect data</h3>
+                <p>
+                    Your data is stored in a database we control, accessed over encrypted connections.
+                    Sensitive values, like third-party API tokens, are encrypted at rest. No system is
+                    perfectly secure, but we design every feature to limit what a breach could expose - for
+                    example, by not collecting data we don't need in the first place.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">9</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">How long we keep data</h3>
+                <p>
+                    We keep your data for as long as your account is active. You can delete your account
+                    at any time from Settings; deletion starts a 7-day grace period (during which signing
+                    back in cancels it), after which your account and its associated data are permanently
+                    removed. Your data may still be present in automated backups that are only used in the
+                    event of a server failure, until those backups are aged out. This process typically takes
+                    another 7 to 30 days.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">10</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">We don't sell your data</h3>
+                <p>
+                    We don't sell or rent your personal information or your content to anyone, and we
+                    don't share it with third parties except where this policy already describes - the
+                    research and photo-import APIs you choose to use, and the sign-in providers you choose
+                    to authenticate with.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">11</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Children's privacy</h3>
+                <p>
+                    UrbanLens is not directed at children, and per our <a href="{% url 'terms' %}">Terms of
+                    Service</a>, you must be at least 18 (or the age of majority where you live) to create
+                    an account. We don't knowingly collect information from children.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">12</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Your rights and choices</h3>
+                <p>
+                    Any data we store about you is visible to you on pages like your profile page. You can 
+                    update or delete your content at any time, disconnect any third-party service, and delete your account 
+                    entirely from Settings. If you'd like a copy of your data or have a question about what we hold,
+                    reach out using the contact info below.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">13</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Changes to this policy</h3>
+                <p>
+                    We may update this policy as the site grows. Material changes will be reflected here. 
+                    Continuing to use UrbanLens after a change means
+                    you accept the updated policy.
+                </p>
+            </div>
+        </div>
+
+        <div class="terms-item">
+            <div class="terms-item-num">14</div>
+            <div class="terms-item-body">
+                <h3 class="terms-item-title">Contact</h3>
+                <p>
+                    Questions about this policy, or want to request your data? Reach out through the
+                    <a href="https://github.com/UrbanLens/UrbanLens">Github page</a>.
+                </p>
+            </div>
+        </div>
+    </div>
+</section>
+
+{% endblock %}
