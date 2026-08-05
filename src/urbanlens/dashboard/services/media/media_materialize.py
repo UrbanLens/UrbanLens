@@ -62,7 +62,7 @@ _PANEL_KEY_TO_IMAGE_SOURCE = {
     "cris_building": ImageSource.CRIS,
 }
 
-_CAPTION_MAX_LENGTH = Image._meta.get_field("caption").max_length
+_CAPTION_MAX_LENGTH = Image._meta.get_field("caption").max_length  # noqa: SLF001 - _meta is public API despite the underscore
 
 
 def _truncated_caption(caption: str) -> str | None:

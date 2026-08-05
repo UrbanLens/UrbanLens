@@ -101,7 +101,14 @@ class _ProviderMediaMappingMixin(_MixinBase):
     display_name: str
 
     def _items(self, results: list[dict], search_term: str = "Bannerman Castle") -> tuple[list[MediaItem], mock.Mock]:
-        with mock.patch.object(RedataReferenceDocumentsGateway, "search", return_value=results) as mock_search:
+        # See test_redata_media_gateway._slides: __post_init__ is neutralised
+        # alongside search because the provider builds its own gateway from
+        # module-level settings, whose constructor raises unless the machine
+        # running the tests happens to have REData credentials configured.
+        with (
+            mock.patch.object(RedataReferenceDocumentsGateway, "__post_init__", return_value=None),
+            mock.patch.object(RedataReferenceDocumentsGateway, "search", return_value=results) as mock_search,
+        ):
             items = list(self.provider_cls()._generate_media(search_term))
         return items, mock_search
 
@@ -144,7 +151,11 @@ class _ProviderMediaMappingMixin(_MixinBase):
         self.assertFalse(self.provider_cls.quote_locality)
 
     def test_a_gateway_failure_propagates_rather_than_being_swallowed(self) -> None:
-        with mock.patch.object(RedataReferenceDocumentsGateway, "search", side_effect=LocationContextUnavailableError("source_error", "down")), pytest.raises(LocationContextUnavailableError):
+        with (
+            mock.patch.object(RedataReferenceDocumentsGateway, "__post_init__", return_value=None),
+            mock.patch.object(RedataReferenceDocumentsGateway, "search", side_effect=LocationContextUnavailableError("source_error", "down")),
+            pytest.raises(LocationContextUnavailableError),
+        ):
             list(self.provider_cls()._generate_media("Bannerman Castle"))
 
 

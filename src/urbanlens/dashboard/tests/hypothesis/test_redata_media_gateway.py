@@ -97,7 +97,16 @@ class _ProviderSlideMappingMixin(_MixinBase):
     display_name: str
 
     def _slides(self, results: list[dict]) -> tuple[list[StreetViewSlide], mock.Mock]:
-        with mock.patch.object(RedataMediaGateway, "lookup", return_value=results) as mock_lookup:
+        # __post_init__ is neutralised alongside lookup because the provider
+        # builds its own RedataMediaGateway() from the module-level settings,
+        # and that constructor raises unless UL_REDATA_API_URL/API_KEY happen
+        # to be set in the environment running the tests. These are pure
+        # slide-mapping assertions - what they must not depend on is whether
+        # the machine has REData credentials configured.
+        with (
+            mock.patch.object(RedataMediaGateway, "__post_init__", return_value=None),
+            mock.patch.object(RedataMediaGateway, "lookup", return_value=results) as mock_lookup,
+        ):
             slides = list(self.provider_cls()._generate_street_view_slides(38.456, -77.123, radius=50))
         return slides, mock_lookup
 
@@ -149,7 +158,11 @@ class _ProviderSlideMappingMixin(_MixinBase):
         """The street-view carousel's own collector already tolerates one
         provider raising (see ``collect_street_view_slides``) - this provider
         must not duplicate that handling by swallowing the error itself."""
-        with mock.patch.object(RedataMediaGateway, "lookup", side_effect=LocationContextUnavailableError("source_error", "down")), pytest.raises(LocationContextUnavailableError):
+        with (
+            mock.patch.object(RedataMediaGateway, "__post_init__", return_value=None),
+            mock.patch.object(RedataMediaGateway, "lookup", side_effect=LocationContextUnavailableError("source_error", "down")),
+            pytest.raises(LocationContextUnavailableError),
+        ):
             list(self.provider_cls()._generate_street_view_slides(38.456, -77.123))
 
 

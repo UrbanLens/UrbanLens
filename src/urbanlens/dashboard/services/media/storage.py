@@ -17,7 +17,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from django.core.cache import cache
-from django.db.models import Sum
+from django.db.models import Q, Sum
 from django.template.defaultfilters import filesizeformat
 
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
@@ -130,6 +130,29 @@ def get_exempt_bytes(profile: Profile) -> int:
 
     total = Image.objects.filter(profile=profile).exclude(quota_exempt_reason="").aggregate(total=Sum("file_size"))["total"]
     return int(total or 0)
+
+
+def get_storage_totals(profile: Profile) -> tuple[int, int]:
+    """Both halves of a profile's storage accounting, in one query.
+
+    The settings page needs counted *and* exempt bytes together; running the
+    two aggregates separately scans the same rows twice. Prefer this over
+    calling :func:`get_storage_used_bytes` and :func:`get_exempt_bytes` back
+    to back.
+
+    Args:
+        profile: The profile whose storage to total.
+
+    Returns:
+        ``(counted_bytes, exempt_bytes)``.
+    """
+    from urbanlens.dashboard.models.images.model import Image
+
+    totals = Image.objects.filter(profile=profile).aggregate(
+        counted=Sum("file_size", filter=Q(quota_exempt_reason="")),
+        exempt=Sum("file_size", filter=~Q(quota_exempt_reason="")),
+    )
+    return int(totals["counted"] or 0), int(totals["exempt"] or 0)
 
 
 def quota_error_for_upload(profile: Profile, upload_size: int | None) -> str | None:
@@ -339,7 +362,7 @@ def get_storage_settings_context(profile: Profile) -> dict:
         estimate) for the preference select.
     """
     quota_bytes = get_quota_bytes(profile)
-    used_bytes = get_storage_used_bytes(profile)
+    used_bytes, exempt_bytes = get_storage_totals(profile)
     remaining_bytes = None if quota_bytes is None else max(quota_bytes - used_bytes, 0)
     percent_used = 0
     if quota_bytes:
@@ -403,7 +426,7 @@ def get_storage_settings_context(profile: Profile) -> dict:
     return {
         "storage_quota_bytes": quota_bytes,
         "storage_used_bytes": used_bytes,
-        "storage_exempt_bytes": get_exempt_bytes(profile),
+        "storage_exempt_bytes": exempt_bytes,
         "storage_remaining_bytes": remaining_bytes,
         "storage_percent_used": percent_used,
         "storage_entitled_dimension": entitled_dimension,

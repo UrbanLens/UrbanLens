@@ -258,7 +258,7 @@ class Image(abstract.FrontendDashboardModel):
     # case is a one-way reward: a photo that earned its exemption keeps it
     # even if voters later change their minds, so a user's stored photos can
     # never retroactively push them over quota.
-    quota_exempt_reason = CharField(max_length=20, blank=True, default="", choices=QuotaExemption.choices, db_index=True)
+    quota_exempt_reason = CharField(max_length=20, blank=True, default="", choices=QuotaExemption.choices)
     # Full EXIF metadata captured from the original upload BEFORE any
     # downscaling or format conversion, so nothing is lost if the stored file
     # is re-encoded. Keys are human-readable tag names; values are
@@ -361,4 +361,10 @@ class Image(abstract.FrontendDashboardModel):
         indexes = [
             Index(fields=["uuid"], name="idxdb_image_uuid"),
             Index(fields=["location", "media_source_key", "media_item_key"], name="idxdb_image_media_key"),
+            # Serves both halves of quota accounting (used vs. exempt bytes),
+            # which always filter by profile first. Composite rather than a
+            # standalone index on quota_exempt_reason: that column has three
+            # values, so indexing it alone would rarely be chosen by the
+            # planner while still costing a write on every photo upload.
+            Index(fields=["profile", "quota_exempt_reason"], name="idxdb_image_profile_quota"),
         ]

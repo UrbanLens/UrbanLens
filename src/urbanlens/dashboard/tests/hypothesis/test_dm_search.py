@@ -70,12 +70,25 @@ class SearchDirectMessagesTests(TestCase):
     def test_date_range_phrase_filters_by_created(self) -> None:
         # An explicit year, not a relative phrase like "last week", so this
         # doesn't depend on which day of the week the test happens to run.
+        # The preposition is required: the parser deliberately refuses to read
+        # a bare "2024" as a date filter, since a 4-digit token appears in
+        # ordinary names ("Building 2024") - see _extract_date_phrases.
         in_range = baker.make("dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="reunion photos")
         out_of_range = baker.make("dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="reunion photos too")
         type(in_range).objects.filter(pk=in_range.pk).update(created=datetime(2024, 6, 15, tzinfo=UTC))
         type(out_of_range).objects.filter(pk=out_of_range.pk).update(created=datetime(2020, 6, 15, tzinfo=UTC))
-        hits = search_direct_messages(self.bob, "reunion 2024")
+        hits = search_direct_messages(self.bob, "reunion in 2024")
         self.assertEqual([hit["message"].pk for hit in hits], [in_range.pk])
+
+    def test_a_bare_year_is_not_read_as_a_date_filter(self) -> None:
+        """A 4-digit token is ordinary text unless a preposition marks it.
+
+        Guards the deliberate narrowness above: "Building 2024" must stay a
+        text search rather than silently becoming a date-filtered one.
+        """
+        hit = baker.make("dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="meet at Building 2024")
+        type(hit).objects.filter(pk=hit.pk).update(created=datetime(2020, 6, 15, tzinfo=UTC))
+        self.assertEqual([entry["message"].pk for entry in search_direct_messages(self.bob, "building 2024")], [hit.pk])
 
     def test_result_url_anchors_to_the_message(self) -> None:
         message = baker.make("dashboard.DirectMessage", sender=self.alice, recipient=self.bob, body="asylum gate photos")

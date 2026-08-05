@@ -45,6 +45,26 @@ class ParseQueryStructureTests(SimpleTestCase):
         self.assertEqual(parse_query("pictures").types, {"photos"})
         self.assertEqual(parse_query("check-ins").types, {"safety"})
 
+    def test_type_keyword_is_recognized_at_either_end(self):
+        """People write "photos of X" and "X photos" about equally often."""
+        leading = parse_query("photos of the abandoned mill")
+        self.assertEqual(leading.types, {"photos"})
+        self.assertEqual(leading.terms, ["abandoned", "mill"])
+
+        trailing = parse_query("abandoned mill photos")
+        self.assertEqual(trailing.types, {"photos"})
+        self.assertEqual(trailing.terms, ["abandoned", "mill"])
+
+    def test_a_mid_sentence_type_word_is_left_alone(self):
+        """The reason the match is restricted to the ends at all.
+
+        "visit" and "page" are ordinary English; a match anywhere would turn
+        this into a visits-only search over the word "please".
+        """
+        parsed = parse_query("please visit my page")
+        self.assertEqual(parsed.types, set())
+        self.assertIn("visit", parsed.terms)
+
     def test_stopwords_removed_from_terms(self):
         parsed = parse_query("messages about meetup")
         self.assertEqual(parsed.types, {"messages"})

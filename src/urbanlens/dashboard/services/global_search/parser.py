@@ -456,14 +456,20 @@ def _extract_place(text: str) -> tuple[str, str | None]:
 
 
 def _extract_type_keywords(working: str) -> tuple[str, set[str]]:
-    """Strip type-restricting keywords from ``working``, but only as the first word.
+    """Strip type-restricting keywords from ``working``, at either end of the query.
 
     Many entries in ``TYPE_KEYWORDS`` are ordinary English words ("pin",
-    "map", "trip", "visit", "comment"). Restricting the match to the query's
-    first word preserves the useful "type-scoped search" pattern (e.g.
-    "photos of the abandoned mill") while eliminating false-positive hijacks
-    from the word appearing later in the sentence (e.g. "please visit my
-    page" should not become a visits-only search).
+    "map", "trip", "visit", "comment"), so a match anywhere in the sentence
+    produces false-positive hijacks - "please visit my page" must not become a
+    visits-only search. Only the first and last tokens are considered, which
+    is where a deliberate type scope actually lands in English: people write
+    both "photos of the abandoned mill" and "abandoned mill photos", but a
+    type word buried mid-sentence is almost always incidental.
+
+    A trailing keyword that turns out to be part of the target's real name
+    (searching for a pin literally called "Road Trip") is recovered by
+    ``GlobalSearchEngine``'s zero-result fallback, which retries with the
+    inferred types cleared.
 
     Args:
         working: Lowercased query text with dates already removed.
@@ -473,10 +479,11 @@ def _extract_type_keywords(working: str) -> tuple[str, set[str]]:
     """
     # Type keywords are whole tokens; hyphens survive tokenization for "check-ins".
     tokens = re.findall(r"[a-z0-9][a-z0-9'-]*", working)
+    edges = {0, len(tokens) - 1}
     types: set[str] = set()
     kept_tokens: list[str] = []
     for index, token in enumerate(tokens):
-        slug = TYPE_KEYWORDS.get(token) if index == 0 else None
+        slug = TYPE_KEYWORDS.get(token) if index in edges else None
         if slug:
             types.add(slug)
         else:

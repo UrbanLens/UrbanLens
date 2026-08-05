@@ -139,11 +139,12 @@ class MemoriesPhotosView(LoginRequiredMixin, View):
         Returns:
             The rendered Photos page.
         """
-        from urbanlens.dashboard.services.media.storage import get_exempt_bytes, get_quota_bytes, get_storage_used_bytes, max_upload_file_size_bytes
+        from urbanlens.dashboard.services.media.storage import get_quota_bytes, get_storage_totals, max_upload_file_size_bytes
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         gallery = Image.objects.uploaded_by(profile).select_related("pin", "wiki")
         page_obj = get_page(request, gallery, _GALLERY_PAGE_SIZE)
+        used_bytes, exempt_bytes = get_storage_totals(profile)
         return render(
             request,
             "dashboard/pages/memories/photos.html",
@@ -155,9 +156,9 @@ class MemoriesPhotosView(LoginRequiredMixin, View):
                 "profile": profile,
                 "photo_count": gallery.count(),
                 "unlogged_visits_count": len(unlogged_visited_pins(profile)),
-                "storage_used_bytes": get_storage_used_bytes(profile),
+                "storage_used_bytes": used_bytes,
                 "storage_quota_bytes": get_quota_bytes(profile),
-                "storage_exempt_bytes": get_exempt_bytes(profile),
+                "storage_exempt_bytes": exempt_bytes,
                 "max_upload_file_size_bytes": max_upload_file_size_bytes(),
             },
         )

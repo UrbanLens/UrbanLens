@@ -22,7 +22,7 @@ from urbanlens.dashboard.services.media.quota_rewards import (
     is_cached_external_media,
     refresh_community_quota_bonus,
 )
-from urbanlens.dashboard.services.media.storage import get_exempt_bytes, get_storage_used_bytes
+from urbanlens.dashboard.services.media.storage import get_exempt_bytes, get_storage_totals, get_storage_used_bytes
 
 
 def _set_bonus_threshold(votes: int) -> None:
@@ -84,6 +84,21 @@ class StorageAccountingTests(TestCase):
         )
         self.assertEqual(get_storage_used_bytes(self.profile), 0)
         self.assertEqual(get_exempt_bytes(self.profile), 500)
+
+    def test_combined_totals_agree_with_the_separate_helpers(self) -> None:
+        """get_storage_totals is an optimisation, not a second definition."""
+        baker.make_recipe("dashboard.image", profile=self.profile, file_size=300)
+        baker.make_recipe("dashboard.image", profile=self.profile, file_size=900, quota_exempt_reason=QuotaExemption.EXTERNAL_MEDIA)
+        baker.make_recipe("dashboard.image", profile=self.profile, file_size=500, quota_exempt_reason=QuotaExemption.COMMUNITY_CONTRIBUTION)
+
+        with self.assertNumQueries(1):
+            counted, exempt = get_storage_totals(self.profile)
+        self.assertEqual(counted, get_storage_used_bytes(self.profile))
+        self.assertEqual(exempt, get_exempt_bytes(self.profile))
+        self.assertEqual((counted, exempt), (300, 1400))
+
+    def test_combined_totals_are_zero_for_an_empty_profile(self) -> None:
+        self.assertEqual(get_storage_totals(self.profile), (0, 0))
 
 
 class CachedExternalMediaTests(TestCase):

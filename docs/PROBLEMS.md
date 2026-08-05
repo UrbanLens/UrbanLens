@@ -4,6 +4,50 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
 to pick up without re-discovering the problem from scratch.
 
+## RESOLVED 2026-08-05: 38 test failures across search, media-auth, and the REData provider gateways
+
+A sweep over `-k "quota or media or album or photo or storage or upload or relevance or wiki_media
+or site_settings or search or redata or dm_search"` went from **38 failed / 1698 passed** to
+**1704 passed, 0 failed**. All three causes were the same shape - production code changed
+deliberately and its tests were never updated - which is why none of them had an obvious owner.
+
+**1. 36 REData provider tests depended on the test machine's credentials.**
+`test_redata_media_gateway.py` and `test_redata_reference_documents_gateway.py` mock the gateway's
+`lookup`/`search`, but the providers construct `RedataMediaGateway()` / `RedataReferenceDocumentsGateway()`
+themselves, and `RedataGateway.__post_init__` raises `ValueError("UL_REDATA_API_URL must be
+configured.")` when the env has no REData credentials. So these passed on a box with credentials
+and failed on one without - the exact ambient-state dependency this file documents repeatedly
+(see cause 3 in the 2026-07-27 entry, which was the same bug inverted). The shared mixin helpers
+now no-op `__post_init__` alongside the mocked call, matching how `test_pin_redata_media_proxy.py`
+forces the *unconfigured* state. **Deliberately not fixed by pinning dummy REData settings in
+`settings/test.py`**: a dozen `is_configured()` helpers read those values, so configuring them
+globally would silently flip behaviour in unrelated tests.
+
+**2. `test_media_auth_mixin.py::test_session_wins_over_a_credential_header` encoded a
+since-reversed security decision.** `CredentialOrSessionMediaMixin.resolve_media_profile`'s own
+docstring explains at length why a *presented credential now wins over an ambient session*: the
+old order let a WebView sharing the site's cookie jar fetch media as whichever account was logged
+in, and let a token without `media:read` bypass the scope check entirely whenever a session was
+also present. The test still asserted the old order. Rewritten to assert the current behaviour,
+plus a new sibling (`test_an_unscoped_credential_cannot_fall_back_to_the_session`) covering the
+half with actual teeth. The throttle concern the old test's docstring cited is already covered by
+`test_throttle_is_not_charged_to_session_requests`, which sends no header at all.
+
+**3. Two search tests predated deliberate narrowing of the query parser.**
+- `test_global_search_engine.py::test_finds_photo_by_generated_keyword` searched `"staircase
+  photos"`. `_extract_type_keywords` had been restricted to the query's *first* word (to stop
+  "please visit my page" becoming a visits-only search), which also killed the equally natural
+  trailing form. **This one was a real product gap, not a stale test** - it now matches a type
+  keyword at either end of the query, which restores "abandoned mill photos" while leaving
+  mid-sentence matches alone. A trailing keyword that turns out to be part of a real name
+  ("Road Trip") is recovered by the engine's existing zero-result fallback, which retries with
+  inferred types cleared.
+- `test_dm_search.py::test_date_range_phrase_filters_by_created` searched `"reunion 2024"`. The
+  parser deliberately requires a preposition before a bare year, because a 4-digit token appears
+  in ordinary names ("Building 2024", "Route 2027") - the pattern carries a comment saying so.
+  The test now uses `"reunion in 2024"`, with a new sibling asserting the bare form stays a plain
+  text search so that narrowness doesn't silently regress.
+
 ## OPEN 2026-08-05: `bun run build` (`bin/build-frontend.ts`) fails with "Formats besides 'esm' are not implemented"
 
 Found while verifying a photo-thumbnail zoom-scaling fix in `map-annotations.ts`. `bun run build`
@@ -277,10 +321,10 @@ Root-caused from a `--tb=short` capture, not yet fixed:
    it from the failing example.
 7. **Assertion mismatches not yet read in detail** - each needs its own traceback before triage:
    `test_avatar_colors.py::GroupMemberSearchAvatarColorTests::test_results_get_distinct_colors`
-   (`0 != 4`), `test_dm_search.py::SearchDirectMessagesTests::
-   test_date_range_phrase_filters_by_created` (`[] != [1]`),
-   `test_global_search_engine.py::PhotoSearchTests::test_finds_photo_by_generated_keyword`
-   (expected string not found in an empty result list),
+   (`0 != 4`), ~~`test_dm_search.py::SearchDirectMessagesTests::
+   test_date_range_phrase_filters_by_created` (`[] != [1]`)~~ **FIXED 2026-08-05, see below**,
+   ~~`test_global_search_engine.py::PhotoSearchTests::test_finds_photo_by_generated_keyword`
+   (expected string not found in an empty result list)~~ **FIXED 2026-08-05, see below**,
    `test_media_own_photos_preview.py::PhotosMediaPreviewTests::` both
    `test_own_photo_tile_carries_image_id_and_coordinates` and
    `test_own_photo_tile_without_coordinates_renders_empty_lat_lng` (`204 != 200` - both in the
