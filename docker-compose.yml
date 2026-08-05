@@ -94,9 +94,9 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health/"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 15s
+      start_period: 30s
 
   # Dedicated ASGI (Daphne) process for WebSocket traffic only (safety check-in
   # chat, etc). `app` above keeps serving 100% of normal HTTP via gunicorn+gevent
@@ -114,7 +114,16 @@ services:
     # in `docker logs`. Route it to the shared log volume instead so it's still on
     # disk for debugging WS issues (see channels_redis timeout tuning) without
     # flooding the console.
-    command: ["-b", "0.0.0.0", "-p", "8001", "--access-log", "/var/log/urbanlens/daphne-access.log", "urbanlens.UrbanLens.asgi:application"]
+    command:
+      [
+        "-b",
+        "0.0.0.0",
+        "-p",
+        "8001",
+        "--access-log",
+        "/var/log/urbanlens/daphne-access.log",
+        "urbanlens.UrbanLens.asgi:application",
+      ]
 
     # `app`'s own entrypoint runs bin/init.py (migrate + collectstatic) before
     # its healthcheck can pass - waiting on `app` being healthy, not just
@@ -144,9 +153,9 @@ services:
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8001/health/"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 15s
+      start_period: 25s
 
   nginx:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_nginx
@@ -172,11 +181,12 @@ services:
       # to ::1 first and nginx's `listen 8080` binds IPv4 only, so the check
       # was connection-refused on every probe (container permanently
       # "unhealthy" despite serving traffic fine).
-      test: ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/nginx-health"]
+      test:
+        ["CMD", "wget", "-q", "--spider", "http://127.0.0.1:8080/nginx-health"]
       interval: 30s
-      timeout: 10s
+      timeout: 15s
       retries: 3
-      start_period: 15s
+      start_period: 20s
 
   db:
     container_name: urbanlens_${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}_db
@@ -200,7 +210,7 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${UL_DB_USER:-postgres}"]
       interval: 10s
-      timeout: 10s
+      timeout: 15s
       retries: 9
 
     logging:
@@ -224,7 +234,14 @@ services:
     # including the safety-checkin scheduled tasks that fire every 5 minutes -
     # that drowns out real signal in production. Failures/retries are still
     # surfaced explicitly via the task_failure/task_retry handlers in celery.py.
-    command: ["-A", "urbanlens.UrbanLens", "worker", "--loglevel=warning", "--concurrency=4"]
+    command:
+      [
+        "-A",
+        "urbanlens.UrbanLens",
+        "worker",
+        "--loglevel=warning",
+        "--concurrency=4",
+      ]
     restart: on-failure
     depends_on:
       db:
@@ -273,7 +290,17 @@ services:
     # GeoParquet/Shapely geometry parsing) opt out via PanelSource.queue and
     # stay on celery-worker's prefork pool instead, so they can't cause GIL
     # contention here for the panels that are genuinely just waiting on I/O.
-    command: ["-A", "urbanlens.UrbanLens", "worker", "--loglevel=warning", "--pool=threads", "--concurrency=20", "-Q", "panel_fetch"]
+    command:
+      [
+        "-A",
+        "urbanlens.UrbanLens",
+        "worker",
+        "--loglevel=warning",
+        "--pool=threads",
+        "--concurrency=20",
+        "-Q",
+        "panel_fetch",
+      ]
     restart: on-failure
     depends_on:
       db:
@@ -300,7 +327,14 @@ services:
     # loglevel=warning: info logs "Scheduler: Sending due task ..." on every beat tick
     # (every 5 minutes for the safety-checkin tasks alone), which is pure noise once
     # the schedule is known-good.
-    command: ["-A", "urbanlens.UrbanLens", "beat", "--loglevel=warning", "--schedule=/var/log/urbanlens/celerybeat-schedule"]
+    command:
+      [
+        "-A",
+        "urbanlens.UrbanLens",
+        "beat",
+        "--loglevel=warning",
+        "--schedule=/var/log/urbanlens/celerybeat-schedule",
+      ]
     restart: on-failure
     depends_on:
       db:
@@ -376,7 +410,18 @@ services:
     # only evicts keys with a TTL (the cache's, and the channel layer's own
     # expiring keys), so queued Celery tasks are never silently dropped; if
     # memory is genuinely exhausted, writes fail loudly (OOM) instead.
-    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "512mb", "--maxmemory-policy", "volatile-lru"]
+    command:
+      [
+        "valkey-server",
+        "--save",
+        "",
+        "--appendonly",
+        "no",
+        "--maxmemory",
+        "512mb",
+        "--maxmemory-policy",
+        "volatile-lru",
+      ]
     networks:
       app_network:
         aliases:
@@ -466,7 +511,18 @@ services:
     network_mode: service:test-runner
     depends_on:
       - test-runner
-    command: ["valkey-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "volatile-lru"]
+    command:
+      [
+        "valkey-server",
+        "--save",
+        "",
+        "--appendonly",
+        "no",
+        "--maxmemory",
+        "256mb",
+        "--maxmemory-policy",
+        "volatile-lru",
+      ]
     healthcheck:
       test: ["CMD", "valkey-cli", "ping"]
       interval: 10s
