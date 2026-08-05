@@ -2,7 +2,7 @@
 
 // -- Homepage -----------------------------------------------------------------
 
-body.page-index {
+body.page-home {
     .home-hero {
         min-height: calc(100vh - 8rem);
         display: flex;
@@ -260,7 +260,7 @@ body.page-index {
 
 [data-theme="dark"] {
 
-    body.page-index {
+    body.page-home {
         .home-feature-title,
         .home-section-title {
             color: $color-indigo-200;
