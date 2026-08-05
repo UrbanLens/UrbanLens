@@ -1,0 +1,83 @@
+{% comment %}
+One album's own photo grid, swapped into #albums-panel in place of the album
+list. Carries the same root id so the "Back to albums" link can swap back.
+
+Expects (from controllers.albums.AlbumDetailView):
+  album, images, available_images, photo_count, cover
+  back_url, add_url, remove_url, reorder_url, edit_url
+{% endcomment %}
+<div id="albums-panel" class="albums-panel album-detail"
+     data-album-slug="{{ album.slug }}"
+     data-refresh-url="{{ detail_url }}"
+     data-reorder-url="{{ reorder_url }}"
+     data-remove-url="{{ remove_url }}"
+     data-add-url="{{ add_url }}">
+
+  <div class="albums-panel-header">
+    <button type="button" class="btn btn--ghost album-back-btn"
+            hx-get="{{ back_url }}" hx-target="#albums-panel" hx-swap="outerHTML">
+      <i class="material-symbols-outlined">arrow_back</i> All albums
+    </button>
+    <h3 class="albums-panel-title">
+      {% if album.kind == "timelapse" %}
+      <i class="material-symbols-outlined">timelapse</i>
+      {% else %}
+      <i class="material-symbols-outlined">photo_library</i>
+      {% endif %}
+      {{ album.name }}
+      <span class="albums-count">{{ photo_count }}</span>
+    </h3>
+  </div>
+
+  {% if album.description %}
+  <p class="album-detail-description">{{ album.description }}</p>
+  {% endif %}
+
+  <form class="album-order-toggle" hx-post="{{ edit_url }}" hx-target="#albums-panel" hx-swap="outerHTML"
+        hx-trigger="change from:find input">
+    {% csrf_token %}
+    <label class="settings-toggle-row">
+      <input type="checkbox" name="manual_order" value="1" class="settings-toggle-input"
+             {% if album.manual_order %}checked{% endif %}>
+      <span class="settings-toggle-label">
+        <strong>Custom order</strong>
+        <span class="settings-help">Drag photos to arrange them. Off shows newest first.</span>
+      </span>
+    </label>
+  </form>
+
+  {% if images %}
+  <ul class="gallery-grid album-items-grid" id="album-items-grid"
+      {% if album.manual_order %}data-album-sortable="1"{% endif %}>
+    {% for img in images %}
+    <li class="gallery-item album-item" data-item-id="{{ img.album_item_id }}" data-id="{{ img.pk }}">
+      <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb">
+      <button type="button" class="album-item-remove" title="Remove from this album"
+              data-image-id="{{ img.pk }}">
+        <i class="material-symbols-outlined">close</i>
+      </button>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="albums-empty settings-help">This album is empty. Add photos from below.</p>
+  {% endif %}
+
+  {% if available_images %}
+  <div class="album-add-section">
+    <h4 class="albums-panel-title">
+      <i class="material-symbols-outlined">add_photo_alternate</i> Add photos
+    </h4>
+    <ul class="gallery-grid album-add-grid">
+      {% for img in available_images %}
+      <li class="gallery-item album-add-item" data-id="{{ img.pk }}">
+        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb">
+        <button type="button" class="album-item-add" title="Add to this album" data-image-id="{{ img.pk }}">
+          <i class="material-symbols-outlined">add</i>
+        </button>
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+  {% endif %}
+</div>

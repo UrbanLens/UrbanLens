@@ -14,6 +14,7 @@ from urbanlens.dashboard.controllers import (
     account_deletion,
     achievements,
     ai_extraction,
+    albums,
     aliases,
     api_keys,
     article,
@@ -771,6 +772,45 @@ urlpatterns = [
                                 pin.PinController.as_view({"post": "clear_debug_cache"}),
                                 name="pin.debug.clear_cache",
                             ),
+                            # Album routes: the literal "albums/" collection route and
+                            # every per-album action are registered before the
+                            # <slug:album_slug> detail route, so a literal segment
+                            # can't be swallowed by the slug converter.
+                            path(
+                                "<slug:pin_slug>/albums/",
+                                albums.AlbumPhotosView.as_view(),
+                                name="pin.albums",
+                            ),
+                            path(
+                                "<slug:pin_slug>/albums/<slug:album_slug>/edit/",
+                                albums.AlbumEditView.as_view(),
+                                name="pin.albums.edit",
+                            ),
+                            path(
+                                "<slug:pin_slug>/albums/<slug:album_slug>/delete/",
+                                albums.AlbumDeleteView.as_view(),
+                                name="pin.albums.delete",
+                            ),
+                            path(
+                                "<slug:pin_slug>/albums/<slug:album_slug>/add/",
+                                albums.AlbumAddPhotosView.as_view(),
+                                name="pin.albums.add",
+                            ),
+                            path(
+                                "<slug:pin_slug>/albums/<slug:album_slug>/remove/",
+                                albums.AlbumRemovePhotosView.as_view(),
+                                name="pin.albums.remove",
+                            ),
+                            path(
+                                "<slug:pin_slug>/albums/<slug:album_slug>/reorder/",
+                                albums.AlbumReorderView.as_view(),
+                                name="pin.albums.reorder",
+                            ),
+                            path(
+                                "<slug:pin_slug>/albums/<slug:album_slug>/",
+                                albums.AlbumDetailView.as_view(),
+                                name="pin.albums.detail",
+                            ),
                             path(
                                 "<slug:pin_slug>/gallery/",
                                 image_gallery.PinGalleryView.as_view(),
@@ -1365,6 +1405,44 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/links/<int:link_id>/delete/",
                     links.LocationLinkDeleteView.as_view(),
                     name="location.wiki.link.delete",
+                ),
+                # Album routes: literal per-album action segments are registered
+                # before the <slug:album_slug> detail route so they can't be
+                # swallowed by the slug converter.
+                path(
+                    "<slug:location_slug>/wiki/albums/",
+                    albums.AlbumPhotosView.as_view(),
+                    name="location.wiki.albums",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/albums/<slug:album_slug>/edit/",
+                    albums.AlbumEditView.as_view(),
+                    name="location.wiki.albums.edit",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/albums/<slug:album_slug>/delete/",
+                    albums.AlbumDeleteView.as_view(),
+                    name="location.wiki.albums.delete",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/albums/<slug:album_slug>/add/",
+                    albums.AlbumAddPhotosView.as_view(),
+                    name="location.wiki.albums.add",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/albums/<slug:album_slug>/remove/",
+                    albums.AlbumRemovePhotosView.as_view(),
+                    name="location.wiki.albums.remove",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/albums/<slug:album_slug>/reorder/",
+                    albums.AlbumReorderView.as_view(),
+                    name="location.wiki.albums.reorder",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/albums/<slug:album_slug>/",
+                    albums.AlbumDetailView.as_view(),
+                    name="location.wiki.albums.detail",
                 ),
                 path(
                     "<slug:location_slug>/wiki/gallery/",

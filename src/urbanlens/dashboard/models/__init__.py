@@ -3,6 +3,7 @@ from urbanlens.dashboard.models.abstract import DashboardManager, DashboardModel
 from urbanlens.dashboard.models.abstract.choices import IndoorOutdoor, SecurityLevel
 from urbanlens.dashboard.models.account import AccountKdf, EmailVerification
 from urbanlens.dashboard.models.achievements import Achievement, ActivityKind, ProfileActivityDay, ProfileStreak, UserAchievement
+from urbanlens.dashboard.models.album import Album, AlbumItem, AlbumKind
 from urbanlens.dashboard.models.aliases import PinAlias, WikiAlias
 from urbanlens.dashboard.models.api_call_log import ApiCallLog
 from urbanlens.dashboard.models.api_rate_limit import ApiRateLimit

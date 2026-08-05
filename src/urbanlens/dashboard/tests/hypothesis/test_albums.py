@@ -1,0 +1,284 @@
+"""Tests for photo Albums: model scoping, membership/ordering services, and the
+external-media add path's implied relevance vote."""
+
+from __future__ import annotations
+
+from unittest import mock
+
+from model_bakery import baker
+
+from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.album.model import Album, AlbumItem, AlbumKind
+from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
+from urbanlens.dashboard.services.photos.albums import (
+    add_images_to_album,
+    album_cover,
+    album_images,
+    eligible_images_for,
+    loose_images_for,
+    remove_images_from_album,
+    reorder_album_items,
+)
+
+
+def _pin_with_photos(count: int = 3):
+    """A pin plus *count* photos attached to it, newest last."""
+    pin = baker.make_recipe("dashboard.pin")
+    images = [baker.make_recipe("dashboard.image", pin=pin, profile=pin.profile) for _ in range(count)]
+    return pin, images
+
+
+class AlbumSlugScopingTests(TestCase):
+    """Album slugs are unique per owner, not globally."""
+
+    def test_two_pins_may_each_have_an_album_of_the_same_name(self) -> None:
+        pin_a = baker.make_recipe("dashboard.pin")
+        pin_b = baker.make_recipe("dashboard.pin")
+        album_a = Album.objects.create(name="Interior", profile=pin_a.profile, parent_pin=pin_a)
+        album_b = Album.objects.create(name="Interior", profile=pin_b.profile, parent_pin=pin_b)
+        self.assertEqual(album_a.slug, album_b.slug)
+
+    def test_one_pin_cannot_reuse_a_slug(self) -> None:
+        pin = baker.make_recipe("dashboard.pin")
+        first = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin)
+        second = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin)
+        self.assertNotEqual(first.slug, second.slug)
+
+    def test_defaults_to_a_plain_album(self) -> None:
+        pin = baker.make_recipe("dashboard.pin")
+        album = Album.objects.create(name="Interior", profile=pin.profile, parent_pin=pin)
+        self.assertEqual(album.kind, AlbumKind.PLAIN)
+        self.assertFalse(album.manual_order)
+
+
+class AlbumScopeTests(TestCase):
+    """An album may only hold photos belonging to its own owner."""
+
+    def test_eligible_images_excludes_another_pins_photos(self) -> None:
+        pin, images = _pin_with_photos(2)
+        _other_pin, other_images = _pin_with_photos(1)
+
+        eligible = eligible_images_for(pin, pin.profile)
+        self.assertCountEqual([img.pk for img in eligible], [img.pk for img in images])
+        self.assertNotIn(other_images[0].pk, [img.pk for img in eligible])
+
+
+class AlbumMembershipTests(TestCase):
+    """Adding, removing, and the loose-photo split."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin, self.images = _pin_with_photos(3)
+        self.album = Album.objects.create(name="Interior", profile=self.pin.profile, parent_pin=self.pin)
+
+    def test_add_images_files_them(self) -> None:
+        added = add_images_to_album(self.album, self.images[:2], self.pin.profile)
+        self.assertEqual(added, 2)
+        self.assertEqual(AlbumItem.objects.for_album(self.album).count(), 2)
+
+    def test_adding_the_same_photo_twice_is_a_no_op(self) -> None:
+        add_images_to_album(self.album, [self.images[0]], self.pin.profile)
+        added_again = add_images_to_album(self.album, [self.images[0]], self.pin.profile)
+        self.assertEqual(added_again, 0)
+        self.assertEqual(AlbumItem.objects.for_album(self.album).count(), 1)
+
+    def test_a_photo_can_be_in_several_albums_at_once(self) -> None:
+        other = Album.objects.create(name="Exterior", profile=self.pin.profile, parent_pin=self.pin)
+        add_images_to_album(self.album, [self.images[0]], self.pin.profile)
+        add_images_to_album(other, [self.images[0]], self.pin.profile)
+        self.assertEqual(AlbumItem.objects.filter(image=self.images[0]).count(), 2)
+
+    def test_loose_images_excludes_filed_photos(self) -> None:
+        add_images_to_album(self.album, [self.images[0]], self.pin.profile)
+        loose = loose_images_for(self.pin, self.pin.profile)
+        self.assertNotIn(self.images[0].pk, [img.pk for img in loose])
+        self.assertEqual(loose.count(), 2)
+
+    def test_removing_keeps_the_photo_itself(self) -> None:
+        add_images_to_album(self.album, [self.images[0]], self.pin.profile)
+        removed = remove_images_from_album(self.album, [self.images[0].pk])
+        self.assertEqual(removed, 1)
+        self.assertTrue(Image.objects.filter(pk=self.images[0].pk).exists())
+
+    def test_deleting_an_album_keeps_its_photos(self) -> None:
+        add_images_to_album(self.album, self.images, self.pin.profile)
+        self.album.delete()
+        self.assertEqual(Image.objects.filter(pk__in=[img.pk for img in self.images]).count(), 3)
+
+    def test_removing_the_cover_photo_clears_the_cover(self) -> None:
+        add_images_to_album(self.album, self.images, self.pin.profile)
+        self.album.cover_image = self.images[0]
+        self.album.save(update_fields=["cover_image", "updated"])
+
+        remove_images_from_album(self.album, [self.images[0].pk])
+        self.album.refresh_from_db()
+        self.assertIsNone(self.album.cover_image_id)
+
+
+class AlbumOrderingTests(TestCase):
+    """manual_order decides whether explicit item order is honoured."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin, self.images = _pin_with_photos(3)
+        self.album = Album.objects.create(name="Interior", profile=self.pin.profile, parent_pin=self.pin)
+        add_images_to_album(self.album, self.images, self.pin.profile)
+
+    def _item_ids_in_order(self) -> list[int]:
+        return list(AlbumItem.objects.for_album(self.album).order_by("order", "created").values_list("pk", flat=True))
+
+    def test_reorder_renumbers_to_the_given_order(self) -> None:
+        reversed_ids = list(reversed(self._item_ids_in_order()))
+        self.assertEqual(reorder_album_items(self.album, reversed_ids), 3)
+        self.assertEqual(self._item_ids_in_order(), reversed_ids)
+
+    def test_reorder_ignores_ids_from_another_album(self) -> None:
+        other = Album.objects.create(name="Exterior", profile=self.pin.profile, parent_pin=self.pin)
+        add_images_to_album(other, [self.images[0]], self.pin.profile)
+        foreign_id = AlbumItem.objects.for_album(other).first().pk
+
+        ids = self._item_ids_in_order()
+        self.assertEqual(reorder_album_items(self.album, [foreign_id, *ids]), 3)
+
+    def test_manual_order_off_falls_back_to_newest_first(self) -> None:
+        reorder_album_items(self.album, list(reversed(self._item_ids_in_order())))
+        self.album.manual_order = False
+        ordered = album_images(self.album, self.pin.profile)
+        self.assertEqual([img.pk for img in ordered], [img.pk for img in reversed(self.images)])
+
+    def test_manual_order_on_honours_the_saved_order(self) -> None:
+        reversed_ids = list(reversed(self._item_ids_in_order()))
+        reorder_album_items(self.album, reversed_ids)
+        self.album.manual_order = True
+        ordered = album_images(self.album, self.pin.profile)
+        self.assertEqual([img.album_item_id for img in ordered], reversed_ids)
+
+    def test_added_photos_append_rather_than_reshuffle(self) -> None:
+        self.album.manual_order = True
+        self.album.save(update_fields=["manual_order", "updated"])
+        before = [img.pk for img in album_images(self.album, self.pin.profile)]
+
+        extra = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.pin.profile)
+        add_images_to_album(self.album, [extra], self.pin.profile)
+
+        after = [img.pk for img in album_images(self.album, self.pin.profile)]
+        self.assertEqual(after, [*before, extra.pk])
+
+
+class AlbumCoverTests(TestCase):
+    """album_cover prefers the explicit cover, else the first item."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin, self.images = _pin_with_photos(2)
+        self.album = Album.objects.create(name="Interior", profile=self.pin.profile, parent_pin=self.pin)
+
+    def test_empty_album_has_no_cover(self) -> None:
+        self.assertIsNone(album_cover(self.album, self.pin.profile))
+
+    def test_falls_back_to_the_first_item(self) -> None:
+        add_images_to_album(self.album, self.images, self.pin.profile)
+        cover = album_cover(self.album, self.pin.profile)
+        self.assertEqual(cover.pk, album_images(self.album, self.pin.profile)[0].pk)
+
+    def test_explicit_cover_wins(self) -> None:
+        add_images_to_album(self.album, self.images, self.pin.profile)
+        ordered = album_images(self.album, self.pin.profile)
+        self.album.cover_image = ordered[-1]
+        self.assertEqual(album_cover(self.album, self.pin.profile).pk, ordered[-1].pk)
+
+
+class ExternalMediaAlbumAddTests(TestCase):
+    """Adding an external media item to an album implies a 'relevant' vote and caches it."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.pin = baker.make_recipe("dashboard.pin")
+        self.location = self.pin.location
+        self.profile = self.pin.profile
+        self.url = "https://example.test/photo.jpg"
+        self.source = "wikimedia"
+
+    def _call(self):
+        from urbanlens.dashboard.services.media.media_relevance import record_relevant_and_cache
+
+        return record_relevant_and_cache(
+            location=self.location,
+            profile=self.profile,
+            source=self.source,
+            url=self.url,
+            pin=self.pin,
+        )
+
+    def test_records_a_relevant_vote_and_caches(self) -> None:
+        fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.profile)
+        with (
+            mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image) as materialize,
+            mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote") as queue_vote,
+        ):
+            result = self._call()
+
+        self.assertTrue(result.voted)
+        self.assertFalse(result.declined)
+        self.assertEqual(result.image, fake_image)
+        materialize.assert_called_once()
+        queue_vote.assert_called_once()
+
+        vote = MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url))
+        self.assertTrue(vote.is_relevant)
+
+    def test_respects_an_existing_not_relevant_vote(self) -> None:
+        MediaRelevance.objects.create(
+            profile=self.profile,
+            location=self.location,
+            source=self.source,
+            item_key=media_item_key(self.url),
+            is_relevant=False,
+        )
+        with mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item") as materialize:
+            result = self._call()
+
+        self.assertTrue(result.declined)
+        self.assertFalse(result.voted)
+        self.assertIsNone(result.image)
+        materialize.assert_not_called()
+        # The user's deliberate down-vote must survive untouched.
+        vote = MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url))
+        self.assertFalse(vote.is_relevant)
+
+    def test_an_existing_relevant_vote_still_caches(self) -> None:
+        MediaRelevance.objects.create(
+            profile=self.profile,
+            location=self.location,
+            source=self.source,
+            item_key=media_item_key(self.url),
+            is_relevant=True,
+        )
+        fake_image = baker.make_recipe("dashboard.image", pin=self.pin, profile=self.profile)
+        with (
+            mock.patch("urbanlens.dashboard.services.media.media_materialize.materialize_media_item", return_value=fake_image),
+            mock.patch("urbanlens.dashboard.services.photos.redata_relevance.queue_relevance_vote"),
+        ):
+            result = self._call()
+
+        self.assertFalse(result.declined)
+        self.assertEqual(result.image, fake_image)
+
+    def test_a_failed_download_keeps_the_vote(self) -> None:
+        from urbanlens.dashboard.services.media.media_materialize import MaterializeError
+
+        with mock.patch(
+            "urbanlens.dashboard.services.media.media_materialize.materialize_media_item",
+            side_effect=MaterializeError("boom"),
+        ):
+            result = self._call()
+
+        self.assertTrue(result.voted)
+        self.assertIsNone(result.image)
+        self.assertIsNotNone(result.error)
+        # The raw exception text must not reach the user.
+        self.assertNotIn("boom", result.error)
+        self.assertTrue(
+            MediaRelevance.objects.get(profile=self.profile, location=self.location, source=self.source, item_key=media_item_key(self.url)).is_relevant
+        )

@@ -1,0 +1,72 @@
+{% comment %}
+Photos subpage body for a pin or wiki: albums first, then photos not filed in
+any album. Swapped wholesale by every album mutation, so it carries its own
+root id.
+
+Expects (from controllers.albums._photos_context):
+  album_rows   - one dict per album (album, cover, photo_count, *_url)
+  loose_images - photos not in any of this owner's albums
+  create_url   - POST target for creating a new album
+  context_type - "pin" or "wiki", for text that differs between the two
+  album_kind_choices - AlbumKind.choices, for the create form's kind select
+{% endcomment %}
+<div id="albums-panel" class="albums-panel" data-refresh-url="{{ create_url }}">
+
+  <div class="albums-panel-header">
+    <h3 class="albums-panel-title">
+      <i class="material-symbols-outlined">photo_library</i>
+      Albums
+    </h3>
+    <button type="button" class="btn btn--primary albums-create-btn"
+            onclick="document.getElementById('album-create-form').hidden = !document.getElementById('album-create-form').hidden">
+      <i class="material-symbols-outlined">add</i> New album
+    </button>
+  </div>
+
+  <form id="album-create-form" class="album-create-form" hidden
+        hx-post="{{ create_url }}" hx-target="#albums-panel" hx-swap="outerHTML">
+    {% csrf_token %}
+    <input type="text" name="name" class="album-create-name" maxlength="100" required
+           placeholder="Album name (e.g. Interior, 2019 visit)">
+    <select name="kind" class="album-create-kind" aria-label="Album type">
+      {% for value, label in album_kind_choices %}
+      <option value="{{ value }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+    <button type="submit" class="btn btn--primary">Create</button>
+    <p class="album-create-hint settings-help">
+      A Timelapse album holds shots of the same scene from the same angle, so they can be rendered to video later.
+    </p>
+  </form>
+
+  {% if album_rows %}
+  <ul class="albums-grid">
+    {% for row in album_rows %}
+    {% include "dashboard/partials/albums/_album_card.html" with row=row %}
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p class="albums-empty settings-help">
+    No albums yet. Create one to group these photos - by area, by visit, or as a timelapse series.
+  </p>
+  {% endif %}
+
+  <div class="albums-loose">
+    <h3 class="albums-panel-title">
+      <i class="material-symbols-outlined">photo</i>
+      {% if album_rows %}Not in an album{% else %}Photos{% endif %}
+      <span class="albums-count">{{ loose_images|length }}</span>
+    </h3>
+    {% if loose_images %}
+    <ul class="gallery-grid albums-loose-grid">
+      {% for img in loose_images %}
+      <li class="gallery-item" data-id="{{ img.pk }}">
+        <img src="{{ img.image.url }}" alt="{{ img.caption|default:'Photo' }}" class="gallery-thumb">
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="settings-help">Every photo here is filed in at least one album.</p>
+    {% endif %}
+  </div>
+</div>

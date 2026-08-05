@@ -54,6 +54,10 @@ declare global {
         // element (legacy comment/visit/trip-comment usage) or an options
         // object with no form, which switches it into standalone save mode.
         _openCommentMapComposer: (formOrOptions: HTMLElement | CommentMapComposerOptions) => void;
+        // Adds an external Media-gallery item to an album. Defined by
+        // shared/album-items.ts; called from the server-rendered Media gallery
+        // tiles, which that module doesn't own.
+        albumAddExternalMedia?: (addUrl: string, media: { source: string; url: string; page_url?: string; caption?: string }) => Promise<void>;
     }
 
     const toastr: Toastr;

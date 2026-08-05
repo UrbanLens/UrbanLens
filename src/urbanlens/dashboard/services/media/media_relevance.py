@@ -11,12 +11,15 @@ and only for display/ranking purposes.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import logging
+from typing import TYPE_CHECKING, NamedTuple
 
 from django.db.models import Count
 
 from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
 from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -137,6 +140,101 @@ def toggle_media_vote(image: Image, profile: Profile, *, value: int) -> int:
         queue_relevance_vote(image, profile, is_relevant=value == 1)
 
     return MediaRelevance.objects.vote_scores(image.location, source).get(item_key, 0)
+
+
+class RelevantCacheResult(NamedTuple):
+    """Outcome of :func:`record_relevant_and_cache`.
+
+    Attributes:
+        image: The materialized local copy, or None when nothing was cached
+            (either the caller had already voted the item down, or the
+            download failed).
+        voted: Whether a "relevant" vote was recorded by this call.
+        declined: True when the caller had already voted this item *not*
+            relevant, so their vote was left alone.
+        error: A user-safe message when materialization failed, else None.
+    """
+
+    image: Image | None
+    voted: bool
+    declined: bool
+    error: str | None
+
+
+def record_relevant_and_cache(
+    *,
+    location: Location,
+    profile: Profile,
+    source: str,
+    url: str,
+    page_url: str = "",
+    caption: str = "",
+    pin=None,
+    wiki=None,
+) -> RelevantCacheResult:
+    """Mark a transient gallery item relevant and cache a local copy of it.
+
+    Used where relevance is implied by an action rather than clicked directly -
+    adding an external media item to an album, for instance. Unlike an explicit
+    thumbs-up, an implied vote must not override a deliberate one: if this
+    profile already voted the item *not* relevant, their vote stands and
+    nothing is cached (``declined=True``).
+
+    A failed download still leaves the vote in place, matching what the
+    pin/wiki vote endpoints already do - the user's opinion is worth keeping
+    even when the fetch didn't work.
+
+    Args:
+        location: The location whose gallery the item belongs to.
+        profile: The profile whose implied vote this is.
+        source: Provider panel key (e.g. ``"wikimedia"``).
+        url: The item's full-resolution image url.
+        page_url: Optional provider page url, for attribution.
+        caption: Optional caption carried from the gallery tile.
+        pin: Cache the copy against this Pin (personal save), if given.
+        wiki: Cache the copy against this Wiki (shared save), if given.
+
+    Returns:
+        A :class:`RelevantCacheResult`.
+    """
+    from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
+    from urbanlens.dashboard.services.photos.redata_relevance import queue_relevance_vote
+
+    item_key = media_item_key(url)
+    if not item_key:
+        return RelevantCacheResult(image=None, voted=False, declined=False, error="Missing item identity.")
+
+    existing = MediaRelevance.objects.for_gallery(profile, location, source).filter(item_key=item_key).first()
+    if existing is not None and not existing.is_relevant:
+        return RelevantCacheResult(image=None, voted=False, declined=True, error=None)
+
+    MediaRelevance.objects.update_or_create(
+        profile=profile,
+        location=location,
+        source=source,
+        item_key=item_key,
+        defaults={"is_relevant": True},
+    )
+
+    try:
+        image = materialize_media_item(
+            location=location,
+            profile=profile,
+            source=source,
+            url=url,
+            page_url=page_url,
+            caption=caption,
+            wiki=wiki,
+            pin=pin,
+        )
+    except MaterializeError as exc:
+        # MaterializeError can embed raw requests/OSError text - log it
+        # server-side and surface a generic message, same as the vote endpoints.
+        logger.warning("record_relevant_and_cache: failed to materialize %s: %s", url, exc)
+        return RelevantCacheResult(image=None, voted=True, declined=False, error="Could not save this photo.")
+
+    queue_relevance_vote(image, profile, is_relevant=True)
+    return RelevantCacheResult(image=image, voted=True, declined=False, error=None)
 
 
 def local_images_for_gallery_items(location: Location, source: str, urls: Iterable[str]) -> dict[str, Image]:

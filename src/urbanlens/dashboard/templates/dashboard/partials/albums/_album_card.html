@@ -1,0 +1,33 @@
+{% comment %}
+One album's tile in the albums grid.
+
+Expects:
+  row - a dict from controllers.albums._album_row (album, cover, photo_count,
+        detail_url, delete_url, ...)
+{% endcomment %}
+<li class="album-card" data-album-slug="{{ row.album.slug }}">
+  <a class="album-card-link" href="#" hx-get="{{ row.detail_url }}"
+     hx-target="#albums-panel" hx-swap="outerHTML">
+    <span class="album-card-cover">
+      {% if row.cover %}
+      <img src="{{ row.cover.image.url }}" alt="{{ row.album.name }}" class="album-card-cover-img">
+      {% else %}
+      <span class="album-card-cover-empty">
+        <i class="material-symbols-outlined">photo_library</i>
+      </span>
+      {% endif %}
+      {% if row.album.kind == "timelapse" %}
+      <span class="album-card-kind" data-tooltip="Timelapse album" data-tooltip-pos="top">
+        <i class="material-symbols-outlined">timelapse</i>
+      </span>
+      {% endif %}
+    </span>
+    <span class="album-card-name">{{ row.album.name }}</span>
+    <span class="album-card-count">{{ row.photo_count }} photo{{ row.photo_count|pluralize }}</span>
+  </a>
+  <button type="button" class="album-card-delete" title="Delete album"
+          hx-post="{{ row.delete_url }}" hx-target="#albums-panel" hx-swap="outerHTML"
+          hx-confirm="Delete the album &quot;{{ row.album.name }}&quot;? The photos themselves are kept.">
+    <i class="material-symbols-outlined">delete</i>
+  </button>
+</li>
