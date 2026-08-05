@@ -156,6 +156,7 @@ SETTINGS_FIELDS: tuple[str, ...] = (
     "community_enabled",
     "show_wiki_cover_photos",
     "auto_create_pin_article_from_wikipedia",
+    "show_supporter_badge",
     # Pin suggestions (PinSuggestionSettingsForm).
     "pin_suggestions_enabled",
     "suggest_public_pins",

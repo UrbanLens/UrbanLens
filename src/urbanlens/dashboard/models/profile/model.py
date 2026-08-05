@@ -440,6 +440,11 @@ class Profile(abstract.PublicDashboardModel):
     # affect the viewer's own pin pages, which always show their chosen cover.
     show_wiki_cover_photos = BooleanField(default=True, help_text="Show the community-selected cover photo banner on wiki pages.")
 
+    # Purely cosmetic opt-in - has no bearing on whether the user actually holds
+    # an active subscription (see is_supporter below), only on whether a badge
+    # is shown when they do.
+    show_supporter_badge = BooleanField(default=True, help_text="Show a small supporter badge next to your name when you have an active subscription.")
+
     # Mirrors what already happens automatically for community wikis (see
     # services.wiki.wiki_seed) - when a Wikipedia article is confidently matched to
     # one of your pins and it doesn't have an article yet, start one from that
@@ -628,6 +633,23 @@ class Profile(abstract.PublicDashboardModel):
     def show_hover_tooltips(self) -> bool:
         """Whether button hover/focus hints should be shown."""
         return self.guidance_level != GuidanceLevel.NONE
+
+    @property
+    def is_supporter(self) -> bool:
+        """Whether this user currently holds an active subscription, paid or admin-granted."""
+        from urbanlens.dashboard.models.subscriptions.model import active_subscription_roles
+
+        return bool(active_subscription_roles(self.user))
+
+    @property
+    def display_supporter_badge(self) -> bool:
+        """Whether the supporter badge should actually be rendered next to this profile's name.
+
+        Requires both an active subscription and the user's own opt-in - the
+        two are independent so a badge never appears for a lapsed subscriber
+        just because they left the toggle on.
+        """
+        return self.show_supporter_badge and self.is_supporter
 
     def best_known_point(self) -> tuple[float, float] | None:
         """Return a representative (lat, lng) for this profile without extra computation.

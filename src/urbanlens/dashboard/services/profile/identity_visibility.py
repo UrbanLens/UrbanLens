@@ -40,6 +40,12 @@ def resolve_visible_identity(viewer: Profile | None, subject: Profile, *, placeh
     Returns:
         Dict with ``display_name``, ``display_avatar_url`` (str or None),
         ``display_profile_url`` (str or None), and ``is_masked`` (bool).
+
+    Note:
+        Deliberately does not resolve the supporter badge - ``Profile.display_supporter_badge``
+        is a live property callers can read straight off ``subject`` after masking is
+        applied, but only once they've also checked ``is_masked``: a masked identity's
+        own supporter status must not leak alongside its scrubbed name/avatar.
     """
     if subject.can_view_profile(viewer):
         from django.urls import reverse

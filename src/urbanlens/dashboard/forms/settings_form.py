@@ -617,10 +617,16 @@ class CommunitySettingsForm(forms.ModelForm):
         label="Auto-Start Pin Articles from Wikipedia",
         help_text="When a Wikipedia article is matched to one of your pins, automatically start that pin's article from it (only if it doesn't already have one).",
     )
+    show_supporter_badge = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-toggle-input"}),
+        label="Show Supporter Badge",
+        help_text="Show a small supporter badge next to your name when you have an active subscription. Has no effect if you don't currently have one.",
+    )
 
     class Meta:
         model = Profile
-        fields = ["community_enabled", "show_wiki_cover_photos", "auto_create_pin_article_from_wikipedia"]
+        fields = ["community_enabled", "show_wiki_cover_photos", "auto_create_pin_article_from_wikipedia", "show_supporter_badge"]
 
 
 class PinSuggestionSettingsForm(forms.ModelForm):

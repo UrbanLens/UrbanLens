@@ -646,3 +646,25 @@
         color: $color-red-500;
     }
 }
+
+// Small "this person has an active subscription" badge, opt-in per profile
+// (Profile.show_supporter_badge). Reused anywhere a name renders, not just
+// page heroes - see partials/ui/_supporter_badge.html.
+.ul-supporter-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: .35rem;
+    width: 1.2rem;
+    height: 1.2rem;
+    border-radius: 999px;
+    color: #fff;
+    background: linear-gradient(135deg, $color-red-500, $color-purple-300);
+    vertical-align: middle;
+    cursor: help;
+
+    .material-symbols-outlined {
+        font-size: .85rem;
+        font-variation-settings: "FILL" 1;
+    }
+}

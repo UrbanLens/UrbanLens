@@ -58,6 +58,7 @@ Expects:
                 {% if profile.user == request.user %}
                 {% include "dashboard/partials/ui/_privacy_hint.html" with label="Name, avatar & bio" value=profile.get_profile_visibility_display field="profile_visibility" raw_value=profile.profile_visibility owner=profile %}
                 {% endif %}
+                {% include "dashboard/partials/ui/_supporter_badge.html" %}
             </h1>
             {% if profile.user == request.user and not edit_mode %}
             <p class="profile-username">@<span class="profile-username-editable" tabindex="0" role="button"
