@@ -14,7 +14,7 @@
      data-media-source-name="{{ item.source }}"
      data-media-key="{{ entry.key }}"
      data-media-url="{{ entry.local_url|default:item.url }}"
-     data-media-thumb="{{ entry.local_url|default:item.thumb_url }}"
+     data-media-thumb="{% firstof entry.local_url entry.thumb_url item.thumb_url %}"
      data-media-page-url="{{ item.page_url|default:item.url }}"
      data-media-remote-url="{{ item.url }}"
      data-media-caption="{{ item.caption }}"
@@ -32,8 +32,8 @@
     {% endif %}
     <button type="button" class="media-item-thumb-btn" onclick="window.mediaOpenLightbox(this)">
         <span class="media-item-source">{{ item.source }}</span>
-        {% if entry.local_url or item.thumb_url %}
-        <img class="media-item-thumb" src="{{ entry.local_url|default:item.thumb_url }}" alt="{{ item.caption }}" loading="lazy"
+        {% if entry.local_url or entry.thumb_url or item.thumb_url %}
+        <img class="media-item-thumb" src="{% firstof entry.local_url entry.thumb_url item.thumb_url %}" alt="{{ item.caption }}" loading="lazy"
              onerror="urbanlensMediaThumbFallback(this, 'broken_image')">
         {% else %}
         <span class="media-item-thumb media-item-thumb-fallback" aria-hidden="true">

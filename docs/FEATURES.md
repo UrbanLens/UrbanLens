@@ -169,6 +169,12 @@ direct-only because REData's contract can't reproduce what they show:
 - **Wikipedia** — best-matching article
 - **Wikimedia Commons** — archival photos/media, direct (REData has no equivalent provider)
 - **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData
+- **Media previews** — Media-gallery items in formats no browser renders (archival TIFFs, scanned
+  PDF inventory/nomination forms, HEIC) are rasterized to JPEG/PNG server-side rather than left as
+  a broken tile or an anonymous document icon (`services.media.previews`). Remote sources go
+  through a signature-gated endpoint (`controllers/media_preview.py`) so it can't be pointed at an
+  arbitrary URL; the in-app REData proxies (CRIS attachments, LoopNet photos) render their own via
+  `?preview=1`, passing already-displayable files straight through
 - **Web Images** — broad web-image search across many engines (Flickr, imgur, Pinterest,
   DeviantArt, Openverse, Unsplash, …) via REData's web-search image mode, using an aggressive
   three-clause relevance query (all non-nickname aliases · state/country + municipality · the site's

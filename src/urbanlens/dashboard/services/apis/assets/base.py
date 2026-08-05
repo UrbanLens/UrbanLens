@@ -43,6 +43,13 @@ class MediaItem:
         caption: Human-readable caption or title.
         source: Human-readable provider name (e.g. ``"Smithsonian Open Access"``).
         page_url: Link to the item's page on the provider's site, if any.
+        content_type: The provider-declared content type of ``url``, when it
+            publishes one. Only some do, but where it exists it is the only
+            reliable way to know a "photo" is really a scanned PDF or a TIFF -
+            an API-generated URL usually carries no extension to infer from -
+            and the gallery needs that to decide whether the item has to be
+            rendered server-side to be displayable at all (see
+            ``services.media.previews``).
     """
 
     url: str
@@ -50,6 +57,7 @@ class MediaItem:
     caption: str
     source: str
     page_url: str = ""
+    content_type: str = ""
 
 
 class MediaProvider(Gateway, ABC):

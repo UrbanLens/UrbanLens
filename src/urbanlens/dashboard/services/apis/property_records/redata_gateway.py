@@ -313,6 +313,19 @@ class RedataGateway(Gateway):
     def fetch_cultural_resource_detail(self, resource_uuid: str) -> dict[str, Any]:
         """Fetch (and cache onto the resource) a CRIS resource's full detail record and attachments.
 
+        REData answers with an envelope - ``{"detail_status": ..., "resource":
+        {...}}`` - because "the source was asked and genuinely publishes
+        nothing deeper" and "detail was retrieved" both leave a resource whose
+        ``detail_retrieved_at`` is set. Callers here only ever want the
+        resource, so the envelope is unwrapped rather than handed on: reading
+        ``attributes``/``attachments`` straight off the envelope silently
+        yields nothing at all, which is not distinguishable from a resource
+        that really has no attachments.
+
+        Requires an API key holding ``cultural_resources:write`` (the fetch
+        persists new data on REData's side); a read-only key gets a 403 here
+        and therefore never sees any attachment.
+
         Args:
             resource_uuid: The resource's REData uuid (from :meth:`lookup_cultural_resources`).
 
@@ -334,9 +347,11 @@ class RedataGateway(Gateway):
             raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, f"Could not reach REData: {exc}") from exc
         if response.status_code == 200:
             try:
-                return dict(response.json())
+                body = dict(response.json())
             except ValueError as exc:
                 raise PropertyRecordsUnavailableError(REASON_SOURCE_ERROR, "REData returned an unparseable response.") from exc
+            resource = body.get("resource")
+            return dict(resource) if isinstance(resource, dict) else body
         if response.status_code == 400:
             try:
                 body = response.json()

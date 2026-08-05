@@ -523,11 +523,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return HttpResponse(status=204)
 
         cached = LocationCache.get_fresh(location, panel.cache_source)
-        if cached is None:
+        # A row whose media half was never filled in is not an answer for this
+        # gallery, even though it is one for the info panel sharing the row.
+        if cached is None or not panel.media_is_ready(cached.data or {}):
             return self._pending_media(request, pin, source)
         items = panel.media_items(cached.data or {})
 
         from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
+        from urbanlens.dashboard.services.media.previews import gallery_thumb_url
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
         relevance = dict(
@@ -545,6 +548,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "key": media_item_key(item.url),
                 "is_relevant": relevance.get(media_item_key(item.url)),
                 "local_url": local_images[item.url].image.url if item.url in local_images else None,
+                # TIFFs, scanned PDFs and HEICs reach the gallery routinely and
+                # none of them render in an <img> - see services.media.previews.
+                "thumb_url": gallery_thumb_url(item.url, item.thumb_url, item.content_type),
             }
             for item in items
         ]
@@ -2091,7 +2097,76 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 _REDATA_MEDIA_CACHE_TTL = 3600
 
 
-class PinLoopnetPhotoView(View):
+class RedataMediaProxyMixin:
+    """Shared caching + preview handling for the REData-backed media proxies.
+
+    Each of these views fetches one file's bytes from REData (whose API key
+    must never reach the browser) and serves them. They also accept
+    ``?preview=1``, meaning "give me something an ``<img>`` can render":
+    already-displayable files are passed through untouched, and anything else
+    is rasterized (a PDF's first page, a TIFF re-encoded). CRIS attachments in
+    particular are routinely scanned PDFs and TIFFs, which no browser displays.
+
+    Deciding here rather than at the call site is what makes this reliable:
+    REData leaves an attachment's ``content_type`` blank until the file has
+    been downloaded at least once, so a caller building a gallery URL usually
+    cannot know the format yet - but this view, holding the bytes, always can.
+    The conversion also belongs here rather than behind the generic
+    ``media_preview`` endpoint, which would only re-download what this view
+    already has.
+    """
+
+    def serve_media(self, request: HttpRequest, cache_key: str, download) -> HttpResponse:
+        """Serve one REData file, converting it to a preview image when asked.
+
+        Args:
+            request: The current request; ``?preview=1`` asks for a
+                browser-displayable rendering rather than the original bytes.
+            cache_key: Django cache key for the *original* bytes. The preview
+                is cached under a suffix of it, so both forms of the same file
+                are cached independently and neither invalidates the other.
+            download: Zero-argument callable returning ``(content, content_type)``,
+                raising ``PropertyRecordsUnavailableError``/``ValueError`` when
+                the file isn't available.
+
+        Returns:
+            The file (or its preview), or a 404 when REData couldn't supply it
+            or the preview couldn't be rendered.
+        """
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError
+        from urbanlens.dashboard.services.media.previews import is_web_safe, render_preview
+
+        wants_preview = request.GET.get("preview") == "1"
+        serve_key = f"{cache_key}_preview" if wants_preview else cache_key
+        cached = cache.get(serve_key)
+        if cached is not None:
+            content, content_type = cached
+            return HttpResponse(content, content_type=content_type)
+
+        original = cache.get(cache_key)
+        if original is None:
+            try:
+                original = download()
+            except (PropertyRecordsUnavailableError, ValueError):
+                return HttpResponse(status=404)
+            cache.set(cache_key, original, _REDATA_MEDIA_CACHE_TTL)
+
+        content, content_type = original
+        # A JPEG needs no conversion, and re-encoding it would only cost
+        # quality - "preview" asks for something displayable, not necessarily
+        # something different.
+        if not wants_preview or is_web_safe(request.path, content_type):
+            return HttpResponse(content, content_type=content_type)
+
+        preview = render_preview(content, content_type)
+        if preview is None:
+            return HttpResponse(status=404)
+        cache.set(serve_key, preview, _REDATA_MEDIA_CACHE_TTL)
+        content, content_type = preview
+        return HttpResponse(content, content_type=content_type)
+
+
+class PinLoopnetPhotoView(RedataMediaProxyMixin, View):
     """GET pin/loopnet/photo/<listing_uuid>/<photo_id>/ - proxies one LoopNet listing photo.
 
     REData's API key must never reach the browser, so photo bytes are
@@ -2105,23 +2180,16 @@ class PinLoopnetPhotoView(View):
     """
 
     def get(self, request: HttpRequest, listing_uuid: str, photo_id: int) -> HttpResponse:
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
 
-        cache_key = f"ul_loopnet_photo_{listing_uuid}_{photo_id}"
-        cached = cache.get(cache_key)
-        if cached is not None:
-            content, content_type = cached
-            return HttpResponse(content, content_type=content_type)
-
-        try:
-            content, content_type = RedataGateway().download_listing_photo(listing_uuid, photo_id)
-        except (PropertyRecordsUnavailableError, ValueError):
-            return HttpResponse(status=404)
-        cache.set(cache_key, (content, content_type), _REDATA_MEDIA_CACHE_TTL)
-        return HttpResponse(content, content_type=content_type)
+        return self.serve_media(
+            request,
+            f"ul_loopnet_photo_{listing_uuid}_{photo_id}",
+            lambda: RedataGateway().download_listing_photo(listing_uuid, photo_id),
+        )
 
 
-class PinCrisAttachmentView(View):
+class PinCrisAttachmentView(RedataMediaProxyMixin, View):
     """GET pin/cris/attachment/<resource_uuid>/<attachment_id>/ - proxies one CRIS attachment/photo.
 
     Same reasoning as ``PinLoopnetPhotoView`` - no login required (CRIS
@@ -2131,23 +2199,16 @@ class PinCrisAttachmentView(View):
     """
 
     def get(self, request: HttpRequest, resource_uuid: str, attachment_id: int) -> HttpResponse:
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
 
-        cache_key = f"ul_cris_attachment_{resource_uuid}_{attachment_id}"
-        cached = cache.get(cache_key)
-        if cached is not None:
-            content, content_type = cached
-            return HttpResponse(content, content_type=content_type)
-
-        try:
-            content, content_type = RedataGateway().download_cultural_resource_attachment(resource_uuid, attachment_id)
-        except (PropertyRecordsUnavailableError, ValueError):
-            return HttpResponse(status=404)
-        cache.set(cache_key, (content, content_type), _REDATA_MEDIA_CACHE_TTL)
-        return HttpResponse(content, content_type=content_type)
+        return self.serve_media(
+            request,
+            f"ul_cris_attachment_{resource_uuid}_{attachment_id}",
+            lambda: RedataGateway().download_cultural_resource_attachment(resource_uuid, attachment_id),
+        )
 
 
-class PinCrisExtractedImageView(View):
+class PinCrisExtractedImageView(RedataMediaProxyMixin, View):
     """GET pin/cris/attachment/<resource_uuid>/<attachment_id>/extracted/<image_id>/ - proxies
     one photo OCR/AI-extracted from a CRIS document attachment.
 
@@ -2155,17 +2216,10 @@ class PinCrisExtractedImageView(View):
     """
 
     def get(self, request: HttpRequest, resource_uuid: str, attachment_id: int, image_id: int) -> HttpResponse:
-        from urbanlens.dashboard.services.apis.property_records.redata_gateway import PropertyRecordsUnavailableError, RedataGateway
+        from urbanlens.dashboard.services.apis.property_records.redata_gateway import RedataGateway
 
-        cache_key = f"ul_cris_extracted_image_{resource_uuid}_{attachment_id}_{image_id}"
-        cached = cache.get(cache_key)
-        if cached is not None:
-            content, content_type = cached
-            return HttpResponse(content, content_type=content_type)
-
-        try:
-            content, content_type = RedataGateway().download_extracted_image(resource_uuid, attachment_id, image_id)
-        except (PropertyRecordsUnavailableError, ValueError):
-            return HttpResponse(status=404)
-        cache.set(cache_key, (content, content_type), _REDATA_MEDIA_CACHE_TTL)
-        return HttpResponse(content, content_type=content_type)
+        return self.serve_media(
+            request,
+            f"ul_cris_extracted_image_{resource_uuid}_{attachment_id}_{image_id}",
+            lambda: RedataGateway().download_extracted_image(resource_uuid, attachment_id, image_id),
+        )

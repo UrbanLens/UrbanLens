@@ -207,8 +207,21 @@ class GalleryMediaApiPayloadTests(TestCase):
         self.assertEqual(payload, {PanelApiKind.MEDIA.value: []})
 
     def test_items_serialize_field_for_field(self) -> None:
-        """Every MediaItem field survives the trip to JSON."""
-        item = {"url": "https://example.test/a.jpg", "thumb_url": "https://example.test/t.jpg", "caption": "A scan", "source": "Smithsonian", "page_url": "https://example.test/a"}
+        """Every MediaItem field survives the trip to JSON.
+
+        ``content_type`` is included even when the provider publishes none: an
+        API client deciding whether it can render an item needs to see the
+        field as empty rather than have to guess whether its absence means
+        "unknown format" or "this server predates the field".
+        """
+        item = {
+            "url": "https://example.test/a.jpg",
+            "thumb_url": "https://example.test/t.jpg",
+            "caption": "A scan",
+            "source": "Smithsonian",
+            "page_url": "https://example.test/a",
+            "content_type": "",
+        }
         LocationCache.set(self.pin.location, self.source.cache_source, {"items": [item]}, query_key="q")
         payload = self.source.api_payload(self.pin)
         assert payload is not None

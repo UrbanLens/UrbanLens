@@ -84,11 +84,14 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
             return HttpResponse(status=404)
 
         cached = LocationCache.get_fresh(location, panel.cache_source)
-        if cached is None:
+        # A row whose media half was never filled in is not an answer for this
+        # gallery, even though it is one for the info panel sharing the row.
+        if cached is None or not panel.media_is_ready(cached.data or {}):
             return self._pending(request, location, profile, source, panel)
         items = panel.media_items(cached.data or {})
 
         from urbanlens.dashboard.services.media.media_relevance import local_images_for_gallery_items
+        from urbanlens.dashboard.services.media.previews import gallery_thumb_url
 
         scores = MediaRelevance.objects.vote_scores(location, source)
         my_marks = dict(MediaRelevance.objects.for_gallery(profile, location, source).values_list("item_key", "is_relevant"))
@@ -107,6 +110,10 @@ class WikiMediaProviderView(LoginRequiredMixin, View):
                     "is_relevant": my_marks.get(key),
                     "vote_score": scores.get(key, 0),
                     "local_url": local_image.image.url if local_image else None,
+                    # TIFFs, scanned PDFs and HEICs reach the gallery routinely
+                    # and none of them render in an <img> - see
+                    # services.media.previews.
+                    "thumb_url": gallery_thumb_url(item.url, item.thumb_url, item.content_type),
                     # Only present once this item has a local copy - a vote on
                     # a still-transient item has no REData photo_id to
                     # attach to (see WikiMediaVoteView.post).

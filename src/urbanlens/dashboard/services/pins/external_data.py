@@ -556,6 +556,28 @@ class GalleryMediaSource(LocationCachePanelSource, ABC):
             The items to render as ``.media-item`` tiles; may be empty.
         """
 
+    def media_is_ready(self, data: dict) -> bool:
+        """Whether a cached row's *media* half has actually been filled in.
+
+        Almost always True: a row exists because this source's ``fetch`` wrote
+        it, and that fetch produced the items. The exception is a source whose
+        ``cache_source`` is shared with a background enrichment source that
+        fills only part of the payload - such a row is a legitimate answer for
+        the info panel while being no answer at all for the gallery, and
+        without this hook the gallery would render it as an authoritative
+        "this provider found nothing" for the whole cache window.
+
+        Both gallery surfaces (pin detail and wiki) consult this on the row
+        they read, rather than each re-deriving the same condition.
+
+        Args:
+            data: The ``LocationCache`` row's ``data`` dict for this source.
+
+        Returns:
+            True when ``media_items`` can be trusted for this row.
+        """
+        return True
+
     def api_media(self, data: dict) -> list[dict[str, Any]]:
         """This source's cached data as plain JSON media dicts.
 

@@ -309,12 +309,35 @@ class LookupCulturalResourcesTests(SimpleTestCase):
 
 
 class FetchCulturalResourceDetailTests(SimpleTestCase):
-    def test_returns_the_detail_body(self) -> None:
+    def test_unwraps_the_resource_from_redatas_envelope(self) -> None:
+        """REData answers ``{"detail_status": ..., "resource": {...}}``.
+
+        Handing the envelope on made every caller's ``attributes``/``attachments``
+        read come back empty, which is indistinguishable from a resource that
+        genuinely has neither - so no CRIS record ever produced an info card or
+        a single photo.
+        """
         session = MagicMock()
-        session.post.return_value = _response(200, json_body={"uuid": "r1", "attachments": [{"id": 1, "kind": "PHOTO"}]})
+        session.post.return_value = _response(
+            200,
+            json_body={
+                "detail_status": "fetched",
+                "resource": {"uuid": "r1", "attributes": {"USNName": "Old Mill"}, "attachments": [{"id": 1, "kind": "photo"}]},
+            },
+        )
         gateway = _gateway(session)
         detail = gateway.fetch_cultural_resource_detail("r1")
-        self.assertEqual(detail["attachments"][0]["kind"], "PHOTO")
+        self.assertEqual(detail["uuid"], "r1")
+        self.assertEqual(detail["attributes"]["USNName"], "Old Mill")
+        self.assertEqual(detail["attachments"][0]["kind"], "photo")
+
+    def test_an_unenveloped_body_is_returned_as_is(self) -> None:
+        """Defensive: a body with no ``resource`` key is already the resource."""
+        session = MagicMock()
+        session.post.return_value = _response(200, json_body={"uuid": "r1", "attachments": [{"id": 1, "kind": "photo"}]})
+        gateway = _gateway(session)
+        detail = gateway.fetch_cultural_resource_detail("r1")
+        self.assertEqual(detail["attachments"][0]["kind"], "photo")
 
     def test_hits_the_fetch_detail_endpoint(self) -> None:
         session = MagicMock()

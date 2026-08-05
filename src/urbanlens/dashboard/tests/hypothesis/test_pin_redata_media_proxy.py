@@ -110,3 +110,72 @@ class PinCrisAttachmentViewTests(SimpleTestCase):
         ):
             response = self.client.get(reverse("pin.cris.attachment", args=["res-1", 5]))
         self.assertEqual(response.status_code, 404)
+
+
+class CrisAttachmentPreviewModeTests(SimpleTestCase):
+    """``?preview=1`` means "give me something an <img> can render".
+
+    CRIS attachments are routinely scanned PDFs and TIFFs, which no browser
+    displays - the Media gallery pointed an ``<img>`` at them and got a broken
+    tile (or, for documents, an anonymous grey icon) even though the file is a
+    photograph of the building.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.client = Client()
+        self.url = reverse("pin.cris.attachment", args=["res-1", 5])
+
+    @staticmethod
+    def _tiff_bytes() -> bytes:
+        from io import BytesIO
+
+        from PIL import Image as PILImage
+
+        buffer = BytesIO()
+        PILImage.new("RGB", (20, 20), "red").save(buffer, format="TIFF")
+        return buffer.getvalue()
+
+    def test_a_tiff_attachment_is_converted(self) -> None:
+        with (
+            patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
+            patch("urbanlens.dashboard.controllers.pin.cache.set"),
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "download_cultural_resource_attachment", return_value=(self._tiff_bytes(), "image/tiff")),
+        ):
+            response = self.client.get(self.url, {"preview": "1"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "image/jpeg")
+
+    def test_an_already_displayable_attachment_passes_through_unconverted(self) -> None:
+        """Re-encoding a JPEG would cost quality for nothing."""
+        with (
+            patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
+            patch("urbanlens.dashboard.controllers.pin.cache.set"),
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "download_cultural_resource_attachment", return_value=(b"jpeg-bytes", "image/jpeg")),
+        ):
+            response = self.client.get(self.url, {"preview": "1"})
+        self.assertEqual(response.content, b"jpeg-bytes")
+        self.assertEqual(response["Content-Type"], "image/jpeg")
+
+    def test_an_unconvertible_attachment_returns_404(self) -> None:
+        """The gallery's onerror handler then falls back to the icon tile."""
+        with (
+            patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
+            patch("urbanlens.dashboard.controllers.pin.cache.set"),
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "download_cultural_resource_attachment", return_value=(b"not a document", "application/zip")),
+        ):
+            response = self.client.get(self.url, {"preview": "1"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_without_the_flag_the_original_bytes_are_served(self) -> None:
+        with (
+            patch("urbanlens.dashboard.controllers.pin.cache.get", return_value=None),
+            patch("urbanlens.dashboard.controllers.pin.cache.set"),
+            patch.object(RedataGateway, "__post_init__", lambda _self: None),
+            patch.object(RedataGateway, "download_cultural_resource_attachment", return_value=(self._tiff_bytes(), "image/tiff")),
+        ):
+            response = self.client.get(self.url)
+        self.assertEqual(response["Content-Type"], "image/tiff")

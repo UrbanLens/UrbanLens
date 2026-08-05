@@ -1880,3 +1880,46 @@ dropping the whole batch rather than just leaving one cid pending. 1 call at an 
 comfortable headroom even in the worst realistic case. Removed the dead `GoogleLegacyCidLookupGateway`
 and its `google_places_legacy_cid_lookup` rate-limit entry entirely rather than leaving unreachable
 code behind.
+
+## CRIS media on a multi-building campus is still only partial coverage (2026-08-05)
+
+Fixed this session (see `plugins/builtin/cris_buildings.py`): the CRIS Media gallery was
+returning nothing at all because `RedataGateway.fetch_cultural_resource_detail` handed back
+REData's `{"detail_status", "resource"}` envelope while every caller read `attributes`/
+`attachments` off it, plus three narrower mismatches (attachment `kind` compared as
+`"PHOTO"`/`"DOCUMENT"` against REData's lowercase values, `resource_type` compared as
+`"district"` against REData's `"building_district"`, and the *first* building of a lookup
+being taken rather than the nearest one).
+
+**Still outstanding**: a parcel-scope pin only aggregates the media of the single nearest
+building plus the site-level record. CRIS's own authoritative "every building on this site"
+list is a SURVEY resource's `USNs` roster - REData surfaces it via a resource's
+`linked_resources`, and its own docs cite survey `12SD00541` as covering all 124 buildings of
+the former Hudson River State Hospital campus. Following that roster (and using REData's bulk
+`POST /cultural-resources/fetch-details/?lat=&lng=`, which UrbanLens's gateway does not
+implement at all, to warm them within one provider's rate budget) is what would give a campus
+pin the complete set. Deliberately out of scope of the bug fix: it needs a per-resource
+fan-out with its own paging/rate story, not another field-name correction.
+
+**Also worth checking operationally**: `fetch-detail/`, the bulk variant, and
+`attachments/{id}/extract/` all require an API key holding `cultural_resources:write`, not
+just `:read` - a read-only key 403s on all three and therefore yields zero attachments no
+matter how correct this code is.
+
+## Pre-existing test failures found while fixing CRIS media (2026-08-05)
+
+15 tests in `dashboard/tests/hypothesis/` fail on a clean `9a8c0f14` checkout, unrelated to that
+work (verified by running them from a detached worktree at HEAD). Two independent causes:
+
+- **`test_delete_low_engagement_wikis.py` (11 tests)** - every one dies on
+  `CommandError: Unknown command: 'delete_low_engagement_wikis'`. There is no such management
+  command anywhere in `src/urbanlens` (`dashboard/management/commands/` holds only the backfill,
+  `diagnose_places_api` and `provision_mobile_oauth_client` commands). The test file describes the
+  intended retention policy in detail - enough pin owners plus a real, non-reverted user edit keeps
+  a wiki, everything else is deletable, dry-run by default - so this reads as a command that was
+  planned and tested but never written (or removed without its tests).
+- **`test_sun_times.py` (3 tests)** - the weather panel makes a real outbound call the test doesn't
+  mock, tripping `core/testing_network.py`'s guard (`Attempted to connect to '208.102.189.146'`).
+  A missing patch in the test, not a product bug.
+- **`test_panel_api_interface.py::ParcelBuildingsApiPayloadTests::test_covering_child_pin_is_reported_by_uuid_and_name`** -
+  one failure in the parcel-buildings API payload; not investigated.
