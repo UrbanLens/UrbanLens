@@ -120,8 +120,19 @@ class FetchTests(TestCase):
         self.assertEqual(data, {})
 
     def test_unconfigured_gateway_gracefully_persists_empty(self) -> None:
-        """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured."""
-        with patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set:
+        """RedataGateway() raises ValueError (not PropertyRecordsUnavailableError) when unconfigured.
+
+        The unconfigured state is forced rather than assumed. This relied on the
+        machine running the tests having no REData credentials, so wherever they
+        *are* configured - the test container included - the gateway constructed
+        happily and went on to make a real call, which the suite's network guard
+        blocked. Same fix, and the same reasoning, as the sibling tests in
+        test_pin_redata_media_proxy.py.
+        """
+        with (
+            patch.object(RedataGateway, "__post_init__", side_effect=ValueError("UL_REDATA_API_URL must be configured.")),
+            patch("urbanlens.dashboard.models.cache.location_cache.LocationCache.set") as mock_set,
+        ):
             LoopnetPanelSource().fetch(self.pin)
         data = mock_set.call_args[0][2]
         self.assertEqual(data, {})

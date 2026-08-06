@@ -11,6 +11,7 @@ from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 import pytest
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.achievements.meta import ActivityKind, streak_metric_key
 from urbanlens.dashboard.models.achievements.model import Achievement, ProfileActivityDay, ProfileStreak, UserAchievement
@@ -321,9 +322,14 @@ class SignalIntegrationTests(AchievementTestsBase):
     """
 
     def test_creating_pins_awards_without_an_explicit_evaluation(self) -> None:
+        from urbanlens.dashboard.tasks import evaluate_achievements_for_profile
+
         achievement = self._achievement(metric="pins_created", threshold=2, name="Pin Pair")
 
-        with self.captureOnCommitCallbacks(execute=True):
+        # captureOnCommitCallbacks fires the hook, but the hook only *enqueues*
+        # the evaluation - with no worker draining the broker it is dropped and
+        # no award is ever made. See core.tests.celery_inline.
+        with tasks_run_inline(evaluate_achievements_for_profile), self.captureOnCommitCallbacks(execute=True):
             baker.make(Pin, profile=self.profile, _quantity=2)
 
         self.assertTrue(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
@@ -379,9 +385,11 @@ class SignalIntegrationTests(AchievementTestsBase):
 
     def test_defining_an_achievement_backfills_via_signal(self) -> None:
         """Saving a new award reaches users who already qualified."""
+        from urbanlens.dashboard.tasks import backfill_achievement
+
         baker.make(Pin, profile=self.profile, _quantity=3)
 
-        with self.captureOnCommitCallbacks(execute=True):
+        with tasks_run_inline(backfill_achievement), self.captureOnCommitCallbacks(execute=True):
             achievement = self._achievement(metric="pins_created", threshold=3, name="Backfilled")
 
         self.assertTrue(UserAchievement.objects.filter(profile=self.profile, achievement=achievement).exists())
