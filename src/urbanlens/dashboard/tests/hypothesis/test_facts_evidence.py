@@ -48,7 +48,10 @@ class FactSaveInvariantTests(TestCase):
 
 class RecordEvidenceTests(TestCase):
     def setUp(self) -> None:
-        self.delay_mock = self.enterContext(mock.patch("urbanlens.dashboard.tasks.recompute_fact_confidence.delay"))
+        # record_evidence enqueues through safely_enqueue_task (broker-outage
+        # tolerant) rather than calling .delay directly - patch the seam it
+        # actually uses.
+        self.enqueue_mock = self.enterContext(mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"))
         self.wiki = baker.make(Wiki, location=baker.make(Location))
 
     def test_creates_the_fact_and_evidence_on_first_call(self) -> None:
@@ -70,14 +73,16 @@ class RecordEvidenceTests(TestCase):
         self.assertEqual(Fact.objects.count(), 0)
 
     def test_queues_a_confidence_recompute(self) -> None:
+        from urbanlens.dashboard.tasks import recompute_fact_confidence
+
         evidence.record_evidence(key="wiki_name", value="Old Mill", source_kind=FactSourceKind.WIKI_EDIT, wiki=self.wiki)
         fact = Fact.objects.get(wiki=self.wiki, key="wiki_name")
-        self.delay_mock.assert_called_once_with(fact.pk)
+        self.enqueue_mock.assert_called_once_with(recompute_fact_confidence, fact.pk)
 
 
 class RecordPhotoCoordinateEvidenceTests(TestCase):
     def setUp(self) -> None:
-        self.enterContext(mock.patch("urbanlens.dashboard.tasks.recompute_fact_confidence.delay"))
+        self.enterContext(mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"))
 
     def test_logs_an_anonymous_point_observation(self) -> None:
         image = baker.make(Image)
@@ -98,7 +103,7 @@ class RecordPhotoCoordinateEvidenceTests(TestCase):
 
 class RecordConsensusAnswerEvidenceTests(TestCase):
     def setUp(self) -> None:
-        self.enterContext(mock.patch("urbanlens.dashboard.tasks.recompute_fact_confidence.delay"))
+        self.enterContext(mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"))
         self.profile = _make_profile()
         self.wiki = baker.make(Wiki, location=baker.make(Location))
         self.session = ConsensusSession.objects.create(host_profile=self.profile)
@@ -155,7 +160,7 @@ class RecordWikiEditEvidenceTests(TestCase):
     """Exercises the models.wiki_edit.signals post_save hook, not just the function in isolation."""
 
     def setUp(self) -> None:
-        self.enterContext(mock.patch("urbanlens.dashboard.tasks.recompute_fact_confidence.delay"))
+        self.enterContext(mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"))
         self.profile = _make_profile()
         self.wiki = baker.make(Wiki, location=baker.make(Location))
 
@@ -188,7 +193,7 @@ class RecordWikiEditEvidenceTests(TestCase):
 
 class RecomputeIntegrationTests(TestCase):
     def setUp(self) -> None:
-        self.enterContext(mock.patch("urbanlens.dashboard.tasks.recompute_fact_confidence.delay"))
+        self.enterContext(mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task"))
         self.wiki = baker.make(Wiki, location=baker.make(Location))
 
     def _log(self, value: str, *, count: int, source_kind: str = FactSourceKind.ADMIN, source_name: str = "admin") -> Fact:

@@ -844,9 +844,15 @@ def create_direct_message(
         except DatabaseError:
             logger.exception("Coordinate detection failed for message %s", message.pk)
         if parse_addresses(body):
+            from urbanlens.dashboard.services.core.celery import safely_enqueue_task
             from urbanlens.dashboard.tasks import detect_dm_address_mentions
 
-            transaction.on_commit(lambda: detect_dm_address_mentions.delay(message.pk))
+            # safely_enqueue_task, not .delay: an on_commit callback runs after
+            # the message row is durably saved, so a broker outage here must
+            # degrade to "no address chips on this message" - a raw .delay
+            # would instead raise out of the callback and 500 a send that
+            # already succeeded.
+            transaction.on_commit(lambda: safely_enqueue_task(detect_dm_address_mentions, message.pk))
 
     # DEBUG, not INFO: this fires on every single message sent site-wide, so at
     # INFO it drowns out genuinely noteworthy log lines in production. Still

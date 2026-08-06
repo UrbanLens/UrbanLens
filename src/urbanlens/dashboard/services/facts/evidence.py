@@ -154,8 +154,12 @@ def record_evidence(
     evidence.save()
 
     from urbanlens.dashboard import tasks
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
 
-    tasks.recompute_fact_confidence.delay(fact.pk)
+    # The evidence row is already saved; confidence recomputation is a
+    # derivative that the next evidence write (or sweep) will redo anyway, so
+    # a broker outage must not fail the recording that just succeeded.
+    safely_enqueue_task(tasks.recompute_fact_confidence, fact.pk)
     return evidence
 
 

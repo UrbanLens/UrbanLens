@@ -221,6 +221,15 @@ CELERY_RESULT_BACKEND = os.getenv("UL_CELERY_RESULT_BACKEND") or CELERY_BROKER_U
 # Matches the fail-fast philosophy already applied to the plain Django
 # cache's own Redis connection above (socket_connect_timeout/socket_timeout).
 CELERY_RESULT_BACKEND_TRANSPORT_OPTIONS = {"retry_policy": {"timeout": 5.0}}
+# With a Redis broker and CELERY_TASK_ACKS_LATE, any message unacked past
+# visibility_timeout is redelivered to another worker - Redis's default is
+# 3600s, which exactly equals both the hard CELERY_TASK_TIME_LIMIT above and
+# the longest countdown= this app schedules (import/export cleanup at 3600s,
+# check-in archival at ARCHIVE_VIEWER_GRACE_PERIOD = 1h). At that boundary a
+# legitimately long task, or a countdown sitting in a worker, is duplicated
+# right as it finishes/fires. Keep this comfortably above
+# max(time_limit, longest countdown); raise it if either grows.
+CELERY_BROKER_TRANSPORT_OPTIONS = {"visibility_timeout": 2 * 60 * 60}
 CELERY_ACCEPT_CONTENT = ["json"]
 CELERY_TASK_SERIALIZER = "json"
 CELERY_RESULT_SERIALIZER = "json"

@@ -2010,3 +2010,27 @@ fixing several tests to build real GooglePlace rows. `enrichment.py`/`external_d
 carry seven "TODO: Catch specific exceptions" blanket handlers - each is a deliberate
 "never let one source break the cycle" guard, so narrowing them is safe only with
 per-source failure tests.
+
+## Codebase audit (2026-08-06, module 3: tasks/consumers/celery) - findings & fixes
+
+- **Redis visibility_timeout was the default 3600s with acks_late on** - exactly equal to
+  both the hard CELERY_TASK_TIME_LIMIT and the longest countdown= this app schedules
+  (import/export cleanup 3600s, check-in archival grace 1h). At that boundary a
+  legitimately long task, or a countdown sitting unacked in a worker, is redelivered and
+  runs twice. Now pinned to 2h via CELERY_BROKER_TRANSPORT_OPTIONS; keep it above
+  max(time_limit, longest countdown) if either grows.
+- **Two raw `.delay()` calls bypassed `safely_enqueue_task`** (DM address-mention
+  detection inside an on_commit callback, and fact-confidence recompute after evidence
+  recording). Both fire after their row is durably saved, so a broker outage turned an
+  already-successful write into a 500. Routed through the guarded helper; the facts test
+  that asserted on `.delay` re-pointed to the enqueue seam.
+
+Verified clean elsewhere: every signal connect carries dispatch_uid; every
+`.objects.get(pk=)` in tasks.py is DoesNotExist-guarded; no @shared_task lives outside
+tasks.py; consumers never touch the ORM outside database_sync_to_async; the beat schedule
+references no missing task, and no task is unreferenced. Queue split (default "celery" +
+"panel_fetch") matches the two workers' -Q flags.
+
+Also: the pre-audit full suite completed 10018 passed / 1 failed, the one failure being
+the facts test above mid-run (the run's snapshot was taken before that fix) - i.e. the
+tree entering this audit was fully green.
