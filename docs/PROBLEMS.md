@@ -2666,3 +2666,20 @@ The broker change made while chasing the first hypothesis was kept: pointing `CE
 `memory://` in tests is correct on its own merits, for the same reason as the cache - `apply_async`
 should not need a live service, and a test asserting that a request only *scheduled* work now sees
 that rather than a swallowed connection error.
+
+## Unit 20 (deferred item, now fixed): pin creation no longer blocks on an AI call
+
+`PinSerializer.create()` called `AutoTagService().suggest_for_pin(pin, apply=True)` inline. That
+service runs a keyword stage and then, for any label the keywords missed, calls the LLM gateway -
+a network round-trip. So every pin created through the REST API, or through an import that goes
+via this serializer, waited on an LLM before the response returned.
+
+This is the recurring two-call-sites shape again, and the fix was already sitting there: the task
+`tasks.suggest_pin_category` exists and both other creation paths
+(`services.pins.pin_creation` and the Google Maps import) already enqueue it. Only the serializer
+was left behind. It now enqueues the same task.
+
+Nothing in the response depended on the tagging having run - the previous code swallowed the
+service's exceptions, so a failed tagging attempt was already invisible to the caller. Four tests
+pin the new behaviour, including that the pin is still created when the broker is unreachable
+(`safely_enqueue_task` returns None) and that a create still isn't treated as an explicit rename.
