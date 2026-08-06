@@ -18,6 +18,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.profile.model import Profile
 
@@ -27,10 +28,11 @@ def _hx_trigger_events(response) -> dict:
     return json.loads(header) if header else {}
 
 
-class PinPanelLiveRefreshTests(TestCase):
+class PinPanelLiveRefreshTests(RedataConfiguredMixin, TestCase):
     """PinController._notify_panel_ready: only fires on a poll (attempt >= 1)."""
 
     def setUp(self) -> None:
+        super().setUp()
         baker.make(User)  # first user is auto-promoted to bootstrap site admin
         user = baker.make(User)
         self.profile = Profile.objects.get(user=user)

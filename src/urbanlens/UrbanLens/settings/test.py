@@ -30,6 +30,21 @@ CACHES = {
     },
 }
 
+# Same reasoning as CACHES above, for the Celery broker. base.py points it at
+# valkey, so every `apply_async` in a test opened a real broker connection - which
+# the network guard blocks, raising RuntimeError, which `safely_enqueue_task`
+# catches and reports as "broker unreachable" by returning None. Callers that treat
+# that as "give up quietly" then took their failure path: the pin-detail panel views
+# returned 204 instead of a panel, and twelve tests failed asserting a behaviour the
+# code only exhibits when the broker is down.
+#
+# `memory://` is Celery's in-process transport - enqueueing succeeds and needs
+# nothing running. Tasks still do not execute, since no worker consumes the queue
+# and CELERY_TASK_ALWAYS_EAGER stays opt-in via UL_CELERY_TASK_ALWAYS_EAGER, so a
+# test asserting a request only *scheduled* work still sees exactly that.
+CELERY_BROKER_URL = "memory://"
+CELERY_RESULT_BACKEND = "cache+memory://"
+
 # No clamd daemon runs in the test environment - tests that exercise the
 # malware-rejection path (services.security.malware_scan) mock it explicitly; every
 # other upload test should hit the "clean" no-op path instead of a 503 from

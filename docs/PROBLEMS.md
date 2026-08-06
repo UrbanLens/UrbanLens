@@ -2629,3 +2629,40 @@ being deleted between enqueue and run. The endpoint now returns `{"queued": N}` 
 the photos will appear shortly rather than claiming they are already there. Eight tests cover it,
 including that nothing is materialized in-request, that the 20-item cap still holds, and that a
 malformed entry is reported without stopping the rest of the batch.
+
+## The 12 panel 204 failures: stale tests, not a product bug (2026-08-06)
+
+Verdict: **the panels behave correctly; the tests predated the REData migration.** Nearly every
+info panel is REData-backed now, and each one's `gate()` ends in `redata_configured()`, which reads
+`UL_REDATA_API_URL`/`UL_REDATA_API_KEY` live from app settings. Neither is set in a test
+environment, so the gate refuses and `panel_info` degrades to a quiet 204 - exactly right for an
+install with no REData, and invisible to a test written when the panel simply rendered. The sibling
+test that passes seeds `nominatim`, which is not REData-backed; that is the whole of the
+source-specific split.
+
+Fixed by adding a `RedataConfiguredMixin` (`tests/hypothesis/redata_helpers.py`) to the four
+affected classes. It patches the two *settings values* rather than the `redata_configured` symbol,
+because every plugin module imports that function by name - patching it at its origin would miss
+them all, and patching per module means enumerating every module a test happens to touch. The
+function reads settings at call time, so setting them covers all of them at once. Tests that
+specifically want the unconfigured behaviour keep patching their own module's symbol, which is the
+existing convention (see `test_inaturalist_panel.py`).
+
+Two of the twelve survived that fix, for a second and unrelated reason:
+`PinPanelLiveRefreshTests.setUp` never called `super().setUp()`, so the mixin - and the project's
+own `TestCase.setUp` - never ran for that class. Added the call.
+
+All 50 tests across the three files now pass.
+
+Worth recording how this was found, because the first three attempts were wrong. I hypothesised in
+turn that the Celery broker was unreachable (plausible - `safely_enqueue_task` catches the guard's
+`RuntimeError` and reports "broker unreachable", and the view treats that as "give up quietly"),
+that `render_context` had changed shape, and that the baker recipe placed the pin at null island.
+Each was consistent with the symptom and each was wrong. What settled it in one run was a throwaway
+probe test printing the actual intermediate values - `gate(pin): False` - rather than more reading.
+Reaching for that earlier would have saved three test cycles at ~3 minutes each.
+
+The broker change made while chasing the first hypothesis was kept: pointing `CELERY_BROKER_URL` at
+`memory://` in tests is correct on its own merits, for the same reason as the cache - `apply_async`
+should not need a live service, and a test asserting that a request only *scheduled* work now sees
+that rather than a swallowed connection error.

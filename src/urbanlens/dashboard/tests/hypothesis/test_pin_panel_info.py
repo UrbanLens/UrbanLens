@@ -16,6 +16,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, panel_sources
 
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
 
 
-class PanelInfoDispatchTests(TestCase):
+class PanelInfoDispatchTests(RedataConfiguredMixin, TestCase):
     """PinController.panel_info() - generic routing shared by every InfoPanelSource."""
 
     def setUp(self) -> None:
@@ -103,7 +104,7 @@ class PanelInfoDispatchTests(TestCase):
         self.assertContains(response, "10km N of Nowhere")
 
 
-class PanelAiExtractButtonTests(TestCase):
+class PanelAiExtractButtonTests(RedataConfiguredMixin, TestCase):
     """AI extract buttons inside generic panels: opt-in per link, gated on the AI feature."""
 
     def setUp(self) -> None:
