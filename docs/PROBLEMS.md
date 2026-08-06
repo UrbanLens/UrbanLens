@@ -2555,3 +2555,33 @@ tracked files behind the working tree. Re-ran everything that matters now that `
 Worth stating plainly: the too-strict first version passed every test I could run at the time. It
 was caught only by reading the fixtures of tests the environment could not execute. When a test
 cannot run, its assertions still encode a contract - read them.
+
+## Recheck of the place/album/overlay suites (2026-08-06)
+
+- **All 34 failures were the test suite's own cache configuration, not defects.**
+  `settings/test.py` inherited `base.py`'s Redis/valkey-backed `CACHES`, so any test whose request
+  path touched the cache depended on a live external service. Under the suite's localhost-only
+  network guard that fails with an opaque "External network access is disabled during tests" -
+  a message about the environment that says nothing about the code. Pointing the test cache at
+  locmem turned the nine suites from 34 failed / 125 passed into **159 passed**, with no other
+  change. That covers module 5's map-overlay upload fix and the albums work, whose models were
+  absent from the container when those modules were audited and had therefore never actually been
+  exercised; both are now genuinely verified.
+
+  This was worth fixing at the source rather than per test class. It is also correct on its own
+  merits: tests previously shared one cache instance, so entries could bleed between them, and
+  locmem is per-process and needs nothing running.
+
+- **The container held 10 orphaned test files** for modules this audit deleted earlier -
+  `test_abstract_serializer` (module 1 removed `abstract.Serializer`), the five search-provider
+  suites (module 4), and the Smithsonian/Internet Archive/NPS gateway suites (migrated to REData).
+  None are tracked in the repo; they were leftovers from the old image, and they aborted full-suite
+  collection with import errors for modules that no longer exist. Removed, so the container's tree
+  now matches the repo exactly.
+
+The through-line of this whole re-verification: for most of this audit, "the suite fails here" was
+treated as an immovable property of the environment and worked around one test at a time. It was a
+one-line defect in the test settings. Time spent early on making the harness trustworthy would have
+paid for itself many times over - every module's verification was weaker than it needed to be, and
+one fix (the pin-relink gate) shipped a regression that a runnable suite would have caught
+immediately.
