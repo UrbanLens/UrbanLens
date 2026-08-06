@@ -163,8 +163,6 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     azure_maps_subscription_key: str | None = Field(default=None, description="The Azure Maps subscription key (Azure Portal -> Azure Maps account -> Authentication)")
     ollama_base_url: str | None = Field(default=None, description="Base URL of a self-hosted Ollama server (e.g. http://localhost:11434) for local, free AI photo-keyword generation")
     ollama_vision_model: str = Field(default="llava", description="Ollama vision model name used for photo keyword generation")
-    mojeek_api_key: str | None = Field(default=None, description="The Mojeek Search API key")
-    marginalia_api_key: str | None = Field(default=None, description="The Marginalia Search API key ('public' is Marginalia's own shared testing key when unset)")
     openweathermap_api_key: str | None = Field(default=None, description="The openweathermap key")
     redata_api_url: str | None = Field(default=None, description="Base URL of the REData property-records service (e.g. https://redata.example.com), no trailing slash needed")
     redata_api_key: str | None = Field(default=None, description="Bearer API key for REData's external API - needs at least the parcels:read scope")

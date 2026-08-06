@@ -144,12 +144,6 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=None,
         notes="Route/drive-time legs via POST /routes/ (as_given capability only). See services.apis.locations.routing_resolution.",
     ),
-    "google_search": ServiceDefaults(
-        display_name="Google Custom Search",
-        calls_per_minute=10,
-        calls_per_day=100,
-        notes="CSE free tier: 100 queries/day hard limit.",
-    ),
     "openweathermap": ServiceDefaults(
         display_name="OpenWeatherMap",
         calls_per_minute=20,
@@ -172,12 +166,6 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=200,
         usa_only=True,
         notes="Massachusetts-based digital archive. Free API.",
-    ),
-    "news": ServiceDefaults(
-        display_name="News API",
-        calls_per_minute=10,
-        calls_per_day=100,
-        notes="Free tier varies by provider.",
     ),
     "apple_maps": ServiceDefaults(
         display_name="Apple Maps Server API",

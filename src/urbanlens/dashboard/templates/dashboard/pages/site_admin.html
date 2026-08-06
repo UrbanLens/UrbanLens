@@ -160,19 +160,6 @@
         <form method="post" action="{% url 'site_admin' %}" class="site-admin-form" id="form-name-priority">
             {% csrf_token %}
             <div class="form-row">
-                <label for="search-provider">Search provider</label>
-                <p class="form-help">
-                    Preferred provider for the "Web Search" panel on pin detail pages, tried first. If it's
-                    unconfigured, rate-limited, or fails, the remaining providers are tried automatically
-                    (SearXNG, Google, Brave, DuckDuckGo, Mojeek, Marginalia, in that order).
-                </p>
-                <select name="search_provider" id="search-provider">
-                    {% for value, label in search_provider_choices %}
-                    <option value="{{ value }}"{% if settings.search_provider == value %} selected{% endif %}>{{ label }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="form-row">
                 <label for="external-data-cache-days">External data cache duration (days)</label>
                 <p class="form-help">
                     Minimum number of days to cache external API responses before re-fetching. Applies to

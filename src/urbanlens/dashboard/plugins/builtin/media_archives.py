@@ -80,6 +80,21 @@ class LibraryOfCongressPlugin(UrbanLensPlugin):
         return [MediaPanelSource("loc", LibraryOfCongressMediaProvider.service_key, LibraryOfCongressMediaProvider)]
 
 
+class DigitalCommonwealthPlugin(UrbanLensPlugin):
+    """Digital Commonwealth media for pinned locations. Massachusetts only."""
+
+    name: ClassVar[str] = "digital_commonwealth"
+    verbose_name: ClassVar[str] = "Digital Commonwealth"
+    description: ClassVar[str] = "Photographs, maps, and documents from Massachusetts libraries, museums, and archives for the pin detail page's Media gallery. Massachusetts pins only. Via REData."
+    author: ClassVar[str] = "UrbanLens"
+
+    def get_panel_sources(self) -> list[PanelSource]:
+        """Contribute the Digital Commonwealth media-gallery provider."""
+        from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import DigitalCommonwealthMediaProvider
+
+        return [MediaPanelSource("digital_commonwealth", DigitalCommonwealthMediaProvider.service_key, DigitalCommonwealthMediaProvider)]
+
+
 class InternetArchivePlugin(UrbanLensPlugin):
     """Internet Archive media for pinned locations."""
 

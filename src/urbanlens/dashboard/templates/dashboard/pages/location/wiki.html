@@ -300,6 +300,9 @@
             <div class="media-provider-loader" id="wiki-media-loader-internet_archive"
                 hx-get="{% url 'location.wiki.media' location.slug 'internet_archive' %}"
                 hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
+            <div class="media-provider-loader" id="wiki-media-loader-digital_commonwealth"
+                hx-get="{% url 'location.wiki.media' location.slug 'digital_commonwealth' %}"
+                hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
             <div class="media-provider-loader" id="wiki-media-loader-yelp"
                 hx-get="{% url 'location.wiki.media' location.slug 'yelp' %}"
                 hx-trigger="load" hx-target="#wiki-media-grid" hx-swap="beforeend" hx-timeout="25000" hidden></div>
@@ -578,7 +581,7 @@
             photos: 'Photos', smithsonian: 'Smithsonian', wikimedia: 'Wikimedia', wikipedia_media: 'Wikipedia',
             loc: 'Library of Congress', yelp: 'Yelp', google_images: 'Google Images', google_maps: 'Google Maps',
             searxng_images: 'Web Images',
-            internet_archive: 'Internet Archive', loopnet: 'LoopNet', cris_building: 'NY Historic Preservation (CRIS)',
+            internet_archive: 'Internet Archive', digital_commonwealth: 'Digital Commonwealth', loopnet: 'LoopNet', cris_building: 'NY Historic Preservation (CRIS)',
         };
         var VOTE_URL = "{% url 'location.wiki.media.vote' location.slug %}";
         var activeTab = 'all';

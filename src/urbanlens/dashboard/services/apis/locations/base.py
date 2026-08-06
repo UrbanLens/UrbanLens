@@ -147,21 +147,6 @@ class BoundaryProvider(Service, ABC):
         return {self.boundary_kind: self.get_boundary(latitude, longitude, name=name)}
 
 
-@dataclass(slots=True)
-class StaticBoundaryProvider(BoundaryProvider):
-    """Deterministic bbox provider, kept for tests and explicit callers.
-
-    No longer part of the default provider chain: when no provider finds a
-    boundary, the effective property boundary falls back to the default circle
-    around the location's coordinates instead of a static bbox.
-    """
-
-    service_key: ClassVar[str | None] = "static_default_boundary"  # pyright: ignore[reportIncompatibleVariableOverride]
-
-    def get_boundary(self, latitude: float, longitude: float, *, name: str | None = None) -> Polygon:
-        return default_bbox(latitude, longitude)
-
-
 def create_bbox_str(latitude: float, longitude: float, delta: float = 0.005) -> str:
     return f"{longitude - delta},{latitude - delta},{longitude + delta},{latitude + delta}"
 

@@ -17,7 +17,6 @@ from urbanlens.dashboard.models.site_settings.meta import (
     DEFAULT_OPENAI_MODEL,
     AiProviderChoice,
     EnvironmentOverrideChoice,
-    SearchProviderChoice,
 )
 from urbanlens.dashboard.models.site_settings.queryset import SiteSettingsManager
 from urbanlens.UrbanLens.environments.factory import select_environment
@@ -281,15 +280,6 @@ class SiteSettings(abstract.FrontendDashboardModel):
         verbose_name="Downscale subscriber videos",
     )
 
-    # --- Search provider ---
-
-    search_provider = CharField(
-        max_length=20,
-        choices=SearchProviderChoice.choices,
-        default=SearchProviderChoice.BRAVE,
-        help_text="Preferred web search provider for pin news/search results, tried first. If it's unconfigured, rate-limited, or fails, the remaining providers (SearXNG, Google, Brave, DuckDuckGo, Mojeek, Marginalia) are tried automatically in that order.",
-        verbose_name="Search provider",
-    )
 
     external_data_cache_days = IntegerField(
         default=7,

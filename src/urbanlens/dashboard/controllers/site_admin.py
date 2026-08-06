@@ -32,7 +32,6 @@ from django.views import View
 
 from urbanlens.dashboard.models.site_settings import (
     EnvironmentOverrideChoice,
-    SearchProviderChoice,
     SiteSettings,
 )
 from urbanlens.dashboard.services.admin.infrastructure_stats import _format_duration
@@ -139,7 +138,6 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "settings": settings,
                 "page_name": "site-admin",
                 "saved": request.GET.get("saved"),
-                "search_provider_choices": SearchProviderChoice.choices,
                 "environment_override_choices": EnvironmentOverrideChoice.choices,
                 "effective_environment_label": settings.get_effective_environment_label(),
                 "env_var_environment": os.getenv("UL_ENVIRONMENT", ""),
@@ -180,11 +178,6 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
         app_title = request.POST.get("app_title", "").strip()
         if app_title:
             settings.app_title = app_title
-
-        valid_providers = set(SearchProviderChoice.values)
-        provider = request.POST.get("search_provider", "")
-        if provider in valid_providers:
-            settings.search_provider = provider
 
         try:
             cache_days = int(request.POST.get("external_data_cache_days", settings.external_data_cache_days))
@@ -837,8 +830,6 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
     "photon": "Geocoding & Places",
     "redata_geocode": "Geocoding & Places",
     # Search & News
-    "google_search": "Search & News",
-    "news": "Search & News",
     "gdelt": "Search & News",
     "marginalia_search": "Search & News",
     "mojeek_search": "Search & News",

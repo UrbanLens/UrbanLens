@@ -6,10 +6,8 @@ REData's ``GET /api/v1/reference-documents/search/`` (``../REData/docs/api-refer
 "GET /reference-documents/search/ - archival material by name") now fronts all
 three archives by name search - ``internet_archive`` (worldwide),
 ``library_of_congress`` (USA, keyless) and ``smithsonian`` (USA, needs
-``RD_SMITHSONIAN_API_KEY`` - on REData's side now, not this project's). A
-fourth provider, ``digital_commonwealth`` (Massachusetts, keyless), exists on
-REData's side too but has no UrbanLens plugin to migrate - see
-``plugins.builtin.media_archives`` for that finding.
+``RD_SMITHSONIAN_API_KEY`` - on REData's side now, not this project's) and
+``digital_commonwealth`` (Massachusetts, keyless).
 
 These four archives have no coordinate index at all - REData only ever
 searches them by name, with ``lat``/``lng`` accepted purely as a *region hint*
@@ -44,7 +42,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.services.apis.assets.base import MediaItem, MediaProvider
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
-from urbanlens.dashboard.services.geo.geo_boundary import USA
+from urbanlens.dashboard.services.geo.geo_boundary import USA, state_boundary
 
 if TYPE_CHECKING:
     from collections.abc import Generator
@@ -196,6 +194,33 @@ class LibraryOfCongressMediaProvider(_RedataReferenceDocumentProvider):
     # fallback "name") produces a search with no genuine narrowing power for
     # LOC's word-independent relevance ranking - skip the provider entirely for
     # such a pin instead of guaranteeing noisy results.
+    reject_address_derived_names: ClassVar[bool] = True
+
+
+@dataclass(slots=True, kw_only=True)
+class DigitalCommonwealthMediaProvider(_RedataReferenceDocumentProvider):
+    """Digital Commonwealth (Massachusetts statewide archives), via REData.
+
+    Unlike its three siblings, this provider never had a direct UrbanLens
+    gateway in production - a raw ``DigitalCommonwealthGateway`` existed but
+    nothing ever called it, so Massachusetts pins simply lacked the archive.
+    REData has fronted the provider all along; this class is the missing
+    UrbanLens half.
+    """
+
+    service_key: ClassVar[str] = "digital_commonwealth"
+    display_name: ClassVar[str] = "Digital Commonwealth"
+    paid_service: ClassVar[bool] = False
+    #: A Massachusetts-only collection: querying it for a pin in Ohio can only
+    #: return coincidental noise, same reasoning as LOC's USA gate.
+    geo_boundary: ClassVar[GeoBoundary | None] = state_boundary("MA")
+    _redata_provider: ClassVar[str] = "digital_commonwealth"
+
+    # Same word-independent relevance ranking as the other archives (it's a
+    # Blacklight/Solr catalog): a street address or a bare state name becomes
+    # OR-term noise rather than a narrowing signal.
+    include_address: ClassVar[bool] = False
+    search_with_country: ClassVar[bool] = False
     reject_address_derived_names: ClassVar[bool] = True
 
 

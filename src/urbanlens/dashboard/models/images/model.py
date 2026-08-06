@@ -66,6 +66,7 @@ class ImageSource(TextChoices):
     SMITHSONIAN = "smithsonian", "Smithsonian Open Access"
     LIBRARY_OF_CONGRESS = "library_of_congress", "Library of Congress"
     INTERNET_ARCHIVE = "internet_archive", "Internet Archive"
+    DIGITAL_COMMONWEALTH = "digital_commonwealth", "Digital Commonwealth"
     IMMICH = "immich", "Immich"
     FLICKR = "flickr", "Flickr"
     GOOGLE_PHOTOS = "google_photos", "Google Photos"

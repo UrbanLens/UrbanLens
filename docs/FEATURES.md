@@ -179,6 +179,7 @@ direct-only because REData's contract can't reproduce what they show:
 - **Wikipedia** — best-matching article
 - **Wikimedia Commons** — archival photos/media, direct (REData has no equivalent provider)
 - **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData
+- **Digital Commonwealth** (Massachusetts) — photographs, maps, and documents from MA libraries/museums/archives, via REData; Massachusetts pins only
 - **Media previews** — Media-gallery items in formats no browser renders (archival TIFFs, scanned
   PDF inventory/nomination forms, HEIC) are rasterized to JPEG/PNG server-side rather than left as
   a broken tile or an anonymous document icon (`services.media.previews`). Remote sources go

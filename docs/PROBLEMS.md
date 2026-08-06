@@ -2034,3 +2034,24 @@ references no missing task, and no task is unreferenced. Queue split (default "c
 Also: the pre-audit full suite completed 10018 passed / 1 failed, the one failure being
 the facts test above mid-run (the run's snapshot was taken before that fix) - i.e. the
 tree entering this audit was fully green.
+
+## Codebase audit (2026-08-06, module 4: plugins/API gateways) - findings & fixes
+
+- **Digital Commonwealth was registered everywhere except where it mattered** - the
+  rate limiter and site-admin category map both knew the service, REData has fronted it
+  all along, and a direct-API `DigitalCommonwealthGateway` sat fully dead (never called by
+  any plugin) - so Massachusetts pins simply lacked the archive. Wired the missing half:
+  `DigitalCommonwealthMediaProvider` (REData `reference-documents/search/`, MA-gated,
+  same query-shape flags as its LOC/IA siblings), a `DigitalCommonwealthPlugin`, gallery
+  loaders on both pin and wiki pages, and an `ImageSource` value so wiki-sends keep
+  attribution. Deleted the dead direct gateway. 43 plugins now discovered.
+- **The admin "Search provider" picker was a dead control** - web search moved wholesale
+  to REData's own provider chain, so `SiteSettings.search_provider` was written by the
+  admin form and read by nothing; an admin changing it changed nothing. Removed the
+  picker, the setting (migration 0037), `SearchProviderChoice`, and the never-read
+  `mojeek_api_key`/`marginalia_api_key` env settings from the same era.
+- **Orphan rate-limit registry entries removed** - `google_search` and `news` had no
+  gateway, plugin, or caller anywhere; they only rendered as permanently-zero rows in the
+  admin API-usage report.
+- **Removed `StaticBoundaryProvider`** - its docstring said "kept for tests and explicit
+  callers"; there were neither.
