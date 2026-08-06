@@ -15,6 +15,21 @@ TESTING = True
 # Test-only: base.py keeps the real hashers for every other environment.
 PASSWORD_HASHERS = ["django.contrib.auth.hashers.MD5PasswordHasher"]
 
+# The real cache is Redis/valkey-backed, which makes every test whose request path
+# touches the cache depend on a live external service. Two problems with that: the
+# suite's own network guard (core.testing_network) only permits localhost, so running
+# against a compose stack - where the cache resolves to a container bridge IP - fails
+# any such test with an opaque "External network access is disabled during tests"
+# rather than anything about the code; and tests would otherwise share one cache
+# instance, so entries bleed between them. locmem is per-process and needs nothing
+# running.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.locmem.LocMemCache",
+        "LOCATION": "urbanlens-tests",
+    },
+}
+
 # No clamd daemon runs in the test environment - tests that exercise the
 # malware-rejection path (services.security.malware_scan) mock it explicitly; every
 # other upload test should hit the "clean" no-op path instead of a 503 from
