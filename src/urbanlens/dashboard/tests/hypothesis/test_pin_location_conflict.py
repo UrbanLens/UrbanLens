@@ -48,6 +48,17 @@ class SlugOrUuidQuerySetTests(TestCase):
 
 
 class PinRelinkViewTests(TestCase):
+    """PinRelinkView's merge-vs-relink behaviour.
+
+    Every ``target`` here sits within ~50 m of ``self.origin`` on purpose. Relinking
+    is what confers wiki access (``location_visible_to`` grants on an exact Location
+    match), so the view only accepts a target the profile can already reach or one
+    covering the pin's own coordinate - the 50 m proximity fallback for place-less
+    coordinates is what puts these inside the pin's own access domain. These
+    coordinates used to be kilometres apart, which quietly asserted that relinking to
+    an arbitrary Location was allowed; that is the hole, not the contract.
+    """
+
     def setUp(self) -> None:
         baker.make(User)  # first user is auto-promoted to bootstrap site admin
         self.user = baker.make(User)
@@ -61,7 +72,7 @@ class PinRelinkViewTests(TestCase):
         return self.client.post(reverse("pin.link.to", args=[self.pin.slug, location_slug]), **headers)
 
     def test_relinks_to_a_location_with_no_existing_pin(self) -> None:
-        target = baker.make(Location, latitude="40.71", longitude="-74.01")
+        target = baker.make(Location, latitude="40.7001", longitude="-74.00")
         response = self._post(target.slug)
         self.assertEqual(response.status_code, 200)
         self.pin.refresh_from_db()
@@ -70,7 +81,7 @@ class PinRelinkViewTests(TestCase):
 
     def test_relinks_to_a_target_location_with_null_slug_via_uuid_fallback(self) -> None:
         """Regression: the client sends `loc.slug or str(loc.uuid)` - the server must accept either."""
-        target = baker.make(Location, latitude="40.72", longitude="-74.02")
+        target = baker.make(Location, latitude="40.7002", longitude="-74.00")
         Location.objects.filter(pk=target.pk).update(slug=None)
         response = self._post(str(target.uuid))
         self.assertEqual(response.status_code, 200)
@@ -101,14 +112,14 @@ class PinRelinkViewTests(TestCase):
         self.assertIn(existing_pin.slug, payload["existing_pin_url"])
 
     def test_plain_relink_via_xhr_reports_not_merged(self) -> None:
-        target = baker.make(Location, latitude="40.75", longitude="-74.05")
+        target = baker.make(Location, latitude="40.7003", longitude="-74.00")
         response = self._post(target.slug, xhr=True)
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["merged"])
 
     def test_another_profiles_pin_at_the_target_location_does_not_trigger_a_merge(self) -> None:
         """The unique constraint is scoped per-profile - someone else's pin there isn't a conflict."""
-        target = baker.make(Location, latitude="40.76", longitude="-74.06")
+        target = baker.make(Location, latitude="40.7004", longitude="-74.00")
         baker.make(Pin, profile=_profile(), location=target)
 
         response = self._post(target.slug)

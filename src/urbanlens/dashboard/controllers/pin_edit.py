@@ -580,13 +580,23 @@ class PinRelinkView(LoginRequiredMixin, View):
             location = get_object_or_404(Location.objects.slug_or_uuid(location_slug))
             # Which Location a pin points at is not a neutral preference - it is what
             # confers access, since location_visible_to grants on an exact Location
-            # match. Without this check, relinking is a way to *earn* a community wiki
-            # rather than discover one, and a Location's slug is its official_name, so
-            # the slug of any notable place is guessable. Every legitimate target
-            # already passes: the picker offers the pin's own location plus
-            # competing_wiki_locations, which is filtered to accessible domains, and the
-            # wiki page's switch button offers those same candidates.
-            if not location_visible_to(location, pin.profile):
+            # match. Unchecked, relinking is a way to *earn* a community wiki rather
+            # than discover one, and a Location's slug is its official_name, so the slug
+            # of any notable place is guessable.
+            #
+            # A target qualifies two ways, matching the two things the UI actually
+            # offers. Either the profile can already reach it (the picker and the wiki
+            # page's switch button both offer only candidates filtered to accessible
+            # domains), or it covers the pin's own coordinate - the map's
+            # location-conflict dialog offers exactly those, and a place the user's own
+            # pin sits inside is one they discovered by pinning it, so allowing it
+            # discloses nothing they could not already derive. Both are checked against
+            # the pin's own point, never against an arbitrary slug from the URL.
+            if not (
+                location.pk == pin.location_id
+                or location_visible_to(location, pin.profile)
+                or Location.objects.get_all_for_point(pin.effective_latitude, pin.effective_longitude).filter(pk=location.pk).exists()
+            ):
                 raise Http404
             # A profile can only ever have one root pin per location
             # (db_pin_unique_location_per_profile) - if one already exists at the

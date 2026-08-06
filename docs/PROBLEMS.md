@@ -2514,3 +2514,44 @@ like-for-like, and that is what the no-regression conclusions rest on), but any 
 "the suite passes" reading of those runs was weaker than it looked. `docker cp src/urbanlens/.
 urbanlens_devs1_app:/app/src/urbanlens/` resyncs it; the pin-relink fix above was re-verified both
 ways *after* syncing. Worth checking the container is current before trusting a test run here.
+
+## Re-verification against the synced container (2026-08-06)
+
+Every `docker exec ... pytest` run in this audit before the resync executed against an image 30
+tracked files behind the working tree. Re-ran everything that matters now that `/app/src` matches.
+
+- **All 36 regression tests this audit added still pass** against current code with the full
+  migration set (0026-0038 present, so a fresh test database). The bun suite is green at 152/152
+  and `tsc --noEmit` is clean. No fix in modules 1-11 or the second pass depended on the stale
+  schema.
+
+- **The container also held 46 files that no longer exist in the repo**, since `docker cp` adds but
+  never deletes. Five were deleted plugin modules under `plugins/builtin/` - and
+  `plugin_registry.discover()` scans that directory, so the container was registering
+  `duckduckgo`, `marginalia`, `mojeek`, `searxng` and `opentopomap` as live plugins after module 4
+  removed them. Deleted them so discovery matches the codebase. No stale *migrations* were present,
+  so the migration graph was never wrong.
+
+- **Correction to the pin-relink fix (a regression I introduced and caught here).** The first
+  version gated relinking on `location_visible_to` alone. That was too strict: `PinRelinkViewTests`
+  - six pre-existing tests I could not run before the resync - relink to a bare `Location` with no
+  `Place` row, which that predicate rejects. Since the Places feature is recent (migrations
+  0026-0028) and `Location.place` is nullable, a place-less target is an ordinary production case,
+  not a test artifact, so the strict gate would have broken real relinking.
+
+  The gate now accepts a target two ways, matching what the UI actually offers: one the profile can
+  already reach, *or* one covering the pin's own coordinate (`get_all_for_point`, which falls back
+  to a 50 m proximity check for place-less coordinates). A place the user's own pin sits inside is
+  one they discovered by pinning it, so allowing it discloses nothing they could not derive - while
+  a Location kilometres away with no relationship, which is the attack, is still refused.
+
+  Four of those six tests placed their target kilometres from the pin, which quietly asserted that
+  relinking to an arbitrary Location was allowed - the hole itself, encoded as a contract. Moved
+  them inside the pin's own domain, preserving exactly what each test verifies (uuid-slug fallback,
+  merge-vs-relink, another profile's pin not triggering a merge), and documented on the class why
+  the coordinates are deliberate. All six pass with the corrected gate, as do the five
+  pin-relink-access security tests.
+
+Worth stating plainly: the too-strict first version passed every test I could run at the time. It
+was caught only by reading the fixtures of tests the environment could not execute. When a test
+cannot run, its assertions still encode a contract - read them.
