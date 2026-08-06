@@ -16,6 +16,7 @@ from unittest.mock import patch
 from django.contrib.gis.geos import Point
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.images.model import Image, MediaKind
@@ -279,12 +280,17 @@ class PrewarmSpotguessrRoundTaskTests(TestCase):
         session.total_rounds = 2
         session.save(update_fields=["total_rounds"])
 
-        round_1 = get_or_create_round(session)
-        assert round_1 is not None
+        # get_or_create_round enqueues the *next* round's prewarm; running it
+        # inline is what this test is actually about (see
+        # core.tests.celery_inline - its docstring's "Celery's eager-mode test
+        # setting" was never actually configured anywhere).
+        with tasks_run_inline(prewarm_spotguessr_round):
+            round_1 = get_or_create_round(session)
+            assert round_1 is not None
 
-        guess_point = Point(float(round_1.location.longitude), float(round_1.location.latitude), srid=4326)
-        with patch("urbanlens.dashboard.services.spotguessr.session.generate_round_content") as mock_generate:
-            submit_guess(round_1, profile, guess_point)
+            guess_point = Point(float(round_1.location.longitude), float(round_1.location.latitude), srid=4326)
+            with patch("urbanlens.dashboard.services.spotguessr.session.generate_round_content") as mock_generate:
+                submit_guess(round_1, profile, guess_point)
 
         mock_generate.assert_not_called()
         round_2 = GameRound.objects.for_session(session).get(sequence_index=1)

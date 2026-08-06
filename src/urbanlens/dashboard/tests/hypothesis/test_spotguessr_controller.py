@@ -9,6 +9,7 @@ from django.core.files.base import ContentFile
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import tasks_run_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.images.model import Image, MediaKind
@@ -557,8 +558,13 @@ class SpotGuessrHomeViewPrewarmTests(TestCase):
 
     def test_visiting_the_page_prewarms_round_one_for_the_default_mode(self) -> None:
         from urbanlens.dashboard.services.spotguessr import prewarm
+        from urbanlens.dashboard.tasks import prewarm_spotguessr_solo_start
 
-        response = self.client.get(reverse("spotguessr"))
+        # The view enqueues the speculative prewarm rather than doing it; with
+        # no worker draining the broker it would simply never happen (see
+        # core.tests.celery_inline).
+        with tasks_run_inline(prewarm_spotguessr_solo_start):
+            response = self.client.get(reverse("spotguessr"))
 
         self.assertEqual(response.status_code, 200)
         cached = prewarm.consume_for_solo_start(self.profile.pk, SpotGuessrMode.PHOTOS, GameConfig())

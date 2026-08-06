@@ -179,7 +179,23 @@ class PinMarkupToJsonTests(TestCase):
         self.assertIsInstance(self.markup.to_json()["uuid"], str)
 
     def test_all_required_keys_present(self) -> None:
-        required = {"uuid", "markup_type", "geometry", "label", "color", "stroke_width", "border_color", "fill_opacity", "border_opacity", "security_indicator"}
+        # Exact equality on purpose: it also catches a field being published to
+        # the frontend by accident. "layer_uuid" is here because custom layers
+        # made it part of the contract (see CustomLayer) - it had been missing
+        # from this set since then.
+        required = {
+            "uuid",
+            "markup_type",
+            "geometry",
+            "label",
+            "color",
+            "stroke_width",
+            "border_color",
+            "fill_opacity",
+            "border_opacity",
+            "security_indicator",
+            "layer_uuid",
+        }
         self.assertEqual(required, set(self.markup.to_json()))
 
 

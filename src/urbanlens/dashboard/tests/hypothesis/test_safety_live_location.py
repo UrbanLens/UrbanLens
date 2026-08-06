@@ -17,6 +17,7 @@ from django.utils import timezone
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.consumers import SafetyCheckinChatConsumer
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus
@@ -200,9 +201,11 @@ class SafetyCheckinLocationGroupScopingTests(TransactionTestCase):
         connected, _ = await session_comm.connect()
         self.assertTrue(connected)
 
-        await database_sync_to_async(update_live_location)(self.checkin, latitude=1.0, longitude=2.0, accuracy=None)
-
-        session_msg = json.loads(await session_comm.receive_from())
+        # Location updates reach a socket via a group_send the service enqueues
+        # rather than performs (see core.tests.celery_inline).
+        with broadcasts_delivered_inline():
+            await database_sync_to_async(update_live_location)(self.checkin, latitude=1.0, longitude=2.0, accuracy=None)
+            session_msg = json.loads(await session_comm.receive_from())
         self.assertEqual(session_msg["type"], "location_update")
         self.assertEqual(session_msg["latitude"], 1.0)
 
@@ -235,9 +238,9 @@ class SafetyCheckinLocationGroupScopingTests(TransactionTestCase):
         connected, _ = await partner_comm.connect()
         self.assertTrue(connected)
 
-        await database_sync_to_async(update_live_location)(self.checkin, latitude=40.0, longitude=-74.0, accuracy=5.0)
-
-        msg = json.loads(await partner_comm.receive_from())
+        with broadcasts_delivered_inline():
+            await database_sync_to_async(update_live_location)(self.checkin, latitude=40.0, longitude=-74.0, accuracy=5.0)
+            msg = json.loads(await partner_comm.receive_from())
         self.assertEqual(msg["type"], "location_update")
         self.assertEqual(msg["latitude"], 40.0)
         self.assertEqual(msg["longitude"], -74.0)

@@ -28,16 +28,29 @@ def _touch(path: Path, when: datetime, size: int = 1) -> None:
     os.utime(path, (timestamp, timestamp))
 
 
+# ``backup_files`` counts only files matching DatabaseBackup's own
+# ``backup_<YYYYMMDD>_<HHMMSS>.sql`` scheme, so a stray file can never inflate
+# admin-facing stats or be mistaken for a completed backup (see
+# core.controllers.backups.db.BACKUP_FILENAME_RE). Fixtures must therefore use
+# real backup names - these tests previously used "old.sql"/"a.sql" and so
+# asserted against a directory the helper correctly saw as empty.
+def _backup_name(when: datetime) -> str:
+    """A filename in DatabaseBackup's own naming scheme for ``when``."""
+    return f"backup_{when:%Y%m%d_%H%M%S}.sql"
+
+
 class BackupFilesTests(SimpleTestCase):
     """backup_files returns existing files newest-first."""
 
     def test_returns_only_files_sorted_by_mtime_descending(self) -> None:
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
-            old = root / "old.sql"
-            new = root / "new.sql"
-            (root / "nested").mkdir()
             base = datetime(2026, 1, 1, tzinfo=UTC)
+            old = root / _backup_name(base)
+            new = root / _backup_name(base + timedelta(hours=1))
+            (root / "nested").mkdir()
+            # A stray non-backup file must be ignored rather than counted.
+            (root / "notes.txt").write_bytes(b"x")
             _touch(old, base)
             _touch(new, base + timedelta(hours=1))
 
@@ -84,8 +97,8 @@ class CollectBackupStatsTests(SimpleTestCase):
         with TemporaryDirectory() as tmp:
             root = Path(tmp)
             base = datetime(2026, 1, 1, tzinfo=UTC)
-            _touch(root / "a.sql", base, size=1024)
-            _touch(root / "b.sql", base + timedelta(hours=2), size=2048)
+            _touch(root / _backup_name(base), base, size=1024)
+            _touch(root / _backup_name(base + timedelta(hours=2)), base + timedelta(hours=2), size=2048)
 
             with (
                 mock.patch("urbanlens.dashboard.services.admin.backups.app_settings.backups_dir", root),

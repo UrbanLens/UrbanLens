@@ -15,6 +15,7 @@ from django.contrib.auth.models import AnonymousUser
 from django.test import TransactionTestCase, override_settings
 from model_bakery import baker
 
+from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
 from urbanlens.dashboard.consumers import TriviaSessionConsumer
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.location.model import Location
@@ -113,9 +114,11 @@ class TriviaSessionConsumerTests(TransactionTestCase):
         connected, _ = await guest_comm.connect()
         self.assertTrue(connected)
 
-        await host_comm.send_to(text_data=json.dumps({"body": "hello team"}))
-
-        host_recv = json.loads(await host_comm.receive_from())
+        # The consumer enqueues its broadcast rather than performing it (see
+        # core.tests.celery_inline), so without this the group_send never happens.
+        with broadcasts_delivered_inline():
+            await host_comm.send_to(text_data=json.dumps({"body": "hello team"}))
+            host_recv = json.loads(await host_comm.receive_from())
         guest_recv = json.loads(await guest_comm.receive_from())
         self.assertEqual(host_recv["type"], "chat.message")
         self.assertEqual(host_recv["message"]["body"], "hello team")

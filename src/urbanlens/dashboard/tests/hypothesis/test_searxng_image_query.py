@@ -63,9 +63,15 @@ class AssembleImageQueryTests(SimpleTestCase):
         for term in SUBJECT_TERMS:
             self.assertIn(f'"{term}"', query)
 
+    # "(" is excluded from the generated terms alongside '"' because this test
+    # counts group delimiters by counting "(" characters: a generated term that
+    # itself contains a parenthesis is indistinguishable from a group opener and
+    # made the count read one too high. Whether a paren *inside* a quoted term
+    # is handled correctly is a separate question from how many groups there
+    # are, and is not what this property is about.
     @given(
-        st.lists(st.text(min_size=1, max_size=20).filter(lambda s: s.strip() and '"' not in s), min_size=1, max_size=5, unique_by=lambda s: s.strip().casefold()),
-        st.lists(st.text(min_size=1, max_size=20).filter(lambda s: s.strip() and '"' not in s), min_size=0, max_size=3, unique_by=lambda s: s.strip().casefold()),
+        st.lists(st.text(min_size=1, max_size=20).filter(lambda s: s.strip() and '"' not in s and "(" not in s), min_size=1, max_size=5, unique_by=lambda s: s.strip().casefold()),
+        st.lists(st.text(min_size=1, max_size=20).filter(lambda s: s.strip() and '"' not in s and "(" not in s), min_size=0, max_size=3, unique_by=lambda s: s.strip().casefold()),
     )
     @_hyp
     def test_group_count_matches_present_components(self, aliases: list[str], area: list[str]):

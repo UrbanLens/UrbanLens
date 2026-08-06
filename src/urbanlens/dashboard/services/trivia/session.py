@@ -268,7 +268,13 @@ def get_or_create_round(session: TriviaSession) -> TriviaRound | None:
     existing_rounds = list(TriviaRound.objects.for_session(session).select_related("question"))
     if existing_rounds:
         last_round = existing_rounds[-1]
-        if TriviaAnswer.objects.for_round(last_round).count() < participant_count:
+        # A revealed round is finished no matter how many people answered it.
+        # Testing only the answer count treated a *force*-revealed round (the
+        # stall sweep's whole purpose - see force_reveal_round) as still in
+        # progress, so it was handed back here forever: the session could
+        # neither advance to the next round nor complete, because
+        # _advance_or_complete only completes when this returns None.
+        if last_round.revealed_at is None and TriviaAnswer.objects.for_round(last_round).count() < participant_count:
             return last_round
 
     if len(existing_rounds) >= session.total_rounds:
