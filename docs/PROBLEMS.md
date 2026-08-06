@@ -2700,3 +2700,29 @@ the rest, and accept actually marking the suggestion handled.
 Still open from this item: `TripActivity.order` has no uniqueness constraint or locking, so two
 concurrent reorders can interleave. That is the same check-then-act family the second pass covered,
 and is left for a dedicated pass rather than bundled in here.
+
+## Unit 09/10 (second half, now fixed): trip activity ordering was unserialised
+
+Two check-then-act sequences share the `order` column, and a threaded test reproduces both.
+
+`reorder_activities` validated that the submitted ids are an exact permutation of the trip's
+non-completed activities, then applied the positions with one `update()` per row, holding nothing
+in between. Two members dragging the itinerary at once interleave: the observed result was
+`[1, 2, 3, 3]` - one position written twice, another lost entirely, and a final order neither
+member asked for. An activity added between the check and the writes also invalidates the
+permutation the check just approved.
+
+`create_activity` appended at `order=trip.activities.count()`, so two concurrent adds both read the
+same count and both took that position. The same `count()` backs the `max_trip_activities` quota,
+so the pair could also both pass a quota only one of them should have.
+
+**A unique constraint on `(trip, order)` is not the fix**, which is worth recording because it is
+the obvious first idea and it would break the feature. Positions are applied one row at a time, so
+a partial permutation legitimately collides mid-loop; and reordering only covers non-completed
+activities, leaving completed ones holding positions that overlap the reassigned range by design.
+Both would violate the constraint during normal use.
+
+Serialising on the parent trip - the same shape as the Consensus tentative-answer fix - matches how
+the data is actually used. In `create_activity` the lock is entered *after* place resolution, so it
+covers only the read-then-write section rather than a geocoding round-trip. The trip controller's
+own 92 tests pass alongside the three new race tests.

@@ -21,6 +21,7 @@ from __future__ import annotations
 import datetime
 from typing import TYPE_CHECKING, Any
 
+from django.db import transaction
 from django.db.models import F
 from django.utils import timezone
 
@@ -504,24 +505,32 @@ def create_activity(
     if clean_status not in SETTABLE_STATUSES:
         clean_status = TripActivity.STATUS_PROPOSED
 
-    max_activities = SiteSettings.get_current().max_trip_activities
-    if max_activities > 0 and trip.activities.count() >= max_activities:
-        raise TripQuotaError(f"This trip already has the maximum of {max_activities} activities.")
+    # Serialised on the trip, and entered only after the slow work (place resolution)
+    # is done, so the lock covers just the read-then-write section. Both the quota
+    # check and the append position count the same rows they are about to add to:
+    # unserialised, two members adding at once both read the same count, so both take
+    # the same `order` and both pass a quota that only one of them should have.
+    with transaction.atomic():
+        Trip.objects.select_for_update().filter(pk=trip.pk).first()
 
-    activity = TripActivity.objects.create(
-        trip=trip,
-        location=location,
-        pin=pin,
-        added_by=actor,
-        title=clean_title,
-        notes=clean_notes,
-        scheduled_at=scheduled_at,
-        scheduled_end=scheduled_end,
-        order=trip.activities.count(),
-        status=clean_status,
-        child_trip=child_trip,
-        location_hidden=_as_bool(location_hidden),
-    )
+        max_activities = SiteSettings.get_current().max_trip_activities
+        if max_activities > 0 and trip.activities.count() >= max_activities:
+            raise TripQuotaError(f"This trip already has the maximum of {max_activities} activities.")
+
+        activity = TripActivity.objects.create(
+            trip=trip,
+            location=location,
+            pin=pin,
+            added_by=actor,
+            title=clean_title,
+            notes=clean_notes,
+            scheduled_at=scheduled_at,
+            scheduled_end=scheduled_end,
+            order=trip.activities.count(),
+            status=clean_status,
+            child_trip=child_trip,
+            location_hidden=_as_bool(location_hidden),
+        )
     # Putting a place on the itinerary reveals it to every member - that counts
     # in the sharer's reshare chain like any other pin share.
     from urbanlens.dashboard.services.trips.trip_share_tracking import record_trip_activity_shares
@@ -841,9 +850,23 @@ def reorder_activities(trip: Trip, actor: Profile, order: Sequence[int]) -> None
     """
     require_perform(actor, trip, trip.allow_edit_activities, REORDER_ACTIVITY_DENIED)
 
-    valid_ids = set(trip.activities.exclude(status=TripActivity.STATUS_COMPLETED).values_list("id", flat=True))
-    if not order or len(order) != len(valid_ids) or set(order) != valid_ids:
-        raise TripValidationError("The order must include exactly the trip's current non-completed activities.")
+    # Serialised on the trip, and the permutation check has to be inside the same
+    # critical section as the writes it authorises. Two members dragging the itinerary
+    # at once otherwise interleave their per-row updates and the trip lands in an order
+    # neither asked for, with one position written twice and another lost - and an
+    # activity added between the check and the writes invalidates the permutation the
+    # check just approved.
+    #
+    # A unique constraint on (trip, order) would not do this job: positions are applied
+    # one row at a time, so a partial permutation legitimately collides mid-loop, and
+    # completed activities keep their existing positions, which overlap the reassigned
+    # range by design.
+    with transaction.atomic():
+        Trip.objects.select_for_update().filter(pk=trip.pk).first()
 
-    for position, activity_id in enumerate(order):
-        TripActivity.objects.filter(id=activity_id, trip=trip).update(order=position)
+        valid_ids = set(trip.activities.exclude(status=TripActivity.STATUS_COMPLETED).values_list("id", flat=True))
+        if not order or len(order) != len(valid_ids) or set(order) != valid_ids:
+            raise TripValidationError("The order must include exactly the trip's current non-completed activities.")
+
+        for position, activity_id in enumerate(order):
+            TripActivity.objects.filter(id=activity_id, trip=trip).update(order=position)
