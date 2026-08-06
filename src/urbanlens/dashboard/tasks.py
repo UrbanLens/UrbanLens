@@ -3130,3 +3130,57 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
     add_images_to_album(album, [image], profile)
     queue_relevance_vote(image, profile, is_relevant=True)
     return image.pk
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def cache_media_item_into_wiki(wiki_id: int, profile_id: int, source: str, url: str, page_url: str = "", caption: str = "") -> int | None:
+    """Download an external media item and attach the local copy to a wiki.
+
+    The wiki-send counterpart to :func:`cache_media_item_into_album`, and split the
+    same way: the request validates and enqueues, this owns the slow half. Sending a
+    full gallery selection meant up to 20 remote downloads inside one request, which
+    is both a multi-second hang with no progress indicator and a request that can time
+    out partway, leaving some photos attached and the rest silently dropped.
+
+    Tolerates the wiki or profile being deleted between enqueue and run - by then the
+    work is simply moot, which is not an error worth retrying.
+
+    Args:
+        wiki_id: PK of the Wiki to attach the photo to.
+        profile_id: PK of the Profile the download is attributed to.
+        source: Provider panel key (e.g. ``"wikimedia"``).
+        url: The item's full-resolution image url.
+        page_url: Optional provider page url, for attribution.
+        caption: Optional caption carried from the gallery tile.
+
+    Returns:
+        PK of the materialized Image, or None if the wiki/profile vanished or the
+        download failed.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
+
+    wiki = Wiki.objects.filter(pk=wiki_id).select_related("location").first()
+    profile = Profile.objects.filter(pk=profile_id).first()
+    if wiki is None or profile is None:
+        logger.info("cache_media_item_into_wiki: wiki %s or profile %s no longer exists", wiki_id, profile_id)
+        return None
+    if wiki.location is None:
+        logger.info("cache_media_item_into_wiki: wiki %s has no location to attach media to", wiki_id)
+        return None
+
+    try:
+        image = materialize_media_item(
+            location=wiki.location,
+            profile=profile,
+            source=source,
+            url=url,
+            page_url=page_url,
+            caption=caption,
+            wiki=wiki,
+        )
+    except MaterializeError:
+        logger.warning("cache_media_item_into_wiki: failed to materialize %s for wiki %s", url, wiki_id)
+        return None
+    return image.pk

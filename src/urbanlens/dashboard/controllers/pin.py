@@ -747,9 +747,14 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
     @action(detail=True, methods=["post"])
     def media_send_to_wiki(self, request: Request, pin_slug: str):
-        """Materialize selected Media gallery items and attach them to this location's wiki."""
+        """Queue selected Media gallery items for attachment to this location's wiki.
+
+        The download itself runs in ``tasks.cache_media_item_into_wiki`` - see there
+        for why a selection of up to 20 is not fetched inside the request.
+        """
         from urbanlens.dashboard.models.wiki.model import Wiki
-        from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import cache_media_item_into_wiki
 
         try:
             pin = Pin.objects.select_related("location").get(slug=pin_slug, profile__user=request.user)
@@ -769,28 +774,27 @@ class PinController(LoginRequiredMixin, GenericViewSet):
             return JsonResponse({"error": "Invalid request data."}, status=400)
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        created = 0
+        # Enqueued rather than downloaded here: a full selection is up to 20 remote
+        # fetches, which inside the request is a multi-second hang with no progress
+        # indicator, and a request that times out partway attaches some photos and
+        # drops the rest with nothing said. Validation stays synchronous so a
+        # malformed entry is still reported immediately.
+        queued = 0
         errors: list[str] = []
         for entry in items[:20]:
             try:
-                materialize_media_item(
-                    location=pin.location,
-                    profile=profile,
-                    source=str(entry.get("source", ""))[:30],
-                    url=str(entry["url"]),
-                    page_url=str(entry.get("page_url") or ""),
-                    caption=str(entry.get("caption") or ""),
-                    wiki=wiki,
-                )
-                created += 1
-            except MaterializeError as exc:
-                # Same rationale as media_relevance above: don't echo exc.
-                logger.warning("media_send_to_wiki: failed to materialize %s: %s", entry.get("url"), exc)
-                errors.append("Could not save this photo.")
+                url = str(entry["url"])
+                source = str(entry.get("source", ""))[:30]
+                page_url = str(entry.get("page_url") or "")
+                caption = str(entry.get("caption") or "")
             except (KeyError, TypeError, ValueError):
                 logger.warning("media_send_to_wiki: malformed item entry: %r", entry)
+                errors.append("Could not save this photo.")
+                continue
+            safely_enqueue_task(cache_media_item_into_wiki, wiki.pk, profile.pk, source, url, page_url, caption)
+            queued += 1
 
-        return JsonResponse({"created": created, "errors": errors})
+        return JsonResponse({"queued": queued, "errors": errors})
 
     @action(detail=True, methods=["get"])
     def nearby_pins_json(self, request: Request, pin_slug: str):

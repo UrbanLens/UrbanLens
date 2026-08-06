@@ -2585,3 +2585,47 @@ one-line defect in the test settings. Time spent early on making the harness tru
 paid for itself many times over - every module's verification was weaker than it needed to be, and
 one fix (the pin-relink gate) shipped a regression that a runnable suite would have caught
 immediately.
+
+## Full-suite baseline (2026-08-06)
+
+First complete run of the test suite in this audit, possible only after pointing the test cache at
+locmem. **18 failed, 10,025 passed, 1,428 subtests passed, in 58 minutes** (`pytest src/urbanlens`,
+container synced to the repo, fresh test database). That is a 99.8% pass rate and the reference
+point future work should measure against - previously there was no number at all, only per-file
+runs whose failures were indistinguishable from environment noise.
+
+Triage of all 18, none caused by this audit's changes:
+
+- **12 panel failures** (`test_panel_feature_gate` x3, `test_pin_panel_info` x7,
+  `test_pin_panel_live_refresh` x2) - **pre-existing, genuine, and worth a dedicated
+  investigation.** They fail with `204 != 200`: the tests seed `LocationCache` for a panel source
+  and expect the panel to render, but the view falls through to its pending-loader path and then
+  returns 204 from `attempt >= MAX_POLL_ATTEMPTS or not schedule_panel_fetch(...)`.
+  `MAX_POLL_ATTEMPTS` is 30 and the tests pass `attempt=1`, so the 204 comes from
+  `schedule_panel_fetch` returning falsy after a cache lookup that missed data the test just wrote.
+  A sibling test seeding `nominatim` the same way passes, so it is source-specific rather than a
+  broken mechanism. If the lookup really does miss in production, pin-detail panels silently render
+  nothing; if it is only the tests that are stale, they are asserting a contract the code no longer
+  has. Either way it needs resolving - flagged here rather than guessed at.
+
+  Confirmed not mine: reverting the SiteSettings request memo in the container reproduced exactly
+  the same 5 failures in the two files I re-ran (5 failed / 15 passed both ways).
+
+- **5 infrastructure-stats failures** (`test_site_admin_stats` x4, `test_infrastructure_stats` x1) -
+  environmental, and already recorded as such in module 1. They collect live postgres/valkey/celery/
+  nginx status, which no test environment can satisfy without those services reachable.
+
+## Unit 08 (deferred item, now fixed): media send-to-wiki no longer downloads in-request
+
+`media_send_to_wiki` looped up to 20 gallery items calling `materialize_media_item`, each a remote
+download, inside the request handler. Two problems, both user-visible: a multi-second hang with no
+progress indicator, against the project standard that says anything non-instant shows one; and a
+request that times out partway attaches some photos and drops the rest silently while the frontend
+toast reports success for all of them.
+
+Split the way `cache_media_item_into_album` already splits the same work - validate and enqueue in
+the request, download in `tasks.cache_media_item_into_wiki`, which tolerates the wiki or profile
+being deleted between enqueue and run. The endpoint now returns `{"queued": N}` and the toast says
+the photos will appear shortly rather than claiming they are already there. Eight tests cover it,
+including that nothing is materialized in-request, that the 20-item cap still holds, and that a
+malformed entry is reported without stopping the rest of the batch.

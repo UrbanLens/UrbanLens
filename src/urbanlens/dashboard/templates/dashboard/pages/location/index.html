@@ -1950,7 +1950,10 @@
                 headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
                 body: JSON.stringify({ items: payload }),
             }).then(function (r) { return r.json().catch(function () { return {}; }); }).then(function (data) {
-                if (window.toastr) toastr.success((data.created || items.length) + ' photo(s) sent to the wiki.');
+                // Queued, not stored: the downloads run in the background, so the
+                // photos appear on the wiki shortly after this returns.
+                var n = (data.queued != null ? data.queued : items.length);
+                if (window.toastr) toastr.success(n + ' photo(s) queued for the wiki - they\'ll appear shortly.');
                 window.mediaToggleSelectMode();
             }).catch(function () { if (window.toastr) toastr.error('Failed to send photos to the wiki.'); });
         };
