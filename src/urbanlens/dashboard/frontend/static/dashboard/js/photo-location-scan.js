@@ -1,10 +1,10 @@
 import {
   getCsrfToken,
   toast
-} from "./achievements-5jnnp4sj.js";
+} from "./photo-location-scan-5jnnp4sj.js";
 import {
   __require
-} from "./achievements-2vd5xdaq.js";
+} from "./photo-location-scan-2vd5xdaq.js";
 
 // node_modules/exifr/dist/full.esm.mjs
 var e = typeof self != "undefined" ? self : global;

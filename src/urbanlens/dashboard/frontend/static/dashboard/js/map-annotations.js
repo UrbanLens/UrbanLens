@@ -1,14 +1,242 @@
 import {
   createMapLayers,
   tileLayer
-} from "./achievements-rarq1vf2.js";
+} from "./photo-location-scan-rarq1vf2.js";
 import {
   confirmAction,
   getCsrfToken,
   htmxProcess,
   toast
-} from "./achievements-5jnnp4sj.js";
-import"./achievements-2vd5xdaq.js";
+} from "./photo-location-scan-5jnnp4sj.js";
+import"./photo-location-scan-2vd5xdaq.js";
+
+// src/urbanlens/dashboard/frontend/ts/shared/map-image-overlays.ts
+function solve8(matrix, rhs) {
+  const size = 8;
+  const width = size + 1;
+  const cells = new Float64Array(size * width);
+  for (let row = 0;row < size; row++) {
+    const source = matrix[row] ?? [];
+    for (let col = 0;col < size; col++)
+      cells[row * width + col] = source[col] ?? 0;
+    cells[row * width + size] = rhs[row] ?? 0;
+  }
+  for (let col = 0;col < size; col++) {
+    let pivot = col;
+    for (let row = col + 1;row < size; row++) {
+      if (Math.abs(cells[row * width + col]) > Math.abs(cells[pivot * width + col]))
+        pivot = row;
+    }
+    if (Math.abs(cells[pivot * width + col]) < 0.000000000001)
+      return null;
+    if (pivot !== col) {
+      for (let k = col;k < width; k++) {
+        const swap = cells[col * width + k];
+        cells[col * width + k] = cells[pivot * width + k];
+        cells[pivot * width + k] = swap;
+      }
+    }
+    const diagonal = cells[col * width + col];
+    for (let row = 0;row < size; row++) {
+      if (row === col)
+        continue;
+      const factor = cells[row * width + col] / diagonal;
+      if (!factor)
+        continue;
+      for (let k = col;k < width; k++)
+        cells[row * width + k] = cells[row * width + k] - factor * cells[col * width + k];
+    }
+  }
+  const solution = [];
+  for (let row = 0;row < size; row++)
+    solution.push(cells[row * width + size] / cells[row * width + row]);
+  return solution;
+}
+function matrix3dForCorners(points, width, height) {
+  const src = [
+    { x: 0, y: 0 },
+    { x: width, y: 0 },
+    { x: width, y: height },
+    { x: 0, y: height }
+  ];
+  if (points.length !== 4)
+    return null;
+  const a = [];
+  const b = [];
+  for (let i = 0;i < 4; i++) {
+    const s = src[i];
+    const d = points[i];
+    if (!d)
+      return null;
+    a.push([s.x, s.y, 1, 0, 0, 0, -s.x * d.x, -s.y * d.x]);
+    b.push(d.x);
+    a.push([0, 0, 0, s.x, s.y, 1, -s.x * d.y, -s.y * d.y]);
+    b.push(d.y);
+  }
+  const h = solve8(a, b);
+  if (!h || h.some((value) => !Number.isFinite(value)))
+    return null;
+  const m = [h[0], h[3], 0, h[6], h[1], h[4], 0, h[7], 0, 0, 1, 0, h[2], h[5], 0, 1];
+  return `matrix3d(${m.map((v) => Number.isFinite(v) ? v : 0).join(",")})`;
+}
+function createMapImageOverlays(leaflet, map, options) {
+  const pane = map.getPane("overlayPane");
+  const live = new Map;
+  const container = document.createElement("div");
+  container.className = "ul-map-overlay-container leaflet-zoom-hide";
+  pane?.appendChild(container);
+  function pixelFor(corner) {
+    const point = map.latLngToLayerPoint(leaflet.latLng(corner[0], corner[1]));
+    return { x: point.x, y: point.y };
+  }
+  function redraw(item) {
+    const { img, entry } = item;
+    if (!img.naturalWidth || !img.naturalHeight)
+      return;
+    const points = entry.corners.map(pixelFor);
+    const matrix = matrix3dForCorners(points, img.naturalWidth, img.naturalHeight);
+    if (!matrix)
+      return;
+    img.style.transform = matrix;
+    img.style.opacity = String(entry.opacity / 100);
+    item.handles.forEach((handle, index) => {
+      const point = points[index];
+      if (!point)
+        return;
+      handle.style.transform = `translate(${point.x}px, ${point.y}px)`;
+      handle.hidden = entry.locked || !item.aligning;
+    });
+  }
+  function redrawAll() {
+    live.forEach(redraw);
+  }
+  async function saveCorners(item) {
+    const body = new FormData;
+    body.append("corners", JSON.stringify(item.entry.corners));
+    body.append("csrfmiddlewaretoken", options.csrfToken);
+    try {
+      const response = await fetch(options.cornersUrl(item.entry.uuid), { method: "POST", body, headers: { "X-CSRFToken": options.csrfToken } });
+      if (!response.ok) {
+        options.onError?.("Could not save the overlay's position.");
+        return;
+      }
+      options.onSaved?.(item.entry.uuid, item.entry.corners);
+    } catch {
+      options.onError?.("Could not save the overlay's position.");
+    }
+  }
+  function makeHandle(item, index) {
+    const handle = document.createElement("div");
+    handle.className = "ul-map-overlay-handle";
+    handle.title = "Drag to align this corner";
+    handle.hidden = true;
+    handle.addEventListener("pointerdown", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      handle.setPointerCapture(event.pointerId);
+      map.dragging.disable();
+      const move = (moveEvent) => {
+        const rect = map.getContainer().getBoundingClientRect();
+        const containerPoint = leaflet.point(moveEvent.clientX - rect.left, moveEvent.clientY - rect.top);
+        const latLng = map.containerPointToLatLng(containerPoint);
+        item.entry.corners[index] = [latLng.lat, latLng.lng];
+        redraw(item);
+      };
+      const up = () => {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        map.dragging.enable();
+        saveCorners(item);
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+    });
+    return handle;
+  }
+  function add(entry) {
+    const img = document.createElement("img");
+    img.className = "ul-map-overlay-image";
+    img.alt = entry.name || "Map overlay";
+    img.draggable = false;
+    img.src = entry.url;
+    const item = { entry, img, handles: [], aligning: false };
+    item.handles = entry.corners.map((_corner, index) => makeHandle(item, index));
+    container.appendChild(img);
+    item.handles.forEach((handle) => container.appendChild(handle));
+    img.addEventListener("load", () => redraw(item));
+    live.set(entry.uuid, item);
+    setVisible(entry.uuid, entry.default_visible);
+    redraw(item);
+  }
+  function remove(uuid) {
+    const item = live.get(uuid);
+    if (!item)
+      return;
+    item.img.remove();
+    item.handles.forEach((handle) => handle.remove());
+    live.delete(uuid);
+  }
+  function setVisible(uuid, visible) {
+    const item = live.get(uuid);
+    if (!item)
+      return;
+    item.img.hidden = !visible;
+    item.handles.forEach((handle) => {
+      handle.hidden = !visible || item.entry.locked || !item.aligning;
+    });
+  }
+  map.on("move moveend viewreset zoomend", redrawAll);
+  return {
+    sync(entries) {
+      const fresh = new Set(entries.map((entry) => entry.uuid));
+      [...live.keys()].filter((uuid) => !fresh.has(uuid)).forEach(remove);
+      entries.forEach((entry) => {
+        const existing = live.get(entry.uuid);
+        if (!existing) {
+          add(entry);
+          return;
+        }
+        const wasVisible = !existing.img.hidden;
+        const urlChanged = existing.entry.url !== entry.url;
+        existing.entry = entry;
+        if (urlChanged)
+          existing.img.src = entry.url;
+        setVisible(entry.uuid, wasVisible);
+        redraw(existing);
+      });
+    },
+    startAlign(uuid) {
+      live.forEach((item, key) => {
+        item.aligning = key === uuid;
+        redraw(item);
+      });
+    },
+    stopAlign() {
+      live.forEach((item) => {
+        item.aligning = false;
+        redraw(item);
+      });
+    },
+    previewOpacity(uuid, opacity) {
+      const item = live.get(uuid);
+      if (!item)
+        return;
+      item.entry.opacity = opacity;
+      item.img.style.opacity = String(opacity / 100);
+    },
+    setVisible,
+    isVisible(uuid) {
+      const item = live.get(uuid);
+      return !!item && !item.img.hidden;
+    },
+    uuids() {
+      return [...live.keys()];
+    },
+    uuidsInLayer(layerUuid) {
+      return [...live.values()].filter((item) => item.entry.layer_uuid === layerUuid).map((item) => item.entry.uuid);
+    }
+  };
+}
 
 // src/urbanlens/dashboard/frontend/ts/entries/map-annotations.ts
 function escHtml(s) {
@@ -30,6 +258,7 @@ function readConfig(el) {
     detailPinsJsonUrl: d.detailPinsJsonUrl || "",
     detailPinCreateUrl: d.detailPinCreateUrl || "",
     detailPinEditUrlTemplate: d.detailPinEditUrlTemplate || "",
+    overlayCornersUrlTemplate: d.overlayCornersUrlTemplate || "",
     detailPinsBulkEditUrl: d.detailPinsBulkEditUrl || "",
     pinShareDialogUrl: d.pinShareDialogUrl || "",
     detailPinsSendToWikiUrl: d.detailPinsSendToWikiUrl || "",
@@ -45,6 +274,14 @@ function readConfig(el) {
 function readCustomLayers() {
   try {
     return JSON.parse(document.getElementById("custom-layers-data")?.textContent || "[]");
+  } catch {
+    return [];
+  }
+}
+function readMapOverlays() {
+  try {
+    const parsed = JSON.parse(document.getElementById("map-overlays-data")?.textContent || "[]");
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
     return [];
   }
@@ -516,6 +753,86 @@ function init() {
   document.body.addEventListener("ul:custom-layers-changed", (e) => {
     syncCustomLayers(e.detail?.layers || []);
   });
+  const overlayCornersTemplate = cfg.overlayCornersUrlTemplate || "";
+  const imageOverlays = overlayCornersTemplate ? createMapImageOverlays(L, map, {
+    cornersUrl: (uuid) => overlayCornersTemplate.replace("00000000-0000-0000-0000-000000000000", uuid),
+    csrfToken: getCsrfToken(),
+    onError: (message) => toast.error?.(message)
+  }) : null;
+  function overlayToggleKey(uuid) {
+    return `overlay-${uuid}`;
+  }
+  function syncMapOverlays(entries) {
+    if (!imageOverlays)
+      return;
+    const standalone = entries.filter((entry) => !entry.layer_uuid);
+    imageOverlays.sync(entries);
+    entries.filter((entry) => entry.layer_uuid).forEach((entry) => {
+      const group = customLayerGroups.get(entry.layer_uuid);
+      imageOverlays.setVisible(entry.uuid, !!group && map.hasLayer(group));
+    });
+    standalone.forEach((entry) => {
+      const key = overlayToggleKey(entry.uuid);
+      mapLayersInstance.registerToggle(key, {
+        isActive: () => imageOverlays.isVisible(entry.uuid),
+        toggle: () => imageOverlays.setVisible(entry.uuid, !imageOverlays.isVisible(entry.uuid))
+      });
+      if (!customLayersMenu)
+        return;
+      let btn = customLayersMenu.querySelector(`[data-map-layer="${key}"]`);
+      if (!btn) {
+        btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "map-layer-btn";
+        btn.dataset.mapLayer = key;
+        btn.dataset.layerKind = "custom";
+        btn.addEventListener("click", () => mapLayersInstance.toggleCustom(key));
+        customLayersMenu.insertBefore(btn, customLayersManageBtn);
+      }
+      btn.innerHTML = `<span class="map-layer-thumb map-layer-thumb--icon"><i class="material-symbols-outlined">image</i></span><span>${escHtml(entry.name || "Image overlay")}</span>`;
+      btn.setAttribute("aria-label", `Show or hide ${entry.name || "image overlay"}`);
+    });
+    const liveKeys = new Set(standalone.map((entry) => overlayToggleKey(entry.uuid)));
+    customLayersMenu?.querySelectorAll('[data-map-layer^="overlay-"]').forEach((btn) => {
+      if (!liveKeys.has(btn.dataset.mapLayer || ""))
+        btn.remove();
+    });
+    mapLayersInstance.syncButtons();
+  }
+  function syncOverlaysToLayers() {
+    if (!imageOverlays)
+      return;
+    customLayerGroups.forEach((group, layerUuid) => {
+      const visible = map.hasLayer(group);
+      imageOverlays.uuidsInLayer(layerUuid).forEach((uuid) => imageOverlays.setVisible(uuid, visible));
+    });
+  }
+  map.on("layeradd layerremove", syncOverlaysToLayers);
+  syncMapOverlays(readMapOverlays());
+  document.body.addEventListener("ul:map-overlays-changed", (e) => {
+    syncMapOverlays(e.detail?.overlays || []);
+  });
+  window.ulMapOverlayStartAlign = (uuid) => {
+    imageOverlays?.startAlign(uuid);
+    document.getElementById("map-overlays-dialog")?.close();
+  };
+  window.ulMapOverlayPreviewOpacity = (uuid, value) => imageOverlays?.previewOpacity(uuid, Number(value));
+  window.ulMapOverlaySeedCorners = () => {
+    const input = document.getElementById("map-overlay-initial-corners");
+    if (!input)
+      return;
+    const bounds = map.getBounds().pad(-0.25);
+    const nw = bounds.getNorthWest();
+    const ne = bounds.getNorthEast();
+    const se = bounds.getSouthEast();
+    const sw = bounds.getSouthWest();
+    input.value = JSON.stringify([
+      [nw.lat, nw.lng],
+      [ne.lat, ne.lng],
+      [se.lat, se.lng],
+      [sw.lat, sw.lng]
+    ]);
+  };
   const dpEditBase = cfg.detailPinEditUrlTemplate.replace("00000000-0000-0000-0000-000000000000/", "");
   let detailPins = [];
   let highlightedDpUuid = null;
@@ -1329,6 +1646,15 @@ function init() {
     loadDetailPins();
     fetchBoundaries(0);
   });
+  const PHOTO_MARKER_BASE_SIZE = 44;
+  const PHOTO_MARKER_MIN_SIZE = 14;
+  const PHOTO_MARKER_HOVER_SCALE = 56 / 44;
+  function photoMarkerSize(highlighted) {
+    const z = map.getZoom();
+    const scale = 2 ** ((z - 16) * 0.5);
+    const base = Math.max(PHOTO_MARKER_MIN_SIZE, Math.min(PHOTO_MARKER_BASE_SIZE, Math.round(PHOTO_MARKER_BASE_SIZE * scale)));
+    return highlighted ? Math.round(base * PHOTO_MARKER_HOVER_SCALE) : base;
+  }
   function makePhotoIcon(url, size, highlighted) {
     const shadow = highlighted ? "0 0 0 3px #2563eb, 0 3px 10px rgba(0,0,0,.45)" : "0 2px 6px rgba(0,0,0,.35)";
     return L.divIcon({
@@ -1341,7 +1667,7 @@ function init() {
   function addPhotoMarker(imgId, url, lat, lng, ownerName) {
     if (photoMarkers[imgId])
       photoLayer.removeLayer(photoMarkers[imgId].marker);
-    const marker = L.marker([lat, lng], { icon: makePhotoIcon(url, 44, false), draggable: !ownerName });
+    const marker = L.marker([lat, lng], { icon: makePhotoIcon(url, photoMarkerSize(false), false), draggable: !ownerName });
     if (ownerName)
       marker.bindTooltip(`Photo from ${ownerName}`, { permanent: false, direction: "top", className: "detail-pin-tooltip" });
     marker.on("dragend", () => {
@@ -1373,8 +1699,13 @@ function init() {
     marker.on("mouseout", () => window._galleryHighlightMarker?.(imgId, false));
     marker.on("click", () => window.galleryOpenLightbox?.(imgId, { url }));
     marker.addTo(photoLayer);
-    photoMarkers[imgId] = { marker, url, lat, lng };
+    photoMarkers[imgId] = { marker, url, lat, lng, highlighted: false };
   }
+  map.on("zoomend", () => {
+    Object.values(photoMarkers).forEach((entry) => {
+      entry.marker.setIcon(makePhotoIcon(entry.url, photoMarkerSize(entry.highlighted), entry.highlighted));
+    });
+  });
   window._galleryAddMarker = (img) => {
     if (!photoPanelItems.find((p) => p.id === img.id))
       photoPanelItems.push({ id: img.id, url: img.url, lat: img.latitude, lng: img.longitude, mine: true });
@@ -1395,8 +1726,8 @@ function init() {
   window._galleryHighlightMarker = (imgId, on) => {
     const entry = photoMarkers[imgId];
     if (entry) {
-      const sz = on ? 56 : 44;
-      entry.marker.setIcon(makePhotoIcon(entry.url, sz, on));
+      entry.highlighted = !!on;
+      entry.marker.setIcon(makePhotoIcon(entry.url, photoMarkerSize(entry.highlighted), entry.highlighted));
       if (on)
         map.panTo([entry.lat, entry.lng]);
     }

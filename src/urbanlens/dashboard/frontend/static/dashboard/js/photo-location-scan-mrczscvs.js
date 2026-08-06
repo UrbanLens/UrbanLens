@@ -1,6 +1,6 @@
 import {
   IconPicker
-} from "./achievements-ee3vhq76.js";
+} from "./photo-location-scan-ee3vhq76.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/organize-icon-picker.ts
 var bulkStateUpdaters = new Map;

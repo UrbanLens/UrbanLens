@@ -1,16 +1,16 @@
 import {
+  createMapLayers
+} from "./photo-location-scan-rarq1vf2.js";
+import {
   createGameShell,
   playEntrance
-} from "./achievements-vedkz711.js";
-import {
-  createMapLayers
-} from "./achievements-rarq1vf2.js";
+} from "./photo-location-scan-vedkz711.js";
 import {
   confirmAction,
   getCsrfToken,
   toast
-} from "./achievements-5jnnp4sj.js";
-import"./achievements-2vd5xdaq.js";
+} from "./photo-location-scan-5jnnp4sj.js";
+import"./photo-location-scan-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/entries/consensus.ts
 var FIELD_KIND = {

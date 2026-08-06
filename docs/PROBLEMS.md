@@ -1931,3 +1931,32 @@ work (confirmed by running them from a detached worktree at HEAD). All three cau
   added a covering child pin, the far-away building vanished from the payload and `unpinned_count`
   read 0. Product code was right; the fixture now puts both buildings on the parcel.
 
+
+## `bun run build` fails as a package script on some hosts (2026-08-06)
+
+Not a project bug, and not reproducible where it matters - but it costs an afternoon to
+rediscover, so: on a host with Bun installed via `curl -fsSL https://bun.sh/install | bash`,
+running the frontend build **through the package script** fails with
+
+```
+TypeError: Formats besides 'esm' are not implemented
+```
+
+...while the exact same build succeeds when the script file is invoked directly:
+
+```bash
+bun run bin/build-frontend.ts        # works
+bun run build                        # fails
+docker exec -w /app <app-container> bun run build   # works
+```
+
+Both Bun installs report 1.3.14, and the container (`oven/bun:1`) runs the identical script
+happily - so this is something about how that particular Bun build executes a package.json
+script, not about `bin/build-frontend.ts` or the `entries-classic` IIFE group it dies on.
+Rewriting the script to use `Bun.build({format: "iife"})` instead of shelling out to
+`bun build --format iife` does *not* help: the JS API accepts the format fine in a standalone
+probe and still throws inside the package-script context, which is what rules the script
+itself out as the cause.
+
+**If you hit this, invoke the file directly or build in the container.** Do not "fix" the
+build script - it is not what is broken.
