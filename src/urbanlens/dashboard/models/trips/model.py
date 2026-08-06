@@ -199,7 +199,6 @@ class Trip(abstract.PublicDashboardModel):
         db_table = "dashboard_trips"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["uuid"], name="idxdb_trip_uuid"),
             Index(fields=["start_date"], name="idxdb_trip_start_date"),
             Index(fields=["end_date"], name="idxdb_trip_end_date"),
         ]

@@ -399,7 +399,6 @@ class SafetyCheckin(abstract.PublicDashboardModel):
         db_table = "dashboard_safety_checkins"
         ordering = ["-checkin_by"]
         indexes = [
-            Index(fields=["uuid"], name="idxdb_sc_uuid"),
             Index(fields=["profile", "trip", "status"], name="idxdb_sc_profile_trip_status"),
             Index(fields=["status", "checkin_by"], name="idxdb_sc_status_by"),
             # Backs SafetyCheckinQuerySet.due_for_archival(), polled by the 5-minute

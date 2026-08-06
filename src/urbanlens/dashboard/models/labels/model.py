@@ -225,7 +225,6 @@ class Label(abstract.FrontendDashboardModel):
         get_latest_by = "updated"
         permissions = [("edit_global_label", "Can edit global labels")]
         indexes = [
-            Index(fields=["uuid"], name="idxdb_label_uuid"),
             Index(fields=["profile"], name="idxdb_label_profile"),
             Index(fields=["profile", "order"], name="idxdb_label_pfile_ord"),
         ]

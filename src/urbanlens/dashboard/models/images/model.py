@@ -360,7 +360,6 @@ class Image(abstract.FrontendDashboardModel):
         db_table = "dashboard_images"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["uuid"], name="idxdb_image_uuid"),
             Index(fields=["location", "media_source_key", "media_item_key"], name="idxdb_image_media_key"),
             # Serves both halves of quota accounting (used vs. exempt bytes),
             # which always filter by profile first. Composite rather than a

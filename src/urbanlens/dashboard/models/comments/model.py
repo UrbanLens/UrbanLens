@@ -102,4 +102,3 @@ class Comment(abstract.FrontendDashboardModel):
         db_table = "dashboard_comments"
         get_latest_by = "updated"
         ordering = ["created"]
-        indexes = [models.Index(fields=["uuid"], name="idxdb_comment_uuid")]

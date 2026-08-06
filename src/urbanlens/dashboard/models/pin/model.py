@@ -921,7 +921,6 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         db_table = "dashboard_user_pins"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["uuid"], name="idxdb_pin_uuid"),
             Index(fields=["profile"], name="idxdb_pin_profile"),
             Index(fields=["profile", "priority"], name="idxdb_pin_pfile_prio"),
             Index(fields=["profile", "last_visited"], name="idxdb_pin_pfile_lvisit"),

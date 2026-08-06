@@ -154,18 +154,22 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
 
     upload = request.FILES.get("image")
     if upload is not None:
-        from urbanlens.dashboard.models.images.model import Image, ImageSource, MediaKind
-        from urbanlens.dashboard.services.media.images import image_upload_error
+        from urbanlens.dashboard.services.photos.photo_upload import PhotoUploadError, upload_photo
 
-        error = image_upload_error(upload, MediaKind.PHOTO)
-        if error is not None:
-            return None, "", error[0]
-        image = Image.objects.create(
-            profile=profile,
-            image=upload,
-            source=ImageSource.UPLOAD,
-            **({"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}),
-        )
+        # The canonical upload service, not a raw Image.objects.create: it
+        # owns the quota check + per-profile lock (without which N concurrent
+        # uploads all pass the check), checksum dedupe, file_size (without
+        # which the sheet never counts against quota), and the async EXIF/
+        # keyword ingestion every other upload gets.
+        try:
+            image = upload_photo(
+                profile,
+                upload,
+                caption=(request.POST.get("name") or "").strip() or None,
+                **({"pin": owner} if isinstance(owner, Pin) else {"wiki": owner}),
+            )
+        except PhotoUploadError as exc:
+            return None, "", exc.message
         return image, "", None
 
     # A Media-gallery pick. The gallery renders provider results live and

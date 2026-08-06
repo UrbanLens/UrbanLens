@@ -2055,3 +2055,24 @@ tree entering this audit was fully green.
   admin API-usage report.
 - **Removed `StaticBoundaryProvider`** - its docstring said "kept for tests and explicit
   callers"; there were neither.
+
+## Codebase audit (2026-08-06, module 5: media/images pipeline) - findings & fixes
+
+- **Eight redundant uuid indexes dropped** (migration 0038) - Pin, Image, Wiki, Trip,
+  Label, Comment, PinVisit, SafetyCheckin each declared `Index(fields=["uuid"])` while
+  `FrontendDashboardModel.uuid` is already `unique=True`, and a unique constraint *is* a
+  btree index in Postgres. Every insert/update on some of the hottest tables maintained a
+  second identical index for nothing. If you add a new FrontendDashboardModel, don't
+  re-add one.
+- **Map-overlay uploads bypassed the upload pipeline** - the overlay controller (added
+  earlier this week) did a raw `Image.objects.create`, skipping the quota check and its
+  per-profile lock, checksum dedupe, `file_size` (so an overlay sheet never counted
+  against quota), and the async EXIF/keyword ingestion. Now goes through the canonical
+  `services.photos.photo_upload.upload_photo`. Anything creating an Image from a *user
+  upload* must use that service; raw creates are for server-fetched bytes only
+  (materialize sets its own size/checksum).
+
+Verified clean: visible_to's per-uploader relationship checks are bounded by the
+gallery's distinct uploaders (documented tradeoff); every other Image-creating path sets
+file_size; media_source_key/media_item_key lookups are indexed; storage sums use the
+single-pass filtered-aggregate helper.
