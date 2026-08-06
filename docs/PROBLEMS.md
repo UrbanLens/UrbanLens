@@ -1960,3 +1960,30 @@ itself out as the cause.
 
 **If you hit this, invoke the file directly or build in the container.** Do not "fix" the
 build script - it is not what is broken.
+
+## Codebase audit (2026-08-06, module 1: core infrastructure) - findings & fixes
+
+- **`ApiCallLog` grew forever** - `prune_older_than_days` was written and documented as
+  the trim mechanism, but nothing ever called it, while every external API call runs three
+  rate-limit COUNTs over the table plus an INSERT. Now pruned daily
+  (`tasks.prune_api_call_logs`). Retention is 400 days, set by the table's *longest reader*:
+  the public costs page reconstructs a 12-month API-spend chart from these rows, so the
+  model helper's 90-day default would have silently zeroed three-quarters of that chart.
+  If you add a longer-window consumer of ApiCallLog, raise the retention with it.
+- **Slug retry loops retried on any unique violation** - `PublicDashboardModel.save()`/
+  `regenerate_slug()` matched any "duplicate key" IntegrityError, so a violation of an
+  unrelated constraint (e.g. Pin's one-pin-per-location-per-profile) burned 20 slug
+  regenerations and could mask the real conflict behind a uuid-suffixed slug. Now only a
+  violation naming a *slug* constraint retries; this makes "slug constraints have 'slug'
+  in their name" a load-bearing naming rule (verified: db_pin_unique_slug_per_profile,
+  uq_pin_list_profile_slug, uq_album_pin_slug/uq_album_wiki_slug, and the field-level
+  uniques on Location/Profile all qualify).
+- **Removed `abstract.Serializer`** - a custom DRF base with context-driven
+  include/exclude-fields machinery that no serializer ever subclassed (every real one uses
+  `serializers.ModelSerializer` directly). Unadopted abstraction; DRF's documented dynamic-
+  fields recipe covers the need if it ever materializes.
+
+Still open (bigger than this pass): `check_rate_limit`'s three COUNTs run per external
+call; fine while windows are indexed and the table is pruned, but a hot service could
+justify a cached counter. `EmailSendLog` is unbounded too - low volume (user-triggered
+email), so left alone deliberately.

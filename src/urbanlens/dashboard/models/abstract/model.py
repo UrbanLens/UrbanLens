@@ -20,6 +20,22 @@ logger = logging.getLogger(__name__)
 _DEFAULT_MAX_SLUG_LENGTH = 255
 
 
+def _is_slug_collision(error: IntegrityError) -> bool:
+    """Whether an IntegrityError is a *slug* unique-constraint violation.
+
+    The retry loops below regenerate the slug and try again - which only helps
+    when the slug was the colliding column. Matching any "duplicate key"
+    message (as this used to) meant a violation of some other constraint
+    (e.g. Pin's one-pin-per-location-per-profile) burned 20 slug
+    regenerations before surfacing, and the save() fallback then masked the
+    real conflict behind a uuid slug. Postgres includes the constraint/index
+    name in the message, and every slug uniqueness constraint in this app has
+    "slug" in its name (a naming rule this check makes load-bearing).
+    """
+    message = str(error)
+    return "duplicate key value violates unique constraint" in message and "slug" in message
+
+
 class DashboardModel(django_models.Model):
     """
     A base model that all other models in this app inherit from.
@@ -163,7 +179,7 @@ class PublicDashboardModel(FrontendDashboardModel):
                         self.save(update_fields=["slug"])
                 break
             except IntegrityError as e:
-                if "duplicate key value violates unique constraint" in str(e):
+                if _is_slug_collision(e):
                     continue
                 raise
         if not self.slug:
@@ -185,7 +201,7 @@ class PublicDashboardModel(FrontendDashboardModel):
                     super().save(*args, **kwargs)
                 return
             except IntegrityError as e:
-                if "duplicate key value violates unique constraint" not in str(e):
+                if not _is_slug_collision(e):
                     raise
                 continue
 

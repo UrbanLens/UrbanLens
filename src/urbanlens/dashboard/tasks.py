@@ -2281,6 +2281,38 @@ def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
 
 
 @shared_task
+def prune_api_call_logs() -> int:
+    """Delete ApiCallLog rows older than every consumer's longest window.
+
+    The table is written on every external API call and, until this task
+    existed, never trimmed - ``ApiCallLog.prune_older_than_days`` was
+    documented as the way to trim it, but nothing ever called it, so the
+    rate-limit COUNTs that run before each call scanned an ever-growing
+    table. Scheduled daily (see ``CELERY_BEAT_SCHEDULE``).
+
+    Retention is set by the longest reader, not the rate limiter: limits need
+    30 days, but ``services.admin.cost_tracking.monthly_cost_series``
+    reconstructs the public costs page's 12-month API-spend chart from these
+    rows - pruning at the model helper's 90-day default would silently zero
+    out three-quarters of that chart. 400 days covers 13 calendar months with
+    margin.
+
+    Returns:
+        Number of rows deleted.
+    """
+    from urbanlens.dashboard.models.api_call_log import ApiCallLog
+
+    deleted = ApiCallLog.prune_older_than_days(_API_CALL_LOG_RETENTION_DAYS)
+    if deleted:
+        logger.info("Pruned %d ApiCallLog row(s) older than %d days", deleted, _API_CALL_LOG_RETENTION_DAYS)
+    return deleted
+
+
+#: See prune_api_call_logs: 12 months of cost-series history plus margin.
+_API_CALL_LOG_RETENTION_DAYS = 400
+
+
+@shared_task
 def prune_pin_tombstones() -> int:
     """Remove pin-deletion tombstones older than the sync retention window.
 

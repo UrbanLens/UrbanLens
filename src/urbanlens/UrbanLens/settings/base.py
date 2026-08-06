@@ -345,6 +345,12 @@ CELERY_BEAT_SCHEDULE = {
         "task": "urbanlens.dashboard.tasks.prune_pin_tombstones",
         "schedule": 24 * 60 * 60,
     },
+    # Daily. Retention (400 days) is set by the costs page's 12-month spend
+    # chart, the longest reader of this table - see prune_api_call_logs.
+    "api-call-log-pruning": {
+        "task": "urbanlens.dashboard.tasks.prune_api_call_logs",
+        "schedule": 24 * 60 * 60,
+    },
     "public-pin-candidate-evaluation": {
         "task": "urbanlens.dashboard.tasks.evaluate_public_pin_candidates",
         "schedule": 60 * 60,
