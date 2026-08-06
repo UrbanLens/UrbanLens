@@ -153,8 +153,19 @@
         .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
         .then(function (data) {
             var n = data.processed || 0;
+            var requested = data.requested != null ? data.requested : n;
             var verb = action === 'accept' ? 'Accepted' : 'Dismissed';
-            if (window.toastr) toastr.success(verb + ' ' + n + ' suggestion' + (n === 1 ? '' : 's') + '.');
+            var noun = ' suggestion' + (n === 1 ? '' : 's') + '.';
+            if (!window.toastr) return;
+            // The server skips ids it can't act on and logs any that fail, reporting
+            // both counts. Reporting only `processed` as a success meant a partial
+            // batch looked identical to a whole one - the user is told 3 were accepted
+            // and has no way to know they asked for 5.
+            if (requested > n) {
+                toastr.warning(verb + ' ' + n + ' of ' + requested + noun + ' The rest could not be processed - they may have already been handled.');
+            } else {
+                toastr.success(verb + ' ' + n + noun);
+            }
         });
     }
 

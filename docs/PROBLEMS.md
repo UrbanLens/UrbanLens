@@ -2683,3 +2683,20 @@ Nothing in the response depended on the tagging having run - the previous code s
 service's exceptions, so a failed tagging attempt was already invisible to the caller. Four tests
 pin the new behaviour, including that the pin is still created when the broker is unreachable
 (`safely_enqueue_task` returns None) and that a create still isn't treated as an explicit rename.
+
+## Unit 09/10 (deferred item, partly fixed): partial bulk actions now say so
+
+`PinSuggestionBulkActionView` skips ids it cannot act on and logs any that raise, then returns
+`processed` alongside `requested`. The page reported only `processed`, as an unqualified success -
+so accepting 3 of 5 rendered "Accepted 3 suggestions", identical in shape to accepting all 5. The
+user is handed a number with nothing to compare it against, and the two that failed are invisible.
+Same silent-partial-failure shape as Unit 08's timeout.
+
+The backend contract was already sufficient; only the toast ignored half of it. It now warns rather
+than congratulates when `processed < requested`. Four tests pin the contract the toast depends on -
+a whole batch, another profile's id being counted but not acted on, one raising item not stopping
+the rest, and accept actually marking the suggestion handled.
+
+Still open from this item: `TripActivity.order` has no uniqueness constraint or locking, so two
+concurrent reorders can interleave. That is the same check-then-act family the second pass covered,
+and is left for a dedicated pass rather than bundled in here.
