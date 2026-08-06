@@ -72,6 +72,7 @@ from urbanlens.dashboard.models.labels.profile_assignment import ProfileLabelAss
 from urbanlens.dashboard.models.link_extraction import LinkExtraction, LinkExtractionStatus
 from urbanlens.dashboard.models.links import PinLink, WikiLink
 from urbanlens.dashboard.models.location import Location
+from urbanlens.dashboard.models.map_overlay import MapImageOverlay
 from urbanlens.dashboard.models.markup import MapLayerMode, MarkupMap, MarkupMapShare, MarkupType, PinMarkup
 from urbanlens.dashboard.models.notifications import NotificationLog, NotificationPreference
 from urbanlens.dashboard.models.pin import Pin, PinNote

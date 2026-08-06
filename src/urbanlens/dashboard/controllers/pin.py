@@ -20,8 +20,10 @@ from rest_framework.exceptions import ParseError
 from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.core.cache_keys import make_cache_key
+from urbanlens.dashboard.controllers.map_overlays import OVERLAY_UUID_PLACEHOLDER, overlay_payload
 from urbanlens.dashboard.forms.upload_datafile import UploadDataFile
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.profile import Profile
@@ -274,6 +276,9 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 "custom_layers": custom_layers,
                 "custom_layers_json": [layer.to_json() for layer in custom_layers],
                 "manage_layers_url": reverse("pin.layers", args=[pin.slug]),
+                "map_overlays_json": overlay_payload(MapImageOverlay.objects.for_pin(pin)),
+                "manage_overlays_url": reverse("pin.overlays", args=[pin.slug]),
+                "overlay_corners_url_template": reverse("pin.overlays.corners", args=[pin.slug, OVERLAY_UUID_PLACEHOLDER]),
                 "profile": profile,
                 "parent_pin": pin.parent_pin,
                 "has_child_pins": pin.detail_pins.exists(),

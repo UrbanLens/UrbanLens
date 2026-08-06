@@ -56,6 +56,22 @@ variant="strip": compact icon row for dialogs (comment map composer/viewer).
             <span>Manage Layers</span>
         </button>
         {% endif %}
+        {% comment %}
+        Image overlays sit beside Manage Layers rather than inside it: a
+        georeferenced sheet is a different kind of thing from a markup grouping,
+        and each overlay gets its own toggle button injected above by
+        map-annotations.ts (unless it was assigned to a custom layer).
+        {% endcomment %}
+        {% if manage_overlays_url %}
+        <button type="button" class="map-layer-btn map-layers-manage-btn"
+                hx-get="{{ manage_overlays_url }}" hx-target="#map-overlays-dialog-body" hx-swap="innerHTML"
+                onclick="document.getElementById('map-overlays-dialog').showModal()">
+            <span class="map-layer-thumb map-layer-thumb--icon">
+                <i class="material-symbols-outlined">add_photo_alternate</i>
+            </span>
+            <span>Image Overlays</span>
+        </button>
+        {% endif %}
     </div>
 </div>
 {% endif %}

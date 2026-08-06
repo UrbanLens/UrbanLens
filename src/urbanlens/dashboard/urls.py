@@ -42,6 +42,7 @@ from urbanlens.dashboard.controllers import (
     labels,
     links,
     location_wiki,
+    map_overlays,
     map_sharing,
     maps,
     markup,
@@ -572,6 +573,26 @@ urlpatterns = [
                                 "<slug:pin_slug>/layers/<uuid:layer_uuid>/share-to-wiki/",
                                 custom_layers.CustomLayerShareToWikiView.as_view(),
                                 name="pin.layers.share_to_wiki",
+                            ),
+                            path(
+                                "<slug:pin_slug>/overlays/",
+                                map_overlays.MapOverlayListView.as_view(),
+                                name="pin.overlays",
+                            ),
+                            path(
+                                "<slug:pin_slug>/overlays/<uuid:overlay_uuid>/",
+                                map_overlays.MapOverlayEditView.as_view(),
+                                name="pin.overlays.edit",
+                            ),
+                            path(
+                                "<slug:pin_slug>/overlays/<uuid:overlay_uuid>/corners/",
+                                map_overlays.MapOverlayCornersView.as_view(),
+                                name="pin.overlays.corners",
+                            ),
+                            path(
+                                "<slug:pin_slug>/overlays/<uuid:overlay_uuid>/delete/",
+                                map_overlays.MapOverlayDeleteView.as_view(),
+                                name="pin.overlays.delete",
                             ),
                             path(
                                 "<slug:pin_slug>/overview/",
@@ -1336,6 +1357,26 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/layers/<uuid:layer_uuid>/reorder/",
                     custom_layers.CustomLayerReorderView.as_view(),
                     name="location.wiki.layers.reorder",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/overlays/",
+                    map_overlays.MapOverlayListView.as_view(),
+                    name="location.wiki.overlays",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/overlays/<uuid:overlay_uuid>/",
+                    map_overlays.MapOverlayEditView.as_view(),
+                    name="location.wiki.overlays.edit",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/overlays/<uuid:overlay_uuid>/corners/",
+                    map_overlays.MapOverlayCornersView.as_view(),
+                    name="location.wiki.overlays.corners",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/overlays/<uuid:overlay_uuid>/delete/",
+                    map_overlays.MapOverlayDeleteView.as_view(),
+                    name="location.wiki.overlays.delete",
                 ),
                 path(
                     "<slug:location_slug>/wiki/comments/",

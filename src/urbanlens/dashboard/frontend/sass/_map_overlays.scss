@@ -1,0 +1,127 @@
+// Georeferenced image overlays on a pin's or wiki's map, plus the
+// manage-overlays dialog that owns their settings.
+// See shared/map-image-overlays.ts and controllers/map_overlays.py.
+
+// Everything inside is positioned in Leaflet's layer-point space, so the
+// container itself must not offset or clip its children - the matrix3d on each
+// image already carries the full placement.
+.ul-map-overlay-container {
+  height: 0;
+  left: 0;
+  position: absolute;
+  top: 0;
+  width: 0;
+}
+
+.ul-map-overlay-image {
+  // transform-origin must stay at the element's own top-left: the homography
+  // is solved against the image's natural pixel rectangle starting at (0,0),
+  // so any other origin silently shifts every corner.
+  transform-origin: 0 0;
+  left: 0;
+  max-width: none;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  user-select: none;
+}
+
+.ul-map-overlay-handle {
+  background: var(--ul-white, #fff);
+  border: 2px solid var(--ul-accent, #2563eb);
+  border-radius: 50%;
+  cursor: grab;
+  height: 14px;
+  // Centred on the corner it represents, so the visual grab point is the
+  // coordinate itself rather than its top-left.
+  margin: -7px 0 0 -7px;
+  left: 0;
+  position: absolute;
+  top: 0;
+  touch-action: none;
+  width: 14px;
+  z-index: 650;
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.map-overlay-manage-list {
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+  list-style: none;
+  margin: 0 0 .8rem;
+  padding: 0;
+}
+
+.map-overlay-manage-row {
+  align-items: flex-start;
+  background: var(--ul-grey-1);
+  border-radius: .4rem;
+  display: flex;
+  gap: .6rem;
+  padding: .5rem;
+}
+
+.map-overlay-manage-thumb {
+  border-radius: .25rem;
+  flex: 0 0 auto;
+  height: 48px;
+  object-fit: cover;
+  width: 48px;
+}
+
+.map-overlay-manage-fields {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: .35rem;
+  min-width: 0;
+}
+
+.map-overlay-manage-name {
+  width: 100%;
+}
+
+.map-overlay-manage-opacity,
+.map-overlay-manage-check {
+  align-items: center;
+  display: flex;
+  font-size: .78rem;
+  gap: .4rem;
+}
+
+.map-overlay-manage-empty {
+  color: var(--ul-grey-5);
+  font-size: .8rem;
+  margin: 0;
+}
+
+.map-overlay-add-form {
+  border-top: 1px solid var(--ul-grey-2);
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  padding-top: .7rem;
+}
+
+.map-overlay-add-sources {
+  display: flex;
+  flex-direction: column;
+  gap: .45rem;
+}
+
+.map-overlay-add-source {
+  display: flex;
+  flex-direction: column;
+  font-size: .78rem;
+  gap: .2rem;
+}
+
+.map-overlay-picked-media {
+  color: var(--ul-grey-5);
+  font-size: .78rem;
+  margin: 0;
+}

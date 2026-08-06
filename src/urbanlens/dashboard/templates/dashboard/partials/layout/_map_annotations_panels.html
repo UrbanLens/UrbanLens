@@ -46,6 +46,10 @@ a sibling #map-annotations-config element, not from this partial).
 
 <div id="map"></div>
 {{ custom_layers_json|json_script:"custom-layers-data" }}
+{# Georeferenced image overlays (Sanborn sheets, site plans) - same #}
+{# json_script pattern as the custom layers above. See                #}
+{# shared/map-image-overlays.ts and controllers/map_overlays.py.      #}
+{{ map_overlays_json|default:""|json_script:"map-overlays-data" }}
 {# -- Map toolbar (tools only; shared component - same as the main map). The  #}
 {# markup drawing tools (formerly a separate "Add Detail" dropdown docked in  #}
 {# .map-bottom-controls) live here as plain icon buttons like every other     #}
@@ -58,7 +62,7 @@ a sibling #map-annotations-config element, not from this partial).
     {# Shared layers panel - same component and engine as the main map. The  #}
     {# details/photos buttons are page-registered toggles (see the `custom`  #}
     {# option in ts/entries/map-annotations.ts).                             #}
-    {% map_layers_panel layers|default:"street,terrain,satellite,weather,borders,details,photos" panel_id="detail-map-layers" extra_class="map-layers-panel--inline" custom_layers=custom_layers manage_layers_url=manage_layers_url %}
+    {% map_layers_panel layers|default:"street,terrain,satellite,weather,borders,details,photos" panel_id="detail-map-layers" extra_class="map-layers-panel--inline" custom_layers=custom_layers manage_layers_url=manage_layers_url manage_overlays_url=manage_overlays_url %}
     <div id="boundary-save-controls" class="map-overlay-btn-group" style="display:none">
         <button class="btn btn--ghost map-overlay-btn map-overlay-btn--clear" onclick="clearBoundary()">
             <i class="material-symbols-outlined">delete_outline</i> Clear
@@ -84,6 +88,16 @@ a sibling #map-annotations-config element, not from this partial).
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Manage Layers" %}
     <div id="custom-layers-dialog-body" class="custom-layers-dialog-body ul-dialog-body"></div>
 </dialog>
+
+{# -- Manage Image Overlays dialog: add/remove georeferenced images and set -- #}
+{# their opacity/lock state. Aligning happens on the map itself, not here.  -- #}
+{% if manage_overlays_url %}
+<dialog id="map-overlays-dialog" class="custom-layers-dialog ul-dialog">
+    {% include "dashboard/partials/ui/_dialog_header.html" with title="Image Overlays" %}
+    <div id="map-overlays-dialog-body" class="custom-layers-dialog-body ul-dialog-body"
+         hx-get="{{ manage_overlays_url }}" hx-trigger="load" hx-swap="innerHTML"></div>
+</dialog>
+{% endif %}
 
 {# -- Unified detail-pin panel: same shell/fields for adding AND editing, no --- #}
 {# embedded picker map - placing/moving the pin happens on the main map. Must --- #}

@@ -313,6 +313,7 @@ def map_layers_panel(
     extra_class: str = "",
     custom_layers: Any = None,
     manage_layers_url: str = "",
+    manage_overlays_url: str = "",
 ) -> dict[str, Any]:
     """Render the shared map layers component.
 
@@ -331,6 +332,10 @@ def map_layers_panel(
             static registry buttons (e.g. a pin or wiki's own layers).
         manage_layers_url: HTMX GET URL for the "Manage Layers" dialog entry
             point. Omit to hide that button (e.g. the ``strip`` variant).
+        manage_overlays_url: HTMX GET URL for the "Image Overlays" dialog,
+            where a user georeferences a historical map or site plan onto this
+            map. Omit to hide that button - only the pin-detail and wiki maps
+            have overlays.
 
     Returns:
         Context for ``partials/map/_layers_panel.html``.
@@ -344,6 +349,7 @@ def map_layers_panel(
         "panel_id": panel_id,
         "extra_class": extra_class,
         "manage_layers_url": manage_layers_url,
+        "manage_overlays_url": manage_overlays_url,
     }
 
 

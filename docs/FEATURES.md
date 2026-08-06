@@ -153,6 +153,16 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
 - Standalone reusable **MarkupMaps** with freehand drawing/annotation tools (point, line, freehand, arrow, text, box, circle, polygon), attachable to pins, wikis, safety check-ins, or kept independent; also embedded in the **safety check-in creation form** for drawing routes and destinations
 - Detail pins — sub-markers placed inside a pin/wiki's bounding box for finer-grained mapping
   (rooms, entrances, hazards, etc.)
+- **Georeferenced image overlays** — drop a historical map image (a Sanborn fire-insurance sheet,
+  a site plan, an old survey) onto a pin's or wiki's map and drag its **four corners** until the
+  old streets sit on the real ones. Four free corners means a full projective transform, so a scan
+  that is rotated, sheared, or trapezoidal (as flatbed scans of century-old paper usually are)
+  still lines up — an axis-aligned bounding box cannot express that. The image comes from an
+  upload, a pick from that page's own Media gallery (materialized to a real `Image` first, so it
+  survives the provider rotating its URL), or an external image URL. Per-overlay opacity, a lock
+  to stop a placed sheet drifting, and either its own layers-panel toggle or membership in a
+  custom layer (`models.map_overlay`, `controllers/map_overlays.py`,
+  `frontend/ts/shared/map-image-overlays.ts`)
 
 ## External Data Enrichment (Pin Detail Page)
 

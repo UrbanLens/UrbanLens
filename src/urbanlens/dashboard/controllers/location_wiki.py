@@ -21,8 +21,10 @@ from django.template.loader import render_to_string
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.controllers.map_overlays import OVERLAY_UUID_PLACEHOLDER, overlay_payload
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
 from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
+from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
@@ -169,6 +171,9 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "custom_layers": custom_layers,
                 "custom_layers_json": [layer.to_json() for layer in custom_layers],
                 "manage_layers_url": reverse("location.wiki.layers", args=[location.slug]),
+                "map_overlays_json": overlay_payload(MapImageOverlay.objects.for_wiki(wiki)),
+                "manage_overlays_url": reverse("location.wiki.overlays", args=[location.slug]),
+                "overlay_corners_url_template": reverse("location.wiki.overlays.corners", args=[location.slug, OVERLAY_UUID_PLACEHOLDER]),
                 "location": location,
                 "profile": profile,
                 "show_wiki_cover_photo": show_wiki_cover_photo,

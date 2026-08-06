@@ -12,6 +12,7 @@
 import { getCsrfToken } from "../shared/csrf";
 import { toast, confirmAction, htmxProcess } from "../shared/dialogs";
 import type { CustomLayerToggle } from "../shared/map-layers";
+import { createMapImageOverlays, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers, tileLayer } from "../shared/map-layers";
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
 
@@ -94,6 +95,7 @@ function readConfig(el: HTMLElement) {
         detailPinsJsonUrl: d.detailPinsJsonUrl || "",
         detailPinCreateUrl: d.detailPinCreateUrl || "",
         detailPinEditUrlTemplate: d.detailPinEditUrlTemplate || "",
+        overlayCornersUrlTemplate: d.overlayCornersUrlTemplate || "",
         detailPinsBulkEditUrl: d.detailPinsBulkEditUrl || "",
         pinShareDialogUrl: d.pinShareDialogUrl || "",
         detailPinsSendToWikiUrl: d.detailPinsSendToWikiUrl || "",
@@ -121,6 +123,17 @@ interface CustomLayerEntry {
 function readCustomLayers(): CustomLayerEntry[] {
     try {
         return JSON.parse(document.getElementById("custom-layers-data")?.textContent || "[]");
+    } catch {
+        return [];
+    }
+}
+
+// Georeferenced image overlays, embedded the same way (see
+// _map_annotations_panels.html and shared/map-image-overlays.ts).
+function readMapOverlays(): MapOverlayEntry[] {
+    try {
+        const parsed = JSON.parse(document.getElementById("map-overlays-data")?.textContent || "[]");
+        return Array.isArray(parsed) ? parsed : [];
     } catch {
         return [];
     }
@@ -699,6 +712,91 @@ function init(): void {
     document.body.addEventListener("ul:custom-layers-changed", (e) => {
         syncCustomLayers((e as CustomEvent).detail?.layers || []);
     });
+
+    // -- Georeferenced image overlays -------------------------------------
+    // Historical sheets (Sanborn maps, site plans) the user has aligned onto
+    // this map by dragging their four corners. Each gets its own toggle in the
+    // layers panel unless it was assigned to a custom layer, in which case it
+    // shows and hides with that layer's other markup instead.
+    const overlayCornersTemplate = cfg.overlayCornersUrlTemplate || "";
+    const imageOverlays = overlayCornersTemplate
+        ? createMapImageOverlays(L, map, {
+              cornersUrl: (uuid) => overlayCornersTemplate.replace("00000000-0000-0000-0000-000000000000", uuid),
+              csrfToken: getCsrfToken(),
+              onError: (message) => toast.error?.(message),
+          })
+        : null;
+
+    function overlayToggleKey(uuid: string): string {
+        return `overlay-${uuid}`;
+    }
+
+    function syncMapOverlays(entries: MapOverlayEntry[]): void {
+        if (!imageOverlays) return;
+        const standalone = entries.filter((entry) => !entry.layer_uuid);
+        imageOverlays.sync(entries, L.layerGroup());
+
+        // An overlay inside a custom layer follows that layer's toggle; the
+        // rest need one of their own so they can be turned off individually.
+        standalone.forEach((entry) => {
+            const key = overlayToggleKey(entry.uuid);
+            mapLayersInstance.registerToggle(key, {
+                isActive: () => imageOverlays.isVisible(entry.uuid),
+                toggle: () => imageOverlays.setVisible(entry.uuid, !imageOverlays.isVisible(entry.uuid)),
+            });
+            if (!customLayersMenu) return;
+            let btn = customLayersMenu.querySelector<HTMLButtonElement>(`[data-map-layer="${key}"]`);
+            if (!btn) {
+                btn = document.createElement("button");
+                btn.type = "button";
+                btn.className = "map-layer-btn";
+                btn.dataset.mapLayer = key;
+                btn.dataset.layerKind = "custom";
+                btn.addEventListener("click", () => mapLayersInstance.toggleCustom(key));
+                customLayersMenu.insertBefore(btn, customLayersManageBtn);
+            }
+            btn.innerHTML = `<span class="map-layer-thumb map-layer-thumb--icon"><i class="material-symbols-outlined">image</i></span><span>${escHtml(entry.name || "Image overlay")}</span>`;
+            btn.setAttribute("aria-label", `Show or hide ${entry.name || "image overlay"}`);
+        });
+
+        // Buttons for overlays that no longer exist (or moved into a layer).
+        const liveKeys = new Set(standalone.map((entry) => overlayToggleKey(entry.uuid)));
+        customLayersMenu?.querySelectorAll<HTMLElement>('[data-map-layer^="overlay-"]').forEach((btn) => {
+            if (!liveKeys.has(btn.dataset.mapLayer || "")) btn.remove();
+        });
+        mapLayersInstance.syncButtons();
+    }
+
+    syncMapOverlays(readMapOverlays());
+
+    document.body.addEventListener("ul:map-overlays-changed", (e) => {
+        syncMapOverlays((e as CustomEvent).detail?.overlays || []);
+    });
+
+    // Hooks the manage-overlays dialog calls by name (it is server-rendered
+    // HTML, so it can't import from this module).
+    window.ulMapOverlayStartAlign = (uuid: string) => {
+        imageOverlays?.startAlign(uuid);
+        (document.getElementById("map-overlays-dialog") as HTMLDialogElement | null)?.close();
+    };
+    window.ulMapOverlayPreviewOpacity = (uuid: string, value: string) => imageOverlays?.previewOpacity(uuid, Number(value));
+    // A new overlay lands covering roughly the current viewport, so aligning
+    // it is a small adjustment rather than a hunt across the world.
+    window.ulMapOverlaySeedCorners = () => {
+        const input = document.getElementById("map-overlay-initial-corners") as HTMLInputElement | null;
+        if (!input) return;
+        const bounds = map.getBounds().pad(-0.25);
+        const nw = bounds.getNorthWest();
+        const ne = bounds.getNorthEast();
+        const se = bounds.getSouthEast();
+        const sw = bounds.getSouthWest();
+        input.value = JSON.stringify([
+            [nw.lat, nw.lng],
+            [ne.lat, ne.lng],
+            [se.lat, se.lng],
+            [sw.lat, sw.lng],
+        ]);
+    };
 
     // URL base for detail pin edit/delete: strip the placeholder UUID off the end.
     const dpEditBase = cfg.detailPinEditUrlTemplate.replace("00000000-0000-0000-0000-000000000000/", "");

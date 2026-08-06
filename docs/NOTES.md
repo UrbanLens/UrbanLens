@@ -437,3 +437,29 @@ time migrations get re-squashed.
   particular test. TODO NOTE From Jess: We should probably fix TestCase so it does work cleanly.
 - Don't write unit tests asserting an exact log message string — trivial wording changes then
   break tests for no functional reason.
+
+## Georeferenced map image overlays
+
+`MapImageOverlay` stores **four WGS-84 corners**, not a transform matrix. The matrix is recomputed
+client-side on every map move from those corners
+(`frontend/ts/shared/map-image-overlays.ts:matrix3dForCorners`), which is why an overlay stays
+correct across zoom levels, base-layer switches, and would survive the rendering ever moving off
+Leaflet. Storing a matrix would bake in one particular projection and pixel origin.
+
+Rendering is a plain `<img>` under a CSS `matrix3d` rather than `L.ImageOverlay`: Leaflet's own
+overlay only accepts axis-aligned bounds, which cannot express rotation, shear, or the trapezoidal
+distortion a flatbed scan of an old sheet actually has. The homography solve is deliberately
+in-repo (~70 lines) rather than a `leaflet-distortableimage` dependency, so the corner semantics
+stay ours.
+
+Two things that look like they could be simplified but can't:
+
+* `.ul-map-overlay-image` must keep `transform-origin: 0 0`. The homography is solved against the
+  image's natural pixel rectangle starting at (0,0); any other origin silently shifts every corner.
+* A degenerate quadrilateral (three corners dragged onto one point) makes the 8x8 system singular.
+  `matrix3dForCorners` returns null there and the caller keeps the previous transform - applying a
+  NaN matrix would make the overlay vanish with no handle left to drag it back.
+
+`?preview=1` is not involved here: an overlay's image must be something a browser renders directly,
+which is why the external-URL path rejects PDFs/TIFFs and tells the user to upload instead (the
+upload path runs through the normal media pipeline).
