@@ -39,6 +39,15 @@ the hero's fixed height has no room to fit everything at once that small.
         Delete wiki
     </button>
     {% endif %}
+    {% if parent_wiki %}
+    {# Wikis nest themselves (a building's inside its campus's), so a nested #}
+    {# page needs a way up. Only rendered when the viewer has earned the     #}
+    {# parent - see the controller's visible_parent_wiki call.               #}
+    <a href="{% url 'location.wiki' parent_wiki.location.slug %}" class="wiki-parent-link btn btn--secondary btn--sm"
+       title="This place sits inside {{ parent_wiki.name }}">
+        <i class="material-symbols-outlined">arrow_upward</i> {{ parent_wiki.name|truncatechars:32 }}
+    </a>
+    {% endif %}
     {% if user_pin %}
     <a href="{% url 'pin.details' user_pin.slug %}" class="wiki-back-link btn btn--secondary btn--sm">
         <i class="material-symbols-outlined">arrow_back</i> Back to my pin

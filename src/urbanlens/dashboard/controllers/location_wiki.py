@@ -38,7 +38,7 @@ from urbanlens.dashboard.services.places.ambiguity import competing_wiki_locatio
 from urbanlens.dashboard.services.places.scope import scope_badge
 from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
-from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
+from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki, visible_parent_wiki
 from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit
 
 if TYPE_CHECKING:
@@ -171,6 +171,10 @@ class LocationWikiView(LoginRequiredMixin, View):
                 "custom_layers": custom_layers,
                 "custom_layers_json": [layer.to_json() for layer in custom_layers],
                 "manage_layers_url": reverse("location.wiki.layers", args=[location.slug]),
+                # Only ever the parent this viewer could actually open - see
+                # visible_parent_wiki: linking to one they haven't earned would
+                # confirm a place exists that they cannot see.
+                "parent_wiki": visible_parent_wiki(wiki, profile),
                 "map_overlays_json": overlay_payload(MapImageOverlay.objects.for_wiki(wiki)),
                 "manage_overlays_url": reverse("location.wiki.overlays", args=[location.slug]),
                 "overlay_corners_url_template": reverse("location.wiki.overlays.corners", args=[location.slug, OVERLAY_UUID_PLACEHOLDER]),

@@ -2076,3 +2076,28 @@ Verified clean: visible_to's per-uploader relationship checks are bounded by the
 gallery's distinct uploaders (documented tradeoff); every other Image-creating path sets
 file_size; media_source_key/media_item_key lookups are indexed; storage sums use the
 single-pass filtered-aggregate helper.
+
+## Codebase audit (2026-08-06, module 6: wiki/community) - findings & fixes
+
+- **Wiki pages had no way up to their parent** - wikis nest themselves (a building's wiki
+  becomes a child of the campus's, a documented feature), and `wiki_access.visible_parent_wiki`
+  was written specifically to make that link safe, but nothing ever called it: no template
+  rendered a parent breadcrumb, so a viewer landing on a nested building wiki was stuck
+  there. Wired it into the wiki hero beside "Back to my pin".
+
+  The gating is the point and is now covered by tests: within one access domain (a building
+  `PART_OF` its parcel) the parent is always reachable, but across a `MEMBER_OF` edge - a
+  campus earned only by holding *every* member parcel - the parent's **name must not reach
+  the response at all**, since a breadcrumb to a page that would 404 confirms a place the
+  viewer hasn't earned exists. The new test asserts absence from the response body, not just
+  absence of a link.
+
+Verified clean: every wiki-scoped controller and external-API view resolves through
+`resolve_visible_wiki` (the two `location_slug` users that don't - `maps.py` building a URL,
+`pin_edit.py` relinking a pin to a Location - aren't wiki access). No dead functions in
+services/wiki, services/comments, or services/consensus once helpers used within their own
+module are accounted for.
+
+Left alone deliberately: `place_visible_to` is public but referenced only by tests - it is a
+coherent part of the access module's public surface (the place-level twin of
+`location_visible_to`), so it reads as API completeness rather than dead weight.
