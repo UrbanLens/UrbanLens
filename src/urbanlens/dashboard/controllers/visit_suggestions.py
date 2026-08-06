@@ -68,7 +68,7 @@ class VisitSuggestionRespondView(LoginRequiredMixin, View):
             response = _render_visit_history(request, pin)
             return _trigger_label_refresh(response)
 
-        notifications = NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20]
+        notifications = NotificationLog.objects.for_profile(profile).for_display().order_by("-created")[:20]
         response = render(
             request,
             "dashboard/partials/notifications/notification_dropdown.html",

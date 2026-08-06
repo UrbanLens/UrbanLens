@@ -518,7 +518,7 @@ class FriendController(LoginRequiredMixin, GenericViewSet):
         ).update(status=Status.READ)
 
         # Return refreshed notification dropdown
-        notifications = NotificationLog.objects.for_profile(viewer_profile).select_related("source_profile").order_by("-created")[:20]
+        notifications = NotificationLog.objects.for_profile(viewer_profile).for_display().order_by("-created")[:20]
         unread_count = NotificationLog.objects.for_profile(viewer_profile).unread().count()
         response = render(
             request,

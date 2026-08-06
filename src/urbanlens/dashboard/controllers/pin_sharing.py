@@ -262,7 +262,7 @@ class PinShareRespondView(LoginRequiredMixin, View):
         if request.headers.get("HX-Request"):
             from urbanlens.dashboard.controllers.notifications import _trigger_label_refresh
 
-            notifications = NotificationLog.objects.for_profile(request.user.profile).select_related("source_profile").order_by("-created")[:20]
+            notifications = NotificationLog.objects.for_profile(request.user.profile).for_display().order_by("-created")[:20]
             response = render(request, "dashboard/partials/notifications/notification_dropdown.html", {"notifications": notifications, "unread_count": NotificationLog.objects.for_profile(request.user.profile).unread().count()})
             return _trigger_label_refresh(response)
         if action == "accept" and target_pin is not None:

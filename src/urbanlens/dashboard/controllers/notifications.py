@@ -70,7 +70,12 @@ class NotificationDropdownView(LoginRequiredMixin, View):
 
     def get(self, request):
         profile = request.user.profile
-        notifications = list(NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20])
+        # pin_share/visit_suggestion are reverse OneToOne accessors the item
+        # template reads to decide whether to offer Accept/Decline (and the
+        # visit merge choice). Without them here each of the 20 rows costs two
+        # extra queries - and the miss is invisible, because a missing reverse
+        # OneToOne raises ObjectDoesNotExist, which Django templates swallow.
+        notifications = list(NotificationLog.objects.for_profile(profile).for_display().order_by("-created")[:20])
         unread_ids = [n.id for n in notifications if n.is_unread]
         if unread_ids:
             NotificationLog.objects.filter(id__in=unread_ids).mark_read()
@@ -94,7 +99,7 @@ class NotificationMarkReadView(LoginRequiredMixin, View):
     def post(self, request, notification_id):
         profile = request.user.profile
         notification = get_object_or_404(
-            NotificationLog.objects.select_related("source_profile"),
+            NotificationLog.objects.for_display(),
             id=notification_id,
             profile=profile,
         )
@@ -119,7 +124,7 @@ class NotificationMarkAllReadView(LoginRequiredMixin, View):
             request,
             "dashboard/partials/notifications/notification_dropdown.html",
             {
-                "notifications": NotificationLog.objects.for_profile(profile).select_related("source_profile").order_by("-created")[:20],
+                "notifications": NotificationLog.objects.for_profile(profile).for_display().order_by("-created")[:20],
                 "unread_count": 0,
             },
         )

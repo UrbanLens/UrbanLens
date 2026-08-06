@@ -2101,3 +2101,31 @@ module are accounted for.
 Left alone deliberately: `place_visible_to` is public but referenced only by tests - it is a
 coherent part of the access module's public surface (the place-level twin of
 `location_visible_to`), so it reads as API completeness rather than dead weight.
+
+## Codebase audit (2026-08-06, module 7: messaging/e2ee/social) - findings & fixes
+
+- **Notification dropdown was a silent N+1** - `notification_item.html` reads the
+  `pin_share`/`visit_suggestion` reverse OneToOnes to decide whether to offer Accept/Decline
+  (a shared pin) or the three-way merge choice (a suggested visit), but all six call sites
+  selected only `source_profile`. Twenty rows therefore cost up to forty extra queries on
+  nearly every page load. The miss is *invisible* by construction: an absent reverse
+  OneToOne raises `ObjectDoesNotExist`, which Django templates swallow - so nothing breaks,
+  it just gets slow. Added `NotificationQuerySet.for_display()` and routed every
+  dropdown-rendering call site through it, so the relation set lives in one place as the
+  template grows. `notification_center` (external API) deliberately keeps its narrower
+  select: its serializer never reads those relations.
+
+  Worth recording how this was nearly mis-diagnosed: `NotificationLog` has no `pin_share`
+  field, so a field-list search says the template references something that doesn't exist,
+  which reads as "these buttons never render". They do - the names are the `related_name`s
+  of OneToOneFields declared on `PinShare`/`VisitSuggestion`. A reverse accessor is easy to
+  miss from the model's own side; check both directions before concluding a template branch
+  is dead.
+
+Verified clean: every `PinShare.objects.create` path (five of them - direct share, re-share,
+DM address detection, map share, trip share) resolves lineage and calls
+`record_share_exposure`, so the `LocationExposure` chain CLAUDE.md calls out is intact.
+Native push is fully wired (notification post_save -> on_commit -> `dispatch_native_push`).
+Comment mention-gating holds on every surface, including the external API, which serializes
+raw text only for comments that already passed the `VisibleComment` gate. No dead functions
+in services/messaging, services/social, services/sharing, or services/notifications.
