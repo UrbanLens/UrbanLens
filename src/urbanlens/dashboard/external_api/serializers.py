@@ -895,6 +895,7 @@ class SettingsSerializer(serializers.Serializer):
     community_enabled = serializers.BooleanField(read_only=True)
     show_wiki_cover_photos = serializers.BooleanField(read_only=True)
     auto_create_pin_article_from_wikipedia = serializers.BooleanField(read_only=True)
+    show_supporter_badge = serializers.BooleanField(read_only=True)
     # Pin suggestions.
     pin_suggestions_enabled = serializers.BooleanField(read_only=True)
     suggest_public_pins = serializers.BooleanField(read_only=True)
@@ -1007,6 +1008,7 @@ class SettingsPatchSerializer(serializers.Serializer):
     community_enabled = serializers.BooleanField(required=False)
     show_wiki_cover_photos = serializers.BooleanField(required=False)
     auto_create_pin_article_from_wikipedia = serializers.BooleanField(required=False)
+    show_supporter_badge = serializers.BooleanField(required=False)
     # Pin suggestions.
     pin_suggestions_enabled = serializers.BooleanField(required=False)
     suggest_public_pins = serializers.BooleanField(required=False)

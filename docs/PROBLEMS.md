@@ -2749,3 +2749,26 @@ change; all 321 SpotGuessr tests pass.
 
 Trivia's equivalent path was checked and left alone - `eligible_questions` is called once per round
 with a growing exclusion set, not inside a retry loop, so it does not have this shape.
+
+## Final full-suite verification (2026-08-06)
+
+**6 failed, 10,060 passed, 1,428 subtests passed** in 57 minutes, against a recorded baseline of
+18 failed / 10,025 passed. Twelve of the baseline's eighteen are fixed, none were introduced, and
+the extra 35 passing tests are the regression tests this audit added.
+
+The six remaining were all present in the baseline:
+
+- **5 infrastructure-stats tests** (`test_site_admin_stats` x4, `test_infrastructure_stats` x1) -
+  environmental. They collect live postgres/valkey/celery/nginx status and cannot pass without
+  those services reachable from the test process. Not a code defect.
+- **1 settings subtest** (`show_supporter_badge`) - a genuine, small API bug, now fixed. The field
+  was added to `Profile`, to the `SETTINGS_FIELDS` allowlist and to migration 0031, but not to the
+  external API's settings serializers, so `read_settings` produced it and the serializer dropped it
+  again: a preference an external client could neither read nor write. Added to both the read and
+  write serializers, in the position the allowlist declares it. This is exactly the failure mode
+  the serializer's own docstring predicts ("a new preference is invisible here until deliberately
+  added to SETTINGS_FIELDS *and* to this class") - the fail-closed design worked, the second step
+  was just missed.
+
+With that fixed, every remaining failure in the suite is environmental. The audit's cumulative
+work - 11 modules, a second pass, and six deferred Unit items - holds against a full run.
