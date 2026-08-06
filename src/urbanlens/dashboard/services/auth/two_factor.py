@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from cryptography.fernet import InvalidToken
 from django.contrib.auth.hashers import check_password, make_password
+from django.db.models import Q
 from django.utils import timezone
 import pyotp
 
@@ -199,8 +200,13 @@ def verify_totp_code(user: User, code: str) -> bool:
     if device.last_used_step is not None and step <= device.last_used_step:
         return False
 
-    TOTPDevice.objects.filter(pk=device.pk).update(last_used_step=step)
-    return True
+    # Claim the step in the same statement that checks it. Reading last_used_step and then
+    # writing it unconditionally lets two submissions of one intercepted code (a phishing
+    # proxy replaying it against a parallel session) both pass the check before either
+    # writes - the whole point of tracking the step. Postgres serialises the row update, so
+    # exactly one caller sees a row matched.
+    claimed = TOTPDevice.objects.filter(pk=device.pk).filter(Q(last_used_step__isnull=True) | Q(last_used_step__lt=step)).update(last_used_step=step)
+    return claimed == 1
 
 
 def verify_totp_setup_code(secret: str, code: str) -> bool:

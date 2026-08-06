@@ -9,6 +9,7 @@ class DashboardConfig(AppConfig):
     name = "urbanlens.dashboard"
 
     def ready(self):
+        from django.core.signals import request_finished, request_started
         from django.db.models.signals import post_save
 
         from urbanlens.dashboard.models.achievements.signals import connect as connect_achievement_signals
@@ -30,6 +31,15 @@ class DashboardConfig(AppConfig):
         from urbanlens.dashboard.plugins import plugin_registry
 
         post_save.connect(create_default_tags, sender=Profile, dispatch_uid="label_create_default_tags")
+
+        # Memoise the SiteSettings singleton for the length of a request only - see that
+        # module's docstring for why this is scoped to requests instead of cached globally.
+        from urbanlens.dashboard.models.site_settings import request_cache as site_settings_cache
+        from urbanlens.dashboard.models.site_settings.model import SiteSettings
+
+        request_started.connect(site_settings_cache.begin_scope, dispatch_uid="site_settings_cache_begin")
+        request_finished.connect(site_settings_cache.end_scope, dispatch_uid="site_settings_cache_end")
+        post_save.connect(site_settings_cache.invalidate, sender=SiteSettings, dispatch_uid="site_settings_cache_invalidate")
 
         # Achievements subscribe to a dozen unrelated models, so their receivers
         # are registered from a table rather than one import per sender.

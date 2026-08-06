@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -54,20 +55,31 @@ class StripeWebhookView(View):
         event = stripe_event.to_dict()
 
         from urbanlens.dashboard.models.billing import StripeWebhookEvent
+        from urbanlens.dashboard.services.billing import webhooks as billing_webhooks
 
-        webhook_event, created = StripeWebhookEvent.objects.get_or_create(
+        # Handling and marking-as-handled have to commit together. ``invoice.payment_succeeded``
+        # credits the payment by *incrementing* total_paid_cents (which drives how long
+        # pay-what-you-want access stays granted), so a delivery that applies the credit but
+        # fails before recording processed_at gets redelivered - Stripe retries on any
+        # non-2xx *or timeout* - and credits it a second time.
+        # Recorded in its own transaction, before the one below, so a delivery whose handler
+        # blows up still leaves its raw payload behind to debug from.
+        StripeWebhookEvent.objects.get_or_create(
             stripe_event_id=event["id"],
             defaults={"event_type": event["type"], "payload": event},
         )
-        if not created and webhook_event.processed_at is not None:
-            # Stripe redelivers on any non-2xx/timeout - a replay of an already-handled
-            # event is a no-op, not a re-run of its side effects.
-            return HttpResponse(status=200)
 
-        from urbanlens.dashboard.services.billing import webhooks as billing_webhooks
+        with transaction.atomic():
+            # Re-read under a row lock: two deliveries of one event arriving at once would
+            # otherwise both read processed_at as null and both run the side effects. The lock
+            # is per-event-id, so it only ever blocks a duplicate of this same event, and it is
+            # held across handle_event's Stripe API call - a round-trip, not a long job.
+            webhook_event = StripeWebhookEvent.objects.select_for_update().get(stripe_event_id=event["id"])
+            if webhook_event.processed_at is not None:
+                return HttpResponse(status=200)
 
-        billing_webhooks.handle_event(event)
+            billing_webhooks.handle_event(event)
 
-        webhook_event.processed_at = timezone.now()
-        webhook_event.save(update_fields=["processed_at", "updated"])
+            webhook_event.processed_at = timezone.now()
+            webhook_event.save(update_fields=["processed_at", "updated"])
         return HttpResponse(status=200)

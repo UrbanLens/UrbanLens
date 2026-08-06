@@ -2129,3 +2129,54 @@ Native push is fully wired (notification post_save -> on_commit -> `dispatch_nat
 Comment mention-gating holds on every surface, including the external API, which serializes
 raw text only for comments that already passed the `VisibleComment` gate. No dead functions
 in services/messaging, services/social, services/sharing, or services/notifications.
+
+## Codebase audit (2026-08-06, module 8: auth/billing/subscriptions/security) - findings & fixes
+
+- **A redelivered Stripe payment could be credited twice (money bug).** `invoice.payment_succeeded`
+  is the one handler with a non-idempotent side effect: `banking.apply_payment` *increments*
+  `total_paid_cents`, which drives `granting_access_for` (i.e. how long pay-what-you-want access
+  stays granted). `StripeWebhookView` recorded the event, handled it, then marked it processed -
+  three separate autocommits. Two ways that double-credits, both of which Stripe's retry policy
+  makes routine rather than theoretical (it redelivers on any non-2xx **or timeout**):
+  a delivery that applied the credit but died before writing `processed_at` gets retried and
+  credits again; and two deliveries arriving at once both read `processed_at` as null and both
+  run the side effects. Handling and marking-as-handled now commit together inside one
+  `transaction.atomic()`, entered after re-reading the event row `select_for_update()` so
+  concurrent duplicates of the same event serialise on it. The audit row is still inserted in its
+  own prior transaction, so a delivery whose handler raises leaves its raw payload behind to debug
+  from. Regression tests cover both paths, including a handler-succeeds-then-marking-fails
+  delivery followed by a retry.
+
+- **TOTP replay protection was a read-modify-write.** `verify_totp_code` read `last_used_step`,
+  compared, then wrote the new step unconditionally - so two submissions of one intercepted code
+  (a phishing proxy replaying it into a parallel session) could both pass the comparison before
+  either wrote, which is the exact thing tracking the step exists to stop. The step is now claimed
+  in the same statement that checks it (`filter(last_used_step__lt=step).update(...)`, verdict from
+  the matched-row count), so Postgres serialises it and exactly one caller wins.
+
+- **The SiteSettings singleton was re-fetched several times per page.** `get_current()` is called
+  from ~80 places, and each was its own `get_or_create(pk=1)` round-trip: three separate context
+  processors fetch it on every request, then the controller fetches it again, then every
+  `user_has_feature()` check fetches it once more. Added a request-scoped memo
+  (`models/site_settings/request_cache.py`), armed by `request_started` and torn down by
+  `request_finished`. Deliberately **not** a process-wide or TTL cache: long-lived Celery workers
+  would pin a settings row for the life of the worker, and the test suite mutates settings through
+  `queryset.update()`, which bypasses `save()` and so cannot invalidate anything. Anywhere without
+  a request never arms the memo and reads through exactly as before. `post_save` clears it so an
+  admin editing settings sees their own change for the rest of that request.
+
+Verified clean: the Stripe webhook does verify signatures (`stripe.Webhook.construct_event` against
+`UL_STRIPE_WEBHOOK_SECRET`, 503 when unset) and is the codebase's only CSRF-exempt endpoint, for a
+documented reason. All 22 API scopes are enforced by at least one view; `ExternalApiView`'s
+fail-closed default genuinely holds (`credential_grants` returns False for a null credential or an
+empty requirement, and `OAUTH2_ONLY_SCOPES` is refused to PAT-style keys regardless of the stored
+grant); `UnscopedExternalApiView` is a documented, deliberate exception. API-key auth hashes with
+Django's password hashers and looks up by indexed public prefix, so it neither iterates every hash
+nor leaks by timing. Login 2FA is lockout-rate-limited. `services/billing/{banking,pricing,
+stripe_client}` and `services/security/{redact,malware_scan}` are all wired, with no dead functions
+in `services/auth`, `services/billing`, or `services/security`.
+
+Not a gap, though it looks like one: `controllers/comments.py` passes `skip_malware_scan=True`.
+The scan is deferred to a Celery task instead, with the comment held `pending_scan` (hidden from
+every other viewer) until it clears - a slow/occasionally-unavailable clamd used to fail whole
+comment submissions.
