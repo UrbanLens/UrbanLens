@@ -2180,3 +2180,58 @@ Not a gap, though it looks like one: `controllers/comments.py` passes `skip_malw
 The scan is deferred to a Celery task instead, with the comment held `pending_scan` (hidden from
 every other viewer) until it clears - a slow/occasionally-unavailable clamd used to fail whole
 comment submissions.
+
+## Codebase audit (2026-08-06, module 9: games, trips, safety, memories) - findings & fixes
+
+- **One bad safety check-in could silently suppress everyone else's escalation.** The three
+  safety beat tasks (`send_due_checkin_reminders`, `send_final_checkin_warnings`,
+  `escalate_overdue_checkins`) each looped a queryset calling a per-check-in service with no
+  per-item guard, so any exception aborted the whole run. `SafetyCheckin` has a deterministic
+  `ordering`, so a row that fails repeatably - corrupt contact data, an address the mail backend
+  rejects, a template that won't render - fails at the same position on *every* tick, and every
+  check-in behind it never escalates. The failure is silent and unbounded: the sweep just returns
+  early, and the people whose emergency contacts were never called have no way to know. This is
+  the most consequential loop in the app to leave unguarded, and the fix was already the
+  file's own convention - `sweep_due_safety_checkin_archival` immediately below, and all four
+  game/trivia/consensus stall sweeps, already isolate per item. These three were simply missed.
+  `escalate_checkin` is per-contact idempotent (`notified_at__isnull=True`), so retrying a failed
+  check-in on the next tick reaches only the contacts the failed attempt never got to.
+
+- **Same shape in two billing sweeps**, fixed while here. `advance_pwyw_usage_ledgers` had no
+  guard at all - and it is the only thing counting a canceled subscription's banked balance down,
+  so one bad row froze every other user's ledger. `sync_stripe_subscriptions` guarded the Stripe
+  *fetch* but not the *apply*, and `sync_from_stripe_subscription` indexes `items.data[0]`, so a
+  subscription in an unexpected shape aborted the sweep for everyone after it.
+
+- **The Memories feed re-queried up to three times per trip.** `_trips_for_range` annotated
+  `_eff_start`/`_eff_end` to filter on, then discarded them and re-derived the same two dates
+  through `Trip.effective_start_date`/`effective_end_date` (a query apiece for any trip without
+  explicit dates), then called `_trip_representative_point`, which ran a third. Now the
+  annotations are used directly and activities arrive via a `Prefetch` carrying the same
+  `select_related`/ordering the point helper wants. Pinned with a test asserting the query count
+  is flat from one trip to six.
+
+- **The same code filtered and displayed trips by different definitions of "ends".** That
+  annotation took `Max(activities__scheduled_at)` while `effective_end_date` takes the later of
+  `scheduled_at` and `scheduled_end`. A trip whose final activity *runs past* the last start time
+  fell in the gap: filtered out of a window it visibly overlaps. The annotation now uses
+  `Greatest(Max(scheduled_at), Max(scheduled_end))` (Postgres's `GREATEST` ignores NULLs, so an
+  activity with no end doesn't erase the max), so the two agree by construction.
+
+- **Wired up `trip_name_suggestions`**, written for the create-trip dialog's placeholder rotation
+  and never called. The dialog carried a hand-maintained 12-name JS array instead - a second list
+  that would drift from the generator that actually names blank-submitted trips. Now exposed
+  through a `trip_name_ideas` template tag (matching the existing `subscription_role_choices`
+  precedent, since the dialog is included from two pages) and handed to JS via `json_script`.
+
+Verified clean: a definition-level sweep for unwired public functions across all four subsystems
+came back empty apart from the above - calendar sync, trip AI suggestions, and the trip signal
+receivers are all properly connected (`@receiver` plus the `apps.py` import). Games access control
+is systematic: every session-scoped SpotGuessr view resolves through `_participant_session`, which
+404s rather than 403s so a non-participant can't confirm a session id exists, and host-only actions
+(`begin_session`, `end_session_now`) check `host_profile_id` in the service layer rather than the
+view. The memories aggregator's other three sources already `select_related` correctly.
+
+Note on method: an early dead-code sweep that excluded each function's whole defining file produced
+17 false positives (`clamp_rounds`, `can_delete_comment`, `invite_members` and more are all called
+by their own module's public entry points). Excluding only the `def` line itself cut it to three.

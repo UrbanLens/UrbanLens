@@ -473,6 +473,22 @@ def subscription_role_choices():
     return SubscriptionRole.objects.all()
 
 
+@register.simple_tag
+def trip_name_ideas(count: int = 12) -> list[str]:
+    """Return generated trip names for the create-trip dialog's placeholder rotation.
+
+    Usage: ``{% trip_name_ideas as trip_name_ideas %}``
+
+    A tag rather than view context because the dialog is included from two pages
+    (the trips list and the overview), and the names come from the same generator
+    that fills in a blank submission server-side - a second, hand-maintained list
+    in the template would drift away from what the server actually names trips.
+    """
+    from urbanlens.dashboard.services.trips.trip_names import trip_name_suggestions
+
+    return trip_name_suggestions(count)
+
+
 @register.filter
 def pin_type_icon(pin_type: str) -> str:
     """The Material Symbols glyph for a ``PinType`` value.

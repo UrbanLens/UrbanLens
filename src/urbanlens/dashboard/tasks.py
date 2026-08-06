@@ -1970,8 +1970,15 @@ def send_due_checkin_reminders() -> int:
     try:
         count = 0
         for checkin in SafetyCheckin.objects.due_for_reminder():
-            send_checkin_reminder(checkin)
-            count += 1
+            # Isolated per check-in for the same reason the archival sweep below is:
+            # this queryset has a deterministic ordering, so one repeatably-failing row
+            # would otherwise abort the run at the same position on every tick and
+            # silently starve every check-in behind it.
+            try:
+                send_checkin_reminder(checkin)
+                count += 1
+            except Exception:
+                logger.exception("Safety checkin %s failed to send its due reminder; will retry next sweep", checkin.pk)
         if count:
             logger.info("Sent %s safety check-in reminder(s)", count)
         return count
@@ -1993,8 +2000,11 @@ def send_final_checkin_warnings() -> int:
     try:
         count = 0
         for checkin in SafetyCheckin.objects.due_for_final_warning():
-            send_final_warning(checkin)
-            count += 1
+            try:
+                send_final_warning(checkin)
+                count += 1
+            except Exception:
+                logger.exception("Safety checkin %s failed to send its final warning; will retry next sweep", checkin.pk)
         if count:
             logger.info("Sent %s safety check-in final warning(s)", count)
         return count
@@ -2016,8 +2026,15 @@ def escalate_overdue_checkins() -> int:
     try:
         count = 0
         for checkin in SafetyCheckin.objects.overdue():
-            escalate_checkin(checkin)
-            count += 1
+            # The most consequential of the three sweeps to isolate: this is the call
+            # that reaches someone's emergency contacts, and escalate_checkin is already
+            # per-contact idempotent, so retrying a failed one next tick only reaches the
+            # contacts the failed attempt never got to.
+            try:
+                escalate_checkin(checkin)
+                count += 1
+            except Exception:
+                logger.exception("Safety checkin %s failed to escalate to its emergency contacts; will retry next sweep", checkin.pk)
         if count:
             logger.info("Escalated %s overdue safety check-in(s)", count)
         return count
@@ -3013,7 +3030,14 @@ def sync_stripe_subscriptions() -> int:
         except stripe.StripeError:
             logger.exception("sync_stripe_subscriptions: failed to retrieve %s", role_subscription.stripe_subscription_id)
             continue
-        sync_from_stripe_subscription(role_subscription, stripe_subscription)
+        # Applying the payload is inside the guard too, not just fetching it:
+        # sync_from_stripe_subscription indexes into items.data[0], so one subscription
+        # in an unexpected shape would otherwise abort the sweep for everyone after it.
+        try:
+            sync_from_stripe_subscription(role_subscription, stripe_subscription)
+        except Exception:
+            logger.exception("sync_stripe_subscriptions: failed to apply %s", role_subscription.stripe_subscription_id)
+            continue
         count += 1
     return count
 
@@ -3036,8 +3060,13 @@ def advance_pwyw_usage_ledgers() -> int:
 
     count = 0
     for role_subscription in RoleSubscription.objects.filter(role__pay_what_you_want=True).select_related("role"):
-        banking.advance_usage_ledger(role_subscription)
-        count += 1
+        # This daily sweep is the only thing counting a canceled subscription's banked
+        # balance down, so one row failing must not freeze every other user's ledger.
+        try:
+            banking.advance_usage_ledger(role_subscription)
+            count += 1
+        except Exception:
+            logger.exception("advance_pwyw_usage_ledgers: failed to advance subscription %s", role_subscription.pk)
     return count
 
 
