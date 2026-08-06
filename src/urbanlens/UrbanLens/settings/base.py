@@ -41,6 +41,7 @@ DEBUG = _env_bool("DJANGO_DEBUG", _is_dev)
 # ALLOWED_HOSTS: AppSettings is the source of truth (override via UL_ALLOWED_HOSTS,
 # a comma-separated list). Local environment defaults to wildcard-friendly hosts so
 # developers can access the site immediately without any configuration.
+from urbanlens.UrbanLens.settings._env import env_bool  # noqa: E402
 from urbanlens.UrbanLens.settings.app import settings as _app_settings  # noqa: E402
 
 ALLOWED_HOSTS = _app_settings.allowed_hosts
@@ -548,8 +549,11 @@ EMAIL_HOST = os.getenv("UL_EMAIL_HOST", "")
 EMAIL_PORT = int(os.getenv("UL_EMAIL_PORT", "587"))
 EMAIL_HOST_USER = os.getenv("UL_EMAIL_USER", "")
 EMAIL_HOST_PASSWORD = os.getenv("UL_EMAIL_PASSWORD", "")
-EMAIL_USE_TLS = os.getenv("UL_EMAIL_TLS", "True") == "True"
-EMAIL_USE_SSL = os.getenv("UL_EMAIL_USE_SSL", "False") == "True"
+# Parsed leniently: app.py declares these same two variables as pydantic bools, which
+# accept true/1/yes, so a literal == "True" here made the two readers of one variable
+# disagree - and for TLS the disagreement resolved toward sending mail in plaintext.
+EMAIL_USE_TLS = env_bool("UL_EMAIL_TLS", default=True)
+EMAIL_USE_SSL = env_bool("UL_EMAIL_USE_SSL", default=False)
 DEFAULT_FROM_EMAIL = os.getenv("UL_EMAIL_FROM", "noreply@yourdomain.org")
 # Canonical base URL used to build absolute links in emails/notifications sent
 # from contexts with no HttpRequest to build them from (e.g. Celery tasks).

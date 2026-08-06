@@ -2277,3 +2277,53 @@ HEAD, so it is not a regression from this work. Note it partially writes output 
 it deleted `core.js`/`e2ee.js`/`permissions.js`/`webauthn.js` from the tracked static output and
 rewrote the esm bundles. Anyone running it needs to `git checkout` the static js directory
 afterwards; the tracked build artifacts should not be committed from a run that aborts halfway.
+
+## Codebase audit (2026-08-06, module 11: settings, urls, labels/saved-filter/search/import-export) - findings & fixes
+
+- **`UL_EMAIL_TLS=true` silently disabled STARTTLS.** `base.py` parsed it as
+  `os.getenv("UL_EMAIL_TLS", "True") == "True"` - a literal string comparison, so every spelling
+  but exactly `True` evaluated to False. The same variable is *also* declared in `app.py` as a
+  pydantic `bool`, which accepts `true`/`1`/`yes`/`on`, so the two readers of one variable
+  disagreed - and the disagreement resolved toward sending SMTP credentials and every outbound
+  mail in plaintext, while the operator's env file plainly said TLS was on. Nothing surfaces
+  that: mail still sends. `.env-sample` ships `True`, which is why it went unnoticed. Added
+  `settings/_env.py:env_bool()` (accepts the spellings people actually write, and falls back to
+  the *default* rather than False on an unrecognised value, since False is the unsafe direction
+  here) and routed both `EMAIL_USE_TLS` and `EMAIL_USE_SSL` through it.
+
+- **Removed three env vars from `.env-sample` that no code reads**: `UL_DPLA_API_KEY`,
+  `UL_US_CENSUS_API_KEY`, and `UL_CLOUDFLARE_WORKER_AI_API_KEY`. An operator setting these gets
+  silence - the census gateway (`census_tigerweb`) is keyless, DPLA is an unbuilt roadmap
+  candidate (it stays documented in `docs/ROADMAP.md`, which is where a not-yet-built integration
+  belongs), and the Cloudflare one is a near-miss for the real `UL_CLOUDFLARE_AI_API_KEY` /
+  `UL_CLOUDFLARE_WORKER_AI_ENDPOINT` pair, both of which do exist and are untouched.
+
+- **Two URL patterns share the name `404`** (`UrbanLens/urls.py:113` and
+  `dashboard/urls.py:1997`), both in the root namespace, so `reverse("404")` is ambiguous and
+  resolves to whichever registered last. Left as-is deliberately: nothing reverses that name, and
+  both catch-alls are correctly *scoped* (the dashboard one only sees `/dashboard/*`, since the
+  app is included under that prefix), so this is a naming wart rather than a routing bug. Noted
+  here so the next person who greps for it doesn't re-derive the analysis.
+
+- **`admin_username` / `admin_email` settings are read by nothing.** They export as
+  `ADMIN_USERNAME`/`ADMIN_EMAIL`, which are not Django settings and which no code consults. Left
+  in place (removing pydantic fields is a crash-loop risk class per CLAUDE.local.md, for no
+  functional gain) but recorded as dead configuration.
+
+Verified clean: of 89 pydantic settings fields, only those two are genuinely unread - the other 14
+that a naive grep flags are consumed through `app.py`'s uppercase auto-export into Django settings
+(`ROOT_URLCONF`, `TIME_ZONE`, `STATIC_URL`, ...), which a lowercase search misses. Route names are
+otherwise collision-free across namespaces (the only other same-namespace duplicates are DRF's own
+format-suffix pairs). No dead code in `models/labels`, `models/saved_filter`, `services/search`, or
+`services/import_export` - the four label signal receivers a definition-level sweep flags are all
+`@receiver`-decorated with `dispatch_uid` and connected on import. The export path is thoroughly
+prefetched: every `.all()` iteration over an M2M has a matching `prefetch_related` on the queryset
+feeding it. The import path bounds decompression against zip bombs. `saved_filter_cache` keys on a
+fingerprint of `updated` timestamps, so entries self-invalidate rather than needing explicit
+invalidation hooks.
+
+Corrected mid-audit: I initially read `_queryset_for_kind` (labels controller) as an N+1, since it
+calls `.with_pin_counts()` where the organize page calls `.with_hierarchy()`, and the shared card
+template reads `label.parents.all`. It is not - `with_pin_counts()` prefetches `parents` and
+`children` itself. Worth recording because the shape (two call sites, one prefetch helper) is
+exactly the module 7 notification bug, and here it turned out fine.
