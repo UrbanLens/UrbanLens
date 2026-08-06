@@ -2470,3 +2470,47 @@ another module deleting its subject first. All six user-upload paths that create
 `LocationExposure` provenance chain CLAUDE.md calls out is intact. Every render of
 `notification_item.html`, including the single-item re-render after marking one read, goes through
 `NotificationQuerySet.for_display()`.
+
+## Second pass (2026-08-06): access control - findings & fixes
+
+- **Relinking a pin was a way to *earn* wiki access rather than discover it.** Wiki visibility is
+  deliberately gated on discovery - `location_visible_to` grants on an exact `Location` match - so
+  which Location a pin points at is not a neutral preference, it is the thing that confers access.
+  `PinRelinkView` scoped the *pin* to the requester (`_pin_for_user`) but resolved the target
+  `Location` straight from the URL slug with no visibility check. And a Location's slug is its
+  `official_name` (falling back to uuid only when unnamed), so the slug of any notable place is
+  guessable: the test's undiscovered location slugs to literally `hudson-river-state-hospital`.
+  Any authenticated user could therefore POST `pin/<their-pin>/link/<guessed-slug>/` and read the
+  community wiki for a place they had never found - defeating the discovery rule CLAUDE.md calls
+  out as deliberate design. Confirmed end to end against current code: before the fix the wiki
+  returns 404, the relink succeeds, and the same wiki then returns 200.
+
+  Fixed by requiring `location_visible_to(location, pin.profile)` before relinking. This breaks no
+  legitimate flow, which is why the gate is safe rather than merely strict: the location picker
+  offers the pin's own location plus `competing_wiki_locations`, which already filters to
+  `accessible_domain_ids`, and the wiki page's switch button offers those same candidates - every
+  reachable target already passes.
+
+Verified clean, mechanically rather than by eye: an AST sweep for `get_object_or_404` on a
+request-supplied id with no scoping kwarg and no pre-filtered queryset found 59 call sites, and
+every one either re-checks ownership on the next line (`image.profile_id != profile.pk`,
+`suggestion.profile_id != profile.pk`), gates through a service (`is_accepted_partner`,
+`is_owner_or_accepted_partner`), is a token credential, or is admin-only. `detail_pins.py` resolves
+a Location from a slug but gates it with `location_visible_to` immediately. All three
+wiki-scoped `Image` queries apply `.visible_to(profile)`. `views_wiki.py` consistently re-scopes
+children to the resolved wiki (`get_object_or_404(WikiEdit, id=edit_id, wiki=wiki)`). The wiki
+access helpers are fail-closed on a missing place or domain root.
+
+### Environment: the dev container was 30 tracked files behind the working tree
+
+Found while chasing a `ModuleNotFoundError` for `services.places`: the `app` container image was
+built from an older commit and was missing 30 tracked files - the whole `models/place`,
+`models/album` and `models/map_overlay` packages, several controllers, and migrations 0026-0038.
+Every `docker exec ... pytest` run in this audit before this point therefore executed against a
+materially older codebase than the working tree.
+
+The HEAD-vs-fix baselines stand (both sides ran in the same stale container, so the comparison was
+like-for-like, and that is what the no-regression conclusions rest on), but any absolute
+"the suite passes" reading of those runs was weaker than it looked. `docker cp src/urbanlens/.
+urbanlens_devs1_app:/app/src/urbanlens/` resyncs it; the pin-relink fix above was re-verified both
+ways *after* syncing. Worth checking the container is current before trusting a test run here.

@@ -575,7 +575,19 @@ class PinRelinkView(LoginRequiredMixin, View):
         from urbanlens.dashboard.models.wiki.model import Wiki
 
         if location_slug:
+            from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to
+
             location = get_object_or_404(Location.objects.slug_or_uuid(location_slug))
+            # Which Location a pin points at is not a neutral preference - it is what
+            # confers access, since location_visible_to grants on an exact Location
+            # match. Without this check, relinking is a way to *earn* a community wiki
+            # rather than discover one, and a Location's slug is its official_name, so
+            # the slug of any notable place is guessable. Every legitimate target
+            # already passes: the picker offers the pin's own location plus
+            # competing_wiki_locations, which is filtered to accessible domains, and the
+            # wiki page's switch button offers those same candidates.
+            if not location_visible_to(location, pin.profile):
+                raise Http404
             # A profile can only ever have one root pin per location
             # (db_pin_unique_location_per_profile) - if one already exists at the
             # target, reassigning `pin.location` would collide with it. Merge
