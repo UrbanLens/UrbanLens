@@ -294,6 +294,40 @@ def _queryset_for_kind(kind: str, profile: Profile) -> QuerySet[Label]:
     raise ValueError(msg)
 
 
+def _auto_tag_available(user, profile: Profile, label_kind: str) -> bool:
+    """Whether *profile* has any auto-tagging path - AI or keyword - for this label kind.
+
+    One helper for both halves of the same decision: the edit form asks this to decide
+    whether to show the ``allow_auto_tag`` toggle, and the save handler asks it to decide
+    whether to honour the submitted value. Written out separately (as they were), the two
+    can drift into rendering a control the server silently ignores, or ignoring one the
+    server would have accepted.
+
+    Args:
+        user: The requesting user, for the site-level AI feature check.
+        profile: The owning profile, holding the per-kind preference flags.
+        label_kind: The label's kind - only tags, categories and statuses are
+            auto-taggable; anything else has no path and returns False.
+
+    Returns:
+        True when at least one auto-tagging path is available.
+    """
+    ai_kind_enabled = {
+        KIND_CATEGORY: profile.ai_label_categories,
+        KIND_TAG: profile.ai_label_tags,
+        KIND_STATUS: profile.ai_label_statuses,
+    }.get(label_kind, False)
+    keyword_kind_enabled = {
+        KIND_CATEGORY: profile.keyword_label_categories,
+        KIND_TAG: profile.keyword_label_tags,
+        KIND_STATUS: profile.keyword_label_statuses,
+    }.get(label_kind, False)
+
+    ai_path = user_has_feature(user, SiteFeature.AI) and profile.ai_enabled and ai_kind_enabled
+    keyword_path = profile.keyword_tagging_enabled and keyword_kind_enabled
+    return bool(ai_path or keyword_path)
+
+
 def _parent_candidates(profile: Profile, kind: str, exclude_id: int | None = None) -> QuerySet[Label]:
     """Return labels eligible as parents for a label of the given kind."""
     if kind == KIND_USER:
@@ -629,18 +663,8 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         selected_ids = {b.id for b in selected_parents} | {b.id for b in selected_children}
         available_parents = _parent_candidates(profile, self.kind, label_id)
 
-        ai_kind_enabled = {
-            KIND_CATEGORY: profile.ai_label_categories,
-            KIND_TAG: profile.ai_label_tags,
-            KIND_STATUS: profile.ai_label_statuses,
-        }.get(label.kind, False)
         can_use_ai_features = user_has_feature(request.user, SiteFeature.AI)
-
-        keyword_kind_enabled = {
-            KIND_CATEGORY: profile.keyword_label_categories,
-            KIND_TAG: profile.keyword_label_tags,
-            KIND_STATUS: profile.keyword_label_statuses,
-        }.get(label.kind, False)
+        show_auto_tag_toggle = _auto_tag_available(request.user, profile, label.kind)
 
         return render(
             request,
@@ -664,7 +688,7 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
                 # per-kind settings (keyword matching needs no site feature/subscription).
                 # Otherwise the option is offering a behavior the user has explicitly
                 # turned off, or that isn't available to them at all.
-                "show_auto_tag_toggle": (can_use_ai_features and profile.ai_enabled and ai_kind_enabled) or (profile.keyword_tagging_enabled and keyword_kind_enabled),
+                "show_auto_tag_toggle": show_auto_tag_toggle,
             },
         )
 
@@ -701,17 +725,7 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         # path available for this label's kind (AI or keyword-based); and never on the
         # protected "Visited" label.
         if not label.is_protected:
-            ai_kind_enabled = {
-                KIND_CATEGORY: profile.ai_label_categories,
-                KIND_TAG: profile.ai_label_tags,
-                KIND_STATUS: profile.ai_label_statuses,
-            }.get(label.kind, False)
-            keyword_kind_enabled = {
-                KIND_CATEGORY: profile.keyword_label_categories,
-                KIND_TAG: profile.keyword_label_tags,
-                KIND_STATUS: profile.keyword_label_statuses,
-            }.get(label.kind, False)
-            can_toggle_auto_tag = (user_has_feature(request.user, SiteFeature.AI) and profile.ai_enabled and ai_kind_enabled) or (profile.keyword_tagging_enabled and keyword_kind_enabled)
+            can_toggle_auto_tag = _auto_tag_available(request.user, profile, label.kind)
             if can_toggle_auto_tag:
                 label.allow_auto_tag = "allow_auto_tag" in request.POST
             label.keywords = request.POST.get("keywords", "").strip() or None
