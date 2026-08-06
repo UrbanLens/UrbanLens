@@ -2327,3 +2327,59 @@ calls `.with_pin_counts()` where the organize page calls `.with_hierarchy()`, an
 template reads `label.parents.all`. It is not - `with_pin_counts()` prefetches `parents` and
 `children` itself. Worth recording because the shape (two call sites, one prefetch helper) is
 exactly the module 7 notification bug, and here it turned out fine.
+
+---
+
+## Codebase audit (2026-08-06): consolidated summary of modules 1-11
+
+Eleven modules, one pass each, module-by-module across the whole codebase. 26 distinct defects
+fixed. Each module's own section above has the detail; this is the shape of what was found.
+
+**The four that would have hurt most in production**, all silent-failure bugs - the system keeps
+returning 200s and the damage is invisible until someone goes looking:
+
+1. *One bad safety check-in could suppress everyone else's escalation* (module 9). Three beat
+   tasks looped without per-item guards over a deterministically-ordered queryset, so a single
+   repeatably-failing row starved every check-in behind it, on every tick, forever. Emergency
+   contacts silently never called.
+2. *A redelivered Stripe payment could be credited twice* (module 8). Handling and
+   marking-as-handled were separate commits, and the credit is an increment. Stripe retries on
+   timeouts, so this was routine, not theoretical.
+3. *`UL_EMAIL_TLS=true` silently disabled STARTTLS* (module 11). A literal `== "True"` compare
+   against a variable that pydantic elsewhere parses as a bool - SMTP credentials and all mail in
+   plaintext while the env file said otherwise.
+4. *Redis `visibility_timeout` left at 3600s with `acks_late` on* (module 3). Any task running
+   over an hour gets redelivered and runs twice, concurrently.
+
+**Recurring patterns, worth internalising more than any single fix:**
+
+- *Two call sites, one fix.* Repeatedly a helper existed and was used correctly in one place and
+  missed in another: notification prefetch (7), safety sweep isolation (9, where the file's own
+  archival sweep three functions below already did it right), billing sweeps (9). When fixing a
+  N+1 or adding a guard, grep for every caller of the same template/service - the second one is
+  usually there.
+- *Read-modify-write where the DB could do it atomically.* TOTP replay steps, webhook
+  idempotency, storage quota, `get_nearby_or_create` - each a check-then-act that two concurrent
+  requests both pass.
+- *Duplicated constants across a language boundary.* The pin-cache version (10), the trip-name
+  list (9), `EMAIL_TLS` vs `EMAIL_USE_TLS` (11). None of these can be caught by types; they need
+  a test that reads both sides, which is now what guards the pin cache.
+- *Silent-by-construction failures.* An absent reverse OneToOne that Django templates swallow
+  (7), a cache-version mismatch that just returns `[]` (10), a sweep that returns early (9). The
+  common thread: no exception, no log, no user-visible error - only a test asserting the
+  *positive* behaviour catches them.
+
+**On method.** Two things repeatedly produced false leads and are worth flagging for whoever
+audits next. First, definition-level "dead code" sweeps: excluding a function's whole defining
+file yielded 17 false positives in module 9 alone (functions called by their own module's public
+entry points), and `@receiver`-decorated signal handlers look unreferenced no matter how you grep.
+Every "dead" finding here was confirmed by hand before deletion, and three suspected N+1s and one
+suspected dead template branch turned out to be fine on inspection - those are recorded too, since
+a wrong conclusion re-derived later costs as much as the original bug. Second, this environment's
+test suite: running against the dev compose stack trips the localhost-only network guard for every
+page-rendering test, so raw failure counts are meaningless. Every module's suspicious failures
+were re-run against a HEAD baseline before being attributed; in each case (166, 88, 19) the
+baseline was identical and the changes were clean.
+
+**Known-broken, not fixed here:** `bun run build` fails at its `entries-classic` (iife) step with
+the installed Bun, and deletes tracked static output before failing (module 10).
