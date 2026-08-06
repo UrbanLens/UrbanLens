@@ -2432,3 +2432,41 @@ fails every test whose request path touches the cache, including the *entire* cl
 tests live in (36 of 47 fail at HEAD). Both fixes here were verified by pinning that one test's
 cache to locmem and running the RED/GREEN pair explicitly against HEAD and against the fix, rather
 than by reading a green summary line.
+
+## Second pass (2026-08-06): cross-module interactions - findings & fixes
+
+Looking for bugs that live *between* modules, which a module-by-module pass structurally cannot
+see: each module looks correct in isolation and the defect is in the seam.
+
+- **Deleting a pin from its detail page left a ghost marker on the map.** Three correct-looking
+  pieces compose into a bug. (1) The map caches pins in localStorage. (2) Its background poll
+  decides whether to refresh by comparing `Max(updated)` across the profile's pins - which a
+  *deletion* cannot advance, so the poll is structurally blind to deletions; the only signal is
+  the `ul_pins_dirty` flag. (3) `deletePinCascade` is a shared helper in `base.html` called from
+  both the map page and the pin detail page, and it did not set that flag - the map's call site
+  set it separately, and the detail page's call site did not. So a pin deleted from its detail
+  page stayed in the map's cache indefinitely, restored on every subsequent load, with a marker
+  that 404s when clicked. It only self-corrected in the one case where the deleted pin happened
+  to be the most recently updated one, which changes `Max(updated)` and trips the poll's
+  not-equal check by accident.
+
+  Fixed in the shared helper rather than at the second call site, so every present and future
+  caller inherits it. Guarded by a contract test that brace-matches the helper's body out of the
+  template and asserts the flag is set on the success path (and not before the user-cancelled
+  bail-outs) - the same approach used for the pin-cache version contract, and for the same reason:
+  the invariant spans a template and its callers, where no type or constraint can reach.
+
+  Checked the neighbours: map bulk-delete is map-only and manages the cache directly, and
+  undo-restore recreates the row with a fresh `updated`, which the poll does catch. Deletion was
+  the unique blind spot.
+
+Verified clean: every `@receiver` in the codebase passes `dispatch_uid`. No Celery task is
+enqueued inside a `transaction.atomic()` block without `on_commit` (checked by AST, not grep). No
+`@shared_task` calls `.objects.get()` unguarded, so a task dispatched by one module tolerates
+another module deleting its subject first. All six user-upload paths that create an `Image`
+(gallery x2, safety, consensus, direct messages, and the shared photo-upload service) run the
+`image_upload_error` gauntlet. All six `PinShare.objects.create` paths pair with
+`resolve_and_stamp_origin_share`/`resolve_origin_share` + `record_share_exposure`, so the
+`LocationExposure` provenance chain CLAUDE.md calls out is intact. Every render of
+`notification_item.html`, including the single-item re-render after marking one read, goes through
+`NotificationQuerySet.for_display()`.

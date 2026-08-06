@@ -836,7 +836,17 @@
                 try { response = await _send(choice === 'alt' ? '?children=keep' : '?children=delete'); } catch (e) { return null; }
             }
 
-            return response.ok ? true : null;
+            if (response.ok) {
+                // The map's pin cache lives in localStorage and its poll only compares
+                // the newest pin's `updated` timestamp - a deletion can't advance that,
+                // so the poll is blind to it and the map would keep restoring a pin that
+                // no longer exists. Flagged here rather than at each call site: the map
+                // page remembered to, the pin detail page didn't, and the next caller
+                // would have had to know too.
+                try { localStorage.setItem('ul_pins_dirty', '1'); } catch (e) { /* private mode - a reload still refetches */ }
+                return true;
+            }
+            return null;
         };
     }());
     </script>
