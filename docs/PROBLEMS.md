@@ -2383,3 +2383,52 @@ baseline was identical and the changes were clean.
 
 **Known-broken, not fixed here:** `bun run build` fails at its `entries-classic` (iife) step with
 the installed Bun, and deletes tracked static output before failing (module 10).
+
+## Second pass (2026-08-06): concurrency & data-integrity races - findings & fixes
+
+The first pass kept turning up one shape - check-then-act that two concurrent callers both pass
+(TOTP replay steps, the Stripe webhook marker, storage quota, `get_nearby_or_create`). This pass
+went looking for the ones it missed, prioritising money, quotas, access grants and safety.
+
+- **Consensus tentative answers were accumulated without a lock.** `record_tentative_answers` is
+  find-then-bump-or-create, and two rounds resolving at once for the same wiki is ordinary, not
+  exotic - separate sessions play the same popular wiki concurrently. A threaded test reproduces
+  it exactly: both reads miss, both insert, and one dies with
+  `IntegrityError: duplicate key value violates unique constraint "db_consensus_tentative_unique"`,
+  taking round resolution down with it and losing the players' answers. No unique constraint can
+  cover this on its own - the coordinate branch dedups by *proximity*, which no constraint can
+  express, so there the same race is silent instead: two rows for one location with support split
+  across them, meaning a value the community actually agreed on never reaches the promotion
+  threshold. That is the feature failing at its whole purpose, quietly. Fixed by locking the
+  parent wiki for the upsert, which covers both branches, makes the row-level `+=` safe, and only
+  ever contends with another resolution for the same wiki.
+
+- **E2EE key reset applied rewraps computed against a superseded key.** The endpoint read the
+  bundle, had the client rewrap every conversation and group envelope against *that* public key,
+  and only then opened its transaction - the docstring's "one atomic transaction, no partial
+  state" was true of the writes but not of the read they depended on. A second reset landing in
+  between (a double-submitted or retried request - the endpoint is slow, so this is the realistic
+  path) meant the second request applied its rewraps on top and overwrote the version. Confirmed
+  at HEAD: the test drives a competing bump to v6 mid-flight and the request still returns 200,
+  logging `now v2` - it clobbers the newer bundle and seals conversations to a key the bundle no
+  longer advertises. Those threads are then undecryptable, and there is no recovery path. Fixed
+  by re-reading the bundle `select_for_update()` inside the transaction and returning 409 if the
+  version moved; the client restarts against the current key. The request has to lose cleanly
+  rather than half-succeed.
+
+Verified clean: `services/consensus/points.py` already locks its `ConsensusProfile` row correctly,
+and the trivia/consensus/spotguessr round-completion checks all operate on a `locked_round`. The
+E2EE *enrollment* check-then-act (`exists()` then `create()`) is backstopped by `profile` being a
+`OneToOneField`, so a concurrent double-enroll fails loudly with an IntegrityError rather than
+producing two bundles.
+
+Recorded, not fixed: a family of count-then-create limit checks (`max_partners`, `max_upcoming`
+trips, `max_members`, `max_activities`) can each be exceeded by one or two under concurrent
+requests. Real, but bounded and self-correcting - a user ends up slightly over a soft cap, with no
+corruption and nothing unrecoverable - so they are noted here rather than each acquiring a lock.
+
+Method note: this environment cannot run most of the affected suites - the Redis network guard
+fails every test whose request path touches the cache, including the *entire* class the E2EE reset
+tests live in (36 of 47 fail at HEAD). Both fixes here were verified by pinning that one test's
+cache to locmem and running the RED/GREEN pair explicitly against HEAD and against the fix, rather
+than by reading a green summary line.

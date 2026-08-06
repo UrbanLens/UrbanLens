@@ -20,7 +20,7 @@ import json
 import os
 import tempfile
 
-from django.test import Client
+from django.test import Client, override_settings
 from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
@@ -451,6 +451,48 @@ class RewrapAllAndResetPreservationTests(TestCase):
 
     def _reset_body(self, **extra) -> str:
         return json.dumps({"confirm": "RESET", "public_key": _b64(os.urandom(32)), "recovery_wrapped_secret": _b64(os.urandom(72)), **extra})
+
+    @override_settings(CACHES={"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache"}})
+    def test_reset_refuses_when_the_bundle_moved_mid_flight(self) -> None:
+        """A second reset landing between our read and our write must not be applied.
+
+        The client rewraps every conversation against the key it read at the start. If
+        another reset bumps the bundle in between, applying these rewraps would seal
+        some threads to the superseded key while the bundle advertises the newer one -
+        undecryptable, and unrecoverable. The request has to lose, not half-succeed.
+        """
+        me, partner = _profile(), _profile()
+        _enroll(me)
+        row = self._pair_key(me, partner)
+        untouched_before = row.wrapped_for(me.pk)
+
+        bundle = MessagingKeyBundle.objects.for_profile(me).first()
+        original_version = bundle.version
+
+        # Simulate the competing reset committing after this request read the bundle
+        # but before it takes the row lock.
+        real_filter = ConversationKey.objects.filter
+
+        def bump_then_filter(*args, **kwargs):
+            MessagingKeyBundle.objects.filter(pk=bundle.pk).update(version=original_version + 5)
+            ConversationKey.objects.filter = real_filter
+            return real_filter(*args, **kwargs)
+
+        ConversationKey.objects.filter = bump_then_filter
+        try:
+            response = _client_for(me).post(
+                reverse("e2ee.reset"),
+                data=self._reset_body(rewrapped_conversation_keys=[{"id": row.pk, "wrapped_key": _b64(os.urandom(48))}]),
+                content_type="application/json",
+            )
+        finally:
+            ConversationKey.objects.filter = real_filter
+
+        self.assertEqual(response.status_code, 409)
+        row.refresh_from_db()
+        self.assertEqual(row.wrapped_for(me.pk), untouched_before, "no rewrap may be applied when the reset is refused")
+        bundle.refresh_from_db()
+        self.assertEqual(bundle.version, original_version + 5, "the competing reset's version must stand")
 
     def test_reset_applies_rewrapped_copies_and_reports_the_count(self) -> None:
         me, partner = _profile(), _profile()

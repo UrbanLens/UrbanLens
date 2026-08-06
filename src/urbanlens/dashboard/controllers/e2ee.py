@@ -970,6 +970,18 @@ class E2EEResetView(DualAuthJsonView):
                 return Response({"error": "Unknown group envelope id"}, status=400)
 
         with transaction.atomic():
+            # The bundle was read before any of the rewrapping above, and the client
+            # computed every rewrap against *that* key. If a second reset landed in the
+            # meantime (a double-submitted or retried request is the realistic way),
+            # applying these rewraps now would seal some conversations to the superseded
+            # key while the bundle advertises the newer one - i.e. permanently
+            # undecryptable threads. Re-read under a row lock and refuse if it moved;
+            # the client can restart the reset against the current key.
+            locked_bundle = MessagingKeyBundle.objects.select_for_update().filter(pk=bundle.pk).first()
+            if locked_bundle is None or locked_bundle.version != bundle.version:
+                return Response({"error": "Your key bundle changed while this reset was in progress. Please try again."}, status=409)
+            bundle = locked_bundle
+
             # Only ever the caller's own side of each pair - the partner's
             # sealed copy is untouchable from this endpoint by construction.
             for row in conversation_rows:
