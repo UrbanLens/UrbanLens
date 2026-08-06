@@ -303,8 +303,6 @@ class Location(abstract.PublicDashboardModel):
         The area-suffixed placeholder is still rejected by
         :func:`~urbanlens.dashboard.services.locations.naming.is_meaningful_name`,
         so it never leaks into external API queries or saved names.
-
-        # TODO: This should be assessed for deletion.
         """
         try:
             wiki = self.wiki

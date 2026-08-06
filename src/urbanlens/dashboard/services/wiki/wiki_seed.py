@@ -1,6 +1,6 @@
 """Seed a wiki's or pin's article from a confidently-matched Wikipedia article.
 
-Wikis are created empty (see ``services.locations.creation.WikiCreationService``'s
+Wikis are created empty (see ``services.wiki.wiki_creation.WikiCreationService``'s
 docstring: "Wikis are never created automatically") - but once a Wikipedia
 article has been confidently matched to the wiki's location (see
 ``WikipediaGateway.get_article_for_location``, which only ever returns a
@@ -12,7 +12,7 @@ true:
 - a Wikipedia match is (re)cached for a location that already has a wiki
   with no article yet (see ``models.cache.signals``), or
 - a wiki is created for a location that already has a cached Wikipedia
-  match (see ``services.locations.creation.WikiCreationService``).
+  match (see ``services.wiki.wiki_creation.WikiCreationService``).
 
 Never overwrites: any existing Article row (seeded or human-written) is left
 untouched - see ``seed_wiki_article_from_wikipedia``'s own guard.

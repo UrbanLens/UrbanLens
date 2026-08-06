@@ -17,7 +17,7 @@ from django.views import View
 
 from urbanlens.dashboard.controllers.pin_edit import _overview_context, _pin_for_user, _pin_hero_oob
 from urbanlens.dashboard.models.wiki.model import Wiki
-from urbanlens.dashboard.services.locations.creation import (
+from urbanlens.dashboard.services.wiki.wiki_creation import (
     WikiCreationService,
     seedable_aliases,
     seedable_field_values,

@@ -20,7 +20,7 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.global_search import GlobalSearchEngine
-from urbanlens.dashboard.services.locations.creation import WikiCreationService
+from urbanlens.dashboard.services.wiki.wiki_creation import WikiCreationService
 
 _SAFELY_ENQUEUE = "urbanlens.dashboard.services.core.celery.safely_enqueue_task"
 

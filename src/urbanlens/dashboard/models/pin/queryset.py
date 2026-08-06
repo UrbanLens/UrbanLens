@@ -483,12 +483,29 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         # Re-queried via the concrete Pin manager (rather than iterating `self`
         # directly) so effective_polygon_for_pin, which takes a concrete Pin,
         # type-checks - `self` here is still the generic PinQuerySet[_ModelT].
-        pins = Pin.objects.filter(pk__in=self.values_list("pk", flat=True)).select_related("location")
+        # The select_related covers every relation resolve_for_pin's fallback
+        # chain touches (own row -> place polygon -> parent -> wiki -> circle),
+        # so resolving N pins doesn't lazily re-fetch each pin's location,
+        # place, parent, and wiki as four extra queries per pin.
+        pins = Pin.objects.filter(pk__in=self.values_list("pk", flat=True)).select_related("location__place", "parent_pin__location", "wiki")
         footprints = [(pin.pk, polygon) for pin in pins if (polygon := Boundary.objects.effective_polygon_for_pin(pin, BoundaryType.PROPERTY)) is not None]
 
+        # Sweep over x-extents instead of comparing all pairs: real
+        # collections are geographically spread out, and most footprints are
+        # the default ~50m circles, so nearly every pair's bounding boxes are
+        # disjoint - the O(n^2) polygon intersects this replaced spent almost
+        # all its time proving that. Sorting by min-x and breaking when the
+        # next candidate starts past this one's max-x keeps only genuinely
+        # x-overlapping pairs; the y-extent check then filters the rest before
+        # any real geometry runs.
+        entries = sorted(((polygon.extent, pk, polygon) for pk, polygon in footprints), key=lambda entry: entry[0][0])
         overlapping_ids: set[int] = set()
-        for i, (pk_a, polygon_a) in enumerate(footprints):
-            for pk_b, polygon_b in footprints[i + 1 :]:
+        for i, ((_min_x, min_y, max_x, max_y), pk_a, polygon_a) in enumerate(entries):
+            for (other_min_x, other_min_y, _other_max_x, other_max_y), pk_b, polygon_b in entries[i + 1 :]:
+                if other_min_x > max_x:
+                    break
+                if other_min_y > max_y or other_max_y < min_y:
+                    continue
                 if polygon_a.intersects(polygon_b):
                     overlapping_ids.add(pk_a)
                     overlapping_ids.add(pk_b)

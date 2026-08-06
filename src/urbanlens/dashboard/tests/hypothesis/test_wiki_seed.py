@@ -452,7 +452,7 @@ class WikipediaCacheSignalTriggersSeedingTests(TestCase):
 
 
 class WikiCreationSeedsFromAlreadyCachedArticleTests(TestCase):
-    """services.locations.creation.WikiCreationService: seed immediately on wiki creation
+    """services.wiki.wiki_creation.WikiCreationService: seed immediately on wiki creation
     when a Wikipedia match was already cached for the location beforehand."""
 
     def setUp(self) -> None:
@@ -460,7 +460,7 @@ class WikiCreationSeedsFromAlreadyCachedArticleTests(TestCase):
         self.profile = self.user.profile
 
     def test_create_for_pin_seeds_the_article_when_already_cached(self) -> None:
-        from urbanlens.dashboard.services.locations.creation import WikiCreationService
+        from urbanlens.dashboard.services.wiki.wiki_creation import WikiCreationService
 
         location = _location()
         LocationCache.objects.create(location=location, source="wikipedia", data=_ARTICLE_DATA)
@@ -475,7 +475,7 @@ class WikiCreationSeedsFromAlreadyCachedArticleTests(TestCase):
         self.assertIn("Eighteenth District School", article.content)
 
     def test_create_for_pin_without_a_cached_match_creates_no_article(self) -> None:
-        from urbanlens.dashboard.services.locations.creation import WikiCreationService
+        from urbanlens.dashboard.services.wiki.wiki_creation import WikiCreationService
 
         location = _location()
         pin = baker.make(Pin, profile=self.profile, location=location)

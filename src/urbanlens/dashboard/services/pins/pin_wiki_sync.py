@@ -143,7 +143,7 @@ def send_pins_to_wiki(parent_pin: Pin, children: list[Pin], profile: Profile) ->
     """Create a matching child wiki for each selected child pin not already covered.
 
     Never creates the wiki itself - community pages are only ever created
-    explicitly (``services.locations.creation.WikiCreationService``); this
+    explicitly (``services.wiki.wiki_creation.WikiCreationService``); this
     silently does nothing when the property has none yet.
 
     Args:

@@ -1987,3 +1987,26 @@ Still open (bigger than this pass): `check_rate_limit`'s three COUNTs run per ex
 call; fine while windows are indexed and the table is pruned, but a hot service could
 justify a cached counter. `EmailSendLog` is unbounded too - low volume (user-triggered
 email), so left alone deliberately.
+
+## Codebase audit (2026-08-06, module 2: pin/location/place) - findings & fixes
+
+- **`PinQuerySet.overlapping()` was O(n²) intersects plus 3-5 queries per pin** - and it is
+  user-reachable (the `overlapping_pins` saved-filter criterion), so a big collection turned
+  each map filter application into thousands of queries. Now select_relates every relation
+  `resolve_for_pin`'s fallback chain touches and sweeps sorted x-extents so only genuinely
+  bbox-overlapping pairs run real geometry. Still open: `Boundary.resolve_for_pin` itself is
+  per-pin (own row -> wiki row -> place polygon); a batched resolver using the existing
+  `rows_by_pin_id` would cut the remaining per-pin queries but changes a subtle fallback
+  chain - do it with care, with `map_pin_share_detection.py` as the pattern.
+- **`WikiCreationService` lived in `services/locations/creation.py`** - wiki creation filed
+  under locations, while every other wiki service lives in `services/wiki/`. Moved to
+  `services/wiki/wiki_creation.py`; all imports/docs updated.
+- **Stale TODO removed** - `Location.display_name` carried "TODO: assess for deletion" while
+  being load-bearing in tasks, comments, and the map controller.
+
+Noted, deliberately not changed: `Location.__setattr__` special-cases a duck-typed
+`google_place` for unit tests - test scaffolding in production code; removing it means
+fixing several tests to build real GooglePlace rows. `enrichment.py`/`external_data.py`
+carry seven "TODO: Catch specific exceptions" blanket handlers - each is a deliberate
+"never let one source break the cycle" guard, so narrowing them is safe only with
+per-source failure tests.

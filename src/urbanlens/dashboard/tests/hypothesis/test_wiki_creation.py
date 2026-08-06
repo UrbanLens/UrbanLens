@@ -17,7 +17,7 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.aliases.model import AliasType
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_stat_vote import WikiStatVote
-from urbanlens.dashboard.services.locations.creation import (
+from urbanlens.dashboard.services.wiki.wiki_creation import (
     WikiCreationService,
     seedable_aliases,
     seedable_field_values,

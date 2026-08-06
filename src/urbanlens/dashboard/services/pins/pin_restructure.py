@@ -453,7 +453,7 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
     """Mirror imported buildings as child wikis, when the place already has a wiki.
 
     Never creates a wiki - community pages are only ever created explicitly
-    (see ``services.locations.creation.WikiCreationService``). When one already
+    (see ``services.wiki.wiki_creation.WikiCreationService``). When one already
     exists, though, its readers benefit from the same building markers.
 
     Args:
