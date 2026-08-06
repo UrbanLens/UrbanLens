@@ -11,11 +11,19 @@
  * filtered here, since the caller always re-checks authoritatively server-side.
  */
 
-// Must match pages/map/index.html's own `_CACHE_KEY`/`v: 8` (the only writer
-// of this localStorage entry) - this constant drifted out of sync with that
-// page's cache-version bumps before (last matched v6), which silently made
-// every read here return [] since the real payload's `v` never matched.
-const CACHE_VERSION = 8;
+// Must match pages/map/index.html's own `_CACHE_KEY`/`v:` literals (that inline
+// script is the only writer of this localStorage entry). This constant drifted out
+// of sync with that page's cache-version bumps before (last matched v6), which
+// silently made every read here return [] since the real payload's `v` never
+// matched. Both are exported so pin-cache.contract.test.ts can read the template
+// and fail the build when the two sides disagree again, rather than the feature
+// just going quiet.
+export const PIN_CACHE_VERSION = 8;
+
+/** The localStorage key holding one profile's cached pin store. */
+export function pinCacheKey(profileUuid: string): string {
+    return `ul_pins_v5_${profileUuid}`;
+}
 
 export interface CachedPinLocation {
     latitude: number;
@@ -37,10 +45,10 @@ export interface CachedSearchPin {
 function readRawCachedPins(profileUuid: string): Array<Record<string, unknown>> {
     if (!profileUuid) return [];
     try {
-        const raw = localStorage.getItem(`ul_pins_v5_${profileUuid}`);
+        const raw = localStorage.getItem(pinCacheKey(profileUuid));
         if (!raw) return [];
         const cache = JSON.parse(raw);
-        if (cache?.v !== CACHE_VERSION || cache?.profileUuid !== profileUuid) return [];
+        if (cache?.v !== PIN_CACHE_VERSION || cache?.profileUuid !== profileUuid) return [];
         const pins = cache.pins;
         if (!pins || typeof pins !== "object") return [];
         return Object.values(pins) as Array<Record<string, unknown>>;

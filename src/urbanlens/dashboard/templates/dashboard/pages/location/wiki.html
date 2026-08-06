@@ -137,9 +137,11 @@
                 </div>
                 {% if first_pinned %}
                 <div class="wiki-stat">
-                    {# Already truncated to the 1st of the month, and suppressed
-                       entirely while the pin count is too low to display - see
-                       services.community_counts.wiki_community_summary. #}
+                    {% comment %}
+                    Already truncated to the 1st of the month, and suppressed
+                    entirely while the pin count is too low to display - see
+                    services.community_counts.wiki_community_summary.
+                    {% endcomment %}
                     <span class="wiki-stat-value">{{ first_pinned|date:"M Y" }}</span>
                     <span class="wiki-stat-label">First pinned</span>
                 </div>

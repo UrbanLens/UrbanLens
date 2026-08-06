@@ -2235,3 +2235,45 @@ view. The memories aggregator's other three sources already `select_related` cor
 Note on method: an early dead-code sweep that excluded each function's whole defining file produced
 17 false positives (`clamp_rounds`, `can_delete_comment`, `invite_members` and more are all called
 by their own module's public entry points). Excluding only the `def` line itself cut it to three.
+
+## Codebase audit (2026-08-06, module 10: frontend TS, templates, SCSS) - findings & fixes
+
+- **A multi-line `{# #}` comment was rendering to users on the wiki page.** Django's lexer matches
+  comments with a non-DOTALL `{#.*?#}`, so a `{#` whose `#}` sits on a later line is never
+  tokenised as a comment at all - it falls through as ordinary text and prints verbatim in the
+  middle of the page. `pages/location/wiki.html` had one, three lines of internal notes about
+  pin-count truncation, rendered right under the "First pinned" stat. Nothing fails loudly: the
+  page still returns 200 and the markup around it is fine, which is exactly why it survived.
+  Converted to `{% comment %}`, and added `test_template_comment_lint.py` - a `SimpleTestCase`
+  (no DB, runs in under two seconds) that scans all 416 templates for the same shape, so the
+  rule CLAUDE.md already states is now enforced rather than remembered.
+
+- **The pin cache's version and key were hardcoded on both sides of a cross-language contract.**
+  `pages/map/index.html`'s inline script is the only writer; `pin-cache.ts` is the reader; the
+  version (`v: 8`, `c.v !== 8`) and the key (`ul_pins_v5_${uuid}`) were spelled out independently
+  in each. A one-sided bump makes every read return `[]` - no error, the features built on it just
+  go quiet. This is not hypothetical: the module's own comment records that it already happened
+  (the reader sat on v6 after the writer moved on). Exported `PIN_CACHE_VERSION`/`pinCacheKey`
+  and added `pin-cache.contract.test.ts`, which parses the template and fails when the two sides
+  disagree. Confirmed it genuinely fails on drift by bumping one side before committing.
+
+- **Deleted `shared/parent-search.ts`** - dead on three independent counts: no entrypoint imports
+  it (so it is never bundled and the `window.filterParentOptions` global it installs never
+  exists), no template calls that global, and the `.tag-parent-option` class it queries appears
+  nowhere but inside the file itself. It is a superseded client-side filter; the live UI does
+  server-side search against `/map/pins/parent-search/`.
+
+Verified clean: a reachability walk from the 14 real entrypoints found only that one orphan plus
+`tools/generate-e2ee-fixture.ts` (a dev tool, legitimately run by hand). Every `|add:` on an id in
+all 416 templates already goes through `|stringformat:"s"` - the documented `''`-collapse gotcha
+has been fixed thoroughly. No orphaned SCSS partials. No other template/JS data duplication of the
+kind the trip-name array was: every hardcoded JS array in a template is an empty accumulator, and
+the one enum-shaped list (`_TRIP_TABS`) is a set of DOM tab names, not a mirror of a server enum.
+`tsc --noEmit` is clean and all 150 bun tests pass.
+
+Pre-existing, not fixed here: `bun run build` fails at `Formats besides 'esm' are not implemented`
+when it reaches the `entries-classic` (iife) step, with the installed Bun. Confirmed identical at
+HEAD, so it is not a regression from this work. Note it partially writes output before failing -
+it deleted `core.js`/`e2ee.js`/`permissions.js`/`webauthn.js` from the tracked static output and
+rewrote the esm bundles. Anyone running it needs to `git checkout` the static js directory
+afterwards; the tracked build artifacts should not be committed from a run that aborts halfway.
