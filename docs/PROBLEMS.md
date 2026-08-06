@@ -2726,3 +2726,26 @@ Serialising on the parent trip - the same shape as the Consensus tentative-answe
 the data is actually used. In `create_activity` the lock is entered *after* place resolution, so it
 covers only the read-then-write section rather than a geocoding round-trip. The trip controller's
 own 92 tests pass alongside the three new race tests.
+
+## Unit 24/25 (deferred item, now fixed): round generation re-ran the eligibility query per retry
+
+`generate_round_content` retries up to `_MAX_LOCATION_ATTEMPTS` (25) times, skipping any location
+the mode cannot build a round from. Every attempt re-ran `eligibility.eligible_locations` - a
+multi-join across every participant's pins, and optionally their visits, a label filter and a geo
+bound - so generating a single round could cost 25 executions of the most expensive query on the
+game path. It runs for every round of every session, and a prior fix already had to attack a
+related O(pool size) problem inside `pick_next_location` for the same reason (see its comment about
+`/start/` being slow-to-timing-out).
+
+Nothing eligibility depends on changes between attempts; only the caller's own exclusion list
+grows. The eligible ids are now resolved once and each attempt narrows a plain primary-key
+queryset. Deliberately not converted to a list: `pick_next_location` applies a PostGIS proximity
+filter (`point__distance_gte`) to the candidates, and reimplementing that distance check in Python
+would put a second, divergable copy of the rule in the codebase - a cheap `pk__in` queryset keeps
+the existing contract intact.
+
+Verified both ways: the new test reports `4 != 1` against the previous code and passes with the
+change; all 321 SpotGuessr tests pass.
+
+Trivia's equivalent path was checked and left alone - `eligible_questions` is called once per round
+with a growing exclusion set, not inside a retry loop, so it does not have this shape.

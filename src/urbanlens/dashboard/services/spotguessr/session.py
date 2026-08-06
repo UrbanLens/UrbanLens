@@ -523,14 +523,25 @@ def generate_round_content(
         raise SpotGuessrError(f"Mode {mode!r} has no round-generation logic.")
 
     excluded_ids = list(excluded_location_ids)
-    for _attempt in range(_MAX_LOCATION_ATTEMPTS):
-        candidates = eligibility.eligible_locations(
+    # Resolved once, not once per attempt. Eligibility is a multi-join across every
+    # participant's pins (and optionally visits, labels and a geo bound), and nothing it
+    # depends on changes between attempts - only our own exclusion list grows. Re-running
+    # it inside the loop meant generating a single round could cost up to
+    # _MAX_LOCATION_ATTEMPTS (25) of the most expensive query on the game path. The
+    # per-attempt queryset below is a plain primary-key filter, which keeps
+    # pick_next_location's PostGIS proximity filter working on a real queryset.
+    eligible_ids = list(
+        eligibility.eligible_locations(
             participants,
             require_visited_by_all=config.require_visited_all,
             geo_bounds=config.geo_bounds,
             exclude_location_ids=excluded_ids,
             label_id=config.label_id,
-        )
+        ).values_list("pk", flat=True),
+    )
+
+    for _attempt in range(_MAX_LOCATION_ATTEMPTS):
+        candidates = Location.objects.filter(pk__in=eligible_ids).exclude(pk__in=excluded_ids)
         location = selection.pick_next_location(candidates, mode=mode, difficulty=config.difficulty, previous_location=previous_location)
         if location is None:
             return None  # nothing eligible left at all
