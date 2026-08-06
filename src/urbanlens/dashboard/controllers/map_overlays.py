@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import contextlib
 import json
-import logging
 from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -47,8 +46,6 @@ if TYPE_CHECKING:
     from django.http import HttpRequest
 
     from urbanlens.dashboard.models.wiki.model import Wiki
-
-logger = logging.getLogger(__name__)
 
 _MAX_NAME_LENGTH = 100
 #: How many overlays one pin or wiki may hold. Each is a full-resolution image
@@ -264,7 +261,6 @@ def _render_overlay_list(request: HttpRequest, owner: Pin | Wiki, qs: QuerySet[M
         {
             "rows": rows,
             "create_url": reverse(url_prefix, args=[owner_slug]),
-            "corners_url_template": reverse(f"{url_prefix}.corners", args=[owner_slug, OVERLAY_UUID_PLACEHOLDER]),
             "layers": CustomLayer.objects.filter(**_owner_kwargs(owner)).order_by("order", "id"),
             "at_limit": len(overlays) >= MAX_OVERLAYS_PER_MAP,
             "max_overlays": MAX_OVERLAYS_PER_MAP,

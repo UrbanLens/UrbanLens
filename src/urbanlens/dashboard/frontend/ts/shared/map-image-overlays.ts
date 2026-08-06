@@ -132,7 +132,6 @@ interface LiveOverlay {
     entry: MapOverlayEntry;
     img: HTMLImageElement;
     handles: HTMLElement[];
-    layerGroup: L.LayerGroup;
     aligning: boolean;
 }
 
@@ -148,7 +147,13 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
     const pane = map.getPane("overlayPane");
     const live = new Map<string, LiveOverlay>();
     const container = document.createElement("div");
-    container.className = "ul-map-overlay-container";
+    // leaflet-zoom-hide makes Leaflet hide the whole container for the duration
+    // of a zoom animation. Without it the overlay is positioned in layer-point
+    // space while the pane is simultaneously being CSS-transformed by the
+    // animation, so it visibly drifts away from the map and snaps back at the
+    // end. Hiding through the animation and redrawing on zoomend is what
+    // Leaflet's own vector renderer does short of implementing _animateZoom.
+    container.className = "ul-map-overlay-container leaflet-zoom-hide";
     pane?.appendChild(container);
 
     function pixelFor(corner: [number, number]) {
@@ -160,9 +165,10 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         const { img, entry } = item;
         if (!img.naturalWidth || !img.naturalHeight) return;
         const points = entry.corners.map(pixelFor);
-        // Everything is positioned in layer-point space, so the element's own
-        // origin is the map origin - no per-element offset bookkeeping, and it
-        // survives Leaflet's own pane transforms during zoom animations.
+        // Everything is positioned in layer-point space, the same coordinates
+        // Leaflet's own overlay pane uses - so the element's origin is the map
+        // origin and there's no per-element offset bookkeeping. (This holds
+        // only between zoom animations; see leaflet-zoom-hide above.)
         const matrix = matrix3dForCorners(points, img.naturalWidth, img.naturalHeight);
         if (!matrix) return;
         img.style.transform = matrix;
@@ -226,14 +232,14 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         return handle;
     }
 
-    function add(entry: MapOverlayEntry, layerGroup: L.LayerGroup): void {
+    function add(entry: MapOverlayEntry): void {
         const img = document.createElement("img");
         img.className = "ul-map-overlay-image";
         img.alt = entry.name || "Map overlay";
         img.draggable = false;
         img.src = entry.url;
 
-        const item: LiveOverlay = { entry, img, handles: [], layerGroup, aligning: false };
+        const item: LiveOverlay = { entry, img, handles: [], aligning: false };
         item.handles = entry.corners.map((_corner, index) => makeHandle(item, index));
 
         container.appendChild(img);
@@ -261,17 +267,20 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         });
     }
 
-    map.on("move zoom viewreset moveend zoomend", redrawAll);
+    // `zoom` deliberately not included: it fires continuously *during* the
+    // animation, when layer points are momentarily inconsistent with the pane's
+    // own transform (see leaflet-zoom-hide above).
+    map.on("move moveend viewreset zoomend", redrawAll);
 
     return {
         /** Replace the whole overlay set (after an HTMX manage-dialog action). */
-        sync(entries: MapOverlayEntry[], layerGroup: L.LayerGroup): void {
+        sync(entries: MapOverlayEntry[]): void {
             const fresh = new Set(entries.map((entry) => entry.uuid));
             [...live.keys()].filter((uuid) => !fresh.has(uuid)).forEach(remove);
             entries.forEach((entry) => {
                 const existing = live.get(entry.uuid);
                 if (!existing) {
-                    add(entry, layerGroup);
+                    add(entry);
                     return;
                 }
                 const wasVisible = !existing.img.hidden;
@@ -312,6 +321,10 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         /** The uuids currently rendered, in draw order. */
         uuids(): string[] {
             return [...live.keys()];
+        },
+        /** The uuids of overlays belonging to one custom layer. */
+        uuidsInLayer(layerUuid: string): string[] {
+            return [...live.values()].filter((item) => item.entry.layer_uuid === layerUuid).map((item) => item.entry.uuid);
         },
     };
 }

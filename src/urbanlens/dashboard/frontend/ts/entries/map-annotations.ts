@@ -734,7 +734,18 @@ function init(): void {
     function syncMapOverlays(entries: MapOverlayEntry[]): void {
         if (!imageOverlays) return;
         const standalone = entries.filter((entry) => !entry.layer_uuid);
-        imageOverlays.sync(entries, L.layerGroup());
+        imageOverlays.sync(entries);
+
+        // An overlay assigned to a custom layer follows that layer's toggle
+        // rather than carrying one of its own. The layer's own LayerGroup holds
+        // markup, not this <img> (it lives in the overlay pane), so visibility
+        // is mirrored from whether that group is on the map.
+        entries
+            .filter((entry) => entry.layer_uuid)
+            .forEach((entry) => {
+                const group = customLayerGroups.get(entry.layer_uuid as string);
+                imageOverlays.setVisible(entry.uuid, !!group && map.hasLayer(group));
+            });
 
         // An overlay inside a custom layer follows that layer's toggle; the
         // rest need one of their own so they can be turned off individually.
@@ -766,6 +777,19 @@ function init(): void {
         });
         mapLayersInstance.syncButtons();
     }
+
+    // Keep layer-assigned overlays in step when their layer is toggled. Bound
+    // to the map rather than to each toggle button so it also catches a layer
+    // turned on from the Manage Layers dialog or by default_visible.
+    function syncOverlaysToLayers(): void {
+        if (!imageOverlays) return;
+        customLayerGroups.forEach((group, layerUuid) => {
+            const visible = map.hasLayer(group);
+            imageOverlays.uuidsInLayer(layerUuid).forEach((uuid) => imageOverlays.setVisible(uuid, visible));
+        });
+    }
+
+    map.on("layeradd layerremove", syncOverlaysToLayers);
 
     syncMapOverlays(readMapOverlays());
 
