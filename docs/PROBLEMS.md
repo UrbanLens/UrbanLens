@@ -2993,3 +2993,30 @@ duplication, but it is not the same class of defect: those values are stable ide
 genuine branching (keyboard shortcuts, layer switching), and adding a new choice leaves the
 existing branches working rather than silently disabling a feature. Coupling worth knowing about,
 not a latent bug, and not worth the indirection of emitting them through `json_script`.
+
+### Extracting base.html's inline JS: the pattern and the constraint
+
+The codebase already has the right pattern, and documents it: `entries-classic/core.ts` is a
+classic (non-module) IIFE bundle loaded in `base.html`'s `<head>`, installing window globals via
+`installGlobalX()` helpers from `shared/` modules. Its own docstring explains why it is not
+`type="module"` - module scripts defer until after parsing, and several pages call these globals
+from classic `<script>` tags that run synchronously. So extracting base.html's remaining globals is
+"add a `shared/x.ts` with an `installGlobalX()`, import it in `core.ts`, delete the inline block".
+
+`base.html` exposes 15 such globals. The dialog group is the obvious first extraction -
+`confirmDialog` (used by 10 templates), `deletePinCascade` (4), `urbanlensConfirmExternalLink` (2) -
+because it is self-contained, has no Leaflet dependency, and already has a contract test.
+
+**But the naive move is wrong, and this is the part worth writing down.** That block is not just
+function definitions: its IIFE resolves `#confirm-dialog` and its buttons *at load time* and
+attaches listeners to them, and it sits after the `<dialog>` markup in the body. `core.ts` runs in
+the `<head>`, where those elements do not exist yet - so lifting the block as-is yields null
+element references and a dialog that never opens. The extraction has to bind lazily (resolve the
+elements and attach listeners on first use) before it can move.
+
+Not attempted here for a reason worth stating: this repo has no DOM/browser test layer, so a
+behavioural change to a dialog reached from 10 templates could not be verified beyond typechecking,
+and `bun test` would report success either way. The contract tests added by this audit only parse
+templates for invariants. Specifying the constraint is more useful than a plausible-looking change
+nobody can check - and it makes the case that a small DOM-level test setup would pay for itself
+before this 19,638-line layer is moved.
