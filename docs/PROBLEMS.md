@@ -3087,3 +3087,30 @@ animation helper's move made deliberately and knowingly untested rather than by 
 
 Not started this turn rather than half-finished: a 307-line port left incomplete is worse than one
 not begun, and the survey is what the next attempt actually needs.
+
+## Full-suite verification (2026-08-07): 10,087 passed, 0 failed
+
+**10,087 passed, 0 failed, 1,429 subtests passed, in 58:49.** Not one failure line in the output.
+The progression across the audit:
+
+| Run | Failed | Passed |
+| --- | --- | --- |
+| First complete run (2026-08-06) | 18 | 10,025 |
+| After the panel-test and settings-serializer fixes | 6 | 10,060 |
+| This run | **0** | **10,087** |
+
+Of the original eighteen, twelve were stale panel tests written before the REData gate existed, five
+were the infrastructure-stats tests that turned out to be masking a real 500, and one was a settings
+field the external API had never exposed. None were flaky; each had a cause.
+
+**One caveat, stated because it affects how much this run proves.** Files were copied into the
+container while it was running - the panel-contract validation landed mid-run - so this is not a
+pristine single-commit run. pytest imports test modules at collection, but source modules are
+imported lazily, so a mid-run copy can produce a mixed state. The container's Python tree is
+byte-identical to the repo now, and the affected work (`panel_source_problems` and its ten tests)
+was verified separately, but a run that proves a specific commit end to end needs no concurrent
+copies. Worth doing before a release; not worth re-running an hour for now.
+
+Also unaffected by that caveat: the frontend work landed today is host-side only (bun), never
+copied into the container, so `shared/confirm-dialog.ts` and the happy-dom harness are outside this
+run entirely. They are covered by `bun test` (162 passing) and `tsc --noEmit` (clean).
