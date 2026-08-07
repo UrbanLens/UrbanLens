@@ -21,6 +21,10 @@ interface ConfirmDialogOptions {
     message?: string;
     confirmLabel?: string;
     cancelLabel?: string;
+    /** Shows a third button; picking it resolves with "alt" rather than a boolean. */
+    altLabel?: string;
+    /** false renders the primary button as non-destructive. */
+    danger?: boolean;
 }
 
 interface HtmxApi {
@@ -46,7 +50,11 @@ interface CommentMapComposerOptions {
 declare global {
     interface Window {
         toastr: Toastr;
-        confirmDialog?: (options: ConfirmDialogOptions) => Promise<boolean>;
+        // Resolves "alt" when the caller offered altLabel and the user picked it - the
+        // pin-delete "keep child pins" path depends on that third outcome. This was
+        // declared as Promise<boolean> while the implementation could already return
+        // "alt", so callers narrowing on it were trusting a type that was not true.
+        confirmDialog?: (options: ConfirmDialogOptions | string) => Promise<boolean | "alt">;
         htmx?: HtmxApi;
         ulBulkToolbar?: UlBulkToolbar;
         csrftoken: string;

@@ -3020,3 +3020,39 @@ and `bun test` would report success either way. The contract tests added by this
 templates for invariants. Specifying the constraint is more useful than a plausible-looking change
 nobody can check - and it makes the case that a small DOM-level test setup would pay for itself
 before this 19,638-line layer is moved.
+
+## A DOM test harness, and the first extraction it made safe (2026-08-07)
+
+The blocker recorded above was real, so it got fixed first: `bun test` had no document, so
+anything touching the DOM could be typechecked but never *exercised*. Added
+`@happy-dom/global-registrator` as a dev dependency and a three-line preload
+(`frontend/ts/testing/dom-setup.ts`, wired through a new `bunfig.toml`).
+
+It immediately paid for itself twice over:
+
+- `pin-cache.test.ts` carried a hand-rolled `MemoryStorage` polyfill assigned onto `globalThis`,
+  which now conflicted with the real one - so those seven tests were rewritten against an actual
+  `Storage` rather than a stand-in.
+- The `base.html` dialog group moved out: `shared/confirm-dialog.ts` now owns `confirmDialog`,
+  `urbanlensConfirmExternalLink` and `deletePinCascade`, installed by `entries-classic/core.ts`,
+  binding `#confirm-dialog` **lazily on first use** exactly as the constraint required. 107 lines
+  of inline JS left `base.html` (1,882 -> 1,776), and 12 behavioural tests now cover what was
+  previously untestable: cancel resolves false, the alt button resolves `"alt"`, the message is
+  HTML-escaped, a 409 asks about children and retries with the chosen mode, a failed delete does
+  not flag the cache, and - the one that matters most - binding still works when the markup appears
+  after the module loads.
+
+  The old `pin-delete-invalidation.contract.test.ts`, which parsed `base.html` looking for the
+  string `ul_pins_dirty`, was deleted: the DOM test asserts the actual behaviour it was
+  approximating.
+
+**The typechecker found a latent type lie on the way through.** `types/globals.d.ts` declared
+`window.confirmDialog` as returning `Promise<boolean>`, but the implementation could already return
+`"alt"` when a caller passed `altLabel` - which the pin-delete "keep child pins" path does. Any
+caller narrowing on that type was trusting something untrue, and `"alt"` is a truthy string, so it
+would have read as a confirmation. Corrected the declaration and made `dialogs.ts`'s
+`confirmAction` narrow explicitly rather than by assumption.
+
+That is the argument for the harness in one paragraph: moving 107 lines under the typechecker
+surfaced a wrong type declaration that had been sitting in a `.d.ts` unexercised. There are 1,776
+lines left in `base.html` alone.

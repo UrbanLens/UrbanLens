@@ -17,6 +17,7 @@
  * classic script preserves the exact head-executes-before-body ordering the
  * site already depends on.
  */
+import { installGlobalConfirmDialog } from "../shared/confirm-dialog";
 import { installGlobalLabelPicker } from "../shared/label-picker";
 import { installGlobalLocationSearchEngine } from "../shared/location-search-engine";
 import { installGlobalMapExport } from "../shared/map-export";
@@ -24,6 +25,7 @@ import { installGlobalMapLayers } from "../shared/map-layers";
 import { installGlobalMarkupEngine } from "../shared/markup-engine";
 import { createMarkupToolbar } from "../shared/markup-toolbar";
 
+installGlobalConfirmDialog();
 installGlobalLocationSearchEngine();
 installGlobalMapLayers();
 installGlobalMarkupEngine();

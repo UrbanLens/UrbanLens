@@ -5,10 +5,15 @@ export interface ConfirmOptions {
     cancelLabel?: string;
 }
 
-/** Wraps window.confirmDialog (base.html), falling back to native confirm() if unavailable. */
+/** Wraps window.confirmDialog (shared/confirm-dialog.ts), falling back to native confirm().
+ *
+ * Callers here never pass altLabel, so the dialog's third outcome cannot arise - but it
+ * is narrowed explicitly rather than assumed, because "alt" is a truthy string and would
+ * otherwise read as a confirmation if one were ever added.
+ */
 export async function confirmAction(options: ConfirmOptions): Promise<boolean> {
     if (window.confirmDialog) {
-        return window.confirmDialog(options);
+        return (await window.confirmDialog(options)) === true;
     }
     return window.confirm(options.message ?? "Are you sure?");
 }

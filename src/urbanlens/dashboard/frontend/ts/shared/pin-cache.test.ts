@@ -6,30 +6,8 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { readCachedPinLocations } from "./pin-cache";
 
-// Bun's test runtime has no browser globals by default - a minimal in-memory
-// Storage polyfill is enough for pin-cache.ts, which only calls getItem/setItem/clear.
-class MemoryStorage implements Storage {
-    private store = new Map<string, string>();
-    get length(): number {
-        return this.store.size;
-    }
-    clear(): void {
-        this.store.clear();
-    }
-    getItem(key: string): string | null {
-        return this.store.has(key) ? (this.store.get(key) ?? null) : null;
-    }
-    key(index: number): string | null {
-        return Array.from(this.store.keys())[index] ?? null;
-    }
-    removeItem(key: string): void {
-        this.store.delete(key);
-    }
-    setItem(key: string, value: string): void {
-        this.store.set(key, value);
-    }
-}
-(globalThis as { localStorage: Storage }).localStorage = new MemoryStorage();
+// localStorage comes from the DOM the test preload registers (see testing/dom-setup.ts),
+// so these exercise a real Storage rather than a hand-rolled stand-in.
 
 const PROFILE_UUID = "11111111-1111-1111-1111-111111111111";
 
