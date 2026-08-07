@@ -3056,3 +3056,34 @@ would have read as a confirmation. Corrected the declaration and made `dialogs.t
 That is the argument for the harness in one paragraph: moving 107 lines under the typechecker
 surfaced a wrong type declaration that had been sitting in a `.d.ts` unexercised. There are 1,776
 lines left in `base.html` alone.
+
+### base.html's remaining 1,776 lines, block by block
+
+Surveyed rather than attacked, so the next extraction starts from evidence. The file has eight
+inline blocks left:
+
+| Block | Lines | Globals | Extractable? |
+| --- | --- | --- | --- |
+| 1 | 158 | `urbanlensMediaThumbFallback`, `urbanlensSizeEditInPlaceInput` | Yes, but carries `{{ csrf_token }}` and Django `messages`, so it needs a `json_script` config first |
+| 2 | 251 | none | Probably - no globals to keep in step |
+| 4 | 62 | `autosaveGuard` | Yes, small and self-contained |
+| 6 | 936 | the comment-map composer group | **Not as one move** - see below |
+| 7 | 307 | `ulSectionCollapsed`, `ulRefreshCollapseRestore`, `ulFlyToToolsFab` | Best next target - no template tags, no Leaflet |
+| 8 | 24 | none | Trivial, but 9 template tags for 24 lines - leave it |
+
+**Block 6 (936 lines, the comment map composer) should not be moved as a single step.** It is one
+IIFE whose functions share closure state, it drives Leaflet through `typeof L` guards, and it
+embeds seven `{% url %}` tags plus the viewer's profile uuid. Moving part of it would leave the
+group's globals defined in two places, which is worse than leaving it; moving all of it would put
+~900 lines of Leaflet-dependent behaviour under a test harness that has no Leaflet. It needs its
+own plan, and probably a Leaflet stub, before it is touched.
+
+**Block 7 is the right next one** - 307 lines, no template tags, no Leaflet, mostly `localStorage`
+and class toggling that happy-dom tests well. One caveat found while reading it: about 70 of those
+lines (`ulFlyToToolsFab` and `_toolsFabTarget`) measure layout via `getBoundingClientRect` and
+`getComputedStyle`, which happy-dom returns as zeros - so that part would move unverified. The two
+concerns share no closure state, only DOM lookups, so they can go as two modules with the
+animation helper's move made deliberately and knowingly untested rather than by accident.
+
+Not started this turn rather than half-finished: a 307-line port left incomplete is worse than one
+not begun, and the survey is what the next attempt actually needs.
