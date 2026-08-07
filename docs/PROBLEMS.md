@@ -3786,3 +3786,38 @@ written down - validate a scan against a known-good and a known-bad case before 
 would have caught all three, and did not get applied here either. Worth treating as a habit
 rather than a note: when a scan reports that one component does something and its siblings do
 not, the first hypothesis should be that the scan is wrong, not the code.
+
+## Undoing a pin delete crashed when the place had been re-pinned (2026-08-07)
+
+Audited the undo framework - the last substantive feature area untouched this session.
+Migrations were checked first and are clean: `makemigrations --check` reports no changes, no
+untracked migrations (the gotcha where an uncommitted one leaks into a dependency), and a
+single linear chain to 0038.
+
+**Ownership is enforced correctly.** `restore_undo_action` explicitly delegates the check -
+its docstring says the caller is responsible for "checking it belongs to the requesting
+profile before calling this" - which is the shape that produces a bug when one caller
+forgets. All three callers honour it: `controllers/undo.py`, `external_api/views_undo.py` and
+`controllers/pin_bulk.py` each resolve through `UndoAction.objects.for_profile(...)`.
+
+**Two real bugs in `PinUndoHandler.restore`,** both from the same constraint:
+`db_pin_unique_location_per_profile` - one *root* pin per location per profile. The handler
+pre-checks every foreign key the batch referenced, and says why: "since recreating the row
+would otherwise fail with an uncaught IntegrityError". It did not check this one.
+
+1. **Delete a pin, drop a new one at the same place, hit undo → IntegrityError → 500.** An
+   ordinary sequence, not a contrived one. Now refused cleanly as `UndoExpiredError` with a
+   message that says what actually happened, matching how every other unsatisfiable restore
+   in this handler behaves.
+
+2. **Restoring a detail pin failed too, for a subtler reason.** Pins were created parent-less
+   and adopted in a second pass (parents need their new pks first). The constraint only
+   covers root pins - so a detail pin is a root pin for the duration of that gap, and
+   collides with whatever root pin stands at its location. Fixed by creating parents before
+   children and setting the link at creation, so a pin is never transiently a root pin it was
+   never meant to be. Repeated passes rather than a sort, so an arbitrarily deep hierarchy in
+   one batch still resolves.
+
+Five tests. Beyond the two failures, they pin down that another profile's pin at the same
+location does *not* block the undo (the constraint is per profile), that the replacement pin
+survives a refused undo, and that an ordinary undo still restores.

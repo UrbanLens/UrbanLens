@@ -90,21 +90,47 @@ class PinUndoHandler(UndoHandler):
         return describe_batch("Pin", "pins", [p.effective_name for p in instances])
 
     @classmethod
+    def _resolved_parent_pk(cls, entry: dict[str, Any], in_batch: set[int]) -> int | None:
+        """The old pk of the parent this entry will end up under, or None if it will be a root pin.
+
+        Three outcomes, matching what :meth:`restore` actually does: no parent
+        recorded; a parent that is part of this same batch (relinked to its new
+        row); or a parent outside the batch, reattached only if it still exists.
+        A parent that has since been deleted leaves the pin at the top level.
+        """
+        old_parent_pk = entry["parent_pin_old_pk"]
+        if not old_parent_pk:
+            return None
+        if old_parent_pk in in_batch:
+            return old_parent_pk
+        if Pin.objects.filter(pk=old_parent_pk, profile_id=entry["profile_id"]).exists():
+            return old_parent_pk
+        return None
+
+    @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[Pin]:
         """Recreate pins with fresh pks/uuids/slugs, relinking hierarchy and labels.
 
-        Parent/child relationships within the restored batch are relinked in
-        a second pass once every pin has a new pk to relink against.
+        Parents are created before their children and the link is set at creation
+        rather than in a second pass. That ordering is not cosmetic:
+        ``db_pin_unique_location_per_profile`` allows one *root* pin per location
+        per profile, so a detail pin created parent-less and adopted afterwards is
+        momentarily a root pin, and collides with whatever root pin already stands
+        at its location.
 
         Raises:
             UndoExpiredError: If the profile, location, wiki, or any label this
                 batch referenced was independently deleted during the retention
                 window, since recreating the row would otherwise fail with an
-                uncaught IntegrityError.
+                uncaught IntegrityError. Also raised when a pin that would come
+                back as a root pin finds its location already re-pinned by this
+                profile - the same constraint, refused cleanly instead of 500ing.
         """
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.services.undo.service import UndoExpiredError
+
+        in_batch = {entry["old_pk"] for entry in payload}
 
         for entry in payload:
             if not Profile.objects.filter(pk=entry["profile_id"]).exists():
@@ -117,33 +143,45 @@ class PinUndoHandler(UndoHandler):
             label_ids = entry["label_ids"]
             if label_ids and Label.objects.filter(pk__in=label_ids).count() != len(set(label_ids)):
                 raise UndoExpiredError("One of the labels on this pin no longer exists.")
+            # Only root pins are covered by the constraint, so only they can be blocked.
+            if cls._resolved_parent_pk(entry, in_batch) is None and Pin.objects.filter(
+                location_id=entry["location_id"], profile_id=entry["profile_id"], parent_pin__isnull=True,
+            ).exists():
+                raise UndoExpiredError("You have pinned this place again since deleting it, so the original can't be restored alongside it.")
 
         old_to_new: dict[int, Pin] = {}
         restored: list[Pin] = []
-        for entry in payload:
-            pin = Pin.objects.create(
-                location_id=entry["location_id"],
-                profile_id=entry["profile_id"],
-                wiki_id=entry["wiki_id"],
-                **entry["fields"],
-            )
-            old_to_new[entry["old_pk"]] = pin
-            restored.append(pin)
+        # Parents first: a child created before its parent would have to be adopted
+        # afterwards, and would be a root pin in the meantime. Repeated passes rather
+        # than a sort, so an arbitrarily deep hierarchy in one batch still resolves.
+        pending = list(payload)
+        while pending:
+            progressed = False
+            deferred: list[dict[str, Any]] = []
+            for entry in pending:
+                parent_old_pk = cls._resolved_parent_pk(entry, in_batch)
+                if parent_old_pk in in_batch and parent_old_pk not in old_to_new:
+                    deferred.append(entry)
+                    continue
+                parent_pk = old_to_new[parent_old_pk].pk if parent_old_pk in old_to_new else parent_old_pk
+                pin = Pin.objects.create(
+                    location_id=entry["location_id"],
+                    profile_id=entry["profile_id"],
+                    wiki_id=entry["wiki_id"],
+                    parent_pin_id=parent_pk,
+                    **entry["fields"],
+                )
+                old_to_new[entry["old_pk"]] = pin
+                restored.append(pin)
+                progressed = True
+            if not progressed:
+                # A cycle among parent links, which the schema should make impossible.
+                raise UndoExpiredError("This pin's hierarchy can no longer be rebuilt.")
+            pending = deferred
 
-        for entry, pin in zip(payload, restored, strict=True):
-            old_parent_pk = entry["parent_pin_old_pk"]
-            if old_parent_pk:
-                if old_parent_pk in old_to_new:
-                    pin.parent_pin = old_to_new[old_parent_pk]
-                    pin.save(update_fields=["parent_pin"])
-                else:
-                    # The parent wasn't part of this deletion (a child pin was
-                    # deleted on its own) - reattach to it if it still exists.
-                    surviving_parent = Pin.objects.filter(pk=old_parent_pk, profile_id=entry["profile_id"]).first()
-                    if surviving_parent is not None:
-                        pin.parent_pin = surviving_parent
-                        pin.save(update_fields=["parent_pin"])
-            if entry["label_ids"]:
-                pin.labels.set(entry["label_ids"])
+        for entry in payload:
+            label_ids = entry["label_ids"]
+            if label_ids:
+                old_to_new[entry["old_pk"]].labels.set(label_ids)
 
         return restored
