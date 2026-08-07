@@ -106,6 +106,9 @@ describe("closing the tab", () => {
 });
 
 describe("clicking a link", () => {
+    // The scheme/modifier/download filtering all lives in leave-confirmation.ts and
+    // is covered there; these check that this guard is wired to it and that its own
+    // dirty/in-flight state is what drives it.
     test("goes straight through when nothing is pending", async () => {
         const event = await clickLink(link());
         expect(event.defaultPrevented).toBe(false);
@@ -118,6 +121,13 @@ describe("clicking a link", () => {
         expect(event.defaultPrevented).toBe(true);
     });
 
+    test("is intercepted while a save is in flight", async () => {
+        autosaveGuard.saveStarted();
+        stubConfirm(false);
+        const event = await clickLink(link());
+        expect(event.defaultPrevented).toBe(true);
+    });
+
     test("declining leaves the guard armed, so the next click asks again", async () => {
         autosaveGuard.markDirty();
         stubConfirm(false);
@@ -125,20 +135,12 @@ describe("clicking a link", () => {
         expect(autosaveGuard.isBlocked()).toBe(true);
     });
 
-    test("accepting disarms the guard so the navigation is not challenged twice", async () => {
+    test("accepting clears the guard's own state", async () => {
         autosaveGuard.markDirty();
+        autosaveGuard.saveStarted();
         stubConfirm(true);
         await clickLink(link());
         expect(autosaveGuard.isBlocked()).toBe(false);
-    });
-
-    test("falls back to the native prompt when core.js has not loaded", async () => {
-        autosaveGuard.markDirty();
-        const nativeConfirm = mock(() => false);
-        window.confirm = nativeConfirm as unknown as typeof window.confirm;
-
-        await clickLink(link());
-        expect(nativeConfirm).toHaveBeenCalled();
     });
 
     test("uses the message the page set", async () => {
@@ -148,87 +150,6 @@ describe("clicking a link", () => {
 
         await clickLink(link());
         expect((dialog.mock.calls[0]?.[0] as { message?: string })?.message).toBe("Your draft is still uploading.");
-    });
-});
-
-describe("links that do not leave the page", () => {
-    const cases: [string, string][] = [
-        ["an in-page anchor", '<a id="go" href="#section">Jump</a>'],
-        ["a javascript: url", '<a id="go" href="javascript:void(0)">Run</a>'],
-        ["a data: url", '<a id="go" href="data:text/plain,hi">Data</a>'],
-        ["a vbscript: url", '<a id="go" href="vbscript:msgbox">Legacy</a>'],
-        ["a new-tab link", '<a id="go" href="/elsewhere/" target="_blank">New tab</a>'],
-        ["an anchor with no href value", '<a id="go" href="">Empty</a>'],
-    ];
-
-    for (const [name, html] of cases) {
-        test(`${name} is not challenged`, async () => {
-            autosaveGuard.markDirty();
-            const dialog = stubConfirm(false);
-
-            const event = await clickLink(link(html));
-            expect(event.defaultPrevented).toBe(false);
-            expect(dialog).not.toHaveBeenCalled();
-        });
-    }
-
-    test("a scheme is matched case-insensitively and past leading whitespace", async () => {
-        autosaveGuard.markDirty();
-        const dialog = stubConfirm(false);
-
-        await clickLink(link('<a id="go" href="  JavaScript:void(0)">Sneaky</a>'));
-        expect(dialog).not.toHaveBeenCalled();
-    });
-
-    test("a click that is not on a link at all is ignored", async () => {
-        autosaveGuard.markDirty();
-        const dialog = stubConfirm(false);
-        document.body.innerHTML = '<button id="go">Press</button>';
-
-        await clickLink(document.getElementById("go")!);
-        expect(dialog).not.toHaveBeenCalled();
-    });
-
-    test("a click on an element inside a link still counts as the link", async () => {
-        autosaveGuard.markDirty();
-        const dialog = stubConfirm(false);
-        document.body.innerHTML = '<a href="/elsewhere/"><span id="go">Deep</span></a>';
-
-        await clickLink(document.getElementById("go")!);
-        expect(dialog).toHaveBeenCalled();
-    });
-});
-
-describe("opening a link in a new tab", () => {
-    // Ctrl/Cmd-click leaves this page open, so there is nothing to lose and nothing
-    // to warn about. Worse, intercepting it and then navigating via location.href
-    // hijacks the current tab - the opposite of what the user asked for, and it
-    // discards the very changes the guard exists to protect.
-    const modifiers: [string, MouseEventInit][] = [
-        ["ctrl", { ctrlKey: true }],
-        ["cmd", { metaKey: true }],
-        ["shift", { shiftKey: true }],
-        ["middle-click", { button: 1 }],
-    ];
-
-    for (const [name, init] of modifiers) {
-        test(`${name} is left alone`, async () => {
-            autosaveGuard.markDirty();
-            const dialog = stubConfirm(false);
-
-            const event = await clickLink(link(), init);
-            expect(event.defaultPrevented).toBe(false);
-            expect(dialog).not.toHaveBeenCalled();
-        });
-    }
-
-    test("a plain click is still challenged", async () => {
-        autosaveGuard.markDirty();
-        const dialog = stubConfirm(false);
-
-        const event = await clickLink(link());
-        expect(event.defaultPrevented).toBe(true);
-        expect(dialog).toHaveBeenCalled();
     });
 });
 

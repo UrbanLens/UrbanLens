@@ -316,28 +316,16 @@
         return true;
     }
 
-    window.addEventListener('beforeunload', function (e) {
-        if (!nobodyWouldBeNotified()) return;
-        e.preventDefault();
-        e.returnValue = '';
+    // beforeunload + link interception are shared with the auto-save guard and the
+    // tools export page; only the condition and wording differ.
+    // See frontend/ts/shared/leave-confirmation.ts.
+    if (window.ulInstallLeaveConfirmation) window.ulInstallLeaveConfirmation({
+        isBlocked: nobodyWouldBeNotified,
+        title: 'Leave without a way to reach you?',
+        message: message,
+        confirmLabel: 'Leave anyway',
+        onConfirmed: function () { window._safetySkipLeaveWarning = true; },
     });
-
-    document.addEventListener('click', function (e) {
-        if (!nobodyWouldBeNotified()) return;
-        var a = e.target.closest ? e.target.closest('a[href]') : null;
-        if (!a) return;
-        var href = a.getAttribute('href');
-        var scheme = href ? href.trim().toLowerCase() : '';
-        if (!href || href.charAt(0) === '#' || scheme.indexOf('javascript:') === 0 || scheme.indexOf('data:') === 0 || scheme.indexOf('vbscript:') === 0 || a.target === '_blank') return;
-        e.preventDefault();
-        var proceed = window.confirmDialog ? window.confirmDialog({
-            title: 'Leave without a way to reach you?',
-            message: message,
-            confirmLabel: 'Leave anyway',
-            danger: true,
-        }) : Promise.resolve(window.confirm(message));
-        proceed.then(function (ok) { if (ok) window.location.href = a.href; });
-    }, true);
 }());
 </script>
 <script>

@@ -13,9 +13,12 @@
  * Ported out of ``base.html``'s inline script unchanged.
  */
 
+import { type LeaveConfirmationHandle, installLeaveConfirmation } from "./leave-confirmation";
+
 let dirty = false;
 let inFlight = 0;
 let message = "Changes are still saving. Leave this page anyway?";
+let leaveConfirmation: LeaveConfirmationHandle | null = null;
 
 export interface AutosaveGuard {
     markDirty(): void;
@@ -66,20 +69,13 @@ function askToLeave(): Promise<boolean | "alt"> {
     return Promise.resolve(window.confirm(message));
 }
 
-function isBlocked(): boolean {
+export function isBlocked(): boolean {
     // Via the global so a page that replaces window.autosaveGuard is still honoured.
     return window.autosaveGuard ? window.autosaveGuard.isBlocked() : autosaveGuard.isBlocked();
 }
 
 function allowNavigation(): void {
     (window.autosaveGuard ?? autosaveGuard).allowNavigation();
-}
-
-function onBeforeUnload(event: BeforeUnloadEvent): void {
-    if (!isBlocked()) return;
-    // Browsers show their own wording here; the message is only used by our dialogs.
-    event.preventDefault();
-    event.returnValue = "";
 }
 
 interface HtmxConfirmEvent extends Event {
@@ -97,37 +93,12 @@ function onHtmxConfirm(event: Event): void {
     });
 }
 
-function onLinkClick(event: MouseEvent): void {
-    if (!isBlocked()) return;
-    // A modified click opens a new tab, window, or download and leaves this page
-    // exactly where it is - there is nothing to warn about. Intercepting it would
-    // also be actively harmful: the confirm path navigates via location.href, which
-    // would hijack the current tab and discard the changes being guarded.
-    if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
-
-    const target = event.target as HTMLElement | null;
-    const link = target?.closest?.("a[href]");
-    if (!(link instanceof HTMLAnchorElement)) return;
-
-    const href = link.getAttribute("href");
-    const scheme = href ? href.trim().toLowerCase() : "";
-    // In-page anchors do not leave, script/data urls are not navigations worth
-    // guarding, and a new tab leaves this page untouched.
-    if (!href || href.charAt(0) === "#" || scheme.startsWith("javascript:") || scheme.startsWith("data:") || scheme.startsWith("vbscript:") || link.target === "_blank") return;
-
-    event.preventDefault();
-    void askToLeave().then((ok) => {
-        if (!ok) return;
-        allowNavigation();
-        window.location.href = link.href;
-    });
-}
-
 /** Reset module state. Test-only. */
 export function resetAutosaveGuardForTests(): void {
     dirty = false;
     inFlight = 0;
     message = "Changes are still saving. Leave this page anyway?";
+    leaveConfirmation?.resetForTests();
 }
 
 declare global {
@@ -139,13 +110,18 @@ declare global {
 export function installGlobalAutosaveGuard(): void {
     window.autosaveGuard = autosaveGuard;
 
-    window.addEventListener("beforeunload", onBeforeUnload);
-    // Capture phase: this has to win before a page's own click handlers act on it.
-    document.addEventListener("click", onLinkClick, true);
+    // beforeunload and link clicks are the same problem three pages have; only the
+    // condition and the wording differ. See shared/leave-confirmation.ts.
+    leaveConfirmation = installLeaveConfirmation({
+        isBlocked,
+        message: () => message,
+        onConfirmed: allowNavigation,
+    });
 
-    // htmx:confirm is bound on <body>, as it was inline, so it keeps running after
-    // any handler a page binds on body itself. This bundle loads from <head> where
-    // document.body is still null, hence the wait.
+    // htmx:confirm is specific to this guard - the other two pages have no
+    // auto-saving requests to hold back. Bound on <body>, as it was inline, so it
+    // keeps running after any handler a page binds on body itself; this bundle
+    // loads from <head> where document.body is still null, hence the wait.
     const bindBody = (): void => document.body.addEventListener("htmx:confirm", onHtmxConfirm);
     if (document.body) bindBody();
     else document.addEventListener("DOMContentLoaded", bindBody);

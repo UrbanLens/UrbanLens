@@ -1189,25 +1189,14 @@
         return xhr.responseText.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
     }
 
-    window.addEventListener('beforeunload', function (e) {
-        if (!isExportInProgress()) return;
-        e.preventDefault();
-        e.returnValue = '';
+    // beforeunload + link interception are shared with the auto-save guard and the
+    // safety check-in page; only the condition and wording differ.
+    // See frontend/ts/shared/leave-confirmation.ts.
+    if (window.ulInstallLeaveConfirmation) window.ulInstallLeaveConfirmation({
+        isBlocked: isExportInProgress,
+        message: EXPORT_LEAVE_MSG,
+        confirmLabel: 'Leave anyway',
     });
-
-    document.addEventListener('click', function (e) {
-        if (!isExportInProgress()) return;
-        const a = e.target.closest('a[href]');
-        if (!a) return;
-        const href = a.getAttribute('href');
-        const scheme = href ? href.trim().toLowerCase() : '';
-        if (!href || href.charAt(0) === '#' || scheme.indexOf('javascript:') === 0 || scheme.indexOf('data:') === 0 || scheme.indexOf('vbscript:') === 0 || a.target === '_blank') return;
-        e.preventDefault();
-        const proceed = window.confirmDialog
-            ? window.confirmDialog({ title: 'Leave page?', message: EXPORT_LEAVE_MSG, confirmLabel: 'Leave anyway', danger: true })
-            : Promise.resolve(window.confirm(EXPORT_LEAVE_MSG));
-        proceed.then(function (ok) { if (ok) window.location.href = a.href; });
-    }, true);
 
     document.body.addEventListener('htmx:afterSwap', function (evt) {
         const targetId = evt.detail.target.id;

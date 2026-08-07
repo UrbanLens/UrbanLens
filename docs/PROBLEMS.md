@@ -3169,3 +3169,36 @@ in a background tab was intercepted, `preventDefault`ed, and - on confirming - n
 **current** tab via `location.href`. So the one gesture that would have safely left the page
 alone instead destroyed the changes the guard exists to protect. Fixed by returning early on
 `ctrlKey`/`metaKey`/`shiftKey`/`altKey`/non-primary button.
+
+## The leave-page warning existed three times, with the same two bugs in each (2026-08-07)
+
+Following up the ctrl-click bug found in `base.html`'s auto-save guard: the same
+"confirm before leaving" logic had been copy-pasted into two more pages, and both copies
+carried the identical defects.
+
+  base.html            auto-save guard (unsaved / in-flight changes)
+  safety/detail.html   "nobody would be notified if something happened"
+  tools/index.html     an export is still running
+
+**Bug 1 - modifier clicks were hijacked.** All three checked the href's scheme and
+`target="_blank"` but none checked modifier keys or mouse button. Ctrl/cmd-clicking a link
+to open it in a background tab was intercepted and, on confirming, navigated the *current*
+tab via `location.href` - so the one gesture that would have left the page safely alone
+instead destroyed what the guard was protecting. Worst on the safety page, whose entire
+premise is that leaving means nobody can reach you.
+
+**Bug 2 - the user was asked twice.** The safety and tools copies navigated via
+`location.href` without first clearing their blocked condition. That navigation re-enters
+`beforeunload`, which was still blocked, so the browser's own "Leave site?" prompt appeared
+on top of the one just answered. The safety page even has a `_safetySkipLeaveWarning` flag
+for exactly this, set on form submit and status update - but never in the link path. The
+auto-save guard avoided it only because it happened to call `allowNavigation()` first.
+
+Fixed by extracting the behaviour to `shared/leave-confirmation.ts`, which each page now
+configures with just its condition and wording. The suppression is internal, so no caller
+can forget it. Also filters `download` links, which save a file without navigating - they
+must not be confirmed, because confirming permanently disarms the guard while the page
+stays put.
+
+Net: 39 lines of duplicated template JS removed, 25 tests added covering the behaviour that
+previously had none.

@@ -24,6 +24,7 @@ import { installGlobalConfirmDialog } from "../shared/confirm-dialog";
 import { installGlobalDialogBackdrop } from "../shared/dialog-backdrop";
 import { installGlobalFlyToDismiss } from "../shared/fly-to-dismiss";
 import { installGlobalLabelPicker } from "../shared/label-picker";
+import { installGlobalLeaveConfirmation } from "../shared/leave-confirmation";
 import { installGlobalLocationSearchEngine } from "../shared/location-search-engine";
 import { installGlobalMapExport } from "../shared/map-export";
 import { installGlobalMapLayers } from "../shared/map-layers";
@@ -49,6 +50,7 @@ installGlobalMapLayers();
 installGlobalMarkupEngine();
 installGlobalMapExport();
 installGlobalLabelPicker();
+installGlobalLeaveConfirmation();
 
 window.createMarkupToolbar = createMarkupToolbar;
 
