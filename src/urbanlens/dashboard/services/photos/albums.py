@@ -224,10 +224,18 @@ def add_images_to_album(album: Album, images: Sequence[Image], added_by: Profile
         return 0
 
     next_order = (AlbumItem.objects.for_album(album).order_by("-order").values_list("order", flat=True).first() or 0) + 1
+    # The read above and the insert below are not atomic, and there are two callers -
+    # one of them the Celery task cache_media_item_into_album, which Celery may deliver
+    # more than once. Without ignore_conflicts the loser of that race hits uq_album_item
+    # and raises, turning a duplicate add into a 500 instead of a no-op.
+    before = AlbumItem.objects.filter(album=album).count()
     AlbumItem.objects.bulk_create(
-        [AlbumItem(album=album, image=image, added_by=added_by, order=next_order + offset) for offset, image in enumerate(to_add)]
+        [AlbumItem(album=album, image=image, added_by=added_by, order=next_order + offset) for offset, image in enumerate(to_add)],
+        ignore_conflicts=True,
     )
-    return len(to_add)
+    # Counted rather than assumed: ignore_conflicts silently drops the rows another
+    # process got in first, so len(to_add) would over-report what this call did.
+    return AlbumItem.objects.filter(album=album).count() - before
 
 
 def remove_images_from_album(album: Album, image_ids: Sequence[int]) -> int:

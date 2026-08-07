@@ -3388,3 +3388,46 @@ actually passes).
 Mutation-tested before trusting it: removing `slug` from `NOT_COPIED` makes it fail with
 `['slug'] != []`. Worth doing - the first version of the bulk-write guard passed while
 scanning zero files, and a guard nobody has seen fail is not yet known to be a guard.
+
+## The field-by-field copy class is exhausted; albums audited (2026-08-07)
+
+**Negative result, recorded so nobody repeats the search.** Task #35 planned to apply the
+field-diff technique to trip cloning, wiki forking, album copying and the import paths. A
+structural scan for the shape - calls with 6+ kwargs where most values are attribute reads
+off one source object - found only **four** across the whole tree, and two are the paths
+already fixed (`create_pin_from_share`'s Pin and Image copies). The other two are a
+model-bakery recipe and a WebAuthn credential built from a library result, neither a
+model-to-model copy. Checked the alternative idioms too: no `pk = None; save()` clone, no
+`model_to_dict`, no `deepcopy` of instances; the `Model(**kwargs)` sites are serializer
+creates. The features the task guessed at simply do not copy models field by field.
+
+### The album feature is in good shape
+
+Audited as the newest code on the release branch, and it holds up better than most of what
+this audit has touched. Recorded because "we looked and it was fine" is worth knowing:
+
+- Authorization is centralised in `_resolve_album_owner` and every view routes through it.
+- The add endpoint re-scopes posted ids through `eligible_images_for`, so the picker's filter
+  is not the only thing enforcing eligibility - the classic version of this bug.
+- Setting a cover re-scopes through the album's own contents.
+- `cover_image` is `SET_NULL` (with a comment saying why), *and* removal clears it, *and*
+  `cover_from_images` falls back when the cover is not in the viewer's visible set. Three
+  independent defences for the same failure.
+- Duplicate membership is prevented in code *and* by a `uq_album_item` constraint.
+- The broker-unreachable path in `_add_external` falls back to running the download inline -
+  the exact failure mode that went unhandled elsewhere in this codebase.
+
+### One real bug: a check-then-act race on adding photos
+
+`add_images_to_album` reads which images are already in the album, then inserts the rest,
+with no lock and no transaction. `uq_album_item` correctly prevents the duplicate row, but
+the unguarded insert turned the loser of that race into an `IntegrityError` - a 500 rather
+than a no-op.
+
+Not hypothetical: there are two callers, and one is the Celery task
+`cache_media_item_into_album`. Celery delivers at least once, so a redelivered task races
+both itself and the user adding the same photo from the picker once it materialises.
+
+Fixed with `ignore_conflicts=True`, plus counting the rows actually inserted rather than
+returning `len(to_add)` - with conflicts ignored, the length over-reports what the call did,
+which would have shown "2 photos added" when one was already there.
