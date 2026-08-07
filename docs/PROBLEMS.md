@@ -3743,3 +3743,46 @@ and **372 tests passing** across 25 files.
 
 For scale, the session as a whole: 66 commits, 258 files changed, +18,349/-4,793 lines, and
 33 new test files. The suite grew from 10,087 to 10,162 passing tests.
+
+## WebSocket consumers: no changes warranted (2026-08-07)
+
+Audited the Channels consumers, chosen because real-time auth has a classic failure mode -
+permission checked at connect and never again - and because a comment elsewhere in the
+codebase mentioned a partner's permission being "only checked at connect time", which read
+like a lead.
+
+It is not one. The layer is complete:
+
+- **Group names are derived from the authenticated identity, never from URL input.** The
+  notification and DM consumers join `notification_group_name(profile_id)` /
+  `direct_message_group_name(profile_id)` built from the connected profile, so a client
+  cannot subscribe to someone else's channel by editing a path.
+- **Scope is checked before any group is joined**, so a scope-refused connection never
+  becomes a member an in-flight broadcast could be delivered to.
+- **Every consumer re-validates its credential for the life of the socket.** The mixin's
+  `start_credential_revalidation` is called by the notification, DM and game-session
+  consumers and paired with `stop_credential_revalidation` in all three `disconnect`s; the
+  safety chat consumer runs a richer `_revalidate_access_periodically` that re-checks the
+  authorization *relationship* as well, and cancels its own task on disconnect.
+  `_credential_is_still_valid` states the principle: "a socket must not outlive the authority
+  that opened it", and checks each credential kind the way its own HTTP authenticator would -
+  a stamped `revoked_at` for a PAT, a deleted or expired row for an OAuth2 token.
+
+That last point matters most for the DM socket specifically, since `messages:read` is
+OAuth2-only precisely so a leaked long-lived key cannot become a path into someone's DMs.
+Revocation is the remedy for a leak, and a socket that ignored revocation would defeat it.
+It doesn't.
+
+### A narrow grep gave a confident wrong answer, for the third time this session
+
+Searching the consumers for `_revalidate|_is_still_authorized|_credential_is_still_valid`
+returned **zero** matches inside the notification, DM and game consumers, which looked like a
+real inconsistency against the safety consumer - and would have been a serious one. They call
+`start_credential_revalidation`, a name the pattern did not cover.
+
+That is the same mistake as `UniqueConstraint.condition` and subscripted generic bases,
+recorded earlier: a scan matched one spelling of a thing that has several. The rule already
+written down - validate a scan against a known-good and a known-bad case before believing it -
+would have caught all three, and did not get applied here either. Worth treating as a habit
+rather than a note: when a scan reports that one component does something and its siblings do
+not, the first hypothesis should be that the scan is wrong, not the code.
