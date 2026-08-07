@@ -2889,3 +2889,36 @@ Two notes on getting the measurement right, both of which cost a cycle:
   `ValueError: 'labels' lookup was already seen with a different queryset` at evaluation. That was
   my error, not the code's - but it is worth knowing the API raises rather than silently
   double-prefetching.
+
+## Query amplification on the external API's trips list (2026-08-07)
+
+Extending the harness to the wiki page, trips detail page and the API list endpoints found the
+pages clean - flat in comment, alias, link, edit-history, activity and member count - and one more
+real defect. **The API's trips list cost six queries per trip** (24 -> 42 for three more trips), and
+the probe split it immediately: five against `dashboard_trip_activities`, one against
+`dashboard_trip_memberships`.
+
+- **Five per trip: the effective-date properties.** `TripSummarySerializer` exposes
+  `effective_start_date`, `effective_end_date`, `timeline_status` and `duration_days`, and the last
+  two each read *both* of the first two - which fall back to querying the trip's activities. This
+  is the same defect fixed in the Memories feed in module 9, resurfacing on a different surface
+  because that fix was local to the aggregator.
+
+  Fixed at the model this time instead of at each call site: both properties now prefer a
+  `_eff_start`/`_eff_end` annotation when the queryset supplied one, and otherwise compute once and
+  memoize on the instance. So a list of trips is flat wherever it is annotated, *and* a single trip
+  costs one query however many of the four fields are read. `for_list_page` now supplies the
+  annotations, matching what the Memories aggregator already annotated - including using the later
+  of `scheduled_at` and `scheduled_end`, so the two surfaces agree on when a trip ends.
+
+- **One per trip: the viewer's membership.** `_membership()` ran a targeted query per trip even
+  though `for_list_page` prefetches the whole roster - the row was in memory already. It now reads
+  the prefetch when one exists (checked via `_prefetched_objects_cache`) and keeps the targeted
+  query otherwise, so callers that did not prefetch don't start pulling whole rosters.
+
+The general lesson, now seen three times (Memories trips, the map's `location__wiki`, this): **an
+expensive model property is invisible at the call site.** `serializer.field = source="x"` looks
+free. Making the property itself annotation-aware and memoized fixes every present and future
+caller, which a per-call-site prefetch does not.
+
+877 trip/memories tests pass alongside the new guards.

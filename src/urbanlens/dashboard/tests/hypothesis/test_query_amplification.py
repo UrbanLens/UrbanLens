@@ -16,12 +16,21 @@ from __future__ import annotations
 from django.contrib.auth.models import User
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
+from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
+from urbanlens.dashboard.models.aliases.model import WikiAlias
+from urbanlens.dashboard.models.comments.model import Comment
+from urbanlens.dashboard.models.links.model import WikiLink
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.trips.model import Trip, TripActivity
+from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
+from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.map_pins.payload import MapPinPayloadService
 
 
@@ -126,3 +135,115 @@ class PinDetailPageAmplificationTests(_AmplificationTestCase):
             self.assertEqual(self.client.get(url).status_code, 200)
 
         self.assert_flat(add_visit, measure)
+
+
+class WikiPageAmplificationTests(_AmplificationTestCase):
+    """The community wiki page against its own content.
+
+    The viewer needs a pin at the location: wiki visibility is gated on discovery
+    (``location_visible_to``), so without one every request here would 404 and the
+    measurement would be of an error page.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.client.force_login(self.user)
+        self.location = self._next_location()
+        baker.make(Pin, profile=self.profile, location=self.location)
+        self.wiki = baker.make(Wiki, location=self.location, name="Powerhouse", officially_created=True)
+        self.url = reverse("location.wiki", kwargs={"location_slug": self.location.slug})
+
+    def _measure(self) -> None:
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_the_page_is_flat_in_comment_count(self) -> None:
+        def add_comment() -> None:
+            baker.make(Comment, wiki=self.wiki, profile=baker.make(User).profile, text="Looks abandoned.")
+
+        self.assert_flat(add_comment, self._measure)
+
+    def test_the_page_is_flat_in_alias_count(self) -> None:
+        counter = {"n": 0}
+
+        def add_alias() -> None:
+            counter["n"] += 1
+            baker.make(WikiAlias, wiki=self.wiki, name=f"Alias {counter['n']}", created_by=self.profile)
+
+        self.assert_flat(add_alias, self._measure)
+
+    def test_the_page_is_flat_in_link_count(self) -> None:
+        counter = {"n": 0}
+
+        def add_link() -> None:
+            counter["n"] += 1
+            baker.make(WikiLink, wiki=self.wiki, name=f"Link {counter['n']}", url=f"https://example.test/{counter['n']}", created_by=self.profile)
+
+        self.assert_flat(add_link, self._measure)
+
+    def test_the_page_is_flat_in_edit_history_count(self) -> None:
+        def add_edit() -> None:
+            baker.make(WikiEdit, wiki=self.wiki, editor=baker.make(User).profile, changes={"name": {"from": "a", "to": "b"}})
+
+        self.assert_flat(add_edit, self._measure)
+
+
+class TripDetailAmplificationTests(_AmplificationTestCase):
+    """The trip detail page against its itinerary and roster."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.client.force_login(self.user)
+        self.trip = baker.make(Trip, creator=self.profile, allow_edit_activities="everyone", allow_add_activities="everyone")
+        self.trip.profiles.add(self.profile)
+        self.url = reverse("trips.detail", kwargs={"trip_slug": self.trip.slug})
+
+    def _measure(self) -> None:
+        self.assertEqual(self.client.get(self.url).status_code, 200)
+
+    def test_the_page_is_flat_in_activity_count(self) -> None:
+        counter = {"n": 0}
+
+        def add_activity() -> None:
+            counter["n"] += 1
+            baker.make(TripActivity, trip=self.trip, title=f"Stop {counter['n']}", location=self._next_location(), order=counter["n"])
+
+        self.assert_flat(add_activity, self._measure)
+
+    def test_the_page_is_flat_in_member_count(self) -> None:
+        def add_member() -> None:
+            self.trip.profiles.add(baker.make(User).profile)
+
+        self.assert_flat(add_member, self._measure)
+
+
+class ExternalApiListAmplificationTests(_AmplificationTestCase):
+    """The API serializes the same objects through a different path than the HTML
+    pages, so it can carry its own amplification even where the page is clean."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        key, self.raw_key = generate_api_key(self.user, "Amplification test")
+        ApiKey.objects.filter(pk=key.pk).update(scopes=[ApiKeyScope.PINS_READ.value, ApiKeyScope.TRIPS_READ.value])
+
+    def _get(self, url: str) -> None:
+        response = self.client.get(url, HTTP_AUTHORIZATION=f"Bearer {self.raw_key}")
+        self.assertEqual(response.status_code, 200)
+
+    def test_the_pins_list_is_flat_in_pin_count(self) -> None:
+        url = reverse("external_api:pins")
+
+        def add_pin() -> None:
+            pin = baker.make(Pin, profile=self.profile, location=self._next_location())
+            pin.labels.add(baker.make(Label, profile=self.profile, kind="tag"))
+
+        self.assert_flat(add_pin, lambda: self._get(url))
+
+    def test_the_trips_list_is_flat_in_trip_count(self) -> None:
+        url = reverse("external_api:trips")
+
+        def add_trip() -> None:
+            trip = baker.make(Trip, creator=self.profile)
+            trip.profiles.add(self.profile)
+            baker.make(TripActivity, trip=trip, location=self._next_location())
+
+        self.assert_flat(add_trip, lambda: self._get(url))

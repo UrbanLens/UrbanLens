@@ -38,6 +38,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+#: Distinguishes "not yet computed" from a genuine ``None`` result, so a trip with no
+#: dates at all is not re-queried on every read.
+_UNCOMPUTED = object()
+
+
 class Trip(abstract.PublicDashboardModel):
     """A planned trip shared among one or more users.
 
@@ -132,27 +137,50 @@ class Trip(abstract.PublicDashboardModel):
 
     @property
     def effective_start_date(self) -> date | None:
-        """``start_date`` if set, else the earliest scheduled activity's date."""
+        """``start_date`` if set, else the earliest scheduled activity's date.
+
+        Resolved from a ``_eff_start`` annotation when the queryset supplied one (see
+        ``TripQuerySet.for_list_page``), and otherwise computed once and remembered on
+        the instance. Both matter because this is not a cheap attribute: it falls back
+        to querying the trip's activities, and ``timeline_status`` and ``duration_days``
+        each read it *and* ``effective_end_date``, so one serialized trip used to cost
+        about five activity queries. The annotation makes a list of trips flat; the memo
+        makes a single trip cost one query however many times it is read.
+        """
+        cached = getattr(self, "_eff_start", _UNCOMPUTED)
+        if cached is not _UNCOMPUTED:
+            return cached
+
         if self.start_date:
-            return self.start_date
-        first = self.activities.filter(scheduled_at__isnull=False).order_by("scheduled_at").first()
-        if first is None or first.scheduled_at is None:
-            return None
-        return first.scheduled_at.date()
+            value = self.start_date
+        else:
+            first = self.activities.filter(scheduled_at__isnull=False).order_by("scheduled_at").first()
+            value = first.scheduled_at.date() if first is not None and first.scheduled_at is not None else None
+        self._eff_start = value
+        return value
 
     @property
     def effective_end_date(self) -> date | None:
-        """``end_date`` if set, else the latest scheduled activity's end (or start) date."""
+        """``end_date`` if set, else the latest scheduled activity's end (or start) date.
+
+        Annotation-aware and memoized for the same reason as
+        :attr:`effective_start_date`.
+        """
+        cached = getattr(self, "_eff_end", _UNCOMPUTED)
+        if cached is not _UNCOMPUTED:
+            return cached
+
         if self.end_date:
-            return self.end_date
-        latest = self.activities.filter(scheduled_at__isnull=False).aggregate(
-            last_start=Max("scheduled_at"),
-            last_end=Max("scheduled_end"),
-        )
-        candidates = [dt for dt in (latest["last_start"], latest["last_end"]) if dt is not None]
-        if not candidates:
-            return None
-        return max(candidates).date()
+            value = self.end_date
+        else:
+            latest = self.activities.filter(scheduled_at__isnull=False).aggregate(
+                last_start=Max("scheduled_at"),
+                last_end=Max("scheduled_end"),
+            )
+            candidates = [dt for dt in (latest["last_start"], latest["last_end"]) if dt is not None]
+            value = max(candidates).date() if candidates else None
+        self._eff_end = value
+        return value
 
     @property
     def timeline_status(self) -> str:

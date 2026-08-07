@@ -2594,14 +2594,29 @@ class TripSummarySerializer(serializers.Serializer):
         return self.context.get("viewer")
 
     def _membership(self, trip):
-        """This viewer's membership row for *trip*, resolved at most once per trip."""
+        """This viewer's membership row for *trip*, resolved at most once per trip.
+
+        Prefers the prefetched roster when the caller supplied one: ``for_list_page``
+        already prefetches ``memberships``, so querying for the viewer's own row here
+        cost one extra query per trip in the list - the roster was in memory the whole
+        time. Callers that did not prefetch keep the targeted query, which fetches one
+        row rather than pulling a whole roster they have no other use for.
+        """
         cache = self.context.setdefault("_membership_cache", {})
         if trip.pk not in cache:
-            from urbanlens.dashboard.models.trips.model import TripMembership
-
             viewer = self._viewer()
-            cache[trip.pk] = TripMembership.objects.for_trip_and_profile(trip, viewer).first() if viewer else None
+            cache[trip.pk] = self._resolve_membership(trip, viewer) if viewer else None
         return cache[trip.pk]
+
+    @staticmethod
+    def _resolve_membership(trip, viewer):
+        """Find *viewer*'s membership row, from the prefetch when one exists."""
+        if "memberships" in getattr(trip, "_prefetched_objects_cache", {}):
+            return next((m for m in trip.memberships.all() if m.profile_id == viewer.id), None)
+
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        return TripMembership.objects.for_trip_and_profile(trip, viewer).first()
 
     def get_activity_count(self, trip) -> int:
         """Annotated activity count, or 0 on an un-annotated instance."""

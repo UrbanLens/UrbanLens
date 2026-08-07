@@ -4,7 +4,8 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
-from django.db.models import Count, F, Max, Prefetch, Q
+from django.db.models import Count, DateField, F, Max, Min, Prefetch, Q
+from django.db.models.functions import Cast, Coalesce, Greatest
 from django.utils import timezone
 
 # Django Imports
@@ -72,6 +73,23 @@ class TripQuerySet(abstract.DashboardQuerySet):
                 comment_count=Count("comments", distinct=True),
                 pin_count=Count("activities__pin", distinct=True, filter=Q(activities__pin__isnull=False)),
             )
+            # Effective dates resolved in the same query rather than per row.
+            # Trip.effective_start_date/effective_end_date fall back to querying the
+            # trip's activities, and timeline_status and duration_days each read both,
+            # so a serialized list cost about five activity queries per trip. Those
+            # properties prefer these annotations when present. Mirrors what the
+            # Memories feed's trip source annotates, including using the later of
+            # scheduled_at and scheduled_end so the two agree on when a trip ends -
+            # Postgres's GREATEST ignores NULLs.
+            .annotate(
+                _first_activity_date=Cast(Min("activities__scheduled_at"), output_field=DateField()),
+                _last_activity_date=Cast(
+                    Greatest(Max("activities__scheduled_at"), Max("activities__scheduled_end")),
+                    output_field=DateField(),
+                ),
+            )
+            .annotate(_eff_start=Coalesce("start_date", "_first_activity_date"))
+            .annotate(_eff_end=Coalesce("end_date", "_last_activity_date", "_eff_start"))
             .prefetch_related(
                 Prefetch(
                     "memberships",
