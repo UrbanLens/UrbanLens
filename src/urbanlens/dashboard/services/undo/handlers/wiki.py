@@ -106,8 +106,9 @@ class WikiUndoHandler(UndoHandler):
         Raises:
             UndoExpiredError: If the location, creator profile, or any label
                 this batch referenced was independently deleted during the
-                retention window, since recreating the row would otherwise
-                fail with an uncaught IntegrityError.
+                retention window, or the location has acquired a new wiki since,
+                since recreating the row would otherwise fail with an uncaught
+                IntegrityError.
         """
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
@@ -116,6 +117,11 @@ class WikiUndoHandler(UndoHandler):
         for entry in payload:
             if not Location.objects.filter(pk=entry["location_id"]).exists():
                 raise UndoExpiredError("The location this wiki page described no longer exists.")
+            # A location holds at most one wiki. Wikis are also created lazily
+            # (Wiki.objects.get_or_create_for_location), so the location acquiring a
+            # replacement without any deliberate user action is routine rather than rare.
+            if Wiki.objects.filter(location_id=entry["location_id"]).exists():
+                raise UndoExpiredError("This location has a community page again, so the deleted one can't be restored alongside it.")
             created_by_id = entry.get("created_by_id")
             if created_by_id is not None and not Profile.objects.filter(pk=created_by_id).exists():
                 raise UndoExpiredError("The profile that created this wiki page no longer exists.")

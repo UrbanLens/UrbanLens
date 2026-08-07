@@ -40,4 +40,25 @@ class SavedFilterUndoHandler(UndoHandler):
 
     @classmethod
     def restore(cls, payload: list[dict[str, Any]]) -> list[SavedFilter]:
+        """Recreate the saved filters.
+
+        Raises:
+            UndoExpiredError: If the owning profile was deleted during the retention
+                window, or the filter's name has since been used for another of that
+                profile's filters - ``uq_saved_filter_profile_name`` would otherwise
+                surface as an uncaught IntegrityError, the same contract
+                ``PinUndoHandler.restore`` follows.
+        """
+        # Deferred import: services.undo.service imports services.undo.handlers
+        # (which imports this module) before UndoExpiredError is defined there.
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.undo.service import UndoExpiredError
+
+        for entry in payload:
+            if not Profile.objects.filter(pk=entry["profile_id"]).exists():
+                raise UndoExpiredError("The profile that owned this saved filter no longer exists.")
+            name = entry["fields"].get("name")
+            if name and SavedFilter.objects.filter(profile_id=entry["profile_id"], name=name).exists():
+                raise UndoExpiredError(f"You already have a saved filter called \u201c{name}\u201d, so this one can't be restored alongside it.")
+
         return [SavedFilter.objects.create(profile_id=entry["profile_id"], **entry["fields"]) for entry in payload]

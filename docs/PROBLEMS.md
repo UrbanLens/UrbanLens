@@ -3821,3 +3821,34 @@ would otherwise fail with an uncaught IntegrityError". It did not check this one
 Five tests. Beyond the two failures, they pin down that another profile's pin at the same
 location does *not* block the undo (the constraint is per profile), that the replacement pin
 survives a refused undo, and that an ordinary undo still restores.
+
+## Two more undo handlers crashed on their own unique constraints (2026-08-07)
+
+Following the pin handler's two crashes (e6e9de7c) into the remaining handlers, since they
+share the pattern: recreate a stashed row, having pre-checked whatever would make the recreate
+fail. Each restores a model with unique constraints of its own.
+
+**`SavedFilter` - unique(profile, name). Crashed.** The handler had *no* pre-checks at all:
+one line, straight to `objects.create`. Delete a saved filter, make another one with the same
+name, hit undo - `uq_saved_filter_profile_name`, uncaught IntegrityError, 500. Now checks both
+the owning profile's existence (which it also never checked) and the name.
+
+**`Wiki` - location is unique, one wiki per location. Crashed.** This handler *did* pre-check
+the location, creator and labels, and its docstring gives the right reason - but it checked
+that the location still *exists*, not that it is still free. Delete a wiki, let the location
+acquire another, undo - `dashboard_wikis_location_id_key`, 500. Worth noting this one is the
+easiest to hit without trying: `Wiki.objects.get_or_create_for_location` creates wikis lazily
+from unrelated code paths (photo enrichment, among others), so the location can reacquire a
+wiki with no deliberate user action at all.
+
+**`Trip` - slug is unique. Clean.** Tested the same way and it passes: the slug is regenerated
+on save, so a reused trip name produces a fresh slug rather than a collision. The test is kept
+as a regression guard, written to accept either a successful restore or a clean refusal - just
+not an IntegrityError reaching the caller.
+
+**`SafetyCheckin` - only uuid is unique**, which restore regenerates. Nothing to do.
+
+That makes four crashes of one shape across three handlers. The shape is worth stating plainly
+for whoever adds the next handler: *an undo handler must pre-check every constraint the
+recreate can violate, not only that its foreign keys still resolve.* Three of the four
+handlers that needed it got the foreign-key half right and the constraint half wrong.
