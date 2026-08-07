@@ -2975,8 +2975,16 @@ JS, which is consistent with it being the least-guarded code in the repo.
 This is the largest maintainability gap found in the audit, but "move it to TypeScript" is a
 programme of work rather than a fix, and which parts become HTMX versus bundled modules is a
 design call for the maintainer. Recorded with numbers so it can be prioritised, along with the
-obvious first candidates: `base.html`'s 1,882 lines are shared by every page, and
-`_dev_toolbar.html`'s 591 ship to production for a development-only feature.
+obvious first candidate: `base.html`'s 1,882 lines are shared by every page.
+
+**Correction to the paragraph above**, which originally also said the dev toolbar's 591 lines
+"ship to production for a development-only feature". They do not. `base.html` includes that partial
+only under `{% if show_dev_toolbar %}`, and `SiteSettings.show_dev_admin_features` grants it to
+site admins solely when the effective environment is development or local, and to non-admins only
+when `UL_ALLOW_DEV_TOOLBAR_FOR_NON_ADMINS` is set *and* the environment is
+staging/development/local/testing. Production is excluded on both paths. The toolbar is still worth
+extracting so it is typechecked, but the reason given for prioritising it was wrong, and correcting
+it changes which target is actually valuable: `base.html`, which does render on every page.
 
 Checked and deliberately *not* changed: six templates hardcode the values of a server-side
 `TextChoices` in their JS (`MapViewChoice` and `MapCenterMode` fully, `ThemeChoice`,
