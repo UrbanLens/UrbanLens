@@ -2831,3 +2831,32 @@ patching. Name the functions inside the function that uses them.
 Verified clean: the pin detail page's street-view provider fan-out already isolates per provider
 and records an `ok=False` result for the admin debug overlay, which is the pattern the rest should
 match.
+
+## Two more unguarded fan-outs, found by an AST sweep (2026-08-07)
+
+An AST sweep for `for <source|provider|panel|handler> in ...` loops that invoke the loop variable
+with no `try` inside found six candidates; two were real.
+
+- **`panel_readiness` (pin detail page)** - the most consequential of the three. It builds the tab
+  strip for the app's busiest page, and it calls `is_ready(pin)` per *bespoke* panel with no guard.
+  Panels are the plugin extensibility surface, so a single plugin raising there returned a 500 for
+  the whole pin page instead of affecting its own tab. Failures are now logged and treated as "not
+  ready", which is the safe default: the tab shows its pending state and polls, exactly as it does
+  for a panel whose data genuinely hasn't arrived yet. The cache-backed and slide-backed panels
+  were already fine - those resolve through one bulk query rather than a call per source.
+
+- **`get_journal_entries`** - same shape, and its own docstring already argued the case: it
+  explains that an *unknown* source key degrades to fewer entries "rather than a 500". A
+  *registered* source that raised did 500. Now isolated per source.
+
+Verified clean: the street-view provider fan-out already isolates per provider and records an
+`ok=False` outcome for the admin debug overlay. The label-merge and pin-bulk loops the sweep also
+flagged iterate the user's own selected rows inside a transaction, where aborting the whole
+operation is the correct behaviour, not a bug.
+
+A note on the panel test, which failed on its first run for an instructive reason: I wrote the test
+panels as `InfoPanelSource` subclasses, but that inherits `LocationCachePanelSource`, so they were
+resolved by the bulk cache query and their `is_ready` was never called - the test exercised a
+branch the fix doesn't touch and reported the fix as broken. Checking the class hierarchy rather
+than re-reading the fix settled it immediately. Test doubles have to sit in the same branch of the
+hierarchy as the code under test, or they quietly prove nothing.

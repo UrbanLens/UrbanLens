@@ -1091,7 +1091,16 @@ def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None) -> d
             readiness[source_key] = bool(warm.get(ready_key))
 
     for bespoke_source in bespoke:
-        readiness[bespoke_source.key] = bespoke_source.is_ready(pin)
+        # Guarded per source: this map is built for the pin detail page's tab strip, and
+        # panels are the plugin extensibility surface, so one plugin's is_ready() raising
+        # would otherwise 500 the whole page rather than affecting its own tab. "Not
+        # ready" is the safe default - the tab shows its pending state and polls, which
+        # is exactly what it does for a panel whose data genuinely hasn't arrived.
+        try:
+            readiness[bespoke_source.key] = bespoke_source.is_ready(pin)
+        except Exception:
+            logger.exception("Panel source %s failed its readiness check for pin %s", bespoke_source.key, pin.pk)
+            readiness[bespoke_source.key] = False
 
     return readiness
 
