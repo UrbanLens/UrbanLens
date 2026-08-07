@@ -3976,3 +3976,56 @@ figure to 7. Had the first result been acted on, 31 correct cross-repo reference
 been rewritten into broken ones. That is the fourth time this session a pattern matched one
 spelling of a thing with several, and the first where acting on it would have *introduced* the
 bug rather than merely missed one.
+
+## Closing verification: 10,174 passed, 0 failed (2026-08-07)
+
+**10,174 passed, 0 failed, 1,429 subtests passed, in 57:59.** No failure line in the output.
+Frontend verified separately and host-side: `tsc --noEmit` clean, 372 tests across 25 files.
+
+Run under the same discipline as 4b5ff2bf, and for the same reason - six commits had landed
+since that one, including real code changes to three undo handlers, and those had been
+verified only by targeted `-k` selections. Container synced to HEAD and its Python file list
+diffed against `git ls-files` before starting; `__pycache__` cleared; nothing copied in during
+the 58 minutes; HEAD `610f97be` at both start and finish with a clean working tree. The run
+proves that commit.
+
+The count moved 10,162 -> 10,174: the twelve undo-restore conflict tests.
+
+### What is left, and who it is left for
+
+The substantive audit is finished. Four findings remain open and every one needs a decision
+from the owner rather than more investigation:
+
+- **Share-received photos and quota** (`#37`) - charged full price for a file consuming no new
+  storage, on the only Image-creating path with no quota check.
+- **Comment deletion semantics** (`#39`) - `Comment.profile` CASCADE vs `TripComment.author`
+  SET_NULL; one of the two is probably not intended.
+- **E2EE rotation enforcement** (`#40`) - the removal boundary is server-enforced, not
+  cryptographic; the sufficient fix costs availability.
+- **12 documentation references** - 7 probably point at the sibling REData repository, 5 at a
+  `completed.md` that exists nowhere despite `CLAUDE.local.md` describing it.
+
+Three further tasks were assessed and deliberately not done: a structural identity-masking
+guard (`#38`) would mostly re-test surfaces already verified correct; routing the remaining
+fetch call sites through `shared/fetch-json.ts` (`#32`) is churn with no bug attached; and
+`base.html`'s last blocks (`#29`) are template-coupled, with the 937-line comment-map composer
+needing a Leaflet stub - a project rather than an audit unit.
+
+### The methodological lesson, stated once more because it recurred
+
+Four times this session a structural scan matched **one spelling of a thing that has several**,
+and each time the result looked authoritative:
+
+| scan | missed | consequence |
+| --- | --- | --- |
+| unique constraints | `UniqueConstraint.condition` | made a correct group-chat design look like a bug |
+| view base classes | subscripted generics (`View[T]`) | made six protected endpoints look unprotected |
+| consumer revalidation | `start_credential_revalidation` | made three consumers look like they never re-check |
+| doc references | `../SiblingRepo/docs/...` | would have broken 31 correct cross-repo links |
+
+The first three wasted effort. The fourth would have *introduced* the bug rather than missed
+one, and was caught only because the number - 38 dead references in a codebase this careful -
+was implausible enough to check. The rule that would have caught all four is cheap: **validate
+a scan against a known-good and a known-bad example before believing its output**, and treat
+"one component does X and its siblings do not" as evidence the scan is wrong before concluding
+the code is.
