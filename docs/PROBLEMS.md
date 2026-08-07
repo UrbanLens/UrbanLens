@@ -3351,3 +3351,40 @@ defaults actively misdescribe the copy:
 Both fixed by copying `source`, `media_type`, `media_source_key` and `media_item_key`. The
 context FKs it omits (`wiki`, `visit`, `safety_checkin`, `direct_message`, `pin_suggestion`)
 are correctly dropped - they belong to the sender's row, not the copy.
+
+## The Pin share copy dropped four properties, and now cannot drop a fifth (2026-08-07)
+
+Same technique as the Image copy: load the model, diff its concrete fields against the
+kwargs the copy passes, judge each omission. `create_pin_from_share` names 28 of `Pin`'s 43
+fields by hand; 11 were omitted. Seven of those are correct (the recipient's own slug, view
+and visit state, dismissal flags, the wiki cache). Four were not:
+
+- **`pin_type_is_user_provided`.** The field's own comment says it guards `pin_type`
+  "exactly like `name_is_user_provided` guards `name`" - and `name_is_user_provided` *is*
+  copied. It is the only thing that makes `classify_detail_marker` return early, so a
+  recipient's copy carried the sender's chosen type with no protection and the automatic
+  building/parcel classifier was free to overwrite it. Precisely the outcome the flag exists
+  to prevent.
+- **`custom_icon`.** `Pin.effective_icon` checks `custom_icon` *before* `icon`, so a pin with
+  a custom uploaded icon arrived looking like a different pin - while the function's own
+  docstring promises it carries over "every user-visible property (name, icon, ...)".
+- **`cover_photo`.** Correctly not copied verbatim (it points at the sender's `Image` row),
+  but the recipient lost the hero image entirely even though the photos themselves are
+  copied. Now mapped to the recipient's own copy by position, and left null when the sender
+  shared only part of their gallery and not the cover.
+- **`indoor_outdoor`.** The one place-property that did not travel while every sibling
+  (`fences`, `alarms`, `cameras`, `security`, `signs`, `vps`, `plywood`, `locked`, the three
+  dates) did. Currently inert - the field is groundwork with no UI - so this is consistency,
+  not a user-visible fix. Recorded as such rather than overstated.
+
+**The guard matters more than the four fixes.** All of these came from one structural fact:
+the copy names fields by hand, so a field added to `Pin` later is simply absent and takes its
+default, and nothing in review connects "add a column to Pin" with "update a function in the
+sharing service". `SharedPinCopyCoversEveryFieldTests` now fails on any `Pin` field that is
+neither copied nor listed in `NOT_COPIED` with a reason, plus two tests keeping that list
+honest (no entries for fields that no longer exist, none claiming to skip a field the copy
+actually passes).
+
+Mutation-tested before trusting it: removing `slug` from `NOT_COPIED` makes it fail with
+`['slug'] != []`. Worth doing - the first version of the bulk-write guard passed while
+scanning zero files, and a guard nobody has seen fail is not yet known to be a guard.

@@ -192,6 +192,14 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
         vulnerability=source.vulnerability,
         danger=source.danger,
         pin_type=source.pin_type,
+        # Copied alongside pin_type for the same reason name_is_user_provided is
+        # copied alongside name: it is the only thing stopping the automatic
+        # building/parcel classifier from overwriting a type the sender chose.
+        pin_type_is_user_provided=source.pin_type_is_user_provided,
+        # effective_icon checks custom_icon before icon, so omitting it silently
+        # changed what the shared pin looked like.
+        custom_icon=source.custom_icon.name or None,
+        indoor_outdoor=source.indoor_outdoor,
         color=source.color,
         detail_bg_color=source.detail_bg_color,
         detail_bg_opacity=source.detail_bg_opacity,
@@ -210,7 +218,8 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
         locked=source.locked,
     )
     new_pin.labels.set(source.labels.all())
-    Image.objects.bulk_create(
+    shared_images = list(share.images.all())
+    copied_images = Image.objects.bulk_create([
         Image(
             image=image.image.name,
             pin=new_pin,
@@ -236,9 +245,32 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
             file_size=image.file_size,
             exif_data=image.exif_data,
         )
-        for image in share.images.all()
-    )
+        for image in shared_images
+    ])
+    _carry_cover_photo(source, new_pin, shared_images, copied_images)
     return new_pin
+
+
+def _carry_cover_photo(source: Pin, new_pin: Pin, shared_images: list[Image], copied_images: list[Image]) -> None:
+    """Point the new pin's cover photo at the recipient's copy of that photo.
+
+    The cover must never reference the sender's row, and a sender who shared only
+    part of their gallery may not have shared the cover at all - in which case the
+    copy correctly has none.
+
+    Args:
+        source: The sender's pin.
+        new_pin: The recipient-side pin, already saved.
+        shared_images: The sender's image rows, in the order they were copied.
+        copied_images: The recipient's new rows, in the same order.
+    """
+    if source.cover_photo_id is None:
+        return
+    for original, copy in zip(shared_images, copied_images, strict=False):
+        if original.pk == source.cover_photo_id:
+            new_pin.cover_photo = copy
+            new_pin.save(update_fields=["cover_photo", "updated"])
+            return
 
 
 def _accept_bundled_shares(root_share: PinShare, target_root: Pin) -> int:
