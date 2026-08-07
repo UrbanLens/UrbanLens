@@ -29,6 +29,10 @@ interface ConfirmDialogOptions {
 
 interface HtmxApi {
     process(element: Element): void;
+    /** Dispatch an htmx event on an element - used to fire `ul:unhide` on sections
+     * whose hx-get was skipped while they were collapsed. Declared here because the
+     * inline script that called it was never typechecked. */
+    trigger(element: Element, event: string, detail?: unknown): void;
     ajax(verb: string, url: string, options: Record<string, unknown>): void;
 }
 
