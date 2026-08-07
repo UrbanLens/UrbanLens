@@ -2957,3 +2957,31 @@ presentation attributes.
 Had I "fixed" the nine panels the first run flagged, I would have added meaningless attributes to
 correct code and called it an improvement. A validation rule asserted against the whole existing
 codebase gets corrected by it; one asserted against a couple of hand-picked examples does not.
+
+## Frontend layer: the inline-JS mass (2026-08-07)
+
+Measured, since the project's stated preference is HTMX first and TypeScript only where HTMX
+cannot do the job: **31 templates carry more than 120 lines of inline `<script>` each, totalling
+19,638 lines.** The worst is `pages/map/index.html` at 5,052 lines of inline JS in a 5,691-line
+template - 89% of the file - followed by `themes/base.html` (1,882), `pages/messages/index.html`
+(1,772), `pages/trips/detail.html` (1,380) and `pages/location/index.html` (1,297).
+
+For comparison, the entire typechecked TypeScript tree is 59 files. `tsconfig.json` includes only
+`frontend/ts/**/*.ts`, so **none of those 19,638 lines are typechecked, bundled, minified, or
+reachable by `bun test`.** Every defect this audit found in that layer - the pin-cache version
+drift, the duplicated trip-name list, the pin-delete cache invalidation - lived in inline template
+JS, which is consistent with it being the least-guarded code in the repo.
+
+This is the largest maintainability gap found in the audit, but "move it to TypeScript" is a
+programme of work rather than a fix, and which parts become HTMX versus bundled modules is a
+design call for the maintainer. Recorded with numbers so it can be prioritised, along with the
+obvious first candidates: `base.html`'s 1,882 lines are shared by every page, and
+`_dev_toolbar.html`'s 591 ship to production for a development-only feature.
+
+Checked and deliberately *not* changed: six templates hardcode the values of a server-side
+`TextChoices` in their JS (`MapViewChoice` and `MapCenterMode` fully, `ThemeChoice`,
+`MapLayerMode`, `DirectMessageShareKind` partially). It reads like the pin-cache version
+duplication, but it is not the same class of defect: those values are stable identifiers used for
+genuine branching (keyboard shortcuts, layer switching), and adding a new choice leaves the
+existing branches working rather than silently disabling a feature. Coupling worth knowing about,
+not a latent bug, and not worth the indirection of emitting them through `json_script`.
