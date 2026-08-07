@@ -1,14 +1,16 @@
 """Extensible aggregation of a profile's "memories" - routes, trips, visits, photos.
 
-Adding a future memory type is one new ``_x_for_range`` function appended to
-``_EVENT_SOURCES`` below - nothing else needs to change. Each source function
-does its own date/bbox filtering on its own model's already-indexed fields.
+Adding a future memory type is one new ``_x_for_range`` function listed in
+``_event_sources`` below - nothing else needs to change. Each source function
+does its own date/bbox filtering on its own model's already-indexed fields, and
+contributes independently: one source failing omits its own events, never the feed.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import date, datetime, time
+import logging
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from django.db.models import DateField, Max, Min, Prefetch
@@ -21,6 +23,9 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.trips.model import Trip
+
+
+logger = logging.getLogger(__name__)
 
 
 class BBox(NamedTuple):
@@ -251,16 +256,31 @@ def _photos_for_range(profile: Profile, start: date, end: date, bbox: BBox | Non
         )
 
 
-_EVENT_SOURCES: tuple[Callable[[Profile, date, date, BBox | None], Iterator[MemoryEvent]], ...] = (
-    _routes_for_range,
-    _trips_for_range,
-    _visits_for_range,
-    _photos_for_range,
-)
+def _event_sources() -> tuple[Callable[[Profile, date, date, BBox | None], Iterator[MemoryEvent]], ...]:
+    """The registered memory sources, resolved fresh on each call.
+
+    A module-level tuple would capture these at import time, which both hides
+    monkeypatching from tests and quietly defeats any later attempt to swap a source.
+    """
+    return (
+        _routes_for_range,
+        _trips_for_range,
+        _visits_for_range,
+        _photos_for_range,
+    )
 
 
 def get_memory_events(profile: Profile, start: date, end: date, *, bbox: BBox | None = None) -> list[MemoryEvent]:
     """Merge every registered event source over [start, end], sorted newest-first.
+
+    Each source contributes independently. This is the page's extensibility seam -
+    adding a memory type is one new function in ``_event_sources`` - so an unguarded
+    fan-out means any single source raising (a corrupt row, a missing relation, a bug
+    in a newly added source) discards the other three and 500s the whole feed. A
+    Memories page missing one kind of memory is worth far more than no page at all.
+
+    Sources are generators, so they are drained one at a time: whatever a source
+    yielded before failing is kept rather than thrown away with it.
 
     Args:
         profile: The profile whose memories to fetch.
@@ -269,10 +289,15 @@ def get_memory_events(profile: Profile, start: date, end: date, *, bbox: BBox | 
         bbox: Optional map-viewport bounding box to further narrow results.
 
     Returns:
-        List of MemoryEvent across all sources, newest first.
+        List of MemoryEvent across every source that succeeded, newest first.
     """
     events: list[MemoryEvent] = []
-    for source in _EVENT_SOURCES:
-        events.extend(source(profile, start, end, bbox))
+    for source in _event_sources():
+        try:
+            # extend() consumes the generator incrementally, so a source that raises
+            # partway keeps whatever it already yielded rather than losing it too.
+            events.extend(source(profile, start, end, bbox))
+        except Exception:
+            logger.exception("Memory source %s failed; omitting it from the feed", getattr(source, "__name__", source))
     events.sort(key=lambda e: e.occurred_at, reverse=True)
     return events

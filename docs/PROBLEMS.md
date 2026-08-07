@@ -2803,3 +2803,31 @@ function keeps the reference resolving at call time. An abstraction that breaks 
 worse than the repetition it replaced.
 
 **The suite now has no known non-environmental failures.**
+
+## Same fan-out gap on the Memories feed (2026-08-07)
+
+The site-admin finding generalised on the first place I looked. `get_memory_events` merges four
+independent sources - routes, trips, visits, photos - with no isolation, so any one raising (a
+corrupt row, a missing relation, a geometry error) discarded the other three and 500'd the feed on
+both the HTML page and the external API.
+
+This is the module's own advertised extensibility seam: its docstring says adding a memory type is
+one new function in the source list and nothing else changes. Unguarded fan-out makes that seam a
+liability - a bug in a newly added source takes out the three that already worked. A Memories page
+missing one kind of memory is worth far more than no page at all.
+
+Each source is now drained independently. `extend()` consumes a generator incrementally, so a
+source that fails partway keeps whatever it already yielded rather than losing that too - pinned by
+a test rather than assumed.
+
+**`_EVENT_SOURCES` had the same import-time capture problem** as the infrastructure collectors, and
+this time the tests caught it before the fix landed: two of the four new tests passed/failed in a
+pattern that only made sense if `mock.patch` was having no effect, which is exactly what a
+module-level tuple of function objects causes. Replaced with `_event_sources()`, resolved per call.
+Twice in one session, so it is worth stating as a rule: **a module-level tuple of function
+references is a testability trap** - it freezes the bindings at import and silently ignores
+patching. Name the functions inside the function that uses them.
+
+Verified clean: the pin detail page's street-view provider fan-out already isolates per provider
+and records an `ok=False` result for the admin debug overlay, which is the pattern the rest should
+match.
