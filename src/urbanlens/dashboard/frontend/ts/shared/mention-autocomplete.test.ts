@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
-import { installGlobalMentionAutocomplete, resetMentionAutocompleteForTests } from "./mention-autocomplete";
+import { type MentionItem, installGlobalMentionAutocomplete, resetMentionAutocompleteForTests } from "./mention-autocomplete";
 
 const WRAP = (attrs = "") => `
   <div class="comment-input-wrap">
@@ -172,10 +172,17 @@ describe("the dropdown", () => {
         await new Promise((resolve) => setTimeout(resolve, 260));
         dropdown().querySelector<HTMLElement>(".mention-option")!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
 
-        // Two spaces: the insert always appends one, and the text after the caret
-        // already began with one. Pre-existing cosmetic quirk, asserted here so the
-        // extraction is provably faithful - see docs/PROBLEMS.md.
-        expect(ta.value).toBe("go @[Old Mill](loc:u1)  tomorrow");
+        // One space, not two: the separator is skipped when the following text
+        // already starts with whitespace.
+        expect(ta.value).toBe("go @[Old Mill](loc:u1) tomorrow");
+    });
+
+    test("the caret lands after the mention, ready to keep typing", async () => {
+        stubFetch([{ name: "Old Mill", uuid: "u1" }]);
+        await type("go to @mill");
+        dropdown().querySelector<HTMLElement>(".mention-option")!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+
+        expect(textarea().selectionStart).toBe(textarea().value.length);
     });
 
     test("a failed request leaves the box alone rather than surfacing an error", async () => {
@@ -191,6 +198,53 @@ describe("the dropdown", () => {
 
         expect(dropdown().hidden).toBe(true);
         expect(dropdown().innerHTML).toBe("");
+    });
+});
+
+describe("when responses arrive out of order", () => {
+    /** Stub fetch so each call's response can be resolved by hand, in any order. */
+    function deferredFetch(): { resolveFor: (q: string, results: MentionItem[]) => void } {
+        const pending = new Map<string, (results: MentionItem[]) => void>();
+        globalThis.fetch = ((url: string | URL | Request) => {
+            const q = new URL(String(url), "https://urbanlens.test").searchParams.get("q") ?? "";
+            return Promise.resolve({
+                json: () => new Promise((resolve) => pending.set(q, resolve)),
+            } as Response);
+        }) as unknown as typeof fetch;
+
+        return {
+            resolveFor: (q, results) => pending.get(q)?.(results),
+        };
+    }
+
+    test("a slow earlier response does not overwrite the newer one", async () => {
+        // Typing "@mil" then "@mill" on a slow connection: if the first lookup lands
+        // last, the dropdown would offer results for a fragment the box no longer
+        // contains, and picking one inserts a location the user never searched for.
+        const { resolveFor } = deferredFetch();
+
+        await type("@mil");
+        await type("@mill");
+
+        resolveFor("mill", [{ name: "Correct Mill", uuid: "new" }]);
+        resolveFor("mil", [{ name: "Stale Mil", uuid: "old" }]);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        const names = Array.from(dropdown().querySelectorAll(".mention-option")).map((el) => el.textContent);
+        expect(names).toEqual(["Correct Mill"]);
+    });
+
+    test("a response for a fragment the caret has left is discarded entirely", async () => {
+        const { resolveFor } = deferredFetch();
+
+        await type("@mil");
+        // The user gives up on the mention and carries on typing a normal sentence,
+        // so there is no active fragment at all when the response lands.
+        await type("@mil is fine");
+        resolveFor("mil", [{ name: "Stale Mil", uuid: "old" }]);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+
+        expect(dropdown().hidden).toBe(true);
     });
 });
 

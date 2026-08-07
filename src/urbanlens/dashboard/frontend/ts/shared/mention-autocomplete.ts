@@ -13,7 +13,7 @@
  * Ported out of ``base.html``'s inline script unchanged.
  */
 
-interface MentionItem {
+export interface MentionItem {
     name: string;
     /** Present for activity mentions only. */
     actIndex?: number;
@@ -24,6 +24,7 @@ interface MentionItem {
 const DEBOUNCE_MS = 200;
 
 let timer: ReturnType<typeof setTimeout> | null = null;
+let inFlight: AbortController | null = null;
 
 /** The ``@`` fragment the caret currently sits in, or null if it is not in one. */
 function currentQuery(ta: HTMLTextAreaElement): { start: number; query: string } | null {
@@ -72,13 +73,33 @@ function showDropdown(ta: HTMLTextAreaElement, items: MentionItem[], onSelect: (
 
 function insert(ta: HTMLTextAreaElement, start: number, text: string): void {
     const pos = ta.selectionStart;
-    ta.value = `${ta.value.substring(0, start)}${text} ${ta.value.substring(pos)}`;
+    const after = ta.value.substring(pos);
+    // A trailing space separates the mention from what follows, but only when there
+    // is not already one there - inserting mid-sentence used to leave a double space.
+    const separator = /^\s/.test(after) ? "" : " ";
+    ta.value = `${ta.value.substring(0, start)}${text}${separator}${after}`;
     const cursor = start + text.length + 1;
     ta.setSelectionRange(cursor, cursor);
     ta.focus();
 }
 
+/**
+ * Whether a response is still wanted by the time it lands.
+ *
+ * Debouncing alone does not make lookups safe: two can still be outstanding at
+ * once, and the network decides which finishes last. Without this the dropdown
+ * could offer results for a fragment the box no longer contains, and picking one
+ * would insert a location the user never searched for.
+ */
+function stillCurrent(ta: HTMLTextAreaElement, query: string): boolean {
+    return currentQuery(ta)?.query === query;
+}
+
 function fetchSuggestions(ta: HTMLTextAreaElement): void {
+    // Whatever was asked for before this is now known to be stale.
+    inFlight?.abort();
+    inFlight = null;
+
     const q = currentQuery(ta);
     if (!q || q.query.length < 1) {
         hideDropdown(dropdownFor(ta));
@@ -87,12 +108,15 @@ function fetchSuggestions(ta: HTMLTextAreaElement): void {
 
     const context = ta.dataset.contextType || "";
     const tripSlug = ta.dataset.tripSlug || "";
-    const headers = { "X-Requested-With": "XMLHttpRequest" };
+    const controller = new AbortController();
+    inFlight = controller;
+    const request = { headers: { "X-Requested-With": "XMLHttpRequest" }, signal: controller.signal };
 
     if (/^\d+$/.test(q.query) && context === "trip" && tripSlug) {
-        fetch(`/dashboard/trips/${encodeURIComponent(tripSlug)}/map-data/`, { headers })
+        fetch(`/dashboard/trips/${encodeURIComponent(tripSlug)}/map-data/`, request)
             .then((r) => r.json())
             .then((data: { points?: { index: number; label: string }[] }) => {
+                if (!stillCurrent(ta, q.query)) return;
                 const points = (data.points || []).filter((p) => String(p.index).startsWith(q.query));
                 showDropdown(
                     ta,
@@ -100,13 +124,16 @@ function fetchSuggestions(ta: HTMLTextAreaElement): void {
                     (item) => insert(ta, q.start, `@act:${item.actIndex}`),
                 );
             })
+            // Swallows genuine failures and our own aborts alike - both mean "no
+            // suggestions", and neither is worth interrupting someone mid-sentence.
             .catch(() => {});
         return;
     }
 
-    fetch(`/dashboard/comments/locations/?q=${encodeURIComponent(q.query)}`, { headers })
+    fetch(`/dashboard/comments/locations/?q=${encodeURIComponent(q.query)}`, request)
         .then((r) => r.json())
         .then((results: MentionItem[]) => {
+            if (!stillCurrent(ta, q.query)) return;
             showDropdown(ta, results, (item) => insert(ta, q.start, `@[${item.name}](loc:${item.uuid})`));
         })
         .catch(() => {});
@@ -155,10 +182,12 @@ function onClick(event: MouseEvent): void {
     document.querySelectorAll<HTMLElement>(".mention-dropdown:not([hidden])").forEach(hideDropdown);
 }
 
-/** Reset module state. Test-only: cancels a pending debounce between cases. */
+/** Reset module state. Test-only: cancels a pending debounce and lookup between cases. */
 export function resetMentionAutocompleteForTests(): void {
     if (timer) clearTimeout(timer);
     timer = null;
+    inFlight?.abort();
+    inFlight = null;
 }
 
 export function installGlobalMentionAutocomplete(): void {

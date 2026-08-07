@@ -3117,24 +3117,23 @@ run entirely. They are covered by `bun test` (162 passing) and `tsc --noEmit` (c
 
 ## Two pre-existing bugs surfaced by extracting base.html's comment utilities (2026-08-07)
 
-Both were found while porting the 252-line comment-utilities block into
-`shared/mention-autocomplete.ts` and friends. Neither was fixed as part of that move -
-a behavioural change mixed into a file move is unreviewable - so both are recorded here.
+**Both are now fixed** (commit follows the extraction). Recorded here because they had been
+live in production inside `base.html`'s inline script, unnoticed and untestable, since the
+mention feature was written.
 
-**1. `@mention` autocomplete has no request cancellation (real, user-visible).**
-`fetchSuggestions` debounces at 200ms but never aborts an in-flight request. Two lookups
-can therefore be outstanding at once, and whichever *responds* last wins, not whichever
-was typed last. Typing `@mil` then `@mill` on a slow connection can leave the dropdown
-showing results for `mil` while the textarea reads `mill`; picking one then inserts a
-location the user did not search for. The fix is an `AbortController` per lookup, aborted
-at the top of the next one, plus a guard that discards a response whose query no longer
-matches the caret's current fragment. Needs a test that resolves two stubbed fetches out
-of order.
+**1. `@mention` autocomplete had no request cancellation - real and user-visible. FIXED.**
+`fetchSuggestions` debounced at 200ms but never aborted an in-flight request, so two lookups
+could be outstanding at once and whichever *responded* last won, not whichever was typed last.
+Typing `@mil` then `@mill` on a slow connection could leave the dropdown showing results for
+`mil` while the textarea read `mill`; picking one then inserted a location the user never
+searched for. Reproduced first with a test that resolves two stubbed fetches out of order -
+it showed `Stale Mil` before the fix, confirming the race was real rather than theoretical.
+Fixed with an `AbortController` per lookup plus a `stillCurrent()` guard that discards any
+response whose query no longer matches the caret's fragment. The guard is the part that
+actually matters: aborting is an optimisation, but a response can already be in flight past
+the point where aborting helps.
 
-**2. Mention insertion can produce a double space (cosmetic).**
-`insert()` unconditionally appends a space after the inserted text. When the caret is
-followed by text that already begins with a space, the result has two:
-`go @mill tomorrow` becomes `go @[Old Mill](loc:u1)  tomorrow`. Asserted as-is in
-`mention-autocomplete.test.ts` so the extraction is provably faithful; the test should be
-updated when the behaviour is corrected. Fix: only append the space when the next
-character is not already whitespace.
+**2. Mention insertion produced a double space - cosmetic. FIXED.**
+`insert()` unconditionally appended a space, so inserting mid-sentence gave two:
+`go @mill tomorrow` became `go @[Old Mill](loc:u1)  tomorrow`. Now the separator is skipped
+when the following text already begins with whitespace.
