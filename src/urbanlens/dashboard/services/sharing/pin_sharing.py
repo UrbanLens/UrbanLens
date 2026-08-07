@@ -216,6 +216,14 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
             pin=new_pin,
             location=new_pin.location,
             profile=share.to_profile,
+            # Both of these carry a default that quietly misdescribes the copy when
+            # omitted: source would file a shared Wikimedia photo under the
+            # recipient's own uploads (and into the wrong Media tab), and media_type
+            # would turn a shared video into a photo, which renders as a broken image.
+            source=image.source,
+            media_type=image.media_type,
+            media_source_key=image.media_source_key,
+            media_item_key=image.media_item_key,
             caption=image.caption,
             author=image.author,
             source_url=image.source_url,

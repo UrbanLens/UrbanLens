@@ -3308,3 +3308,46 @@ would be pointless.
 
 **Worth generalising:** any new `bulk_create`/`bulk_update` on a model with `post_save`
 receivers needs this same audit. `Pin` alone has six.
+
+## A guard for the bulk-write class, which immediately found a fifth site (2026-08-07)
+
+Follow-up to the four bulk writes fixed in 8ed25a93. Whether a bulk write is dangerous is a
+property of the *model*, not the call site, so a site that is safe today becomes a bug the
+moment somebody adds a receiver to the model it writes - and nothing about that change would
+look wrong in review. `tests/hypothesis/test_bulk_write_signal_guard.py` now fails the build
+on any `bulk_create`/`bulk_update` targeting a model with live `pre/post_save` or
+`pre/post_delete` receivers unless the site is listed in `REVIEWED` with a reason.
+
+Design notes worth keeping:
+- Receivers are read from **Django's live signal registry** (`signal.has_listeners(model)`),
+  not by grepping for `@receiver`. That is what caught the fifth site: `Image` gets its
+  `post_save` connected dynamically from the achievements `_SUBSCRIPTIONS` table, so no grep
+  for a decorator would ever have found it.
+- The allowlist is keyed by `(file, model, operation)`, **not line number**, which would churn
+  on every edit above the call and train people to update it without thinking.
+- Two "guard the guard" tests assert the scan still finds call sites and the registry lookup
+  still returns receivers. These earned their place immediately: the first version of the test
+  had a wrong `PACKAGE_ROOT` and scanned **zero** files, which made the real assertion pass
+  vacuously. Without those two tests it would have been committed green and guarded nothing.
+
+**The fifth site (`pin_sharing.py`, `Image.bulk_create`) turned out to be correct as-is** -
+firing that receiver would credit the *recipient* of a share with a photo-upload streak day
+for photos they did not take. It is recorded in `REVIEWED` with that reasoning. Its one loose
+end: the recipient's photo-count metric is not invalidated at copy time, and self-heals only
+on their next photo action. Left alone as a product question, not a defect.
+
+### But following that thread found two real bugs in the same function
+
+`create_pin_from_share` builds the recipient's `Image` rows field by field, and any field it
+omits silently takes the **model default** instead of the source row's value. Two of those
+defaults actively misdescribe the copy:
+
+- **`source` defaults to `UPLOAD`.** Resharing a pin whose gallery held a materialised Yelp,
+  Wikimedia or Smithsonian photo filed it as the recipient's own upload. `ImageSource` is what
+  drives the Media section's per-source tabs, so the photo also landed in the wrong tab.
+- **`media_type` defaults to `PHOTO`.** A shared video was recreated as a photo, which renders
+  through `<img>` instead of the player - a broken image.
+
+Both fixed by copying `source`, `media_type`, `media_source_key` and `media_item_key`. The
+context FKs it omits (`wiki`, `visit`, `safety_checkin`, `direct_message`, `pin_suggestion`)
+are correctly dropped - they belong to the sender's row, not the copy.
