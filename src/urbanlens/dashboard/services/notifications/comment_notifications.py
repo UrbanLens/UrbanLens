@@ -19,6 +19,11 @@ The rules that live here, and only here:
   ``DeliveryPreference.NONE``, which must suppress the row entirely rather than
   writing it and hiding it at render time - a stored notification still shows
   up in counts and digests.
+- **Name the actor only as far as the recipient may see them.** Both helpers
+  resolve the actor through ``resolve_visible_identity`` before building their
+  strings, so a notification never discloses someone the thread it links to
+  would mask - and never pushes that name to a device or an SMS.
+
 - **One deep-link builder for all three comment kinds.** Pin, wiki and trip
   comments live in different models and reverse to different routes;
   :func:`comment_url` is the single place that knows the mapping, so a
@@ -111,6 +116,33 @@ def _preference(recipient: Profile, field: str) -> DeliveryPreference:
         return DeliveryPreference.SITE
 
 
+def _actor_names(recipient: Profile, actor: Profile) -> tuple[str, str]:
+    """How *actor* may be named to *recipient*, as (display name, handle).
+
+    The comment list resolves authors through ``resolve_visible_identities`` and
+    the template renders the masked name when it says to, so naming the actor
+    outright here would contradict the very thread the notification links to.
+    It also travels further than a page does: a ``NotificationLog`` insert is
+    delivered to registered push devices, and ``notification_text_alerts`` builds
+    an SMS body from the title - a masked name would otherwise reach a lock
+    screen and a text message.
+
+    Args:
+        recipient: The profile being notified.
+        actor: The profile that replied or reacted.
+
+    Returns:
+        ``(name, handle)`` - the handle is ``@name`` only when the recipient may
+        actually see who *actor* is; "@Member 2" reads like a real mention and is
+        not one.
+    """
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+
+    identity = resolve_visible_identity(recipient, actor)
+    name = identity["display_name"] or actor.username
+    return name, (name if identity["is_masked"] else f"@{name}")
+
+
 def notify_reply(actor: Profile, parent_comment: Any, reply: Any = None) -> None:
     """Tell the author of *parent_comment* that *actor* replied to it.
 
@@ -125,11 +157,12 @@ def notify_reply(actor: Profile, parent_comment: Any, reply: Any = None) -> None
         return
     if _preference(recipient, "comment_reply") == DeliveryPreference.NONE:
         return
+    name, handle = _actor_names(recipient, actor)
     NotificationLog.objects.create(
         profile=recipient,
         notification_type=NotificationType.COMMENT_REPLY,
-        title=f"{actor.username} replied to your comment",
-        message=f"@{actor.username} replied to your comment.",
+        title=f"{name} replied to your comment",
+        message=f"{handle} replied to your comment.",
         url=comment_url(reply or parent_comment),
     )
 
@@ -150,10 +183,11 @@ def notify_reaction(actor: Profile, comment: Any) -> None:
         return
     if _preference(recipient, "comment_liked") == DeliveryPreference.NONE:
         return
+    name, handle = _actor_names(recipient, actor)
     NotificationLog.objects.create(
         profile=recipient,
         notification_type=NotificationType.COMMENT_LIKED,
-        title=f"{actor.username} reacted to your comment",
-        message=f"@{actor.username} reacted to your comment.",
+        title=f"{name} reacted to your comment",
+        message=f"{handle} reacted to your comment.",
         url=comment_url(comment),
     )

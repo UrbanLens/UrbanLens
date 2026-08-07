@@ -3649,3 +3649,43 @@ The DM provider now resolves through `display_identity_for` rather than the gene
 delegates to the latter - but it labels a hidden partner "Former contact", which is what the
 inbox and conversation header already call them. The generic resolver would have said
 "Member 1" in search and "Former contact" in the inbox for the same person.
+
+## Reply/reaction notifications named people the thread masks (2026-08-07)
+
+Third unit on this class, and the first instance where the leaked name leaves the app.
+
+`notify_reply` and `notify_reaction` built `title=f"{actor.username} replied to your
+comment"` and `message=f"@{actor.username} ..."` from the raw username, while the comment
+list resolves authors through `resolve_visible_identities` and the template renders the
+masked name. So the same person was "Member 2" in the thread and their real username in the
+notification about that thread.
+
+**Why this one is worse than a page.** A `NotificationLog` insert is picked up by
+`enqueue_native_push` and delivered to the recipient's registered devices, and
+`notification_text_alerts` builds an SMS body straight from `notification.title`. The name
+reaches a lock screen and a text message - places the app's own masking cannot reach back
+into.
+
+Fixed with an `_actor_names` helper resolving the actor for that specific recipient. It
+returns the name *and* a handle, because `message` used an `@name` mention form: "@Member 2"
+reads like a real mention and is not one, so the `@` is applied only when the recipient may
+actually see who the actor is. The rule is now stated in the module docstring alongside the
+other three it already lists ("never notify someone about their own action", "honour the
+delivery preference", "one deep-link builder").
+
+Seven tests, including one that the notification is still *sent* - masking the name must not
+suppress the event, since the recipient is entitled to know someone replied - and one that
+the deep link is unchanged.
+
+### Where the class ends
+
+The remaining sweep hits were checked and are correct as they stand. Safety check-in contacts
+and safety-chat participants are a closed set the owner explicitly established, and removing
+a partner revokes their access (`remove_checkin_partner` force-closes the socket), so there
+is no lingering-access case of the kind `display_identity_for` exists for. `__str__` methods
+are admin/debug surfaces. Notification text addressed *to* the person concerned must name the
+other party - that is the message.
+
+Four instances across three units: trips export, three global-search providers, and these two
+notifications. The rule is real and applied in six places; it is still not enforced anywhere,
+which is what task #38 weighs.
