@@ -18,8 +18,12 @@
  * site already depends on.
  */
 import { installGlobalCollapsibleSections } from "../shared/collapsible-sections";
+import { installGlobalCommentCompose } from "../shared/comment-compose";
 import { installGlobalConfirmDialog } from "../shared/confirm-dialog";
 import { installGlobalFlyToDismiss } from "../shared/fly-to-dismiss";
+import { installGlobalMentionAutocomplete } from "../shared/mention-autocomplete";
+import { installGlobalPopupDismiss } from "../shared/popup-dismiss";
+import { installGlobalReactionPicker } from "../shared/reaction-picker";
 import { installGlobalLabelPicker } from "../shared/label-picker";
 import { installGlobalLocationSearchEngine } from "../shared/location-search-engine";
 import { installGlobalMapExport } from "../shared/map-export";
@@ -28,8 +32,12 @@ import { installGlobalMarkupEngine } from "../shared/markup-engine";
 import { createMarkupToolbar } from "../shared/markup-toolbar";
 
 installGlobalCollapsibleSections();
+installGlobalCommentCompose();
 installGlobalConfirmDialog();
 installGlobalFlyToDismiss();
+installGlobalMentionAutocomplete();
+installGlobalPopupDismiss();
+installGlobalReactionPicker();
 installGlobalLocationSearchEngine();
 installGlobalMapLayers();
 installGlobalMarkupEngine();

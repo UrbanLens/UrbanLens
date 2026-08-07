@@ -3114,3 +3114,27 @@ copies. Worth doing before a release; not worth re-running an hour for now.
 Also unaffected by that caveat: the frontend work landed today is host-side only (bun), never
 copied into the container, so `shared/confirm-dialog.ts` and the happy-dom harness are outside this
 run entirely. They are covered by `bun test` (162 passing) and `tsc --noEmit` (clean).
+
+## Two pre-existing bugs surfaced by extracting base.html's comment utilities (2026-08-07)
+
+Both were found while porting the 252-line comment-utilities block into
+`shared/mention-autocomplete.ts` and friends. Neither was fixed as part of that move -
+a behavioural change mixed into a file move is unreviewable - so both are recorded here.
+
+**1. `@mention` autocomplete has no request cancellation (real, user-visible).**
+`fetchSuggestions` debounces at 200ms but never aborts an in-flight request. Two lookups
+can therefore be outstanding at once, and whichever *responds* last wins, not whichever
+was typed last. Typing `@mil` then `@mill` on a slow connection can leave the dropdown
+showing results for `mil` while the textarea reads `mill`; picking one then inserts a
+location the user did not search for. The fix is an `AbortController` per lookup, aborted
+at the top of the next one, plus a guard that discards a response whose query no longer
+matches the caret's current fragment. Needs a test that resolves two stubbed fetches out
+of order.
+
+**2. Mention insertion can produce a double space (cosmetic).**
+`insert()` unconditionally appends a space after the inserted text. When the caret is
+followed by text that already begins with a space, the result has two:
+`go @mill tomorrow` becomes `go @[Old Mill](loc:u1)  tomorrow`. Asserted as-is in
+`mention-autocomplete.test.ts` so the extraction is provably faithful; the test should be
+updated when the behaviour is corrected. Fix: only append the space when the next
+character is not already whitespace.
