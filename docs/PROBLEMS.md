@@ -3504,3 +3504,50 @@ own uploads are refused with an error about photos they did not upload. Whether 
 those rows, charge them, or block the accept is a product/billing decision, and
 `QuotaExemption` is explicitly scoped to "storage the whole community benefits from", which a
 received share is not. Flagged rather than decided.
+
+## External API audit: no changes warranted (2026-08-07)
+
+A full unit spent on the external API's permission, scope and throttle layers found nothing
+to fix. Recording what was checked and how, because the useful output of a clean audit is
+knowing not to repeat it.
+
+**Scope coverage is complete.** All 205 view classes under `external_api/` declare
+`required_scopes` somewhere in their ancestry. Verified by walking the AST and resolving
+inheritance transitively.
+
+**Everything fails closed, in three independent places.** `credential_grants` refuses an
+empty requirement rather than reading it as "nothing required"; `HasApiKeyScope` defaults a
+missing `required_scopes` to an empty set, which that refusal then denies; and
+`ExternalApiView.required_scopes` returns an empty set for a method with no entry. A view
+added without a declaration is unreachable to credentials, not open to them.
+
+**The PAT/OAuth2 split is enforced at check time, not at grant time.** `OAUTH2_ONLY_SCOPES`
+is rejected in `credential_grants` even if a key somehow carries it, so a hand-edited row or
+a future scope-picker bug cannot hand a bearer key access to end-to-end encrypted DMs.
+
+**Object-level ownership holds.** A scan for handlers doing a lookup with no owner-scoping
+token returned three; all three are false positives that scope through a base-class helper
+(`_get_checkin`, `resolve_solo_session`) and then filter by that already-scoped parent.
+
+**Throttle tiers derive from the same declaration that gates access**, so there is no second
+list to drift, and an undeclared method lands in the *tighter* write tier. Only two views
+override the tier and both are documented. The one shape worth checking - a read-tier GET
+that triggers paid external calls - is `PinPanelDetailView`, and it is bounded twice over:
+`schedule_panel_fetch` is single-flight per (source, pin) via a cache marker, and the fetch
+itself runs under the per-service rate limiter (`RateLimitExceededError` is caught in
+`external_data`).
+
+### A lesson about these scans, learned twice
+
+Two scans in this audit produced confident wrong answers because they matched on syntax
+without handling a variant:
+
+- The unique-constraint scan ignored `UniqueConstraint.condition`, so 27 *partial* constraints
+  read as absolute - which is what made a correct group-chat design look like a bug.
+- This scan resolved base classes from `ast.Name`/`ast.Attribute` only, so six views
+  inheriting a *subscripted generic* (`PinSubResourceView[PinNote]`) reported no bases at all
+  and looked unprotected.
+
+Both times the fix was to widen the scanner, and both times the first result was plausible
+enough to act on. Any structural scan here should be re-run against a known-good and a
+known-bad example before its output is trusted.
