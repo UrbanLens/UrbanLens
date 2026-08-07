@@ -3886,3 +3886,47 @@ and wiki comments while leaving your trip comments in place, authored by nobody.
 two is probably not what was intended, but which one is a data-policy question - whether
 deletion means "erase what I wrote" or "keep the conversation readable" - and not a call to
 make from inside an audit. Recorded here for the owner.
+
+## E2EE group messages: the cryptographic membership boundary depends on the server (2026-08-07)
+
+`models/e2ee/group_key.py` states the design claim plainly: "Versioning is what enforces
+membership boundaries **cryptographically**" - a removed member "is excluded from every later
+version, so messages sent after their removal are unreadable to them". The server-side half is
+well built: `needs_rotation` is computed by comparing the latest version's envelope set against
+active membership, and the key endpoint refuses to store a version whose envelopes don't cover
+that membership exactly.
+
+**But nothing validates the `key_version` a client sends a message with.**
+`create_group_message` checks only `key_version < 1` (alongside the blob checks). It never
+verifies that the version exists, belongs to this group, or is the current one. The value is
+client-supplied and stored verbatim, on all four send paths - the WebSocket consumer, the
+external API, the web controller, and the share-a-pin-in-a-group path.
+
+So a message can be encrypted with a **pre-removal** key version that a removed member still
+holds an envelope for. Reachable benignly - a tab open across the removal, an offline outbox
+replaying queued messages, an API client caching the version it last fetched - and reachable
+deliberately: a remaining member can choose an old version specifically to make a message
+readable by someone the group ejected, and the server will accept it.
+
+**What actually protects post-removal messages today is the server**, not the cryptography: a
+removed member has no active membership, so `visible_window` and the active-membership checks
+never serve them the ciphertext. That is a real defence and the messages are not currently
+exposed. It is, however, exactly the dependency end-to-end encryption exists to remove - it
+would not survive a database backup, a leak, a server compromise, or a future bug in the
+delivery gate, which is the threat model the feature is written against.
+
+### Why this is surfaced rather than fixed
+
+The obvious fix - reject any `key_version` that isn't the latest - is **not sufficient on its
+own**. If nobody has rotated yet, the latest version is still the pre-removal one, and its
+envelopes still include the removed member. The rule that would actually hold the stated
+property is stronger: refuse to accept an encrypted group message while `needs_rotation` is
+true, i.e. until some client has stored a version whose envelopes match the active membership.
+
+That trades availability for the property. Rotation is client-driven, so between a removal and
+the next client rotating, group messaging would be blocked - and an offline outbox would have
+messages rejected on replay and need re-encrypting. Whether that trade is right depends on how
+strictly the removal boundary is meant to hold versus how tolerant the product should be of a
+lagging or offline client, which is a decision for the owner rather than an audit. `docs/e2ee.md`
+already documents a related deliberate trade (recoverability over forward secrecy), so there is
+precedent for either answer being the intended one.
