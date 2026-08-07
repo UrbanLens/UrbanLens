@@ -3724,3 +3724,22 @@ non-deterministically - and it would look perfectly reasonable in review.
 
 The warning now lives in the seam's own docstring, where someone about to consume the
 parameter will read it, rather than only here.
+
+## Full-suite verification of the whole session: 10,162 passed, 0 failed (2026-08-07)
+
+**10,162 passed, 0 failed, 1,429 subtests passed, in 59:45.** No failure line in the output.
+
+This one carries **no caveat**, unlike the run recorded earlier (4259df61), which was taken
+while files were being copied into the container and so could not claim to prove any single
+commit. This time, before starting: the container was synced to HEAD, the one test file
+deleted during the session (`test_group_membership_rejoin.py`, removed as duplicate coverage)
+was deleted from the container too, `__pycache__` was cleared, and the container's Python file
+list was diffed against `git ls-files` to confirm they matched. Nothing was copied in during
+the 59 minutes. HEAD was `ae5746dc` at both start and finish, with a clean working tree, so
+this run proves that commit.
+
+Frontend, verified host-side and therefore never touching the container: `tsc --noEmit` clean
+and **372 tests passing** across 25 files.
+
+For scale, the session as a whole: 66 commits, 258 files changed, +18,349/-4,793 lines, and
+33 new test files. The suite grew from 10,087 to 10,162 passing tests.
