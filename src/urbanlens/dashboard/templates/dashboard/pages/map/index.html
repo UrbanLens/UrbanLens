@@ -1715,17 +1715,11 @@
     }
 
     // -- Fetch tiles from server -----------------------------------------------
-    async function _fetchJson(url, options, timeoutMs) {
-        const controller = new AbortController();
-        const tid = setTimeout(() => controller.abort(), timeoutMs || 120000);
-        try {
-            const opts = Object.assign({}, options || {}, { signal: controller.signal });
-            const resp = await fetch(url, opts);
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            return await resp.json();
-        } finally {
-            clearTimeout(tid);
-        }
+    // Thin shim over the shared helper (frontend/ts/shared/fetch-json.ts), which
+    // this page's own version was promoted into. Kept so the timeout stays a
+    // positional argument at the call sites below.
+    function _fetchJson(url, options, timeoutMs) {
+        return window.ulFetchJson(url, Object.assign({}, options || {}, { timeoutMs: timeoutMs || 120000 }));
     }
 
     async function _fetchAllPinPages(message) {
@@ -2320,12 +2314,9 @@
                     // Update visual immediately
                     stars.forEach(s => s.classList.toggle('popup-star--on', parseInt(s.dataset.val) <= val));
 
-                    fetch(`/dashboard/rest/reviews/create_or_update/${pinId}/`, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-                        body: JSON.stringify({ rating: val }),
-                    })
-                    .then(r => r.json())
+                    // ulSendJson throws on a non-2xx; a bare fetch().then(json)
+                    // reported "Rating saved" for ratings the server refused.
+                    window.ulSendJson(`/dashboard/rest/reviews/create_or_update/${pinId}/`, 'PATCH', { rating: val })
                     .then(() => {
                         if (uuid && _pinStore.has(uuid)) {
                             _pinStore.get(uuid).rating = val;
@@ -2490,17 +2481,10 @@
                             const pinUuid = this.closest('.pin-popup').dataset.uuid;
                             const data = {};
                             data[this.name] = value;
-                            fetch(`/dashboard/rest/pins/${pinUuid}/`, {
-                                method: 'PATCH',
-                                headers: {
-                                    'Content-Type': 'application/json',
-                                    'X-CSRFToken': '{{ csrf_token }}',
-                                },
-                                body: JSON.stringify(data),
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                console.log(`${this.name} updated successfully`);
+                            // ulSendJson throws on a non-2xx; a bare fetch().then(json)
+                            // announced "updated successfully" for refused edits.
+                            window.ulSendJson(`/dashboard/rest/pins/${pinUuid}/`, 'PATCH', data)
+                            .then(() => {
                                 toastr.success(`${this.name.charAt(0).toUpperCase() + this.name.slice(1)} updated successfully`);
                                 const button = document.createElement('button');
                                 button.classList.add('add-tag-button');

@@ -1766,11 +1766,10 @@
                 document.querySelectorAll('[data-media-sort]').forEach(function (b) { b.classList.toggle('active', b === sortBtn); });
                 var g2 = grid();
                 if (g2) { sortMediaGallery(g2); if (window.initAdaptivePagination) window.initAdaptivePagination(document, true); }
-                fetch('{% url "pin.media.sort" %}', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-                    body: JSON.stringify({ sort: sort }),
-                });
+                // A display preference: worth reporting if it does not stick, but the
+                // sort the user just asked for has already been applied locally.
+                window.ulSendJson('{% url "pin.media.sort" %}', 'POST', { sort: sort })
+                    .catch(function () { if (window.toastr) toastr.warning("Couldn't save your sort preference."); });
             }
         });
         document.querySelectorAll('[data-media-sort]').forEach(function (b) {
@@ -1796,14 +1795,13 @@
             rebuildMediaTabs();
             applyMediaTabFilter(activeTab);
             if (window.initAdaptivePagination) window.initAdaptivePagination(document, true);
-            fetch('{% url "pin.media.relevance" pin.slug %}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-                body: JSON.stringify({
-                    source: source, item_key: key, url: url, is_relevant: nextRelevant,
-                    page_url: itemEl.dataset.mediaPageUrl || '', caption: itemEl.dataset.mediaCaption || '',
-                }),
-            }).then(function (resp) { return resp.json(); }).then(function (data) {
+            // The thumb state is applied optimistically above, so a refused vote has
+            // to be reported - otherwise it silently reverts on the next page load.
+            window.ulSendJson('{% url "pin.media.relevance" pin.slug %}', 'POST', {
+                source: source, item_key: key, url: url, is_relevant: nextRelevant,
+                page_url: itemEl.dataset.mediaPageUrl || '', caption: itemEl.dataset.mediaCaption || '',
+            }).then(function (data) {
+                data = data || {};
                 if (data.materialize_error && window.toastr) toastr.warning("Marked relevant, but couldn't save a local copy: " + data.materialize_error);
                 if (!data.image_url) return;
                 itemEl.dataset.mediaUrl = data.image_url;
@@ -1945,11 +1943,10 @@
             var payload = items.map(function (item) {
                 return { source: item.dataset.mediaSource, url: item.dataset.mediaUrl, page_url: item.dataset.mediaPageUrl, caption: item.dataset.mediaCaption };
             });
-            fetch('{% url "pin.media.send_to_wiki" pin.slug %}', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
-                body: JSON.stringify({ items: payload }),
-            }).then(function (r) { return r.json().catch(function () { return {}; }); }).then(function (data) {
+            // The inner .json().catch(=> {}) used to swallow a 500's HTML error page
+            // and fall through to the success toast below. ulSendJson throws first.
+            window.ulSendJson('{% url "pin.media.send_to_wiki" pin.slug %}', 'POST', { items: payload }).then(function (data) {
+                data = data || {};
                 // Queued, not stored: the downloads run in the background, so the
                 // photos appear on the wiki shortly after this returns.
                 var n = (data.queued != null ? data.queued : items.length);

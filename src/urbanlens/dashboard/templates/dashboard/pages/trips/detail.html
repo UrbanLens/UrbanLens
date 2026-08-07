@@ -794,14 +794,11 @@
                             m.on('dragend', function (ev) {
                                 dragUnlocked = false;
                                 var ll = ev.target.getLatLng();
-                                fetch(posUrl, {
-                                    method: 'POST',
-                                    headers: {
-                                        'Content-Type': 'application/json',
-                                        'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]').value,
-                                        'X-Requested-With': 'XMLHttpRequest',
-                                    },
-                                    body: JSON.stringify({lat: ll.lat, lng: ll.lng}),
+                                // The marker has already moved on screen, so a refused
+                                // save must surface - a bare fetch's .catch never fired
+                                // for an HTTP error and the move looked accepted.
+                                window.ulSendJson(posUrl, 'POST', {lat: ll.lat, lng: ll.lng}, {
+                                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
                                 }).catch(function () {
                                     toastr && toastr.error('Could not save new position.');
                                 });

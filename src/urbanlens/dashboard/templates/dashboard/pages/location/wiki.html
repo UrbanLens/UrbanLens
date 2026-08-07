@@ -708,16 +708,14 @@
             // Clicking your active thumb clears the vote back to neutral.
             var next = isUp ? (wasUp ? null : true) : (wasDown ? null : false);
             applyVoteState(itemEl, next);
-            fetch(VOTE_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrftoken },
-                body: JSON.stringify({
-                    source: itemEl.dataset.mediaSource, item_key: itemEl.dataset.mediaKey,
-                    url: itemEl.dataset.mediaUrl, is_relevant: next,
-                    page_url: itemEl.dataset.mediaPageUrl || '', caption: itemEl.dataset.mediaCaption || '',
-                    image_id: itemEl.dataset.imageId || null,
-                }),
-            }).then(function (r) { return r.json(); }).then(function (data) {
+            // The thumb is set optimistically above, so a refused vote has to say so.
+            window.ulSendJson(VOTE_URL, 'POST', {
+                source: itemEl.dataset.mediaSource, item_key: itemEl.dataset.mediaKey,
+                url: itemEl.dataset.mediaUrl, is_relevant: next,
+                page_url: itemEl.dataset.mediaPageUrl || '', caption: itemEl.dataset.mediaCaption || '',
+                image_id: itemEl.dataset.imageId || null,
+            }).then(function (data) {
+                data = data || {};
                 if (data.materialize_error && window.toastr) toastr.warning("Vote saved, but couldn't save a local copy: " + data.materialize_error);
                 if (data.image_id) itemEl.dataset.imageId = data.image_id;
                 if (data.image_url) {

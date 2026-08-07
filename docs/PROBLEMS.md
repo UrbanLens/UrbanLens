@@ -3234,3 +3234,37 @@ warning people learn to ignore. Recovery resets it, so a later outage can warn a
 judging on its own - several are intentional fire-and-forget (the profile "skip setup"
 button navigates whether or not the save lands) and a blanket change would be churn. Worth
 a pass when someone can weigh them individually.
+
+## Six writes reported success for requests the server had refused (2026-08-07)
+
+Triage of the 34 unchecked mutating `fetch` calls found in the previous pass. The question
+asked of each: *if this request fails, does the user believe something saved that did not?*
+
+**Six said yes**, all sharing one shape - `fetch(...).then(r => r.json()).then(showSuccess)`
+with no `response.ok` check. `fetch` resolves for 400s and 500s, so the success path ran
+regardless:
+
+| site | what the user saw on failure |
+| --- | --- |
+| `map/index.html` star rating | "Rating saved." - and the local pin cache updated with a rating the server rejected |
+| `map/index.html` pin field edit | "Name updated successfully" |
+| `location/index.html` media relevance | thumb stays marked; reverts on next load |
+| `location/index.html` send-to-wiki | "N photo(s) queued for the wiki" - the inner `.json().catch(=> ({}))` swallowed a 500's HTML page and fell through to the success toast |
+| `location/wiki.html` photo vote | vote stays applied; reverts on next load |
+| `trips/detail.html` marker drag | marker stays where dropped |
+
+The map page is the clearest case of drift: it already had a private `_fetchJson` doing
+`if (!resp.ok) throw`, used for its GET reads - while the two PATCH writes in the same file
+did not use it.
+
+That helper is now `shared/fetch-json.ts` (25 tests), which throws on non-2xx carrying the
+server's own message where it sent one, handles 204 (calling `.json()` on an empty body
+throws, which would turn a successful DRF delete into an apparent failure), and applies the
+CSRF header. The map's private copy is a two-line shim over it.
+
+**Judged fine and left alone**, with the reasoning recorded so the next pass need not
+re-derive it: geolocation visit tracking, map position and dark-mode preference saves (all
+explicitly best-effort - nothing is claimed to the user), the profile skip-setup button
+(navigates either way by design), and `e2ee-client.ts` (its `postJson` is a helper whose
+callers check; the login path checks `.redirected`). The media-sort preference now warns on
+failure since it had no handler at all.
