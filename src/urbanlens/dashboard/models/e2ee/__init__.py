@@ -1,7 +1,7 @@
 """End-to-end encryption key storage for direct messages.
 
 The server only ever stores opaque, client-encrypted blobs here - see
-``docs/e2ee.md`` for the full scheme and threat model. Nothing in this
+``docs/designs/e2ee.md`` for the full scheme and threat model. Nothing in this
 package can decrypt a message on its own.
 """
 

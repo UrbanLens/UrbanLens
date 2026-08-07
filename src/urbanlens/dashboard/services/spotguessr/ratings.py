@@ -1,6 +1,6 @@
 """Applying a completed round's results to Glicko-2 ratings.
 
-See ``docs/designs/spotguessr.md`` ("Glicko-2 ratings: player skill vs.
+See ``docs/designs/drafts/spotguessr.md`` ("Glicko-2 ratings: player skill vs.
 location difficulty") for why a round is treated as one rating period for
 both the players and the location.
 """

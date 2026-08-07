@@ -1,6 +1,6 @@
 """Round scoring: point-vs-boundary distance, and the points curve.
 
-See ``docs/designs/spotguessr.md`` ("Scoring: point vs. boundary distance",
+See ``docs/designs/drafts/spotguessr.md`` ("Scoring: point vs. boundary distance",
 "Points") for the rules this encodes.
 """
 
@@ -20,14 +20,14 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.location.model import Location
 
-#: See docs/designs/spotguessr.md's config table - keep these in sync.
+#: See docs/designs/drafts/spotguessr.md's config table - keep these in sync.
 MAX_ROUND_POINTS = 5000
 MAX_DATE_POINTS = 1000
 DATE_DECAY_DAYS = 180.0
 
 #: points_for_distance()'s two-component blend: a fast near-field decay
 #: (rewards "a few blocks" precision) plus a slow city-scale decay (keeps
-#: "same city" meaningfully non-zero) - see docs/designs/spotguessr.md's
+#: "same city" meaningfully non-zero) - see docs/designs/drafts/spotguessr.md's
 #: Points section for the full rationale and sample values.
 NEAR_DECAY_KM = 1.5
 CITY_DECAY_KM = 40.0
@@ -63,7 +63,7 @@ def street_view_target(location: Location) -> RoundTarget:
     There is no Image row to carry a more specific coordinate - Street View
     imagery is definitionally centered on the location's own point, so
     distance behaves exactly like a coordinate-bearing photo (see
-    docs/designs/spotguessr.md's "Street View mode").
+    docs/designs/drafts/spotguessr.md's "Street View mode").
     """
     point = Point(float(location.longitude), float(location.latitude), srid=4326)
     return RoundTarget(is_point=True, geometry=point)

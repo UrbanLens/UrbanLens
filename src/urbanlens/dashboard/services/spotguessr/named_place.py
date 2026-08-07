@@ -1,6 +1,6 @@
 """Name/alias selection for Named Place mode rounds.
 
-See ``docs/designs/spotguessr.md`` ("Named Place mode") for the rules this
+See ``docs/designs/drafts/spotguessr.md`` ("Named Place mode") for the rules this
 encodes.
 """
 

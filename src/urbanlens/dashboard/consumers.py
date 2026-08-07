@@ -1162,7 +1162,7 @@ class GameSessionConsumer(_ParticipantSessionConsumer):
     """Real-time sync for one SpotGuessr session, shared by every participant (UL-392).
 
     Mounted at ``ws/spotguessr/session/<int:session_id>/``. See
-    "Real-time sync: GameSessionConsumer" in ``docs/designs/spotguessr.md``
+    "Real-time sync: GameSessionConsumer" in ``docs/designs/drafts/spotguessr.md``
     for the full event catalogue; ``_ParticipantSessionConsumer`` documents
     everything about this socket that isn't SpotGuessr-specific.
     """

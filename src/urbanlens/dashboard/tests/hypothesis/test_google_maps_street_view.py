@@ -1,6 +1,6 @@
 """Tests for GoogleMapsGateway.get_street_view_single - Street View "no imagery" placeholder leak.
 
-See docs/designs/spotguessr.md ("Street View mode") and
+See docs/designs/drafts/spotguessr.md ("Street View mode") and
 services.spotguessr.street_view for how this feeds SpotGuessr's Street View
 mode. A custom (mock) `session` is passed directly to the gateway - Gateway
 .__post_init__ preserves any non-plain-requests.Session as-is, which is this

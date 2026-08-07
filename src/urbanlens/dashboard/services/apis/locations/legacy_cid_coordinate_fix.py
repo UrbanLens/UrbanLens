@@ -2,7 +2,7 @@
 
 Until 2026-07-25 the pin importer derived a Google-Maps-CID pin's coordinates by
 decoding the S2 cell embedded in its Maps URL, which is wrong roughly a third of
-the time (see ``docs/redata-cid-resolution.md``). Imports since then resolve the
+the time (see ``docs/designs/redata-cid-resolution.md``). Imports since then resolve the
 CID properly via :mod:`services.apis.locations.cid_resolution`, but every ``Pin``
 - and every ``Location`` - created by an earlier import is still sitting wherever
 the S2 guess put it.

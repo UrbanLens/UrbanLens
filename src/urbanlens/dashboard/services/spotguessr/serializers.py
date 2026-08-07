@@ -36,7 +36,7 @@ def _geo_bounds_bbox(session: GameSession) -> list[list[float]] | None:
     """The session's configured ``geo_bounds``, as a Leaflet-ready ``[[south, west], [north, east]]`` bbox.
 
     Lets the frontend zoom the guess map to the configured area (see
-    ``docs/designs/spotguessr.md``'s eligibility rule 3) instead of always
+    ``docs/designs/drafts/spotguessr.md``'s eligibility rule 3) instead of always
     opening on a fixed default view. None when no area was configured.
     """
     geo_bounds_geojson = (session.config or {}).get("geo_bounds_geojson")

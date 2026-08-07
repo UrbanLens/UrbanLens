@@ -1,6 +1,6 @@
 """Country/state/city bonus points: a nominal reward for "in the right area," even off-target.
 
-See docs/designs/spotguessr.md's Points section. Pure distance-based scoring
+See docs/designs/drafts/spotguessr.md's Points section. Pure distance-based scoring
 means a guess that nails the right city but the wrong street still often
 reads as "basically zero" - these bonuses exist to reduce that feeling,
 independent of (and added on top of) the distance curve in ``scoring``.

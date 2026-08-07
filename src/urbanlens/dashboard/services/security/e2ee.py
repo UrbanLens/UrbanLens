@@ -3,7 +3,7 @@
 The server's entire role in the E2EE scheme is storing opaque blobs and
 answering "which mode does this account authenticate in" - all cryptography
 happens in the browser (see ``frontend/ts/shared/e2ee-crypto.ts`` and
-``docs/e2ee.md``). Everything here is bookkeeping around that storage.
+``docs/designs/e2ee.md``). Everything here is bookkeeping around that storage.
 """
 
 from __future__ import annotations

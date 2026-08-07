@@ -1,6 +1,6 @@
 """Session-scoped live text chat (UL-392).
 
-See ``docs/designs/spotguessr.md`` ("Session chat") - WebSocket-only send,
+See ``docs/designs/drafts/spotguessr.md`` ("Session chat") - WebSocket-only send,
 HTTP-served history for reconnects. ``GameSessionConsumer`` is the only
 caller of ``send_chat_message``; the HTTP chat-history endpoint is the only
 caller of ``recent_messages``.
@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.spotguessr.model import GameSession
 
-#: See docs/designs/spotguessr.md's config table.
+#: See docs/designs/drafts/spotguessr.md's config table.
 CHAT_HISTORY_LIMIT = 50
 MAX_MESSAGE_LENGTH = 1000
 

@@ -1,6 +1,6 @@
 """Location selection: difficulty slider + anti-clustering ("feels random").
 
-See ``docs/designs/spotguessr.md`` ("Difficulty slider", "'Feels random'
+See ``docs/designs/drafts/spotguessr.md`` ("Difficulty slider", "'Feels random'
 selection") for the rules this encodes.
 """
 
@@ -22,7 +22,7 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.location.model import Location
 
-#: See docs/designs/spotguessr.md's config table - keep these in sync.
+#: See docs/designs/drafts/spotguessr.md's config table - keep these in sync.
 MIN_LOCATION_RATING = 1000.0
 MAX_LOCATION_RATING = 2000.0
 DIFFICULTY_BANDWIDTH = 200.0

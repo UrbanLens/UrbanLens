@@ -1,7 +1,7 @@
 """Resolves Google Maps CIDs to coordinates, choosing REData or Google Places.
 
 Single chokepoint for the "which provider resolves a CID" decision (see
-``docs/redata-cid-resolution.md`` for the full background):
+``docs/designs/redata-cid-resolution.md`` for the full background):
 
 - REData configured (``UL_REDATA_API_URL``/``UL_REDATA_API_KEY`` both set) -
   the primary deployment's path. A batch call to REData's

@@ -3,7 +3,7 @@
 A confirmed pin whose cid has neither an existing Location nor a cached
 Places lookup must never be placed from the preview's own (unverified)
 lat/lng - see maps.py's import_preview_streaming docstring and
-docs/redata-cid-resolution.md for why (the free S2-decode heuristic behind
+docs/designs/redata-cid-resolution.md for why (the free S2-decode heuristic behind
 that preview guess is wrong ~31% of the time). It should instead be queued
 for background resolution via resolve_deferred_pin_locations.
 """

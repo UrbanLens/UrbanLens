@@ -3,7 +3,7 @@
 Photos-mode rounds are the only source of this signal (Named Place/Street
 View rounds have no ``round.image``). See ``services.media.media_relevance`` for
 how these events are weighted into a photo's overall effective relevance,
-and ``docs/designs/spotguessr.md`` ("Photo relevance feedback") for the
+and ``docs/designs/drafts/spotguessr.md`` ("Photo relevance feedback") for the
 full design.
 """
 

@@ -3,7 +3,7 @@
 See ``services.photos.photo_coordinates`` for how these accumulate into an
 estimate; this module is only the SpotGuessr-side hook that records every
 Photos-mode guess and decides whether it's also worth feeding into that
-estimate. See ``docs/designs/spotguessr.md``'s "Crowd-sourced photo
+estimate. See ``docs/designs/drafts/spotguessr.md``'s "Crowd-sourced photo
 coordinates" for the full design.
 """
 

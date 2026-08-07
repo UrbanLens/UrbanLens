@@ -1,6 +1,6 @@
 """Ratings visibility: your own ratings + friends' ratings with opt-out.
 
-See ``docs/designs/spotguessr.md`` ("Social: ratings visibility").
+See ``docs/designs/drafts/spotguessr.md`` ("Social: ratings visibility").
 """
 
 from __future__ import annotations

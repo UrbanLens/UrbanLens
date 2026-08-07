@@ -1,6 +1,6 @@
 """Street View imagery selection for Street View mode rounds.
 
-See ``docs/designs/spotguessr.md`` ("Street View mode") for the rules this
+See ``docs/designs/drafts/spotguessr.md`` ("Street View mode") for the rules this
 encodes.
 """
 

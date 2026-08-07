@@ -1,7 +1,7 @@
 """Querysets for the e2ee package's models.
 
 Pure read-query helpers only - nothing here touches wrapping/sealing logic
-or any key material. See ``docs/e2ee.md`` for the scheme itself.
+or any key material. See ``docs/designs/e2ee.md`` for the scheme itself.
 """
 
 from __future__ import annotations

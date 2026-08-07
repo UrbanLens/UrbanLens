@@ -976,7 +976,7 @@ def archive_checkin(checkin: SafetyCheckin) -> None:
 
     Idempotent - a no-op if ``checkin`` already has an archive. If the owner has
     no ``MessagingKeyBundle`` yet (rare - enrollment is automatic at every login/
-    authenticated page load, see ``docs/e2ee.md``), logs a warning and returns
+    authenticated page load, see ``docs/designs/e2ee.md``), logs a warning and returns
     without archiving or scrubbing anything; the periodic sweep
     (``tasks.sweep_due_safety_checkin_archival``) retries every 5 minutes until
     a bundle appears.
@@ -1072,7 +1072,7 @@ def _seal_archive_payload(payload: dict, owner_public_key_b64: str) -> tuple[str
     """Encrypt a payload under a fresh random key, then seal that key to a public key.
 
     Mirrors the exact primitives ``ConversationKey``/direct messages already use
-    (see ``docs/e2ee.md`` and ``tests/hypothesis/test_e2ee_interop.py``), just run
+    (see ``docs/designs/e2ee.md`` and ``tests/hypothesis/test_e2ee_interop.py``), just run
     server-side instead of in the browser - sealing only ever needs the
     recipient's *public* key, so the owner doesn't need to be online for this.
 

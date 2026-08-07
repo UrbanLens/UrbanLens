@@ -1,7 +1,7 @@
 """Endpoints for direct-message end-to-end encryption key storage.
 
 Every blob accepted here was encrypted client-side; these views only validate
-shape, enforce ownership, and store. See ``docs/e2ee.md`` for the scheme and
+shape, enforce ownership, and store. See ``docs/designs/e2ee.md`` for the scheme and
 ``services/e2ee.py`` for the shared helpers.
 
 These are *dual-auth* endpoints (see

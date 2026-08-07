@@ -3,7 +3,7 @@
 The one place ``controllers.spotguessr``/``consumers.GameSessionConsumer`` call
 into - the only layer that knows how eligibility, mode-specific selection,
 scoring, ratings, and real-time broadcast compose together. See
-``docs/designs/spotguessr.md`` for the full rules.
+``docs/designs/drafts/spotguessr.md`` for the full rules.
 """
 
 from __future__ import annotations
@@ -81,7 +81,7 @@ class GameConfig:
     """A validated, session-ready snapshot of SpotGuessr settings.
 
     Mirrors what's stored on ``GameSession.config`` - see
-    ``docs/designs/spotguessr.md``'s config table for defaults.
+    ``docs/designs/drafts/spotguessr.md``'s config table for defaults.
     """
 
     difficulty: float = 0.5
@@ -241,7 +241,7 @@ def start_multiplayer_session(
     The host's own participant row is created JOINED immediately - no
     invite step for yourself. Each invitee gets an INVITED row plus a
     notification (see ``_notify_invite``). See "Multiplayer sessions" in
-    ``docs/designs/spotguessr.md`` for the full lobby lifecycle.
+    ``docs/designs/drafts/spotguessr.md`` for the full lobby lifecycle.
     """
     session = GameSession.objects.create(
         host_profile=host,

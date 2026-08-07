@@ -1,6 +1,6 @@
 """Gateway for REData's CID -> coordinate resolution endpoint.
 
-See ``docs/redata-cid-resolution.md`` for why this exists (Google Maps CIDs
+See ``docs/designs/redata-cid-resolution.md`` for why this exists (Google Maps CIDs
 decoded via the free literal-S2-cell heuristic are wrong ~31% of the time).
 Contract implemented here matches REData's own docs: ``../REData/docs/api-reference.md``,
 "Google Maps CID resolution" section - if the two ever disagree, REData's docs

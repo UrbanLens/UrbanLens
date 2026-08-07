@@ -1,6 +1,6 @@
 """SpotGuessr models - Glicko-2 ratings, game sessions, rounds, guesses, and chat.
 
-See ``docs/designs/spotguessr.md`` for the full rules this schema encodes -
+See ``docs/designs/drafts/spotguessr.md`` for the full rules this schema encodes -
 eligibility ("pinned by every joined participant"), point-vs-boundary
 distance scoring, the difficulty slider, the Glicko-2 player/location rating
 pairing, and the multiplayer lobby lifecycle (UL-392).
@@ -64,7 +64,7 @@ class GameSessionStatus(abstract.TextChoices):
     Solo sessions skip LOBBY entirely (created directly as ACTIVE with one
     JOINED participant). Multiplayer sessions start in LOBBY and only
     become ACTIVE when the host explicitly begins the game - see
-    ``docs/designs/spotguessr.md``'s "Multiplayer sessions" section.
+    ``docs/designs/drafts/spotguessr.md``'s "Multiplayer sessions" section.
     """
 
     LOBBY = "lobby", "Lobby"
@@ -252,7 +252,7 @@ class GameSessionParticipant(abstract.DashboardModel):
             invite step when you're the only player. Eligibility, "has
             everyone in this round guessed," and the final scoreboard all
             read JOINED participants only (see
-            ``docs/designs/spotguessr.md``'s eligibility rule 6) - an
+            ``docs/designs/drafts/spotguessr.md``'s eligibility rule 6) - an
             invitee who never accepts is not yet a player.
         joined_at: When this row was created. Despite the name, this is set
             for INVITED rows too (it's really "created_at" - kept as
@@ -323,7 +323,7 @@ class GameRound(abstract.DashboardModel):
             location's coordinates each time.
         target_is_point: Whether scoring measures from ``target_point``
             (the image had its own coordinates) rather than the location's
-            *current* effective boundary. See ``docs/designs/spotguessr.md``
+            *current* effective boundary. See ``docs/designs/drafts/spotguessr.md``
             ("Scoring: point vs. boundary distance") for why boundary-based
             rounds deliberately do NOT snapshot geometry - boundaries are
             community-maintained and get more accurate over time.
@@ -528,7 +528,7 @@ class GameSessionChatMessage(abstract.DashboardModel):
     ciphertext/key-exchange machinery those models carry buys nothing here.
     Sent and broadcast over ``GameSessionConsumer`` only; read history is
     served over HTTP for reconnects/late page-opens (see
-    ``docs/designs/spotguessr.md``'s "Session chat").
+    ``docs/designs/drafts/spotguessr.md``'s "Session chat").
     """
 
     body = CharField(max_length=1000)

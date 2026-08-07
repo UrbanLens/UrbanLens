@@ -1,6 +1,6 @@
 """Photo selection for Photos-mode rounds.
 
-See ``docs/designs/spotguessr.md`` ("Photo selection (Photos mode)") for why
+See ``docs/designs/drafts/spotguessr.md`` ("Photo selection (Photos mode)") for why
 there is deliberately no separate "opted into the game" gate yet - that
 gate is UL-394's community submission pipeline.
 

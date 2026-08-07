@@ -1,6 +1,6 @@
 """SpotGuessr controller - gameplay, multiplayer lobby, and chat (UL-391..UL-393).
 
-See ``docs/designs/spotguessr.md`` for the full rules. Session/round/guess/
+See ``docs/designs/drafts/spotguessr.md`` for the full rules. Session/round/guess/
 lobby orchestration lives in ``services.spotguessr`` - this module only
 handles HTTP: request parsing, participant/ownership checks, and JSON
 serialization (a round's answer is never serialized until a guess reveals

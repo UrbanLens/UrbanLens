@@ -65,11 +65,20 @@ conversation key ──▶ encrypts ──▶ message body
   encrypted iff **every** active member has a key bundle. Clients mint a new
   version whenever the latest one no longer covers the current membership
   (the key endpoint reports `needs_rotation`), and the server refuses any
-  version whose envelopes don't cover the active membership exactly. This is
-  what makes membership boundaries cryptographic: a newly added member holds
-  envelopes only for post-join versions (and the server additionally never
-  serves them pre-join messages at all), while a removed member is excluded
-  from every later version, so post-removal messages are unreadable to them.
+  version whose envelopes don't cover the active membership exactly. A newly
+  added member holds envelopes only for post-join versions (and the server
+  additionally never serves them pre-join messages at all), while a removed
+  member is excluded from every later version.
+
+  **What is and isn't enforced.** The server does not check the `key_version` a
+  message is sent with beyond `>= 1` — it never verifies the version exists,
+  belongs to that group, or is current. A client can therefore encrypt under a
+  pre-removal version whose envelopes a removed member still holds, whether by
+  accident (a stale tab, an offline outbox replaying) or deliberately. What
+  keeps post-removal messages from that member today is the *server*: they have
+  no active membership, so `visible_window` never serves them the ciphertext.
+  Treat the removal boundary as server-enforced rather than cryptographic until
+  that is decided — see the open question in `docs/PROBLEMS.md`.
   Removed members keep their old envelopes — their own history stays readable,
   the same recoverability trade as everywhere else in this design.
 

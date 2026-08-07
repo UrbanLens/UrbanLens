@@ -1,6 +1,6 @@
 """Broadcast helpers for GameSessionConsumer's channel-layer group.
 
-See ``docs/designs/spotguessr.md`` ("Real-time sync: GameSessionConsumer")
+See ``docs/designs/drafts/spotguessr.md`` ("Real-time sync: GameSessionConsumer")
 for the event catalogue this feeds. Kept separate from
 ``services.spotguessr.session``/``chat`` so both can call it without either
 depending on the other.

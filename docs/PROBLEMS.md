@@ -3930,3 +3930,49 @@ strictly the removal boundary is meant to hold versus how tolerant the product s
 lagging or offline client, which is a decision for the owner rather than an audit. `docs/e2ee.md`
 already documents a related deliberate trade (recoverability over forward secrecy), so there is
 precedent for either answer being the intended one.
+
+## Corrected the E2EE docstring's overstated claim, and 28 dead doc references (2026-08-07)
+
+Two documentation corrections, both factual rather than judgement calls, so neither waits on
+the open decision in task #40.
+
+**The security claim now matches what the code enforces.** `models/e2ee/group_key.py` said
+"Versioning is what enforces membership boundaries cryptographically", and
+`docs/designs/e2ee.md` said the same. As the previous entry establishes, it does not - nothing
+validates a message's `key_version`, and what actually keeps post-removal messages from a
+removed member is the server's delivery gate. Both now say so, and the model docstring carries
+an explicit instruction not to add a code path that relies on the version alone to keep a
+removed member out. Leaving the original wording was the real risk: a docstring that promises
+a cryptographic guarantee is exactly what stops the next developer from checking.
+
+**28 source references pointed at documents that had moved:**
+
+    docs/designs/spotguessr.md      -> docs/designs/drafts/spotguessr.md      (21 files)
+    docs/redata-cid-resolution.md   -> docs/designs/redata-cid-resolution.md  (6 files)
+    docs/overpass-mirror-test.md    -> docs/reports/overpass-mirror-test.md   (1 file)
+    docs/e2ee.md                    -> docs/designs/e2ee.md                   (8 files)
+
+Same class as the seven dead `docs/plugins.md` references fixed earlier in this audit: a
+pointer that resolves nowhere is a dead end for whoever follows it, and these were pointing
+away from documents that do exist.
+
+**12 references left alone deliberately**, because fixing them would mean guessing:
+
+- `docs/api-reference.md` (7) - the same filename is referenced elsewhere in this codebase as
+  `../REData/docs/api-reference.md`, a sibling repository. Most of these sit in REData gateway
+  files and are probably that, but `plugins/builtin/photon.py` is not a REData integration and
+  more likely means Photon's own published API docs. Rewriting them would be inventing intent.
+- `docs/notes/ai/completed.md` (4) and `docs/PROBLEMS.md/completed.md` (1, malformed) - no
+  `completed.md` and no `prompts/` directory exist anywhere in this checkout, though
+  `CLAUDE.local.md` describes them as where prior agents' work notes live. The target is
+  genuinely absent, not moved.
+
+### A fourth narrow-pattern error, caught before it did damage
+
+The first scan reported **38** files with a dead `docs/api-reference.md` reference. The regex
+`docs/[A-Za-z0-9_./-]+\.md` had matched the *tail* of `../REData/docs/api-reference.md` - a
+path into a sibling repo, entirely valid. Re-running it anchored (`(?<![\w./-])`) cut the real
+figure to 7. Had the first result been acted on, 31 correct cross-repo references would have
+been rewritten into broken ones. That is the fourth time this session a pattern matched one
+spelling of a thing with several, and the first where acting on it would have *introduced* the
+bug rather than merely missed one.

@@ -87,7 +87,7 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_minute=10,
         calls_per_day=None,
         calls_per_30_days=None,
-        notes="Batch CID->coordinate resolution via POST /places/resolve-cids/. See docs/redata-cid-resolution.md.",
+        notes="Batch CID->coordinate resolution via POST /places/resolve-cids/. See docs/designs/redata-cid-resolution.md.",
     ),
     "redata_places": ServiceDefaults(
         display_name="REData Places",
