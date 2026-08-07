@@ -17,27 +17,33 @@
  * classic script preserves the exact head-executes-before-body ordering the
  * site already depends on.
  */
+import { installGlobalAutosaveGuard } from "../shared/autosave-guard";
 import { installGlobalCollapsibleSections } from "../shared/collapsible-sections";
 import { installGlobalCommentCompose } from "../shared/comment-compose";
 import { installGlobalConfirmDialog } from "../shared/confirm-dialog";
+import { installGlobalDialogBackdrop } from "../shared/dialog-backdrop";
 import { installGlobalFlyToDismiss } from "../shared/fly-to-dismiss";
-import { installGlobalMentionAutocomplete } from "../shared/mention-autocomplete";
-import { installGlobalPopupDismiss } from "../shared/popup-dismiss";
-import { installGlobalReactionPicker } from "../shared/reaction-picker";
 import { installGlobalLabelPicker } from "../shared/label-picker";
 import { installGlobalLocationSearchEngine } from "../shared/location-search-engine";
 import { installGlobalMapExport } from "../shared/map-export";
 import { installGlobalMapLayers } from "../shared/map-layers";
 import { installGlobalMarkupEngine } from "../shared/markup-engine";
 import { createMarkupToolbar } from "../shared/markup-toolbar";
+import { installGlobalMentionAutocomplete } from "../shared/mention-autocomplete";
+import { installGlobalPopupDismiss } from "../shared/popup-dismiss";
+import { installGlobalReactionPicker } from "../shared/reaction-picker";
+import { installGlobalScrollToHash } from "../shared/scroll-to-hash";
 
+installGlobalAutosaveGuard();
 installGlobalCollapsibleSections();
 installGlobalCommentCompose();
 installGlobalConfirmDialog();
+installGlobalDialogBackdrop();
 installGlobalFlyToDismiss();
 installGlobalMentionAutocomplete();
 installGlobalPopupDismiss();
 installGlobalReactionPicker();
+installGlobalScrollToHash();
 installGlobalLocationSearchEngine();
 installGlobalMapLayers();
 installGlobalMarkupEngine();

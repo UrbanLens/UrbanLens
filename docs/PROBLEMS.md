@@ -3137,3 +3137,35 @@ the point where aborting helps.
 `insert()` unconditionally appended a space, so inserting mid-sentence gave two:
 `go @mill tomorrow` became `go @[Old Mill](loc:u1)  tomorrow`. Now the separator is skipped
 when the following text already begins with whitespace.
+
+## Two more bugs found extracting base.html's guard/scroll/dialog blocks (2026-08-07)
+
+Both were live in `base.html`'s inline script, both are now fixed with tests.
+
+**1. Scroll-to-hash threw a `DOMException` on any fragment that is not valid CSS. FIXED.**
+`_scrollToHash` called `document.querySelector(window.location.hash)` directly. A fragment
+is not a selector: ids beginning with a digit, `#/route`, `#foo=bar`, `#!`, `#sec:2` and -
+most relevantly - the `#_=_` and `#access_token=...` that OAuth providers append when
+redirecting back all throw. This app signs in through Google and Discord, so that path is
+reachable in production. Because the handler is bound to `htmx:afterSettle`, it threw again
+on *every* HTMX swap for the life of the page.
+
+Verified by probe before fixing: of eight realistic fragments, five threw. Fixed by trying
+`getElementById` on the decoded fragment first (it takes a literal id, so it copes with all
+of the above), keeping `querySelector` behind a `try` for fragments naming something other
+than an id, and guarding `decodeURIComponent` against malformed escapes. A numeric id such
+as `#123` now actually scrolls, where before it threw.
+
+*Testing note worth remembering:* the first version of this test wrapped `dispatchEvent` in
+`expect(...).not.toThrow()` and passed while the exception was plainly being thrown - a
+listener exception is reported, not propagated, so that assertion can never fail. The test
+had to call the function directly. Assertions around `dispatchEvent` prove nothing about
+what the listener did.
+
+**2. The unsaved-changes guard hijacked ctrl/cmd/shift-click. FIXED.**
+The capture-phase click handler checked the href's scheme and `target="_blank"` but never the
+modifier keys or mouse button. With unsaved changes present, ctrl-clicking a link to open it
+in a background tab was intercepted, `preventDefault`ed, and - on confirming - navigated the
+**current** tab via `location.href`. So the one gesture that would have safely left the page
+alone instead destroyed the changes the guard exists to protect. Fixed by returning early on
+`ctrlKey`/`metaKey`/`shiftKey`/`altKey`/non-primary button.
