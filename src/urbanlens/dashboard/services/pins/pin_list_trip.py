@@ -28,6 +28,7 @@ def copy_list_pins_to_trip(pin_list: PinList, trip: Trip, added_by: Profile) -> 
         Number of activities created.
     """
     from urbanlens.dashboard.models.trips.model import TripActivity
+    from urbanlens.dashboard.models.trips.signals import queue_calendar_push
     from urbanlens.dashboard.services.trips.trip_share_tracking import record_trip_activity_shares
 
     base_order = trip.activities.count()
@@ -50,4 +51,11 @@ def copy_list_pins_to_trip(pin_list: PinList, trip: Trip, added_by: Profile) -> 
     # whose only member is `added_by`, the common "Create a trip" case).
     for activity in activities:
         record_trip_activity_shares(activity)
+
+    # bulk_create fires no post_save, so sync_trip_on_activity_save never runs and
+    # a list copied into an auto-synced trip never reached the user's calendar.
+    # Queued once for the trip rather than per activity - the push sends the whole
+    # trip anyway.
+    if activities:
+        queue_calendar_push(trip.pk)
     return len(items)

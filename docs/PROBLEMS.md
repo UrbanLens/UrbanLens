@@ -3268,3 +3268,43 @@ explicitly best-effort - nothing is claimed to the user), the profile skip-setup
 (navigates either way by design), and `e2ee-client.ts` (its `postJson` is a helper whose
 callers check; the login path checks `.redirected`). The media-sort preference now warns on
 failure since it had no handler at all.
+
+## Bulk writes silently skipped the receivers that maintain derived state (2026-08-07)
+
+First backend unit after five frontend ones. Three checks on the Celery/transaction layer came
+back **clean**, which is worth recording so nobody re-runs them: of 71 `safely_enqueue_task`
+call sites, **none** dispatch inside a `transaction.atomic()` block without `on_commit`
+(verified with an AST walk, after a naive line-based scan proved unreliable for the
+`@transaction.atomic` *decorator* case); there are no `select_for_update()` calls outside a
+transaction; and no Celery task is handed a model instance instead of a pk.
+
+The real finding was elsewhere. `bulk_update`/`bulk_create` issue raw SQL and never fire
+`post_save`, so any receiver maintaining derived state is skipped. Four sites did this:
+
+**1-3. `Label` bulk writes left the map pin cache stale.** `Pin.icon_source_label()` picks the
+winning label by `-order`, so a label's *order* decides which icon and colour a pin draws -
+not just its icon field. `refresh_map_pin_cache_for_label` exists precisely to invalidate the
+server-side pin cache when that changes, and its own docstring says pins would otherwise "keep
+serving the old baked-in icon/color until the cache TTL lapsed". All three bulk paths went
+straight past it:
+
+  - `controllers/organize.py` - drag-to-reorder labels
+  - `external_api/views_labels_bulk.py` - the API's reorder endpoint
+  - `external_api/views_labels_bulk.py` - the API's bulk edit, which writes `icon`, `color`,
+    `order` and `description` directly. The most direct case of all.
+
+So a user reordering their labels saw the map keep drawing the old icons.
+
+**4. Copying a pin list into a trip never reached the calendar.** `copy_list_pins_to_trip`
+uses `bulk_create`, so `sync_trip_on_activity_save` never fired and the new activities never
+reached an auto-synced Google Calendar until some unrelated activity was saved.
+
+Fixed by giving the label receiver a reusable `refresh_map_pin_cache_for_label_ids()` (one
+query for many labels, `distinct()` so a pin carrying two changed labels is refreshed once)
+and calling it from all three bulk paths, and by making `queue_calendar_push` public and
+calling it once after the bulk_create. 8 tests, including one establishing the premise that
+reordering really does change which icon a pin draws - without that, refreshing the cache
+would be pointless.
+
+**Worth generalising:** any new `bulk_create`/`bulk_update` on a model with `post_save`
+receivers needs this same audit. `Pin` alone has six.

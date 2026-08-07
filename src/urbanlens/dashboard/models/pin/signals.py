@@ -1,3 +1,4 @@
+from collections.abc import Iterable
 import logging
 
 from django.db import transaction
@@ -145,6 +146,27 @@ def refresh_map_pin_cache_for_labels(sender, instance: Pin, action: str, **kwarg
         _refresh_cached_pin(instance.pk, instance.profile_id)
 
 
+def refresh_map_pin_cache_for_label_ids(label_ids: Iterable[int]) -> None:
+    """Invalidate the cached map pins of every pin carrying any of these labels.
+
+    Call this after a bulk write to ``Label``. ``bulk_update`` issues raw SQL and
+    never fires ``post_save``, so :func:`refresh_map_pin_cache_for_label` does not
+    run and affected pins keep serving the icon and colour baked in at cache time.
+    That is not only an icon edit: ``Pin.icon_source_label`` picks the winning label
+    by ``-order``, so a reorder changes what a pin draws just as much.
+
+    Args:
+        label_ids: Primary keys of the labels that changed.
+    """
+    ids = list(label_ids)
+    if not ids:
+        return
+    # distinct(): a pin carrying two of the changed labels would otherwise be
+    # refreshed once per label.
+    for pin_id, profile_id in Pin.objects.filter(labels__in=ids).distinct().values_list("pk", "profile_id"):
+        _refresh_cached_pin(pin_id, profile_id)
+
+
 @receiver(post_save, sender=Label, dispatch_uid="label_refresh_map_pin_cache")
 def refresh_map_pin_cache_for_label(sender: type[Label], instance: Label, created: bool, **kwargs) -> None:
     """A label's icon/color can appear on any pin carrying it (Pin.effective_icon).
@@ -157,8 +179,7 @@ def refresh_map_pin_cache_for_label(sender: type[Label], instance: Label, create
     """
     if created:
         return  # not attached to any pin yet
-    for pin_id, profile_id in Pin.objects.filter(labels=instance).values_list("pk", "profile_id"):
-        _refresh_cached_pin(pin_id, profile_id)
+    refresh_map_pin_cache_for_label_ids([instance.pk])
 
 
 @receiver(post_save, sender=LabelCustomization, dispatch_uid="label_customization_refresh_map_pin_cache")

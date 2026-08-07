@@ -29,6 +29,7 @@ from urbanlens.dashboard.external_api.views import ExternalApiView
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.models.pin.signals import refresh_map_pin_cache_for_label_ids
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
 
 if TYPE_CHECKING:
@@ -77,6 +78,8 @@ class LabelReorderView(ExternalApiView):
 
         if reordered:
             Label.objects.bulk_update(reordered, ["order"])
+            # bulk_update fires no post_save; order decides a pin's icon.
+            refresh_map_pin_cache_for_label_ids([label.pk for label in reordered])
 
         return Response({"reordered": len(reordered), "skipped_global_uuids": skipped_global_uuids})
 
@@ -165,6 +168,10 @@ class LabelBulkEditView(ExternalApiView):
                     update_fields.add("order")
             if update_fields:
                 Label.objects.bulk_update(labels, list(update_fields))
+                # bulk_update fires no post_save, so nothing else invalidates the
+                # cached pins carrying these labels - and icon/color/order all
+                # change what those pins draw.
+                refresh_map_pin_cache_for_label_ids([label.pk for label in labels])
 
             if parents:
                 for label in labels:
