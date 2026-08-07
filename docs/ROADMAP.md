@@ -131,7 +131,7 @@ When a TODO item is ambiguous, these tiebreakers reflect the owner's demonstrate
   and completes with a toast (UL-119). The `panel_fetch` queue exists specifically so slow panel
   fetches can't starve the general worker; CPU-heavy panels opt out via `PanelSource.queue`.
 - **Plugins > one-off integrations.** New external services are `Gateway` + `UrbanLensPlugin`
-  manifest (`docs/plugins.md`), not controller-level API calls.
+  manifest (`docs/designs/plugins.md`), not controller-level API calls.
 - **The app is beta.** Weirdness is a bug, not a convention. Fix it or log it in
   `docs/PROBLEMS.md`. Existing suboptimal patterns are not precedent.
 - **Free/open APIs before paid.** See §4.7.
@@ -296,7 +296,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
 
 ### 3.3 Extensibility
 
-- The **plugin contract** (`docs/plugins.md`) is the extension surface: rate-limited services,
+- The **plugin contract** (`docs/designs/plugins.md`) is the extension surface: rate-limited services,
   panels, imagery providers, name providers, enrichment sources, hooks. When adding a *new kind*
   of contribution (e.g. a new panel family, a routing provider chain, an export format), extend
   the plugin contract rather than hardcoding a registry — the cost is small and it keeps

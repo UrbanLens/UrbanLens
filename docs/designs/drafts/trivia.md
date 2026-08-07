@@ -97,7 +97,7 @@ rejected candidate was never shown to anyone, so unlike a user's own rejected su
 is no "show it back to the author very rarely" leniency to apply; it's simply discarded.
 Driven by a scheduled Celery task (`tasks.run_scheduled_trivia_generation`, hourly, single-flight
 cache-locked), not a wiki-save hook — there is no existing "wiki saved" action hook in the
-plugin system to react to instead (see `docs/plugins.md`'s hook bus), and a batched hourly sweep
+plugin system to react to instead (see `docs/designs/plugins.md`'s hook bus), and a batched hourly sweep
 naturally caps AI spend.
 
 ### 3. User-submitted (`services.trivia.submission`)

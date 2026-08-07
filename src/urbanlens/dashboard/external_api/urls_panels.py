@@ -1,7 +1,7 @@
 """External-API routes for pin-detail panels.
 
 Owns the pluggable, provider-backed information panels that plugins contribute
-to a pin's detail screen (see ``docs/plugins.md`` and ``PanelSource``). The web
+to a pin's detail screen (see ``docs/designs/plugins.md`` and ``PanelSource``). The web
 UI fetches these lazily over HTMX; a native client needs the same data without
 the HTML, which is what this domain exposes.
 

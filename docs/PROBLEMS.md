@@ -2922,3 +2922,38 @@ free. Making the property itself annotation-aware and memoized fixes every prese
 caller, which a per-call-site prefetch does not.
 
 877 trip/memories tests pass alongside the new guards.
+
+## The plugin/panel extension surface, from an author's point of view (2026-08-07)
+
+- **`docs/plugins.md` does not exist.** It is at `docs/designs/plugins.md`, moved there by an
+  earlier "clean, organize" commit that left every reference behind: CLAUDE.md (the project
+  instructions themselves), `docs/FEATURES.md`, `docs/ROADMAP.md`, a design draft, and two source
+  docstrings - seven dead paths, so an author following the instructions lands nowhere. Updated all
+  seven to the real location rather than moving the file back, since the move looks deliberate.
+
+- **The doc never shows how to write the panel.** Its worked example contributes
+  `NpsPanelSource()` and then never defines it, so the one class an author actually has to write is
+  the one part not demonstrated. Recorded rather than fixed here - writing that section properly is
+  its own piece of work, and worth doing.
+
+- **Three of a panel's required attributes fail quietly when omitted.** `section_id` and `title`
+  default to `""` on the base class, and `cache_source` is meaningful only by convention. Get any
+  of them wrong and nothing raises: you get a section with no DOM id for HTMX to swap against, a
+  panel with no heading, or - the quietest - a cache-backed panel whose fetch writes one key while
+  its read looks for another, so it polls forever and never renders. Added
+  `panel_source_problems()`, reported once per key from `panel_sources()`, plus a test asserting
+  every panel this repo ships is well-formed. That test is the useful half: it turns a silent
+  runtime absence into a loud CI failure and keeps working as panels are added.
+
+**The validation had to be calibrated against reality twice, which is the interesting part.** The
+first rule demanded `section_id`/`title` of every panel and immediately flagged nine shipped media
+panels. They were right and the rule was wrong: gallery media providers render as tabs *inside* the
+combined Media gallery, which supplies the surrounding markup. The second rule exempted those and
+flagged the core `boundary` panel - also correct, and also not a section: it fetches boundary data
+the map and the external API consume, rendering nothing. The rule that survives is the precise one:
+only `InfoPanelSource` and `SlidesPanelSource` render their own section, so only they need the
+presentation attributes.
+
+Had I "fixed" the nine panels the first run flagged, I would have added meaningless attributes to
+correct code and called it an improvement. A validation rule asserted against the whole existing
+codebase gets corrected by it; one asserted against a couple of hand-picked examples does not.

@@ -240,7 +240,7 @@ buffer, per-run caps).
 ## Extensibility: Plugin System
 
 Third-party integrations are packaged as **plugins** (`dashboard/plugins/builtin/`) — see
-`docs/plugins.md` for the full contribution API. A plugin can add rate-limited services, pin-detail
+`docs/designs/plugins.md` for the full contribution API. A plugin can add rate-limited services, pin-detail
 panels, satellite/street-view providers, place-name providers, and lifecycle hooks. Plugins are
 discoverable from bundled modules, an env-var module list, or pip entry points, and can be
 enabled/disabled per-install or per-service without a restart. Inventory at `/site-admin/plugins/`.

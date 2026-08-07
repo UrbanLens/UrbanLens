@@ -980,13 +980,56 @@ _CORE_PANEL_SOURCES: tuple[PanelSource, ...] = (
 )
 
 
+def panel_source_problems(source: PanelSource) -> list[str]:
+    """Return the ways ``source`` is misconfigured, as human-readable strings.
+
+    Everything checked here is something the base class lets you omit and that then
+    fails *quietly* at render rather than loudly at registration: ``section_id`` and
+    ``title`` default to empty strings, so a panel missing them renders a section with
+    no DOM id and no heading, and a cache-backed panel with no ``cache_source`` looks
+    up the empty key forever and sits in its pending state.
+
+    Args:
+        source: The panel source to check.
+
+    Returns:
+        A list of problems, empty when the source is well-formed.
+    """
+    problems: list[str] = []
+    if not getattr(source, "key", ""):
+        problems.append("key is required (it addresses the panel in URLs, cache keys and Celery arguments)")
+
+    # The two presentation attributes are required only of sources that render a
+    # section of their own - which is exactly InfoPanelSource and SlidesPanelSource.
+    # The other two shapes legitimately have neither: gallery media providers render as
+    # tabs *inside* the combined Media gallery, whose controller supplies the
+    # surrounding markup, and a source like BoundaryPanelSource renders nothing at all,
+    # fetching data that other surfaces (the map, the external API) consume.
+    if isinstance(source, (InfoPanelSource, SlidesPanelSource)):
+        if not source.title:
+            problems.append("title is required (it is the panel's heading, and the pending placeholder's)")
+        if not source.section_id:
+            problems.append("section_id is required (the panel's DOM id, which HTMX swaps against)")
+
+    if isinstance(source, LocationCachePanelSource) and not getattr(source, "cache_source", ""):
+        problems.append("cache_source is required for a cache-backed panel (it keys the LocationCache rows its fetch writes)")
+    return problems
+
+
+#: Keys already reported by :func:`panel_sources`, so a misconfigured plugin is
+#: reported once rather than on every request that builds the registry.
+_REPORTED_PANEL_PROBLEMS: set[str] = set()
+
+
 def panel_sources() -> dict[str, PanelSource]:
     """Every registered panel source, keyed by the source key used in URLs,
     Celery task arguments, and cache keys.
 
     Combines the core sources with the contributions of every enabled plugin.
     A plugin source whose key collides with an existing one is logged and
-    skipped.
+    skipped. A source that is registered but misconfigured is logged too - see
+    :func:`panel_source_problems` for what that means and why those particular
+    mistakes are worth shouting about.
 
     Returns:
         Mapping of source key to its :class:`PanelSource`.
@@ -999,6 +1042,12 @@ def panel_sources() -> dict[str, PanelSource]:
             logger.warning("Ignoring duplicate panel source '%s' from plugins", source.key)
             continue
         sources[source.key] = source
+
+    for key, source in sources.items():
+        problems = panel_source_problems(source)
+        if problems and key not in _REPORTED_PANEL_PROBLEMS:
+            _REPORTED_PANEL_PROBLEMS.add(key)
+            logger.error("Panel source '%s' (%s) is misconfigured: %s", key, type(source).__name__, "; ".join(problems))
     return sources
 
 
