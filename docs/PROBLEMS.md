@@ -2772,3 +2772,34 @@ The six remaining were all present in the baseline:
 
 With that fixed, every remaining failure in the suite is environmental. The audit's cumulative
 work - 11 modules, a second pass, and six deferred Unit items - holds against a full run.
+
+## The last 5 failures were a real bug, not an environment limitation (2026-08-07)
+
+I had recorded the five infrastructure-stats failures as environmental - "they need live
+postgres/valkey/celery/nginx". Looking properly, the reason they failed is a genuine product
+defect: **the site-admin status page 500s when an infrastructure service is unreachable.**
+
+`collect_infrastructure_service_stats` called its four collectors with no isolation. Each collector
+handles the failure it expects (Valkey catches `RedisError`, and so on), but anything else - a
+malformed URL, a DNS error surfacing as `OSError`, a driver raising something new after an upgrade -
+propagated straight out and took the whole page with it. That page exists precisely to tell an
+admin which component is unhealthy, so a component being unhealthy in an unanticipated way hid the
+state of the three that were fine along with the one that wasn't. Exactly the per-item isolation
+gap found in the safety sweeps (module 9).
+
+Each collector now degrades to an "Unavailable" stat of its own. The page always returns four
+entries in display order, however badly the services are behaving - and the five tests pass,
+because the network guard's `RuntimeError` is now reported as a degraded service rather than
+crashing the request. Fixing the product fixed the tests; mocking the tests would have left the
+500 in place.
+
+Two new tests cover the resilience directly: one collector raising must not lose the other three,
+and all four raising must still return four entries.
+
+Worth noting a mistake in my own first attempt: I put the four collectors in a module-level tuple,
+which captured the function objects at import time and silently made them unpatchable - my own new
+tests failed because `mock.patch` on the module attribute had no effect. Naming them inside the
+function keeps the reference resolving at call time. An abstraction that breaks testability is
+worse than the repetition it replaced.
+
+**The suite now has no known non-environmental failures.**

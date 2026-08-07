@@ -7,7 +7,7 @@ from dataclasses import dataclass
 import logging
 import os
 import time
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlparse, urlunparse
 
 from celery import current_app
@@ -17,6 +17,9 @@ from kombu.exceptions import KombuError
 import redis
 from redis.exceptions import RedisError
 import requests
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 logger = logging.getLogger(__name__)
 
@@ -380,15 +383,55 @@ def collect_nginx_stats() -> InfrastructureServiceStat:
         )
 
 
+def _collect_or_degrade(key: str, name: str, icon: str, collector: Callable[[], InfrastructureServiceStat]) -> InfrastructureServiceStat:
+    """Run one collector, degrading to an "unavailable" stat if it raises.
+
+    Each collector already handles the failure it expects - Valkey catches
+    ``RedisError``, and so on. This catches everything they don't: a malformed
+    connection URL, a DNS error surfacing as ``OSError``, a driver raising
+    something new after an upgrade.
+
+    Args:
+        key: The service's stable key, kept stable so the template can style it.
+        name: Display name.
+        icon: Material Symbols glyph.
+        collector: The per-service collection function.
+
+    Returns:
+        The collected stat, or an ``unhealthy`` placeholder describing the failure.
+    """
+    try:
+        return collector()
+    except Exception:
+        logger.exception("Failed to collect %s infrastructure stats", key)
+        return InfrastructureServiceStat(
+            key=key,
+            name=name,
+            icon=icon,
+            status="unhealthy",
+            status_label="Unavailable",
+            metrics=(ServiceMetric("Status", "Stats could not be collected - see the server log."),),
+        )
+
+
 def collect_infrastructure_service_stats() -> tuple[InfrastructureServiceStat, ...]:
     """Collect health statistics for all UrbanLens infrastructure services.
 
+    Each service is collected independently. This page exists to tell an admin which
+    component is unhealthy, so one component being unhealthy in an unanticipated way
+    must not take the whole page down with it - previously an exception from any single
+    collector propagated and the status page returned a 500, hiding the state of the
+    three services that were fine along with the one that wasn't.
+
     Returns:
         Tuple of service stats in display order: PostgreSQL, Valkey, Celery, nginx.
+        Always four entries, in that order, however badly the services are behaving.
     """
+    # Each collector is named here rather than held in a module-level table, so the
+    # reference resolves at call time and stays patchable by tests.
     return (
-        collect_postgres_stats(),
-        collect_valkey_stats(),
-        collect_celery_stats(),
-        collect_nginx_stats(),
+        _collect_or_degrade("postgres", "PostgreSQL", "storage", collect_postgres_stats),
+        _collect_or_degrade("valkey", "Valkey", "memory", collect_valkey_stats),
+        _collect_or_degrade("celery", "Celery", "conveyor_belt", collect_celery_stats),
+        _collect_or_degrade("nginx", "nginx", "dns", collect_nginx_stats),
     )

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 from unittest import mock
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
@@ -137,12 +138,59 @@ class CollectNginxStatsTests(SimpleTestCase):
         self.assertEqual(stat.status_label, "Unreachable")
 
 
+_COLLECTOR = "urbanlens.dashboard.services.admin.infrastructure_stats.collect_{}_stats"
+
+
+def _stub(key: str) -> InfrastructureServiceStat:
+    return InfrastructureServiceStat(key=key, name=key, icon="x", status="healthy", status_label="Connected", metrics=())
+
+
 class CollectInfrastructureServiceStatsTests(SimpleTestCase):
-    """collect_infrastructure_service_stats returns all expected services."""
+    """collect_infrastructure_service_stats returns all expected services.
+
+    The collectors are stubbed rather than run: this function's job is aggregation,
+    and each collector has its own tests above. Running them for real would make
+    these assertions depend on live postgres/valkey/celery/nginx.
+    """
+
+    def _patched(self, **overrides):
+        """Patch all four collectors, overriding individual ones by key."""
+        return [
+            mock.patch(_COLLECTOR.format(key), side_effect=overrides[key]) if key in overrides else mock.patch(_COLLECTOR.format(key), return_value=_stub(key))
+            for key in ("postgres", "valkey", "celery", "nginx")
+        ]
 
     def test_returns_postgres_valkey_celery_and_nginx(self) -> None:
-        stats = collect_infrastructure_service_stats()
+        with contextlib.ExitStack() as stack:
+            for patcher in self._patched():
+                stack.enter_context(patcher)
+            stats = collect_infrastructure_service_stats()
+
         self.assertEqual(len(stats), 4)
         self.assertEqual([stat.key for stat in stats], ["postgres", "valkey", "celery", "nginx"])
         for stat in stats:
             self.assertIsInstance(stat, InfrastructureServiceStat)
+
+    def test_one_collector_blowing_up_does_not_lose_the_others(self) -> None:
+        """This page exists to report which service is unhealthy - a service being
+        unhealthy in an unanticipated way must not take the whole page down."""
+        with contextlib.ExitStack() as stack:
+            for patcher in self._patched(valkey=OSError("name resolution failed")):
+                stack.enter_context(patcher)
+            stats = collect_infrastructure_service_stats()
+
+        self.assertEqual([stat.key for stat in stats], ["postgres", "valkey", "celery", "nginx"])
+        by_key = {stat.key: stat for stat in stats}
+        self.assertEqual(by_key["valkey"].status, "unhealthy")
+        self.assertEqual(by_key["valkey"].status_label, "Unavailable")
+        self.assertEqual(by_key["postgres"].status, "healthy", "a healthy service must still be reported")
+
+    def test_every_collector_failing_still_returns_four_entries(self) -> None:
+        failures = dict.fromkeys(("postgres", "valkey", "celery", "nginx"), RuntimeError("boom"))
+        with contextlib.ExitStack() as stack:
+            for patcher in self._patched(**failures):
+                stack.enter_context(patcher)
+            stats = collect_infrastructure_service_stats()
+
+        self.assertEqual(len(stats), 4)
+        self.assertTrue(all(stat.status == "unhealthy" for stat in stats))
