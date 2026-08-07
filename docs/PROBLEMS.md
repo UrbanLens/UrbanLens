@@ -3689,3 +3689,38 @@ other party - that is the message.
 Four instances across three units: trips export, three global-search providers, and these two
 notifications. The rule is real and applied in six places; it is still not enforced anywhere,
 which is what task #38 weighs.
+
+## Plugin/panel data paths: no changes warranted, one latent trap documented (2026-08-07)
+
+Audited the panel data paths, looking specifically for the shape that would matter most:
+panel results are cached per **location** (`LocationCache` keyed on `(location, source)`, and
+`PanelSource.scope` defaults to `loc{location_id}`), so any panel whose data is *user*-
+specific would serve one user's data to another.
+
+**There is no such panel.** All 34 panel sources use the default location scope, and every
+one of them fetches a property of the place - elevation, parcel, weather, Wikipedia, imagery.
+The per-user-credential integrations that would be dangerous here (Immich, Google Photos,
+Google Calendar) are not panel sources at all. Five classes matched a "per-user" grep; four
+were the word "credential" appearing in a comment.
+
+Also verified: `panel_visible_to` is the single decision shared by the web tab strip and the
+external API - a feature-gated panel cannot be visible on one surface and hidden on the other
+- and it only returns True unconditionally when the source declares no required feature.
+
+### The one real hazard, at a seam rather than in current behaviour
+
+`plugins.builtin.nominatim` calls `update_location_name_from_external_sources(location,
+profile=pin.profile)` during its fetch, which reaches `default_name_resolver(profile=...)`.
+Today that parameter is **unused**, and the resolver's docstring is explicit that name
+resolution is "an intentionally system-driven decision - individual users cannot override the
+source ordering with their own preference". So nothing is wrong now.
+
+But the parameter is documented as a seam for a future profile-aware resolver, and a future
+author consuming it would be walking into a trap: panel fetches are single-flighted per
+*location*, so several users viewing the same place produce one fetch, and the profile it
+carries is whoever's poll claimed the flight marker first. A resolver honouring that profile
+would make a shared location's name depend on which user loaded the page first,
+non-deterministically - and it would look perfectly reasonable in review.
+
+The warning now lives in the seam's own docstring, where someone about to consume the
+parameter will read it, rather than only here.

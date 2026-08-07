@@ -245,6 +245,19 @@ def default_name_resolver(profile: Profile | None = None, *, location: Location 
         profile: The profile whose action triggered this resolution, if any.
             Unused by the current resolver but kept for a future
             profile-aware (e.g. AI-backed) resolver to consume.
+
+            **Read this before consuming it.** One caller is a panel fetch
+            (``plugins.builtin.nominatim``), and panel fetches are
+            single-flighted per *location*, not per pin - see
+            ``services.pins.external_data.schedule_panel_fetch``. Several users
+            viewing the same place produce one fetch, and the profile it carries
+            is simply whoever's poll claimed the flight marker first. A resolver
+            that let this profile influence the outcome would therefore make a
+            *shared* location's name depend on which user happened to load the
+            page first, non-deterministically. That is precisely what the
+            paragraph above rules out today; a profile-aware resolver would need
+            the caller to establish whose preference legitimately applies rather
+            than inheriting a race winner.
         location: The location being named, if known. When it has at least
             one detail (child) pin (``Pin.parent_pin`` - see
             ``models.pin.model``), REData's building name is given outright
