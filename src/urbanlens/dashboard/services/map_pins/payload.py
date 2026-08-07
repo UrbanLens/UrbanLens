@@ -43,7 +43,12 @@ class MapPinPayloadService:
     def prepare_queryset(self, query: QuerySet[Pin]) -> QuerySet[Pin]:
         latest_rating = Review.objects.filter(pin_id=OuterRef("pk")).order_by("-created").values("rating")[:1]
         return (
-            query.select_related("location")
+            # location__wiki as well as location: every pin serialized here reads
+            # effective_name, which falls through to Location.display_name, which reads
+            # the reverse OneToOne `wiki` - one query per pin on the map's own payload
+            # unless it is joined in. That property's docstring asks callers to do this;
+            # this is the highest-traffic caller in the app.
+            query.select_related("location", "location__wiki")
             .annotate(map_rating=Subquery(latest_rating), child_count=Count("detail_pins", distinct=True))
             .prefetch_related(Prefetch("labels", queryset=Label.objects.with_customizations_for(self.profile)))
             .order_by("pk")

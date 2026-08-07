@@ -2860,3 +2860,32 @@ resolved by the bulk cache query and their `is_ready` was never called - the tes
 branch the fix doesn't touch and reported the fix as broken. Checking the class hierarchy rather
 than re-reading the fix settled it immediately. Test doubles have to sit in the same branch of the
 hierarchy as the code under test, or they quietly prove nothing.
+
+## Query amplification on the map payload (2026-08-07)
+
+Measured rather than read: build N items, count queries, add more, count again, require no growth.
+Three of the four measured paths are flat. The map's pin payload was not - **exactly one extra
+query per pin**, on the highest-traffic serialization in the app.
+
+The probe named it in one run: `SELECT ... FROM dashboard_wikis`, 3 -> 6 as pins went 3 -> 6.
+`serialize()` reads `pin.effective_name`, which falls through to `Location.display_name`, which
+reads the reverse OneToOne `wiki`. `prepare_queryset` select_related `location` but not
+`location__wiki`. `Location.display_name`'s own docstring asks callers to
+`select_related("wiki")` in bulk "to avoid an extra query per row" - the guidance was already
+written down, and the busiest caller in the app was the one that missed it. Same family as the
+notification-dropdown N+1 from module 7: a reverse OneToOne that reads like an attribute.
+
+Added `test_query_amplification.py` as a standing guard over the map payload and the pin detail
+page (flat in both label count and visit count).
+
+Two notes on getting the measurement right, both of which cost a cycle:
+
+- The first harness demanded a delta of exactly zero and reported *-2* on the pin detail page. That
+  is warm-up, not a fix: the first request of a test populates per-process caches. The harness now
+  measures a discarded warm-up call first and asserts one-sided - cost must not *grow*; a page
+  getting cheaper is never the bug being hunted.
+- The first version of the map test called `service.all(service.prepare_queryset(qs))`, but `all()`
+  applies `prepare_queryset` itself. The doubled `Prefetch("labels", ...)` raises
+  `ValueError: 'labels' lookup was already seen with a different queryset` at evaluation. That was
+  my error, not the code's - but it is worth knowing the API raises rather than silently
+  double-prefetching.
