@@ -874,12 +874,32 @@ def _export_photos(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
 
 
 def _export_trips(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+    """Export the trips this user is a member of.
+
+    Member and creator names go through ``resolve_visible_identities``, the same
+    resolution ``services.trips.trip_membership`` applies when the trip page renders
+    its member list - so a co-member whose profile visibility hides them from this
+    user is "Member 2" in the export exactly as they are on screen. This mirrors
+    what :func:`_export_direct_messages` does for a conversation partner: an export
+    is a copy of what the user can see, not a way around what they cannot.
+
+    ``member_uuids`` is still exported for everyone, masked or not. It carries no
+    name, and the import's re-invite step needs it to rebuild the trip's membership;
+    dropping it would turn a privacy fix into a lost feature.
+    """
     from urbanlens.dashboard.models.trips.model import Trip
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
 
     trips = Trip.objects.filter(profiles=profile).prefetch_related("profiles__user").select_related("creator__user").order_by("created")
 
     rows = []
     for trip in trips:
+        members = list(trip.profiles.all())
+        identities = resolve_visible_identities(profile, members)
+
+        def _name(subject: Any, identities: dict = identities) -> str:
+            return identities.get(subject.pk, {}).get("display_name") or subject.username
+
         rows.append(
             {
                 "uuid": str(trip.uuid),
@@ -887,16 +907,17 @@ def _export_trips(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "description": trip.description or "",
                 "start_date": str(trip.start_date) if trip.start_date else None,
                 "end_date": str(trip.end_date) if trip.end_date else None,
-                "creator": trip.creator.user.username if trip.creator else None,
+                "creator": _name(trip.creator) if trip.creator else None,
                 # Whether the exporting user created this trip - the importer
                 # only re-creates trips the user owned (a membership in someone
                 # else's trip records THEIR trip, which an import can't rebuild
                 # on their behalf).
                 "is_creator": trip.creator_id == profile.pk,
-                "members": [p.user.username for p in trip.profiles.all()],
+                "members": [_name(p) for p in members],
                 # Stable identifiers for re-inviting members on import; same
-                # order as ``members``.
-                "member_uuids": [str(p.uuid) for p in trip.profiles.all()],
+                # order as ``members``. Not a name, so exported for masked
+                # members too - see this function's docstring.
+                "member_uuids": [str(p.uuid) for p in members],
                 "created": str(trip.created),
             },
         )

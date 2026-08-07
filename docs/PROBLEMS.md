@@ -3551,3 +3551,45 @@ without handling a variant:
 Both times the fix was to widen the scanner, and both times the first result was plausible
 enough to act on. Any structural scan here should be re-run against a known-good and a
 known-bad example before its output is trusted.
+
+## The data export disclosed trip members the app masks on screen (2026-08-07)
+
+Audited the import/export paths. Most of it is exemplary and needed no changes - recorded
+here so it is not re-audited:
+
+- **Archive handling is properly defended.** No `extractall` anywhere; members are iterated
+  and extracted individually. `_safe_basename` keeps only the basename (so there is no path
+  left to traverse) *and* rejects `..`; symlinks are skipped in both ZIP (via `external_attr`
+  mode bits) and TAR (`isfile()` only); there are per-file, total-uncompressed and file-count
+  caps; and both formats read one byte past the declared size to catch a compression-ratio
+  attack where the header lies.
+- **The import refuses to write on someone else's behalf.** `_resolve_import_target` requires
+  a pin target to resolve to the importer's *own* pin and a wiki target to pass
+  `location_visible_to`, with the threat named in its docstring.
+- **Friendships import as requests, not facts.** `_import_connections` re-creates each
+  outgoing row through `Friendship.request` rather than honouring the exported status, so a
+  crafted archive cannot forge an ACCEPTED friendship and grant itself friend-level access.
+  The stated principle is the right one: "an import may only re-create actions the importing
+  user could take themselves through the UI".
+
+**The bug was on the export side.** `_export_direct_messages` passes each conversation
+partner through `display_identity_for` and says why in its docstring - "an export never
+reveals a partner's name/avatar beyond what the user could currently see on screen (e.g.
+after being blocked or a privacy change)". `_export_trips` did not apply that rule: it wrote
+`p.user.username` for every trip member and for the creator, while the trip page resolves
+those same people through `resolve_visible_identities` and masks the ones the viewer may not
+identify.
+
+So a user could export their data and read the username of a co-member whose profile
+visibility hides them - `NO_ONE`, or any setting the viewer doesn't satisfy. The codebase
+already agreed this was wrong; only this one function had not been told.
+
+Fixed by resolving member and creator names through `resolve_visible_identities`, the same
+call the trip page makes. `member_uuids` is still exported for masked members: it carries no
+name, and the import's re-invite step reads *that* field rather than `members`, so masking
+the names cannot break the round trip - verified against `_import_trips`, which reads
+`member_uuids` and never `members`.
+
+Seven tests, including one asserting the DM export still masks (it already did - a guard so
+the two exports cannot drift apart again) and one asserting masked members are still *listed*,
+since dropping them would leak a different fact: how many people are on the trip.
