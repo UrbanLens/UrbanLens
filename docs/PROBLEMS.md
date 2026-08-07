@@ -3202,3 +3202,35 @@ stays put.
 
 Net: 39 lines of duplicated template JS removed, 25 tests added covering the behaviour that
 previously had none.
+
+## Live location sharing on a safety check-in failed silently (2026-08-07)
+
+Found by sweeping for `fetch` call sites that mutate state without checking the response.
+Of 34 such sites, most turned out to be false positives (helpers whose callers check, or
+deliberately best-effort calls) - but this one is real, and it is on a safety feature.
+
+`fetch` only rejects on network failure, never on an HTTP error status. Both live-location
+handlers had a `.catch` and no `.ok` check, so every server rejection was invisible:
+
+- **Position updates** were sent with `.catch(function () {})`. The update endpoint returns
+  **400** when sharing has been turned off or the check-in has already concluded. So if a
+  check-in was resolved from elsewhere - a partner marking the owner safe, say - the browser
+  kept watching the GPS and posting a position every 30 seconds, each rejected, forever. The
+  owner saw no indication. The partner watched a marker frozen at the last accepted fix.
+- **The toggle** called `startWatching()` unconditionally and only caught network errors, so
+  a refused toggle left the switch on and the GPS running while the server had recorded
+  nothing.
+
+The drift was visible inside the same file: the delete-check-in handler thirty lines above
+correctly does `if (!r.ok) throw new Error()`.
+
+Fixed by moving the logic to `shared/safety-live-location.ts` (22 tests, including one per
+rejection status) which checks every response, reverts the toggle when the server refuses,
+and warns the owner after two consecutive failed reports - two rather than one because a
+single blip is noise, and once rather than every 30s because a warning that repeats is a
+warning people learn to ignore. Recovery resets it, so a later outage can warn again.
+
+**Not fixed, deliberately:** the remaining ~30 unchecked mutating `fetch` sites. Each needs
+judging on its own - several are intentional fire-and-forget (the profile "skip setup"
+button navigates whether or not the save lands) and a blanket change would be churn. Worth
+a pass when someone can weigh them individually.

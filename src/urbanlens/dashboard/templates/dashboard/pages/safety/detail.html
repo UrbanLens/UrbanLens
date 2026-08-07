@@ -381,68 +381,18 @@
 <script>
 (function () {
     // -- Live location sharing toggle + throttled position reporting -----------
-    // 30s balances "a partner watching in an emergency wants a current position"
-    // against battery/bandwidth - tightening it wouldn't meaningfully help a
-    // partner (someone overdue on a hike isn't moving fast enough for sub-30s
-    // updates to matter).
-    var MIN_INTERVAL_MS = 30000;
+    // Logic lives in frontend/ts/shared/safety-live-location.ts so its failure
+    // handling is testable: fetch does not reject on an HTTP error status, and the
+    // previous inline version's .catch therefore never fired - a check-in resolved
+    // elsewhere left this page reporting a position the server was rejecting.
     var toggle = document.getElementById('safety-live-location-toggle');
-    if (!toggle) return;
-    var toggleUrl = "{% url 'safety.checkin.location.toggle' checkin.slug|default:checkin.uuid %}";
-    var updateUrl = "{% url 'safety.checkin.location.update' checkin.slug|default:checkin.uuid %}";
-    var csrfToken = document.querySelector('#safety-checkin-form [name=csrfmiddlewaretoken]').value;
-    var watchId = null;
-    var lastSentAt = 0;
-    var pendingPosition = null;
-    var sendTimer = null;
-
-    function sendPosition(position) {
-        lastSentAt = Date.now();
-        var body = new FormData();
-        body.append('latitude', position.coords.latitude);
-        body.append('longitude', position.coords.longitude);
-        if (position.coords.accuracy != null) body.append('accuracy', position.coords.accuracy);
-        fetch(updateUrl, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: body }).catch(function () {});
-    }
-
-    function onPosition(position) {
-        var elapsed = Date.now() - lastSentAt;
-        if (elapsed >= MIN_INTERVAL_MS) {
-            sendPosition(position);
-            return;
-        }
-        pendingPosition = position;
-        if (sendTimer) return;
-        sendTimer = setTimeout(function () {
-            sendTimer = null;
-            if (pendingPosition) { sendPosition(pendingPosition); pendingPosition = null; }
-        }, MIN_INTERVAL_MS - elapsed);
-    }
-
-    function startWatching() {
-        if (watchId !== null || !navigator.geolocation) return;
-        watchId = navigator.geolocation.watchPosition(onPosition, function () {
-            if (window.toastr) toastr.error('Could not get your location - live location sharing may not work.');
-        }, { enableHighAccuracy: true });
-    }
-
-    function stopWatching() {
-        if (watchId !== null) { navigator.geolocation.clearWatch(watchId); watchId = null; }
-        window.clearTimeout(sendTimer);
-        sendTimer = null;
-        pendingPosition = null;
-    }
-
-    toggle.addEventListener('change', function () {
-        var enabled = toggle.checked;
-        var body = new FormData();
-        body.append('enabled', enabled ? '1' : '0');
-        fetch(toggleUrl, { method: 'POST', headers: { 'X-CSRFToken': csrfToken }, body: body })
-            .catch(function () { if (window.toastr) toastr.error('Could not update live location sharing.'); });
-        if (enabled) startWatching(); else stopWatching();
+    if (!toggle || !window.ulInstallSafetyLiveLocation) return;
+    window.ulInstallSafetyLiveLocation({
+        toggle: toggle,
+        toggleUrl: "{% url 'safety.checkin.location.toggle' checkin.slug|default:checkin.uuid %}",
+        updateUrl: "{% url 'safety.checkin.location.update' checkin.slug|default:checkin.uuid %}",
+        csrfToken: document.querySelector('#safety-checkin-form [name=csrfmiddlewaretoken]').value,
     });
-
-    if (toggle.checked) startWatching();
 }());
 </script>
 {% endif %}

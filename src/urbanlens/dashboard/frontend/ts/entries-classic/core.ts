@@ -33,6 +33,7 @@ import { createMarkupToolbar } from "../shared/markup-toolbar";
 import { installGlobalMentionAutocomplete } from "../shared/mention-autocomplete";
 import { installGlobalPopupDismiss } from "../shared/popup-dismiss";
 import { installGlobalReactionPicker } from "../shared/reaction-picker";
+import { installGlobalSafetyLiveLocation } from "../shared/safety-live-location";
 import { installGlobalScrollToHash } from "../shared/scroll-to-hash";
 
 installGlobalAutosaveGuard();
@@ -44,6 +45,7 @@ installGlobalFlyToDismiss();
 installGlobalMentionAutocomplete();
 installGlobalPopupDismiss();
 installGlobalReactionPicker();
+installGlobalSafetyLiveLocation();
 installGlobalScrollToHash();
 installGlobalLocationSearchEngine();
 installGlobalMapLayers();
