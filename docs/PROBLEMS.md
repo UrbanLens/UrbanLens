@@ -3431,3 +3431,39 @@ both itself and the user adding the same photo from the picker once it materiali
 Fixed with `ignore_conflicts=True`, plus counting the rows actually inserted rather than
 returning `len(to_add)` - with conflicts ignored, the length over-reports what the call did,
 which would have shown "2 photos added" when one was already there.
+
+## Check-then-act sweep: one fix, and a hypothesis that was wrong (2026-08-07)
+
+Following up the album race (42a178fa) by looking for the same shape elsewhere: read what
+exists, insert the difference, with a unique constraint behind it.
+
+**A wrong hypothesis, recorded so nobody re-derives it.** The first scan listed 77 models
+with a multi-column unique constraint and flagged 17 unprotected creates. It looked like
+`add_group_members` was a *deterministic* bug: `GroupChatMembership` is documented as one row
+per member *stint*, re-adding is meant to create a brand-new row, and a `(group, profile)`
+constraint would make that impossible - so re-adding anyone who had left should 500.
+
+It does not, because that constraint is **partial**: `(group, profile) WHERE left_at IS
+NULL`. That is exactly the right schema - one active membership, unlimited historical stints
+- and my scan had simply not looked at `condition`. **27 of the 77 constraints are partial**,
+so any future sweep must read the condition before concluding anything. The group-chat stint
+behaviour is correct, and `test_group_chats.py` already covers both halves of it
+(`test_readding_creates_new_stint`, `test_rejoined_member_does_not_see_absence_window`); the
+tests I had written were deleted rather than committed as duplicate coverage.
+
+**What actually discriminates a real instance from a theoretical one is a Celery caller.**
+The album bug mattered because `cache_media_item_into_album` is a task and Celery delivers at
+least once, which makes "two runs at once" ordinary rather than a rare interleaving. Applying
+that filter to the 17 candidates leaves exactly one: `generate_keywords_for_image`, whose
+only caller is the `generate_photo_keywords` task.
+
+It deletes a provider's existing keywords and inserts the new ones. The delete does not
+isolate it from another worker doing the same, so the second insert hit
+`uniq_image_keyword_per_source` and failed the task, leaving that provider's keywords
+missing until something re-ran it. Fixed with `ignore_conflicts=True`.
+
+The remaining 15 need two genuinely simultaneous user actions (two managers adding the same
+person, a double-clicked "add to list"). Left alone deliberately: the failure is a 500 on one
+of two racing requests, the constraint keeps the data correct either way, and blanket-editing
+15 call sites would be churn of the kind this audit has been avoiding. Worth revisiting only
+if one of them acquires a Celery caller.

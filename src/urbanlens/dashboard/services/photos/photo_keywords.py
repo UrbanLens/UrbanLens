@@ -187,8 +187,15 @@ def generate_keywords_for_image(image_id: int) -> dict[str, int]:
 
         with transaction.atomic():
             ImageKeyword.objects.filter(image=image, source=provider.slug).delete()
+            # ignore_conflicts because the delete above does not isolate this from
+            # another worker replacing the same provider's keywords. The only caller
+            # is a Celery task, and Celery delivers at least once - a worker lost
+            # mid-task has its message redelivered, so two runs for one image is
+            # ordinary rather than a rare interleaving. Losing that race should leave
+            # the keywords in place, not fail the task.
             ImageKeyword.objects.bulk_create(
                 [ImageKeyword(image=image, source=provider.slug, keyword=result.keyword, confidence=result.confidence) for result in keywords],
+                ignore_conflicts=True,
             )
         counts[provider.slug] = len(keywords)
         if keywords:
