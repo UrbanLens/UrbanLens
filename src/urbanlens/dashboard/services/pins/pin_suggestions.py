@@ -35,7 +35,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DATES, MAX_SUGGESTION_ALIASES, MAX_SUGGESTION_LINKS, MAX_SUGGESTION_PHOTOS, PinSuggestion, PinSuggestionOrigin, PinSuggestionStatus
 from urbanlens.dashboard.models.profile.model import _haversine_km
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-from urbanlens.dashboard.services.media.images import compute_checksum
+from urbanlens.dashboard.services.media.images import compute_checksum, delete_stored_file
 from urbanlens.dashboard.services.media.media_materialize import fetch_with_revalidated_redirects
 from urbanlens.dashboard.services.media.storage import quota_error_for_upload
 from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError
@@ -599,7 +599,7 @@ def _delete_image_with_file(image: Image) -> None:
     every deletion site in this codebase deletes the file first. Factored out
     here since accept/reject both need it for candidate photo cleanup.
     """
-    image.image.delete(save=False)
+    delete_stored_file(image)
     image.delete()
 
 

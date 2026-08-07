@@ -18,7 +18,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.media.images import compute_checksum, image_to_gallery_json, image_upload_error, parse_reposition_payload
+from urbanlens.dashboard.services.media.images import compute_checksum, delete_stored_file, image_to_gallery_json, image_upload_error, parse_reposition_payload
 from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
@@ -175,10 +175,14 @@ class PinGalleryBulkView(LoginRequiredMixin, View):
             # Collect the stored file paths first, then delete the underlying
             # storage files (Django has no bulk API for that) followed by a
             # single bulk DB delete, instead of one DELETE per row.
-            image_paths = list(images.values_list("image", flat=True))
-            for path in image_paths:
-                if path:
-                    default_storage.delete(path)
+            # Same reference rule as delete_stored_file: a shared photo's file
+            # backs several rows, and the whole batch is going, so rows inside it
+            # must not count as references.
+            batch = list(images)
+            batch_pks = [image.pk for image in batch]
+            image_paths = [image.image.name for image in batch if image.image]
+            for image in batch:
+                delete_stored_file(image, also_deleting=batch_pks)
             images.delete()
             return JsonResponse({"deleted": len(image_paths)})
 
@@ -261,7 +265,7 @@ class PinImageView(LoginRequiredMixin, View):
         profile, _ = Profile.objects.get_or_create(user=request.user)
         if img.profile != profile:
             raise Http404
-        img.image.delete(save=False)
+        delete_stored_file(img)
         img.delete()
         return HttpResponse(status=204)
 
@@ -383,6 +387,6 @@ class WikiImageView(LoginRequiredMixin, View):
         img, profile = self._get_image(request, image_id, location_slug)
         if img.profile != profile:
             raise Http404
-        img.image.delete(save=False)
+        delete_stored_file(img)
         img.delete()
         return HttpResponse(status=204)

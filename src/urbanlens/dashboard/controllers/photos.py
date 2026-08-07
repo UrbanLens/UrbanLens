@@ -19,7 +19,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.media.images import image_to_gallery_json
+from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json
 from urbanlens.dashboard.services.memories.photos import classify_photo, create_pin_and_log_visit, log_visit_on_pin
 from urbanlens.dashboard.services.memories.unlogged import unlogged_visited_pins
 from urbanlens.dashboard.services.visits.visits import accept_visit_suggestion, reject_visit_suggestion
@@ -325,7 +325,7 @@ class PhotoActionView(LoginRequiredMixin, View):
 
     def delete_photo(self, request: HttpRequest, image: Image, profile: Profile) -> HttpResponse:
         """Delete the photo entirely."""
-        image.image.delete(save=False)
+        delete_stored_file(image)
         image.delete()
         return _toast("Photo deleted.", "info", refresh_queue=True)
 

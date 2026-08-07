@@ -2167,15 +2167,18 @@ def hard_delete_expired_direct_messages() -> int:
     """
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
     from urbanlens.dashboard.models.images.model import Image
+    from urbanlens.dashboard.services.media.images import delete_stored_file
 
     due_ids = list(DirectMessage.objects.due_for_hard_delete().values_list("id", flat=True))
     if not due_ids:
         return 0
 
-    for image in Image.objects.filter(direct_message_id__in=due_ids):
+    expiring = list(Image.objects.filter(direct_message_id__in=due_ids))
+    expiring_pks = [image.pk for image in expiring]
+    for image in expiring:
         if image.image:
             try:
-                image.image.delete(save=False)
+                delete_stored_file(image, also_deleting=expiring_pks)
             except OSError:
                 logger.exception("Failed to delete image file %s for expiring direct message %s", image.pk, image.direct_message_id)
     Image.objects.filter(direct_message_id__in=due_ids).delete()

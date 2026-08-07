@@ -184,6 +184,7 @@ from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
 from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
 from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 from urbanlens.dashboard.services.map_pins.autocomplete import resolve_google_place, search_google_places, search_local
+from urbanlens.dashboard.services.media.images import delete_stored_file
 from urbanlens.dashboard.services.media.media_labels import MediaLabelError, set_media_labels
 from urbanlens.dashboard.services.media.media_relevance import toggle_media_vote
 from urbanlens.dashboard.services.memories.aggregator import BBox, get_memory_events
@@ -1279,7 +1280,7 @@ class PhotoDetailView(_OwnedImageMixin, ExternalApiView):
             return Response({"error": "No such photo."}, status=404)
         # Matches controllers.photos.PhotoActionView.delete_photo: drop the
         # stored file before the row, so deleting the row can't orphan bytes.
-        image.image.delete(save=False)
+        delete_stored_file(image)
         image.delete()
         return Response(status=204)
 
@@ -3271,7 +3272,7 @@ class SafetyCheckinPhotoDetailView(SafetyCheckinScopedView):
         image = Image.objects.filter(pk=image_id, safety_checkin=checkin, profile=request.user.profile).first()
         if image is None:
             return Response({"error": "No such photo."}, status=404)
-        image.image.delete(save=False)
+        delete_stored_file(image)
         image.delete()
         return Response(status=204)
 

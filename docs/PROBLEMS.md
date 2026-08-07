@@ -3467,3 +3467,40 @@ person, a double-clicked "add to list"). Left alone deliberately: the failure is
 of two racing requests, the constraint keeps the data correct either way, and blanket-editing
 15 call sites would be churn of the kind this audit has been avoiding. Worth revisiting only
 if one of them acquires a Celery caller.
+
+## Deleting your own photo silently broke it for everyone you shared it with (2026-08-07)
+
+Found while auditing the quota feature (recently changed on this branch). The quota work
+itself is sound - usage is always computed live rather than cached, so there is no staleness
+bug; `materialize_media_item` really does stamp `EXTERNAL_MEDIA`; `_save_enriched_image`
+attaches no profile so it is charged to nobody; and the quota is enforced on 15+ upload
+paths. A scan for `Image`-creating functions with no quota guard returned only three, two of
+which are correct by design.
+
+The third was `create_pin_from_share`, and following it up found something worse than a
+quota gap.
+
+**The bug.** Sharing a pin copies its photos by assigning the *same* storage key
+(`image=image.image.name`) - the bytes are deliberately not duplicated, so one file backs
+several `Image` rows. But every deletion path called `image.image.delete(save=False)`, which
+removes that file outright, with nothing checking whether another row still points at it.
+
+So: share a pin, the recipient accepts, you later delete that photo from your own gallery -
+and the recipient's copy becomes a broken image. No error, no log line, and the recipient's
+row still exists so nothing looks wrong until the image fails to load.
+
+Fixed with `services.media.images.delete_stored_file`, which removes the file only when no
+other row references it, and takes an `also_deleting` set so a bulk delete does not count
+rows inside its own batch as references. Routed all seven deletion sites through it
+(pin gallery, wiki gallery, bulk gallery delete, organize queue, safety check-in, two
+external-API endpoints, and the DM hard-delete task). Five tests, including two that guard
+against over-correcting: an unshared photo's file must still be deleted, and the file must
+go once the last row referencing it goes.
+
+**Not changed, deliberately.** The recipient of a share is charged full quota for a file that
+consumes no new storage, and share acceptance is the one `Image`-creating path with no quota
+check at all - so accepting shares can silently push someone over quota, after which their
+own uploads are refused with an error about photos they did not upload. Whether to exempt
+those rows, charge them, or block the accept is a product/billing decision, and
+`QuotaExemption` is explicitly scoped to "storage the whole community benefits from", which a
+received share is not. Flagged rather than decided.

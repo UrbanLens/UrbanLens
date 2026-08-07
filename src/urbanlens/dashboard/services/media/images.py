@@ -13,6 +13,9 @@ import posixpath
 import re
 from typing import IO, TYPE_CHECKING, Any
 
+if TYPE_CHECKING:
+    from collections.abc import Collection
+
 from django.utils import timezone
 from PIL import Image as PILImage
 from PIL.ExifTags import GPSTAGS, TAGS
@@ -623,3 +626,40 @@ def image_to_gallery_json(img: Image, request: HttpRequest, viewer_profile: Prof
         "copyright": img.copyright or "",
         "taken_at": img.taken_at.isoformat() if img.taken_at else None,
     }
+
+
+def delete_stored_file(image: Any, *, also_deleting: Collection[int] = ()) -> bool:
+    """Remove an image's stored file, unless another row still points at it.
+
+    Sharing a pin copies its photos by reusing the *same* storage key rather than
+    duplicating the bytes (see ``services.sharing.pin_sharing.create_pin_from_share``),
+    so one file can back several ``Image`` rows. Deleting the file whenever the first
+    of those rows goes leaves everyone else's copy pointing at nothing - a broken
+    photo, with no error anywhere to explain it.
+
+    The file is still removed as soon as the last row referencing it goes, so this
+    does not trade a broken photo for a storage leak.
+
+    Args:
+        image: The ``Image`` whose stored file should go.
+        also_deleting: Primary keys of other rows being deleted in the same
+            operation. They must not count as references, or a bulk delete would
+            never remove anything.
+
+    Returns:
+        True when the file was deleted, False when another row still needs it (or
+        there was no file).
+    """
+    from urbanlens.dashboard.models.images.model import Image as ImageModel
+
+    name = image.image.name if image.image else ""
+    if not name:
+        return False
+
+    still_referenced = ImageModel.objects.filter(image=name).exclude(pk__in=[image.pk, *also_deleting]).exists()
+    if still_referenced:
+        logger.debug("Keeping stored file %s: another image row still references it", name)
+        return False
+
+    image.image.delete(save=False)
+    return True

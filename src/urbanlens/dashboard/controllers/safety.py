@@ -25,7 +25,7 @@ from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckin
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title
-from urbanlens.dashboard.services.media.images import image_to_gallery_json, parse_reposition_payload
+from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json, parse_reposition_payload
 from urbanlens.dashboard.services.social.connections import get_connections
 from urbanlens.dashboard.services.visits.safety import (
     CheckinArchivedError,
@@ -1487,7 +1487,7 @@ class SafetyImageView(LoginRequiredMixin, View):
             204 on success.
         """
         img = self._get_image(request, checkin_slug, image_id)
-        img.image.delete(save=False)
+        delete_stored_file(img)
         img.delete()
         return HttpResponse(status=204)
 
