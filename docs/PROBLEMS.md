@@ -3593,3 +3593,59 @@ the names cannot break the round trip - verified against `_import_trips`, which 
 Seven tests, including one asserting the DM export still masks (it already did - a guard so
 the two exports cannot drift apart again) and one asserting masked members are still *listed*,
 since dropping them would leak a different fact: how many people are on the trip.
+
+## Global search named people the rest of the app masks (2026-08-07)
+
+Generalising the trips-export leak (ea1a62db). If one surface had missed the
+identity-masking rule, others might have, so this was a sweep rather than a guess: find
+every function that emits another party's `username` without calling a masking helper. 48
+matches, most correct by design - `__str__` for admin, notification text addressed *to* the
+person concerned, URL and query parsing that merely mentions the word.
+
+**Three were real, all in global search.** Search results name other people, and every other
+surface that does resolves the name first:
+
+  messages page + DM export      display_identity_for
+  trip comments                  resolve_visible_identities
+  pin/wiki comment list          resolve_visible_identities (the template branches on
+                                 the `is_masked` it sets)
+
+`DirectMessageSearchProvider` built `title=f"{direction} {other.username}"`, and
+`CommentSearchProvider` built both its subtitles from `.username` - for pin/wiki comments
+and for trip comments. So a user could type a word into the search box and read the username
+of a conversation partner or comment author whose profile visibility hides them; the page
+rendering those very same rows would have shown "Member 2".
+
+Worth noting the reach: global search is also exposed through the external API, where the DM
+provider is gated behind `messages:read` (an OAUTH2_ONLY scope) precisely because it returns
+message content. The names were leaking through the same endpoint.
+
+Fixed with one `_display_names` helper used by all three call sites, resolving a whole batch
+in a single call - the resolver recomputes the viewer's allowed-subject set per invocation,
+so per-row resolution would have been both wrong-shaped and slow. Six tests: two that fail
+without the fix, two asserting a *visible* author's name still appears (masking everything
+would be a different bug), and one asserting rows are still returned - the searcher is
+entitled to find the comment, just not to learn who wrote it.
+
+### Two existing tests were asserting the leak
+
+`test_messages_from_person_finds_conversation_without_text_terms` and
+`..._excludes_other_conversations` both checked `self.alice.username in result.title`. With
+masking applied they fail with `'alice' not found in 'From Member 1'`.
+
+Those tests are about *filtering* - that a person-scoped query returns only that person's
+conversation - and were using the title as a convenient proxy for "whose conversation is
+this". The proxy was the leak. They now assert on the result's URL, which carries the
+partner's profile slug, so the original intent is tested without requiring the name to be
+disclosed. Rewriting a test to match new behaviour deserves suspicion, so to be explicit:
+the assertion that changed was incidental to what each test is named for, and the fixture
+profiles are genuinely masked from one another (they are unrelated `baker.make` profiles),
+which is why the leak was visible there at all.
+
+### One refinement the failures prompted
+
+The DM provider now resolves through `display_identity_for` rather than the generic
+`resolve_visible_identities`. Both make the identical visibility decision - the former
+delegates to the latter - but it labels a hidden partner "Former contact", which is what the
+inbox and conversation header already call them. The generic resolver would have said
+"Member 1" in search and "Former contact" in the inbox for the same person.

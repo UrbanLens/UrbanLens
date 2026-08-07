@@ -622,6 +622,36 @@ class VisitSearchProvider(SearchProvider):
         return results
 
 
+def _display_names(viewer: Profile, subjects: list) -> dict[int, str]:
+    """Map profile pk to the name *viewer* is allowed to see for that person.
+
+    Search results name other people - a conversation partner, a comment's
+    author - and every other surface that does resolves the name first: the
+    messages page and the DM export via ``display_identity_for``, the comment
+    list and trip comments via ``resolve_visible_identities`` (whose
+    ``is_masked``/``display_name`` the comment template branches on). Building a
+    result title straight from ``.username`` put names in the search box that the
+    page rendering the very same row would have withheld.
+
+    Resolved for the whole batch in one call rather than per row: the resolver
+    recomputes the viewer's allowed-subject set each time it is invoked.
+
+    Args:
+        viewer: The searching profile.
+        subjects: The people named in this batch of results; duplicates are fine.
+
+    Returns:
+        Mapping of profile pk to display name.
+    """
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identities
+
+    unique = {subject.pk: subject for subject in subjects if subject is not None}
+    if not unique:
+        return {}
+    resolved = resolve_visible_identities(viewer, list(unique.values()))
+    return {pk: (resolved.get(pk, {}).get("display_name") or subject.username) for pk, subject in unique.items()}
+
+
 class DirectMessageSearchProvider(SearchProvider):
     """The user's direct messages.
 
@@ -639,15 +669,25 @@ class DirectMessageSearchProvider(SearchProvider):
             return []
         queryset = message_search_queryset(profile, parsed).select_related("sender__user", "recipient__user")
 
+        from urbanlens.dashboard.services.messaging.direct_messages import display_identity_for
+
+        messages = list(queryset[:limit])
+        # display_identity_for rather than the generic resolver: it makes the same
+        # visibility decision but labels a hidden partner "Former contact", which is
+        # what the inbox and the conversation header already call them. Two different
+        # words for the same person across two views is its own small bug.
+        partners = {(message.recipient if message.sender_id == profile.pk else message.sender).pk: (message.recipient if message.sender_id == profile.pk else message.sender) for message in messages}
+        names = {pk: (display_identity_for(profile, partner)["display_name"] or partner.username) for pk, partner in partners.items()}
+
         results = []
-        for message in queryset[:limit]:
+        for message in messages:
             other = message.recipient if message.sender_id == profile.pk else message.sender
             direction = "To" if message.sender_id == profile.pk else "From"
             peer_slug = other.ensure_slug()
             results.append(
                 SearchResult(
                     type=self.slug,
-                    title=f"{direction} {other.username}",
+                    title=f"{direction} {names.get(other.pk, other.username)}",
                     url=reverse("messages.conversation", kwargs={"profile_slug": peer_slug}),
                     subtitle=f"{message.created:%b %d, %Y}",
                     snippet=excerpt(message.body, parsed.terms),
@@ -800,7 +840,9 @@ class CommentSearchProvider(SearchProvider):
             .distinct()
             .order_by("-created")
         )
-        for comment in comment_qs[:limit]:
+        comments = list(comment_qs[:limit])
+        names = _display_names(profile, [comment.profile for comment in comments])
+        for comment in comments:
             # Comments are read through their host's collection
             # (``pins/<slug>/comments/``, ``wikis/<location_slug>/comments/``),
             # so the host's slug is the addressable half; the comment's own uuid
@@ -820,7 +862,7 @@ class CommentSearchProvider(SearchProvider):
                     type=self.slug,
                     title=f"Comment on {host}",
                     url=url,
-                    subtitle=f"{comment.profile.username} · {comment.created:%b %d, %Y}" if comment.profile else f"{comment.created:%b %d, %Y}",
+                    subtitle=f"{names.get(comment.profile.pk, comment.profile.username)} · {comment.created:%b %d, %Y}" if comment.profile else f"{comment.created:%b %d, %Y}",
                     snippet=excerpt(comment.text, parsed.terms),
                     date=comment.created,
                     score=self.score_of(comment),
@@ -830,13 +872,15 @@ class CommentSearchProvider(SearchProvider):
             )
 
         trip_comment_qs = TripComment.objects.filter(trip__profiles=profile).filter(term_filter(parsed.terms, ["text"])).filter(date_range_filter("created", parsed)).select_related("trip", "author__user").distinct().order_by("-created")
-        for comment in trip_comment_qs[: max(limit - len(results), 0)]:
+        trip_comments = list(trip_comment_qs[: max(limit - len(results), 0)])
+        names = _display_names(profile, [comment.author for comment in trip_comments])
+        for comment in trip_comments:
             results.append(
                 SearchResult(
                     type=self.slug,
                     title=f"Comment on {comment.trip.name}",
                     url=reverse("trips.detail", kwargs={"trip_slug": comment.trip.slug}),
-                    subtitle=f"{comment.author.username} · {comment.created:%b %d, %Y}" if comment.author else f"{comment.created:%b %d, %Y}",
+                    subtitle=f"{names.get(comment.author.pk, comment.author.username)} · {comment.created:%b %d, %Y}" if comment.author else f"{comment.created:%b %d, %Y}",
                     snippet=excerpt(comment.text, parsed.terms),
                     date=comment.created,
                     score=self.score_of(comment),
