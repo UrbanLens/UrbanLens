@@ -4215,3 +4215,34 @@ real browser to verify; the roadmap entry carries the design.
 
 **Page overflows footer** - CSS-level, needs a browser to reproduce; nothing checkable
 statically.
+
+## Verified: this session's frontend work ships on deploy (2026-08-08)
+
+A closing verification worth writing down because the standing "never run `bun run build` on
+this host" rule could otherwise imply the opposite. The tracked `static/dashboard/js/*.js`
+bundles have not been rebuilt this session, and `core.ts` gained a dozen new shared modules -
+so do deploys serve stale bundles missing all of it?
+
+No. `src/bin/init.py` (invoked by the container entrypoint before the healthcheck can pass)
+calls `build_frontend()` at every container start: `bun run sass` + `bun run build` (dev) or
+`bun run deploy` (staging/production), then `collectstatic`. Bundles are compiled fresh from
+the TypeScript source inside the container, with the container's own toolchain. The tracked
+static bundles are dev-host artifacts; the host-side "bun run build is broken / clobbers
+tracked output" note is about this checkout's host environment, not the deploy path - and the
+dev container being up and healthy is itself proof the in-container build succeeds.
+
+## Where the audit stands (2026-08-08)
+
+Every area reachable from this environment has now been covered. What remains needs something
+this environment does not have:
+
+- **The owner's decision**: share-quota treatment (#37), comment deletion semantics (#39),
+  E2EE rotation enforcement (#40), the 12 unresolvable doc references, UL-34's vague repro,
+  and unparking UL-277.
+- **A browser**: the leaflet-draw immediate-commit deletion fix (designed, in the roadmap),
+  the saved-filter page's footer overflow, and UL-353/UL-271's repro detail.
+
+Nothing on the remaining task list clears the bar of "worth doing without those inputs" -
+#38 would re-test surfaces verified correct, #32 is churn with no bug attached, #29's last
+blocks are template-coupled or need a Leaflet stub. Stated per the standing instruction to
+say so plainly rather than manufacture work.
