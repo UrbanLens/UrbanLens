@@ -286,6 +286,8 @@ from urbanlens.dashboard.services.trips.trip_membership import (
     set_member_organizer,
     set_trip_rsvp,
 )
+from urbanlens.dashboard.services.undo.handlers.pin_list import MODEL_LABEL as PIN_LIST_MODEL_LABEL
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.visits.safety import (
     CheckinArchivedError,
     SafetyValidationError,
@@ -1860,6 +1862,7 @@ class PinListDetailView(ExternalApiView):
         pin_list = _get_pin_list(request, list_slug)
         if pin_list is None:
             return Response({"error": "No such list."}, status=404)
+        stash_for_undo(PIN_LIST_MODEL_LABEL, [pin_list], request.user.profile)
         pin_list.delete()
         return Response(status=204)
 

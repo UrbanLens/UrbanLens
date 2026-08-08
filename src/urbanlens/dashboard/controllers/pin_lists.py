@@ -27,6 +27,8 @@ from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 from urbanlens.dashboard.services.pins.pin_list_markup import build_list_markup_snapshot
 from urbanlens.dashboard.services.pins.pin_list_membership import add_pins_to_list, reorder_list_items, resync_smart_list
 from urbanlens.dashboard.services.pins.pin_list_trip import copy_list_pins_to_trip
+from urbanlens.dashboard.services.undo.handlers.pin_list import MODEL_LABEL as PIN_LIST_MODEL_LABEL
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -352,6 +354,7 @@ class PinListDeleteView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest, list_slug: str) -> HttpResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
         pin_list = _get_pin_list_or_404(list_slug, profile)
+        stash_for_undo(PIN_LIST_MODEL_LABEL, [pin_list], profile)
         pin_list.delete()
         return HttpResponseRedirect(f"{reverse('organize.index')}?tab=lists")
 

@@ -349,7 +349,7 @@
     };
 
     window.pinListDelete = function () {
-        if (!confirm('Delete this list? This cannot be undone.')) return;
+        if (!confirm('Delete this list? The pins on it are untouched, and you can restore the list from Settings → Undo History.')) return;
         fetch(LIST_DELETE_URL, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
             .then((r) => {
                 if (!r.ok) return Promise.reject('Could not delete this list.');

@@ -4029,3 +4029,48 @@ was implausible enough to check. The rule that would have caught all four is che
 a scan against a known-good and a known-bad example before believing its output**, and treat
 "one component does X and its siblings do not" as evidence the scan is wrong before concluding
 the code is.
+
+## Pin lists are now restorable from Undo History; two gaps remain documented (2026-08-08)
+
+Coverage audit of the undo framework from the missing-feature angle: which user-facing
+destructive deletes stash for undo, and which silently do not. Pins (all four delete paths,
+including the DRF endpoint the map's delete dialog calls), wikis, trips, safety check-ins and
+saved filters all stash. **Pin lists, labels, markup maps, albums and custom fields did not** -
+five permanent deletes in an app whose pin-delete dialog promises "You can restore it from
+Settings → Undo History".
+
+**Implemented: `PinListUndoHandler`** (`services/undo/handlers/pin_list.py`), wired into both
+delete endpoints (web + external API). A list is exactly what undo exists for - deleting one
+destroys hand-built curation while the pins survive. Design points, following the rules this
+audit established:
+
+- Pre-checks `uq_pin_list_profile_name` and the owning profile before creating anything, per
+  the constraint rule from the four handler crashes. The slug constraint cannot fire because
+  the slug is regenerated rather than restored.
+- Restores leniently where the missing piece was never part of the deletion: member pins
+  deleted since are skipped (a list of survivors beats no list), and dead
+  `source_saved_filter`/`markup_map` links are dropped - both are SET_NULL on their targets'
+  own deletes, so this matches what would have happened to a live list.
+- `smart_boundary` (GEOS geometry) round-trips as EWKT so the payload stays JSON-safe.
+- The list-delete confirm no longer says "This cannot be undone", which had just become false.
+
+**Documented for follow-up rather than implemented, in judgement order:**
+
+- **Label** - the next most valuable, and more destructive than lists in one way: deleting a
+  label silently strips it from every pin carrying it. A handler needs: the label's own fields,
+  its `parents` m2m (hierarchy), the pk list from `Pin.labels.through` (which pins carried it),
+  and its `LabelCustomization` rows. Restore pre-checks: profile exists, plus whatever
+  name-uniqueness Label enforces per kind (check the model - the organize page suggests
+  per-profile-per-kind). Pins that vanished are skipped like list members. The complication
+  that makes this a deliberate follow-up rather than a quick add: `label_retire_redata_taxonomy
+  _on_delete` fires on label delete (REData taxonomy retirement), so restore likely needs to
+  *un-retire* or re-sync the taxonomy - understand that signal's contract first.
+- **MarkupMap** - hand-drawn annotation data, clearly worth protecting. Complication: markup
+  maps are shared (`MarkupMapShare`), attachable to comments/messages/pin lists, and deletes
+  happen from three controllers. Serialize the geojson + style fields; decide whether shares
+  are restored (probably not - the recipient relationship was severed) and whether
+  comment/message attachments should relink (probably yes when the row still exists, same
+  SET_NULL-lenient rule as lists).
+- **Album / CustomField** - lower value: an album is a grouping of surviving photos
+  (`AlbumItem` rows), a custom field's values cascade with it. Same handler pattern applies
+  directly with nothing novel; do them if a user ever asks.
