@@ -57,6 +57,17 @@ REVIEWED: dict[tuple[str, str, str], str] = {
         "copy time; it self-heals on their next photo action. See docs/PROBLEMS.md."
     ),
     (
+        "dashboard/services/undo/handlers/markup_map.py",
+        "PinMarkup",
+        "bulk_create",
+    ): (
+        "Undo restore recreating a map's annotations. The skipped per-item signals all do one "
+        "thing - defer a pin-inference resync of the parent map - and the handler calls "
+        "defer_pin_inference_sync(map.pk) itself right after the bulk_create, which also fixes "
+        "an ordering hazard: the map's own created-save defers its resync before the items "
+        "exist under autocommit."
+    ),
+    (
         "dashboard/services/pins/pin_list_trip.py",
         "TripActivity",
         "bulk_create",

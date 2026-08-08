@@ -84,6 +84,25 @@ class MarkupMapUndoTests(TestCase):
 
         self.assertFalse(MarkupMapShare.objects.filter(markup_map=restored).exists())
 
+    def test_the_restore_schedules_a_pin_inference_resync_that_sees_the_annotations(self):
+        # bulk_create fires no post_save, so without the handler's explicit
+        # defer_pin_inference_sync the restored drawing would never be scanned
+        # for detected pins - the bulk-write signal guard caught exactly this.
+        from unittest import mock
+
+        undo_action = self._delete_with_undo()
+
+        with self.captureOnCommitCallbacks(execute=False) as callbacks:
+            restored = restore_undo_action(undo_action)[0]
+            self.assertEqual(restored.items.count(), 1)  # items exist before any callback runs
+
+        with mock.patch("urbanlens.dashboard.services.sharing.map_pin_share_detection.sync_pin_inferences") as sync:
+            for callback in callbacks:
+                callback()
+
+        synced_maps = {call.args[0].pk for call in sync.call_args_list}
+        self.assertIn(restored.pk, synced_maps)
+
     def test_the_delete_view_stashes(self):
         self.client.force_login(self.profile.user)
 

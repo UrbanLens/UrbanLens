@@ -4127,3 +4127,31 @@ misattributed, since its profile FK is CASCADE.
 safety check-ins, saved filters, pin lists, labels, markup maps. Album and CustomField remain
 deliberately uncovered (an album is a grouping of surviving photos; a custom field's values
 cascade with it) - the handler pattern applies directly if ever wanted.
+
+## The bulk-write guard caught the audit's own new code (2026-08-08)
+
+Full-suite verification of the three undo commits: **10,197 passed, 1 failed** at 43c26dd6,
+and the failure was `test_bulk_write_signal_guard` flagging `PinMarkup.bulk_create` in the
+markup-map undo handler - the guard built earlier in this audit, doing precisely what it was
+built for, against precisely the person who built it.
+
+And it was right on the merits, not just procedurally. The skipped per-item signals defer a
+pin-inference resync of the parent map. The map's own `created` save also defers one, which
+*looks* like cover - but under autocommit that `on_commit` callback can run before the
+annotations are bulk-created, syncing a drawing of zero items, with the skipped per-item
+signals never triggering a later pass. An ordering hazard that review would not have seen.
+
+Fixed per the guard's own instruction (do the work explicitly): `signals.py` now exposes
+`defer_pin_inference_sync` as a public seam, the handler calls it right after the
+`bulk_create`, the guard's REVIEWED entry records the reasoning, and a test proves the resync
+is scheduled at a point where the restored items already exist
+(`captureOnCommitCallbacks(execute=False)`, then run the callbacks under a mock).
+
+Also corrected `docs/FEATURES.md`'s undo entry, which was stale twice over: it called the
+framework "cache-backed" when the payload deliberately lives on the durable `UndoAction` row
+(the model docstring explains a cache entry can vanish before its window ends), and it listed
+four covered models out of the current eight.
+
+Frontend and ruff verified clean alongside. The one failure is fixed and the affected
+selection (265 markup/undo/bulk_write/inference tests) passes; the next full run will confirm
+the whole.

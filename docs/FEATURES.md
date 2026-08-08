@@ -392,8 +392,12 @@ User-defined private fields for **pins**, **photos**, **people**, and **maps**. 
 
 ## Undo / Data Safety
 
-- Generic, cache-backed undo framework: deleting a pin, wiki, safety check-in, or trip stages the
-  action for a limited window before it's finalized
+- Generic undo framework: deleting a pin, wiki, trip, safety check-in, saved filter, pin list,
+  label, or markup map stashes a durable snapshot (on the ``UndoAction`` row itself, not in a
+  cache) restorable for a retention window. Restores pre-check the constraints the recreate
+  could violate and refuse cleanly rather than 500ing; relational pieces that were never part
+  of the deletion (a list's member pins, a label's parents, a map's annotation authors)
+  restore leniently, skipping whatever has since been deleted
 - Settings → Undo History page to review and restore recently undo-able actions
 
 ## Achievements

@@ -97,6 +97,7 @@ class MarkupMapUndoHandler(UndoHandler):
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
         from urbanlens.dashboard.models.markup.model import CustomLayer
+        from urbanlens.dashboard.models.markup.signals import defer_pin_inference_sync
         from urbanlens.dashboard.models.pin.model import Pin
         from urbanlens.dashboard.models.profile.model import Profile
         from urbanlens.dashboard.services.undo.service import UndoExpiredError
@@ -123,7 +124,7 @@ class MarkupMapUndoHandler(UndoHandler):
             # raise, and inventing a different author would misattribute it.
             author_ids = {a["profile_id"] for a in annotations}
             live_authors = set(Profile.objects.filter(pk__in=author_ids).values_list("pk", flat=True))
-            PinMarkup.objects.bulk_create(
+            created_items = PinMarkup.objects.bulk_create(
                 [
                     PinMarkup(
                         parent_map=markup_map,
@@ -135,5 +136,12 @@ class MarkupMapUndoHandler(UndoHandler):
                     if annotation["profile_id"] in live_authors
                 ],
             )
+            if created_items:
+                # bulk_create fires no post_save, so the per-item pin-inference
+                # signals never run - and the map's own created-save defers its
+                # resync at a moment when, under autocommit, the annotations may
+                # not exist yet. Scheduling it here, after the items, is what
+                # guarantees the resync sees the restored drawing.
+                defer_pin_inference_sync(markup_map.pk)
             restored.append(markup_map)
         return restored
