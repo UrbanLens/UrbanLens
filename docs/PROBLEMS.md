@@ -4183,3 +4183,35 @@ three times. Seven tests. Frontend suite 372 → 379.
 Also checked and deliberately not touched: UL-277 (per-source freshness windows) is parked at
 the owner's explicit request in this file; the nearest open Tier-1 item, but not mine to
 unpark.
+
+## Filter-view defects cluster: triaged, 3 of 5 already resolved (2026-08-08)
+
+Roadmap Tier-1 item 5 listed five defects and prescribed one agent owning the page. Static
+triage shows the list is mostly stale:
+
+- **Icon picker dead - already fixed.** `entries/saved-filter-detail.ts` exists solely to fix
+  it, and its comment names the root cause: the page rendered the shared `_icon_picker.html`
+  partial but never loaded anything defining `window.IconPicker`, so the trigger's onclick
+  threw silently. The entry installs the global picker.
+- **Badge picker parity - already fixed** (2026-07-23, browser-verified; see the label-picker
+  extraction entry above). Both picker shapes now come from `shared/label-picker.ts`.
+- **Preview doesn't refresh on criteria change - already fixed.** The detail page has a
+  debounced live preview on form change/input with a supersession token (the same
+  stale-response pattern this audit fixed in mention-autocomplete), and `_sfSaveRegions`
+  dispatches a synthetic bubbling `change` precisely because property assignment fires no DOM
+  event - region edits refresh the preview too.
+
+**Polygon resurrection - mechanism identified, deliberately not blind-fixed.** The page's own
+logic is correct: `draw:created/edited/deleted` all persist, and loading round-trips through
+`_sfRegionLayers` properly. The resurrection is stock leaflet-draw semantics: delete mode is
+transactional, click-deletions commit only via the sub-toolbar's small "Save" action, and
+disabling delete mode (e.g. by clicking the polygon tool to draw next) **reverts** uncommitted
+deletions - `draw:deleted` never fires, so the layers genuinely return, exactly matching the
+report "deleted polygons resurrect on next draw". The fix is to stop using leaflet-draw's
+remove tool (`edit.remove: false`) and implement immediate-commit deletion - a toggle that
+removes a clicked layer from the feature group and calls `_sfSaveRegions()` at once. Not
+shipped from this environment because it changes live map interaction behaviour, which needs a
+real browser to verify; the roadmap entry carries the design.
+
+**Page overflows footer** - CSS-level, needs a browser to reproduce; nothing checkable
+statically.

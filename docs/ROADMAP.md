@@ -388,10 +388,23 @@ Ordering within each tier is roughly by (user impact × risk × leverage). IDs r
    too vague to reproduce without asking Jess which specific setting/page - do that before
    spending more time on it, rather than guessing at a shared cause that these two related
    items turned out not to have.
-5. **Filter-view page defects cluster** (prompts backlog): page overflows footer; deleted
-   include/exclude polygons resurrect on next draw; map preview doesn't refresh on criteria
-   change; icon picker dead; badge picker lacks the map-sidebar's features. One agent should own
-   the whole page against the map sidebar as reference implementation (§2.3).
+5. **Filter-view page defects cluster** (prompts backlog) — TRIAGED 2026-08-08, three of five
+   already resolved: the dead icon picker was fixed by `entries/saved-filter-detail.ts` (its
+   own comment describes the missing-global root cause), the badge picker gained the map
+   sidebar's full engine 2026-07-23 (`shared/label-picker.ts`, browser-verified per
+   `docs/PROBLEMS.md`), and the preview *does* live-refresh on criteria change (debounced
+   change/input listeners + a supersession token; `_sfSaveRegions` even dispatches a synthetic
+   `change` because property assignment fires no DOM event). Two remain:
+   - **Polygon resurrection — mechanism identified, fix designed, needs a browser to verify.**
+     It is leaflet-draw's transactional delete: click-deletions only commit when the user
+     clicks the tiny "Save" link in the delete sub-toolbar; switching straight to the draw
+     tool disables delete mode, which *reverts* uncommitted deletions (`draw:deleted` never
+     fires, so `_sfSaveRegions` is never wrong - the layers genuinely come back). Fix: drop
+     `edit.remove` from the Draw control and implement immediate-commit deletion (a delete
+     toggle that removes a clicked layer from `drawnItems` and calls `_sfSaveRegions()` right
+     away), since the page's own save logic is already correct on every committed change.
+   - **Page overflows footer** — CSS; reproduce in a browser before touching it.
+
 6. **Pin-detail cache freshness** (UL-277) — items marked "fresh" after 10+ minutes;
    audit the freshness-window computation in `external_data.py`.
 7. ~~**Filter correctness**: unrated pin passing a rating filter (UL-270); sliders ignoring
