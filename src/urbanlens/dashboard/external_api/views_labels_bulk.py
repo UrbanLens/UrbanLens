@@ -31,6 +31,8 @@ from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.signals import refresh_map_pin_cache_for_label_ids
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
+from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 
 if TYPE_CHECKING:
     from rest_framework.request import Request
@@ -103,6 +105,7 @@ class LabelBulkDeleteView(ExternalApiView):
             return Response({"error": "No matching labels."}, status=404)
 
         count = len(labels)
+        stash_for_undo(LABEL_MODEL_LABEL, labels, request.user.profile)
         Label.objects.filter(pk__in=[label.pk for label in labels]).delete()
         return Response({"deleted": count})
 

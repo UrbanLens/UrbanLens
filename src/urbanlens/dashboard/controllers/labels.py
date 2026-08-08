@@ -42,6 +42,8 @@ from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
 from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
+from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -774,6 +776,7 @@ class LabelDeleteView(_LabelKindMixin, LoginRequiredMixin, View):
         if label.is_protected:
             return HttpResponse(f"'{escape(label.name)}' is a protected status and cannot be deleted.", status=403)
 
+        stash_for_undo(LABEL_MODEL_LABEL, [label], _request_profile(request))
         label.delete()
         return _render_rows(request, self.kind, _request_profile(request))
 
@@ -919,6 +922,9 @@ class LabelBulkDeleteView(_LabelKindMixin, LoginRequiredMixin, View):
         qs = Label.objects.filter(id__in=ids, profile=profile, kind=self.kind)
         if self.kind == KIND_STATUS:
             qs = qs.filter(is_protected=False)
+        doomed = list(qs)
+        if doomed:
+            stash_for_undo(LABEL_MODEL_LABEL, doomed, profile)
         qs.delete()
         return _render_rows(request, self.kind, profile)
 

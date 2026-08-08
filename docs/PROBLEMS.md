@@ -4074,3 +4074,31 @@ audit established:
 - **Album / CustomField** - lower value: an album is a grouping of surviving photos
   (`AlbumItem` rows), a custom field's values cascade with it. Same handler pattern applies
   directly with nothing novel; do them if a user ever asks.
+
+## Labels are now restorable from Undo History (2026-08-08)
+
+Second of the two designed follow-ups from the undo coverage audit. The gating question -
+whether the REData taxonomy retirement signal makes restore hazardous - resolved cleanly:
+the signal pair is self-healing. Deleting queues a retirement
+(`retire_redata_taxonomy_on_delete`), and recreating fires `post_save`, whose
+`sync_redata_taxonomy_on_save` **upserts** a fresh definition. The parent relinks re-trigger
+definition syncs via the m2m signal, and the pin re-assignments refresh the map pin cache the
+same way any label add does. No special handling needed in the handler at all.
+
+What the handler captures is the part deletion actually destroys: besides the label's own
+fields, the cascade severs both directions of the `parents` self-M2M (children keep existing
+but lose their link) and the label's assignment to every pin carrying it - visible state,
+since label order decides which icon a pin draws.
+
+One deliberate divergence from the other handlers: `Label` has **no unique constraints**, so
+restore never refuses. A name reused since simply yields two labels, which the organize
+page's merge tool already handles - refusing would be stricter than the app itself is. The
+constraint pre-check rule still holds; there is just nothing to pre-check beyond the owning
+profile.
+
+Wired into all three delete sites (single, web bulk, external API bulk). Ten tests, including
+the in-batch hierarchy relink (bulk-deleting parent and child together must link their two
+*new* rows, not the dead pks - same shape as the pin handler's parent ordering bug).
+
+Remaining from the coverage audit: MarkupMap (design documented in the pin-list entry),
+Album, CustomField (low value, pattern applies directly).
