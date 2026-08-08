@@ -29,6 +29,8 @@ from urbanlens.dashboard.services.map.map_snapshot import (
 from urbanlens.dashboard.services.notifications.comment_notifications import notify_reply
 from urbanlens.dashboard.services.notifications.mentions import render_comment_text, viewer_pinned_uuids
 from urbanlens.dashboard.services.trips.trip_comments import ALLOWED_COMMENT_EMOJIS
+from urbanlens.dashboard.services.undo.handlers.markup_map import MODEL_LABEL as MARKUP_MAP_MODEL_LABEL
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, resolve_visible_wiki
 
 # Re-exported so existing imports (e.g. tests) keep resolving from this module.
@@ -321,6 +323,10 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
         markup_map = comment.markup_map
         comment.delete()
         if markup_map is not None:
+            # The comment itself is not restorable, but the map attached to it is
+            # hand-drawn work - stash it so deleting the comment can't silently
+            # destroy the drawing.
+            stash_for_undo(MARKUP_MAP_MODEL_LABEL, [markup_map], markup_map.profile)
             markup_map.delete()
         # Replies to a deleted comment survive (parent FK is SET_NULL), becoming
         # orphaned top-level comments. Re-render the whole panel rather than just
@@ -388,6 +394,10 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
         markup_map = comment.markup_map
         comment.delete()
         if markup_map is not None:
+            # The comment itself is not restorable, but the map attached to it is
+            # hand-drawn work - stash it so deleting the comment can't silently
+            # destroy the drawing.
+            stash_for_undo(MARKUP_MAP_MODEL_LABEL, [markup_map], markup_map.profile)
             markup_map.delete()
         # Replies to a deleted comment survive (parent FK is SET_NULL), becoming
         # orphaned top-level comments. Re-render the whole panel rather than just

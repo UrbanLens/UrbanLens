@@ -32,6 +32,8 @@ from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
 from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title, sanitize_map_data
 from urbanlens.dashboard.services.sharing.map_sharing import clone_markup_map
+from urbanlens.dashboard.services.undo.handlers.markup_map import MODEL_LABEL as MARKUP_MAP_MODEL_LABEL
+from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.visits.safety import notify_contacts_of_update
 from urbanlens.dashboard.services.wiki.wiki_access import location_visible_to, resolve_visible_wiki
 
@@ -477,6 +479,7 @@ class MarkupMapDeleteView(LoginRequiredMixin, View):
             Empty 200 response on success.
         """
         markup_map = get_object_or_404(MarkupMap, uuid=map_uuid, profile__user=request.user)
+        stash_for_undo(MARKUP_MAP_MODEL_LABEL, [markup_map], markup_map.profile)
         markup_map.delete()
         return HttpResponse("", status=200)
 

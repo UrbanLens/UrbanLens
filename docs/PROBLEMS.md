@@ -4102,3 +4102,28 @@ the in-batch hierarchy relink (bulk-deleting parent and child together must link
 
 Remaining from the coverage audit: MarkupMap (design documented in the pin-list entry),
 Album, CustomField (low value, pattern applies directly).
+
+## Markup maps are now restorable from Undo History (2026-08-08)
+
+Last of the designed follow-ups from the undo coverage audit. A markup map is hand-drawn
+work - shapes, arrows, labels, security indicators placed one by one - and deleting it
+cascaded away every `PinMarkup` annotation, arguably the most expensive data any of the
+handlers protect.
+
+The shares decision, made and recorded in the handler's docstring: **`MarkupMapShare` rows
+are deliberately not restored.** Recreating them would silently re-expose the map to every
+past recipient; the delete severed those relationships, and an undo brings back the owner's
+work, not other people's access to it. The owner can re-share. Inbound attachments (a
+comment's or DM's `markup_map` FK) are SET_NULL and already nulled before any stash could
+run, so they are out of scope by construction.
+
+Wired into the explicit delete view and both comment-delete sites that destroy an attached
+map as a side effect - the comment itself is not restorable (task #39 pending), but deleting
+a comment must not silently destroy the drawing attached to it. Annotations restore with
+their original authors; one whose author's account is gone is skipped rather than
+misattributed, since its profile FK is CASCADE.
+
+**Undo coverage is now complete for every hand-curated deletable**: pins, wikis, trips,
+safety check-ins, saved filters, pin lists, labels, markup maps. Album and CustomField remain
+deliberately uncovered (an album is a grouping of surviving photos; a custom field's values
+cascade with it) - the handler pattern applies directly if ever wanted.
