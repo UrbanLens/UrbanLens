@@ -4155,3 +4155,31 @@ four covered models out of the current eight.
 Frontend and ruff verified clean alongside. The one failure is fixed and the affected
 selection (265 markup/undo/bulk_write/inference tests) passes; the next full run will confirm
 the whole.
+
+## Confirming full run clean; undo restores now refresh the map cache (2026-08-08)
+
+**10,199 passed, 0 failed, 1,429 subtests, in 58:03** at `f8e0c23d`, under the usual
+discipline (container synced and file-list-verified first, nothing copied during the run).
+This confirms the guard-catch fix: the previous run's one failure is gone and the suite has
+grown 10,174 → 10,199 across the three undo handlers and their guard entry.
+
+**One client-side bug found and fixed while the run executed** (host-side only, so the run's
+claim is unaffected). Investigating the roadmap's open UL-279 showed its server half already
+fixed by 8ed25a93 and the organize/label pages covered by `organize.ts`'s dirty-flagging -
+but the **Undo History restore path** was not covered. The map's client pin cache polls only
+the newest pin's `updated` timestamp: a restored *pin* advances that and is picked up, but a
+restored **label** returns its pin assignments through the M2M without touching any pin row,
+and a restored list or markup map likewise moves nothing the poll can see. So a restore from
+Settings → Undo History left the map rendering the pre-restore world until the cache expired.
+This matters more now than when UL-279 was filed, since label/list/map restores only became
+possible this session.
+
+Fixed as `shared/undo-map-refresh.ts`: a delegated `htmx:afterRequest` listener flagging
+`ul_pins_dirty` after a successful POST to `/undo/…/restore/`, installed once by `core.js`
+rather than inlined in the undo partial - the partial is re-swapped after every restore, so an
+inline listener would stack a copy per swap, the exact trap this session's test harnesses hit
+three times. Seven tests. Frontend suite 372 → 379.
+
+Also checked and deliberately not touched: UL-277 (per-source freshness windows) is parked at
+the owner's explicit request in this file; the nearest open Tier-1 item, but not mine to
+unpark.
