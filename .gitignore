@@ -7,6 +7,9 @@ __pycache__/
 *.pyc
 **/frontend/static/admin/
 **/frontend/static/**/*.css
+# Bundled JS output (bin/build-frontend.ts writes <app>/frontend/static/<app>/js/).
+# Hand-written JS not compiled from TS lives in frontend/static/js/ (no app segment) and stays tracked.
+**/frontend/static/*/js/
 src/urbanlens/frontend/static/dashboard/images/
 src/urbanlens/frontend/static/icons/unused/
 src/urbanlens/media/

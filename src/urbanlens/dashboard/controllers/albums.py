@@ -19,6 +19,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.controllers.image_gallery import create_uploaded_photo
 from urbanlens.dashboard.models.album.model import ALBUM_KIND_SPECS, Album, AlbumKind, album_kind_spec
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -27,6 +28,7 @@ from urbanlens.dashboard.services.core.text_limits import MAX_ALBUM_DESCRIPTION_
 from urbanlens.dashboard.services.media.media_relevance import MATERIALIZE_ERROR_MESSAGE
 from urbanlens.dashboard.services.photos.albums import (
     add_images_to_album,
+    album_date_range,
     album_images,
     albums_with_images,
     cover_from_images,
@@ -111,8 +113,8 @@ def _album_row(owner: Pin | Wiki, album: Album, images: list) -> dict:
     same reasoning as ``custom_layers._render_layer_list``.
 
     Takes *images* already resolved so batched callers don't re-query per
-    album; the cover and count are both derived from it, which also keeps the
-    count honest for a viewer who can't see every photo in the album.
+    album; the cover, count, and date range are all derived from it, which also
+    keeps them honest for a viewer who can't see every photo in the album.
 
     Args:
         owner: The Pin or Wiki the album belongs to.
@@ -124,18 +126,89 @@ def _album_row(owner: Pin | Wiki, album: Album, images: list) -> dict:
     """
     prefix = _url_prefix(owner)
     slug = _owner_slug(owner)
+    date_start, date_end = album_date_range(images)
     return {
         "album": album,
         "images": images,
         "cover": cover_from_images(album, images),
         "photo_count": len(images),
+        "date_start": date_start,
+        "date_end": date_end,
+        # The card's own href, so an album tile is a real link (middle-click,
+        # copy-link, no-JS) even though HTMX normally handles the click.
+        "list_url": reverse(prefix, args=[slug]),
         "detail_url": reverse(f"{prefix}.detail", args=[slug, album.slug]),
         "edit_url": reverse(f"{prefix}.edit", args=[slug, album.slug]),
         "delete_url": reverse(f"{prefix}.delete", args=[slug, album.slug]),
         "add_url": reverse(f"{prefix}.add", args=[slug, album.slug]),
         "remove_url": reverse(f"{prefix}.remove", args=[slug, album.slug]),
         "reorder_url": reverse(f"{prefix}.reorder", args=[slug, album.slug]),
+        "upload_url": reverse(f"{prefix}.upload", args=[slug, album.slug]),
     }
+
+
+def _photo_map_payload(images: list, viewer: Profile | None) -> list[dict]:
+    """Describe *images* for the album map layer.
+
+    Only the viewer's own photos are marked movable: repositioning goes through
+    the gallery's per-image endpoint, which refuses to move someone else's
+    upload. Sending ``movable`` from here keeps the map from offering a drag
+    that the server would then reject.
+
+    Args:
+        images: The album's viewer-visible photos.
+        viewer: The browsing profile.
+
+    Returns:
+        One dict per photo that has a position, JSON-serialisable.
+    """
+    payload = []
+    for image in images:
+        latitude, longitude = image.effective_latitude, image.effective_longitude
+        if latitude is None or longitude is None:
+            continue
+        payload.append(
+            {
+                "id": image.pk,
+                "url": image.display_url,
+                "lat": float(latitude),
+                "lng": float(longitude),
+                "placed": image.latitude is not None and image.longitude is not None,
+                "movable": viewer is not None and image.profile_id == viewer.pk,
+                "caption": image.caption or "",
+            }
+        )
+    return payload
+
+
+def _album_detail_context(owner: Pin | Wiki, album: Album, viewer: Profile) -> dict:
+    """Assemble the single-album view's context.
+
+    Args:
+        owner: The Pin or Wiki the album belongs to.
+        album: The album being shown.
+        viewer: The browsing profile.
+
+    Returns:
+        Template context for ``_album_detail.html``.
+    """
+    row = _album_row(owner, album, album_images(album, viewer))
+    filed_ids = {image.pk for image in row["images"]}
+    row["available_images"] = [image for image in eligible_images_for(owner, viewer) if image.pk not in filed_ids]
+    row["back_url"] = reverse(_url_prefix(owner), args=[_owner_slug(owner)])
+    row["list_url"] = row["back_url"]
+    # The gallery's own per-image endpoint owns repositioning; the album map
+    # posts to it rather than growing a second writer for Image coordinates.
+    row["reposition_base"] = reverse("pin.gallery" if isinstance(owner, Pin) else "location.wiki.gallery", args=[_owner_slug(owner)])
+    row["map_photos"] = _photo_map_payload(row["images"], viewer)
+    row["placed_count"] = len(row["map_photos"])
+    row["context_type"] = "pin" if isinstance(owner, Pin) else "wiki"
+    # Fallback centre for an album whose photos carry no coordinates at all;
+    # the map fits to the photos themselves whenever there are any.
+    location = owner.location
+    row["map_center_lat"] = float(location.latitude) if location is not None and location.latitude is not None else None
+    row["map_center_lng"] = float(location.longitude) if location is not None and location.longitude is not None else None
+    return row
 
 
 def _photos_context(owner: Pin | Wiki, viewer: Profile | None) -> dict:
@@ -154,6 +227,7 @@ def _photos_context(owner: Pin | Wiki, viewer: Profile | None) -> dict:
         "album_rows": rows,
         "loose_images": list(loose_images_for(owner, viewer)),
         "create_url": reverse(_url_prefix(owner), args=[_owner_slug(owner)]),
+        "list_url": reverse(_url_prefix(owner), args=[_owner_slug(owner)]),
         "context_type": "pin" if is_pin else "wiki",
         "pin": owner if is_pin else None,
         "wiki": None if is_pin else owner,
@@ -191,10 +265,19 @@ class AlbumPhotosView(LoginRequiredMixin, View):
     GET /map/pin/<pin_slug>/albums/
     GET /location/<location_slug>/wiki/albums/
     POST (same URLs) creates an album.
+
+    ``?album=<slug>`` renders that album's own view instead of the list, which
+    is what makes an opened album a real, shareable URL: the browser's Back
+    button and a pasted link both land on the same place. The client pushes
+    that query string when an album is opened (see ``shared/album-items.ts``).
     """
 
     def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
-        """Render the Photos panel.
+        """Render the Photos panel, or one album when ``?album=`` is given.
+
+        An ``album`` slug that doesn't resolve falls back to the list rather
+        than 404ing - a stale bookmark to a since-deleted album should still
+        land somewhere useful.
 
         Args:
             request: HttpRequest.
@@ -202,10 +285,15 @@ class AlbumPhotosView(LoginRequiredMixin, View):
             location_slug: Slug of the parent location (community route).
 
         Returns:
-            The rendered ``_albums_panel.html`` partial.
+            The rendered ``_albums_panel.html`` or ``_album_detail.html`` partial.
         """
-        owner, _qs = _resolve_album_owner(request, pin_slug, location_slug)
+        owner, qs = _resolve_album_owner(request, pin_slug, location_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        if album_slug := request.GET.get("album"):
+            album = qs.filter(slug=album_slug).first()
+            if album is not None:
+                return render(request, "dashboard/partials/albums/_album_detail.html", _album_detail_context(owner, album, profile))
         return _render_photos_panel(request, owner, profile)
 
     def post(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
@@ -266,11 +354,7 @@ class AlbumDetailView(LoginRequiredMixin, View):
         """
         owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        row = _album_row(owner, album, album_images(album, profile))
-        filed_ids = {image.pk for image in row["images"]}
-        row["available_images"] = [image for image in eligible_images_for(owner, profile) if image.pk not in filed_ids]
-        row["back_url"] = reverse(_url_prefix(owner), args=[_owner_slug(owner)])
-        return render(request, "dashboard/partials/albums/_album_detail.html", row)
+        return render(request, "dashboard/partials/albums/_album_detail.html", _album_detail_context(owner, album, profile))
 
 
 class AlbumEditView(LoginRequiredMixin, View):
@@ -462,6 +546,40 @@ class AlbumAddPhotosView(LoginRequiredMixin, View):
         if result is None:
             return {"error": MATERIALIZE_ERROR_MESSAGE}
         return {"added": 1, "image_id": result}
+
+
+class AlbumUploadView(LoginRequiredMixin, View):
+    """Upload a photo straight into an album.
+
+    POST /map/pin/<pin_slug>/albums/<album_slug>/upload/
+    POST /location/<location_slug>/wiki/albums/<album_slug>/upload/
+
+    Multipart, one ``image`` file per request - same contract as the pin and
+    wiki galleries, whose response body the client reuses to render the new
+    tile. The photo is created against the album's owner first, so it lands in
+    the owner's gallery too; filing it in the album is the extra step.
+    """
+
+    def post(self, request: HttpRequest, album_slug: str, pin_slug: str | None = None, location_slug: str | None = None) -> JsonResponse:
+        """Store the uploaded photo and file it in this album.
+
+        Args:
+            request: HttpRequest carrying the multipart ``image`` file.
+            album_slug: Slug of the album to upload into.
+            pin_slug: Slug of the parent pin (personal route).
+            location_slug: Slug of the parent location (community route).
+
+        Returns:
+            201 with the gallery JSON for the new photo, or the rejection's
+            own status (400/409/413/415) with an ``error`` message.
+        """
+        owner, _qs, album = _get_album(request, pin_slug, location_slug, album_slug)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        image, response = create_uploaded_photo(request, owner, profile)
+        if image is not None:
+            add_images_to_album(album, [image], profile)
+        return response
 
 
 class AlbumRemovePhotosView(LoginRequiredMixin, View):

@@ -346,8 +346,9 @@
     {# -- Comments tab -------------------------------------------------------- #}
     {# -- Photos tab: community albums first, then wiki photos not in one ---- #}
     <section class="page-tab-panel" data-tab-panel="photos" hidden>
+        {# ?album= is carried through so a deep link (or a Back navigation) loads that album directly. #}
         <div id="albums-panel"
-             hx-get="{% url 'location.wiki.albums' location.slug %}"
+             hx-get="{% url 'location.wiki.albums' location.slug %}{% if request.GET.album %}?album={{ request.GET.album|urlencode }}{% endif %}"
              hx-trigger="load"
              hx-swap="outerHTML"
              class="albums-panel card wiki-card">

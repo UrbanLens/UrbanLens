@@ -18,7 +18,7 @@ class ProfileNote(abstract.FrontendDashboardModel):
     cannot see it.  A viewer may keep multiple notes per subject.
     """
 
-    content = EncryptedTextField(blank=True, default="")
+    content = EncryptedTextField(blank=True, default="", fail_soft=True)
 
     author = ForeignKey(
         "dashboard.Profile",

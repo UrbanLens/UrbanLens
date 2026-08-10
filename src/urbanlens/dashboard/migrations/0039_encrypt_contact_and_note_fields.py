@@ -54,7 +54,7 @@ class Migration(migrations.Migration):
             model_name="emergencycontactdefault",
             name="email",
             field=urbanlens.dashboard.models.fields.EncryptedTextField(
-                blank=True, null=True, validators=[django.core.validators.validate_email]
+                blank=True, fail_soft=True, null=True, validators=[django.core.validators.validate_email]
             ),
         ),
         migrations.AlterField(
@@ -62,6 +62,7 @@ class Migration(migrations.Migration):
             name="google_email",
             field=urbanlens.dashboard.models.fields.EncryptedTextField(
                 blank=True,
+                fail_soft=True,
                 help_text="Email of the connected Google account, for display only.",
                 null=True,
             ),
@@ -71,6 +72,7 @@ class Migration(migrations.Migration):
             name="google_email",
             field=urbanlens.dashboard.models.fields.EncryptedTextField(
                 blank=True,
+                fail_soft=True,
                 help_text="Email of the connected Google account, for display only.",
                 null=True,
             ),
@@ -79,7 +81,7 @@ class Migration(migrations.Migration):
             model_name="profile",
             name="area",
             field=urbanlens.dashboard.models.fields.EncryptedTextField(
-                blank=True, null=True
+                blank=True, fail_soft=True, null=True
             ),
         ),
         migrations.AlterField(
@@ -87,6 +89,7 @@ class Migration(migrations.Migration):
             name="bio",
             field=urbanlens.dashboard.models.fields.EncryptedTextField(
                 blank=True,
+                fail_soft=True,
                 max_length=50000,
                 null=True,
                 validators=[django.core.validators.MaxLengthValidator(50000)],
@@ -96,56 +99,56 @@ class Migration(migrations.Migration):
             model_name="profile",
             name="discord_username",
             field=urbanlens.dashboard.models.fields.EncryptedTextField(
-                blank=True, default=""
+                blank=True, default="", fail_soft=True
             ),
         ),
         migrations.AlterField(
             model_name="profile",
             name="matrix_handle",
             field=urbanlens.dashboard.models.fields.EncryptedTextField(
-                blank=True, default=""
+                blank=True, default="", fail_soft=True
             ),
         ),
         migrations.AlterField(
             model_name="profile",
             name="phone_number",
             field=urbanlens.dashboard.models.fields.EncryptedTextField(
-                blank=True, default=""
+                blank=True, default="", fail_soft=True
             ),
         ),
         migrations.AlterField(
             model_name="profile",
             name="signal_username",
             field=urbanlens.dashboard.models.fields.EncryptedTextField(
-                blank=True, default=""
+                blank=True, default="", fail_soft=True
             ),
         ),
         migrations.AlterField(
             model_name="profile",
             name="telegram_username",
             field=urbanlens.dashboard.models.fields.EncryptedTextField(
-                blank=True, default=""
+                blank=True, default="", fail_soft=True
             ),
         ),
         migrations.AlterField(
             model_name="profile",
             name="whatsapp_number",
             field=urbanlens.dashboard.models.fields.EncryptedTextField(
-                blank=True, default=""
+                blank=True, default="", fail_soft=True
             ),
         ),
         migrations.AlterField(
             model_name="profileemail",
             name="email",
             field=urbanlens.dashboard.models.fields.EncryptedTextField(
-                validators=[django.core.validators.validate_email]
+                fail_soft=True, validators=[django.core.validators.validate_email]
             ),
         ),
         migrations.AlterField(
             model_name="profilenote",
             name="content",
             field=urbanlens.dashboard.models.fields.EncryptedTextField(
-                blank=True, default=""
+                blank=True, default="", fail_soft=True
             ),
         ),
         migrations.RunPython(

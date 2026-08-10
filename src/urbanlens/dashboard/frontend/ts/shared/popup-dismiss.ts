@@ -27,6 +27,12 @@ function onDocumentClick(event: MouseEvent): void {
             d.open = false;
         });
     }
+
+    if (!target.closest(".album-menu")) {
+        document.querySelectorAll<HTMLDetailsElement>(".album-menu[open]").forEach((d) => {
+            d.open = false;
+        });
+    }
 }
 
 export function installGlobalPopupDismiss(): void {

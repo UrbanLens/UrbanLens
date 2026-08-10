@@ -60,6 +60,7 @@ class GoogleCalendarAccount(abstract.DashboardModel):
     google_email = EncryptedTextField(
         null=True,
         blank=True,
+        fail_soft=True,
         help_text="Email of the connected Google account, for display only.",
     )
     access_token = EncryptedTextField()

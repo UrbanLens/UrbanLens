@@ -33,7 +33,7 @@ class GooglePhotosAccount(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="google_photos_account",
     )
-    google_email = EncryptedTextField(null=True, blank=True, help_text="Email of the connected Google account, for display only.")
+    google_email = EncryptedTextField(null=True, blank=True, fail_soft=True, help_text="Email of the connected Google account, for display only.")
     access_token = EncryptedTextField()
     refresh_token = EncryptedTextField(null=True, blank=True)
     token_expiry = DateTimeField(null=True, blank=True)

@@ -834,6 +834,11 @@ urlpatterns = [
                                 name="pin.albums.reorder",
                             ),
                             path(
+                                "<slug:pin_slug>/albums/<slug:album_slug>/upload/",
+                                albums.AlbumUploadView.as_view(),
+                                name="pin.albums.upload",
+                            ),
+                            path(
                                 "<slug:pin_slug>/albums/<slug:album_slug>/",
                                 albums.AlbumDetailView.as_view(),
                                 name="pin.albums.detail",
@@ -1485,6 +1490,11 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/albums/<slug:album_slug>/reorder/",
                     albums.AlbumReorderView.as_view(),
                     name="location.wiki.albums.reorder",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/albums/<slug:album_slug>/upload/",
+                    albums.AlbumUploadView.as_view(),
+                    name="location.wiki.albums.upload",
                 ),
                 path(
                     "<slug:location_slug>/wiki/albums/<slug:album_slug>/",

@@ -98,7 +98,7 @@ class EmergencyContactDefault(abstract.DashboardModel):
     # Encrypted: this is a reusable template copied onto SafetyCheckinContact at
     # check-in creation time (see services.visits.safety.save_contact_defaults) and
     # never itself matched by value - only the copies are (against SafetyContactOptOut).
-    email = EncryptedTextField(null=True, blank=True, validators=[validate_email])
+    email = EncryptedTextField(null=True, blank=True, validators=[validate_email], fail_soft=True)
     label = CharField(max_length=150, blank=True, default="")
     order = IntegerField(default=0)
 

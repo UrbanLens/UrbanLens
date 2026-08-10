@@ -311,6 +311,23 @@ class Image(abstract.FrontendDashboardModel):
     objects = ImageManager()
 
     @property
+    def display_url(self) -> str:
+        """The URL to render this photo from.
+
+        A row can exist without a stored file - an external gallery item whose
+        download failed still carries its ``source_url`` - and reading
+        ``image.url`` on one of those raises. Templates and serializers use
+        this instead so a single such row can't break a whole grid.
+
+        Returns:
+            The stored file's URL, the remote source URL, or "" when neither
+            is set.
+        """
+        if self.image:
+            return self.image.url
+        return self.source_url or ""
+
+    @property
     def effective_latitude(self) -> Decimal | None:
         """The best-known latitude for this photo.
 

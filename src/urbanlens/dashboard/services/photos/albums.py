@@ -18,6 +18,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 
 if TYPE_CHECKING:
     from collections.abc import Collection, Sequence
+    from datetime import datetime
 
     from django.db.models import QuerySet
 
@@ -287,6 +288,30 @@ def reorder_album_items(album: Album, item_ids: Sequence[int]) -> int:
     if updated:
         AlbumItem.objects.bulk_update(updated, ["order"])
     return len(updated)
+
+
+def album_date_range(images: Sequence[Image]) -> tuple[datetime | None, datetime | None]:
+    """Earliest and latest capture date across *images*.
+
+    Uses ``Image.taken_at`` (the EXIF capture time) and falls back to
+    ``created`` for photos that carry no EXIF date - a scan or a screenshot
+    still belongs somewhere on the album's timeline, and dropping it would
+    make the range silently narrower than the album really is.
+
+    Takes the already-resolved list rather than aggregating in SQL so the
+    Photos tab keeps its fixed query count no matter how many albums it shows
+    (see :func:`albums_with_images`).
+
+    Args:
+        images: The album's viewer-visible photos, in any order.
+
+    Returns:
+        ``(first, last)``, or ``(None, None)`` for an empty album.
+    """
+    stamps = [image.taken_at or image.created for image in images]
+    if not stamps:
+        return None, None
+    return min(stamps), max(stamps)
 
 
 def cover_from_images(album: Album, images: list[Image]) -> Image | None:

@@ -28,7 +28,7 @@ class ProfileEmail(abstract.DashboardModel):
     ciphertext can't be queried or uniqueness-constrained.
     """
 
-    email = EncryptedTextField(validators=[validate_email])
+    email = EncryptedTextField(validators=[validate_email], fail_soft=True)
     normalized_email = CharField(max_length=254, db_index=True)
     is_verified = BooleanField(default=False)
     verification_token = UUIDField(default=uuid.uuid4, editable=False)

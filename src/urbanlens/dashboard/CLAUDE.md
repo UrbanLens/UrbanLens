@@ -43,5 +43,9 @@ When calling any API, track usage and cost per call (keep a running estimate). T
 
 - Any new pin/location share path must call `resolve_origin_share` + `record_share_exposure` to
   keep the `LocationExposure` provenance chain intact.
-- `EncryptedTextField` derives its key from Django `SECRET_KEY` - changing it corrupts all
-  encrypted data (Immich tokens, etc.).
+- `EncryptedTextField` writes under the active key (`UL_FIELD_ENCRYPTION_KEY`, else Django's
+  `SECRET_KEY`) and reads under any key in `UL_FIELD_ENCRYPTION_KEY_FALLBACKS`. Changing a key
+  is safe *only* via the rotation procedure in `docs/DATA_ENCRYPTION.md` (add new key → run
+  `manage.py rotate_field_encryption` → drop old key); swapping it in one step orphans every
+  row. Content fields set `fail_soft=True` and degrade to their default rather than raising;
+  credential fields raise so their callers can drop the row and prompt a reconnect.

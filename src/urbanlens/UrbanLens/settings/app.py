@@ -81,6 +81,17 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "encryption survives a SECRET_KEY rotation."
         ),
     )
+    field_encryption_key_fallbacks: Annotated[list[str], NoDecode] = Field(
+        default_factory=list,
+        description=(
+            "Retired field-encryption keys, comma-separated. Values are always written under the active "
+            "key but can still be read under any key listed here, so a key change is a rolling change "
+            "rather than data loss: add the new key, deploy, run `manage.py rotate_field_encryption`, "
+            "then drop the retired key from this list. Django's SECRET_KEY is always tried as a final "
+            "fallback, so setting field_encryption_key for the first time never orphans existing rows; "
+            "list the *old* SECRET_KEY here when rotating SECRET_KEY itself."
+        ),
+    )
     root_urlconf: str = Field(default="urbanlens.UrbanLens.urls", description="The root urlconf")
     admin_username: str = Field(default="Admin", description="The username to use for the admin user")
     admin_email: str = Field(default="admin@yourdomain.com", description="The email to use for the admin user")
@@ -252,7 +263,7 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
     def django(self) -> LazySettings:
         return conf.settings
 
-    @field_validator("allowed_hosts", "plugin_modules", "disabled_plugins", mode="before")
+    @field_validator("allowed_hosts", "plugin_modules", "disabled_plugins", "field_encryption_key_fallbacks", mode="before")
     @classmethod
     def _split_comma_separated(cls, value: Any) -> Any:
         """Allow list-valued settings to be provided as comma-separated strings via env vars."""

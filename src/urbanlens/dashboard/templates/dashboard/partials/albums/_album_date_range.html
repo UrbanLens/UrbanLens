@@ -1,0 +1,22 @@
+{% comment %}
+An album's photo date range, collapsed to a single date when every photo was
+taken on the same day. Rendered nowhere when the album is empty.
+
+Dates come from Image.taken_at (EXIF capture time) falling back to the upload
+time - see services.photos.albums.album_date_range.
+
+Expects:
+  date_start, date_end - datetimes or None
+{% endcomment %}
+{% if date_start and date_end %}
+<span class="album-date-range" title="Photos taken between these dates">
+  <i class="material-symbols-outlined">calendar_month</i>
+  {% if date_start|date:"Y-m-d" == date_end|date:"Y-m-d" %}
+  <time datetime="{{ date_start|date:'c' }}">{{ date_start|date:"M j, Y" }}</time>
+  {% else %}
+  <time datetime="{{ date_start|date:'c' }}">{{ date_start|date:"M j, Y" }}</time>
+  <span class="album-date-range-sep">&ndash;</span>
+  <time datetime="{{ date_end|date:'c' }}">{{ date_end|date:"M j, Y" }}</time>
+  {% endif %}
+</span>
+{% endif %}

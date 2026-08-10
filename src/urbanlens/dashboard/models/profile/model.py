@@ -144,8 +144,8 @@ class Profile(abstract.PublicDashboardModel):
     # never agreed - existing accounts are backfilled to their profile creation
     # date (accepting terms is implied by having used the site already).
     tos_accepted_at = DateTimeField(null=True, blank=True)
-    bio = EncryptedTextField(null=True, blank=True, max_length=MAX_PROFILE_BIO_LENGTH, validators=[MaxLengthValidator(MAX_PROFILE_BIO_LENGTH)])
-    area = EncryptedTextField(null=True, blank=True)
+    bio = EncryptedTextField(null=True, blank=True, fail_soft=True, max_length=MAX_PROFILE_BIO_LENGTH, validators=[MaxLengthValidator(MAX_PROFILE_BIO_LENGTH)])
+    area = EncryptedTextField(null=True, blank=True, fail_soft=True)
     birth_date = DateField(null=True, blank=True)
     started_exploring = DateField(null=True, blank=True)
 
@@ -278,13 +278,15 @@ class Profile(abstract.PublicDashboardModel):
 
     # Contact information and its visibility. Encrypted at rest - none of these are
     # ever looked up by value (access is gated by contact_visibility at the app layer,
-    # not by a DB query), so there's no lookup/index/uniqueness to preserve.
-    phone_number = EncryptedTextField(blank=True, default="")
-    signal_username = EncryptedTextField(blank=True, default="")
-    discord_username = EncryptedTextField(blank=True, default="")
-    whatsapp_number = EncryptedTextField(blank=True, default="")
-    telegram_username = EncryptedTextField(blank=True, default="")
-    matrix_handle = EncryptedTextField(blank=True, default="")
+    # not by a DB query), so there's no lookup/index/uniqueness to preserve. fail_soft
+    # because Profile loads on nearly every request: an undecryptable row must degrade
+    # to a blank field, not 500 the whole site (see EncryptedTextField).
+    phone_number = EncryptedTextField(blank=True, default="", fail_soft=True)
+    signal_username = EncryptedTextField(blank=True, default="", fail_soft=True)
+    discord_username = EncryptedTextField(blank=True, default="", fail_soft=True)
+    whatsapp_number = EncryptedTextField(blank=True, default="", fail_soft=True)
+    telegram_username = EncryptedTextField(blank=True, default="", fail_soft=True)
+    matrix_handle = EncryptedTextField(blank=True, default="", fail_soft=True)
     contact_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,

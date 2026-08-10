@@ -13,13 +13,13 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
-from urbanlens.dashboard.models.images.model import Image, MediaKind
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.media.images import compute_checksum, delete_stored_file, image_to_gallery_json, image_upload_error, parse_reposition_payload
-from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
+from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json, parse_reposition_payload
+from urbanlens.dashboard.services.photos.uploads import UploadRejection, upload_photo_for_owner
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -35,6 +35,57 @@ _GALLERY_PAGE_SIZE = 12
 def _wiki_for_location(location: Location | None) -> Wiki | None:
     """Return the community Wiki for a Location, or None when it has no wiki yet."""
     return Wiki.objects.get_for_location(location)
+
+
+def create_uploaded_photo(request: HttpRequest, owner: Pin | Wiki, profile: Profile) -> tuple[Image | None, JsonResponse]:
+    """Store the request's uploaded photo against *owner*.
+
+    Shared by the pin gallery, the wiki gallery, and an album's upload button so
+    all three answer with the same body and the same status codes - the client
+    code that renders an uploaded tile is shared too, and would otherwise have
+    to special-case whichever surface drifted.
+
+    Args:
+        request: The upload request; reads the ``image`` file and ``caption``.
+        owner: The Pin or Wiki to attach the photo to.
+        profile: The uploading profile.
+
+    Returns:
+        Tuple of (the created Image or None, the response to return). Callers
+        that need the row - to file it somewhere else - take the first element
+        rather than re-parsing the response body.
+    """
+    image_file = request.FILES.get("image")
+    if not image_file:
+        return None, JsonResponse({"error": "No image provided."}, status=400)
+
+    result = upload_photo_for_owner(owner, profile, image_file, request.POST.get("caption", ""))
+    if isinstance(result, UploadRejection):
+        return None, JsonResponse({"error": result.message}, status=result.status)
+
+    # Imported here rather than at module scope: dashboard.tasks pulls in the
+    # service layer, which imports this module back.
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import process_image_upload
+
+    safely_enqueue_task(process_image_upload, result.pk)
+    return result, JsonResponse(image_to_gallery_json(result, request, profile), status=201)
+
+
+def store_uploaded_photo(request: HttpRequest, owner: Pin | Wiki, profile: Profile) -> JsonResponse:
+    """Store the request's uploaded photo against *owner* and return the gallery JSON.
+
+    Args:
+        request: The upload request; reads the ``image`` file and ``caption``.
+        owner: The Pin or Wiki to attach the photo to.
+        profile: The uploading profile.
+
+    Returns:
+        201 with ``image_to_gallery_json`` on success, or the rejection's own
+        status with an ``error`` message.
+    """
+    _image, response = create_uploaded_photo(request, owner, profile)
+    return response
 
 
 # -- Pin gallery --------------------------------------------------------------
@@ -96,39 +147,7 @@ class PinGalleryView(LoginRequiredMixin, View):
         """Upload an image to a pin. Rejects a file the uploader already has on this pin."""
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        image_file = request.FILES.get("image")
-        if not image_file:
-            return JsonResponse({"error": "No image provided."}, status=400)
-
-        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
-        if upload_error:
-            message, status = upload_error
-            return JsonResponse({"error": message}, status=status)
-
-        checksum = compute_checksum(image_file)
-        if Image.objects.filter(pin=pin, profile=profile, checksum=checksum).exists():
-            return JsonResponse({"error": "You already uploaded this photo to this pin."}, status=409)
-
-        with per_profile_upload_lock(profile):
-            quota_error = quota_error_for_upload(profile, image_file.size)
-            if quota_error:
-                return JsonResponse({"error": quota_error}, status=413)
-
-            img = Image.objects.create(
-                image=image_file,
-                pin=pin,
-                wiki=_wiki_for_location(pin.location),
-                location=pin.location,
-                profile=profile,
-                caption=request.POST.get("caption", "").strip() or None,
-                checksum=checksum,
-                file_size=image_file.size,
-            )
-        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-        from urbanlens.dashboard.tasks import process_image_upload
-
-        safely_enqueue_task(process_image_upload, img.pk)
-        return JsonResponse(image_to_gallery_json(img, request, profile), status=201)
+        return store_uploaded_photo(request, pin, profile)
 
 
 class PinGalleryJsonView(LoginRequiredMixin, View):
@@ -288,39 +307,8 @@ class WikiGalleryView(LoginRequiredMixin, View):
 
     def post(self, request: HttpRequest, location_slug: str) -> JsonResponse:
         """Upload an image to a location wiki. Rejects a file the uploader already has on this wiki."""
-        location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        image_file = request.FILES.get("image")
-        if not image_file:
-            return JsonResponse({"error": "No image provided."}, status=400)
-
-        upload_error = image_upload_error(image_file, MediaKind.PHOTO)
-        if upload_error:
-            message, status = upload_error
-            return JsonResponse({"error": message}, status=status)
-
-        checksum = compute_checksum(image_file)
-        if Image.objects.filter(wiki=wiki, profile=profile, checksum=checksum).exists():
-            return JsonResponse({"error": "You already uploaded this photo to this wiki."}, status=409)
-
-        with per_profile_upload_lock(profile):
-            quota_error = quota_error_for_upload(profile, image_file.size)
-            if quota_error:
-                return JsonResponse({"error": quota_error}, status=413)
-
-            img = Image.objects.create(
-                image=image_file,
-                wiki=wiki,
-                location=location,
-                profile=profile,
-                caption=request.POST.get("caption", "").strip() or None,
-                checksum=checksum,
-                file_size=image_file.size,
-            )
-        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-        from urbanlens.dashboard.tasks import process_image_upload
-
-        safely_enqueue_task(process_image_upload, img.pk)
-        return JsonResponse(image_to_gallery_json(img, request, profile), status=201)
+        _location, wiki, profile = resolve_visible_wiki(request, location_slug)
+        return store_uploaded_photo(request, wiki, profile)
 
 
 class WikiGalleryJsonView(LoginRequiredMixin, View):

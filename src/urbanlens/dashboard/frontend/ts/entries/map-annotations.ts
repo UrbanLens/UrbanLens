@@ -15,6 +15,7 @@ import type { CustomLayerToggle } from "../shared/map-layers";
 import { createMapImageOverlays, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { createMapLayers, tileLayer } from "../shared/map-layers";
 import type { MarkupItem, MarkupToolbar } from "../shared/markup-toolbar";
+import { makePhotoIcon, photoMarkerSize as sharedPhotoMarkerSize } from "../shared/photo-map";
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
 declare const L: typeof import("leaflet");
@@ -1761,27 +1762,10 @@ function init(): void {
     });
 
     // -- Photo panel -----------------------------------------------------------
-    // Base thumbnail size at zoom 16+, halving every 4 zoom levels below that so
-    // thumbnails don't cover a huge chunk of the map when zoomed far out.
-    const PHOTO_MARKER_BASE_SIZE = 44;
-    const PHOTO_MARKER_MIN_SIZE = 14;
-    const PHOTO_MARKER_HOVER_SCALE = 56 / 44;
-
+    // Icon and sizing come from shared/photo-map so this map and an album's map
+    // render a photo identically.
     function photoMarkerSize(highlighted?: boolean): number {
-        const z = map.getZoom();
-        const scale = 2 ** ((z - 16) * 0.5);
-        const base = Math.max(PHOTO_MARKER_MIN_SIZE, Math.min(PHOTO_MARKER_BASE_SIZE, Math.round(PHOTO_MARKER_BASE_SIZE * scale)));
-        return highlighted ? Math.round(base * PHOTO_MARKER_HOVER_SCALE) : base;
-    }
-
-    function makePhotoIcon(url: string, size: number, highlighted?: boolean): L.DivIcon {
-        const shadow = highlighted ? "0 0 0 3px #2563eb, 0 3px 10px rgba(0,0,0,.45)" : "0 2px 6px rgba(0,0,0,.35)";
-        return L.divIcon({
-            className: "",
-            html: `<img src="${url}" class="photo-marker-img" style="width:${size}px;height:${size}px;object-fit:cover;border-radius:5px;border:2px solid #fff;box-shadow:${shadow};display:block;transition:transform .15s,box-shadow .15s;">`,
-            iconSize: [size, size],
-            iconAnchor: [size / 2, size / 2],
-        });
+        return sharedPhotoMarkerSize(map.getZoom(), highlighted);
     }
 
     function addPhotoMarker(imgId: number, url: string, lat: number, lng: number, ownerName?: string): void {

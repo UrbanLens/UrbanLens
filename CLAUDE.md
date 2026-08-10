@@ -106,4 +106,4 @@ When a user reports a bug, reproduce it with a failing unit test (TDD), then fix
 - Settings are split: Django config in `settings/base.py`, app env-driven config in `settings/app.py` (Pydantic)
 - Any new pin/location share path must call `resolve_origin_share` + `record_share_exposure` to
   keep the `LocationExposure` provenance chain intact.
-- `EncryptedTextField` derives its key from Django `SECRET_KEY` - changing it corrupts all encrypted data
+- `EncryptedTextField` writes under the active key and reads under any retired key still listed in `UL_FIELD_ENCRYPTION_KEY_FALLBACKS`; rotate keys only via the procedure in `docs/DATA_ENCRYPTION.md` (which also tracks what is/isn't encrypted, and why)
