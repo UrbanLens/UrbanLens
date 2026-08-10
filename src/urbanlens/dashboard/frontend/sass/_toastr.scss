@@ -80,6 +80,15 @@ $_icon-warning-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/200
         max-width: calc(100vw - #{$space-md * 2}) !important;
     }
 
+    // The map's tool dock occupies this same corner below $breakpoint-sm, and
+    // toasts (z-index 10070) would otherwise absorb taps meant for the tools.
+    // Clears both dock rows: baseline 28px + saved-filters strip + tool row.
+    body:has(#map) & {
+        @include down($breakpoint-sm) {
+            bottom: 146px !important;
+        }
+    }
+
     // -- Base toast ------------------------------------------------------------
 
     > div {
@@ -141,9 +150,11 @@ $_icon-warning-dark: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/200
             opacity:       .75;
         }
 
-        .toast-close-button {
-            display: none !important;
-        }
+        // No rule hiding .toast-close-button: toastr only renders one when a
+        // caller passes closeButton:true, and those callers need it. The
+        // bulk-delete Undo toast pairs it with tapToDismiss:false, so hiding it
+        // left a 10-second toast with no way to dismiss it - sitting on the
+        // mobile toolbar, which shares this corner.
     }
 
     // -- Semantic variants -----------------------------------------------------

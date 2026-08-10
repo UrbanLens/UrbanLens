@@ -66,6 +66,15 @@ interface NearbyPinEntry {
     longitude: number | null;
 }
 
+/** A Media-section tile's payload, as carried by its "text/media-item" drag. */
+interface MediaDropItem {
+    source: string;
+    key: string;
+    url: string;
+    pageUrl: string;
+    caption: string;
+}
+
 interface BuildingImportRow {
     selection_key: string;
     name: string;
@@ -137,6 +146,76 @@ function readMapOverlays(): MapOverlayEntry[] {
     } catch {
         return [];
     }
+}
+
+/**
+ * Wire a rubber-band rectangle selection gesture onto a map's container.
+ *
+ * Pointer events serve mouse, touch and pen from one code path, so the
+ * gesture is reachable on a phone as well as with a mouse.
+ *
+ * @param element - The map's container element.
+ * @param map - The Leaflet map the rectangle is drawn on.
+ * @param isActive - Whether the caller's select mode is currently on.
+ * @param onSelect - Receives the dragged rectangle's bounds once the drag ends.
+ */
+function initMapRectangleSelect(element: HTMLElement, map: L.Map, isActive: () => boolean, onSelect: (bounds: L.LatLngBounds) => void): void {
+    // A finger's contact point drifts further than a mouse cursor's, so a
+    // coarse pointer needs more slop before a tap reads as a drag.
+    const MOUSE_DRAG_THRESHOLD_PX = 6;
+    const COARSE_DRAG_THRESHOLD_PX = 12;
+
+    let rect: L.Rectangle | null = null;
+    element.addEventListener("pointerdown", (event: PointerEvent) => {
+        // A second finger belongs to a pinch-zoom, not to a second rectangle.
+        if (!isActive() || !event.isPrimary || event.button !== 0) return;
+        const startLL = map.mouseEventToLatLng(event);
+        const threshold = event.pointerType === "mouse" ? MOUSE_DRAG_THRESHOLD_PX : COARSE_DRAG_THRESHOLD_PX;
+        const restoreDragging = map.dragging.enabled();
+        map.dragging.disable();
+        let dragging = false;
+
+        function finish(): void {
+            element.removeEventListener("pointermove", onMove);
+            element.removeEventListener("pointerup", onUp);
+            element.removeEventListener("pointercancel", finish);
+            if (rect) {
+                map.removeLayer(rect);
+                rect = null;
+            }
+            if (restoreDragging) map.dragging.enable();
+        }
+
+        function onMove(moveEvent: PointerEvent): void {
+            if (!dragging && Math.hypot(moveEvent.clientX - event.clientX, moveEvent.clientY - event.clientY) < threshold) return;
+            if (!dragging) {
+                // Capturing only once the gesture is a drag keeps a plain tap
+                // reaching the marker or shape underneath, while still
+                // delivering moves that leave the map's bounds.
+                element.setPointerCapture(moveEvent.pointerId);
+                dragging = true;
+            }
+            if (rect) map.removeLayer(rect);
+            rect = L.rectangle(L.latLngBounds(startLL, map.mouseEventToLatLng(moveEvent)), {
+                color: "#1E88E5",
+                weight: 2,
+                fillOpacity: 0.08,
+                dashArray: "4 4",
+                interactive: false,
+            }).addTo(map);
+        }
+
+        function onUp(upEvent: PointerEvent): void {
+            const dragged = dragging;
+            finish();
+            if (!dragged) return;
+            onSelect(L.latLngBounds(startLL, map.mouseEventToLatLng(upEvent)));
+        }
+
+        element.addEventListener("pointermove", onMove);
+        element.addEventListener("pointerup", onUp);
+        element.addEventListener("pointercancel", finish);
+    });
 }
 
 function init(): void {
@@ -327,47 +406,26 @@ function init(): void {
         applyBuildingSelectMode = (active: boolean): void => {
             selectBtn?.classList.toggle("active", active);
             mapElement.classList.toggle("select-mode", active);
+            // Disabling dragging makes Leaflet hand touch panning back to the
+            // browser, which would scroll the page instead of letting the
+            // rubber band consume the gesture.
+            mapElement.style.touchAction = active ? "none" : "";
             if (active) previewMap.dragging.disable();
             else previewMap.dragging.enable();
         };
 
-        // Rectangle drag-select over building shapes, mirroring the detail-pin
-        // panel's multi-select tool (initDetailPinDragSelect below).
-        let dragRect: L.Rectangle | null = null;
-        mapElement.addEventListener("mousedown", (e: MouseEvent) => {
-            if (!buildingSelectMode || e.button !== 0) return;
-            const startLL = previewMap.mouseEventToLatLng(e);
-            const startX = e.clientX;
-            const startY = e.clientY;
-            let dragging = false;
-
-            function onMove(ev: MouseEvent): void {
-                if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
-                dragging = true;
-                if (dragRect) previewMap.removeLayer(dragRect);
-                dragRect = L.rectangle(L.latLngBounds(startLL, previewMap.mouseEventToLatLng(ev)), {
-                    color: "#1E88E5",
-                    weight: 2,
-                    fillOpacity: 0.08,
-                    dashArray: "4 4",
-                    interactive: false,
-                }).addTo(previewMap);
-            }
-            function onUp(ev: MouseEvent): void {
-                document.removeEventListener("mousemove", onMove);
-                if (dragRect) {
-                    previewMap.removeLayer(dragRect);
-                    dragRect = null;
-                }
-                if (!dragging) return;
-                const bounds = L.latLngBounds(startLL, previewMap.mouseEventToLatLng(ev));
+        // Rectangle drag-select over building shapes, sharing the detail-pin
+        // panel's multi-select gesture (initMapRectangleSelect).
+        initMapRectangleSelect(
+            mapElement,
+            previewMap,
+            () => buildingSelectMode,
+            (bounds) => {
                 boundsByKey.forEach((buildingBounds, key) => {
                     if (bounds.intersects(buildingBounds)) toggleBuildingKey(key);
                 });
-            }
-            document.addEventListener("mousemove", onMove);
-            document.addEventListener("mouseup", onUp, { once: true });
-        });
+            },
+        );
 
         requestAnimationFrame(() => buildingImportMap?.invalidateSize());
     }
@@ -1381,7 +1439,6 @@ function init(): void {
     // never selectable, matching their existing non-draggable/non-editable state.
     let detailSelectMode = false;
     const selectedDpUuids = new Set<string>();
-    let dpDragSelectRect: L.Rectangle | null = null;
 
     function detailSelectableEntries(): DetailPinEntry[] {
         return detailPins.filter((d) => !d.owner_name);
@@ -1412,6 +1469,10 @@ function init(): void {
         document.getElementById("select-detail-pins-button")?.classList.add("active");
         document.getElementById("map")?.classList.add("select-mode");
         map.dragging.disable();
+        // Disabling dragging makes Leaflet hand touch panning back to the
+        // browser, which would scroll the page instead of letting the rubber
+        // band consume the gesture.
+        mapEl.style.touchAction = "none";
     }
 
     function exitDetailPinSelectMode(): void {
@@ -1420,6 +1481,7 @@ function init(): void {
         document.getElementById("select-detail-pins-button")?.classList.remove("active");
         document.getElementById("map")?.classList.remove("select-mode");
         map.dragging.enable();
+        mapEl.style.touchAction = "";
         clearDpSelection();
     }
 
@@ -1642,42 +1704,16 @@ function init(): void {
 
     // Rectangle drag-select over detail-pin markers, mirroring the main map's
     // multi-select tool (_initSelectDragRectangle in pages/map/index.html).
-    (function initDetailPinDragSelect() {
-        mapEl.addEventListener("mousedown", (e: MouseEvent) => {
-            if (!detailSelectMode || e.button !== 0) return;
-            const startLL = map.mouseEventToLatLng(e);
-            const startX = e.clientX;
-            const startY = e.clientY;
-            let dragging = false;
-
-            function onMove(ev: MouseEvent): void {
-                if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
-                dragging = true;
-                if (dpDragSelectRect) map.removeLayer(dpDragSelectRect);
-                dpDragSelectRect = L.rectangle(L.latLngBounds(startLL, map.mouseEventToLatLng(ev)), {
-                    color: "#1E88E5",
-                    weight: 2,
-                    fillOpacity: 0.08,
-                    dashArray: "4 4",
-                    interactive: false,
-                }).addTo(map);
-            }
-            function onUp(ev: MouseEvent): void {
-                document.removeEventListener("mousemove", onMove);
-                if (dpDragSelectRect) {
-                    map.removeLayer(dpDragSelectRect);
-                    dpDragSelectRect = null;
-                }
-                if (!dragging) return;
-                const bounds = L.latLngBounds(startLL, map.mouseEventToLatLng(ev));
-                detailSelectableEntries().forEach((dp) => {
-                    if (dp.marker && !selectedDpUuids.has(dp.uuid) && bounds.contains(dp.marker.getLatLng())) toggleDpSelection(dp.uuid);
-                });
-            }
-            document.addEventListener("mousemove", onMove);
-            document.addEventListener("mouseup", onUp, { once: true });
-        });
-    })();
+    initMapRectangleSelect(
+        mapEl,
+        map,
+        () => detailSelectMode,
+        (bounds) => {
+            detailSelectableEntries().forEach((dp) => {
+                if (dp.marker && !selectedDpUuids.has(dp.uuid) && bounds.contains(dp.marker.getLatLng())) toggleDpSelection(dp.uuid);
+            });
+        },
+    );
 
     // -- Markup toolbar (shared factory - see ts/shared/markup-toolbar.ts) --
     const toolbar: MarkupToolbar = window.createMarkupToolbar(map, markupLayer, {
@@ -1812,6 +1848,78 @@ function init(): void {
         });
     };
 
+    // -- Tap-to-place ----------------------------------------------------------
+    // HTML5 drag-and-drop never fires on touch, so drag-onto-the-map leaves a
+    // photo with no coordinates unplaceable from a phone. An armed item hands
+    // the next map click to the same placement path a drop takes.
+    type PendingPlacement = { kind: "photo"; photoId: number } | { kind: "media"; itemEl: HTMLElement; item: MediaDropItem };
+    let pendingPlacement: PendingPlacement | null = null;
+    const PLACEMENT_HINT = "Tap the map to place this photo, or press Escape to cancel.";
+
+    function syncPlacementAffordance(): void {
+        const armedPhotoId = pendingPlacement?.kind === "photo" ? String(pendingPlacement.photoId) : null;
+        document.querySelectorAll<HTMLElement>(".photo-panel-item").forEach((li) => {
+            const armed = armedPhotoId != null && li.dataset.id === armedPhotoId;
+            li.classList.toggle("is-placing", armed);
+            li.querySelector(".photo-panel-place-btn")?.setAttribute("aria-pressed", String(armed));
+        });
+        const armedMediaEl = pendingPlacement?.kind === "media" ? pendingPlacement.itemEl : null;
+        document.querySelectorAll<HTMLElement>(".media-item.is-placing").forEach((el) => {
+            if (el !== armedMediaEl) el.classList.remove("is-placing");
+        });
+        armedMediaEl?.classList.add("is-placing");
+    }
+
+    function disarmPlacement(): void {
+        if (!pendingPlacement) return;
+        map.off("click", onPlacementMapClick);
+        mapEl.classList.remove("photo-drop-target");
+        pendingPlacement = null;
+        syncPlacementAffordance();
+    }
+
+    function onPlacementMapClick(event: L.LeafletMouseEvent): void {
+        const pending = pendingPlacement;
+        disarmPlacement();
+        if (!pending) return;
+        if (pending.kind === "photo") placePhotoAt(pending.photoId, event.latlng);
+        else placeMediaItemAt(pending.itemEl, pending.item, event.latlng);
+    }
+
+    function armPlacement(pending: PendingPlacement): void {
+        disarmPlacement();
+        pendingPlacement = pending;
+        map.once("click", onPlacementMapClick);
+        mapEl.classList.add("photo-drop-target");
+        syncPlacementAffordance();
+        toast.info(PLACEMENT_HINT);
+    }
+
+    document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") disarmPlacement();
+    });
+
+    // Media tiles are server-rendered (partials/pins/pin_media_items.html), so
+    // their affordance calls in here instead of being bound from this module.
+    window.mediaPlaceOnMap = function (itemEl: HTMLElement): void {
+        if (!cfg.mediaRelevanceUrl) return;
+        if (pendingPlacement?.kind === "media" && pendingPlacement.itemEl === itemEl) {
+            disarmPlacement();
+            return;
+        }
+        armPlacement({
+            kind: "media",
+            itemEl,
+            item: {
+                source: itemEl.dataset.mediaSource ?? "",
+                key: itemEl.dataset.mediaKey ?? "",
+                url: itemEl.dataset.mediaUrl ?? "",
+                pageUrl: itemEl.dataset.mediaPageUrl ?? "",
+                caption: itemEl.dataset.mediaCaption ?? "",
+            },
+        });
+    };
+
     function buildPhotoPanel(): void {
         const ul = document.getElementById("photo-panel-list");
         if (!ul) return;
@@ -1845,13 +1953,26 @@ function init(): void {
             li.dataset.id = String(img.id);
             li.draggable = true;
             li.title = "Click to view";
+            // The place button carries its own styling: .photo-panel-item is a
+            // bare thumbnail tile with no button treatment to inherit.
             li.innerHTML = `
                 <div class="photo-panel-thumb-wrap">
                     <img src="${img.url}" class="photo-panel-thumb" alt="" draggable="false">
+                    <button type="button" class="photo-panel-place-btn" draggable="false" aria-pressed="false"
+                            title="${hasCoords ? "Move on map" : "Place on map"}" aria-label="${hasCoords ? "Move on map" : "Place on map"}"
+                            style="position:absolute;top:3px;right:3px;display:flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:4px;background:rgba(0,0,0,.52);color:#fff;cursor:pointer">
+                        <i class="material-icons" style="font-size:1rem">add_location_alt</i>
+                    </button>
                     <span class="photo-panel-coord-badge ${hasCoords ? "has-gps" : "no-gps"}" title="${hasCoords ? "Has GPS" : "No GPS"}">
                         <i class="material-icons">${hasCoords ? "place" : "location_off"}</i>
                     </span>
                 </div>`;
+            li.querySelector(".photo-panel-place-btn")?.addEventListener("click", (event) => {
+                // The tile's own click pans and opens the lightbox.
+                event.stopPropagation();
+                if (pendingPlacement?.kind === "photo" && pendingPlacement.photoId === img.id) disarmPlacement();
+                else armPlacement({ kind: "photo", photoId: img.id });
+            });
             li.addEventListener("mouseenter", () => window._galleryHighlightMarker?.(img.id, true));
             li.addEventListener("mouseleave", () => window._galleryHighlightMarker?.(img.id, false));
             li.addEventListener("dragstart", (e) => {
@@ -1866,24 +1987,10 @@ function init(): void {
             });
             ul.appendChild(li);
         });
+        syncPlacementAffordance();
     }
 
-    // Drop photo onto map to assign coordinates.
-    mapEl.addEventListener("dragover", (e) => {
-        if (!e.dataTransfer?.types.includes("text/photoid")) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "move";
-        mapEl.classList.add("photo-drop-target");
-    });
-    mapEl.addEventListener("dragleave", () => mapEl.classList.remove("photo-drop-target"));
-    mapEl.addEventListener("drop", (e) => {
-        mapEl.classList.remove("photo-drop-target");
-        const idStr = e.dataTransfer?.getData("text/photoid");
-        if (!idStr) return;
-        e.preventDefault();
-        const imgId = Number.parseInt(idStr, 10);
-        const rect = mapEl.getBoundingClientRect();
-        const latlng = map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]);
+    function placePhotoAt(imgId: number, latlng: L.LatLng): void {
         const item = photoPanelItems.find((p) => p.id === imgId);
         if (!item) return;
         const prevLat = item.lat;
@@ -1908,6 +2015,27 @@ function init(): void {
         }
         buildPhotoPanel();
         refreshPanelHeader();
+    }
+
+    // Drop photo onto map to assign coordinates.
+    mapEl.addEventListener("dragover", (e) => {
+        if (!e.dataTransfer?.types.includes("text/photoid")) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        mapEl.classList.add("photo-drop-target");
+    });
+    mapEl.addEventListener("dragleave", () => {
+        if (!pendingPlacement) mapEl.classList.remove("photo-drop-target");
+    });
+    mapEl.addEventListener("drop", (e) => {
+        mapEl.classList.remove("photo-drop-target");
+        const idStr = e.dataTransfer?.getData("text/photoid");
+        if (!idStr) return;
+        e.preventDefault();
+        // A completed drop resolves whatever the user had armed for a tap.
+        disarmPlacement();
+        const rect = mapEl.getBoundingClientRect();
+        placePhotoAt(Number.parseInt(idStr, 10), map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]));
     });
 
     // Drop a Media-section item (external provider result, not yet a real
@@ -1917,28 +2045,7 @@ function init(): void {
     // the photo layer exactly like a real gallery photo. Only wired when the
     // page actually has a Media section (cfg.mediaRelevanceUrl - the wiki
     // page, which shares this module, has none).
-    mapEl.addEventListener("dragover", (e) => {
-        if (!cfg.mediaRelevanceUrl || !e.dataTransfer?.types.includes("text/media-item")) return;
-        e.preventDefault();
-        e.dataTransfer.dropEffect = "copy";
-        mapEl.classList.add("photo-drop-target");
-    });
-    mapEl.addEventListener("dragleave", () => mapEl.classList.remove("photo-drop-target"));
-    mapEl.addEventListener("drop", (e) => {
-        const raw = e.dataTransfer?.getData("text/media-item");
-        if (!cfg.mediaRelevanceUrl || !raw) return;
-        e.preventDefault();
-        mapEl.classList.remove("photo-drop-target");
-        const itemEl = window._mediaDragItemEl;
-        window._mediaDragItemEl = undefined;
-        let item: { source: string; key: string; url: string; pageUrl: string; caption: string };
-        try {
-            item = JSON.parse(raw);
-        } catch {
-            return;
-        }
-        const rect = mapEl.getBoundingClientRect();
-        const latlng = map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]);
+    function placeMediaItemAt(itemEl: HTMLElement | undefined, item: MediaDropItem, latlng: L.LatLng): void {
         fetch(cfg.mediaRelevanceUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
@@ -1963,6 +2070,34 @@ function init(): void {
                 }
             })
             .catch(() => toast.error("Failed to save photo location."));
+    }
+
+    mapEl.addEventListener("dragover", (e) => {
+        if (!cfg.mediaRelevanceUrl || !e.dataTransfer?.types.includes("text/media-item")) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "copy";
+        mapEl.classList.add("photo-drop-target");
+    });
+    mapEl.addEventListener("dragleave", () => {
+        if (!pendingPlacement) mapEl.classList.remove("photo-drop-target");
+    });
+    mapEl.addEventListener("drop", (e) => {
+        const raw = e.dataTransfer?.getData("text/media-item");
+        if (!cfg.mediaRelevanceUrl || !raw) return;
+        e.preventDefault();
+        // A completed drop resolves whatever the user had armed for a tap.
+        disarmPlacement();
+        mapEl.classList.remove("photo-drop-target");
+        const itemEl = window._mediaDragItemEl;
+        window._mediaDragItemEl = undefined;
+        let item: MediaDropItem;
+        try {
+            item = JSON.parse(raw);
+        } catch {
+            return;
+        }
+        const rect = mapEl.getBoundingClientRect();
+        placeMediaItemAt(itemEl, item, map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]));
     });
 
     // Tab switching.
@@ -2162,6 +2297,7 @@ function init(): void {
         // whichever side panel happens to be open (autosave makes this safe).
         toolbar.closeMarkupPanel();
         closeDetailPinPanel();
+        disarmPlacement();
         // While actively editing, boundary polygons need to catch clicks/drags
         // ahead of markup shapes - temporarily swap the pane stacking order for that.
         map.getPane("boundaryPane")!.style.zIndex = "560";
@@ -2488,6 +2624,8 @@ function init(): void {
     function openAddPinDialog(): void {
         // Only one map side-panel open at a time - closing markup autosaves first.
         toolbar.closeMarkupPanel();
+        // These modes claim the next map click too.
+        disarmPlacement();
 
         dpMode = "add";
         editingDp = null;
@@ -2507,6 +2645,8 @@ function init(): void {
     function openDetailPinEditDialog(dp: DetailPinEntry): void {
         // Only one map side-panel open at a time - closing markup autosaves first.
         toolbar.closeMarkupPanel();
+        // These modes claim the next map click too.
+        disarmPlacement();
 
         dpMode = "edit";
         editingDp = dp;
@@ -2824,5 +2964,8 @@ declare global {
         // only carries string data through dataTransfer, not element refs.
         _mediaDragItemEl?: HTMLElement;
         mediaApplyMaterializedDrop?: (itemEl: HTMLElement | undefined, data: Record<string, unknown>) => void;
+        // Touch counterpart to that drag: arms the tile so the next map tap
+        // places it. Called from the tile's own "place on map" control.
+        mediaPlaceOnMap?: (itemEl: HTMLElement) => void;
     }
 }

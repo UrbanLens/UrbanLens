@@ -192,6 +192,7 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
     const prevLayer = L.layerGroup().addTo(map);
     let lastCursorLL: L.LatLng | null = null;
     let suppressClickUntil = 0;
+    let dragPointerId: number | null = null;
 
     const getColor = () => opts.getColor?.() ?? "#e74c3c";
     const getLabel = () => opts.getTextLabel?.() ?? "";
@@ -414,15 +415,39 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
         }
     }
 
-    function onMouseMove(e: L.LeafletMouseEvent): void {
-        lastCursorLL = e.latlng;
-        if (state || tool === "rect" || tool === "circle") preview(e.latlng);
+    // Leaflet's own "mousemove" never fires for touch, so the preview feed is a
+    // container-level pointer listener instead.
+    function onPointerMove(e: PointerEvent): void {
+        if (!e.isPrimary) return;
+        const ll = map.mouseEventToLatLng(e);
+        lastCursorLL = ll;
+        // An in-progress gesture draws its own preview in onMove below; running
+        // both leaves whichever fires last owning the frame.
+        if (dragPointerId !== null) return;
+        if (state || tool === "rect" || tool === "circle") preview(ll);
     }
 
-    function onMouseDown(e: MouseEvent): void {
+    function onPointerDown(e: PointerEvent): void {
         if (!tool || e.button !== 0) return;
+        // A second finger (pinch-zoom) must not open a competing gesture.
+        if (!e.isPrimary || dragPointerId !== null) return;
         const eligible = ["circle", "rect", "arrow", "line", "text", "freehand"].includes(tool);
         if (!eligible) return;
+
+        const container = map.getContainer();
+        const target = e.target instanceof Element ? e.target : null;
+        // The map toolbar, the layers panel and Leaflet's own controls all sit
+        // inside the map container: capturing the pointer for a press on one of
+        // those would retarget its click to the container and swallow the button.
+        if (target !== container && !target?.closest(".leaflet-pane")) return;
+
+        const pointerId = e.pointerId;
+        // Deliberately not preventDefault()ed, unlike the app's other pointer
+        // drags: a press that never moves still has to produce the click that
+        // onClick places a point from, and cancelling pointerdown can suppress it.
+        container.setPointerCapture(pointerId);
+        dragPointerId = pointerId;
+        map.dragging.disable();
 
         const startLL = map.mouseEventToLatLng(e);
         const startX = e.clientX;
@@ -430,6 +455,10 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
         let isDragging = false;
         // For arrow/line: if we already have points placed via click, chain onto them
         const hasPoints = !!(state?.points.length && (tool === "arrow" || tool === "line"));
+        // A finger wobbles more than a mouse: at the mouse threshold a tap that
+        // drifts commits a degenerate shape instead of placing a point.
+        const coarse = e.pointerType === "touch";
+        const DRAG_MIN_PX = coarse ? 12 : 6;
 
         // Freehand samples every point along the drag path (throttled by a
         // minimum on-screen distance between samples, to keep the point count
@@ -439,12 +468,24 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
         const freehandPoints: LatLngTuple[] = [];
         let lastSampleX = startX;
         let lastSampleY = startY;
-        const FREEHAND_MIN_SAMPLE_PX = 4;
+        const FREEHAND_MIN_SAMPLE_PX = coarse ? 6 : 4;
 
-        function onMove(ev: MouseEvent): void {
+        function endGesture(): void {
+            container.removeEventListener("pointermove", onMove);
+            container.removeEventListener("pointerup", onUp);
+            container.removeEventListener("pointercancel", onCancel);
+            dragPointerId = null;
+            // An armed tool keeps panning off for its whole session (see
+            // startTool); only a session deactivated mid-gesture gets it back.
+            if (!tool) map.dragging.enable();
+        }
+
+        function onMove(ev: PointerEvent): void {
+            // Other pointers keep reaching this element while ours is captured.
+            if (ev.pointerId !== pointerId) return;
             const dx = ev.clientX - startX;
             const dy = ev.clientY - startY;
-            if (!isDragging && Math.hypot(dx, dy) < 6) return;
+            if (!isDragging && Math.hypot(dx, dy) < DRAG_MIN_PX) return;
             isDragging = true;
             const endLL = map.mouseEventToLatLng(ev);
             const c = getColor();
@@ -480,8 +521,17 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
             }
         }
 
-        function onUp(ev: MouseEvent): void {
-            document.removeEventListener("mousemove", onMove);
+        function onCancel(ev: PointerEvent): void {
+            if (ev.pointerId !== pointerId) return;
+            // A cancelled pointer is the system taking the gesture away, not a
+            // finished shape - drop the preview rather than commit a truncated one.
+            endGesture();
+            clearPrev();
+        }
+
+        function onUp(ev: PointerEvent): void {
+            if (ev.pointerId !== pointerId) return;
+            endGesture();
             clearPrev();
             const dx = ev.clientX - startX;
             const dy = ev.clientY - startY;
@@ -490,11 +540,11 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
             // by net displacement like every other drag-to-draw tool below.
             if (tool === "freehand") {
                 if (freehandPoints.length < 2) return;
-            } else if (!isDragging || Math.hypot(dx, dy) < 6) {
+            } else if (!isDragging || Math.hypot(dx, dy) < DRAG_MIN_PX) {
                 return; // too small - treat as click
             }
             const endLL = map.mouseEventToLatLng(ev);
-            // A completed drag still fires a native `click` right after this mouseup;
+            // A completed drag still fires a native `click` right after this pointerup;
             // swallow it so it doesn't start a stray new point at the drag's end.
             suppressClickUntil = Date.now() + 350;
 
@@ -516,8 +566,9 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
             }
         }
 
-        document.addEventListener("mousemove", onMove);
-        document.addEventListener("mouseup", onUp, { once: true });
+        container.addEventListener("pointermove", onMove);
+        container.addEventListener("pointerup", onUp);
+        container.addEventListener("pointercancel", onCancel);
     }
 
     function onKeyDown(e: KeyboardEvent): void {
@@ -539,15 +590,15 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
 
     map.on("click", onClick);
     map.on("dblclick", onDblClick);
-    map.on("mousemove", onMouseMove);
-    map.getContainer().addEventListener("mousedown", onMouseDown);
+    map.getContainer().addEventListener("pointermove", onPointerMove);
+    map.getContainer().addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown, true);
 
     function destroy(): void {
         map.off("click", onClick);
         map.off("dblclick", onDblClick);
-        map.off("mousemove", onMouseMove);
-        map.getContainer().removeEventListener("mousedown", onMouseDown);
+        map.getContainer().removeEventListener("pointermove", onPointerMove);
+        map.getContainer().removeEventListener("pointerdown", onPointerDown);
         document.removeEventListener("keydown", onKeyDown, true);
         if (map.hasLayer(prevLayer)) map.removeLayer(prevLayer);
     }

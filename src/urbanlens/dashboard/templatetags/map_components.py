@@ -483,6 +483,20 @@ register_map_tool(
 )
 register_map_tool(
     MapToolSpec(
+        key="pin_list",
+        icon="list",
+        aria_label="Pin list",
+        tooltip="Browse the pins matching the current filters",
+        tooltip_pos="below",
+        # _togglePinListPanel() already looks this id up to sync the button's
+        # active state; the edge handle (#pin-list-handle) is a desktop
+        # convenience rather than the only way in.
+        button_id="pin-list-button",
+        onclick="_togglePinListPanel()",
+    )
+)
+register_map_tool(
+    MapToolSpec(
         key="select",
         icon="check_box",
         aria_label="Select pins",

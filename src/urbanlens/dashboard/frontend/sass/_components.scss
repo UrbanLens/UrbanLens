@@ -646,6 +646,32 @@
 			border: none !important;
 			outline: none !important;
 		}
+
+		// The overlapped-input trick means the thumbs are the ONLY hittable
+		// part of this control (track and input are both pointer-events:none so
+		// the two ranges don't block each other), and these drive every
+		// score/count filter. An 18px thumb is well under a finger, so grow it
+		// on touch - the hit area of a native range thumb tracks its rendered
+		// size, and no ::before can be attached to reach it.
+		@media (pointer: coarse) {
+			&::-webkit-slider-thumb {
+				width: 28px;
+				height: 28px;
+			}
+
+			&::-moz-range-thumb {
+				width: 28px;
+				height: 28px;
+			}
+		}
+	}
+
+	@media (pointer: coarse) {
+		// Room for the larger touch thumbs above, which would otherwise be
+		// clipped by the track area's tighter desktop height.
+		&__track-area {
+			height: 30px;
+		}
 	}
 
 	&__value-label {

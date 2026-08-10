@@ -395,7 +395,7 @@ class PublicCostsViewTests(TestCase):
 
     def test_footer_link_hidden_when_disabled(self) -> None:
         response = self.client.get(reverse("about"))
-        self.assertNotContains(response, "Running Costs")
+        self.assertNotContains(response, "Costs")
 
     def test_footer_link_shown_when_enabled(self) -> None:
         settings_obj = SiteSettings.get_current()
@@ -403,4 +403,4 @@ class PublicCostsViewTests(TestCase):
         settings_obj.save(update_fields=["public_costs_page_enabled"])
 
         response = self.client.get(reverse("about"))
-        self.assertContains(response, "Running Costs")
+        self.assertContains(response, "Costs")

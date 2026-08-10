@@ -43,9 +43,18 @@
         }
     }
 
-    &:hover {
+    &:hover,
+    &:focus-within {
         #upload-avatar-button {
             cursor: pointer;
+            display: block;
+        }
+    }
+
+    // Hover-to-reveal leaves this unreachable on touch, where it is the only
+    // way to change an avatar - keep it permanently visible there instead.
+    @media (hover: none) {
+        #upload-avatar-button {
             display: block;
         }
     }
@@ -276,9 +285,17 @@ div.section {
     &.collapsed {
         opacity: 0.45;
 
-        &:focus,
+        // :focus-within, not :focus - .map-buttons is a non-focusable <div>, so
+        // :focus never matched and touch has no :hover to fall back on.
+        &:focus-within,
         &:hover {
             opacity: 1;
+        }
+
+        // Without hover there is no way to bring a collapsed toolbar back to
+        // full opacity, so keep it legible enough to find and tap.
+        @media (hover: none) {
+            opacity: 0.85;
         }
 
         .map-buttons-content {
@@ -379,6 +396,8 @@ div.section {
         color: var(--ul-grey-6);
         flex-shrink: 0;
         border-radius: $radius-sm;
+        // ~22px wide, and the only way to reach saved filters past the first page.
+        @include touch-target;
 
         .material-symbols-outlined {
             font-size: 1.1rem;
@@ -544,17 +563,65 @@ div.section {
     animation: spin 1.2s linear infinite;
 }
 
-// -- Map toolbar: ensure 44px touch targets on mobile -------------------------
+// -- Mobile map bottom dock ---------------------------------------------------
+// Below $breakpoint-sm every bottom-anchored map overlay competes for the same
+// corner: .map-buttons flips to bottom-right (it is top-right from sm up),
+// .map-saved-filters-toolbar is bottom-right at every breakpoint, and
+// .map-layers-panel is bottom-left. Tools and saved filters resolved to
+// identical coordinates at the same z-index, so whichever came later in the
+// DOM (saved filters) swallowed every tap meant for the other - which included
+// the only mobile route to the filter panel.
+//
+// The saved-filters strip is always exactly one row tall, so it keeps the
+// baseline and the tool toolbar stacks above it. Stacking in that direction
+// lets the tool row wrap to as many rows as it needs (10-tool markup maps do)
+// without ever growing into the strip.
 
 @include down($breakpoint-sm) {
+    // One .map-btn-icon plus .map-buttons' padding and borders - the height of
+    // the single-row saved-filters strip the toolbar has to clear.
+    #map {
+        --map-dock-row-h: 54px;
+    }
+
     .map-buttons {
         padding: 5px 5px 5px 3px;
         gap: 3px;
+        max-width: calc(100vw - 20px);
 
+        // 44px literally, not 2.75rem: the root font-size shrinks on small
+        // screens, so a rem value silently lands under the touch-target floor.
         .map-btn-icon {
-            width: 2.75rem;
-            height: 2.75rem;
+            width: 44px;
+            height: 44px;
         }
+
+        // Was an 18px sliver, and it is the only route back to a collapsed toolbar.
+        .map-toolbar-collapse {
+            width: 32px;
+            height: 44px;
+        }
+
+        // Base sets overflow:hidden with no wrap, so a toolbar wider than the
+        // screen silently clipped its trailing tools off with no way to reach
+        // them (the 10-tool markup map lost Select child pins and Screenshot).
+        .map-buttons-content {
+            flex-wrap: wrap;
+            justify-content: flex-end;
+            row-gap: 3px;
+        }
+    }
+
+    // Keeps clear of the bottom-left layers toggle on a 360px-wide screen.
+    .map-saved-filters-toolbar {
+        max-width: min(58vw, 18rem);
+    }
+
+    // Only lift the tools when a saved-filters strip is actually present. The
+    // class (unlike the id) exists only on the populated toolbar - the empty
+    // out-of-band placeholder keeps the id alone, so :has() must not match it.
+    #map:has(.map-saved-filters-toolbar) .map-buttons:not(.map-saved-filters-toolbar) {
+        bottom: calc(28px + var(--map-dock-row-h) + 8px);
     }
 }
 

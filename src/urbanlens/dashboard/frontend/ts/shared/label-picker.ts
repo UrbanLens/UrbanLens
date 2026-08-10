@@ -148,6 +148,7 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
     let dropHandled = false; // set by drop handlers so dragend knows not to auto-remove
     let chipJustDragged = false; // suppresses the click browsers fire after dragend
     let availJustDragged = false; // same, for labels dragged straight from the list
+    let pressJustHandled = false; // same, for the click that follows a long-press/context-menu release
     // Non-null in formula mode: parsed groups are the canonical state.
     let formulaGroups: LabelGroup[] | null = null;
     // Kind-tab filter ("" = All) and the formula bar's current search token - both only
@@ -193,16 +194,103 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
         return m;
     }
 
+    // -- Long-press: the touch/pen stand-in for right-click -------------------
+    // iOS Safari never fires `contextmenu` and no mobile browser starts an HTML5
+    // drag from touch, so excluding a label and flipping a chip between the
+    // columns are otherwise unreachable without typing a formula.
+    const LONG_PRESS_MS = 500;
+    // A finger drifts several px through a press its owner considers still, so
+    // this is looser than a mouse would need.
+    const LONG_PRESS_SLOP_PX = 10;
+
+    let pressTimer = 0;
+    let endPress: (() => void) | null = null;
+
+    /** Drops the pending long-press, if any, without running it. */
+    function cancelPress(): void {
+        if (pressTimer) window.clearTimeout(pressTimer);
+        pressTimer = 0;
+        endPress?.();
+        endPress = null;
+    }
+
+    function releasePress(): void {
+        pressJustHandled = false;
+        document.removeEventListener("click", releasePress);
+        document.removeEventListener("pointerdown", releasePress);
+    }
+
+    /**
+     * Takes ownership of the press in flight, false if the other path already
+     * has it - Android fires `contextmenu` for the very gesture the long-press
+     * timer is counting, and handling both would toggle twice.
+     *
+     * Claiming also neutralizes the click the release emits (see the
+     * `pressJustHandled` guards): that can't expire on a timer, since a press
+     * may be held for any length of time, so it lifts on the click itself or on
+     * the next pointerdown when the release produces no click at all.
+     */
+    function claimPress(): boolean {
+        if (pressJustHandled) return false;
+        cancelPress();
+        pressJustHandled = true;
+        document.addEventListener("click", releasePress);
+        document.addEventListener("pointerdown", releasePress);
+        return true;
+    }
+
+    /**
+     * Runs `action` once `event`'s pointer has been held roughly still for
+     * LONG_PRESS_MS. Mouse pointers are excluded: they already have right-click,
+     * and a slow left-click has to stay a plain click.
+     */
+    function startPress(event: PointerEvent, action: () => void): void {
+        if (event.pointerType === "mouse" || !event.isPrimary || event.button !== 0) return;
+        cancelPress();
+        const startX = event.clientX;
+        const startY = event.clientY;
+        const onMove = (moveEvent: PointerEvent): void => {
+            if (Math.abs(moveEvent.clientX - startX) > LONG_PRESS_SLOP_PX || Math.abs(moveEvent.clientY - startY) > LONG_PRESS_SLOP_PX) cancelPress();
+        };
+        // Watched on the document rather than on the pressed element (which
+        // map-image-overlays.ts can do, via setPointerCapture) because `action`
+        // replaces the chip mid-gesture, and because capturing the pointer stops
+        // the element's own native drag from ever starting.
+        document.addEventListener("pointermove", onMove);
+        document.addEventListener("pointerup", cancelPress);
+        document.addEventListener("pointercancel", cancelPress);
+        // A native drag swallows pointermove, so without this the timer would
+        // still fire midway through dragging a label between the columns.
+        document.addEventListener("dragstart", cancelPress);
+        endPress = (): void => {
+            document.removeEventListener("pointermove", onMove);
+            document.removeEventListener("pointerup", cancelPress);
+            document.removeEventListener("pointercancel", cancelPress);
+            document.removeEventListener("dragstart", cancelPress);
+        };
+        pressTimer = window.setTimeout(() => {
+            pressTimer = 0;
+            if (claimPress()) action();
+        }, LONG_PRESS_MS);
+    }
+
     // -- Chip HTML ------------------------------------------------------------
     function chipHtml(id: string, label: string, color: string, icon: string, mode: ChipMode): string {
         const bg = color ? color + "33" : mode === "incl" ? "rgba(34,197,94,.18)" : "rgba(239,68,68,.18)";
         const border = color ? color + "66" : mode === "incl" ? "rgba(34,197,94,.4)" : "rgba(239,68,68,.4)";
         const txtCol = mode === "incl" ? "#86efac" : "#fca5a5";
         const iconHtml = icon ? `<span style="font-size:.85em">${escHtml(icon)}</span>` : "";
+        const flip = mode === "incl" ? "exclude" : "include";
+        // Right-click/long-press is the fast path, but it's invisible - the
+        // button is the only cue that a chip has two states, and on touch the
+        // only one-tap way to flip it. Styled inline because `_map.scss` has no
+        // rule for it.
+        const toggleHtml = `<button type="button" class="fp-label-chip-toggle" title="Switch to ${flip}" aria-label="Switch to ${flip}"
+                      style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0;border:0;border-radius:50%;background:rgba(0,0,0,.25);color:inherit;font:inherit;line-height:1;cursor:pointer">${mode === "incl" ? "−" : "+"}</button>`;
         return `<span class="fp-label-chip fp-label-chip--${mode}" data-id="${escHtml(id)}" draggable="true"
-                      title="Click to remove · Right-click to ${mode === "incl" ? "exclude" : "include"} · Drag to move or drop outside to remove"
+                      title="Click to remove · Right-click or long-press to ${flip} · Drag to move or drop outside to remove"
                       style="background:${bg};border-color:${border};color:${txtCol}">
-                    ${iconHtml}<span class="fp-label-chip-text">${escHtml(label)}</span>
+                    ${iconHtml}<span class="fp-label-chip-text">${escHtml(label)}</span>${toggleHtml}
                 </span>`;
     }
 
@@ -347,11 +435,16 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
             container.querySelectorAll<HTMLElement>(".fp-label-chip").forEach((chip) => {
                 const id = chip.dataset.id || "";
                 chip.addEventListener("click", () => {
-                    if (!chipJustDragged) removeLabel(id);
+                    if (!chipJustDragged && !pressJustHandled) removeLabel(id);
                 });
                 chip.addEventListener("contextmenu", (e) => {
                     e.preventDefault();
-                    toggleLabelMode(id);
+                    if (claimPress()) toggleLabelMode(id);
+                });
+                chip.addEventListener("pointerdown", (e) => startPress(e, () => toggleLabelMode(id)));
+                chip.querySelector<HTMLElement>(".fp-label-chip-toggle")?.addEventListener("click", (e) => {
+                    e.stopPropagation(); // the chip body around it removes the label
+                    if (!pressJustHandled) toggleLabelMode(id);
                 });
                 chip.addEventListener("dragstart", (e) => {
                     dragId = id;
@@ -482,15 +575,21 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
     els.list.addEventListener("click", (e) => {
         const btn = (e.target as HTMLElement).closest<HTMLElement>(".fp-label-avail");
         if (!btn) return;
-        // Suppress the click some browsers fire on the source right after a drop.
-        if (availJustDragged) return;
+        // Suppress the click some browsers fire on the source right after a drop,
+        // and the one that follows a long-press release.
+        if (availJustDragged || pressJustHandled) return;
         addLabel(btn, "incl");
     });
     els.list.addEventListener("contextmenu", (e) => {
         const btn = (e.target as HTMLElement).closest<HTMLElement>(".fp-label-avail");
         if (!btn) return;
         e.preventDefault();
-        addLabel(btn, "excl");
+        if (claimPress()) addLabel(btn, "excl");
+    });
+    els.list.addEventListener("pointerdown", (e) => {
+        const btn = (e.target as HTMLElement).closest<HTMLElement>(".fp-label-avail");
+        if (!btn) return;
+        startPress(e, () => addLabel(btn, "excl"));
     });
     els.list.addEventListener("dragstart", (e) => {
         const btn = (e.target as HTMLElement).closest<HTMLElement>(".fp-label-avail");

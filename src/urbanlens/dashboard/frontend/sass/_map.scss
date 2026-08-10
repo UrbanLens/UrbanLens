@@ -1353,6 +1353,16 @@ img.leaflet-marker-icon.is-selected {
     padding: .85rem 1.25rem;
     border-top: 1px solid var(--ul-surface-border);
     flex-shrink: 0;
+    // In edit mode this row holds four nowrap buttons (Delete, View details,
+    // Cancel, Save) that outgrow a phone-width dialog. Without wrapping, the
+    // overflow runs past the *start* edge - and the dialog clips it with no
+    // scroll, so Delete became unreachable rather than merely cramped.
+    flex-wrap: wrap;
+    row-gap: .5rem;
+
+    @include down($breakpoint-sm) {
+        justify-content: space-between;
+    }
 }
 
 // -- Map context menu (right-click) -----------------------------------------
@@ -1745,12 +1755,19 @@ img.leaflet-marker-icon.is-selected {
         color: var(--ul-grey-9);
     }
 
+    // Desktop-only: these handles dock to the map's left/right edge and slide
+    // by the panel's side width when open, which only makes sense while the
+    // panels are side-docked. Below $breakpoint-sm both panels become
+    // full-width bottom sheets, so the toolbar's own #pin-list-button /
+    // #search-pins-button are the entry points there (see map_components.py's
+    // MAP_TOOL_REGISTRY) - the handle is a desktop convenience, not the only
+    // way in.
     @include up($breakpoint-sm) {
         display: flex;
     }
 }
 
-/* Always-visible shortcut handle (desktop only - the layers-menu entry covers mobile) */
+/* Edge shortcut handle, mirrored by .filter-panel-handle below. Desktop-only - see .panel-handle. */
 .pin-list-handle {
     left: 0;
     transform: translateY(-50%);
@@ -1761,8 +1778,7 @@ img.leaflet-marker-icon.is-selected {
     }
 }
 
-/* Always-visible shortcut handle for #filter-panel - right-docked mirror of .pin-list-handle,
-   same mechanic/look (desktop only - the layers-menu entry covers mobile). */
+/* Right-docked mirror of .pin-list-handle, same mechanic/look. Desktop-only - see .panel-handle. */
 .filter-panel-handle {
     right: 0;
     transform: translateY(-50%);
@@ -1804,6 +1820,9 @@ img.leaflet-marker-icon.is-selected {
     font-size: 1rem;
     line-height: 1;
     transition: color 0.15s, background 0.15s;
+    // On mobile these panels are bottom sheets and this is their dismiss
+    // control, but it renders at roughly 28x22px.
+    @include touch-target;
 }
 
 .fp-close:hover {
@@ -1901,6 +1920,13 @@ img.leaflet-marker-icon.is-selected {
     transition: background 0.15s, border-color 0.15s, color 0.15s;
     user-select: none;
     white-space: nowrap;
+
+    // Real padding rather than the touch-target mixin: chips sit 5px apart in a
+    // wrapping list, so overlaying expanded hit areas would let neighbours
+    // steal each other's taps.
+    @media (pointer: coarse) {
+        padding: 9px 14px;
+    }
     font-size: 0.76rem;
 }
 
@@ -2353,6 +2379,16 @@ details.fp-accordion-item[open] .fp-acc-arrow {
     overflow-y: auto;
     scrollbar-width: thin;
     scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+    overscroll-behavior: contain;
+
+    // On mobile this sits inside #filter-form's scroller, inside the filter
+    // bottom sheet - three nested scroll contexts, so a drag starting on a chip
+    // chained unpredictably between them. Let the list flow in the sheet's own
+    // scroller instead of owning a fourth 140px viewport.
+    @include down($breakpoint-sm) {
+        max-height: none;
+        overflow-y: visible;
+    }
 }
 
 /* -- Floating address search bar (mobile-first) --------------------- */
@@ -2426,8 +2462,12 @@ div.container .addr-search-bar {
         border: none;
         outline: none;
         color: var(--ul-grey-8);
-        font-size: 0.78rem;
-        padding: 6px 0;
+        // 16px is iOS Safari's focus-zoom threshold: anything smaller makes
+        // focusing this field zoom the whole map page, and the viewport meta
+        // sets no maximum-scale to prevent it. The desktop step-down below is
+        // safe because a pointer device never triggers that zoom.
+        font-size: 16px;
+        padding: 10px 0;
 
         &::placeholder {
             color: var(--ul-grey-6);
@@ -2453,6 +2493,15 @@ div.container .addr-search-bar {
     align-items: center;
     justify-content: center;
     transition: color .15s, background .15s;
+    // ~19px rendered, sitting 4px apart inside the search bar.
+    @include touch-target;
+
+    // Hover is the only feedback these carry, and touch has none - give a tap
+    // something visible to confirm it landed.
+    &:active {
+        color: var(--ul-grey-9);
+        background: rgba(255, 255, 255, 0.12);
+    }
     flex-shrink: 0;
 
     &:hover {
@@ -2502,6 +2551,11 @@ div.container .addr-search-bar {
     overflow: hidden;
     max-height: 320px;
     overflow-y: auto;
+    // Leaflet sets `touch-action: none` on its container to own touch drags,
+    // which also suppresses native scrolling of nested overflow regions like
+    // this one. Re-enable vertical panning for the list itself.
+    touch-action: pan-y;
+    overscroll-behavior: contain;
 
     &[hidden] { display: none; }
 }
@@ -3496,6 +3550,52 @@ div.container .addr-search-bar {
             transform: translateY(0);
         }
     }
+
+    // The markup/detail-pin draw panel is a 300px full-height side dock, which
+    // covers most of a phone screen - and it is force-shown the moment a
+    // drawing tool is armed, so it hides the map you have to draw on. Same
+    // bottom-sheet treatment as the two panels above, but short enough to
+    // leave the map workable while a tool is active.
+    .map-dialog--side {
+        top: auto;
+        right: 0;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        max-width: none;
+        height: auto;
+        max-height: 45dvh;
+        border-radius: 16px 16px 0 0;
+    }
+
+    // Desktop shifts every bottom-docked control sideways when a panel opens
+    // (see the #map.filter-open / #map.pin-list-open rules above, all of which
+    // are up($breakpoint-sm)-only). Here the panels are 70-80dvh sheets that
+    // cover the whole dock band instead, so the dock drops away entirely
+    // rather than trying to dodge - one rule replacing five per-element shifts.
+    #map.filter-open,
+    #map.pin-list-open {
+        .map-buttons,
+        .map-layers-panel {
+            transform: translateY(120%);
+            pointer-events: none;
+        }
+    }
+
+    // Select mode raises its own full-width action bar at the bottom, which
+    // outranks the dock (z-index 1200) and would otherwise sit on top of it.
+    #map.select-mode .map-buttons {
+        transform: translateY(120%);
+        pointer-events: none;
+    }
+
+    .bulk-select-toolbar {
+        left: 10px;
+        right: 10px;
+        bottom: 10px;
+        transform: none;
+        max-width: none;
+    }
 }
 
 /* -- Pin load overlay (cold start only) --------------------------- */
@@ -3764,11 +3864,15 @@ div.container .addr-search-bar {
     to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-@media (max-width: 640px) {
+// Switches on the same token as every other map override. A raw 640px here
+// left a 641-767px band where this card kept its desktop top-right anchoring
+// while the control it points at had already moved to the opposite corner.
+@include down($breakpoint-sm) {
     .map-onboarding {
         top: auto;
         right: 12px;
-        bottom: 78px;
+        // Clears the bottom dock (tools row + saved-filters strip) it highlights.
+        bottom: calc(28px + var(--map-dock-row-h, 54px) + 20px);
         left: 12px;
         width: auto;
     }
@@ -3929,7 +4033,8 @@ div.container .addr-search-bar {
     50% { outline-color: rgba(6, 182, 212, .55); }
 }
 
-@media (max-width: 720px) {
+// Same token normalization as .map-onboarding above.
+@include down($breakpoint-sm) {
     .page-onboarding {
         top: auto;
         right: 12px;
@@ -4061,6 +4166,14 @@ div.container .addr-search-bar {
     max-height: clamp(34px, 22cqmin, 74px);
     transition: opacity .2s ease, box-shadow .2s ease, color .2s ease, border-color .2s ease;
     white-space: nowrap;
+
+    // Below $breakpoint-xs this is a horizontal icon+label row, and the shared
+    // cap above resolves to ~79px on a 360px screen against ~89px of content -
+    // clipping "Layers" mid-word. The row form is bounded by its own content,
+    // so let it size naturally there.
+    @include down($breakpoint-xs) {
+        max-width: none;
+    }
 
     .map-layers-toggle-thumb {
         display: none;
@@ -4746,6 +4859,7 @@ div.container .addr-search-bar {
     border-radius: 50%;
     color: rgba(255, 255, 255, .35);
     cursor: pointer;
+    @include touch-target;
     transition: background .15s, color .15s, border-color .15s;
 
     .material-symbols-outlined,
@@ -4792,12 +4906,23 @@ div.container .addr-search-bar {
     }
 }
 
-// Pinch-to-zoom on phones; show +/- controls from tablet/desktop up
+// Pinch-to-zoom exists on phones, but there is no discrete zoom-*out* gesture
+// (double-tap only zooms in), so one-handed use had no way back out. Keep the
+// +/- controls at every width; on mobile they just need to clear the
+// full-width search bar that owns the top edge there.
 #map .leaflet-control-zoom {
-    display: none;
+    display: block;
+}
 
-    @include up($breakpoint-sm) {
-        display: block;
+@include down($breakpoint-sm) {
+    #map .leaflet-top.leaflet-left {
+        top: 52px;
+    }
+
+    #map .leaflet-control-zoom a {
+        width: 44px;
+        height: 44px;
+        line-height: 44px;
     }
 }
 

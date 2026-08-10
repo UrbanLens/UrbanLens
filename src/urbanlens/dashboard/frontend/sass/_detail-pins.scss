@@ -846,7 +846,9 @@
     color: var(--ul-grey-7);
 }
 
-@media (max-width: 720px) {
+// Normalized onto the shared breakpoint token - a raw 720px here disagreed
+// with the map overrides this dialog's own map is subject to.
+@include down($breakpoint-sm) {
     .building-import-layout {
         grid-template-columns: 1fr;
         max-height: calc(100vh - 13rem);

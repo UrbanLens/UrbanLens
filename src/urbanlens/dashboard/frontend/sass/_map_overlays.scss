@@ -2,6 +2,8 @@
 // manage-overlays dialog that owns their settings.
 // See shared/map-image-overlays.ts and controllers/map_overlays.py.
 
+@use 'variables' as *;
+
 // Everything inside is positioned in Leaflet's layer-point space, so the
 // container itself must not offset or clip its children - the matrix3d on each
 // image already carries the full placement.
@@ -41,6 +43,18 @@
   touch-action: none;
   width: 14px;
   z-index: 650;
+
+  // The drag itself is already Pointer Events (map-image-overlays.ts), so touch
+  // reaches it - but a 14px dot is under half a finger, and `touch-action: none`
+  // means a near-miss pans the map instead of nudging the corner. Grow the hit
+  // area, and the dot itself slightly, without moving the coordinate it marks.
+  @include touch-target($position: null);
+
+  @media (pointer: coarse) {
+    height: 20px;
+    width: 20px;
+    margin: -10px 0 0 -10px;
+  }
 
   &:active {
     cursor: grabbing;

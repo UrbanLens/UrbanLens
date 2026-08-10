@@ -1,9 +1,9 @@
 {% extends 'dashboard/themes/base.html' %}
 
-{% block page_title %}Running Costs - {{ site_title|default:"UrbanLens" }}{% endblock %}
+{% block page_title %}Costs - {{ site_title|default:"UrbanLens" }}{% endblock %}
 
 {% block hero %}
-{% include "dashboard/partials/ui/_page_hero.html" with eyebrow="Transparency" title="What it costs to run UrbanLens" subtitle="A rough, ongoing estimate of everything behind the map: hardware, hosting, and the external APIs powering pin enrichment, search, and messaging." modifier="wide" %}
+{% include "dashboard/partials/ui/_page_hero.html" with eyebrow="Transparency" title="What UrbanLens costs to run" subtitle="Costs behind the map: hardware, hosting, and external APIs." modifier="wide" %}
 {% endblock %}
 
 {% block subnav %}

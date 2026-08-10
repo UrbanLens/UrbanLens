@@ -14,7 +14,7 @@
 {% block content %}
 <div id="map" data-map-style="{% if map_dark_mode == 'dark' %}dark{% else %}light{% endif %}" hx-boost="true">
     {# -- Map toolbar (tools only; shared component - see map_components.py) -- #}
-    {% map_toolbar "add_pin,import,search,select,screenshot" %}
+    {% map_toolbar "add_pin,import,search,pin_list,select,screenshot" %}
 
     {# -- Layers panel (bottom-left, Google-Maps style; shared component) ------ #}
     {# Rendered by the shared {% templatetag openblock %} map_layers_panel {% templatetag closeblock %} tag and driven by      #}
@@ -411,6 +411,13 @@
 
     {# -- Pin list panel (left-docked) ------------------------------------ #}
     <div id="pin-list-panel">
+        {# Reuses the filter panel's header chrome - on mobile this panel is a #}
+        {# bottom sheet, where the edge handle is unavailable and a visible #}
+        {# close control is the only dismiss affordance besides the toolbar toggle. #}
+        <div class="fp-header">
+            <span class="fp-title">Pins</span>
+            <button type="button" class="fp-close" onclick="_togglePinListPanel()" aria-label="Close">✕</button>
+        </div>
         <div class="pl-body" id="pin-list-body"></div>
     </div>
 
@@ -1285,6 +1292,43 @@
         if (!keepMarker) _clearContextMenuMarker();
     }
 
+    // Context menus are position:fixed, so they take viewport coordinates and
+    // have to be kept inside it - a long-press near the right or bottom edge
+    // opens the menu where nothing can scroll it back into view otherwise.
+    function _placeFloatingMenu(menu, clientX, clientY) {
+        const margin = 8;
+        menu.style.maxWidth = `${window.innerWidth - margin * 2}px`;
+        menu.style.maxHeight = `${window.innerHeight - margin * 2}px`;
+        menu.style.overflowY = 'auto';
+        // Measure from the origin - shrink-to-fit width depends on where the menu
+        // sits, so measuring it in place reports a squeezed, taller box.
+        menu.style.left = '0px';
+        menu.style.top = '0px';
+        if (!menu.isConnected) document.body.appendChild(menu);
+        const { width, height } = menu.getBoundingClientRect();
+        // Flip to the other side of the press point when the menu does not fit
+        // below/right of it; the clamp then covers menus that fit neither way.
+        const left = clientX + width + margin > window.innerWidth ? clientX - width : clientX;
+        const top = clientY + height + margin > window.innerHeight ? clientY - height : clientY;
+        const maxLeft = Math.max(margin, window.innerWidth - width - margin);
+        const maxTop = Math.max(margin, window.innerHeight - height - margin);
+        menu.style.left = `${Math.min(Math.max(left, margin), maxLeft)}px`;
+        menu.style.top = `${Math.min(Math.max(top, margin), maxTop)}px`;
+    }
+
+    // Marker menus open at the point that was clicked, in viewport coordinates;
+    // a marker reached by keyboard reports none, so fall back to where the
+    // marker itself sits on screen.
+    function _markerMenuAnchor(e, lat, lng) {
+        const src = e && e.originalEvent;
+        if (src && Number.isFinite(src.clientX) && Number.isFinite(src.clientY)) {
+            return { x: src.clientX, y: src.clientY };
+        }
+        const rect = map.getContainer().getBoundingClientRect();
+        const pt = map.latLngToContainerPoint([lat, lng]);
+        return { x: rect.left + pt.x, y: rect.top + pt.y };
+    }
+
     function _clearSearchMarker() {
         if (!_searchMarker) return;
         map.removeLayer(_searchMarker);
@@ -1295,15 +1339,13 @@
         _clearSearchMarker();
         _clearContextMenuMarker();
         _searchMarker = _createTempPlaceMarker(lat, lng, title || '', true /* isSearch */);
-        _searchMarker.on('click', function() {
+        _searchMarker.on('click', function(e) {
             map.closePopup();
             document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
             const latFmt = lat.toFixed(6), lngFmt = lng.toFixed(6);
+            const anchor = _markerMenuAnchor(e, lat, lng);
             const menu = document.createElement('div');
             menu.className = 'map-context-menu';
-            const pt = map.latLngToContainerPoint([lat, lng]);
-            menu.style.top = `${pt.y}px`;
-            menu.style.left = `${pt.x}px`;
 
             const coordItem = document.createElement('button');
             coordItem.className = 'map-context-menu__item map-context-menu__coords';
@@ -1332,7 +1374,7 @@
             dismissItem.addEventListener('click', () => { menu.remove(); _clearSearchMarker(); });
             menu.appendChild(dismissItem);
 
-            document.body.appendChild(menu);
+            _placeFloatingMenu(menu, anchor.x, anchor.y);
             const dismiss = (ev) => {
                 if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', dismiss); }
             };
@@ -2536,8 +2578,8 @@
 
         const menu = document.createElement('div');
         menu.className = 'map-context-menu';
-        menu.style.top = `${e.originalEvent.clientY}px`;
-        menu.style.left = `${e.originalEvent.clientX}px`;
+        const anchorX = e.originalEvent.clientX;
+        const anchorY = e.originalEvent.clientY;
 
         // -- Coordinates row -------------------------------------------------
         const latFmt = lat.toFixed(6);
@@ -2573,7 +2615,12 @@
 
         fetch(`{% url 'map.streetview_check' %}?lat=${lat}&lng=${lng}`)
             .then(r => r.json())
-            .then(data => { if (data.available) svItem.style.display = ''; })
+            .then(data => {
+                if (!data.available || !menu.isConnected) return;
+                svItem.style.display = '';
+                // The extra row can push the menu past the bottom of the screen.
+                _placeFloatingMenu(menu, anchorX, anchorY);
+            })
             .catch(() => {});
 
         // -- Directions -------------------------------------------------------
@@ -2603,7 +2650,7 @@
         });
         menu.appendChild(addPinItem);
 
-        document.body.appendChild(menu);
+        _placeFloatingMenu(menu, anchorX, anchorY);
 
         _contextMenuDismiss = (ev) => {
             if (!menu.contains(ev.target)) _closeMapContextMenu(menu);
@@ -2728,15 +2775,13 @@
             zIndexOffset: 1000,
             title: place.name,
         });
-        marker.on('click', function () {
+        marker.on('click', function (e) {
             map.closePopup();
             document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
             const latFmt = lat.toFixed(6), lngFmt = lng.toFixed(6);
+            const anchor = _markerMenuAnchor(e, lat, lng);
             const menu = document.createElement('div');
             menu.className = 'map-context-menu';
-            const pt = map.latLngToContainerPoint([lat, lng]);
-            menu.style.top = `${pt.y}px`;
-            menu.style.left = `${pt.x}px`;
 
             // Header: place name
             const nameRow = document.createElement('div');
@@ -2758,6 +2803,7 @@
                     .then(data => {
                         if (data?.place && document.body.contains(detailsWrap)) {
                             detailsWrap.innerHTML = _buildPlaceDetailRows(place, data.place);
+                            _placeFloatingMenu(menu, anchor.x, anchor.y);
                         }
                     })
                     .catch(() => {});
@@ -2776,6 +2822,7 @@
                             description: short,
                             vicinity: data.description || place.vicinity || '',
                         });
+                        _placeFloatingMenu(menu, anchor.x, anchor.y);
                     }
                 })
                 .catch(() => {});
@@ -2815,7 +2862,7 @@
             });
             menu.appendChild(infoItem);
 
-            document.body.appendChild(menu);
+            _placeFloatingMenu(menu, anchor.x, anchor.y);
             const dismiss = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', dismiss); } };
             setTimeout(() => document.addEventListener('click', dismiss), 0);
         });
@@ -2987,7 +3034,6 @@
         _selectMode = true;
         document.getElementById('select-pins-button')?.classList.add('active');
         document.getElementById('map')?.classList.add('select-mode');
-        map.dragging.disable();
         _addPinClickMode = false;
         _markerMap.forEach(function (m) { if (m.dragging) m.dragging.disable(); });
         document.getElementById('bulk-select-toolbar').hidden = false;
@@ -2999,6 +3045,8 @@
         _selectMode = false;
         document.getElementById('select-pins-button')?.classList.remove('active');
         document.getElementById('map')?.classList.remove('select-mode');
+        // Dragging is only ever off for the length of a rubber-band gesture
+        // (see _initSelectDragRectangle); this covers one that never finished.
         map.dragging.enable();
         _markerMap.forEach(function (m) { if (m.dragging) m.dragging.enable(); });
         _clearSelection();
@@ -3092,28 +3140,57 @@
         return (pin && (pin.name || pin.address)) || 'Untitled pin';
     }
 
-    // -- Rectangle drag-select: mousedown-move-up on the map container while
-    // select mode is active. A 6px move threshold keeps a plain click on empty
-    // map space from being treated as a (zero-size) drag-select. -------------
+    // -- Rectangle drag-select: pointerdown-move-up on the map container while
+    // select mode is active, so mouse, touch and pen all run the same path. A
+    // move threshold keeps a plain click/tap on empty map space from being
+    // treated as a (zero-size) drag-select. ---------------------------------
     (function _initSelectDragRectangle() {
-        map.getContainer().addEventListener('mousedown', function (e) {
-            if (!_selectMode || e.button !== 0) return;
+        const container = map.getContainer();
+        container.addEventListener('pointerdown', function (e) {
+            // A second finger belongs to a pinch, not to a second rectangle.
+            if (!_selectMode || !e.isPrimary || e.button !== 0) return;
             const startLL = map.mouseEventToLatLng(e);
             const startX = e.clientX;
             const startY = e.clientY;
+            // A finger wanders further than a mouse does while pressing, so a
+            // coarse pointer has to travel further before this reads as a drag.
+            const threshold = e.pointerType === 'mouse' ? 6 : 12;
             let dragging = false;
 
+            // Select mode leaves map dragging on so touch users can still move
+            // the map; it is off only for the length of this gesture. Pointerdown
+            // runs ahead of Leaflet's own mousedown/touchstart, so the map cannot
+            // pan even for the first pixel of a rubber band.
+            map.dragging.disable();
+
+            function cleanup() {
+                container.removeEventListener('pointermove', onMove);
+                window.removeEventListener('pointerup', onUp);
+                window.removeEventListener('pointercancel', onCancel);
+                if (_dragSelectRect) { map.removeLayer(_dragSelectRect); _dragSelectRect = null; }
+                map.dragging.enable();
+            }
             function onMove(ev) {
-                if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6) return;
-                dragging = true;
+                if (ev.pointerId !== e.pointerId) return;
+                if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < threshold) return;
+                if (!dragging) {
+                    dragging = true;
+                    // Captured only once the gesture is definitely a drag: capturing
+                    // on pointerdown would retarget the click to the container and
+                    // tapping a pin would stop toggling its selection.
+                    container.setPointerCapture(e.pointerId);
+                }
+                // The rectangle owns the gesture now - the browser must not take
+                // it for a scroll.
+                if (ev.pointerType !== 'mouse') ev.preventDefault();
                 if (_dragSelectRect) map.removeLayer(_dragSelectRect);
                 _dragSelectRect = L.rectangle(L.latLngBounds(startLL, map.mouseEventToLatLng(ev)), {
                     color: '#1E88E5', weight: 2, fillOpacity: 0.08, dashArray: '4 4', interactive: false,
                 }).addTo(map);
             }
             function onUp(ev) {
-                document.removeEventListener('mousemove', onMove);
-                if (_dragSelectRect) { map.removeLayer(_dragSelectRect); _dragSelectRect = null; }
+                if (ev.pointerId !== e.pointerId) return;
+                cleanup();
                 if (!dragging) return;
                 const bounds = L.latLngBounds(startLL, map.mouseEventToLatLng(ev));
                 function selectInBounds(marker, uuid) {
@@ -3122,8 +3199,16 @@
                 _markerMap.forEach(selectInBounds);
                 if (_childPinsActive) _childMarkerMap.forEach(selectInBounds);
             }
-            document.addEventListener('mousemove', onMove);
-            document.addEventListener('mouseup', onUp, { once: true });
+            function onCancel(ev) {
+                if (ev.pointerId === e.pointerId) cleanup();
+            }
+
+            container.addEventListener('pointermove', onMove);
+            // The end of the gesture is watched on the window: until the capture
+            // above is taken, a release outside the map would never reach the
+            // container and would strand map dragging in its disabled state.
+            window.addEventListener('pointerup', onUp);
+            window.addEventListener('pointercancel', onCancel);
         });
     }());
 
@@ -4543,14 +4628,12 @@
             latLngs.push([r.lat, r.lng]);
             const marker = _createTempPlaceMarker(r.lat, r.lng, r.title || searchTerm, true);
             marker.on('click', (function (mlat, mlng, mname) {
-                return function () {
+                return function (e) {
                     map.closePopup();
                     document.querySelectorAll('.map-context-menu').forEach(m => m.remove());
+                    const anchor = _markerMenuAnchor(e, mlat, mlng);
                     const menu = document.createElement('div');
                     menu.className = 'map-context-menu';
-                    const pt = map.latLngToContainerPoint([mlat, mlng]);
-                    menu.style.top = `${pt.y}px`;
-                    menu.style.left = `${pt.x}px`;
                     const coordItem = document.createElement('button');
                     coordItem.className = 'map-context-menu__item map-context-menu__coords';
                     coordItem.title = 'Click to copy coordinates';
@@ -4572,7 +4655,7 @@
                     dismissItem.innerHTML = '<i class="material-symbols-outlined">close</i>Dismiss marker';
                     dismissItem.addEventListener('click', () => { menu.remove(); marker.remove(); });
                     menu.appendChild(dismissItem);
-                    document.body.appendChild(menu);
+                    _placeFloatingMenu(menu, anchor.x, anchor.y);
                     const dismiss = (ev) => { if (!menu.contains(ev.target)) { menu.remove(); document.removeEventListener('click', dismiss); } };
                     setTimeout(() => document.addEventListener('click', dismiss), 0);
                 };
