@@ -676,6 +676,7 @@
     let   _totalPins         = {{ pin_count|default:0 }};
     let   _isOffline         = false;   // true when the meta poll returns an error/network failure
     let   _searchMarker      = null;    // temporary Leaflet marker placed on search-result jump
+    let   _userLocationMarker = null;   // persistent "you are here" dot from the most recent GPS fix
     let   _contextMenuMarker = null;    // temporary marker while the map right-click menu is open
     let   _contextMenuDismiss = null;   // document click handler for the active context menu
 
@@ -841,6 +842,13 @@
     window.map = map;
     window.pin = null;
 
+    // Show the "you are here" dot immediately from a cached fix (if any) rather
+    // than waiting up to 8s for the live read below to resolve; that live read
+    // then relocates this same marker once it comes back.
+    if (_MAP_CENTER_MODE === 'gps' && _cachedUserLoc) {
+        _showUserLocationMarker(_cachedUserLoc.lat, _cachedUserLoc.lng);
+    }
+
     // GPS mode: refine the initial centre with a live geolocation read.
     // If we already used a cached position, the map won't visibly jump; we just
     // silently refresh the cache so the next load is accurate. If we had no cached
@@ -873,6 +881,7 @@
         navigator.geolocation.getCurrentPosition(
             (pos) => {
                 _cacheUserLocation(pos.coords.latitude, pos.coords.longitude);
+                _showUserLocationMarker(pos.coords.latitude, pos.coords.longitude);
                 if (_GEOLOCATION_TRACKING_ALLOWED) {
                     _recordGeolocationVisit(pos.coords.latitude, pos.coords.longitude);
                 }
@@ -1267,6 +1276,29 @@
             zIndexOffset: 2000,
             title,
         });
+    }
+
+    // -- "You are here" marker --------------------------------------------------
+    // Unlike _searchMarker (a temp place-pin cleared on the next search), this
+    // persists across pans/searches once a GPS fix has been shown - it's
+    // updated in place rather than recreated, so repeated fixes (initial load,
+    // background refresh, "jump to my location") just relocate the same dot.
+    function _showUserLocationMarker(lat, lng) {
+        if (_userLocationMarker) {
+            _userLocationMarker.setLatLng([lat, lng]);
+            return;
+        }
+        _userLocationMarker = L.marker([lat, lng], {
+            icon: L.divIcon({
+                className: 'user-location-marker-wrap',
+                html: '<span class="user-location-marker-halo"></span><span class="user-location-marker-dot"></span>',
+                iconSize: [22, 22],
+                iconAnchor: [11, 11],
+            }),
+            zIndexOffset: 3000,
+            title: 'Your location',
+        }).bindPopup('Your approximate location');
+        _userLocationMarker.addTo(map);
     }
 
     function _clearContextMenuMarker() {
@@ -4683,7 +4715,10 @@
     function _onLocationSelect(result) {
         _programmaticMove = true;
         map.setView([result.lat, result.lng], result.zoom || _defaultZoom);
-        if (result.type === 'mylocation') return;
+        if (result.type === 'mylocation') {
+            _showUserLocationMarker(result.lat, result.lng);
+            return;
+        }
         if (result.type === 'pin' && result.pinSlug) {
             let found = false;
             for (const [uuid, pin] of _pinStore) {

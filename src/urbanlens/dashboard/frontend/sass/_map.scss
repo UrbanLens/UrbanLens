@@ -124,6 +124,49 @@ body.page-map-view {
     100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
 }
 
+// -- "You are here" marker --------------------------------------------------
+// Unlike the temp place marker above (a bottom-anchored pin glyph for a
+// specific result), this represents an exact point, so it's a centred dot -
+// plus a slow ambient halo (vs. the one-shot drop pulse) since it sits on the
+// map indefinitely rather than announcing a single fresh jump.
+.user-location-marker-wrap {
+    background: none !important;
+    border: none !important;
+    position: relative;
+}
+
+.user-location-marker-dot {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    border-radius: 50%;
+    background: $color-blue-500;
+    border: 3px solid #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, .5);
+    cursor: pointer;
+}
+
+.user-location-marker-halo {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    margin: -8px 0 0 -8px;
+    border-radius: 50%;
+    background: rgba($color-blue-500, .45);
+    animation: ul-user-location-pulse 2.4s ease-out infinite;
+    pointer-events: none;
+}
+
+@keyframes ul-user-location-pulse {
+    0% { transform: scale(1); opacity: .8; }
+    100% { transform: scale(3); opacity: 0; }
+}
+
 // Map pin icon (Material Icons rendered via Leaflet divIcon)
 .map-pin-icon-wrap {
     background: none !important;
