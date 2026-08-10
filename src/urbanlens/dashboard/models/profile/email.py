@@ -5,9 +5,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 import uuid
 
-from django.db.models import CASCADE, BooleanField, CharField, DateTimeField, EmailField, ForeignKey, Q, UniqueConstraint, UUIDField
+from django.core.validators import validate_email
+from django.db.models import CASCADE, BooleanField, CharField, DateTimeField, ForeignKey, Q, UniqueConstraint, UUIDField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.fields import EncryptedTextField
 from urbanlens.dashboard.models.profile.queryset import ProfileEmailManager
 from urbanlens.dashboard.services.auth.email_normalization import normalize_email
 
@@ -20,9 +22,13 @@ class ProfileEmail(abstract.DashboardModel):
     rows count for matching (invite-friend lookup, duplicate checks, and
     username-or-email login) - an unverified row is inert so a user can't add
     someone else's address to hijack invites or logins meant for them.
+
+    ``email`` is encrypted at rest (display copy only); matching always goes
+    through ``normalized_email``, which stays plaintext and indexed since Fernet
+    ciphertext can't be queried or uniqueness-constrained.
     """
 
-    email = EmailField()
+    email = EncryptedTextField(validators=[validate_email])
     normalized_email = CharField(max_length=254, db_index=True)
     is_verified = BooleanField(default=False)
     verification_token = UUIDField(default=uuid.uuid4, editable=False)

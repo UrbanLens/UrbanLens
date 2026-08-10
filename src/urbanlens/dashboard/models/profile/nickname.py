@@ -16,6 +16,11 @@ class ProfileNickname(abstract.DashboardModel):
     Only the *author* can see the nickname they assigned; the *subject*
     profile owner cannot.  Each author may hold at most one nickname per
     subject.
+
+    Deliberately *not* encrypted at rest, unlike the sibling private
+    annotations: global search matches it with ``nickname__icontains`` (see
+    ``services.global_search.providers.person_match``), which cannot work
+    against ciphertext. See ``docs/DATA_ENCRYPTION.md``.
     """
 
     nickname = CharField(

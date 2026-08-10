@@ -27,6 +27,7 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
+from urbanlens.dashboard.models.fields import EncryptedTextField
 from urbanlens.dashboard.models.profile.meta import (
     DistanceUnit,
     ExploringWithOthersPreference,
@@ -143,8 +144,8 @@ class Profile(abstract.PublicDashboardModel):
     # never agreed - existing accounts are backfilled to their profile creation
     # date (accepting terms is implied by having used the site already).
     tos_accepted_at = DateTimeField(null=True, blank=True)
-    bio = TextField(null=True, blank=True, max_length=MAX_PROFILE_BIO_LENGTH, validators=[MaxLengthValidator(MAX_PROFILE_BIO_LENGTH)])
-    area = CharField(max_length=255, null=True, blank=True)
+    bio = EncryptedTextField(null=True, blank=True, max_length=MAX_PROFILE_BIO_LENGTH, validators=[MaxLengthValidator(MAX_PROFILE_BIO_LENGTH)])
+    area = EncryptedTextField(null=True, blank=True)
     birth_date = DateField(null=True, blank=True)
     started_exploring = DateField(null=True, blank=True)
 
@@ -275,13 +276,15 @@ class Profile(abstract.PublicDashboardModel):
     # single indexed query instead of a full-table Python scan.
     primary_email_normalized = CharField(max_length=254, blank=True, default="", db_index=True)
 
-    # Contact information and its visibility
-    phone_number = CharField(max_length=30, blank=True, default="")
-    signal_username = CharField(max_length=100, blank=True, default="")
-    discord_username = CharField(max_length=100, blank=True, default="")
-    whatsapp_number = CharField(max_length=30, blank=True, default="")
-    telegram_username = CharField(max_length=100, blank=True, default="")
-    matrix_handle = CharField(max_length=200, blank=True, default="")
+    # Contact information and its visibility. Encrypted at rest - none of these are
+    # ever looked up by value (access is gated by contact_visibility at the app layer,
+    # not by a DB query), so there's no lookup/index/uniqueness to preserve.
+    phone_number = EncryptedTextField(blank=True, default="")
+    signal_username = EncryptedTextField(blank=True, default="")
+    discord_username = EncryptedTextField(blank=True, default="")
+    whatsapp_number = EncryptedTextField(blank=True, default="")
+    telegram_username = EncryptedTextField(blank=True, default="")
+    matrix_handle = EncryptedTextField(blank=True, default="")
     contact_visibility = CharField(
         max_length=20,
         choices=VisibilityChoice.choices,

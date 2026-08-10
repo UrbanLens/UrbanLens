@@ -57,8 +57,7 @@ class GoogleCalendarAccount(abstract.DashboardModel):
         on_delete=CASCADE,
         related_name="google_calendar_account",
     )
-    google_email = CharField(
-        max_length=255,
+    google_email = EncryptedTextField(
         null=True,
         blank=True,
         help_text="Email of the connected Google account, for display only.",

@@ -7,6 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from django.core.validators import validate_email
 from django.db.models import (
     CASCADE,
     SET_NULL,
@@ -30,6 +31,7 @@ from django.db.models import (
 from django.db.models.fields import CharField, DateTimeField
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.fields import EncryptedTextField
 from urbanlens.dashboard.models.safety.queryset import (
     EmergencyContactDefaultManager,
     SafetyCheckinContactManager,
@@ -93,7 +95,10 @@ class EmergencyContactDefault(abstract.DashboardModel):
 
     owner = ForeignKey("dashboard.Profile", on_delete=CASCADE, related_name="safety_contact_defaults")
     contact_profile = ForeignKey("dashboard.Profile", on_delete=SET_NULL, null=True, blank=True, related_name="+")
-    email = EmailField(null=True, blank=True)
+    # Encrypted: this is a reusable template copied onto SafetyCheckinContact at
+    # check-in creation time (see services.visits.safety.save_contact_defaults) and
+    # never itself matched by value - only the copies are (against SafetyContactOptOut).
+    email = EncryptedTextField(null=True, blank=True, validators=[validate_email])
     label = CharField(max_length=150, blank=True, default="")
     order = IntegerField(default=0)
 
