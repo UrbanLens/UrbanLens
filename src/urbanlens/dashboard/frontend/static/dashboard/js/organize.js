@@ -3,21 +3,21 @@ import {
   installGlobalOrganizeIconPicker,
   registerBulkStateUpdater,
   resetColorPicker
-} from "./photo-location-scan-mrczscvs.js";
+} from "./achievements-mrczscvs.js";
 import {
   sortable_esm_default
-} from "./photo-location-scan-351ta66q.js";
-import {
-  renderIconGlyphHtml,
-  resetIconPicker
-} from "./photo-location-scan-ee3vhq76.js";
+} from "./achievements-351ta66q.js";
 import {
   confirmAction,
   getCsrfToken,
   htmxProcess,
   toast
-} from "./photo-location-scan-5jnnp4sj.js";
-import"./photo-location-scan-2vd5xdaq.js";
+} from "./achievements-4vcewk45.js";
+import {
+  renderIconGlyphHtml,
+  resetIconPicker
+} from "./achievements-ee3vhq76.js";
+import"./achievements-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/label-rel-picker.ts
 var LabelRelPicker = {

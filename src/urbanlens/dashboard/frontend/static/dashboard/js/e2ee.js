@@ -21854,7 +21854,7 @@ https://github.com/browserify/crypto-browserify`);
   // src/urbanlens/dashboard/frontend/ts/shared/dialogs.ts
   async function confirmAction(options) {
     if (window.confirmDialog) {
-      return window.confirmDialog(options);
+      return await window.confirmDialog(options) === true;
     }
     return window.confirm(options.message ?? "Are you sure?");
   }

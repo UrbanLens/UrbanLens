@@ -1,14 +1,14 @@
 import {
   createMapLayers,
   tileLayer
-} from "./photo-location-scan-rarq1vf2.js";
+} from "./achievements-rarq1vf2.js";
 import {
   confirmAction,
   getCsrfToken,
   htmxProcess,
   toast
-} from "./photo-location-scan-5jnnp4sj.js";
-import"./photo-location-scan-2vd5xdaq.js";
+} from "./achievements-4vcewk45.js";
+import"./achievements-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/map-image-overlays.ts
 function solve8(matrix, rhs) {
@@ -286,6 +286,68 @@ function readMapOverlays() {
     return [];
   }
 }
+function initMapRectangleSelect(element, map, isActive, onSelect) {
+  const MOUSE_DRAG_THRESHOLD_PX = 6;
+  const COARSE_DRAG_THRESHOLD_PX = 12;
+  let rect = null;
+  element.addEventListener("pointerdown", (event) => {
+    if (!isActive() || !event.isPrimary || event.button !== 0)
+      return;
+    const startLL = map.mouseEventToLatLng(event);
+    const pointerId = event.pointerId;
+    const threshold = event.pointerType === "mouse" ? MOUSE_DRAG_THRESHOLD_PX : COARSE_DRAG_THRESHOLD_PX;
+    const restoreDragging = map.dragging.enabled();
+    map.dragging.disable();
+    let dragging = false;
+    function finish() {
+      element.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+      window.removeEventListener("pointercancel", onCancel);
+      if (rect) {
+        map.removeLayer(rect);
+        rect = null;
+      }
+      if (restoreDragging)
+        map.dragging.enable();
+    }
+    function onCancel(cancelEvent) {
+      if (cancelEvent.pointerId !== pointerId)
+        return;
+      finish();
+    }
+    function onMove(moveEvent) {
+      if (moveEvent.pointerId !== pointerId)
+        return;
+      if (!dragging && Math.hypot(moveEvent.clientX - event.clientX, moveEvent.clientY - event.clientY) < threshold)
+        return;
+      if (!dragging) {
+        element.setPointerCapture(moveEvent.pointerId);
+        dragging = true;
+      }
+      if (rect)
+        map.removeLayer(rect);
+      rect = L.rectangle(L.latLngBounds(startLL, map.mouseEventToLatLng(moveEvent)), {
+        color: "#1E88E5",
+        weight: 2,
+        fillOpacity: 0.08,
+        dashArray: "4 4",
+        interactive: false
+      }).addTo(map);
+    }
+    function onUp(upEvent) {
+      if (upEvent.pointerId !== pointerId)
+        return;
+      const dragged = dragging;
+      finish();
+      if (!dragged)
+        return;
+      onSelect(L.latLngBounds(startLL, map.mouseEventToLatLng(upEvent)));
+    }
+    element.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    window.addEventListener("pointercancel", onCancel);
+  });
+}
 function init() {
   const mapEl = document.getElementById("map");
   const configEl = document.getElementById("map-annotations-config");
@@ -445,49 +507,17 @@ function init() {
     applyBuildingSelectMode = (active) => {
       selectBtn?.classList.toggle("active", active);
       mapElement.classList.toggle("select-mode", active);
+      mapElement.style.touchAction = active ? "none" : "";
       if (active)
         previewMap.dragging.disable();
       else
         previewMap.dragging.enable();
     };
-    let dragRect = null;
-    mapElement.addEventListener("mousedown", (e) => {
-      if (!buildingSelectMode || e.button !== 0)
-        return;
-      const startLL = previewMap.mouseEventToLatLng(e);
-      const startX = e.clientX;
-      const startY = e.clientY;
-      let dragging = false;
-      function onMove(ev) {
-        if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6)
-          return;
-        dragging = true;
-        if (dragRect)
-          previewMap.removeLayer(dragRect);
-        dragRect = L.rectangle(L.latLngBounds(startLL, previewMap.mouseEventToLatLng(ev)), {
-          color: "#1E88E5",
-          weight: 2,
-          fillOpacity: 0.08,
-          dashArray: "4 4",
-          interactive: false
-        }).addTo(previewMap);
-      }
-      function onUp(ev) {
-        document.removeEventListener("mousemove", onMove);
-        if (dragRect) {
-          previewMap.removeLayer(dragRect);
-          dragRect = null;
-        }
-        if (!dragging)
-          return;
-        const bounds = L.latLngBounds(startLL, previewMap.mouseEventToLatLng(ev));
-        boundsByKey.forEach((buildingBounds, key) => {
-          if (bounds.intersects(buildingBounds))
-            toggleBuildingKey(key);
-        });
-      }
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp, { once: true });
+    initMapRectangleSelect(mapElement, previewMap, () => buildingSelectMode, (bounds) => {
+      boundsByKey.forEach((buildingBounds, key) => {
+        if (bounds.intersects(buildingBounds))
+          toggleBuildingKey(key);
+      });
     });
     requestAnimationFrame(() => buildingImportMap?.invalidateSize());
   }
@@ -1323,7 +1353,6 @@ function init() {
   }
   let detailSelectMode = false;
   const selectedDpUuids = new Set;
-  let dpDragSelectRect = null;
   function detailSelectableEntries() {
     return detailPins.filter((d) => !d.owner_name);
   }
@@ -1355,6 +1384,7 @@ function init() {
     document.getElementById("select-detail-pins-button")?.classList.add("active");
     document.getElementById("map")?.classList.add("select-mode");
     map.dragging.disable();
+    map.getContainer().style.touchAction = "none";
   }
   function exitDetailPinSelectMode() {
     if (!detailSelectMode)
@@ -1363,6 +1393,7 @@ function init() {
     document.getElementById("select-detail-pins-button")?.classList.remove("active");
     document.getElementById("map")?.classList.remove("select-mode");
     map.dragging.enable();
+    map.getContainer().style.touchAction = "";
     clearDpSelection();
   }
   function toggleDpSelection(uuid) {
@@ -1580,46 +1611,12 @@ function init() {
     loadDetailPins();
     fetchBoundaries(0);
   }
-  (function initDetailPinDragSelect() {
-    mapEl.addEventListener("mousedown", (e) => {
-      if (!detailSelectMode || e.button !== 0)
-        return;
-      const startLL = map.mouseEventToLatLng(e);
-      const startX = e.clientX;
-      const startY = e.clientY;
-      let dragging = false;
-      function onMove(ev) {
-        if (!dragging && Math.hypot(ev.clientX - startX, ev.clientY - startY) < 6)
-          return;
-        dragging = true;
-        if (dpDragSelectRect)
-          map.removeLayer(dpDragSelectRect);
-        dpDragSelectRect = L.rectangle(L.latLngBounds(startLL, map.mouseEventToLatLng(ev)), {
-          color: "#1E88E5",
-          weight: 2,
-          fillOpacity: 0.08,
-          dashArray: "4 4",
-          interactive: false
-        }).addTo(map);
-      }
-      function onUp(ev) {
-        document.removeEventListener("mousemove", onMove);
-        if (dpDragSelectRect) {
-          map.removeLayer(dpDragSelectRect);
-          dpDragSelectRect = null;
-        }
-        if (!dragging)
-          return;
-        const bounds = L.latLngBounds(startLL, map.mouseEventToLatLng(ev));
-        detailSelectableEntries().forEach((dp) => {
-          if (dp.marker && !selectedDpUuids.has(dp.uuid) && bounds.contains(dp.marker.getLatLng()))
-            toggleDpSelection(dp.uuid);
-        });
-      }
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp, { once: true });
+  initMapRectangleSelect(mapEl, map, () => detailSelectMode, (bounds) => {
+    detailSelectableEntries().forEach((dp) => {
+      if (dp.marker && !selectedDpUuids.has(dp.uuid) && bounds.contains(dp.marker.getLatLng()))
+        toggleDpSelection(dp.uuid);
     });
-  })();
+  });
   const toolbar = window.createMarkupToolbar(map, markupLayer, {
     markupJsonUrl: cfg.markupJsonUrl,
     markupCreateUrl: cfg.markupCreateUrl,
@@ -1735,6 +1732,71 @@ function init() {
       li.classList.toggle("is-highlighted", +(li.dataset.id ?? "") === imgId && !!on);
     });
   };
+  let pendingPlacement = null;
+  const PLACEMENT_HINT = "Tap the map to place this photo, or press Escape to cancel.";
+  function syncPlacementAffordance() {
+    const armedPhotoId = pendingPlacement?.kind === "photo" ? String(pendingPlacement.photoId) : null;
+    document.querySelectorAll(".photo-panel-item").forEach((li) => {
+      const armed = armedPhotoId != null && li.dataset.id === armedPhotoId;
+      li.classList.toggle("is-placing", armed);
+      li.querySelector(".photo-panel-place-btn")?.setAttribute("aria-pressed", String(armed));
+    });
+    const armedMediaEl = pendingPlacement?.kind === "media" ? pendingPlacement.itemEl : null;
+    document.querySelectorAll(".media-item.is-placing").forEach((el) => {
+      if (el !== armedMediaEl)
+        el.classList.remove("is-placing");
+    });
+    armedMediaEl?.classList.add("is-placing");
+  }
+  function disarmPlacement() {
+    if (!pendingPlacement)
+      return;
+    map.off("click", onPlacementMapClick);
+    map.getContainer().classList.remove("photo-drop-target");
+    pendingPlacement = null;
+    syncPlacementAffordance();
+  }
+  function onPlacementMapClick(event) {
+    const pending = pendingPlacement;
+    disarmPlacement();
+    if (!pending)
+      return;
+    if (pending.kind === "photo")
+      placePhotoAt(pending.photoId, event.latlng);
+    else
+      placeMediaItemAt(pending.itemEl, pending.item, event.latlng);
+  }
+  function armPlacement(pending) {
+    disarmPlacement();
+    pendingPlacement = pending;
+    map.once("click", onPlacementMapClick);
+    map.getContainer().classList.add("photo-drop-target");
+    syncPlacementAffordance();
+    toast.info(PLACEMENT_HINT);
+  }
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape")
+      disarmPlacement();
+  });
+  window.mediaPlaceOnMap = function(itemEl) {
+    if (!cfg.mediaRelevanceUrl)
+      return;
+    if (pendingPlacement?.kind === "media" && pendingPlacement.itemEl === itemEl) {
+      disarmPlacement();
+      return;
+    }
+    armPlacement({
+      kind: "media",
+      itemEl,
+      item: {
+        source: itemEl.dataset.mediaSource ?? "",
+        key: itemEl.dataset.mediaKey ?? "",
+        url: itemEl.dataset.mediaUrl ?? "",
+        pageUrl: itemEl.dataset.mediaPageUrl ?? "",
+        caption: itemEl.dataset.mediaCaption ?? ""
+      }
+    });
+  };
   function buildPhotoPanel() {
     const ul = document.getElementById("photo-panel-list");
     if (!ul)
@@ -1771,10 +1833,22 @@ function init() {
       li.innerHTML = `
                 <div class="photo-panel-thumb-wrap">
                     <img src="${img.url}" class="photo-panel-thumb" alt="" draggable="false">
+                    <button type="button" class="photo-panel-place-btn" draggable="false" aria-pressed="false"
+                            title="${hasCoords ? "Move on map" : "Place on map"}" aria-label="${hasCoords ? "Move on map" : "Place on map"}"
+                            style="position:absolute;top:3px;right:3px;display:flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:4px;background:rgba(0,0,0,.52);color:#fff;cursor:pointer">
+                        <i class="material-icons" style="font-size:1rem">add_location_alt</i>
+                    </button>
                     <span class="photo-panel-coord-badge ${hasCoords ? "has-gps" : "no-gps"}" title="${hasCoords ? "Has GPS" : "No GPS"}">
                         <i class="material-icons">${hasCoords ? "place" : "location_off"}</i>
                     </span>
                 </div>`;
+      li.querySelector(".photo-panel-place-btn")?.addEventListener("click", (event) => {
+        event.stopPropagation();
+        if (pendingPlacement?.kind === "photo" && pendingPlacement.photoId === img.id)
+          disarmPlacement();
+        else
+          armPlacement({ kind: "photo", photoId: img.id });
+      });
       li.addEventListener("mouseenter", () => window._galleryHighlightMarker?.(img.id, true));
       li.addEventListener("mouseleave", () => window._galleryHighlightMarker?.(img.id, false));
       li.addEventListener("dragstart", (e) => {
@@ -1791,24 +1865,9 @@ function init() {
       });
       ul.appendChild(li);
     });
+    syncPlacementAffordance();
   }
-  mapEl.addEventListener("dragover", (e) => {
-    if (!e.dataTransfer?.types.includes("text/photoid"))
-      return;
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    mapEl.classList.add("photo-drop-target");
-  });
-  mapEl.addEventListener("dragleave", () => mapEl.classList.remove("photo-drop-target"));
-  mapEl.addEventListener("drop", (e) => {
-    mapEl.classList.remove("photo-drop-target");
-    const idStr = e.dataTransfer?.getData("text/photoid");
-    if (!idStr)
-      return;
-    e.preventDefault();
-    const imgId = Number.parseInt(idStr, 10);
-    const rect = mapEl.getBoundingClientRect();
-    const latlng = map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]);
+  function placePhotoAt(imgId, latlng) {
     const item = photoPanelItems.find((p) => p.id === imgId);
     if (!item)
       return;
@@ -1832,31 +1891,29 @@ function init() {
     }
     buildPhotoPanel();
     refreshPanelHeader();
-  });
+  }
   mapEl.addEventListener("dragover", (e) => {
-    if (!cfg.mediaRelevanceUrl || !e.dataTransfer?.types.includes("text/media-item"))
+    if (!e.dataTransfer?.types.includes("text/photoid"))
       return;
     e.preventDefault();
-    e.dataTransfer.dropEffect = "copy";
-    mapEl.classList.add("photo-drop-target");
+    e.dataTransfer.dropEffect = "move";
+    map.getContainer().classList.add("photo-drop-target");
   });
-  mapEl.addEventListener("dragleave", () => mapEl.classList.remove("photo-drop-target"));
+  mapEl.addEventListener("dragleave", () => {
+    if (!pendingPlacement)
+      mapEl.classList.remove("photo-drop-target");
+  });
   mapEl.addEventListener("drop", (e) => {
-    const raw = e.dataTransfer?.getData("text/media-item");
-    if (!cfg.mediaRelevanceUrl || !raw)
+    map.getContainer().classList.remove("photo-drop-target");
+    const idStr = e.dataTransfer?.getData("text/photoid");
+    if (!idStr)
       return;
     e.preventDefault();
-    mapEl.classList.remove("photo-drop-target");
-    const itemEl = window._mediaDragItemEl;
-    window._mediaDragItemEl = undefined;
-    let item;
-    try {
-      item = JSON.parse(raw);
-    } catch {
-      return;
-    }
+    disarmPlacement();
     const rect = mapEl.getBoundingClientRect();
-    const latlng = map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]);
+    placePhotoAt(Number.parseInt(idStr, 10), map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]));
+  });
+  function placeMediaItemAt(itemEl, item, latlng) {
     fetch(cfg.mediaRelevanceUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
@@ -1878,6 +1935,35 @@ function init() {
         toast.warning(`Couldn't save a local copy: ${data.materialize_error}`);
       }
     }).catch(() => toast.error("Failed to save photo location."));
+  }
+  mapEl.addEventListener("dragover", (e) => {
+    if (!cfg.mediaRelevanceUrl || !e.dataTransfer?.types.includes("text/media-item"))
+      return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "copy";
+    map.getContainer().classList.add("photo-drop-target");
+  });
+  mapEl.addEventListener("dragleave", () => {
+    if (!pendingPlacement)
+      mapEl.classList.remove("photo-drop-target");
+  });
+  mapEl.addEventListener("drop", (e) => {
+    const raw = e.dataTransfer?.getData("text/media-item");
+    if (!cfg.mediaRelevanceUrl || !raw)
+      return;
+    e.preventDefault();
+    disarmPlacement();
+    map.getContainer().classList.remove("photo-drop-target");
+    const itemEl = window._mediaDragItemEl;
+    window._mediaDragItemEl = undefined;
+    let item;
+    try {
+      item = JSON.parse(raw);
+    } catch {
+      return;
+    }
+    const rect = mapEl.getBoundingClientRect();
+    placeMediaItemAt(itemEl, item, map.containerPointToLatLng([e.clientX - rect.left, e.clientY - rect.top]));
   });
   document.querySelectorAll(".map-panel-tab").forEach((btn) => {
     btn.addEventListener("click", () => {
@@ -2025,6 +2111,7 @@ function init() {
     editingBoundaryType = type;
     toolbar.closeMarkupPanel();
     closeDetailPinPanel();
+    disarmPlacement();
     map.getPane("boundaryPane").style.zIndex = "560";
     const group = boundaryGroups[type];
     if (type === "property" && boundarySources.property === "circle")
@@ -2302,6 +2389,7 @@ function init() {
   }
   function openAddPinDialog() {
     toolbar.closeMarkupPanel();
+    disarmPlacement();
     dpMode = "add";
     editingDp = null;
     dpCreatedUuid = null;
@@ -2317,6 +2405,7 @@ function init() {
   }
   function openDetailPinEditDialog(dp) {
     toolbar.closeMarkupPanel();
+    disarmPlacement();
     dpMode = "edit";
     editingDp = dp;
     resetDpForm();

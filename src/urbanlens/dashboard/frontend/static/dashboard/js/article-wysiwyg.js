@@ -1,12 +1,12 @@
 import {
   confirmAction,
   getCsrfToken
-} from "./photo-location-scan-5jnnp4sj.js";
+} from "./achievements-4vcewk45.js";
 import {
   __commonJS,
   __export,
   __toESM
-} from "./photo-location-scan-2vd5xdaq.js";
+} from "./achievements-2vd5xdaq.js";
 
 // node_modules/markdown-it-task-lists/index.js
 var require_markdown_it_task_lists = __commonJS((exports, module) => {

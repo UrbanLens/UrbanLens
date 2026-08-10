@@ -46,6 +46,622 @@
     throw Error('Dynamic require of "' + x + '" is not supported');
   });
 
+  // src/urbanlens/dashboard/frontend/ts/shared/leave-confirmation.ts
+  function resolveMessage(options) {
+    return typeof options.message === "function" ? options.message() : options.message;
+  }
+  function ask(options) {
+    const message = resolveMessage(options);
+    if (window.confirmDialog) {
+      return window.confirmDialog({
+        title: options.title ?? "Leave page?",
+        message,
+        confirmLabel: options.confirmLabel ?? "Leave anyway",
+        danger: true
+      });
+    }
+    return Promise.resolve(window.confirm(message));
+  }
+  function installLeaveConfirmation(options) {
+    let leaving = false;
+    const blocked = () => !leaving && options.isBlocked();
+    window.addEventListener("beforeunload", (event) => {
+      if (!blocked())
+        return;
+      event.preventDefault();
+      event.returnValue = "";
+    });
+    document.addEventListener("click", (event) => {
+      if (!blocked())
+        return;
+      if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0)
+        return;
+      const target = event.target;
+      const link = target?.closest?.("a[href]");
+      if (!(link instanceof HTMLAnchorElement))
+        return;
+      const href = link.getAttribute("href");
+      const scheme = href ? href.trim().toLowerCase() : "";
+      if (!href || href.charAt(0) === "#" || scheme.startsWith("javascript:") || scheme.startsWith("data:") || scheme.startsWith("vbscript:") || link.target === "_blank" || link.hasAttribute("download")) {
+        return;
+      }
+      event.preventDefault();
+      const destination = link.href;
+      ask(options).then((ok) => {
+        if (!ok)
+          return;
+        leaving = true;
+        options.onConfirmed?.();
+        window.location.href = destination;
+      });
+    }, true);
+    return {
+      resetForTests: () => {
+        leaving = false;
+      }
+    };
+  }
+  function installGlobalLeaveConfirmation() {
+    window.ulInstallLeaveConfirmation = installLeaveConfirmation;
+  }
+
+  // src/urbanlens/dashboard/frontend/ts/shared/autosave-guard.ts
+  var dirty = false;
+  var inFlight = 0;
+  var message = "Changes are still saving. Leave this page anyway?";
+  var leaveConfirmation = null;
+  var autosaveGuard = {
+    markDirty: () => {
+      dirty = true;
+    },
+    markClean: () => {
+      dirty = false;
+    },
+    saveStarted: () => {
+      inFlight += 1;
+    },
+    saveFinished: () => {
+      inFlight = Math.max(0, inFlight - 1);
+    },
+    allowNavigation: () => {
+      dirty = false;
+      inFlight = 0;
+    },
+    isBlocked: () => dirty || inFlight > 0,
+    setMessage: (msg) => {
+      message = msg;
+    }
+  };
+  function askToLeave() {
+    if (window.confirmDialog) {
+      return window.confirmDialog({
+        title: "Leave page?",
+        message,
+        confirmLabel: "Leave anyway",
+        danger: true
+      });
+    }
+    return Promise.resolve(window.confirm(message));
+  }
+  function isBlocked() {
+    return window.autosaveGuard ? window.autosaveGuard.isBlocked() : autosaveGuard.isBlocked();
+  }
+  function allowNavigation() {
+    (window.autosaveGuard ?? autosaveGuard).allowNavigation();
+  }
+  function onHtmxConfirm(event) {
+    if (!isBlocked())
+      return;
+    const confirmEvent = event;
+    confirmEvent.preventDefault();
+    askToLeave().then((ok) => {
+      if (!ok)
+        return;
+      allowNavigation();
+      confirmEvent.detail.issueRequest(true);
+    });
+  }
+  function installGlobalAutosaveGuard() {
+    window.autosaveGuard = autosaveGuard;
+    leaveConfirmation = installLeaveConfirmation({
+      isBlocked,
+      message: () => message,
+      onConfirmed: allowNavigation
+    });
+    const bindBody = () => document.body.addEventListener("htmx:confirm", onHtmxConfirm);
+    if (document.body)
+      bindBody();
+    else
+      document.addEventListener("DOMContentLoaded", bindBody);
+  }
+
+  // src/urbanlens/dashboard/frontend/ts/shared/collapsible-sections.ts
+  var forcedOpen = new Set;
+  function key(scope, section) {
+    return `ul-collapsed:${scope}:${section}`;
+  }
+  function isCollapsed(scope, section) {
+    try {
+      return localStorage.getItem(key(scope, section)) === "1";
+    } catch {
+      return false;
+    }
+  }
+  function setCollapsed(scope, section, collapsed) {
+    try {
+      if (collapsed)
+        localStorage.setItem(key(scope, section), "1");
+      else
+        localStorage.removeItem(key(scope, section));
+    } catch {}
+  }
+  function applyState(container) {
+    const scope = container.dataset.collapseScope;
+    const section = container.dataset.collapseSection;
+    if (!scope || !section)
+      return;
+    const emptyByDefault = container.dataset.collapseIfEmpty === "true" && !forcedOpen.has(key(scope, section));
+    const collapsed = isCollapsed(scope, section) || emptyByDefault;
+    container.classList.toggle("is-collapsed", collapsed);
+    container.querySelector(".section-collapse-btn")?.setAttribute("aria-expanded", String(!collapsed));
+  }
+  function headerOf(container) {
+    return container.querySelector(":scope > .card-header, :scope > .wiki-card-header, :scope > .tag-panel-header, :scope > .wiki-tabs");
+  }
+  function labelOf(container, header) {
+    if (container.dataset.collapseLabel)
+      return container.dataset.collapseLabel;
+    const titleEl = header?.querySelector(":scope > span:not(.badge):not(.visit-count), :scope > h2, :scope > h3, :scope > h4");
+    const label = titleEl?.textContent?.trim() || (container.dataset.collapseSection ?? "");
+    container.dataset.collapseLabel = label;
+    return label;
+  }
+  function actionsGroup(header) {
+    const existing = header.querySelector(":scope > .card-header-actions");
+    if (existing)
+      return existing;
+    const group = document.createElement("div");
+    group.className = "card-header-actions";
+    const toMove = Array.from(header.children).filter((el) => el.matches(".btn--icon-sm, .gallery-upload-compact-btn, .card-header-link, .btn, .section-collapse-btn") && !el.classList.contains("view-toggle-btn"));
+    toMove.forEach((el) => group.appendChild(el));
+    header.appendChild(group);
+    return group;
+  }
+  function ensureToggle(container) {
+    const header = headerOf(container);
+    if (header)
+      labelOf(container, header);
+    if (container.dataset.collapseInit === "1") {
+      applyState(container);
+      return;
+    }
+    if (!header)
+      return;
+    const actions = actionsGroup(header);
+    if (!actions.querySelector(".section-collapse-btn")) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn--icon-sm section-collapse-btn";
+      btn.setAttribute("aria-label", "Collapse section");
+      btn.innerHTML = '<i class="material-symbols-outlined">expand_less</i>';
+      actions.appendChild(btn);
+    }
+    container.dataset.collapseInit = "1";
+    applyState(container);
+  }
+  function currentScope() {
+    return document.querySelector("[data-collapse-scope]")?.dataset.collapseScope ?? null;
+  }
+  function closeToolsFab() {
+    const menu = document.getElementById("tools-fab-menu");
+    const btn = document.getElementById("tools-fab-btn");
+    if (menu)
+      menu.hidden = true;
+    btn?.setAttribute("aria-expanded", "false");
+  }
+  function updateRestoreControls() {
+    const fab = document.getElementById("tools-fab");
+    const group = fab?.querySelector('[data-tools-fab-group="collapse-restore"]');
+    if (!fab || !group)
+      return;
+    const scope = currentScope();
+    const hiddenSections = scope ? Array.from(document.querySelectorAll(`[data-collapse-scope="${scope}"][data-collapse-section].is-collapsed`)).filter((section) => !section.closest("[hidden]")) : [];
+    const restoreMenu = group.querySelector(".collapse-restore-menu");
+    const countEl = fab.querySelector(".collapse-restore-count");
+    group.hidden = hiddenSections.length === 0;
+    fab.hidden = hiddenSections.length === 0;
+    if (countEl) {
+      countEl.hidden = hiddenSections.length === 0;
+      countEl.textContent = String(hiddenSections.length);
+    }
+    if (!hiddenSections.length) {
+      closeToolsFab();
+      if (restoreMenu)
+        restoreMenu.innerHTML = "";
+      return;
+    }
+    if (!restoreMenu)
+      return;
+    restoreMenu.innerHTML = "";
+    for (const section of hiddenSections) {
+      const item = document.createElement("button");
+      item.type = "button";
+      item.className = "collapse-restore-item";
+      item.innerHTML = '<i class="material-symbols-outlined">visibility</i>';
+      item.append(section.dataset.collapseLabel || (section.dataset.collapseSection ?? ""));
+      item.addEventListener("click", () => {
+        const sectionName = section.dataset.collapseSection ?? "";
+        section.classList.remove("is-collapsed");
+        section.querySelector(".section-collapse-btn")?.setAttribute("aria-expanded", "true");
+        if (scope) {
+          setCollapsed(scope, sectionName, false);
+          forcedOpen.add(key(scope, sectionName));
+        }
+        if (section.getAttribute("hx-get") && window.htmx)
+          window.htmx.trigger(section, "ul:unhide");
+        const innerLoader = section.querySelector('[hx-get][hx-trigger*="ul:unhide"]');
+        if (innerLoader && window.htmx)
+          window.htmx.trigger(innerLoader, "ul:unhide");
+        updateRestoreControls();
+      });
+      restoreMenu.appendChild(item);
+    }
+  }
+  function scanAll() {
+    document.querySelectorAll("[data-collapse-scope][data-collapse-section]").forEach(ensureToggle);
+    updateRestoreControls();
+  }
+  function onDocumentClick(event) {
+    const target = event.target;
+    if (!target?.closest)
+      return;
+    const fabToggle = target.closest("#tools-fab-btn");
+    if (fabToggle) {
+      const menu = document.getElementById("tools-fab-menu");
+      const opening = !!menu?.hidden;
+      if (menu)
+        menu.hidden = !opening;
+      fabToggle.setAttribute("aria-expanded", String(opening));
+      return;
+    }
+    const btn = target.closest(".section-collapse-btn");
+    if (btn) {
+      const container = btn.closest("[data-collapse-scope][data-collapse-section]");
+      if (!container)
+        return;
+      const collapsed = !container.classList.contains("is-collapsed");
+      container.classList.toggle("is-collapsed", collapsed);
+      btn.setAttribute("aria-expanded", String(!collapsed));
+      setCollapsed(container.dataset.collapseScope ?? "", container.dataset.collapseSection ?? "", collapsed);
+      updateRestoreControls();
+      return;
+    }
+    const fab = document.getElementById("tools-fab");
+    const openMenu = document.getElementById("tools-fab-menu");
+    if (fab && openMenu && !openMenu.hidden && !fab.contains(target))
+      closeToolsFab();
+  }
+  function installGlobalCollapsibleSections() {
+    window.ulSectionCollapsed = isCollapsed;
+    window.ulRefreshCollapseRestore = updateRestoreControls;
+    document.addEventListener("click", onDocumentClick);
+    document.addEventListener("htmx:afterSettle", scanAll);
+    const ready = () => {
+      document.body.addEventListener("ul:tabShown", updateRestoreControls);
+      scanAll();
+    };
+    if (document.readyState === "loading")
+      document.addEventListener("DOMContentLoaded", ready);
+    else
+      ready();
+  }
+
+  // src/urbanlens/dashboard/frontend/ts/shared/comment-compose.ts
+  function toggleReplyForm(id) {
+    const el = document.getElementById(id);
+    if (!el)
+      return;
+    el.hidden = !el.hidden;
+    if (el.hidden)
+      return;
+    const textarea = el.querySelector("textarea");
+    if (textarea)
+      setTimeout(() => textarea.focus(), 30);
+  }
+  function onFileChange(event) {
+    const input = event.target;
+    if (!(input instanceof HTMLInputElement) || !input.classList.contains("comment-image-input"))
+      return;
+    const file = input.files?.[0];
+    const preview = input.closest(".comment-compose-actions")?.querySelector(".comment-image-preview");
+    if (preview)
+      preview.textContent = file ? `\uD83D\uDCCE ${file.name}` : "";
+  }
+  function highlightFromEvent(event, on) {
+    const target = event.target;
+    const link = target?.closest?.(".mention--activity");
+    if (!(link instanceof HTMLElement) || !window.tripHighlightMarker)
+      return;
+    const id = link.dataset.activityId;
+    if (id)
+      window.tripHighlightMarker(id, on);
+  }
+  function installGlobalCommentCompose() {
+    window.toggleReplyForm = toggleReplyForm;
+    document.addEventListener("change", onFileChange);
+    document.addEventListener("mouseover", (e) => highlightFromEvent(e, true));
+    document.addEventListener("mouseout", (e) => highlightFromEvent(e, false));
+  }
+
+  // src/urbanlens/dashboard/frontend/ts/shared/confirm-dialog.ts
+  var parts = null;
+  var resolveCurrent = null;
+  function settle(result) {
+    if (resolveCurrent) {
+      const resolve = resolveCurrent;
+      resolveCurrent = null;
+      resolve(result);
+    }
+    if (parts?.dialog.open)
+      parts.dialog.close();
+  }
+  function dialogParts() {
+    if (parts)
+      return parts;
+    const dialog = document.getElementById("confirm-dialog");
+    const ok = document.getElementById("confirm-dialog-ok");
+    const alt = document.getElementById("confirm-dialog-alt");
+    const title = document.getElementById("confirm-dialog-title");
+    const message2 = document.getElementById("confirm-dialog-message");
+    if (!dialog || !ok || !alt || !title || !message2)
+      return null;
+    parts = { dialog, ok, alt, title, message: message2 };
+    document.getElementById("confirm-dialog-cancel")?.addEventListener("click", () => settle(false));
+    document.getElementById("confirm-dialog-x")?.addEventListener("click", () => settle(false));
+    ok.addEventListener("click", () => settle(true));
+    alt.addEventListener("click", () => settle("alt"));
+    dialog.addEventListener("close", () => settle(false));
+    return parts;
+  }
+  function confirmDialog(options) {
+    const opts = typeof options === "string" ? { message: options } : options ?? {};
+    const found = dialogParts();
+    if (!found)
+      return Promise.resolve(false);
+    found.title.textContent = opts.title || "Are you sure?";
+    found.message.innerHTML = (opts.message || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>");
+    found.ok.textContent = opts.confirmLabel || "Confirm";
+    found.ok.className = opts.danger === false ? "btn btn--primary" : "btn--danger-filled";
+    found.alt.hidden = !opts.altLabel;
+    if (opts.altLabel)
+      found.alt.textContent = opts.altLabel;
+    return new Promise((resolve) => {
+      resolveCurrent = resolve;
+      found.dialog.showModal();
+    });
+  }
+  function urbanlensConfirmExternalLink(event, url) {
+    event.preventDefault();
+    confirmDialog({
+      title: "Leaving this site",
+      message: `This link was added by the community and leads to an external, untrusted site:
+${url}`,
+      confirmLabel: "Continue",
+      danger: false
+    }).then((ok) => {
+      if (ok)
+        window.open(url, "_blank", "noopener");
+    });
+    return false;
+  }
+  async function deletePinCascade(pinUuid, pinName, csrfToken) {
+    const confirmed = await confirmDialog({
+      title: "Delete Pin",
+      message: `Delete "${pinName || "this pin"}"?
+
+You can restore it from Settings → Undo History.`,
+      confirmLabel: "Delete"
+    });
+    if (!confirmed)
+      return false;
+    const url = `/dashboard/rest/pins/${encodeURIComponent(pinUuid)}/`;
+    const send = (query) => fetch(url + query, { method: "DELETE", headers: { "X-CSRFToken": csrfToken } });
+    let response;
+    try {
+      response = await send("");
+    } catch {
+      return null;
+    }
+    if (response.status === 409) {
+      let data = null;
+      try {
+        data = await response.json();
+      } catch {}
+      if (!data?.requires_children_decision)
+        return null;
+      const n = data.children ?? 0;
+      const plural = n === 1 ? "" : "s";
+      const them = n === 1 ? "it" : "them";
+      const choice = await confirmDialog({
+        title: "Delete child pins too?",
+        message: `This pin has ${n} child pin${plural}.
+
+Delete ${them} as well, or keep ${them} on your map?`,
+        confirmLabel: "Delete all",
+        altLabel: `Keep child pin${plural}`
+      });
+      if (!choice)
+        return false;
+      try {
+        response = await send(choice === "alt" ? "?children=keep" : "?children=delete");
+      } catch {
+        return null;
+      }
+    }
+    if (response.ok) {
+      try {
+        localStorage.setItem("ul_pins_dirty", "1");
+      } catch {}
+      return true;
+    }
+    return null;
+  }
+  function installGlobalConfirmDialog() {
+    window.confirmDialog = confirmDialog;
+    window.urbanlensConfirmExternalLink = urbanlensConfirmExternalLink;
+    window.deletePinCascade = deletePinCascade;
+  }
+
+  // src/urbanlens/dashboard/frontend/ts/shared/dialog-backdrop.ts
+  var press = null;
+  function isBackdrop(dialog, x, y) {
+    const rect = dialog.getBoundingClientRect();
+    return x < rect.left || x > rect.right || y < rect.top || y > rect.bottom;
+  }
+  function onMouseDown(event) {
+    const target = event.target;
+    const dialog = target?.closest?.("dialog");
+    if (!(dialog instanceof HTMLDialogElement) || !dialog.open) {
+      press = null;
+      return;
+    }
+    press = isBackdrop(dialog, event.clientX, event.clientY) ? "backdrop" : "inside";
+  }
+  function onClick(event) {
+    const dialog = event.target;
+    if (!(dialog instanceof HTMLDialogElement) || !dialog.open)
+      return;
+    if (press !== "backdrop")
+      return;
+    if (!isBackdrop(dialog, event.clientX, event.clientY))
+      return;
+    const closeFn = dialog.dataset.closefn;
+    const custom = closeFn ? window[closeFn] : null;
+    if (typeof custom === "function")
+      custom();
+    else
+      dialog.close();
+    press = null;
+  }
+  function installGlobalDialogBackdrop() {
+    document.addEventListener("mousedown", onMouseDown);
+    document.addEventListener("click", onClick);
+  }
+
+  // src/urbanlens/dashboard/frontend/ts/shared/fetch-json.ts
+  class HttpError extends Error {
+    status;
+    constructor(status, message2) {
+      super(message2);
+      this.name = "HttpError";
+      this.status = status;
+    }
+  }
+  async function errorMessage(response) {
+    const fallback = `HTTP ${response.status}`;
+    try {
+      const text = await response.text();
+      if (!text)
+        return fallback;
+      try {
+        const data = JSON.parse(text);
+        if (typeof data === "string")
+          return data || fallback;
+        if (data && typeof data === "object") {
+          const record = data;
+          for (const key2 of ["detail", "error", "message"]) {
+            const value = record[key2];
+            if (typeof value === "string" && value)
+              return value;
+          }
+        }
+        return fallback;
+      } catch {
+        return fallback;
+      }
+    } catch {
+      return fallback;
+    }
+  }
+  async function fetchJson(url, options = {}) {
+    const { timeoutMs = 120000, ...init } = options;
+    const controller = new AbortController;
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const response = await fetch(url, { ...init, signal: controller.signal });
+      if (!response.ok)
+        throw new HttpError(response.status, await errorMessage(response));
+      if (response.status === 204)
+        return null;
+      return await response.json();
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+  async function sendJson(url, method, body, options = {}) {
+    const { headers, ...rest } = options;
+    return fetchJson(url, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        "X-CSRFToken": window.csrftoken ?? "",
+        ...headers
+      },
+      body: body === undefined ? undefined : JSON.stringify(body),
+      ...rest
+    });
+  }
+  function installGlobalFetchJson() {
+    window.ulFetchJson = fetchJson;
+    window.ulSendJson = sendJson;
+  }
+
+  // src/urbanlens/dashboard/frontend/ts/shared/fly-to-dismiss.ts
+  function toolsFabTarget() {
+    const btn = document.getElementById("tools-fab-btn");
+    if (btn) {
+      const rect = btn.getBoundingClientRect();
+      if (rect.width)
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    }
+    const remPx = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16;
+    return { x: 22 + 23, y: window.innerHeight - 4 * remPx - 23 };
+  }
+  function flyToToolsFab(el) {
+    if (!el || !el.isConnected) {
+      el?.remove();
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    const target = toolsFabTarget();
+    const dx = target.x - (rect.left + rect.width / 2);
+    const dy = target.y - (rect.top + rect.height / 2);
+    el.style.position = "fixed";
+    el.style.top = `${rect.top}px`;
+    el.style.left = `${rect.left}px`;
+    el.style.width = `${rect.width}px`;
+    el.style.height = `${rect.height}px`;
+    el.style.margin = "0";
+    el.style.zIndex = "9998";
+    el.style.pointerEvents = "none";
+    el.offsetWidth;
+    el.style.setProperty("--ext-panel-dismiss-x", `${dx}px`);
+    el.style.setProperty("--ext-panel-dismiss-y", `${dy}px`);
+    el.classList.add("ext-panel-dismissing");
+    let done = false;
+    const finish = () => {
+      if (done)
+        return;
+      done = true;
+      el.remove();
+    };
+    el.addEventListener("transitionend", finish, { once: true });
+    setTimeout(finish, 450);
+  }
+  function installGlobalFlyToDismiss() {
+    window.ulFlyToToolsFab = flyToToolsFab;
+  }
+
   // src/urbanlens/dashboard/frontend/ts/shared/label-picker.ts
   function escHtml(value) {
     return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -79,6 +695,7 @@
     let dropHandled = false;
     let chipJustDragged = false;
     let availJustDragged = false;
+    let pressJustHandled = false;
     let formulaGroups = null;
     let activeKind = "";
     let listQuery = "";
@@ -111,15 +728,75 @@
       });
       return m;
     }
+    const LONG_PRESS_MS = 500;
+    const LONG_PRESS_SLOP_PX = 10;
+    let pressTimer = 0;
+    let endPress = null;
+    function cancelPress() {
+      if (pressTimer)
+        window.clearTimeout(pressTimer);
+      pressTimer = 0;
+      endPress?.();
+      endPress = null;
+    }
+    function releasePress() {
+      pressJustHandled = false;
+      document.removeEventListener("click", releasePress);
+      document.removeEventListener("pointerdown", releasePress);
+    }
+    function claimPress(emitsClick = true) {
+      if (pressJustHandled)
+        return false;
+      cancelPress();
+      if (!emitsClick)
+        return true;
+      pressJustHandled = true;
+      document.addEventListener("click", releasePress);
+      document.addEventListener("pointerdown", releasePress);
+      return true;
+    }
+    function isMouseContextMenu(event) {
+      const pointerType = event.pointerType;
+      return pointerType ? pointerType === "mouse" : event.button === 2;
+    }
+    function startPress(event, action) {
+      if (event.pointerType === "mouse" || !event.isPrimary || event.button !== 0)
+        return;
+      cancelPress();
+      const startX = event.clientX;
+      const startY = event.clientY;
+      const onMove = (moveEvent) => {
+        if (Math.abs(moveEvent.clientX - startX) > LONG_PRESS_SLOP_PX || Math.abs(moveEvent.clientY - startY) > LONG_PRESS_SLOP_PX)
+          cancelPress();
+      };
+      document.addEventListener("pointermove", onMove);
+      document.addEventListener("pointerup", cancelPress);
+      document.addEventListener("pointercancel", cancelPress);
+      document.addEventListener("dragstart", cancelPress);
+      endPress = () => {
+        document.removeEventListener("pointermove", onMove);
+        document.removeEventListener("pointerup", cancelPress);
+        document.removeEventListener("pointercancel", cancelPress);
+        document.removeEventListener("dragstart", cancelPress);
+      };
+      pressTimer = window.setTimeout(() => {
+        pressTimer = 0;
+        if (claimPress())
+          action();
+      }, LONG_PRESS_MS);
+    }
     function chipHtml(id, label, color, icon, mode) {
       const bg = color ? color + "33" : mode === "incl" ? "rgba(34,197,94,.18)" : "rgba(239,68,68,.18)";
       const border = color ? color + "66" : mode === "incl" ? "rgba(34,197,94,.4)" : "rgba(239,68,68,.4)";
       const txtCol = mode === "incl" ? "#86efac" : "#fca5a5";
       const iconHtml = icon ? `<span style="font-size:.85em">${escHtml(icon)}</span>` : "";
+      const flip = mode === "incl" ? "exclude" : "include";
+      const toggleHtml = `<button type="button" class="fp-label-chip-toggle" title="Switch to ${flip}" aria-label="Switch to ${flip}"
+                      style="display:inline-flex;align-items:center;justify-content:center;min-width:20px;height:20px;padding:0;border:0;border-radius:50%;background:rgba(0,0,0,.25);color:inherit;font:inherit;line-height:1;cursor:pointer">${mode === "incl" ? "−" : "+"}</button>`;
       return `<span class="fp-label-chip fp-label-chip--${mode}" data-id="${escHtml(id)}" draggable="true"
-                      title="Click to remove · Right-click to ${mode === "incl" ? "exclude" : "include"} · Drag to move or drop outside to remove"
+                      title="Click to remove · Right-click or long-press to ${flip} · Drag to move or drop outside to remove"
                       style="background:${bg};border-color:${border};color:${txtCol}">
-                    ${iconHtml}<span class="fp-label-chip-text">${escHtml(label)}</span>
+                    ${iconHtml}<span class="fp-label-chip-text">${escHtml(label)}</span>${toggleHtml}
                 </span>`;
     }
     function currentGroups() {
@@ -146,21 +823,21 @@
     }
     function groupsToFormulaParts(groups) {
       const byId = new Map([...labelByNameMap().values()].map((v) => [v.id, v]));
-      const parts = [];
+      const parts2 = [];
       for (const g of groups) {
         const names = g.ids.map((id) => {
           const entry = byId.get(String(id));
           return entry ? quoteLabelName(entry.label) : String(id);
         });
         if (g.op === "not") {
-          names.forEach((n) => parts.push(`-${n}`));
+          names.forEach((n) => parts2.push(`-${n}`));
         } else if (g.op === "or") {
-          parts.push(names.length > 1 ? `(${names.join(" / ")})` : names[0] || "");
+          parts2.push(names.length > 1 ? `(${names.join(" / ")})` : names[0] || "");
         } else {
-          parts.push(...names);
+          parts2.push(...names);
         }
       }
-      return parts;
+      return parts2;
     }
     function formulaPillHtml(entry, fallback, mode) {
       const label = entry?.label ?? fallback;
@@ -200,13 +877,13 @@
       } else {
         const inclIds = [...labelState.entries()].filter(([, m]) => m === "incl").map(([id]) => id);
         const exclIds = [...labelState.entries()].filter(([, m]) => m === "excl").map(([id]) => id);
-        const parts = [];
+        const parts2 = [];
         if (inclIds.length > 0) {
           const names = inclIds.map((id) => quoteLabelName(labelTextForId(id)));
-          parts.push(inclMode === "or" && names.length > 1 ? `(${names.join(" / ")})` : names.join(" "));
+          parts2.push(inclMode === "or" && names.length > 1 ? `(${names.join(" / ")})` : names.join(" "));
         }
-        exclIds.forEach((id) => parts.push(`-${quoteLabelName(labelTextForId(id))}`));
-        bar.value = parts.join(" ");
+        exclIds.forEach((id) => parts2.push(`-${quoteLabelName(labelTextForId(id))}`));
+        bar.value = parts2.join(" ");
       }
     }
     function rebuild() {
@@ -248,12 +925,19 @@
         container.querySelectorAll(".fp-label-chip").forEach((chip) => {
           const id = chip.dataset.id || "";
           chip.addEventListener("click", () => {
-            if (!chipJustDragged)
+            if (!chipJustDragged && !pressJustHandled)
               removeLabel(id);
           });
           chip.addEventListener("contextmenu", (e) => {
             e.preventDefault();
-            toggleLabelMode(id);
+            if (claimPress(!isMouseContextMenu(e)))
+              toggleLabelMode(id);
+          });
+          chip.addEventListener("pointerdown", (e) => startPress(e, () => toggleLabelMode(id)));
+          chip.querySelector(".fp-label-chip-toggle")?.addEventListener("click", (e) => {
+            e.stopPropagation();
+            if (!pressJustHandled)
+              toggleLabelMode(id);
           });
           chip.addEventListener("dragstart", (e) => {
             dragId = id;
@@ -370,7 +1054,7 @@
       const btn = e.target.closest(".fp-label-avail");
       if (!btn)
         return;
-      if (availJustDragged)
+      if (availJustDragged || pressJustHandled)
         return;
       addLabel(btn, "incl");
     });
@@ -379,7 +1063,14 @@
       if (!btn)
         return;
       e.preventDefault();
-      addLabel(btn, "excl");
+      if (claimPress(!isMouseContextMenu(e)))
+        addLabel(btn, "excl");
+    });
+    els.list.addEventListener("pointerdown", (e) => {
+      const btn = e.target.closest(".fp-label-avail");
+      if (!btn)
+        return;
+      startPress(e, () => addLabel(btn, "excl"));
     });
     els.list.addEventListener("dragstart", (e) => {
       const btn = e.target.closest(".fp-label-avail");
@@ -765,9 +1456,9 @@
     }
     function mergeIncludeIds(ids) {
       for (const id of ids) {
-        const key = String(id);
-        if (labelState.get(key) !== "excl")
-          labelState.set(key, "incl");
+        const key2 = String(id);
+        if (labelState.get(key2) !== "excl")
+          labelState.set(key2, "incl");
       }
       formulaGroups = null;
       rebuild();
@@ -875,16 +1566,19 @@
   }
 
   // src/urbanlens/dashboard/frontend/ts/shared/pin-cache.ts
-  var CACHE_VERSION = 8;
+  var PIN_CACHE_VERSION = 8;
+  function pinCacheKey(profileUuid) {
+    return `ul_pins_v5_${profileUuid}`;
+  }
   function readRawCachedPins(profileUuid) {
     if (!profileUuid)
       return [];
     try {
-      const raw = localStorage.getItem(`ul_pins_v5_${profileUuid}`);
+      const raw = localStorage.getItem(pinCacheKey(profileUuid));
       if (!raw)
         return [];
       const cache = JSON.parse(raw);
-      if (cache?.v !== CACHE_VERSION || cache?.profileUuid !== profileUuid)
+      if (cache?.v !== PIN_CACHE_VERSION || cache?.profileUuid !== profileUuid)
         return [];
       const pins = cache.pins;
       if (!pins || typeof pins !== "object")
@@ -1053,22 +1747,22 @@
       onToast = null
     } = options;
     const barEl = bar || input.parentElement;
-    function toast(level, message) {
+    function toast(level, message2) {
       if (onToast) {
-        onToast(level, message);
+        onToast(level, message2);
         return;
       }
       if (typeof window.toastr !== "undefined") {
-        (window.toastr[level] ?? window.toastr.info)(message);
+        (window.toastr[level] ?? window.toastr.info)(message2);
         return;
       }
       if (level === "error")
-        console.error(message);
+        console.error(message2);
       else
-        console.warn(message);
+        console.warn(message2);
     }
-    function setFetching(on, message) {
-      onFetchingChange?.(on, message);
+    function setFetching(on, message2) {
+      onFetchingChange?.(on, message2);
     }
     function getHistory() {
       if (!historyKey)
@@ -1174,11 +1868,11 @@
     let activeIdx = -1;
     let searchSeq = 0;
     let updateHistoryBtn = () => {};
-    function makeCollapsibleHdr(label, key, slot) {
+    function makeCollapsibleHdr(label, key2, slot) {
       const hdr = document.createElement("div");
       hdr.className = "addr-suggestion-group-hdr";
       hdr.dataset.collapsible = "1";
-      hdr.dataset.section = key;
+      hdr.dataset.section = key2;
       hdr.textContent = label;
       const hint = document.createElement("span");
       hint.className = "addr-section-collapsed-hint";
@@ -1518,8 +2212,8 @@
         const instant = buildInstantLocalSuggestions(query);
         const instantCoords = new Set(instant.map((r) => coordKey(r.lat, r.lng)).filter((k) => k !== null));
         const preview = previewFromCache(localResultCache, query, (r) => {
-          const key = coordKey(r.lat, r.lng);
-          return key !== null && instantCoords.has(key);
+          const key2 = coordKey(r.lat, r.lng);
+          return key2 !== null && instantCoords.has(key2);
         });
         const combined = [...instant, ...preview];
         if (combined.length) {
@@ -1612,10 +2306,10 @@
       const box = suggestions;
       box.innerHTML = "";
       activeIdx = -1;
-      function emptySection(label, key) {
+      function emptySection(label, key2) {
         const slot = document.createElement("div");
         slot.className = "addr-source-slot";
-        slot.appendChild(makeCollapsibleHdr(label, key, slot));
+        slot.appendChild(makeCollapsibleHdr(label, key2, slot));
         box.appendChild(slot);
         return slot;
       }
@@ -1702,6 +2396,8 @@
     });
     suggestions.addEventListener("mousedown", (e) => e.preventDefault());
     suggestions.addEventListener("wheel", (e) => e.stopPropagation(), { passive: true });
+    suggestions.addEventListener("touchstart", (e) => e.stopPropagation(), { passive: true });
+    suggestions.addEventListener("touchmove", (e) => e.stopPropagation(), { passive: true });
     historyBtn?.addEventListener("click", () => {
       const hist = getHistory();
       if (!hist.length)
@@ -1859,8 +2555,8 @@
     terrain: "topographic",
     satellite: "satellite"
   };
-  function normalizeBase(key) {
-    return BASE_ALIASES[(key || "").toLowerCase()] || "street";
+  function normalizeBase(key2) {
+    return BASE_ALIASES[(key2 || "").toLowerCase()] || "street";
   }
   function tileLayer(kind, extraOptions) {
     const def = TILE_DEFS[kind] || TILE_DEFS[normalizeBase(kind)] || TILE_DEFS.street;
@@ -1960,24 +2656,24 @@
       opts.onStateChange?.(getState());
     }
     function attributionText() {
-      const parts = [];
+      const parts2 = [];
       if (map.hasLayer(satelliteLayer)) {
-        parts.push("© Esri");
+        parts2.push("© Esri");
       } else if (map.hasLayer(topographicLayer)) {
-        parts.push("© OpenTopoMap");
+        parts2.push("© OpenTopoMap");
       } else if (map.hasLayer(darkLayer)) {
-        parts.push("© OSM · CARTO");
+        parts2.push("© OSM · CARTO");
       } else {
-        parts.push("© OpenStreetMap");
+        parts2.push("© OpenStreetMap");
       }
       if (weather && (map.hasLayer(weather.rain) || map.hasLayer(weather.clouds))) {
-        parts.push("© OpenWeatherMap");
+        parts2.push("© OpenWeatherMap");
       }
       if (map.hasLayer(bordersLayer) && !map.hasLayer(satelliteLayer)) {
-        parts.push("© Esri");
+        parts2.push("© Esri");
       }
-      parts.push("Leaflet");
-      return parts.join(" · ");
+      parts2.push("Leaflet");
+      return parts2.join(" · ");
     }
     if (opts.onAttribution) {
       let attributionFrame = null;
@@ -2008,8 +2704,8 @@
         layer.on("error", onLoad);
       }
     }
-    function layerButton(key) {
-      return root?.querySelector(`[data-map-layer="${key}"]`) ?? null;
+    function layerButton(key2) {
+      return root?.querySelector(`[data-map-layer="${key2}"]`) ?? null;
     }
     function syncButtons() {
       if (!root)
@@ -2021,34 +2717,34 @@
       layerButton("weather")?.classList.toggle("active", state.weather);
       layerButton("borders")?.classList.toggle("active", state.borders);
       layerButton("dark")?.classList.toggle("active", isDarkActive());
-      for (const [key, toggle] of Object.entries(custom)) {
+      for (const [key2, toggle] of Object.entries(custom)) {
         const active = toggle.activeWhenOff ? !toggle.isActive() : toggle.isActive();
-        layerButton(key)?.classList.toggle("active", active);
+        layerButton(key2)?.classList.toggle("active", active);
       }
     }
     function setBase(rawKey) {
-      const key = normalizeBase(rawKey);
-      if (key !== "satellite" && map.hasLayer(satelliteLayer))
+      const key2 = normalizeBase(rawKey);
+      if (key2 !== "satellite" && map.hasLayer(satelliteLayer))
         map.removeLayer(satelliteLayer);
-      if (key !== "topographic" && map.hasLayer(topographicLayer))
+      if (key2 !== "topographic" && map.hasLayer(topographicLayer))
         map.removeLayer(topographicLayer);
-      if (key === "satellite" && !map.hasLayer(satelliteLayer))
+      if (key2 === "satellite" && !map.hasLayer(satelliteLayer))
         satelliteLayer.addTo(map);
-      if (key === "topographic" && !map.hasLayer(topographicLayer))
+      if (key2 === "topographic" && !map.hasLayer(topographicLayer))
         topographicLayer.addTo(map);
       syncButtons();
       persistState();
     }
     function toggleBase(rawKey) {
-      const key = normalizeBase(rawKey);
-      if (key !== "street") {
-        const layer = key === "satellite" ? satelliteLayer : topographicLayer;
+      const key2 = normalizeBase(rawKey);
+      if (key2 !== "street") {
+        const layer = key2 === "satellite" ? satelliteLayer : topographicLayer;
         if (map.hasLayer(layer)) {
           setBase("street");
           return;
         }
       }
-      setBase(key);
+      setBase(key2);
     }
     function toggleWeather() {
       if (!weather)
@@ -2071,30 +2767,30 @@
       syncButtons();
       persistState();
     }
-    function setOverlay(key, on) {
-      if (key === "weather") {
+    function setOverlay(key2, on) {
+      if (key2 === "weather") {
         if (!weather)
           return;
         const active = map.hasLayer(weather.rain) || map.hasLayer(weather.clouds);
         if (active !== on)
           toggleWeather();
-      } else if (key === "borders") {
+      } else if (key2 === "borders") {
         if (map.hasLayer(bordersLayer) !== on)
           toggleBorders();
       }
     }
-    function toggleCustom(key) {
-      const layer = custom[key];
+    function toggleCustom(key2) {
+      const layer = custom[key2];
       if (!layer)
         return;
       const wasActive = layer.isActive();
       layer.toggle();
-      if (key === "details" && wasActive)
+      if (key2 === "details" && wasActive)
         setOverlay("borders", false);
       syncButtons();
     }
-    function registerToggle(key, toggle) {
-      custom[key] = toggle;
+    function registerToggle(key2, toggle) {
+      custom[key2] = toggle;
       syncButtons();
     }
     function setDarkMode(mode) {
@@ -2175,23 +2871,23 @@
     }
     if (root) {
       root.querySelectorAll("[data-map-layer]").forEach((btn) => {
-        const key = btn.dataset.mapLayer;
+        const key2 = btn.dataset.mapLayer;
         const kind = btn.dataset.layerKind || "custom";
-        if (key === "weather" && !weather) {
+        if (key2 === "weather" && !weather) {
           btn.hidden = true;
           return;
         }
         btn.addEventListener("click", () => {
           if (kind === "base")
-            toggleBase(key === "terrain" ? "topographic" : key);
-          else if (key === "weather")
+            toggleBase(key2 === "terrain" ? "topographic" : key2);
+          else if (key2 === "weather")
             toggleWeather();
-          else if (key === "borders")
+          else if (key2 === "borders")
             toggleBorders();
-          else if (key === "dark")
+          else if (key2 === "dark")
             toggleDark();
           else
-            toggleCustom(key);
+            toggleCustom(key2);
         });
       });
     }
@@ -2210,10 +2906,10 @@
           }
         } catch {}
       }
-      const key = normalizeBase(base);
-      if (key === "satellite")
+      const key2 = normalizeBase(base);
+      if (key2 === "satellite")
         satelliteLayer.addTo(map);
-      else if (key === "topographic")
+      else if (key2 === "topographic")
         topographicLayer.addTo(map);
       if (weatherOn && weather) {
         weather.rain.addTo(map);
@@ -2362,6 +3058,7 @@
     const prevLayer = L.layerGroup().addTo(map);
     let lastCursorLL = null;
     let suppressClickUntil = 0;
+    let dragPointerId = null;
     const getColor = () => opts.getColor?.() ?? "#e74c3c";
     const getLabel = () => opts.getTextLabel?.() ?? "";
     function hint() {
@@ -2432,6 +3129,7 @@
       map.doubleClickZoom.enable();
       map.dragging.enable();
       map.getContainer().style.cursor = "";
+      map.getContainer().style.touchAction = "";
       opts.onToolChange?.(null);
     }
     function startTool(type) {
@@ -2440,6 +3138,7 @@
       map.doubleClickZoom.disable();
       map.dragging.disable();
       map.getContainer().style.cursor = "crosshair";
+      map.getContainer().style.touchAction = "none";
       opts.onToolChange?.(type);
       hint();
     }
@@ -2481,7 +3180,7 @@
         commit("circle", [state.points[0], [lastCursorLL.lat, lastCursorLL.lng]]);
       }
     }
-    function onClick(e) {
+    function onClick2(e) {
       if (!tool || e.originalEvent.detail > 1)
         return;
       if (Date.now() < suppressClickUntil)
@@ -2562,32 +3261,61 @@
           commit("polygon", ppts);
       }
     }
-    function onMouseMove(e) {
-      lastCursorLL = e.latlng;
+    function onPointerMove(e) {
+      if (!e.isPrimary)
+        return;
+      const ll = map.mouseEventToLatLng(e);
+      lastCursorLL = ll;
+      if (dragPointerId !== null)
+        return;
       if (state || tool === "rect" || tool === "circle")
-        preview(e.latlng);
+        preview(ll);
     }
-    function onMouseDown(e) {
+    function onPointerDown(e) {
       if (!tool || e.button !== 0)
+        return;
+      if (!e.isPrimary || dragPointerId !== null)
         return;
       const eligible = ["circle", "rect", "arrow", "line", "text", "freehand"].includes(tool);
       if (!eligible)
         return;
+      const container = map.getContainer();
+      const target = e.target instanceof Element ? e.target : null;
+      if (target !== container && !target?.closest(".leaflet-pane"))
+        return;
+      const pointerId = e.pointerId;
+      dragPointerId = pointerId;
+      map.dragging.disable();
       const startLL = map.mouseEventToLatLng(e);
       const startX = e.clientX;
       const startY = e.clientY;
       let isDragging = false;
       const hasPoints = !!(state?.points.length && (tool === "arrow" || tool === "line"));
+      const coarse = e.pointerType === "touch";
+      const DRAG_MIN_PX = coarse ? 12 : 6;
       const freehandPoints = [];
       let lastSampleX = startX;
       let lastSampleY = startY;
-      const FREEHAND_MIN_SAMPLE_PX = 4;
+      const FREEHAND_MIN_SAMPLE_PX = coarse ? 6 : 4;
+      function endGesture() {
+        container.removeEventListener("pointermove", onMove);
+        container.removeEventListener("pointerup", onUp);
+        container.removeEventListener("pointercancel", onCancel);
+        dragPointerId = null;
+        if (!tool)
+          map.dragging.enable();
+      }
       function onMove(ev) {
+        if (ev.pointerId !== pointerId)
+          return;
         const dx = ev.clientX - startX;
         const dy = ev.clientY - startY;
-        if (!isDragging && Math.hypot(dx, dy) < 6)
+        if (!isDragging && Math.hypot(dx, dy) < DRAG_MIN_PX)
           return;
-        isDragging = true;
+        if (!isDragging) {
+          container.setPointerCapture(pointerId);
+          isDragging = true;
+        }
         const endLL = map.mouseEventToLatLng(ev);
         const c = getColor();
         clearPrev();
@@ -2621,15 +3349,23 @@
           L.polyline(freehandPoints, { color: c, weight: 3, opacity: 0.85, interactive: false }).addTo(prevLayer);
         }
       }
+      function onCancel(ev) {
+        if (ev.pointerId !== pointerId)
+          return;
+        endGesture();
+        clearPrev();
+      }
       function onUp(ev) {
-        document.removeEventListener("mousemove", onMove);
+        if (ev.pointerId !== pointerId)
+          return;
+        endGesture();
         clearPrev();
         const dx = ev.clientX - startX;
         const dy = ev.clientY - startY;
         if (tool === "freehand") {
           if (freehandPoints.length < 2)
             return;
-        } else if (!isDragging || Math.hypot(dx, dy) < 6) {
+        } else if (!isDragging || Math.hypot(dx, dy) < DRAG_MIN_PX) {
           return;
         }
         const endLL = map.mouseEventToLatLng(ev);
@@ -2648,8 +3384,9 @@
           commit("text", [[startLL.lat, startLL.lng], [endLL.lat, endLL.lng]], { label: getLabel() });
         }
       }
-      document.addEventListener("mousemove", onMove);
-      document.addEventListener("mouseup", onUp, { once: true });
+      container.addEventListener("pointermove", onMove);
+      container.addEventListener("pointerup", onUp);
+      container.addEventListener("pointercancel", onCancel);
     }
     function onKeyDown(e) {
       if (!tool)
@@ -2671,16 +3408,16 @@
         finishCurrent();
       }
     }
-    map.on("click", onClick);
+    map.on("click", onClick2);
     map.on("dblclick", onDblClick);
-    map.on("mousemove", onMouseMove);
-    map.getContainer().addEventListener("mousedown", onMouseDown);
+    map.getContainer().addEventListener("pointermove", onPointerMove);
+    map.getContainer().addEventListener("pointerdown", onPointerDown);
     document.addEventListener("keydown", onKeyDown, true);
     function destroy() {
-      map.off("click", onClick);
+      map.off("click", onClick2);
       map.off("dblclick", onDblClick);
-      map.off("mousemove", onMouseMove);
-      map.getContainer().removeEventListener("mousedown", onMouseDown);
+      map.getContainer().removeEventListener("pointermove", onPointerMove);
+      map.getContainer().removeEventListener("pointerdown", onPointerDown);
       document.removeEventListener("keydown", onKeyDown, true);
       if (map.hasLayer(prevLayer))
         map.removeLayer(prevLayer);
@@ -2703,8 +3440,8 @@
   var TILE_SIZE = 256;
   var TILE_LOAD_TIMEOUT_MS = 8000;
   function activeBaseKey(layers) {
-    const key = layers.baseKey();
-    return key === "street" && layers.isDarkActive() ? "dark" : key;
+    const key2 = layers.baseKey();
+    return key2 === "street" && layers.isDarkActive() ? "dark" : key2;
   }
   function loadTileImage(url) {
     return new Promise((resolve) => {
@@ -2956,22 +3693,22 @@
   // src/urbanlens/dashboard/frontend/ts/shared/dialogs.ts
   async function confirmAction(options) {
     if (window.confirmDialog) {
-      return window.confirmDialog(options);
+      return await window.confirmDialog(options) === true;
     }
     return window.confirm(options.message ?? "Are you sure?");
   }
   var toast = {
-    success(message) {
-      window.toastr.success(message);
+    success(message2) {
+      window.toastr.success(message2);
     },
-    error(message) {
-      window.toastr.error(message);
+    error(message2) {
+      window.toastr.error(message2);
     },
-    warning(message) {
-      window.toastr.warning(message);
+    warning(message2) {
+      window.toastr.warning(message2);
     },
-    info(message) {
-      window.toastr.info(message);
+    info(message2) {
+      window.toastr.info(message2);
     }
   };
 
@@ -3611,11 +4348,405 @@
     };
   }
 
+  // src/urbanlens/dashboard/frontend/ts/shared/mention-autocomplete.ts
+  var DEBOUNCE_MS = 200;
+  var timer = null;
+  var inFlight2 = null;
+  function currentQuery(ta) {
+    const before = ta.value.substring(0, ta.selectionStart);
+    const atIdx = before.lastIndexOf("@");
+    if (atIdx === -1)
+      return null;
+    const frag = before.substring(atIdx + 1);
+    if (/\s/.test(frag))
+      return null;
+    return { start: atIdx, query: frag };
+  }
+  function dropdownFor(ta) {
+    return ta.closest(".comment-input-wrap")?.querySelector(".mention-dropdown") ?? null;
+  }
+  function hideDropdown(dd) {
+    if (!dd)
+      return;
+    dd.hidden = true;
+    dd.innerHTML = "";
+  }
+  function showDropdown(ta, items, onSelect) {
+    const dd = dropdownFor(ta);
+    if (!dd)
+      return;
+    dd.innerHTML = "";
+    if (!items.length) {
+      dd.hidden = true;
+      return;
+    }
+    for (const item of items) {
+      const div = document.createElement("div");
+      div.className = "mention-option";
+      div.innerHTML = `<span class="mention-option__name">${item.name.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</span>`;
+      div.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        onSelect(item);
+        hideDropdown(dd);
+      });
+      dd.appendChild(div);
+    }
+    dd.hidden = false;
+  }
+  function insert(ta, start, text) {
+    const pos = ta.selectionStart;
+    const after = ta.value.substring(pos);
+    const separator = /^\s/.test(after) ? "" : " ";
+    ta.value = `${ta.value.substring(0, start)}${text}${separator}${after}`;
+    const cursor = start + text.length + 1;
+    ta.setSelectionRange(cursor, cursor);
+    ta.focus();
+  }
+  function stillCurrent(ta, query) {
+    return currentQuery(ta)?.query === query;
+  }
+  function fetchSuggestions(ta) {
+    inFlight2?.abort();
+    inFlight2 = null;
+    const q = currentQuery(ta);
+    if (!q || q.query.length < 1) {
+      hideDropdown(dropdownFor(ta));
+      return;
+    }
+    const context = ta.dataset.contextType || "";
+    const tripSlug = ta.dataset.tripSlug || "";
+    const controller = new AbortController;
+    inFlight2 = controller;
+    const request = { headers: { "X-Requested-With": "XMLHttpRequest" }, signal: controller.signal };
+    if (/^\d+$/.test(q.query) && context === "trip" && tripSlug) {
+      fetch(`/dashboard/trips/${encodeURIComponent(tripSlug)}/map-data/`, request).then((r) => r.json()).then((data) => {
+        if (!stillCurrent(ta, q.query))
+          return;
+        const points = (data.points || []).filter((p) => String(p.index).startsWith(q.query));
+        showDropdown(ta, points.map((p) => ({ name: `#${p.index} - ${p.label}`, actIndex: p.index })), (item) => insert(ta, q.start, `@act:${item.actIndex}`));
+      }).catch(() => {});
+      return;
+    }
+    fetch(`/dashboard/comments/locations/?q=${encodeURIComponent(q.query)}`, request).then((r) => r.json()).then((results) => {
+      if (!stillCurrent(ta, q.query))
+        return;
+      showDropdown(ta, results, (item) => insert(ta, q.start, `@[${item.name}](loc:${item.uuid})`));
+    }).catch(() => {});
+  }
+  function isMentionInput(target) {
+    return target instanceof HTMLElement && target.classList.contains("mention-input");
+  }
+  function onInput(event) {
+    if (!isMentionInput(event.target))
+      return;
+    const ta = event.target;
+    if (timer)
+      clearTimeout(timer);
+    timer = setTimeout(() => fetchSuggestions(ta), DEBOUNCE_MS);
+  }
+  function onKeydown(event) {
+    if (!isMentionInput(event.target))
+      return;
+    const dd = dropdownFor(event.target);
+    if (!dd || dd.hidden)
+      return;
+    const options = Array.from(dd.querySelectorAll(".mention-option"));
+    const current = dd.querySelector(".mention-option.is-selected");
+    const idx = current ? options.indexOf(current) : -1;
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      current?.classList.remove("is-selected");
+      options[Math.min(idx + 1, options.length - 1)]?.classList.add("is-selected");
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      current?.classList.remove("is-selected");
+      options[Math.max(idx - 1, 0)]?.classList.add("is-selected");
+    } else if ((event.key === "Enter" || event.key === "Tab") && current) {
+      event.preventDefault();
+      current.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    } else if (event.key === "Escape") {
+      hideDropdown(dd);
+    }
+  }
+  function onClick2(event) {
+    if (isMentionInput(event.target))
+      return;
+    document.querySelectorAll(".mention-dropdown:not([hidden])").forEach(hideDropdown);
+  }
+  function installGlobalMentionAutocomplete() {
+    document.addEventListener("input", onInput);
+    document.addEventListener("keydown", onKeydown);
+    document.addEventListener("click", onClick2);
+  }
+
+  // src/urbanlens/dashboard/frontend/ts/shared/popup-dismiss.ts
+  function onDocumentClick2(event) {
+    const target = event.target;
+    if (!target?.closest)
+      return;
+    if (!target.closest(".trip-member-rsvp-wrap")) {
+      document.querySelectorAll(".rsvp-popup:not([hidden])").forEach((p) => {
+        p.hidden = true;
+      });
+    }
+    if (!target.closest(".pab-add-picker")) {
+      document.querySelectorAll(".pab-add-picker[open]").forEach((d) => {
+        d.open = false;
+      });
+    }
+  }
+  function installGlobalPopupDismiss() {
+    document.addEventListener("click", onDocumentClick2);
+  }
+
+  // src/urbanlens/dashboard/frontend/ts/shared/reaction-picker.ts
+  var RECENT_KEY = "urbanlens.recentReactionEmojis";
+  var RECENT_LIMIT = 5;
+  function getRecentReactionEmojis() {
+    try {
+      const parsed = JSON.parse(window.localStorage.getItem(RECENT_KEY) || "[]");
+      return Array.isArray(parsed) ? parsed.filter((emoji) => typeof emoji === "string" && emoji.length > 0).slice(0, RECENT_LIMIT) : [];
+    } catch {
+      return [];
+    }
+  }
+  function saveRecentReactionEmoji(emoji) {
+    if (!emoji)
+      return;
+    const recent = [emoji, ...getRecentReactionEmojis().filter((item) => item !== emoji)];
+    try {
+      window.localStorage.setItem(RECENT_KEY, JSON.stringify(recent.slice(0, RECENT_LIMIT)));
+    } catch {}
+  }
+  function refreshRecentReactionEmojis(popup) {
+    const recent = getRecentReactionEmojis();
+    let section = popup.querySelector(".reaction-picker-recent");
+    if (!section) {
+      section = document.createElement("div");
+      section.className = "reaction-picker-recent";
+      section.innerHTML = '<div class="reaction-picker-label">Recent</div><div class="reaction-picker-recent-list"></div><div class="reaction-picker-divider" aria-hidden="true"></div>';
+      popup.insertBefore(section, popup.firstChild);
+    }
+    const list = section.querySelector(".reaction-picker-recent-list");
+    if (!list)
+      return;
+    list.innerHTML = "";
+    for (const emoji of recent) {
+      const source = Array.from(popup.querySelectorAll(".reaction-picker-emoji:not(.reaction-picker-emoji--recent)")).find((btn) => (btn.dataset.emoji || btn.textContent?.trim()) === emoji);
+      if (!source)
+        continue;
+      const clone = source.cloneNode(true);
+      clone.classList.add("reaction-picker-emoji--recent");
+      clone.setAttribute("title", `Use recent reaction ${emoji}`);
+      list.appendChild(clone);
+      if (window.htmx)
+        window.htmx.process(clone);
+    }
+    section.hidden = !list.children.length;
+  }
+  function toggleReactionPicker(btn) {
+    const popup = btn.parentElement?.querySelector(".reaction-picker-popup");
+    if (!popup)
+      return;
+    document.querySelectorAll(".reaction-picker-popup:not([hidden])").forEach((p) => {
+      if (p !== popup)
+        p.hidden = true;
+    });
+    if (popup.hidden)
+      refreshRecentReactionEmojis(popup);
+    popup.hidden = !popup.hidden;
+  }
+  function onDocumentClick3(event) {
+    const target = event.target;
+    if (!target?.closest)
+      return;
+    const emojiButton = target.closest(".reaction-picker-emoji");
+    if (emojiButton)
+      saveRecentReactionEmoji(emojiButton.dataset.emoji || (emojiButton.textContent?.trim() ?? ""));
+    if (!target.closest(".reaction-picker")) {
+      document.querySelectorAll(".reaction-picker-popup:not([hidden])").forEach((p) => {
+        p.hidden = true;
+      });
+    }
+  }
+  function installGlobalReactionPicker() {
+    window.toggleReactionPicker = toggleReactionPicker;
+    document.addEventListener("click", onDocumentClick3);
+  }
+
+  // src/urbanlens/dashboard/frontend/ts/shared/safety-live-location.ts
+  var MIN_INTERVAL_MS = 30000;
+  var FAILURES_BEFORE_WARNING = 2;
+  function installSafetyLiveLocation(options) {
+    const { toggle, toggleUrl, updateUrl, csrfToken } = options;
+    const geolocation = options.geolocation ?? (typeof navigator === "undefined" ? undefined : navigator.geolocation);
+    const notify = options.notify ?? ((_kind, message2) => window.toastr?.error(message2));
+    const now = options.now ?? (() => Date.now());
+    let watchId = null;
+    let lastSentAt = 0;
+    let pendingPosition = null;
+    let sendTimer = null;
+    let failures = 0;
+    let warned = false;
+    const post = (url, body) => fetch(url, { method: "POST", headers: { "X-CSRFToken": csrfToken }, body });
+    function reportOutcome(ok) {
+      if (ok) {
+        failures = 0;
+        warned = false;
+        return;
+      }
+      failures += 1;
+      if (failures < FAILURES_BEFORE_WARNING || warned)
+        return;
+      warned = true;
+      notify("error", "Your live location isn't reaching the server - your partner may be seeing an old position.");
+    }
+    function sendPosition(position) {
+      lastSentAt = now();
+      const body = new FormData;
+      body.append("latitude", String(position.coords.latitude));
+      body.append("longitude", String(position.coords.longitude));
+      if (position.coords.accuracy != null)
+        body.append("accuracy", String(position.coords.accuracy));
+      post(updateUrl, body).then((response) => reportOutcome(response.ok)).catch(() => reportOutcome(false));
+    }
+    function onPosition(position) {
+      const elapsed = now() - lastSentAt;
+      if (elapsed >= MIN_INTERVAL_MS) {
+        sendPosition(position);
+        return;
+      }
+      pendingPosition = position;
+      if (sendTimer)
+        return;
+      sendTimer = setTimeout(() => {
+        sendTimer = null;
+        if (!pendingPosition)
+          return;
+        sendPosition(pendingPosition);
+        pendingPosition = null;
+      }, MIN_INTERVAL_MS - elapsed);
+    }
+    function startWatching() {
+      if (watchId !== null || !geolocation)
+        return;
+      watchId = geolocation.watchPosition(onPosition, () => notify("error", "Could not get your location - live location sharing may not work."), { enableHighAccuracy: true });
+    }
+    function stopWatching() {
+      if (watchId !== null && geolocation) {
+        geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+      if (sendTimer)
+        clearTimeout(sendTimer);
+      sendTimer = null;
+      pendingPosition = null;
+      failures = 0;
+      warned = false;
+    }
+    toggle.addEventListener("change", () => {
+      const enabled = toggle.checked;
+      const body = new FormData;
+      body.append("enabled", enabled ? "1" : "0");
+      if (enabled)
+        startWatching();
+      else
+        stopWatching();
+      const refuse = () => {
+        toggle.checked = !enabled;
+        if (enabled)
+          stopWatching();
+        notify("error", "Could not update live location sharing.");
+      };
+      post(toggleUrl, body).then((response) => {
+        if (!response.ok)
+          refuse();
+      }).catch(refuse);
+    });
+    if (toggle.checked)
+      startWatching();
+    return {
+      consecutiveFailures: () => failures,
+      stop: stopWatching
+    };
+  }
+  function installGlobalSafetyLiveLocation() {
+    window.ulInstallSafetyLiveLocation = installSafetyLiveLocation;
+  }
+
+  // src/urbanlens/dashboard/frontend/ts/shared/scroll-to-hash.ts
+  function findTarget(hash) {
+    const raw = hash.slice(1);
+    if (!raw)
+      return null;
+    let id = raw;
+    try {
+      id = decodeURIComponent(raw);
+    } catch {}
+    const byId = document.getElementById(id);
+    if (byId)
+      return byId;
+    try {
+      return document.querySelector(hash);
+    } catch {
+      return null;
+    }
+  }
+  function scrollToHash() {
+    const hash = window.location.hash;
+    if (!hash)
+      return;
+    findTarget(hash)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+  function installGlobalScrollToHash() {
+    document.addEventListener("htmx:afterSettle", scrollToHash);
+    document.addEventListener("DOMContentLoaded", () => setTimeout(scrollToHash, 400));
+  }
+
+  // src/urbanlens/dashboard/frontend/ts/shared/undo-map-refresh.ts
+  function isRestoreRequest(detail) {
+    if (!detail.successful)
+      return false;
+    if ((detail.requestConfig?.verb ?? "").toLowerCase() !== "post")
+      return false;
+    const path = detail.requestConfig?.path ?? "";
+    return path.includes("/undo/") && path.endsWith("/restore/");
+  }
+  function onAfterRequest(event) {
+    const detail = event.detail;
+    if (!detail || !isRestoreRequest(detail))
+      return;
+    try {
+      localStorage.setItem("ul_pins_dirty", "1");
+    } catch {}
+  }
+  function installGlobalUndoMapRefresh() {
+    const bind = () => document.body.addEventListener("htmx:afterRequest", onAfterRequest);
+    if (document.body)
+      bind();
+    else
+      document.addEventListener("DOMContentLoaded", bind);
+  }
+
   // src/urbanlens/dashboard/frontend/ts/entries-classic/core.ts
+  installGlobalAutosaveGuard();
+  installGlobalCollapsibleSections();
+  installGlobalCommentCompose();
+  installGlobalConfirmDialog();
+  installGlobalDialogBackdrop();
+  installGlobalFetchJson();
+  installGlobalFlyToDismiss();
+  installGlobalMentionAutocomplete();
+  installGlobalPopupDismiss();
+  installGlobalReactionPicker();
+  installGlobalSafetyLiveLocation();
+  installGlobalScrollToHash();
+  installGlobalUndoMapRefresh();
   installGlobalLocationSearchEngine();
   installGlobalMapLayers();
   installGlobalMarkupEngine();
   installGlobalMapExport();
   installGlobalLabelPicker();
+  installGlobalLeaveConfirmation();
   window.createMarkupToolbar = createMarkupToolbar;
 })();

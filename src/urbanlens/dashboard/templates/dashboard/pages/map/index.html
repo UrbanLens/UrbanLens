@@ -4479,6 +4479,11 @@
     document.getElementById('filter-panel').addEventListener('touchstart', function (e) {
         e.stopPropagation();
     });
+    // Both panels are children of #map, so a press inside them reaches the
+    // container-level rubber-band listener unless stopped here.
+    document.getElementById('filter-panel').addEventListener('pointerdown', function (e) {
+        e.stopPropagation();
+    });
     document.getElementById('filter-panel').addEventListener('contextmenu', function (e) {
         e.stopPropagation();
     });
@@ -4491,6 +4496,9 @@
         e.stopPropagation();
     });
     document.getElementById('pin-list-panel').addEventListener('touchstart', function (e) {
+        e.stopPropagation();
+    });
+    document.getElementById('pin-list-panel').addEventListener('pointerdown', function (e) {
         e.stopPropagation();
     });
     document.getElementById('pin-list-panel').addEventListener('contextmenu', function (e) {

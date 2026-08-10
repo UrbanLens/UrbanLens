@@ -1,11 +1,11 @@
 import {
   sortable_esm_default
-} from "./photo-location-scan-351ta66q.js";
+} from "./achievements-351ta66q.js";
 import {
   getCsrfToken,
   toast
-} from "./photo-location-scan-5jnnp4sj.js";
-import"./photo-location-scan-2vd5xdaq.js";
+} from "./achievements-4vcewk45.js";
+import"./achievements-2vd5xdaq.js";
 
 // src/urbanlens/dashboard/frontend/ts/shared/album-items.ts
 var QUEUED_REFRESH_DELAY_MS = 4000;

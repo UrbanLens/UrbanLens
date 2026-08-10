@@ -170,6 +170,7 @@ function initMapRectangleSelect(element: HTMLElement, map: L.Map, isActive: () =
         // A second finger belongs to a pinch-zoom, not to a second rectangle.
         if (!isActive() || !event.isPrimary || event.button !== 0) return;
         const startLL = map.mouseEventToLatLng(event);
+        const pointerId = event.pointerId;
         const threshold = event.pointerType === "mouse" ? MOUSE_DRAG_THRESHOLD_PX : COARSE_DRAG_THRESHOLD_PX;
         const restoreDragging = map.dragging.enabled();
         map.dragging.disable();
@@ -177,8 +178,8 @@ function initMapRectangleSelect(element: HTMLElement, map: L.Map, isActive: () =
 
         function finish(): void {
             element.removeEventListener("pointermove", onMove);
-            element.removeEventListener("pointerup", onUp);
-            element.removeEventListener("pointercancel", finish);
+            window.removeEventListener("pointerup", onUp);
+            window.removeEventListener("pointercancel", onCancel);
             if (rect) {
                 map.removeLayer(rect);
                 rect = null;
@@ -186,7 +187,15 @@ function initMapRectangleSelect(element: HTMLElement, map: L.Map, isActive: () =
             if (restoreDragging) map.dragging.enable();
         }
 
+        function onCancel(cancelEvent: PointerEvent): void {
+            if (cancelEvent.pointerId !== pointerId) return;
+            finish();
+        }
+
         function onMove(moveEvent: PointerEvent): void {
+            // A pinch's second finger would otherwise redraw the rectangle to
+            // its position, and its release would commit those bounds.
+            if (moveEvent.pointerId !== pointerId) return;
             if (!dragging && Math.hypot(moveEvent.clientX - event.clientX, moveEvent.clientY - event.clientY) < threshold) return;
             if (!dragging) {
                 // Capturing only once the gesture is a drag keeps a plain tap
@@ -206,6 +215,7 @@ function initMapRectangleSelect(element: HTMLElement, map: L.Map, isActive: () =
         }
 
         function onUp(upEvent: PointerEvent): void {
+            if (upEvent.pointerId !== pointerId) return;
             const dragged = dragging;
             finish();
             if (!dragged) return;
@@ -213,8 +223,13 @@ function initMapRectangleSelect(element: HTMLElement, map: L.Map, isActive: () =
         }
 
         element.addEventListener("pointermove", onMove);
-        element.addEventListener("pointerup", onUp);
-        element.addEventListener("pointercancel", finish);
+        // The terminators go on window, not the element: capture is only taken
+        // once the drag threshold is crossed, so a press that ends before that
+        // (a flick off the map edge) would otherwise never be delivered here -
+        // leaving these listeners attached and map dragging disabled, and
+        // letting the next gesture fire a stale onUp with the previous bounds.
+        window.addEventListener("pointerup", onUp);
+        window.addEventListener("pointercancel", onCancel);
     });
 }
 
@@ -1472,7 +1487,7 @@ function init(): void {
         // Disabling dragging makes Leaflet hand touch panning back to the
         // browser, which would scroll the page instead of letting the rubber
         // band consume the gesture.
-        mapEl.style.touchAction = "none";
+        map.getContainer().style.touchAction = "none";
     }
 
     function exitDetailPinSelectMode(): void {
@@ -1481,7 +1496,7 @@ function init(): void {
         document.getElementById("select-detail-pins-button")?.classList.remove("active");
         document.getElementById("map")?.classList.remove("select-mode");
         map.dragging.enable();
-        mapEl.style.touchAction = "";
+        map.getContainer().style.touchAction = "";
         clearDpSelection();
     }
 
@@ -1873,7 +1888,7 @@ function init(): void {
     function disarmPlacement(): void {
         if (!pendingPlacement) return;
         map.off("click", onPlacementMapClick);
-        mapEl.classList.remove("photo-drop-target");
+        map.getContainer().classList.remove("photo-drop-target");
         pendingPlacement = null;
         syncPlacementAffordance();
     }
@@ -1890,7 +1905,7 @@ function init(): void {
         disarmPlacement();
         pendingPlacement = pending;
         map.once("click", onPlacementMapClick);
-        mapEl.classList.add("photo-drop-target");
+        map.getContainer().classList.add("photo-drop-target");
         syncPlacementAffordance();
         toast.info(PLACEMENT_HINT);
     }
@@ -2022,13 +2037,13 @@ function init(): void {
         if (!e.dataTransfer?.types.includes("text/photoid")) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        mapEl.classList.add("photo-drop-target");
+        map.getContainer().classList.add("photo-drop-target");
     });
     mapEl.addEventListener("dragleave", () => {
         if (!pendingPlacement) mapEl.classList.remove("photo-drop-target");
     });
     mapEl.addEventListener("drop", (e) => {
-        mapEl.classList.remove("photo-drop-target");
+        map.getContainer().classList.remove("photo-drop-target");
         const idStr = e.dataTransfer?.getData("text/photoid");
         if (!idStr) return;
         e.preventDefault();
@@ -2076,7 +2091,7 @@ function init(): void {
         if (!cfg.mediaRelevanceUrl || !e.dataTransfer?.types.includes("text/media-item")) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "copy";
-        mapEl.classList.add("photo-drop-target");
+        map.getContainer().classList.add("photo-drop-target");
     });
     mapEl.addEventListener("dragleave", () => {
         if (!pendingPlacement) mapEl.classList.remove("photo-drop-target");
@@ -2087,7 +2102,7 @@ function init(): void {
         e.preventDefault();
         // A completed drop resolves whatever the user had armed for a tap.
         disarmPlacement();
-        mapEl.classList.remove("photo-drop-target");
+        map.getContainer().classList.remove("photo-drop-target");
         const itemEl = window._mediaDragItemEl;
         window._mediaDragItemEl = undefined;
         let item: MediaDropItem;

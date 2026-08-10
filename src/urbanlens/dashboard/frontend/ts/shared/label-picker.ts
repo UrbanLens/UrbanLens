@@ -230,13 +230,26 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
      * may be held for any length of time, so it lifts on the click itself or on
      * the next pointerdown when the release produces no click at all.
      */
-    function claimPress(): boolean {
+    function claimPress(emitsClick = true): boolean {
         if (pressJustHandled) return false;
         cancelPress();
+        if (!emitsClick) return true;
         pressJustHandled = true;
         document.addEventListener("click", releasePress);
         document.addEventListener("pointerdown", releasePress);
         return true;
+    }
+
+    /**
+     * True when a `contextmenu` came from a real mouse right-click, which emits
+     * no follow-up click to suppress - and can't be racing a long-press timer
+     * either, since startPress ignores mouse pointers. Arming the suppression
+     * for it would leave the guard set until some unrelated later click,
+     * swallowing keyboard (Enter/Space) activations in the meantime.
+     */
+    function isMouseContextMenu(event: MouseEvent): boolean {
+        const pointerType = (event as PointerEvent).pointerType;
+        return pointerType ? pointerType === "mouse" : event.button === 2;
     }
 
     /**
@@ -439,7 +452,7 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
                 });
                 chip.addEventListener("contextmenu", (e) => {
                     e.preventDefault();
-                    if (claimPress()) toggleLabelMode(id);
+                    if (claimPress(!isMouseContextMenu(e))) toggleLabelMode(id);
                 });
                 chip.addEventListener("pointerdown", (e) => startPress(e, () => toggleLabelMode(id)));
                 chip.querySelector<HTMLElement>(".fp-label-chip-toggle")?.addEventListener("click", (e) => {
@@ -584,7 +597,7 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
         const btn = (e.target as HTMLElement).closest<HTMLElement>(".fp-label-avail");
         if (!btn) return;
         e.preventDefault();
-        if (claimPress()) addLabel(btn, "excl");
+        if (claimPress(!isMouseContextMenu(e))) addLabel(btn, "excl");
     });
     els.list.addEventListener("pointerdown", (e) => {
         const btn = (e.target as HTMLElement).closest<HTMLElement>(".fp-label-avail");

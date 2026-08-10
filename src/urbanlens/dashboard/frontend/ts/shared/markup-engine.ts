@@ -271,6 +271,7 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
         map.doubleClickZoom.enable();
         map.dragging.enable();
         map.getContainer().style.cursor = "";
+        map.getContainer().style.touchAction = "";
         opts.onToolChange?.(null);
     }
 
@@ -285,6 +286,10 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
         map.doubleClickZoom.disable();
         map.dragging.disable();
         map.getContainer().style.cursor = "crosshair";
+        // Leaflet's `touch-action: none` rides on the drag handler it just
+        // removed, so without this the browser reclaims one-finger drags as
+        // page scrolling and pointercancels the stroke mid-draw.
+        map.getContainer().style.touchAction = "none";
         opts.onToolChange?.(type);
         hint();
     }
@@ -445,7 +450,10 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
         // Deliberately not preventDefault()ed, unlike the app's other pointer
         // drags: a press that never moves still has to produce the click that
         // onClick places a point from, and cancelling pointerdown can suppress it.
-        container.setPointerCapture(pointerId);
+        // Capture is taken lazily in onMove, once the gesture is known to be a
+        // drag - capturing here would retarget the follow-up click to the
+        // container, so with a tool armed a click on a marker would stop
+        // reaching that marker's own handler.
         dragPointerId = pointerId;
         map.dragging.disable();
 
@@ -486,7 +494,13 @@ function createDrawSession(map: L.Map, opts: DrawSessionOpts): DrawSession {
             const dx = ev.clientX - startX;
             const dy = ev.clientY - startY;
             if (!isDragging && Math.hypot(dx, dy) < DRAG_MIN_PX) return;
-            isDragging = true;
+            if (!isDragging) {
+                // Now that this is a drag rather than a tap, capture so moves
+                // that leave the container still arrive - and so a touch drag
+                // is not stolen mid-stroke by the browser.
+                container.setPointerCapture(pointerId);
+                isDragging = true;
+            }
             const endLL = map.mouseEventToLatLng(ev);
             const c = getColor();
             clearPrev();

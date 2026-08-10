@@ -1,10 +1,10 @@
 import {
   getCsrfToken,
   toast
-} from "./photo-location-scan-5jnnp4sj.js";
+} from "./achievements-4vcewk45.js";
 import {
   __require
-} from "./photo-location-scan-2vd5xdaq.js";
+} from "./achievements-2vd5xdaq.js";
 
 // node_modules/exifr/dist/full.esm.mjs
 var e = typeof self != "undefined" ? self : global;
@@ -1688,16 +1688,19 @@ function partitionByCachedPins(clusters, pins, radiusM = EXISTING_PIN_RADIUS_M) 
 }
 
 // src/urbanlens/dashboard/frontend/ts/shared/pin-cache.ts
-var CACHE_VERSION = 8;
+var PIN_CACHE_VERSION = 8;
+function pinCacheKey(profileUuid) {
+  return `ul_pins_v5_${profileUuid}`;
+}
 function readRawCachedPins(profileUuid) {
   if (!profileUuid)
     return [];
   try {
-    const raw = localStorage.getItem(`ul_pins_v5_${profileUuid}`);
+    const raw = localStorage.getItem(pinCacheKey(profileUuid));
     if (!raw)
       return [];
     const cache = JSON.parse(raw);
-    if (cache?.v !== CACHE_VERSION || cache?.profileUuid !== profileUuid)
+    if (cache?.v !== PIN_CACHE_VERSION || cache?.profileUuid !== profileUuid)
       return [];
     const pins = cache.pins;
     if (!pins || typeof pins !== "object")
