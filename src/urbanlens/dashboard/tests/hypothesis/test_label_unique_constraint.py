@@ -247,3 +247,24 @@ class LabelConflictHandlingTests(TestCase):
         Label.objects.create(profile=other, name="ZzAudit Rooftop", kind=KIND_TAG)
 
         self.assertIsNone(find_conflicting_label(profile=self.profile, name="ZzAudit Rooftop", kind=KIND_TAG))
+
+    def test_converting_a_kind_into_a_taken_name_is_refused(self) -> None:
+        """The least obvious collision: the name is unchanged, the *kind* moves.
+
+        A tag called "Bridge" converted to a category collides with an existing
+        category "Bridge" - so the check has to use the incoming ``new_kind``,
+        not the label's current one.
+        """
+        from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label
+
+        tag = Label.objects.create(profile=self.profile, name="ZzAudit Bridge", kind=KIND_TAG)
+        Label.objects.create(profile=self.profile, name="ZzAudit Bridge", kind=KIND_CATEGORY)
+
+        self.assertIsNone(
+            find_conflicting_label(profile=self.profile, name=tag.name, kind=KIND_TAG, exclude_pk=tag.pk),
+            "staying a tag is fine - it is only itself",
+        )
+        self.assertIsNotNone(
+            find_conflicting_label(profile=self.profile, name=tag.name, kind=KIND_CATEGORY, exclude_pk=tag.pk),
+            "converting it to a category must collide with the existing category",
+        )

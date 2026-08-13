@@ -325,7 +325,23 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
 
         category_name = category_name.lower()
         try:
-            category, _created = Label.objects.get_or_create(name=category_name, kind="category", defaults={"profile": None})
+            category, _created = Label.objects.get_or_create(
+                name__iexact=category_name,
+                kind="category",
+                # profile=None belongs in the *lookup*, not just defaults: this
+                # creates a global category, so the get must find a global one.
+                # Without it the get spans every profile's labels and returns
+                # MultipleObjectsReturned as soon as two users have a category of
+                # the same name - which the case-insensitive match below makes
+                # dramatically more likely.
+                profile=None,
+                # Looked up case-insensitively because the uniqueness constraint is
+                # (lower(name), profile, kind): an exact-match get would miss an
+                # existing "Factory" while creating "factory", and the insert would
+                # then violate the constraint. get_or_create cannot recover from that
+                # either - its retry repeats the same exact-match get.
+                defaults={"name": category_name},
+            )
             if category:
                 self.labels.add(category)
                 if save:

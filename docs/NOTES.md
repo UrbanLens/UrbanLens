@@ -78,6 +78,38 @@ controllers and viewsets were deleted in favor of the unified label controller/v
 Per-user visual overrides (color/icon) on a shared global label live in a separate
 `LabelCustomization` model — editing "your" label color never mutates the label other users see.
 
+## Label names are unique per owner and kind, case-insensitively
+
+Since migrations 0042/0043, `Label` carries
+`UniqueConstraint(Lower("name"), "profile", "kind", nulls_distinct=False)`. Three consequences that
+are not obvious from the model:
+
+**It is case-insensitive.** "Abandoned" and "abandoned" are the same label. This matches what
+callers already assumed - `services/media/media_labels.py` pre-filtered with `name__iexact` because
+`get_or_create(name=...)` alone is case-sensitive and the intended identity was not. Any lookup that
+feeds a create must use `name__iexact`, or the `get` misses an existing row, the insert violates the
+constraint, and `get_or_create`'s own retry (which repeats the same exact-match `get`) cannot
+recover.
+
+**Global labels are constrained against each other.** A global label has `profile IS NULL`, and
+Postgres treats NULLs as distinct by default - so without `nulls_distinct=False` two identical
+global labels would still be possible. That flag needs Postgres 15+; this project runs 17.
+
+**Shadowing a global label is refused by the application, not the database.** A personal label and a
+global label with the same name differ in `profile`, so the constraint permits both. The check in
+`services/labels/uniqueness.py` is deliberately wider and refuses it, because two identically-named
+labels in one list are indistinguishable to the user. Migration 0042 merged the pre-existing ones
+into the global label, which survives.
+
+Every write path checks `find_conflicting_label` *before* writing and returns a message (HTML views
+400, external API 409, undo-restore refuses) - reaching the constraint means a 500, so the check is
+the interface and the constraint is the backstop.
+
+For tests: a new `Profile` is seeded with ~46 default labels, so `Label.objects.create(name="Hospital",
+kind=KIND_CATEGORY)` now raises. Use `core/tests/labels.ensure_label()` when the fixture wants "a
+label with this identity", and a fresh name when it genuinely needs a *new* row - `ensure_label`
+returns the seeded one, which fires no create signal and already has parents.
+
 ## Pin slugs are scoped per-profile, not global
 
 `Pin` has `UniqueConstraint(fields=["profile", "slug"], condition=Q(slug__isnull=False))` — slugs

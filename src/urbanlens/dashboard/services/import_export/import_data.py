@@ -506,7 +506,11 @@ def _import_labels(
             # Match by UUID first (re-importing the same export), then by name+kind
             # (the import may be re-run against data that was already imported, or
             # the export UUID may not round-trip - either way, don't duplicate).
-            existing = Label.objects.filter(uuid=label_uuid, profile=profile).first() or Label.objects.filter(profile=profile, name=name, kind=kind).first()
+            # name__iexact, not name: labels are unique on (lower(name), profile,
+            # kind) since migration 0043, so an exact-match lookup would miss
+            # "Abandoned" while importing "abandoned" and then fail the whole
+            # import on the constraint instead of skipping the duplicate.
+            existing = Label.objects.filter(uuid=label_uuid, profile=profile).first() or Label.objects.filter(profile=profile, name__iexact=name, kind=kind).first()
             if existing:
                 label_uuid_map[uuid_str] = existing.pk
                 result.inc_skipped("labels")
@@ -527,13 +531,13 @@ def _import_labels(
         else:
             # Global label: match by name+kind first, then fall back to a user-owned
             # label with the same name+kind, then create as user-owned if neither exists.
-            existing = Label.objects.filter(profile__isnull=True, name=name, kind=kind).first()
+            existing = Label.objects.filter(profile__isnull=True, name__iexact=name, kind=kind).first()
             if existing:
                 label_uuid_map[uuid_str] = existing.pk
                 result.inc_skipped("labels")
             else:
                 # Re-create as a user-owned label (global doesn't exist on this instance).
-                user_existing = Label.objects.filter(profile=profile, name=name, kind=kind).first()
+                user_existing = Label.objects.filter(profile=profile, name__iexact=name, kind=kind).first()
                 if user_existing:
                     label_uuid_map[uuid_str] = user_existing.pk
                     result.inc_skipped("labels")

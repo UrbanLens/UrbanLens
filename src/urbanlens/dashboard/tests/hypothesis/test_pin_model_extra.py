@@ -210,19 +210,44 @@ class PinAddCategoryTests(TestCase):
 
     def test_add_category_creates_label_with_category_kind(self) -> None:
         from urbanlens.dashboard.models.labels.model import Label
+
         self.pin.add_category("hospital")
-        self.assertTrue(Label.objects.filter(name="hospital", kind="category").exists())
+
+        self.assertTrue(Label.objects.filter(name__iexact="hospital", kind="category").exists())
 
     def test_add_category_links_label_to_pin(self) -> None:
         self.pin.add_category("school")
         self.pin.refresh_from_db()
-        names = list(self.pin.labels.filter(kind="category").values_list("name", flat=True))
+
+        names = [n.lower() for n in self.pin.labels.filter(kind="category").values_list("name", flat=True)]
+
         self.assertIn("school", names)
 
-    def test_add_category_normalises_to_lowercase(self) -> None:
+    def test_add_category_reuses_an_existing_label_whatever_its_case(self) -> None:
+        """Replaces an older assertion that ``add_category("Prison")`` produced a
+        label literally named "prison".
+
+        It did - by creating a *second* label beside any existing "Prison", which
+        is the duplication migrations 0042/0043 exist to prevent. The lookup is
+        ``name__iexact`` now, so an existing label wins and keeps its own casing;
+        only a genuinely new one is created lowercased.
+        """
+        from urbanlens.dashboard.models.labels.model import Label
+
+        existing = Label.objects.create(name="Prison", kind="category", profile=None)
+
         result = self.pin.add_category("Prison")
-        self.assertIsNotNone(result)
-        self.assertEqual(result.name, "prison")
+
+        self.assertEqual(result.pk, existing.pk, "should reuse the existing label, not make a second")
+        # Scoped to global labels: the profile is seeded with its own default
+        # categories, and "Prison" is among them - counting across every profile
+        # would include that unrelated row.
+        self.assertEqual(Label.objects.filter(name__iexact="prison", kind="category", profile__isnull=True).count(), 1)
+
+    def test_add_category_creates_a_new_label_lowercased(self) -> None:
+        result = self.pin.add_category("ZzBrandNewKind")
+
+        self.assertEqual(result.name, "zzbrandnewkind")
 
 
 class PinChangeCategoryTests(TestCase):
