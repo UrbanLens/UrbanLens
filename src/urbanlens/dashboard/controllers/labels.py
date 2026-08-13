@@ -20,6 +20,7 @@ from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
 from django.utils.html import escape
 from django.views import View
+from PIL.Image import DecompressionBombError as PILDecompressionBombError
 
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
 from urbanlens.dashboard.models.images.model import Image
@@ -274,7 +275,7 @@ def _resize_custom_icon(uploaded_file: UploadedFile) -> UploadedFile:
         if not name.lower().endswith(ext):
             name = name.rsplit(".", 1)[0] + ext
         return InMemoryUploadedFile(out, "ImageField", name, f"image/{fmt.lower()}", out.getbuffer().nbytes, None)
-    except (OSError, ValueError):
+    except (OSError, ValueError, PILDecompressionBombError):
         with contextlib.suppress(OSError):
             uploaded_file.seek(0)
         return uploaded_file

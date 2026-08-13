@@ -2209,7 +2209,7 @@ class PhotoSerializer(serializers.Serializer):
     dm_peer_name = serializers.CharField(read_only=True, allow_null=True)
 
 
-def build_photo_payload(image: Image, viewer_profile: Profile) -> dict:
+def build_photo_payload(image: Image, viewer_profile: Profile, pending_image_ids: set[int] | None = None) -> dict:
     """Build one photo's external-API payload for a given viewer.
 
     Deliberately not ``services.media.images.image_to_gallery_json``: that one takes
@@ -2238,6 +2238,10 @@ def build_photo_payload(image: Image, viewer_profile: Profile) -> dict:
             ``pin``/``wiki``/``visit``/``location``/``profile`` selected, or
             this issues a query per field.
         viewer_profile: The profile the payload is being built for.
+        pending_image_ids: Precomputed pending-suggestion ids for the whole
+            batch (see ``services.memories.photos.pending_suggestion_image_ids``).
+            Callers serializing a list should pass it; without it ``classify_photo``
+            issues a query per photo.
 
     Returns:
         A dict matching :class:`PhotoSerializer`.
@@ -2287,7 +2291,7 @@ def build_photo_payload(image: Image, viewer_profile: Profile) -> dict:
         "file_size": image.file_size,
         "labels": [label.name for label in image.labels.all()],
         "organize_dismissed": image.organize_dismissed if is_owner else False,
-        "state": classify_photo(image),
+        "state": classify_photo(image, pending_image_ids),
         "owner_slug": owner_slug,
         "pin_slug": image.pin.slug if (is_owner and image.pin is not None) else None,
         "pin_name": image.pin.effective_name if (is_owner and image.pin is not None) else None,

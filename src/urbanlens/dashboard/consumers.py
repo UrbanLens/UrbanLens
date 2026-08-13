@@ -613,6 +613,14 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     ``{"type": "error", "detail": "..."}`` rather than silently dropped or
     left to crash the socket, so a sender always learns their message didn't
     go through - important for a feature people may rely on in an emergency.
+
+    Access is resolved once, at ``connect()``. Both routes therefore need a
+    revocation path for an already-open socket, and both have the same pair:
+    an immediate ``*_access_revoked`` broadcast when the row is removed, plus a
+    periodic re-check as a backstop for a dropped broadcast. On the contact
+    route "revoked" means the ``SafetyCheckinContact`` row is gone -
+    ``services.visits.safety.set_checkin_contacts`` deletes every row missing
+    from a resubmitted contact list.
     """
 
     async def connect(self):
@@ -673,25 +681,28 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             await self.close(code=4500)
             return
         logger.info("Safety chat connected: checkin=%s contact=%s", self.checkin.pk, getattr(self.contact, "pk", None))
-        if self.contact is None:
-            # Defense-in-depth against a dropped partner_access_revoked broadcast: that
-            # group_send is best-effort, same as every other broadcast in this module, but
-            # unlike the others it's the *only* mechanism that revokes an already-open
-            # connection's access (permission is otherwise checked once, at connect() time).
-            # A channel-layer hiccup at the exact moment a partner is removed would
-            # otherwise leave their live-location stream open indefinitely with no
-            # self-healing path. The token/contact route never joins the location group and
-            # its access can't be revoked mid-connection (a magic link is either valid or
-            # it isn't), so it doesn't need this.
-            #
-            # This same loop also carries the credential re-check for a ?key=
-            # connection (_is_still_authorized consults _credential_is_still_valid),
-            # which is why this consumer never calls
-            # CredentialScopeMixin.start_credential_revalidation - doing both would
-            # run two timers against the same connection for the same purpose. Only
-            # the session route can carry a credential that matters here anyway: the
-            # contact route is authorized by its token, not by a credential.
-            self._revalidation_task = asyncio.create_task(self._revalidate_access_periodically())
+        # Defense-in-depth against a dropped *_access_revoked broadcast: those
+        # group_sends are best-effort, same as every other broadcast in this module,
+        # but they are the only mechanism that revokes an already-open connection's
+        # access (permission is otherwise checked once, at connect() time). A
+        # channel-layer hiccup at the exact moment someone is removed would otherwise
+        # leave their chat - and, for a partner, their live-location stream - open
+        # indefinitely with no self-healing path.
+        #
+        # This runs on the contact route too. A magic-link token cannot be *edited*
+        # into invalidity, which is what once made this look unnecessary there, but
+        # it can be deleted: set_checkin_contacts() drops every row missing from a
+        # resubmitted contact list, and a removed contact whose portal is still open
+        # would otherwise keep receiving the check-in's chat.
+        #
+        # This same loop also carries the credential re-check for a ?key=
+        # connection (_is_still_authorized consults _credential_is_still_valid),
+        # which is why this consumer never calls
+        # CredentialScopeMixin.start_credential_revalidation - doing both would
+        # run two timers against the same connection for the same purpose. Only
+        # the session route can carry a credential that matters here anyway: the
+        # contact route is authorized by its token, not by a credential.
+        self._revalidation_task = asyncio.create_task(self._revalidate_access_periodically())
 
     async def disconnect(self, close_code):
         """Leave the check-in's group(s), if we ever joined any, and stop re-validating."""
@@ -743,7 +754,7 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
             location - indefinitely.
         """
         from urbanlens.dashboard.models.profile.model import Profile
-        from urbanlens.dashboard.models.safety.model import SafetyCheckin
+        from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
         from urbanlens.dashboard.services.visits.safety import is_owner_or_accepted_partner
 
         if not _credential_is_still_valid(self.credential):
@@ -751,6 +762,11 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         checkin = SafetyCheckin.objects.filter(pk=self.checkin.pk).first()
         if checkin is None:
             return False
+        if self.contact is not None:
+            # The contact route's authority is its token, and revoking that token
+            # means deleting the row - so "still authorized" is "the row is still
+            # there, still on this check-in".
+            return SafetyCheckinContact.objects.filter(pk=self.contact.pk, checkin_id=checkin.pk).exists()
         profile = Profile.objects.filter(pk=self.profile_id).first()
         if profile is None:
             return False
@@ -880,6 +896,22 @@ class SafetyCheckinChatConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         # this and would otherwise fall through to appendMessage(). Closing with 4404
         # alone already makes the client show "You don't have access to this chat."
         # (see _chat_panel.html's onclose handler), same as a revoked contact token.
+        await self.close(code=4404)
+
+    async def contact_access_revoked(self, event):
+        """Force-close this connection if it belongs to the just-removed contact.
+
+        The contact-route mirror of :meth:`partner_access_revoked`. Delivered to
+        every connection on the check-in's group; only the one whose bound
+        contact matches acts on it.
+
+        Args:
+            event: The group-send event, with a ``payload`` dict containing the
+                removed contact's ``contact_id`` (see
+                ``services.visits.safety._broadcast_contact_access_revoked``).
+        """
+        if self.contact is None or self.contact.pk != event["payload"]["contact_id"]:
+            return
         await self.close(code=4404)
 
     @database_sync_to_async

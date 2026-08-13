@@ -213,18 +213,34 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
 
         Args:
             south: Southern (minimum) latitude.
-            west: Western (minimum) longitude.
+            west: Western edge longitude. May exceed +/-180 (Leaflet reports
+                unwrapped bounds when the map is panned across the date line)
+                and may be greater than ``east`` when the viewport crosses it.
             north: Northern (maximum) latitude.
-            east: Eastern (maximum) longitude.
+            east: Eastern edge longitude, same caveats as ``west``.
 
         Returns:
             This queryset filtered to pins within the box.
         """
         from django.contrib.gis.geos import Polygon
 
-        bbox = Polygon.from_bbox((west, south, east, north))
-        bbox.srid = 4326
-        return self.filter(location__point__within=bbox)
+        from urbanlens.dashboard.services.geo.longitude import normalize_longitude
+
+        west = normalize_longitude(west)
+        east = normalize_longitude(east)
+
+        def box(west_edge: float, east_edge: float) -> Polygon:
+            bbox = Polygon.from_bbox((west_edge, south, east_edge, north))
+            bbox.srid = 4326
+            return bbox
+
+        if west > east:
+            # The viewport crosses the antimeridian. One box from these edges
+            # spans the *long* way round - 358 degrees for a 2-degree window -
+            # so it excludes everything on screen and includes everything else.
+            # Query the two real halves instead.
+            return self.filter(Q(location__point__within=box(west, 180.0)) | Q(location__point__within=box(-180.0, east)))
+        return self.filter(location__point__within=box(west, east))
 
     def by_tag(self, tag_id: int) -> Self:
         """Filter pins that have this tag or any of its descendant tags."""
@@ -397,10 +413,15 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
                     qs = qs.filter(detail_pin_count__lte=int(max_detail_pins))
         if custom_fields := criteria.get("custom_fields"):
             qs = qs.filter_by_custom_fields(custom_fields)
+        from urbanlens.dashboard.services.geo.longitude import split_at_antimeridian
+
         if include_regions := criteria.get("include_regions"):
-            qs = qs.filter(location__point__within=include_regions)
+            # Regions drawn across the date line arrive unwrapped (Leaflet gives
+            # 179..181); stored points are folded, so a planar __within misses
+            # everything east of the line until the region is split.
+            qs = qs.filter(location__point__within=split_at_antimeridian(include_regions))
         if exclude_regions := criteria.get("exclude_regions"):
-            qs = qs.exclude(location__point__within=exclude_regions)
+            qs = qs.exclude(location__point__within=split_at_antimeridian(exclude_regions))
         if criteria.get("overlapping_pins"):
             qs = qs.overlapping()
         return qs.distinct()

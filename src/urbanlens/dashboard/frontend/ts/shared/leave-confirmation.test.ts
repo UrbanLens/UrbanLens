@@ -3,10 +3,11 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { installLeaveConfirmation } from "./leave-confirmation";
 
 /**
- * Each case installs its own guard, as separate pages do, and the listeners from
- * earlier cases stay bound to document for the rest of the file. So each guard
- * closes over its *own* armed flag: only the guard under test is ever armed, and
- * the leftovers stay inert instead of answering the current test's dialog.
+ * Each case installs its own guard, as separate pages do. `beforeEach` uninstalls
+ * every guard from earlier cases, so `document` does not accumulate a
+ * capture-phase click listener per test for the rest of the run. Guards are also
+ * disarmed defensively - each closes over its *own* armed flag, so even a
+ * leftover would stay inert rather than answering the current test's dialog.
  */
 interface Guard {
     /** Arm this guard - i.e. the page now has something worth losing. */
@@ -20,19 +21,21 @@ function stubConfirm(answer: boolean): ReturnType<typeof mock> {
     return fn;
 }
 
-/** Every guard ever installed, so previous cases' guards can be disarmed. */
+/** Every guard ever installed, so previous cases' guards can be torn down. */
 const installed: { armed: boolean }[] = [];
+const handles: { uninstall(): void }[] = [];
 
 function install(overrides: Partial<Parameters<typeof installLeaveConfirmation>[0]> = {}): Guard {
     const state = { armed: false };
     installed.push(state);
     const onConfirmed = mock(() => {});
-    installLeaveConfirmation({
+    const handle = installLeaveConfirmation({
         isBlocked: () => state.armed,
         message: "Careful.",
         onConfirmed: onConfirmed as unknown as () => void,
         ...overrides,
     });
+    handles.push(handle);
     return {
         arm: () => {
             state.armed = true;
@@ -60,7 +63,11 @@ function beforeUnload(): Event {
 }
 
 beforeEach(() => {
-    // Leftover guards stay bound to document; disarm them so only this case's is live.
+    // Unbind earlier cases' listeners so `document` does not accumulate one per
+    // test, and disarm their flags so nothing lingering can answer this case.
+    handles.splice(0).forEach((handle) => {
+        handle.uninstall();
+    });
     installed.forEach((state) => {
         state.armed = false;
     });

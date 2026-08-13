@@ -785,7 +785,13 @@ class SiteAdminSubscriptionsView(LoginRequiredMixin, PermissionRequiredMixin, Vi
             settings_obj = SiteSettings.get_current()
             valid_features = set(SiteFeature.values)
             selected = sorted(value for value in request.POST.getlist("features") if value in valid_features)
-            SiteSettings.objects.filter(pk=settings_obj.pk).update(default_features=",".join(selected))
+            # save(update_fields=...), not queryset.update(): the get_current() above
+            # memoises the row for the rest of this request (see
+            # models.site_settings.request_cache), and only post_save invalidates that
+            # memo. Writing the same single column either way, so this costs nothing
+            # and keeps anything added below from reading the pre-edit values.
+            settings_obj.default_features = ",".join(selected)
+            settings_obj.save(update_fields=["default_features", "updated"])
             if is_htmx:
                 response = HttpResponse(status=204)
                 response["HX-Trigger"] = json.dumps({"roleSettingsSaved": {"field_group": "default_features", "role": "__default__"}})

@@ -376,6 +376,12 @@ def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
         title="Friend request accepted",
         message=f"{actor.username} accepted your friend request.",
         url=reverse("profile.view_user", kwargs={"profile_slug": actor.slug or str(actor.uuid)}),
+        # The actor is who accepted - the same profile this notification's message
+        # and url already point at. Without it the external API's
+        # NotificationSerializer reports a null actor, so a mobile client renders
+        # the notification with no one to link back to. The other two paths that
+        # raise FRIEND_ACCEPTED both set it.
+        source_profile=actor,
     )
     _mark_friend_request_notifications_read(actor, target.pk)
     return friendship

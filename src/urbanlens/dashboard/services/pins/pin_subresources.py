@@ -33,7 +33,7 @@ from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink
 from urbanlens.dashboard.models.pin.note import PinNote
-from urbanlens.dashboard.services.locations.naming import is_meaningful_name, normalize_name_for_comparison
+from urbanlens.dashboard.services.locations.naming import is_meaningful_name, normalize_name_for_comparison, sanitize_name
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin
@@ -148,7 +148,11 @@ def create_pin_alias(pin: Pin, *, name: str, kind: str = AliasType.ALTERNATE) ->
         AliasExistsError: The pin already has this name as an alias,
             case-insensitively.
     """
-    cleaned = (name or "").strip()
+    # Validate the value that will actually be stored: PinAlias.save() runs the
+    # name through sanitize_name, so a name made only of dropped characters
+    # ("\U0001f389", "<>") passes a raw non-empty check and then persists as an
+    # empty alias - a blank row that also consumes the pin's unique alias slot.
+    cleaned = sanitize_name((name or "").strip()) or ""
     if not cleaned:
         raise ValueError("Name is required.")
     try:

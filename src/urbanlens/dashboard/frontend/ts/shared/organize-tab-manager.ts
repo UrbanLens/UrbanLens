@@ -128,6 +128,21 @@ export class OrgTabManager {
             this.syncSelectionUi();
             this.openBulkEditDialog();
         };
+        // Merge and delete are exposed the same way so the Display Order tab can
+        // drive them without owning its own dialogs: that tab lists all three
+        // kinds together, and each kind's merge dialog lives here.
+        window._orgBulkMergeByIds[this.cfg.ns] = (ids: string[]) => {
+            this.selected = new Set(ids.map(String));
+            this.syncSelectionUi();
+            this.mergeTargetId = Array.from(this.selected)[0]!;
+            this.renderMergeDialog();
+            (document.getElementById(this.cfg.mergeDialog.dialogId) as HTMLDialogElement).showModal();
+        };
+        window._orgBulkDeleteByIds[this.cfg.ns] = (ids: string[]) => {
+            this.selected = new Set(ids.map(String));
+            this.syncSelectionUi();
+            void this.bulkDelete();
+        };
         window._orgRegisterSelectionClearer(() => {
             this.selected.clear();
             this.lastClickedIdx = -1;

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.markup.model import MarkupMap
 from urbanlens.dashboard.models.profile.model import Profile
@@ -87,6 +88,9 @@ class SafetyCheckinUndoHandler(UndoHandler):
             "destination_location_id": checkin.destination_location_id,
             "markup_map_id": checkin.markup_map_id,
             "markup_map_ids": list(checkin.markup_maps.values_list("id", flat=True)),
+            # Image.safety_checkin is SET_NULL, so the delete detached these photos rather
+            # than destroying them, and nothing else records where they were.
+            "image_ids": list(checkin.images.values_list("pk", flat=True)),
             "contacts": [
                 {
                     **{name: getattr(contact, name) for name in _CONTACT_FIELDS},
@@ -164,5 +168,10 @@ class SafetyCheckinUndoHandler(UndoHandler):
                 SafetyCheckinContact.objects.create(checkin=checkin, **contact_entry)
             for partner_entry in entry.get("partners", []):
                 SafetyCheckinPartner.objects.create(checkin=checkin, **partner_entry)
+            image_ids = entry.get("image_ids") or []
+            if image_ids:
+                # Same rule as the pin and wiki handlers: re-link only what is
+                # still detached.
+                Image.objects.filter(pk__in=image_ids, safety_checkin__isnull=True).update(safety_checkin=checkin)
             restored.append(checkin)
         return restored

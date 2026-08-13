@@ -87,6 +87,8 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.locations.base import SatelliteSlide, SatelliteViewProvider, StreetViewProvider, StreetViewSlide
     from urbanlens.dashboard.services.geo.geo_boundary import GeoBoundary
 
+from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+
 logger = logging.getLogger(__name__)
 
 #: Seconds between HTMX/JS poll requests while a fetch task is in flight.
@@ -853,7 +855,17 @@ def collect_satellite_slides(lat: float, lng: float) -> tuple[list[SatelliteSlid
             gateway_slides, from_cache = gateway.get_satellite_slides(lat, lng)
             slides.extend(gateway_slides)
             results.append(ProviderFetchResult(service, from_cache=from_cache, count=len(gateway_slides)))
+        except RateLimitExceededError as rle:
+            # Recorded as a failed provider, not skipped silently: it contributed
+            # nothing *and* may well succeed shortly, which is the difference
+            # between "this location has no imagery" and "we did not get to ask".
+            # SlidesPanelSource.fetch reads these to decide how long to trust an
+            # empty result.
+            logger.debug("Satellite view provider %s rate-limited -> %s", service, rle)
+            results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
         except RequestCancelledError as rce:
+            # A disabled service is a stable state, not a transient one - it is
+            # not a reason to keep re-warming this panel every few minutes.
             logger.debug("Satellite view provider %s request cancelled -> %s", service, rce)
         except Exception as e:
             # TODO: Catch specific exceptions
@@ -881,7 +893,17 @@ def collect_street_view_slides(lat: float, lng: float) -> tuple[list[StreetViewS
             provider_slides, from_cache = provider.get_street_view_slides(lat, lng)
             slides.extend(provider_slides)
             results.append(ProviderFetchResult(service, from_cache=from_cache, count=len(provider_slides)))
+        except RateLimitExceededError as rle:
+            # Recorded as a failed provider, not skipped silently: it contributed
+            # nothing *and* may well succeed shortly, which is the difference
+            # between "this location has no imagery" and "we did not get to ask".
+            # SlidesPanelSource.fetch reads these to decide how long to trust an
+            # empty result.
+            logger.debug("Street view provider %s rate-limited -> %s", service, rle)
+            results.append(ProviderFetchResult(service, from_cache=False, count=0, ok=False))
         except RequestCancelledError as rce:
+            # A disabled service is a stable state, not a transient one - it is
+            # not a reason to keep re-warming this panel every few minutes.
             logger.debug("Street view provider %s request cancelled -> %s", service, rce)
         except Exception:
             # TODO: Catch specific exceptions
@@ -933,11 +955,21 @@ class SlidesPanelSource(PanelSource, ABC):
         """Run this carousel's provider chain (see the module-level collectors)."""
 
     def fetch(self, pin: Pin) -> None:
-        """Warm every provider's slide cache, then set the ready marker."""
+        """Warm every provider's slide cache, then mark how far to trust the result.
+
+        ``collect`` reports per-provider outcomes, and they decide the marker's
+        lifetime. Every provider answering - even with nothing - is a real
+        "there is no imagery here", worth remembering for
+        :data:`SLIDES_READY_TTL_SECONDS`. A provider that failed or was
+        rate-limited answered nothing at all, and treating that as a settled
+        empty result left the panel blank for twelve hours on the strength of one
+        transient refusal. Those retry on the ordinary failure cadence instead.
+        """
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        self.collect(lat, lng)
-        cache.set(self.ready_key(pin), 1, SLIDES_READY_TTL_SECONDS)
+        _, results = self.collect(lat, lng)
+        complete = all(result.ok for result in results)
+        cache.set(self.ready_key(pin), 1, SLIDES_READY_TTL_SECONDS if complete else FAILURE_SKIP_TTL_SECONDS)
 
 
 class SatellitePanelSource(SlidesPanelSource):
@@ -1201,22 +1233,44 @@ def schedule_panel_fetch(source_key: str, pin: Pin) -> bool:
     if cache.get(source.skip_key(pin)):
         logger.debug("schedule_panel_fetch: %s for pin %s is suppressed, skipping", source_key, pin.pk)
         return False
-    if cache.add(source.flight_key(pin), 1, FLIGHT_TTL_SECONDS):
+    # The marker's TTL covers queue wait *and* execution, so on a backed-up
+    # panel_fetch queue it can lapse before the task even starts. The worker
+    # therefore releases by token: without one, a fetch that outlived its marker
+    # deletes the *next* schedule's marker on the way out, and the poll after
+    # that dispatches a third fetch - duplicate paid API calls for one panel.
+    flight_token = acquire_lock(source.flight_key(pin), FLIGHT_TTL_SECONDS)
+    if flight_token is not None:
         from urbanlens.dashboard.services.core.celery import safely_enqueue_task
         from urbanlens.dashboard.tasks import fetch_panel_source
 
         logger.debug("schedule_panel_fetch: dispatching %s for pin %s to queue '%s'", source_key, pin.pk, source.queue)
-        if safely_enqueue_task(fetch_panel_source, source_key, pin.pk, queue=source.queue) is None:
+        if safely_enqueue_task(fetch_panel_source, source_key, pin.pk, flight_token, queue=source.queue) is None:
             # Broker down: a raised error here would 500 every panel on the pin
             # detail page at once. Release the just-claimed single-flight marker
             # so the next poll retries the enqueue instead of waiting out
             # FLIGHT_TTL_SECONDS behind a task that was never queued.
-            cache.delete(source.flight_key(pin))
+            release_lock(source.flight_key(pin), flight_token)
             return False
     return True
 
 
-def run_panel_fetch(source_key: str, pin: Pin) -> None:
+def _release_flight(source, pin: Pin, flight_token: str | None) -> None:
+    """Drop the single-flight marker, if it is still this fetch's.
+
+    Args:
+        source: The panel source being fetched.
+        pin: The pin whose panel was fetched.
+        flight_token: Token from the scheduling call, or None for a task enqueued
+            before tokens existed - those release unconditionally, as they did
+            before, rather than leaking the marker until its TTL.
+    """
+    if flight_token is None:
+        cache.delete(source.flight_key(pin))
+    else:
+        release_lock(source.flight_key(pin), flight_token)
+
+
+def run_panel_fetch(source_key: str, pin: Pin, flight_token: str | None = None) -> None:
     """Execute one panel fetch inside the Celery worker.
 
     Owns the failure policy so individual sources don't have to:
@@ -1240,7 +1294,7 @@ def run_panel_fetch(source_key: str, pin: Pin) -> None:
     if not pin.profile.external_apis_enabled:
         # External APIs may have been turned off after this task was enqueued;
         # skip without recording a failure so the panel just stays absent.
-        cache.delete(source.flight_key(pin))
+        _release_flight(source, pin, flight_token)
         return
 
     started = time.monotonic()
@@ -1270,4 +1324,4 @@ def run_panel_fetch(source_key: str, pin: Pin) -> None:
     else:
         logger.debug("Panel fetch %s for pin %s finished in %.1fs", source_key, pin.pk, time.monotonic() - started)
     finally:
-        cache.delete(source.flight_key(pin))
+        _release_flight(source, pin, flight_token)

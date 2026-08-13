@@ -43,6 +43,7 @@ from urbanlens.dashboard.external_api.errors import MALFORMED_JSON_BODY_MESSAGE
 from urbanlens.dashboard.external_api.mixins import DualAuthJsonView
 from urbanlens.dashboard.models.account.model import AccountKdf, ApiKeyScope
 from urbanlens.dashboard.models.e2ee import ConversationKey, MessagingKeyBundle
+from urbanlens.dashboard.models.e2ee.key_bundle import DEFAULT_KDF_MEMLIMIT, DEFAULT_KDF_OPSLIMIT
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message
 from urbanlens.dashboard.services.security.e2ee import (
@@ -262,7 +263,16 @@ class E2EEEnrollView(DualAuthJsonView):
             kdf_memlimit = int(data.get("kdf_memlimit", 0))
         except (TypeError, ValueError):
             return Response({"error": "Invalid kdf parameters"}, status=400)
-        if kdf_opslimit <= 0 or kdf_memlimit <= 0:
+        # A floor, not just "positive". These parameters decide how expensive it is
+        # to brute-force `password_wrapped_secret` offline, and the whole point of
+        # that blob is that whoever holds it - including this server - cannot open
+        # it. Accepting any positive value let a caller enrol its own account with
+        # Argon2 parameters weak enough to make the wrapped private key
+        # recoverable from the password. Stronger-than-default is still accepted,
+        # so a future client can raise them without a server change; the real
+        # client always sends exactly these (frontend `e2ee-crypto.KDF_OPSLIMIT`
+        # / `KDF_MEMLIMIT`, pinned to match), so nothing legitimate trips this.
+        if kdf_opslimit < DEFAULT_KDF_OPSLIMIT or kdf_memlimit < DEFAULT_KDF_MEMLIMIT:
             return Response({"error": "Invalid kdf parameters"}, status=400)
 
         with transaction.atomic():

@@ -93,10 +93,18 @@ urlpatterns = [
     path("verify-email/<uuid:token>/", VerifyEmailView.as_view(), name="verify_email"),
     path("resend-verification/", ResendVerificationView.as_view(), name="resend_verification"),
     path("dashboard/", include(dashboard_urls), name="dashboard"),
-    # OAuth2 provider (django-oauth-toolkit): authorize/token/revoke plus the
-    # logged-in application-management views. Native clients (the mobile app)
-    # register a *public* application here and authenticate with PKCE; the
-    # tokens are honored only by the external API (see external_api.views).
+    # OAuth2 provider (django-oauth-toolkit). Native clients (the mobile app)
+    # register a *public* application here and authenticate with PKCE
+    # (PKCE_REQUIRED is on globally); the tokens are honored only by the external
+    # API (see external_api.views).
+    #
+    # This mounts django-oauth-toolkit's *whole* URL set, which is wider than the
+    # authorize/token/revoke + application-management this comment used to list:
+    # it also exposes token introspection, the RFC 8628 device-code endpoints,
+    # and the OpenID discovery documents. Neither of the first two is reachable
+    # in practice today - no application is registered with the device grant, and
+    # `introspect` is not among OAUTH2_PROVIDER["SCOPES"], so no token can carry
+    # it - but they are mounted, so narrow this include if that stops being true.
     path("oauth/", include("oauth2_provider.urls", namespace="oauth2_provider")),
     path("health/", HealthController.as_view({"get": "check"}), name="health"),
     path("", IndexController.as_view(), name="index"),

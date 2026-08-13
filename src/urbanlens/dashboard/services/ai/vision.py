@@ -111,7 +111,11 @@ def _openai_vision_keywords(image_bytes: bytes) -> list[str]:
         round(estimated_cost, 5),
         elapsed_ms,
     )
-    log_api_call(SERVICE_AI_PHOTO_KEYWORDS, success=True, response_ms=elapsed_ms, endpoint=f"openai:{model}")
+    # cost_estimate is what cost reporting reads; the log line above is only for
+    # humans tailing the worker. This path prices the call from the response's own
+    # token counts, so it is more accurate than the flat ServiceDefaults.cost_per_call
+    # the HTTP gateway wrapper applies elsewhere - worth actually storing.
+    log_api_call(SERVICE_AI_PHOTO_KEYWORDS, success=True, response_ms=elapsed_ms, endpoint=f"openai:{model}", cost_estimate=estimated_cost)
 
     body = response.choices[0].message.content or ""
     return _parse_keyword_text(body)

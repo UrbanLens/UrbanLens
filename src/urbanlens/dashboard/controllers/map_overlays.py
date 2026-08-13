@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from django.db.models import QuerySet
     from django.http import HttpRequest
 
+    from urbanlens.dashboard.models.map_overlay.queryset import MapImageOverlayQuerySet
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 _MAX_NAME_LENGTH = 100
@@ -60,7 +61,7 @@ MAX_OVERLAYS_PER_MAP = 12
 OVERLAY_UUID_PLACEHOLDER = "00000000-0000-0000-0000-000000000000"
 
 
-def _resolve_owner(request: HttpRequest, pin_slug: str | None, location_slug: str | None) -> tuple[Pin | Wiki, QuerySet[MapImageOverlay]]:
+def _resolve_owner(request: HttpRequest, pin_slug: str | None, location_slug: str | None) -> tuple[Pin | Wiki, MapImageOverlayQuerySet]:
     """Resolve the overlay owner (Pin or Wiki) from URL kwargs.
 
     Args:
@@ -213,7 +214,7 @@ def _image_from_request(request: HttpRequest, owner: Pin | Wiki, profile: Profil
     return None, "", "Choose an image to overlay."
 
 
-def overlay_payload(qs: QuerySet[MapImageOverlay]) -> list[dict]:
+def overlay_payload(qs: MapImageOverlayQuerySet) -> list[dict]:
     """Serialize an owner's renderable overlays for the map.
 
     Shared with the pin-detail and wiki page controllers, which embed the
@@ -229,7 +230,7 @@ def overlay_payload(qs: QuerySet[MapImageOverlay]) -> list[dict]:
     return [overlay.to_json() for overlay in qs.renderable().select_related("image", "layer").order_by("order", "id")]
 
 
-def _render_overlay_list(request: HttpRequest, owner: Pin | Wiki, qs: QuerySet[MapImageOverlay], error: str | None = None) -> HttpResponse:
+def _render_overlay_list(request: HttpRequest, owner: Pin | Wiki, qs: MapImageOverlayQuerySet, error: str | None = None) -> HttpResponse:
     """Render the manage-overlays list, with an ``HX-Trigger`` for the map JS.
 
     Action URLs are built here by positional ``args`` (rather than reversed

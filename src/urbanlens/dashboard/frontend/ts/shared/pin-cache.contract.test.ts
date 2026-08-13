@@ -46,4 +46,28 @@ describe("pin cache contract with the map page's inline writer", () => {
         const templateKey = (captured ?? "").replace("${_PROFILE_UUID}", "PROFILE_UUID_HERE");
         expect(templateKey).toBe(pinCacheKey("PROFILE_UUID_HERE"));
     });
+
+    /**
+     * The version and key are not the whole contract. The writer runs each pin
+     * through `_slimPin`, which keeps only the fields named in `_CACHE_FIELDS`,
+     * so that Set decides what this reader can actually see. Dropping or renaming
+     * an entry there degrades the reader silently, exactly like the version drift
+     * above: `readCachedPinsForSearch` skips every pin missing `name`/`latitude`/
+     * `longitude` and returns [], so instant search suggestions just stop
+     * appearing, and `readCachedPinLocations` returning [] makes the Tools-page
+     * folder scanner stop filtering locations the user already has pins for.
+     * Neither throws.
+     */
+    test("the writer still caches every field this reader consumes", () => {
+        const captured = template.match(/_CACHE_FIELDS\s*=\s*new Set\(\[([\s\S]*?)\]\)/)?.[1];
+        expect(captured).toBeDefined();
+
+        const cachedFields = new Set([...(captured ?? "").matchAll(/['"]([\w]+)['"]/g)].map((m) => m[1]));
+        expect(cachedFields.size).toBeGreaterThan(5); // guards against a regex that matched nothing useful
+
+        // Every field read by readRawCachedPins' consumers in pin-cache.ts.
+        for (const field of ["uuid", "name", "latitude", "longitude", "icon", "address", "tags"]) {
+            expect(cachedFields).toContain(field);
+        }
+    });
 });

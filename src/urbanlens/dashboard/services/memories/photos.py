@@ -20,6 +20,7 @@ from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.visits.visits import add_visited_status, resolve_location_for_point, sync_last_visited, visit_logging_allowed
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
     from decimal import Decimal
 
     from urbanlens.dashboard.models.images.model import Image
@@ -57,12 +58,39 @@ def find_matching_pin(profile: Profile, latitude: Decimal | float, longitude: De
     )
 
 
-def classify_photo(image: Image) -> PhotoState:
+def pending_suggestion_image_ids(images: Sequence[Image]) -> set[int]:
+    """Return which of *images* have a pending photo-origin VisitSuggestion.
+
+    One query for the whole batch, to pass to :func:`classify_photo` when
+    classifying a list - see that function's ``pending_image_ids``.
+
+    Args:
+        images: The photos about to be classified.
+
+    Returns:
+        The subset of their primary keys with a pending suggestion.
+    """
+    from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
+
+    if not images:
+        return set()
+    return set(
+        VisitSuggestion.objects.filter(origin_image__in=images, status=VisitSuggestionStatus.PENDING).values_list("origin_image_id", flat=True),
+    )
+
+
+def classify_photo(image: Image, pending_image_ids: set[int] | None = None) -> PhotoState:
     """Return the organize state of an uploaded photo.
 
     Args:
         image: The Image to classify (``visit``, coordinates, and
             ``organize_dismissed`` are read).
+        pending_image_ids: Precomputed output of
+            :func:`pending_suggestion_image_ids`. Callers classifying a *list*
+            should pass it, otherwise this issues a suggestion-exists query per
+            photo. Passed explicitly rather than read off a prefetch attribute
+            so that forgetting it costs queries rather than silently returning
+            the wrong state.
 
     Returns:
         - ``"filed"``: already tied to a visit, or dismissed - no action needed.
@@ -74,7 +102,11 @@ def classify_photo(image: Image) -> PhotoState:
 
     if image.visit_id or image.organize_dismissed:
         return "filed"
-    if VisitSuggestion.objects.filter(origin_image=image, status=VisitSuggestionStatus.PENDING).exists():
+    if pending_image_ids is not None:
+        has_pending = image.pk in pending_image_ids
+    else:
+        has_pending = VisitSuggestion.objects.filter(origin_image=image, status=VisitSuggestionStatus.PENDING).exists()
+    if has_pending:
         return "suggested"
     if image.effective_latitude is not None and image.effective_longitude is not None:
         return "needs_pin"

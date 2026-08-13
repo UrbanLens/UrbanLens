@@ -18,8 +18,10 @@ end.
 
 from __future__ import annotations
 
+from datetime import timedelta
 from unittest import mock
 
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -27,6 +29,11 @@ from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.services.apis.locations.cid_resolution import PROVIDER_REDATA, CidResolutionResult
+
+#: Positions in retry()'s args list, counted from the start so appending a
+#: parameter cannot silently repoint them onto the wrong value.
+_ARG_REQUEST_FAILURES = 4
+_ARG_NO_PROGRESS = 5
 
 
 class ResolveDeferredPinLocationsNoProgressTests(TestCase):
@@ -62,11 +69,12 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
         self.assertEqual(result, {"created": 0, "exists": 0, "skipped": 0})
         mock_retry.assert_called_once()
         self.assertFalse(mock_retry.call_args.kwargs["throw"])
-        self.assertEqual(mock_retry.call_args.kwargs["args"][-2], 0)
-        self.assertEqual(mock_retry.call_args.kwargs["args"][-1], 1)
+        self.assertEqual(mock_retry.call_args.kwargs["args"][_ARG_REQUEST_FAILURES], 0)
+        self.assertEqual(mock_retry.call_args.kwargs["args"][_ARG_NO_PROGRESS], 1)
         self.assertFalse(NotificationLog.objects.filter(profile=self.profile).exists())
 
-    def test_exceeding_the_no_progress_cap_gives_up_and_notifies_instead_of_retrying(self) -> None:
+    def test_a_batch_past_the_deadline_gives_up_and_notifies_instead_of_retrying(self) -> None:
+        """The cap now only widens the retry gap; two days of no progress ends it."""
         with (
             mock.patch("urbanlens.dashboard.services.apis.locations.cid_resolution.resolve_cids", return_value=self._all_pending_result()),
             mock.patch("urbanlens.dashboard.tasks.update_task_progress"),
@@ -77,6 +85,7 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
                 self.two_pin_lists,
                 auto_tag=False,
                 consecutive_no_progress=tasks._MAX_CONSECUTIVE_NO_PROGRESS_RETRIES - 1,
+                started_at=(timezone.now() - timedelta(days=3)).isoformat(),
             )
 
         mock_retry.assert_not_called()
@@ -105,7 +114,7 @@ class ResolveDeferredPinLocationsNoProgressTests(TestCase):
             )
 
         mock_retry.assert_called_once()
-        self.assertEqual(mock_retry.call_args.kwargs["args"][-1], 0)
+        self.assertEqual(mock_retry.call_args.kwargs["args"][_ARG_NO_PROGRESS], 0)
         # Only the still-pending pin should be carried into the retry.
         remaining_lists = mock_retry.call_args.kwargs["args"][1]
         remaining_cids = [p["cid"] for lst in remaining_lists for p in lst["pins"]]

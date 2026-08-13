@@ -470,11 +470,6 @@ urlpatterns = [
                                 name="pin.gallery.bulk",
                             ),
                             path(
-                                "<slug:pin_slug>/google/",
-                                pin.PinController.as_view({"get": "get_google_images"}),
-                                name="google_images",
-                            ),
-                            path(
                                 "<slug:pin_slug>/search/",
                                 pin.PinController.as_view({"get": "web_search"}),
                                 name="pin.web_search",
@@ -1918,6 +1913,11 @@ urlpatterns = [
                     "locations/import-failures/queue/",
                     pin_import_failures.PinImportFailureQueuePartialView.as_view(),
                     name="memories.locations.import_failures.queue",
+                ),
+                path(
+                    "<int:failure_id>/guess/",
+                    pin_import_failures.PinImportFailureGuessView.as_view(),
+                    name="memories.locations.import_failures.guess",
                 ),
                 path(
                     "locations/import-failures/<int:failure_id>/resolve/",

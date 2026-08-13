@@ -82,7 +82,7 @@ def test_schedule_panel_fetch_runs_when_external_apis_enabled() -> None:
         result = schedule_panel_fetch("boundary", pin)
 
     assert result is True
-    fetch_task.apply_async.assert_called_once_with(args=("boundary", pin.pk), kwargs={}, queue="celery")
+    fetch_task.apply_async.assert_called_once_with(args=("boundary", pin.pk, mock.ANY), kwargs={}, queue="celery")
 
 
 @pytest.mark.django_db
@@ -97,7 +97,7 @@ def test_fast_panel_dispatches_to_the_panel_fetch_queue() -> None:
     with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
         schedule_panel_fetch("photon", pin)
 
-    fetch_task.apply_async.assert_called_once_with(args=("photon", pin.pk), kwargs={}, queue="panel_fetch")
+    fetch_task.apply_async.assert_called_once_with(args=("photon", pin.pk, mock.ANY), kwargs={}, queue="panel_fetch")
 
 
 @pytest.mark.django_db

@@ -53,12 +53,9 @@ def haversine_distance_meters(a: Point, b: Point) -> float:
     about, so the small approximation versus a true geodesic/ellipsoidal
     calculation is immaterial here.
     """
-    lat1, lon1 = math.radians(a.y), math.radians(a.x)
-    lat2, lon2 = math.radians(b.y), math.radians(b.x)
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    haversine = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
-    return 2 * _EARTH_RADIUS_METERS * math.asin(math.sqrt(haversine))
+    from urbanlens.dashboard.services.geo.distance import haversine_meters
+
+    return haversine_meters(a.y, a.x, b.y, b.x)
 
 
 #: A wiki with fewer aliases than this is still worth suggesting more for -

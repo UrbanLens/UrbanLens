@@ -237,6 +237,7 @@ class PinCoverPhotoView(LoginRequiredMixin, View):
                 Location).
         """
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
         try:
             data = json.loads(request.body)
             image_id = data.get("image_id")
@@ -250,8 +251,12 @@ class PinCoverPhotoView(LoginRequiredMixin, View):
 
         # Any image tied to this pin's own gallery, or already associated
         # with its Location (e.g. a Media-gallery item materialized via
-        # "send to wiki" or a prior cover-photo pick), is eligible.
-        image = get_object_or_404(Image, pk=image_id)
+        # "send to wiki" or a prior cover-photo pick), is eligible - but only
+        # among photos this viewer may see, since every pin upload stamps
+        # Image.location and two users pinning the same place therefore share
+        # a location id. `visible_to` is applied to the single-row queryset so
+        # its per-uploader visibility pass stays scoped to that one uploader.
+        image = get_object_or_404(Image.objects.filter(pk=image_id).visible_to(profile))
         if image.pin_id != pin.pk and image.location_id != pin.location_id:
             raise Http404
         pin.cover_photo = image
@@ -344,7 +349,9 @@ class WikiCoverPhotoView(LoginRequiredMixin, View):
             wiki.save(update_fields=["cover_photo", "updated"])
             return JsonResponse({"cover_photo": None})
 
-        image = get_object_or_404(Image.objects.visible_to(profile), pk=image_id)
+        # Scoped to the one row before `visible_to`, whose per-uploader pass
+        # would otherwise walk every uploader on the site to answer about one image.
+        image = get_object_or_404(Image.objects.filter(pk=image_id).visible_to(profile))
         if image.wiki_id != wiki.pk and image.location_id != location.pk:
             raise Http404
         wiki.cover_photo = image

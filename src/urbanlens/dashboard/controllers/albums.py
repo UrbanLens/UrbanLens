@@ -96,8 +96,28 @@ def _get_album(request: HttpRequest, pin_slug: str | None, location_slug: str | 
 
 
 def _owner_slug(owner: Pin | Wiki) -> str:
-    """Return the slug used in *owner*'s own URL namespace."""
-    return owner.slug if isinstance(owner, Pin) else owner.location.slug
+    """Return the slug used in *owner*'s own URL namespace.
+
+    ``slug`` is nullable on the model, but cannot be absent here: both owner
+    kinds were fetched *by* this slug in :func:`_resolve_album_owner`, and both
+    mint one on save. Declared non-optional rather than propagating an
+    ``Optional`` no caller could act on - every use feeds ``reverse()``, which
+    turns None into an opaque ``NoReverseMatch`` 500. The guard makes the
+    impossible case a clean 404 instead.
+
+    Args:
+        owner: The album owner resolved from the URL.
+
+    Returns:
+        The owner's URL slug.
+
+    Raises:
+        Http404: The owner somehow has no slug.
+    """
+    slug = owner.slug if isinstance(owner, Pin) else owner.location.slug
+    if slug is None:
+        raise Http404
+    return slug
 
 
 def _url_prefix(owner: Pin | Wiki) -> str:

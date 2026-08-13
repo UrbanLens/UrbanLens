@@ -78,7 +78,16 @@ class BulkSuggestionPartialReportingTests(TestCase):
         second.refresh_from_db()
         self.assertEqual(second.status, PinSuggestionStatus.REJECTED)
 
-    def test_accepting_marks_the_suggestions_handled(self) -> None:
+    # Accepting is the only action here that creates a Pin, and creating one at
+    # coordinates with no existing Location goes through
+    # _create_location_with_canonical_name -> GooglePlaceService._resolve_name,
+    # which is a live outbound lookup made *synchronously inside the request*.
+    # Unmocked it reaches the real internet and the suite's network guard fails
+    # the test. Same patch pair as test_photo_organize, which hits this path for
+    # the same reason.
+    @mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None)
+    @mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task")
+    def test_accepting_marks_the_suggestions_handled(self, _mock_enqueue, _mock_resolve_name) -> None:
         suggestion = self._suggestion()
 
         payload = self._post("accept", [suggestion.pk]).json()

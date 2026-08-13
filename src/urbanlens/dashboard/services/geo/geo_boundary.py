@@ -18,6 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 import logging
+import time
 from typing import TYPE_CHECKING
 
 from django.contrib.gis.geos import MultiPolygon, Point, Polygon
@@ -35,6 +36,15 @@ BBox = tuple[float, float, float, float]
 #: reads from here instead of re-querying TIGERweb.
 _STATE_BOUNDARY_CACHE_SECONDS = 30 * 86400
 
+#: How long a *failed* load is honoured before the next call tries again.
+#: A failure is not memoized like a success is: a boundary is typically held as a
+#: plugin ``ClassVar``, so one transient TIGERweb error would otherwise close that
+#: plugin's gate for the life of the worker - days, for a Celery process. Retrying
+#: on every call instead would hammer the provider and log a traceback per call,
+#: so failures are honoured briefly and then re-attempted. Matches the failure
+#: cadence panel fetches already use.
+_FAILED_LOAD_RETRY_SECONDS = 300.0
+
 
 @dataclass(slots=True)
 class GeoBoundary:
@@ -51,16 +61,39 @@ class GeoBoundary:
     _loader: Callable[[], Polygon | MultiPolygon | None]
     _cached: Polygon | MultiPolygon | None = field(default=None, init=False, repr=False)
     _loaded: bool = field(default=False, init=False, repr=False)
+    #: When a failed load may be retried (``time.monotonic()`` scale), or None.
+    _retry_after: float | None = field(default=None, init=False, repr=False)
 
     def _geometry(self) -> Polygon | MultiPolygon | None:
-        if not self._loaded:
-            try:
-                self._cached = self._loader()
-            except Exception:
-                # TODO: Catch specific exceptions
-                logger.exception("GeoBoundary: loader failed; treating boundary as unavailable")
-                self._cached = None
-            self._loaded = True
+        """Resolve the geometry once, or report unavailable until a retry is due.
+
+        A loader that *returns* None has answered - the boundary genuinely does
+        not resolve - and is memoized permanently. A loader that *raises* has not
+        answered, and is only honoured for
+        :data:`_FAILED_LOAD_RETRY_SECONDS`, because the two are otherwise
+        indistinguishable to every caller and the second one heals on its own.
+
+        Returns:
+            The boundary geometry, or None when it is unresolved or unavailable.
+        """
+        if self._loaded:
+            return self._cached
+        if self._retry_after is not None and time.monotonic() < self._retry_after:
+            return None
+        try:
+            self._cached = self._loader()
+        except Exception:
+            # TODO: Catch specific exceptions
+            logger.warning(
+                "GeoBoundary: loader failed; treating boundary as unavailable for %.0fs",
+                _FAILED_LOAD_RETRY_SECONDS,
+                exc_info=True,
+            )
+            self._cached = None
+            self._retry_after = time.monotonic() + _FAILED_LOAD_RETRY_SECONDS
+            return None
+        self._loaded = True
+        self._retry_after = None
         return self._cached
 
     @property

@@ -31,19 +31,18 @@ from django.test import Client
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
-from oauth2_provider.models import get_access_token_model, get_application_model
+from oauth2_provider.models import get_access_token_model
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.oauth import first_party_application
 from urbanlens.dashboard.controllers import e2ee as e2ee_controllers
 from urbanlens.dashboard.external_api.mixins import DualAuthJsonView
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.e2ee import MessagingKeyBundle
 from urbanlens.dashboard.models.profile.model import Profile
-from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 
 AccessToken = get_access_token_model()
-Application = get_application_model()
 
 CURRENT_PASSWORD = "correct-horse-battery-staple"
 
@@ -66,7 +65,7 @@ def _profile_with_password(password: str = CURRENT_PASSWORD) -> Profile:
 def _token_for(user: User, scope: str) -> str:
     token = AccessToken.objects.create(
         user=user,
-        application=Application.objects.get(client_id=FIRST_PARTY_CLIENT_ID),
+        application=first_party_application(),
         token=f"tok-{os.urandom(8).hex()}",
         expires=timezone.now() + timedelta(hours=1),
         scope=scope,

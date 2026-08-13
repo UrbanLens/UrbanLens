@@ -19,6 +19,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
+from urbanlens.dashboard.controllers.media_auth import mark_private_media
 from urbanlens.dashboard.controllers.pin_import_failures import pending_pin_import_failures
 from urbanlens.dashboard.controllers.pin_merge_suggestions import merge_suggestion_cards, pending_merge_suggestions
 from urbanlens.dashboard.models.immich.model import ImmichAccount
@@ -207,14 +208,14 @@ class PinSuggestionImmichThumbnailView(LoginRequiredMixin, View):
         cached = cache.get(cache_key)
         if cached is not None:
             content, content_type = cached
-            return HttpResponse(content, content_type=content_type)
+            return mark_private_media(HttpResponse(content, content_type=content_type))
 
         try:
             content, content_type = ImmichGateway(account=account).get_asset_thumbnail(asset_id)
         except GatewayRequestError:
             return HttpResponse(status=502)
         cache.set(cache_key, (content, content_type), _THUMBNAIL_CACHE_TTL)
-        return HttpResponse(content, content_type=content_type)
+        return mark_private_media(HttpResponse(content, content_type=content_type))
 
 
 class PinSuggestionBulkActionView(LoginRequiredMixin, View):

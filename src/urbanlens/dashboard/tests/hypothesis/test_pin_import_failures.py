@@ -26,6 +26,7 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.urls import reverse
+from django.utils import timezone
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
@@ -423,6 +424,9 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
                 self._lists(pins),
                 auto_tag=False,
                 consecutive_request_failures=tasks._MAX_CONSECUTIVE_REDATA_FAILURES - 1,
+                # The counters only widen the retry gap now; the two-day deadline is
+                # what ends a batch and turns its cids into failure rows.
+                started_at=(timezone.now() - timedelta(days=3)).isoformat(),
             )
 
         self.assertEqual(summary, {"created": 0, "exists": 0, "skipped": 2})
@@ -446,6 +450,9 @@ class ResolveDeferredPinLocationsFailureRecordingTests(TestCase):
                 self._lists(pins),
                 auto_tag=False,
                 consecutive_no_progress=tasks._MAX_CONSECUTIVE_NO_PROGRESS_RETRIES - 1,
+                # The counters only widen the retry gap now; the two-day deadline is
+                # what ends a batch and turns its cids into failure rows.
+                started_at=(timezone.now() - timedelta(days=3)).isoformat(),
             )
 
         self.assertEqual(summary, {"created": 0, "exists": 0, "skipped": 2})

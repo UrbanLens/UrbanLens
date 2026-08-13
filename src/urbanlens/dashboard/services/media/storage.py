@@ -213,15 +213,19 @@ def per_profile_upload_lock(profile: Profile, timeout: int = _UPLOAD_LOCK_TIMEOU
         when it could not be acquired within a short retry window (a warning
         is logged and the caller should proceed without the extra safety net).
     """
+    from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
+
     key = f"upload-quota-lock:{profile.pk}"
-    acquired = cache.add(key, value=True, timeout=timeout)
-    if not acquired:
+    # Token-checked release: an upload slower than `timeout` has already lost the
+    # lock to the next one, and a bare delete here would drop *that* upload's lock
+    # rather than its own.
+    token = acquire_lock(key, timeout)
+    if token is None:
         logger.warning("Could not acquire upload quota lock for profile %s; proceeding without it.", profile.pk)
     try:
-        yield acquired
+        yield token is not None
     finally:
-        if acquired:
-            cache.delete(key)
+        release_lock(key, token)
 
 
 def max_upload_file_size_bytes() -> int:

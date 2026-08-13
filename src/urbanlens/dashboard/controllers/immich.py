@@ -20,6 +20,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
+from urbanlens.dashboard.controllers.media_auth import mark_private_media
 from urbanlens.dashboard.forms.immich_form import ImmichAccountForm
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.immich.model import ImmichAccount
@@ -257,14 +258,14 @@ class PinImmichThumbnailView(LoginRequiredMixin, View):
         cached = cache.get(cache_key)
         if cached is not None:
             content, content_type = cached
-            return HttpResponse(content, content_type=content_type)
+            return mark_private_media(HttpResponse(content, content_type=content_type))
 
         try:
             content, content_type = ImmichGateway(account=account).get_asset_thumbnail(asset_id)
         except GatewayRequestError:
             return HttpResponse(status=502)
         cache.set(cache_key, (content, content_type), _THUMBNAIL_CACHE_TTL)
-        return HttpResponse(content, content_type=content_type)
+        return mark_private_media(HttpResponse(content, content_type=content_type))
 
 
 class PinImmichImportView(LoginRequiredMixin, View):

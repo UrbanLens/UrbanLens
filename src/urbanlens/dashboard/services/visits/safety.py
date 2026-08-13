@@ -322,7 +322,14 @@ def set_checkin_contacts(checkin: SafetyCheckin, contacts: Iterable[ContactInput
             )
             keep_ids.add(created.pk)
 
+    removed = list(checkin.contacts.exclude(pk__in=keep_ids).values_list("pk", flat=True))
     checkin.contacts.exclude(pk__in=keep_ids).delete()
+    for contact_id in removed:
+        # A removed contact may already have a live WebSocket open on the token
+        # route, whose authority was resolved once at connect() time - the same
+        # problem remove_checkin_partner() handles for partners. Without this they
+        # keep receiving this check-in's chat until they close the tab.
+        _broadcast_contact_access_revoked(checkin, contact_id)
 
 
 def is_contact_opted_out(
@@ -1199,6 +1206,23 @@ def _broadcast_partner_access_revoked(checkin: SafetyCheckin, profile_id: int) -
     )
 
 
+def _broadcast_contact_access_revoked(checkin: SafetyCheckin, contact_id: int) -> None:
+    """Tell a just-removed contact's connection(s) to close, if any are open.
+
+    The contact-route mirror of :func:`_broadcast_partner_access_revoked`, and
+    delivered on the same group for the same reason: only the connection whose
+    bound contact matches the payload acts on it.
+
+    Args:
+        checkin: The check-in the contact was removed from.
+        contact_id: PK of the removed ``SafetyCheckinContact`` row.
+    """
+    send_group_message(
+        safety_checkin_group_name(checkin.pk),
+        {"type": "contact.access_revoked", "payload": {"contact_id": contact_id}},
+    )
+
+
 def _broadcast_checkin_archived(checkin: SafetyCheckin) -> None:
     """Push the "this check-in is now archived" event to its connected group.
 
@@ -1748,12 +1772,41 @@ def cancel_checkin(checkin: SafetyCheckin) -> None:
     schedule_checkin_archival(checkin)
 
 
+def _is_resolved_in_db(checkin: SafetyCheckin) -> bool:
+    """Report whether the stored row has concluded, ignoring the in-memory copy.
+
+    The beat sweeps read their rows up front and then spend real time per row -
+    rendering and sending one email per contact - so by the time a transition
+    is applied the owner may have checked in, or a contact may have marked them
+    safe. Every lifecycle write that could move a check-in *out* of a resolved
+    state has to consult the row rather than the argument it was handed.
+
+    Args:
+        checkin: The possibly-stale in-memory check-in.
+
+    Returns:
+        True when the stored status is terminal (or the row is gone).
+    """
+    status = SafetyCheckin.objects.filter(pk=checkin.pk).values_list("status", flat=True).first()
+    return status is None or status in SafetyCheckinStatus.resolved_statuses()
+
+
 def send_checkin_reminder(checkin: SafetyCheckin) -> None:
     """Notify the owner that their check-in is due, and mark the reminder sent.
+
+    Skips a check-in resolved since the sweep selected it. Both halves matter:
+    the notification would be nonsense ("time to check in" moments after
+    checking in), and the ``AWAITING_CHECKIN`` transition would be actively
+    dangerous - ``SafetyCheckin.objects.overdue()`` selects on that status, so
+    resurrecting a resolved row queues it to escalate to emergency contacts.
 
     Args:
         checkin: The check-in whose ``checkin_by`` time has arrived.
     """
+    if _is_resolved_in_db(checkin):
+        logger.info("Safety checkin %s resolved before its due reminder went out; skipping", checkin.pk)
+        return
+
     checkin_path = reverse("safety.checkin.checkin", kwargs={"checkin_slug": _checkin_url_slug(checkin)})
     NotificationLog.objects.create(
         profile=checkin.profile,
@@ -1771,9 +1824,18 @@ def send_checkin_reminder(checkin: SafetyCheckin) -> None:
             template="dashboard/email/safety_checkin_reminder.html",
             context={"checkin": checkin, "checkin_url": _absolute_url(checkin_path)},
         )
-    checkin.status = SafetyCheckinStatus.AWAITING_CHECKIN
-    checkin.reminder_sent_at = timezone.now()
-    checkin.save(update_fields=["status", "reminder_sent_at", "updated"])
+    # Conditional, not save(): the owner may have checked in while the mail above
+    # was going out. Leaving status alone on a 0-row match keeps the sweep's retry
+    # working too - an unresolved row that failed mid-send stays SCHEDULED and is
+    # re-selected next tick.
+    now = timezone.now()
+    updated = (
+        SafetyCheckin.objects.filter(pk=checkin.pk, status=SafetyCheckinStatus.SCHEDULED)
+        .update(status=SafetyCheckinStatus.AWAITING_CHECKIN, reminder_sent_at=now, updated=now)
+    )
+    if updated:
+        checkin.status = SafetyCheckinStatus.AWAITING_CHECKIN
+        checkin.reminder_sent_at = now
 
 
 def send_final_warning(checkin: SafetyCheckin) -> None:
@@ -1827,9 +1889,17 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
     the profile safe. If the owner opted in, the destination's community wiki
     is notified at the same time (see ``post_checkin_to_community_wiki``).
 
+    Skips a check-in resolved since the sweep selected it - reaching real
+    emergency contacts (and, with ``notify_community_wiki``, posting publicly)
+    about someone already known to be safe is the worst outcome this module has.
+
     Args:
         checkin: The overdue check-in.
     """
+    if _is_resolved_in_db(checkin):
+        logger.info("Safety checkin %s resolved before escalation ran; not notifying contacts", checkin.pk)
+        return
+
     if checkin.notify_community_wiki:
         post_checkin_to_community_wiki(checkin)
 
@@ -1840,6 +1910,12 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
     # reaches the contacts a prior, partially-failed attempt never got to - instead of
     # re-emailing every contact already notified, including real emergency contacts.
     for contact in checkin.contacts.filter(notified_at__isnull=True):
+        # Re-checked per contact, not just on entry: this loop sends one email per
+        # contact and a long contact list keeps it running for a while. Stopping
+        # the moment someone reports in spares the contacts not yet reached.
+        if _is_resolved_in_db(checkin):
+            logger.info("Safety checkin %s resolved mid-escalation; stopping before the remaining contacts", checkin.pk)
+            return
         if is_contact_opted_out(contact.contact_profile, contact.email, owner=checkin.profile, checkin=checkin):
             continue
         portal_path = reverse("safety.contact.portal", kwargs={"token": contact.token})
@@ -1864,10 +1940,17 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
         contact.notified_at = timezone.now()
         contact.save(update_fields=["notified_at", "updated"])
 
-    checkin.status = SafetyCheckinStatus.OVERDUE
-    checkin.escalated_at = timezone.now()
-    checkin.save(update_fields=["status", "escalated_at", "updated"])
-    _broadcast_status_update(checkin)
+    # Conditional for the same reason as the reminder's: a resolution landing during
+    # the contact loop above must win, not be overwritten by OVERDUE.
+    now = timezone.now()
+    updated = (
+        SafetyCheckin.objects.filter(pk=checkin.pk, status__in=(SafetyCheckinStatus.SCHEDULED, SafetyCheckinStatus.AWAITING_CHECKIN))
+        .update(status=SafetyCheckinStatus.OVERDUE, escalated_at=now, updated=now)
+    )
+    if updated:
+        checkin.status = SafetyCheckinStatus.OVERDUE
+        checkin.escalated_at = now
+        _broadcast_status_update(checkin)
 
 
 def mark_found_safe(contact: SafetyCheckinContact) -> None:

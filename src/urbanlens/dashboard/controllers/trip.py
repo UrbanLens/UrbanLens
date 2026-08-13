@@ -400,13 +400,21 @@ class TripOverviewView(LoginRequiredMixin, View):
         from urbanlens.dashboard.services.social.connections import get_connections
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        all_trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user"))
+        # with_effective_dates: the calendar payload and the stat tiles both read
+        # effective_start_date/effective_end_date/timeline_status, which query the
+        # trip's activities per row without the annotations.
+        all_trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user").with_effective_dates())
         recently_updated_trips = list(Trip.objects.recently_updated(profile, limit=self.RECENT_TRIPS_LIMIT))
         recently_viewed_trips = list(Trip.objects.recently_viewed(profile, limit=self.RECENT_TRIPS_LIMIT))
         # Matches TripListView/CalendarImportView - every list of other members'
         # trips must mask identities the viewer isn't allowed to see (see
         # _apply_trip_list_identity_masking's docstring for the gap this closes).
-        _apply_trip_list_identity_masking(profile, all_trips)
+        #
+        # Only the two rendered lists need it. `all_trips` never reaches the
+        # template: it is consumed here into `stats` and `trips_calendar_data`,
+        # which carry no identity fields (uuid/name/dates/status/url). Masking it
+        # walked every trip's memberships, so an unbounded trip list cost two
+        # queries per trip to mutate objects that were then discarded.
         _apply_trip_list_identity_masking(profile, recently_updated_trips)
         _apply_trip_list_identity_masking(profile, recently_viewed_trips)
         return render(
@@ -466,7 +474,7 @@ class TripCalendarView(LoginRequiredMixin, View):
 
     def get(self, request):
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user"))
+        trips = list(Trip.objects.filter(profiles=profile).select_related("creator__user").with_effective_dates())
         return render(
             request,
             "dashboard/pages/trips/calendar.html",
@@ -1449,8 +1457,20 @@ def _build_activity_forecasts(activities: list[TripActivity]) -> list[dict]:
         if target.tzinfo is not None:
             target = target.replace(tzinfo=None)
 
-        closest = min(slots, key=lambda s: abs((s["date"] - target).total_seconds()))
-        gap_hours = abs((closest["date"] - target).total_seconds()) / 3600
+        # Both sides forced naive before subtracting. `ForecastSlot.date` is
+        # parsed with `datetime.fromisoformat`, which passes an offset straight
+        # through, so a provider that emits one (REData's format is whatever its
+        # API returns) would otherwise raise
+        # "can't subtract offset-naive and offset-aware datetimes" and 500 the
+        # trip page. This only removes the crash: the slots are still compared in
+        # whatever wall clock each provider used, which is a real and separate bug
+        # for the Open-Meteo path - see docs/PROBLEMS.md, it needs the location's
+        # timezone to fix properly.
+        def _naive(value: datetime.datetime) -> datetime.datetime:
+            return value.replace(tzinfo=None) if value.tzinfo is not None else value
+
+        closest = min(slots, key=lambda s: abs((_naive(s["date"]) - target).total_seconds()))
+        gap_hours = abs((_naive(closest["date"]) - target).total_seconds()) / 3600
 
         if gap_hours > 36:
             entry["out_of_range"] = True

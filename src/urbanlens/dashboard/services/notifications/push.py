@@ -34,6 +34,7 @@ from django.utils import timezone
 import requests
 
 from urbanlens.dashboard.models.push_device import PushDevice, PushTransport
+from urbanlens.dashboard.services.security.url_safety import is_blocked_address
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -80,9 +81,13 @@ def _validate_unifiedpush_endpoint(address: str) -> None:
         infos = socket.getaddrinfo(parts.hostname, parts.port or (443 if parts.scheme == "https" else 80), proto=socket.IPPROTO_TCP)
     except OSError as exc:
         raise PushRegistrationError("UnifiedPush endpoint hostname does not resolve.") from exc
+    # is_blocked_address rather than an inline copy of the same five checks: this
+    # used to duplicate them, and so missed the RFC 6598 CGNAT range (100.64/10)
+    # that the shared helper blocks. Python's ipaddress does not classify CGNAT as
+    # private, and cloud providers route internal-only infrastructure through it -
+    # so a divergent copy of this check is a divergent SSRF guard.
     for info in infos:
-        candidate = ipaddress.ip_address(info[4][0])
-        if candidate.is_private or candidate.is_loopback or candidate.is_link_local or candidate.is_reserved or candidate.is_multicast:
+        if is_blocked_address(ipaddress.ip_address(info[4][0])):
             raise PushRegistrationError("UnifiedPush endpoint must be publicly reachable.")
 
 

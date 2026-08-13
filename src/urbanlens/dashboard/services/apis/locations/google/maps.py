@@ -14,7 +14,9 @@ from defusedxml.ElementTree import ParseError as XMLParseError
 from django.core.cache import cache
 from django.db import DatabaseError
 from fastkml import kml
+from fastkml.exceptions import KMLParseError
 from gpxpy.gpx import GPXException
+from lxml.etree import XMLSyntaxError
 from pyogrio.errors import DataSourceError as ShapefileDataSourceError
 import requests
 from shapely.errors import ShapelyError
@@ -45,6 +47,25 @@ from urbanlens.dashboard.services.import_formats.html_description import extract
 from urbanlens.dashboard.services.labels.style_suggestions import suggest_label_style
 from urbanlens.dashboard.services.security.redact import redact_coordinate, redact_text
 from urbanlens.UrbanLens.settings.app import settings
+
+#: Every error that means "this uploaded file is unusable, skip it and carry on".
+#: Named rather than inlined because two handlers need the same list - the KML
+#: parser's own and the bulk importer's per-file guard - and they drifted apart
+#: once already: fastkml's ``KMLParseError`` (a ``FastKMLError``) and lxml's
+#: ``XMLSyntaxError`` (a ``SyntaxError``) are neither ``ValueError`` nor
+#: defusedxml's ``ParseError``, so a malformed KML escaped both and aborted the
+#: whole import stream instead of skipping one file.
+IMPORT_PARSE_ERRORS: tuple[type[Exception], ...] = (
+    UnicodeDecodeError,
+    ValueError,
+    KeyError,
+    AttributeError,
+    GPXException,
+    ShapelyError,
+    XMLParseError,
+    KMLParseError,
+    XMLSyntaxError,
+)
 
 if TYPE_CHECKING:
     from decimal import Decimal
@@ -739,7 +760,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     data_list = osm_xml_to_dict(raw_bytes, user_profile)
                     parsed.append((filename, fmt, data_list, len(data_list)))
                     grand_total += len(data_list)
-            except (UnicodeDecodeError, ValueError, KeyError, AttributeError, GPXException, ShapelyError, XMLParseError) as exc:
+            except IMPORT_PARSE_ERRORS as exc:
                 logger.warning("Failed to parse '%s', skipping: %s", filename, exc)
                 _notify_pin_import_parse_failure(fmt)
 
@@ -1303,7 +1324,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 )
 
             logger.debug("Converted %s pins from KML file to dicts.", len(pins))
-        except (ValueError, AttributeError, UnicodeDecodeError) as e:
+        except IMPORT_PARSE_ERRORS as e:
+            # fastkml's KMLParseError descends from FastKMLError, and lxml's
+            # XMLSyntaxError from SyntaxError - neither is a ValueError, and neither
+            # is defusedxml's ParseError, so both used to escape this handler *and*
+            # the caller's. A KML with unparseable coordinates or a truncated tag
+            # then aborted the whole import stream instead of skipping one file.
             logger.exception("Failed to import pins from KML: %s", e)
             raise
 

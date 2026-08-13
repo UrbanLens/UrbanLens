@@ -133,11 +133,22 @@ def find_nearest_pin(latitude: float, longitude: float, profile: Profile, radius
     Returns:
         Nearest matching Pin, or None if no pin is within range.
     """
+    from django.contrib.gis.db.models.functions import Distance
     from django.contrib.gis.geos import Point
     from django.contrib.gis.measure import D
 
     point = Point(longitude, latitude, srid=4326)
-    return Pin.objects.filter(location__point__distance_lte=(point, D(m=radius_m)), profile=profile).order_by("location__point").first()
+    # Ordering by the geometry column itself is not ordering by distance - it
+    # sorts by PostGIS's internal representation, so this returned an arbitrary
+    # pin inside the radius. Measured: a pin 75m away was picked over one 11m
+    # away, which attributes an imported visit to the wrong place whenever a
+    # profile has two pins inside VISIT_MATCH_RADIUS_M.
+    return (
+        Pin.objects.filter(location__point__distance_lte=(point, D(m=radius_m)), profile=profile)
+        .annotate(_match_distance=Distance("location__point", point))
+        .order_by("_match_distance")
+        .first()
+    )
 
 
 def pin_exists_at(profile: Profile, *, location_id: int | None = None, latitude: float | Decimal | None = None, longitude: float | Decimal | None = None) -> bool:

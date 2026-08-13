@@ -108,10 +108,23 @@ class GameConfig:
 
     @property
     def geo_bounds(self) -> GEOSGeometry | None:
-        """The configured geographic restriction as a GEOS geometry, or None."""
+        """The configured geographic restriction as a GEOS geometry, or None.
+
+        Split at the antimeridian here rather than at each query: the callers all
+        run planar ``__within`` lookups (``ST_Within`` has no geography
+        implementation), and an area a player drew across the date line arrives
+        with unwrapped coordinates that match nothing on its far side. Splitting
+        at the source means every consumer - eligibility counts, round selection,
+        the external API - inherits the fix.
+
+        Returns:
+            The restriction geometry, or None when unrestricted.
+        """
         if not self.geo_bounds_geojson:
             return None
-        return GEOSGeometry(json.dumps(self.geo_bounds_geojson))
+        from urbanlens.dashboard.services.geo.longitude import split_at_antimeridian
+
+        return split_at_antimeridian(GEOSGeometry(json.dumps(self.geo_bounds_geojson)))
 
 
 def config_from_session(session: GameSession) -> GameConfig:

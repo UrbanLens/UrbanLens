@@ -30,24 +30,26 @@ class PinEffectiveColorTests(SimpleTestCase):
         return pin
 
     def _mock_labels(self, mock_labels: MagicMock, labels: list[MagicMock]) -> None:
-        """Stand in for ``labels.exclude(kind="user")``.
+        """Stand in for ``labels.all()``.
 
-        The stub sits on ``exclude`` itself because ``icon_source_label`` sorts
-        in Python (``sorted(...)``) instead of calling ``.order_by()``. Stubbing
-        ``exclude().order_by()`` therefore left the real call iterating a bare
-        MagicMock, which yields nothing: every expects-a-colour case here saw
-        None, and every expects-None case passed without exercising anything.
+        The stub sits on ``all`` itself because ``icon_source_label`` filters and
+        sorts in Python (to stay on the prefetch cache) instead of calling
+        ``.exclude()``/``.order_by()``. Stubbing a chained call therefore leaves
+        the real call iterating a bare MagicMock, which yields nothing: every
+        expects-a-colour case would see None, and every expects-None case would
+        pass without exercising anything.
 
-        ``order``/``name`` are set explicitly so that sort has real values to
-        compare - left as MagicMocks the multi-label cases would sort by
-        whatever MagicMock's comparison operators happen to do - and are chosen
-        so list position is the winning order, which is what these tests mean by
-        "first label wins".
+        ``kind`` is set so the user-label filter keeps them. ``order``/``name``
+        are set explicitly so that sort has real values to compare - left as
+        MagicMocks the multi-label cases would sort by whatever MagicMock's
+        comparison operators happen to do - and are chosen so list position is
+        the winning order, which is what these tests mean by "first label wins".
         """
         for index, label in enumerate(labels):
+            label.kind = "tag"
             label.order = -index
             label.name = f"label-{index}"
-        mock_labels.exclude.return_value = list(labels)
+        mock_labels.all.return_value = list(labels)
 
     @patch.object(Pin, "labels")
     def test_returns_none_when_no_tags(self, mock_labels: MagicMock) -> None:

@@ -1165,7 +1165,21 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
         params = serializer.validated_data
         profile = request.user.profile
 
-        queryset = Image.objects.uploaded_by(profile).select_related("pin", "wiki", "wiki__location", "visit", "location", "profile", "direct_message")
+        # profile__user: Profile.username reads self.user.username.
+        # pin__location(__wiki): pin_name -> Pin.effective_name -> Location.display_name,
+        # which reads the location's Wiki. Both are per-row queries without these.
+        queryset = Image.objects.uploaded_by(profile).select_related(
+            "pin",
+            "pin__location",
+            "pin__location__wiki",
+            "wiki",
+            "wiki__location",
+            "visit",
+            "location",
+            "profile",
+            "profile__user",
+            "direct_message",
+        )
         # Without this the payload builder issues a labels query per row.
         queryset = queryset.prefetch_related("labels")
 
@@ -1197,9 +1211,15 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
         # created timestamp (a bulk import writes dozens in the same instant).
         queryset = queryset.order_by("-created", "-pk")
 
+        from urbanlens.dashboard.services.memories.photos import pending_suggestion_image_ids
+
         paginator = self.pagination_class()
         page = paginator.paginate_queryset(queryset, request, view=self)
-        payload = [build_photo_payload(image, profile) for image in page or []]
+        images = list(page or [])
+        # One suggestion query for the page instead of one per photo inside
+        # classify_photo, matching how the Memories queue builds its cards.
+        pending_ids = pending_suggestion_image_ids(images)
+        payload = [build_photo_payload(image, profile, pending_ids) for image in images]
         return paginator.get_paginated_response(PhotoSerializer(payload, many=True).data)
 
     @extend_schema(request=PhotoUploadSerializer, responses={201: PhotoSerializer, 400: ErrorSerializer, 403: ErrorSerializer, 409: ErrorSerializer, 413: ErrorSerializer})

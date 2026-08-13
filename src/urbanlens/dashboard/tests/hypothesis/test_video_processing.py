@@ -95,7 +95,7 @@ class ProcessUploadedVideoTests(TestCase):
         self.assertIsNone(new_size)
 
     def test_oversized_video_triggers_reencode(self) -> None:
-        def fake_reencode(src_path: str, out_path: str, max_height: int) -> bool:
+        def fake_reencode(src_path: str, out_path: str, max_height: int, *, strip_location: bool = False) -> bool:
             with open(out_path, "wb") as f:
                 f.write(b"x")  # smaller than the 17-byte source, so it's kept
             return True

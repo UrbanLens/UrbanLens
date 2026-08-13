@@ -43,6 +43,7 @@ class NpsPlugin(UrbanLensPlugin):
 | `get_street_view_providers()` | `StreetViewProvider` gateways for the street-view carousel |
 | `get_name_providers()` | `NameProvider` sources of place-name candidates for a location (see below) |
 | `get_enrichment_sources()` | `EnrichmentSource` kinds of data the hourly background-enrichment task backfills for every pinned/wiki'd location (see below) |
+| `get_photo_keyword_providers()` | `PhotoKeywordProvider` strategies that keyword uploaded photos in the background, making them text-searchable (see below) |
 | `register(hooks)` | Arbitrary action/filter callbacks on the shared hook bus |
 
 Contributions across plugins are ordered by `(plugin.order, plugin.name)` — the imagery
@@ -167,6 +168,32 @@ handles declaratively (subclasses implement only `fetch(location)`). Sources who
 `refreshes_names` is True get official names/aliases re-resolved after each cycle.
 An "attempted but found nothing" result must still persist a marker, so hopeless
 locations are never retried every cycle.
+
+### Photo keyword providers
+
+`get_photo_keyword_providers()` returns `PhotoKeywordProvider` instances
+(`services.photos.photo_keywords`). Each runs in the background after a photo upload and stores
+its own `ImageKeyword` rows attributed to its `slug`, which is what makes uploaded photos
+text-searchable in global search.
+
+```python
+class MyKeywordProvider(PhotoKeywordProvider):
+    slug = "my_plugin_keywords"      # stored on ImageKeyword.source
+    label = "My keywords"            # shown in logs and admin surfaces
+
+    def is_available_for(self, image: Image) -> bool:
+        # The pipeline already checks the uploader's `generate_photo_keywords`
+        # setting; override only for provider-specific gates - a subscription
+        # feature, configured credentials, a per-profile AI toggle.
+        return True
+```
+
+Several providers run simultaneously and independently - one failing or being unavailable does
+not suppress the others, and each owns its own rows, so re-running one never disturbs another's
+keywords. Built-in examples span the range: `photo_keywords_metadata` reads keywords already
+embedded in the file, `photo_keywords_classifier` and `photo_keywords_ai_vision` derive them from
+image content, and the Ollama plugin contributes its own vision provider - so a plugin can add
+keywording without being an AI plugin at all.
 
 ### Rules
 

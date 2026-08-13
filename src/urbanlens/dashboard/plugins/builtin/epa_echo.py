@@ -64,9 +64,22 @@ _EXACT_MATCH_RADIUS_MILES = 0.1
 
 
 def _miles_between(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    from urbanlens.dashboard.models.profile.model import _haversine_km
+    """Great-circle distance between two points, in miles.
 
-    return _haversine_km((lat1, lng1), (lat2, lng2)) * 0.621371
+    Args:
+        lat1: First latitude in degrees.
+        lng1: First longitude in degrees.
+        lat2: Second latitude in degrees.
+        lng2: Second longitude in degrees.
+
+    Returns:
+        Distance in miles.
+    """
+    from urbanlens.dashboard.models.profile.meta import DistanceUnit
+    from urbanlens.dashboard.services.core.units import km_to_display
+    from urbanlens.dashboard.services.geo.distance import haversine_km
+
+    return km_to_display(haversine_km(lat1, lng1, lat2, lng2), DistanceUnit.MILES)
 
 
 def _facility_from_poi(poi: dict[str, Any]) -> dict[str, Any]:

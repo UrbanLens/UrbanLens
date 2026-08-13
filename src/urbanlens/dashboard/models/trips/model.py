@@ -40,7 +40,6 @@ logger = logging.getLogger(__name__)
 
 #: Distinguishes "not yet computed" from a genuine ``None`` result, so a trip with no
 #: dates at all is not re-queried on every read.
-_UNCOMPUTED = object()
 
 
 class Trip(abstract.PublicDashboardModel):
@@ -58,6 +57,13 @@ class Trip(abstract.PublicDashboardModel):
 
     # Global uniqueness (unlike Pin's per-profile slug) since a trip has no
     # natural per-user namespace - it's shared among all its members.
+    #: Memoized/annotated effective dates. Declared (not assigned) so they stay
+    #: off the model's field list while still giving the properties below a real
+    #: type to return; populated either by ``TripQuerySet.for_list_page``'s
+    #: annotation or by the first read.
+    _eff_start: date | None
+    _eff_end: date | None
+
     slug = SlugField(max_length=255, null=True, blank=True, unique=True)
 
     name = CharField(max_length=255)
@@ -147,10 +153,16 @@ class Trip(abstract.PublicDashboardModel):
         about five activity queries. The annotation makes a list of trips flat; the memo
         makes a single trip cost one query however many times it is read.
         """
-        cached = getattr(self, "_eff_start", _UNCOMPUTED)
-        if cached is not _UNCOMPUTED:
-            return cached
+        # try/except rather than a sentinel: None is a legitimate cached value
+        # here, so "absent" cannot be expressed as a default. The declared
+        # ``_eff_start`` attribute is what lets this return a real ``date | None``
+        # instead of the ``object`` a ``getattr(..., sentinel)`` widens to.
+        try:
+            return self._eff_start
+        except AttributeError:
+            pass
 
+        value: date | None
         if self.start_date:
             value = self.start_date
         else:
@@ -166,10 +178,12 @@ class Trip(abstract.PublicDashboardModel):
         Annotation-aware and memoized for the same reason as
         :attr:`effective_start_date`.
         """
-        cached = getattr(self, "_eff_end", _UNCOMPUTED)
-        if cached is not _UNCOMPUTED:
-            return cached
+        try:
+            return self._eff_end
+        except AttributeError:
+            pass
 
+        value: date | None
         if self.end_date:
             value = self.end_date
         else:

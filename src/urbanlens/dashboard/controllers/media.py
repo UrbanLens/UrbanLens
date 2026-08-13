@@ -59,7 +59,7 @@ from django.conf import settings
 from django.http import FileResponse, Http404, HttpResponse
 from django.views import View
 
-from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin, MediaThrottledError
+from urbanlens.dashboard.controllers.media_auth import CredentialOrSessionMediaMixin, MediaThrottledError, mark_private_media
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -147,9 +147,9 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
             response = HttpResponse()
             del response["Content-Type"]
             response["X-Accel-Redirect"] = settings.MEDIA_X_ACCEL_PREFIX + quote(rel_path)
-            return response
+            return mark_private_media(response)
 
-        return FileResponse(full_path.open("rb"))  # lgtm[py/path-injection] -- already traversal-checked by _resolve_media_path below
+        return mark_private_media(FileResponse(full_path.open("rb")))  # lgtm[py/path-injection] -- already traversal-checked by _resolve_media_path below
 
     def _resolve_media_path(self, path: str) -> tuple[str, Path]:
         """Resolve the requested path and verify it stays inside ``MEDIA_ROOT``.
@@ -252,7 +252,11 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
                 # image that *also* lives in a pin/wiki gallery falls through
                 # to the normal photo-visibility check below.
                 return False
-        return Image.objects.visible_to(profile).filter(pk=image.pk).exists()
+        # pk filter first: `visible_to` eagerly resolves the uploader set of
+        # whatever queryset it is handed, so calling it on the unfiltered
+        # manager would walk every uploader on the site to answer about one
+        # image - on the path that serves every media file.
+        return Image.objects.filter(pk=image.pk).visible_to(profile).exists()
 
     def _authorize_comment_image(self, profile: Profile, rel_path: str) -> bool:
         """Authorize a ``comment_images/`` file via its Comment/TripComment row.

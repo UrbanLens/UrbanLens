@@ -53,6 +53,38 @@ def guess_media_kind_from_extension(filename: str) -> MediaKind | None:
     return None
 
 
+def unsupported_image_extension_error(filename: str) -> str | None:
+    """Reject a photo upload whose extension we would not serve as a passive image.
+
+    The magic-byte check in :func:`content_type_mismatch_error` deliberately
+    fails *open* for formats ``filetype`` cannot fingerprint, which is right for
+    documents but leaves a hole for photos: **SVG has no magic-byte signature**,
+    so a scripted ``.svg`` passes sniffing, passes antivirus (script in markup is
+    not a virus signature), and gets stored. It is then served from this app's own
+    origin as ``image/svg+xml`` - derived from the extension by nginx's mime.types -
+    and a browser navigating directly to it executes the script with the app's
+    origin. ``X-Content-Type-Options: nosniff`` does not help, because the type is
+    not being sniffed: the file genuinely is an SVG.
+
+    So photos are allowlisted by extension rather than only sniffed. The stored
+    extension is what decides the Content-Type it is later served with, which
+    makes it the thing that has to be constrained. Only photos are checked -
+    documents legitimately arrive with extensions outside their own set (``.docx``
+    and friends are converted after upload), and this must not reject them.
+
+    Args:
+        filename: The uploaded file's client-supplied name.
+
+    Returns:
+        A user-facing error message when the extension is not an allowed image
+        extension, else None.
+    """
+    extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
+    if extension in _IMAGE_EXTENSIONS:
+        return None
+    return "That image format isn't supported. Please upload a JPEG, PNG, GIF, WebP, HEIC, BMP, TIFF, or AVIF file."
+
+
 def sniff_media_kind(file_obj: IO[bytes]) -> MediaKind | None:
     """Detect the real media kind of an uploaded file from its magic bytes.
 

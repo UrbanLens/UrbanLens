@@ -80,6 +80,21 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   (a list's "more actions" menu) as GeoJSON, KML, GPX, or CSV
 - Data export/import of a user's full dataset, plus scheduled/on-demand backups
 
+## Public Locations
+
+A small, highly selective set of locations can be voted **public** by the users who already have
+them pinned, and public locations are then suggested to every account (opt-out). The point is to
+give a new user a populated map without exposing anything vulnerable — the eligibility rules are
+the safety mechanism, so they run entirely server-side (`services/pins/public_pins.py`) and users
+never see the rule engine, only vote buttons on a place that already qualifies.
+
+- Voting is **anonymous in the UI**: a voter sees only their own choice, and no running tally is
+  shown before an outcome is settled
+- Candidates cycle `OPEN`/`SUSPENDED` as eligibility comes and goes; `PASSED`/`REJECTED` are
+  terminal
+- `evaluate_public_pin_candidates` runs hourly to re-run eligibility, settle open votes, and fan
+  out suggestions — idempotent at any frequency
+
 ## Search & Navigation
 
 - Logged-in home page (`/dashboard/home/`) — a customizable widget dashboard (stats, recent
@@ -359,6 +374,11 @@ plus the `@mixin tad-tabs` / `@mixin tag-dialog-list` Sass mixins for consistent
   a 60s polling fallback
 - Outbound email notifications with per-role rate caps (hourly/daily/monthly) and safety controls
 - **11-event × 4-channel notification matrix** (Settings → Account): each event type (new message, friend request, check-in alert, AI task completion, etc.) can be independently configured for in-app, email, WhatsApp, and SMS delivery. WhatsApp/SMS require a phone number on the profile. WhatsApp/SMS delivery is wired for every event type: DMs and safety check-ins keep their dedicated pipelines, and all other types dispatch centrally via a `NotificationLog` post_save signal (`services/notifications/notification_text_alerts.py`) — delayed 2 minutes, skipped if read in the meantime, debounced per type per 6h.
+- **Native-app push** (`models/push_device`, `services/notifications/push.py`): a backgrounded app
+  holds no WebSocket, so it registers a push destination instead. **UnifiedPush** — an app-chosen,
+  self-hostable push server such as ntfy — is the default transport, matching the project's
+  self-hosted ethos and keeping an F-Droid build free of Play Services. An FCM row kind exists for
+  a future Play-Store flavour and is deliberately not dispatched yet
 - Admin-only critical alerting via email + Gotify push (distinct from user-facing notifications)
 
 ## Custom Fields
@@ -556,7 +576,12 @@ for the boundary rationale:
 - `ws/messages/` — direct-message delivery, typing indicators, read/open tracking, and
   reaction updates for DMs and group chats (with an HTTP fallback for sending)
 - `ws/safety/checkin/<uuid>/chat/` and `ws/safety/contact/<token>/chat/` — safety check-in chat,
-  shared between the check-in owner and emergency contacts
+  shared between the check-in owner, every accepted partner, and every emergency contact. The
+  session route additionally joins a narrower live-location group that contacts never join;
+  removing a partner or a contact force-closes their open socket
+- `ws/spotguessr/session/<id>/`, `ws/trivia/session/<id>/`, `ws/consensus/session/<id>/` — one
+  channel-layer group per game session. Every state change stays a durable HTTP POST that
+  broadcasts over the socket; the only client-to-server frame these accept is a chat message
 
 ## Games: SpotGuessr
 
@@ -686,3 +711,28 @@ Everything below the line is not yet built.
 Not yet built: a moderation review UI for AI-rejected questions (the only way to inspect why a
 question was rejected today is direct DB access) - explicitly decided against, not just
 unbuilt - see the design doc's "Known gaps" section.
+
+
+## Games: Consensus
+
+The wiki-data-completion game, and the only game that writes back to shared data. A round shows a
+player one missing or unconfirmed piece of data about a `Wiki` they have a visited pin for — a
+name, description, alias, or a photo's coordinates — and the player supplies it. The per-field-kind
+registry driving round generation and answer application lives in `services/consensus/fields.py`,
+so a new answerable field is a registry entry rather than new game code.
+
+- **Solo and competitive modes.** Solo applies an answer the instant it is submitted. The
+  competitive mode races participants and resolves disagreement by vote; when a vote cannot settle
+  it, the answer lands in a cross-session *tentative* pool that later sessions can confirm
+  (`ConsensusTentativeAnswer`)
+- **Trust, not just points.** `ConsensusProfile` carries a Beta-Bernoulli posterior
+  (`trust_alpha`/`trust_beta`) updated from trust-check rounds — rounds whose answer is already
+  known — starting from a weakly-informative prior so a new player is neither trusted nor
+  distrusted. That posterior weights how much a player's answer counts. Points and levels are
+  Consensus-only and deliberately not shared with SpotGuessr/Trivia's Glicko-2 ratings, and are
+  awarded for out-of-game manual wiki edits too (`models/wiki_edit/signals.py`)
+- **Session flow** under `games/consensus/`: home, friends, start, lobby, invite, join, begin,
+  round, answer, vote, end — with `ws/consensus/session/<id>/` pushing round and resolution
+  updates, and a stall sweep (`sweep_stalled_consensus_sessions`) reclaiming abandoned sessions
+- Answers feed the same fact-confidence machinery documented under the wiki sections
+  (`services/facts/confidence.py`), which converges a value by trust-weighted agreement clustering

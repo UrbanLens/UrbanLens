@@ -497,7 +497,7 @@ completion marker regardless of which of the above set it.
 **Selection** (`services.spotguessr.named_place.candidate_name_for_location`): the location
 needs a *meaningful* name to show. Reuses `services.pins.public_pins.is_meaningful_name()`
 verbatim (already filters blank/placeholder/coordinate-shaped strings — see
-`docs/designs/public-pins-by-vote.md`) rather than inventing a second heuristic:
+`docs/designs/drafts/public-pins-by-vote.md`) rather than inventing a second heuristic:
 
 1. If `config.use_aliases` (default **True** — per spec, aliases are on by default with a
    setting to turn them off) and the wiki has at least one meaningful `WikiAlias`, pick one

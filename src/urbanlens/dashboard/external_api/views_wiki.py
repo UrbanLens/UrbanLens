@@ -632,7 +632,10 @@ class WikiCoverPhotoApiView(WikiApiView):
         serializer = WikiCoverPhotoUpdateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        image = get_object_or_404(Image.objects.visible_to(profile), uuid=serializer.validated_data["image_uuid"])
+        # uuid filter first - `visible_to` eagerly resolves the uploader set of
+        # the queryset it is given, so the unfiltered manager would cost a
+        # site-wide uploader walk to answer about one image.
+        image = get_object_or_404(Image.objects.filter(uuid=serializer.validated_data["image_uuid"]).visible_to(profile))
         if image.wiki_id != wiki.pk and image.location_id != location.pk:
             raise Http404
         wiki.cover_photo = image

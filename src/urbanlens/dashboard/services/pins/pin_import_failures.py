@@ -34,7 +34,7 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
 
 
-def record_pin_import_failure(profile: Profile, cid: int, *, name: str, description: str, reason: PinImportFailureReason) -> None:
+def record_pin_import_failure(profile: Profile, cid: int, *, name: str, description: str, reason: PinImportFailureReason, maps_url: str = "") -> None:
     """Record a pin's cid that couldn't be placed automatically, unless one already exists.
 
     Called from ``tasks.resolve_deferred_pin_locations`` for a cid that resolution
@@ -55,6 +55,9 @@ def record_pin_import_failure(profile: Profile, cid: int, *, name: str, descript
         name: Best-known name for the place, captured at the moment it was deferred.
         description: Best-known description, captured the same way.
         reason: Why the automatic lookup failed.
+        maps_url: The Google Maps URL the cid came from, when the import had
+            one. Stored for its embedded S2 cell, which gives an approximate
+            position used only to corroborate a guessed location.
     """
     PinImportFailure.objects.get_or_create(
         profile=profile,
@@ -63,6 +66,7 @@ def record_pin_import_failure(profile: Profile, cid: int, *, name: str, descript
             "name": name,
             "description": description,
             "reason": reason,
+            "maps_url": maps_url or "",
         },
     )
 

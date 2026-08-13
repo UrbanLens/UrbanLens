@@ -25,6 +25,7 @@ from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.locations.naming import (
     normalize_name_for_comparison,
     persist_official_aliases_for_location,
+    sanitize_name,
 )
 from urbanlens.dashboard.services.pins.pin_subresources import (
     AliasExistsError,
@@ -211,7 +212,10 @@ class LocationAliasView(LoginRequiredMixin, View):
 
     def post(self, request, location_slug):
         location, wiki, profile = resolve_visible_wiki(request, location_slug)
-        name = (request.POST.get("name") or "").strip()
+        # Sanitized before the emptiness check: WikiAlias.save() applies
+        # sanitize_name, so a name of only dropped characters would otherwise
+        # store as a blank alias (see pin_subresources.add_pin_alias).
+        name = sanitize_name((request.POST.get("name") or "").strip()) or ""
         if not name:
             return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE

@@ -17,11 +17,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import logging
+import math
 from typing import TYPE_CHECKING, Any
 
 from django.utils import timezone
 
 from urbanlens.dashboard.models.facts.model import Fact, FactDataType, FactStatus
+from urbanlens.dashboard.services.geo.longitude import circular_mean_longitude
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -95,7 +97,7 @@ def _aggregate_point(weighted: list[_WeightedEvidence]) -> tuple[Any, float]:
         return None, 0.0
 
     avg_lat = sum(item.value.y * item.weight for item in weighted) / total_weight
-    avg_lng = sum(item.value.x * item.weight for item in weighted) / total_weight
+    avg_lng = circular_mean_longitude([item.value.x for item in weighted], [item.weight for item in weighted])
     centroid = Point(avg_lng, avg_lat, srid=4326)
 
     agreeing_weight = sum(item.weight for item in weighted if haversine_distance_meters(item.value, centroid) <= AGREEMENT_DISTANCE_METERS)
@@ -139,7 +141,14 @@ def _cluster_categorical(weighted: list[_WeightedEvidence]) -> tuple[list[tuple[
         else:
             cluster.append(item)
 
-    totals = sorted(((sum(item.weight for item in cluster), cluster[0].value) for cluster in clusters), reverse=True)
+    # key= on the weight alone: a bare `reverse=True` sorts the tuples, so two
+    # clusters of equal weight fall through to comparing their *values*. That was
+    # never the intent, and it raises for values that aren't mutually comparable -
+    # reachable here because FactEvidence keeps a per-row `data_type` so old rows
+    # stay interpretable after a key's registered type changes (one fact can hold a
+    # text row and a bool row), and every `value_*` column is nullable. Sorting on
+    # weight only leaves ties in evidence order, which is stable and cannot raise.
+    totals = sorted(((sum(item.weight for item in cluster), cluster[0].value) for cluster in clusters), key=lambda total: total[0], reverse=True)
     total_weight = sum(weight for weight, _value in totals)
     return totals, total_weight
 

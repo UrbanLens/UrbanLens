@@ -34,6 +34,9 @@ Context:
 
         <p class="pin-suggestion-card-dates">Google couldn't place this pin automatically.</p>
 
+        <div hx-get="{% url 'memories.locations.import_failures.guess' failure.pk %}"
+             hx-trigger="revealed once" hx-swap="outerHTML"></div>
+
         <div class="pin-suggestion-card-actions">
             <button type="button" class="btn btn--sm btn--primary"
                     onclick="document.getElementById('pin-import-failure-place-dialog-{{ failure.pk }}').showModal()">

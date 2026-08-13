@@ -214,6 +214,20 @@ class Label(abstract.FrontendDashboardModel):
             queue.extend(children_ids)
         return visited
 
+    @property
+    def is_global(self) -> bool:
+        """Whether this is a site-wide label rather than one a user owns.
+
+        Reads ``profile_id`` rather than ``profile`` so templates can ask this
+        per row without fetching the owning profile: ``{% if not label.profile %}``
+        issued one query per label per occurrence, and the Organize page asks it
+        several times for each card.
+
+        Returns:
+            True when no profile owns this label.
+        """
+        return self.profile_id is None
+
     def __str__(self) -> str:
         if self.profile_id:
             return f"{self.name} ({self.profile})"

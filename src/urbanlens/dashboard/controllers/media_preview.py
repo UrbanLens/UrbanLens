@@ -31,6 +31,7 @@ from django.http import HttpResponse
 from django.views import View
 import requests
 
+from urbanlens.dashboard.controllers.media_auth import mark_private_media
 from urbanlens.dashboard.services.media.previews import MAX_PREVIEW_SOURCE_BYTES, render_preview, signature_is_valid
 from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url
 
@@ -118,7 +119,7 @@ class MediaPreviewView(View):
             return HttpResponse(status=404)
         if cached is not None:
             content, content_type = cached
-            return HttpResponse(content, content_type=content_type)
+            return mark_private_media(HttpResponse(content, content_type=content_type))
 
         fetched = _fetch_source(url)
         preview = render_preview(*fetched) if fetched else None
@@ -128,4 +129,4 @@ class MediaPreviewView(View):
 
         cache.set(cache_key, preview, _PREVIEW_CACHE_TTL)
         content, content_type = preview
-        return HttpResponse(content, content_type=content_type)
+        return mark_private_media(HttpResponse(content, content_type=content_type))

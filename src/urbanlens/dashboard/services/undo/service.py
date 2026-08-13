@@ -32,6 +32,15 @@ class UndoExpiredError(Exception):
     """Raised when an UndoAction is past its retention window."""
 
 
+class UndoAlreadyRestoredError(UndoExpiredError):
+    """Raised when an UndoAction was already restored by another request.
+
+    Subclasses :class:`UndoExpiredError` so the existing callers - which all
+    answer "this undo is no longer available" - keep working unchanged, while
+    a caller that wants to tell the two apart still can.
+    """
+
+
 def stash_for_undo(model_label: str, instances: Sequence[Model], profile: Profile) -> UndoAction:
     """Serialize ``instances`` and index them for a profile's undo history.
 
@@ -77,6 +86,14 @@ def restore_undo_action(undo_action: UndoAction) -> list[Any]:
 
     handler = get_handler(undo_action.model_label)
     with transaction.atomic():
+        # Claim the row before restoring. Expiry was checked against an instance
+        # the caller fetched earlier, and a double-submitted Undo gives two
+        # requests a valid instance each: without the lock both pass that check
+        # and both restore, so one click brings everything back twice. Locking
+        # here makes the second request wait and then find the row gone.
+        claimed = UndoAction.objects.select_for_update().filter(pk=undo_action.pk).first()
+        if claimed is None:
+            raise UndoAlreadyRestoredError(f"UndoAction {undo_action.pk} was already restored.")
         # A handler's restore() may raise UndoExpiredError partway through a
         # multi-instance batch (e.g. the second of three stashed pins
         # references a label that's since been deleted) - wrapping in
@@ -84,8 +101,8 @@ def restore_undo_action(undo_action: UndoAction) -> list[Any]:
         # instance restored while the UndoAction itself still gets deleted
         # below, which would otherwise silently orphan a partially-restored
         # batch with no surviving undo entry to retry from.
-        restored = handler.restore(undo_action.payload)
-        undo_action.delete()
+        restored = handler.restore(claimed.payload)
+        claimed.delete()
     return restored
 
 

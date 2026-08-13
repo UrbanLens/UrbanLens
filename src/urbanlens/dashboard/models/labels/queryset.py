@@ -8,6 +8,7 @@ from django.db.models import Count, IntegerField, OuterRef, Prefetch, Q, Subquer
 from django.db.models.functions import Coalesce
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.profile.model import Profile
@@ -38,28 +39,24 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
 
     def tags(self) -> Self:
         """Return only items with kind='tag'."""
-        # Don't hardcode strings
-        return self.filter(kind="tag")
+        return self.filter(kind=KIND_TAG)
 
     def categories(self) -> Self:
         """Return only items with kind='category'."""
-        # Don't hardcode strings
-        return self.filter(kind="category")
+        return self.filter(kind=KIND_CATEGORY)
 
     def statuses(self) -> Self:
         """Return only items with kind='status'."""
-        # Don't hardcode strings
-        return self.filter(kind="status")
+        return self.filter(kind=KIND_STATUS)
 
     def user_labels(self) -> Self:
         """Return only items with kind='user' (for annotating profiles privately)."""
-        # TODO: Don't hardcode 'user' string
-        return self.filter(kind="user")
+        return self.filter(kind=KIND_USER)
 
     def media(self) -> Self:
         """Return only items with kind='media' (attached to photos/videos/documents, not pins)."""
         # Don't hardcode strings
-        return self.filter(kind="media")
+        return self.filter(kind=KIND_MEDIA)
 
     def suggestable(self) -> Self:
         """Return only tag/category labels - the sole kinds ever synced to REData's label-suggestion service.
@@ -67,14 +64,11 @@ class LabelQuerySet(abstract.FrontendDashboardQuerySet):
         Status, people, and media labels are never sent (per the explicit
         product decision - see ``services.labels.redata_suggestions``).
         """
-        from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
-
         return self.filter(kind__in=(KIND_TAG, KIND_CATEGORY))
 
     def location_labels(self) -> Self:
         """Return only items assignable to pins/wikis (excludes 'user' and 'media', which attach elsewhere)."""
-        # TODO: Don't hardcode 'user' string
-        return self.exclude(kind__in=["user", "media"])
+        return self.exclude(kind__in=(KIND_USER, KIND_MEDIA))
 
     def with_customizations_for(self, profile: Profile | int) -> Self:
         """Prefetch this user's LabelCustomizations into _user_customizations attr."""

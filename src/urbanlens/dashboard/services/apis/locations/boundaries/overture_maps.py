@@ -58,12 +58,20 @@ _EARTH_RADIUS_M = 6_371_000.0
 
 
 def _haversine_m(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance between two WGS-84 points, in meters."""
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    d_phi = math.radians(lat2 - lat1)
-    d_lambda = math.radians(lon2 - lon1)
-    a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lambda / 2) ** 2
-    return 2 * _EARTH_RADIUS_M * math.asin(math.sqrt(a))
+    """Great-circle distance in metres.
+
+    Args:
+        lat1: First latitude in degrees.
+        lon1: First longitude in degrees.
+        lat2: Second latitude in degrees.
+        lon2: Second longitude in degrees.
+
+    Returns:
+        Distance in metres.
+    """
+    from urbanlens.dashboard.services.geo.distance import haversine_meters
+
+    return haversine_meters(lat1, lon1, lat2, lon2)
 
 
 def _clean_value(value: Any) -> Any:

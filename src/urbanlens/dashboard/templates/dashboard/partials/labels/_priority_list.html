@@ -34,19 +34,31 @@ only ever built once at page load and never caught up with those changes).
             <span class="priority-item-name">{{ item.name }}</span>
             <div class="priority-item-chips">
                 <span class="priority-kind-chip priority-kind-chip--{{ item.kind }}">{{ item.kind }}</span>
-                {% if not item.profile %}<span class="tag-global-label">global</span>{% endif %}
+                {% if item.is_global %}<span class="tag-global-label">global</span>{% endif %}
             </div>
         </div>
         <div class="priority-jump-actions">
             <button type="button" class="priority-jump-btn jump-top" data-priority-jump="top" title="Send to top"><i class="material-symbols-outlined">vertical_align_top</i></button>
             <button type="button" class="priority-jump-btn jump-bottom" data-priority-jump="bottom" title="Send to bottom"><i class="material-symbols-outlined">vertical_align_bottom</i></button>
         </div>
-        {% if item.kind == 'tag' or item.kind == 'category' or item.kind == 'status' and item.profile %}
+        {% if item.kind == 'tag' or item.kind == 'category' or item.kind == 'status' and not item.is_global %}
         <button type="button" class="priority-edit-btn" title="Edit {{ item.kind }}"
                 hx-get="{% url 'label.edit' label_kind=item.kind label_id=item.id %}"
                 hx-target="#label-edit-dialog-body" hx-swap="innerHTML">
             <i class="material-symbols-outlined">edit</i>
         </button>
+        {% endif %}
+        {% if not item.is_global %}
+        <form hx-post="{% url 'label.delete' label_kind=item.kind label_id=item.id %}"
+              hx-target="#{{ item.kind }}-rows" hx-swap="innerHTML"
+              hx-confirm="Delete '{{ item.name }}'? Pins will NOT be deleted."
+              hx-on::after-request="document.body.dispatchEvent(new Event('refreshPriority'))"
+              style="display:inline;">
+            {% csrf_token %}
+            <button type="submit" class="priority-delete-btn" title="Delete {{ item.kind }}">
+                <i class="material-symbols-outlined">delete</i>
+            </button>
+        </form>
         {% endif %}
         <div class="priority-order-editor">
             <button type="button" class="priority-order-chip" title="Change position">{{ forloop.counter }}</button>

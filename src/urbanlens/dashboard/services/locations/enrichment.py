@@ -348,7 +348,7 @@ def compute_service_budget(service: str, site_settings: SiteSettings | None = No
     buffer_fraction = min(max(site_settings.enrichment_buffer_percent, 0), 90) / 100.0
 
     def used_within(delta: timedelta) -> int:
-        return ApiCallLog.objects.for_service(service).since(delta).exclude(was_geo_filtered=True).count()
+        return ApiCallLog.objects.for_service(service).since(delta).billable().count()
 
     budgets: list[int] = []
     used_day: int | None = None

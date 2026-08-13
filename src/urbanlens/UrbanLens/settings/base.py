@@ -459,6 +459,17 @@ CSRF_COOKIE_SECURE = _env_bool("CSRF_COOKIE_SECURE", SECURE_SSL_REDIRECT)
 # Internal container health checks hit /health over HTTP on the app port.
 SECURE_REDIRECT_EXEMPT = [r"^health"]
 
+# HSTS, gated on exactly the same condition as SECURE_SSL_REDIRECT so an
+# intentionally HTTP-only deployment (UL_UNSAFE_ALLOW_HTTP, the dev default) and
+# the test suite are unaffected. Without it, SECURE_SSL_REDIRECT alone still
+# leaves a first visit strippable: that redirect is itself served over HTTP, so
+# an attacker on the path can answer it instead. A year, with subdomains, is the
+# usual production value; preload is deliberately left off, since submitting a
+# domain to the preload list is a decision for whoever owns it - it is painful to
+# reverse and this project is self-hosted by design.
+SECURE_HSTS_SECONDS = int(os.getenv("UL_HSTS_SECONDS", "31536000")) if SECURE_SSL_REDIRECT else 0
+SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool("UL_HSTS_INCLUDE_SUBDOMAINS", SECURE_HSTS_SECONDS > 0)
+
 # Trust the X-Forwarded-Proto header set by Nginx so Django builds https:// URLs
 # when sitting behind a reverse proxy that terminates SSL.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
