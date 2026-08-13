@@ -38,6 +38,16 @@ repos:
         always_run: true
         pass_filenames: false
 
+# REPOSITORY CONSISTENCY
+-   repo: local
+    hooks:
+      - id: imports-tracked
+        name: every urbanlens.* import resolves to a committed file
+        entry: python3 bin/check_imports_tracked.py
+        language: system
+        files: '\.py$'
+        pass_filenames: false
+
 # TYPESCRIPT
 -   repo: local
     hooks:

@@ -1,0 +1,51 @@
+{% comment %}
+A suggested location for a pin whose Google Maps CID never resolved, derived
+from the pin's own name (see services.pins.import_failure_guess).
+
+Fetched lazily per card, so this template renders only when there is a guess
+worth showing - the "no guess" case is an empty response, not an empty state.
+
+The button fills the Place Pin dialog's coordinate fields rather than submitting:
+the guess comes from a name, and a name can be wrong, so the user sees what is
+being proposed and confirms it. Nothing here places a pin on its own.
+
+Context:
+  failure - the pending PinImportFailure
+  guess   - a LocationGuess
+{% endcomment %}
+<div class="pin-import-failure-guess">
+    <p class="pin-import-failure-guess-label">
+        <i class="material-symbols-outlined">lightbulb</i>
+        {% if guess.source == "address+area" %}
+        That name is an address, and the map link agrees:
+        {% elif guess.source == "name+area" %}
+        A place by that name, and the map link agrees:
+        {% elif guess.source == "address" %}
+        That name looks like an address:
+        {% elif guess.source == "area" %}
+        Roughly where the map link points - approximate:
+        {% else %}
+        A place by that name:
+        {% endif %}
+    </p>
+    {% if guess.display_name %}
+    <p class="pin-import-failure-guess-name">{{ guess.display_name|truncatechars:90 }}</p>
+    {% else %}
+    <p class="pin-import-failure-guess-name pin-import-failure-guess-name--coords">
+        {{ guess.latitude|floatformat:4 }}, {{ guess.longitude|floatformat:4 }}
+    </p>
+    {% endif %}
+    <button type="button" class="btn btn--sm btn--ghost"
+            data-guess-latitude="{{ guess.latitude|stringformat:'f' }}"
+            data-guess-longitude="{{ guess.longitude|stringformat:'f' }}"
+            data-guess-failure="{{ failure.pk }}"
+            onclick="
+                const dialog = document.getElementById('pin-import-failure-place-dialog-{{ failure.pk }}');
+                document.getElementById('pin-import-failure-latitude-{{ failure.pk }}').value = this.dataset.guessLatitude;
+                document.getElementById('pin-import-failure-longitude-{{ failure.pk }}').value = this.dataset.guessLongitude;
+                dialog.showModal();
+            ">
+        <i class="material-symbols-outlined">edit_location_alt</i>
+        Use this location
+    </button>
+</div>
