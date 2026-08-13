@@ -1301,6 +1301,94 @@ _MAX_CONSECUTIVE_REDATA_FAILURES = 5
 _MAX_CONSECUTIVE_NO_PROGRESS_RETRIES = 5
 
 
+def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_tag: bool) -> tuple[int, int, int]:
+    """Place every pin in ``deferred_lists`` whose cid this round actually resolved.
+
+    Called on *every* round of ``resolve_deferred_pin_locations``, not only the final
+    one - see that task's own docstring ("places whatever resolves now"), which the
+    task previously failed to honour on any round that still had pending cids.
+
+    The three buckets are handled differently and the distinction is the whole point:
+
+    - ``result.resolved`` - place the pin.
+    - ``result.unresolvable`` - a terminal "no such location" answer; record a
+      ``NO_LOCATION_FOUND`` failure card so the user can fix it by hand.
+    - anything else (still pending) - do nothing at all. A pending cid is unfinished
+      work, not a failure, and writing a card for it here would put a transient state
+      into a table with a unique ``(profile, cid)`` constraint and no expiry.
+
+    Args:
+        result: The ``CidResolutionResult`` for this round.
+        deferred_lists: The lists being imported, in import_preview_streaming's shape.
+        profile: The importing profile.
+        auto_tag: Whether to enqueue AI category suggestion for newly-created pins.
+
+    Returns:
+        ``(created, exists, skipped)`` for this round only - each retry is a fresh task
+        invocation, so these are per-round counts, not per-batch totals.
+    """
+    from urbanlens.dashboard.models.labels.model import Label
+    from urbanlens.dashboard.models.location import Location
+    from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailureReason
+    from urbanlens.dashboard.services.apis.locations.google.maps import _create_pin_from_confirmed
+    from urbanlens.dashboard.services.pins.pin_import_failures import auto_resolve_pin_import_failure_for_cid, record_pin_import_failure
+
+    created_count = exists_count = skipped_count = 0
+    for lst in deferred_lists:
+        stem = lst.get("stem", "")
+        list_label_ids = lst.get("label_ids") or []
+        create_category = bool(lst.get("create_category", False))
+        list_labels = list(Label.objects.filter(id__in=list_label_ids)) if list_label_ids else []
+
+        category_label = None
+        if create_category and stem:
+            category_label, _ = Label.objects.get_or_create(
+                profile=profile,
+                name__iexact=stem,
+                defaults={"name": stem, "kind": "category"},
+            )
+
+        for pin_dict in lst.get("pins", []):
+            cid = pin_dict["cid"]
+            coords = result.resolved.get(cid)
+            if coords is None:
+                if cid in result.unresolvable:
+                    record_pin_import_failure(
+                        profile,
+                        cid,
+                        name=pin_dict.get("name", ""),
+                        description=pin_dict.get("description", ""),
+                        reason=PinImportFailureReason.NO_LOCATION_FOUND,
+                    )
+                    skipped_count += 1
+                continue
+
+            # Re-check now, not just at defer time: an earlier pin in this
+            # same batch referencing the same cid (saved to two lists) may
+            # have just linked/created its Location.
+            location = Location.objects.by_cid(cid).first()
+            pin, created = _create_pin_from_confirmed(
+                pin_dict,
+                location=location,
+                latitude=coords[0],
+                longitude=coords[1],
+                user_profile=profile,
+                list_labels=list_labels,
+                category_label=category_label,
+                auto_tag=auto_tag,
+            )
+            if pin:
+                auto_resolve_pin_import_failure_for_cid(profile, cid, pin)
+                if created:
+                    created_count += 1
+                else:
+                    exists_count += 1
+            else:
+                skipped_count += 1
+
+    return created_count, exists_count, skipped_count
+
+
 @shared_task(bind=True, max_retries=None)
 def resolve_deferred_pin_locations(
     self,
@@ -1353,15 +1441,10 @@ def resolve_deferred_pin_locations(
     """
     from django.urls import reverse
 
-    from urbanlens.dashboard.models.labels.model import Label
-    from urbanlens.dashboard.models.location import Location
     from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
-    from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailureReason
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.apis.locations.cid_resolution import resolve_cids
-    from urbanlens.dashboard.services.apis.locations.google.maps import _create_pin_from_confirmed
-    from urbanlens.dashboard.services.pins.pin_import_failures import auto_resolve_pin_import_failure_for_cid, record_pin_import_failure
 
     empty = {"created": 0, "exists": 0, "skipped": 0}
     profile = Profile.objects.filter(pk=profile_id).first()
@@ -1385,8 +1468,12 @@ def resolve_deferred_pin_locations(
 
     if result.auth_failed:
         logger.error("resolve_deferred_pin_locations: REData rejected the API key resolving %d cid(s) for profile %s - not retrying.", len(all_cids), profile_id)
-        for cid in all_cids:
-            record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), reason=PinImportFailureReason.LOOKUP_ERROR)
+        # Deliberately no per-cid PinImportFailure rows here - see _place_resolved_pins.
+        # A denied API key is a REData-side configuration fault that says nothing about
+        # any individual place; writing one terminal card per cid turned a single
+        # operator problem into hundreds of manual triage cards the user cannot action,
+        # in a table with a unique (profile, cid) constraint and no expiry. The
+        # aggregate notification below is the whole user-facing signal.
         NotificationLog.objects.create(
             profile=profile,
             status=Status.UNREAD,
@@ -1410,8 +1497,9 @@ def resolve_deferred_pin_locations(
             len(all_cids),
             profile_id,
         )
-        for cid in all_cids:
-            record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), reason=PinImportFailureReason.LOOKUP_ERROR)
+        # No per-cid cards - REData being unreachable is a transient source outage, the
+        # textbook case for "never negative-cache a source error". See the auth_failed
+        # branch above.
         NotificationLog.objects.create(
             profile=profile,
             status=Status.UNREAD,
@@ -1443,8 +1531,10 @@ def resolve_deferred_pin_locations(
                 profile_id,
                 consecutive_no_progress,
             )
-            for cid in all_cids:
-                record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), reason=PinImportFailureReason.LOOKUP_STALLED)
+            # No per-cid cards. "REData hasn't finished yet" is the most transient state
+            # of the three give-up branches - these cids are still queued on REData's own
+            # end and will very likely resolve on a later import or sweep. This branch
+            # alone accounted for the ~600-card pile-up on a large Takeout import.
             NotificationLog.objects.create(
                 profile=profile,
                 status=Status.UNREAD,
@@ -1459,6 +1549,15 @@ def resolve_deferred_pin_locations(
             )
             update_task_progress(self, current=total, total=total, message="Failed: location lookups stalled.")
             return {"created": 0, "exists": 0, "skipped": len(all_cids)}
+
+        # Place whatever DID resolve this round before scheduling the retry. Previously
+        # this branch returned before the placement loop below ever ran, and
+        # `remaining_pins` then dropped every resolved cid from the retry args - so on
+        # any mixed round (some resolved, some pending) the coordinates REData had just
+        # successfully returned were discarded, and the pin was never placed by this
+        # round nor by any later one. A long import is mixed on nearly every round, so
+        # this silently lost the bulk of a large batch.
+        _place_resolved_pins(result, deferred_lists, profile=profile, auto_tag=auto_tag)
 
         pending_set = set(result.pending)
         remaining_lists = []
@@ -1494,51 +1593,7 @@ def resolve_deferred_pin_locations(
         )
         return {"created": 0, "exists": 0, "skipped": 0}
 
-    created_count = exists_count = skipped_count = 0
-    for lst in deferred_lists:
-        stem = lst.get("stem", "")
-        list_label_ids = lst.get("label_ids") or []
-        create_category = bool(lst.get("create_category", False))
-        list_labels = list(Label.objects.filter(id__in=list_label_ids)) if list_label_ids else []
-
-        category_label = None
-        if create_category and stem:
-            category_label, _ = Label.objects.get_or_create(
-                profile=profile,
-                name__iexact=stem,
-                defaults={"name": stem, "kind": "category"},
-            )
-
-        for pin_dict in lst.get("pins", []):
-            cid = pin_dict["cid"]
-            coords = result.resolved.get(cid)
-            if coords is None:
-                record_pin_import_failure(profile, cid, name=pin_dict.get("name", ""), description=pin_dict.get("description", ""), reason=PinImportFailureReason.NO_LOCATION_FOUND)
-                skipped_count += 1
-                continue
-
-            # Re-check now, not just at defer time: an earlier pin in this
-            # same batch referencing the same cid (saved to two lists) may
-            # have just linked/created its Location.
-            location = Location.objects.by_cid(cid).first()
-            pin, created = _create_pin_from_confirmed(
-                pin_dict,
-                location=location,
-                latitude=coords[0],
-                longitude=coords[1],
-                user_profile=profile,
-                list_labels=list_labels,
-                category_label=category_label,
-                auto_tag=auto_tag,
-            )
-            if pin:
-                auto_resolve_pin_import_failure_for_cid(profile, cid, pin)
-                if created:
-                    created_count += 1
-                else:
-                    exists_count += 1
-            else:
-                skipped_count += 1
+    created_count, exists_count, skipped_count = _place_resolved_pins(result, deferred_lists, profile=profile, auto_tag=auto_tag)
 
     unresolved = len(result.unresolvable)
     logger.info("resolve_deferred_pin_locations: profile %s batch resolved via %s.", profile_id, result.provider)
