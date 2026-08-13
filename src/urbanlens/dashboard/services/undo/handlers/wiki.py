@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
@@ -93,6 +94,9 @@ class WikiUndoHandler(UndoHandler):
             "created_by_id": wiki.created_by_id,
             "parent_wiki_old_pk": wiki.parent_wiki_id,
             "label_ids": list(wiki.labels.values_list("id", flat=True)),
+            # Image.wiki is SET_NULL, so the delete detached these photos rather
+            # than destroying them, and nothing else records where they were.
+            "image_ids": list(wiki.images.values_list("pk", flat=True)),
         }
 
     @classmethod
@@ -147,6 +151,11 @@ class WikiUndoHandler(UndoHandler):
                 if parent is not None:
                     wiki.parent_wiki = parent
                     wiki.save(update_fields=["parent_wiki"])
+            # Only photos still detached: one re-filed since belongs where the
+            # user put it. ``.get`` - entries stashed before this key lack it.
+            image_ids = entry.get("image_ids") or []
+            if image_ids:
+                Image.objects.filter(pk__in=image_ids, wiki__isnull=True).update(wiki=wiki)
             if entry["label_ids"]:
                 wiki.labels.set(entry["label_ids"])
 

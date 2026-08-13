@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 _QUEUE_PARTIAL = "dashboard/partials/memories/_pin_import_failures_queue.html"
 _CARD_PARTIAL = "dashboard/partials/memories/_pin_import_failure_card.html"
+_GUESS_PARTIAL = "dashboard/partials/memories/_pin_import_failure_guess.html"
 
 
 def pending_pin_import_failures(profile: Profile) -> QuerySet[PinImportFailure]:
@@ -131,6 +132,44 @@ class PinImportFailureQueuePartialView(LoginRequiredMixin, View):
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
         return render(request, _QUEUE_PARTIAL, {"pin_import_failures": list(pending_pin_import_failures(profile))})
+
+
+class PinImportFailureGuessView(LoginRequiredMixin, View):
+    """Suggest a location for one import failure, from its name.
+
+    GET /memories/locations/import-failures/<failure_id>/guess/
+
+    Fetched per card on reveal rather than computed while rendering the queue:
+    a single import can leave hundreds of failures, and each guess costs a
+    geocoder call. Building them all up front would make the page wait on
+    hundreds of sequential lookups, and would spend that quota on cards the user
+    never scrolls to.
+
+    Answers with an empty body when there is no confident guess, which is the
+    normal case for a vague name - the card then shows nothing extra.
+    """
+
+    def get(self, request: HttpRequest, failure_id: int) -> HttpResponse:
+        """Render the suggestion for this failure, if there is one.
+
+        Args:
+            request: The incoming GET request.
+            failure_id: PK of the failure to guess a location for.
+
+        Returns:
+            The rendered suggestion partial, or an empty response.
+        """
+        from urbanlens.dashboard.services.pins.import_failure_guess import guess_for_failure
+
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+        failure = get_object_or_404(PinImportFailure, pk=failure_id, profile=profile)
+        if not failure.is_actionable:
+            return HttpResponse("")
+
+        guess = guess_for_failure(failure)
+        if guess is None:
+            return HttpResponse("")
+        return render(request, _GUESS_PARTIAL, {"failure": failure, "guess": guess})
 
 
 class PinImportFailureResolveView(LoginRequiredMixin, View):

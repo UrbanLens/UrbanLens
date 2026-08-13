@@ -150,6 +150,8 @@ export function installOrgBulkToolbar(): void {
     window._orgBulk = resetOrgBulk();
     window._orgSelectionClearers = window._orgSelectionClearers ?? [];
     window._orgBulkEditByIds = window._orgBulkEditByIds ?? {};
+    window._orgBulkMergeByIds = window._orgBulkMergeByIds ?? {};
+    window._orgBulkDeleteByIds = window._orgBulkDeleteByIds ?? {};
 
     window._orgRegisterSelectionClearer = (fn) => {
         window._orgSelectionClearers.push(fn);
@@ -310,6 +312,8 @@ declare global {
         _orgBulkSync: (n: number, opts: { hasEdit: boolean; hasMerge: boolean; hasDel: boolean }) => void;
         _orgOpenSingleEdit: (dataAttr: string, id: string) => boolean;
         _orgBulkEditByIds: Record<string, (ids: string[]) => void>;
+        _orgBulkMergeByIds: Record<string, (ids: string[]) => void>;
+        _orgBulkDeleteByIds: Record<string, (ids: string[]) => void>;
         _initPrioritySortable?: () => void;
     }
 }

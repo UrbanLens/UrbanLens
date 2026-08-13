@@ -44,6 +44,7 @@ from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
 
+from urbanlens.dashboard.models.album.model import Album
 from urbanlens.dashboard.models.aliases.model import PinAlias
 from urbanlens.dashboard.models.auto_removals.model import PinAutoRemoval
 from urbanlens.dashboard.models.boundary.model import Boundary
@@ -52,7 +53,8 @@ from urbanlens.dashboard.models.custom_fields.model import CustomFieldValue
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.link_extraction.model import LinkExtraction
 from urbanlens.dashboard.models.links.model import PinLink
-from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
+from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
+from urbanlens.dashboard.models.markup.model import CustomLayer, MarkupMap, PinMarkup
 from urbanlens.dashboard.models.pin.note import PinNote
 from urbanlens.dashboard.models.pin_list.model import PinListItem
 from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion
@@ -381,6 +383,29 @@ def _repoint_other_merge_suggestions(survivor: Pin, loser: Pin) -> None:
             suggestion.save(update_fields=["pin_b", "updated"])
 
 
+def _merge_albums(survivor: Pin, loser: Pin) -> None:
+    """Move the loser's albums onto the survivor, re-slugging on collision.
+
+    ``uq_album_pin_slug`` is unique on ``(parent_pin, slug)``, so a plain
+    reassign fails when both pins have an album with the same slug - two pins
+    each carrying a "Photos" album is the ordinary case, and both hold real
+    images, so neither may be dropped. Clearing the slug lets the model's
+    ``save()`` mint a fresh unique one (it only generates when the slug is
+    empty), keeping both albums.
+
+    Args:
+        survivor: The pin absorbing the albums.
+        loser: The pin being merged away.
+    """
+    taken = set(Album.objects.filter(parent_pin=survivor).values_list("slug", flat=True))
+    for album in Album.objects.filter(parent_pin=loser):
+        album.parent_pin = survivor
+        if album.slug in taken:
+            album.slug = ""
+        album.save()
+        taken.add(album.slug)
+
+
 def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[str, int] | None = None) -> Pin:
     """Merge loser into survivor: reassign every relation, resolve every conflict, delete loser.
 
@@ -430,6 +455,14 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
         _merge_article(survivor, loser, resolutions)
         _merge_lineage(survivor, loser)
         survivor.labels.add(*loser.labels.all())
+
+        _merge_albums(survivor, loser)
+        # Overlays and custom layers carry no uniqueness constraint on the pin,
+        # so they move straight across. All three of these relations CASCADE
+        # from Pin and postdate this module - without them the loser's albums,
+        # overlays and layers were destroyed by the delete() below.
+        MapImageOverlay.objects.filter(parent_pin=loser).update(parent_pin=survivor)
+        CustomLayer.objects.filter(parent_pin=loser).update(parent_pin=survivor)
 
         PinVisit.objects.filter(pin=loser).update(pin=survivor)
         Image.objects.filter(pin=loser).update(pin=survivor)

@@ -141,12 +141,20 @@ def pinned_by_floor(active_user_count: int, config: PublicPinConfig = CONFIG) ->
 
 
 def _km_between(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    """Great-circle distance in kilometers (haversine)."""
-    rlat1, rlon1, rlat2, rlon2 = map(math.radians, (lat1, lon1, lat2, lon2))
-    dlat = rlat2 - rlat1
-    dlon = rlon2 - rlon1
-    a = math.sin(dlat / 2) ** 2 + math.cos(rlat1) * math.cos(rlat2) * math.sin(dlon / 2) ** 2
-    return 6371.0 * 2 * math.asin(math.sqrt(a))
+    """Great-circle distance in kilometres.
+
+    Args:
+        lat1: First latitude in degrees.
+        lon1: First longitude in degrees.
+        lat2: Second latitude in degrees.
+        lon2: Second longitude in degrees.
+
+    Returns:
+        Distance in kilometres.
+    """
+    from urbanlens.dashboard.services.geo.distance import haversine_km
+
+    return haversine_km(lat1, lon1, lat2, lon2)
 
 
 def _active_user_count(now: datetime, config: PublicPinConfig) -> int:

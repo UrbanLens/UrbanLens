@@ -106,7 +106,10 @@ def downscaled_jpeg_bytes(image: Image, max_dimension: int = AI_IMAGE_MAX_DIMENS
         with image.image.open("rb") as stored_file:
             img: PILImage.Image = PILImage.open(stored_file)
             img.load()
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, PILImage.DecompressionBombError) as exc:
+        # DecompressionBombError inherits from Exception, not OSError, so it is not
+        # covered by the other two - and PILImage.open() raises it on the header,
+        # before any decode. Without it a single oversized upload aborts keywording.
         logger.warning("Could not read image %s for keyword downscale: %s", image.pk, exc)
         return None
 

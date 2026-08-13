@@ -649,7 +649,9 @@ class SpotGuessrPinsView(LoginRequiredMixin, View):
 
     def get(self, request: HttpRequest) -> HttpResponse:
         profile = _current_profile(request)
-        pins = Pin.objects.filter(profile=profile).select_related("location")
+        # location__wiki as well: the label falls through to Location.display_name,
+        # which reads the reverse OneToOne `wiki` - one query per pin without it.
+        pins = Pin.objects.filter(profile=profile).select_related("location", "location__wiki")
         return JsonResponse(
             {
                 "pins": [

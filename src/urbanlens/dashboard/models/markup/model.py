@@ -41,23 +41,20 @@ logger = logging.getLogger(__name__)
 
 
 def _haversine_meters(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
-    """Return the great-circle distance between two points in metres.
+    """Great-circle distance in metres.
 
     Args:
-        lat1: Latitude of the first point.
-        lng1: Longitude of the first point.
-        lat2: Latitude of the second point.
-        lng2: Longitude of the second point.
+        lat1: First latitude in degrees.
+        lng1: First longitude in degrees.
+        lat2: Second latitude in degrees.
+        lng2: Second longitude in degrees.
 
     Returns:
         Distance in metres.
     """
-    radius = 6_371_000.0
-    phi1, phi2 = math.radians(lat1), math.radians(lat2)
-    dphi = math.radians(lat2 - lat1)
-    dlambda = math.radians(lng2 - lng1)
-    a = math.sin(dphi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(dlambda / 2) ** 2
-    return 2 * radius * math.asin(math.sqrt(a))
+    from urbanlens.dashboard.services.geo.distance import haversine_meters
+
+    return haversine_meters(lat1, lng1, lat2, lng2)
 
 
 class MarkupMap(abstract.FrontendDashboardModel):

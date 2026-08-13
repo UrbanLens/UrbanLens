@@ -168,7 +168,14 @@ class ViewProfileView(LoginRequiredMixin, View):
         common_pins_permitted = profile.can_view_common_pins_with(my_profile)
         context["common_pin_count"] = len(common_ids) if common_pins_permitted else None
         context["can_view_common_pins"] = bool(common_ids) and common_pins_permitted
-        context["shared_visited"] = Location.objects.filter(id__in=shared_visited_ids).select_related("wiki").order_by("wiki__name", "official_name") if shared_visited_ids else Location.objects.none()
+        # Gated on the same mutual permission as common_pin_count above. A shared
+        # *visit* discloses more than a shared pin - that both people were actually
+        # there - so it cannot be shown to a viewer the common-pins setting refuses.
+        context["shared_visited"] = (
+            Location.objects.filter(id__in=shared_visited_ids).select_related("wiki").order_by("wiki__name", "official_name")
+            if shared_visited_ids and common_pins_permitted
+            else Location.objects.none()
+        )
 
         # Friendship relationship
         from urbanlens.dashboard.models.friendship.model import Friendship

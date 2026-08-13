@@ -3,7 +3,7 @@
 Plan is deferred for now. May be reconsidered in the future.
 
 Context
-UrbanLens is currently a single Django/GeoDjango monolith (src/urbanlens, one first-party app urbanlens.dashboard, PostGIS, Celery, HTMX/Leaflet frontend). All user data — pins, notes, visits, photos, profiles — sits plaintext in one database, and media is served by nginx with no auth check. The E2EE design doc (docs/e2ee.md) explicitly names the unclosed gap: nothing protects users from a malicious or compromised server operator. ROADMAP UL-102 is the owner's own prior analysis of this exact split.
+UrbanLens is currently a single Django/GeoDjango monolith (src/urbanlens, one first-party app urbanlens.dashboard, PostGIS, Celery, HTMX/Leaflet frontend). All user data — pins, notes, visits, photos, profiles — sits plaintext in one database, and media is served by nginx with no auth check. The E2EE design doc (docs/designs/e2ee.md) explicitly names the unclosed gap: nothing protects users from a malicious or compromised server operator. ROADMAP UL-102 is the owner's own prior analysis of this exact split.
 
 This release splits the app into two separately deployable services:
 
@@ -43,7 +43,7 @@ Both sides keep PostGIS (agent still has Route LineString, PinMarkup geometry, p
 Web UI is served by the agent — all templates/HTMX/TS bundles stay. Wiki pages render on the agent from wiki JSON fetched via ServerClient (markdown utils in urbanlens_core keep output identical). Server has only a minimal account portal (login, 2FA, passkeys, email, delete).
 Plugins gain a side attribute: server-billed shared-key integrations (Google/Azure/Yelp/OpenAI/NPS/OpenWeatherMap/REData…) run server-side behind the enrichment API with LocationCache; per-user OAuth (Immich/Flickr/Google Photos/Calendar/Ollama/SearXNG) and keyless public APIs run agent-side.
 Agent media gets authenticated serving this release (nginx X-Accel-Redirect internal location) — fixes the existing unauthenticated location /media/ hole in config/nginx/django.conf.
-Clients: browsers → agent (sessions, unchanged UX). Future desktop/mobile → agent /api/v1/ growing from dashboard/external_api/ + docs/external_app_api_plan.md. Agents → server /api/agent/v1/.
+Clients: browsers → agent (sessions, unchanged UX). Future desktop/mobile → agent /api/v1/ growing from dashboard/external_api/ + docs/designs/drafts/external_app_api_plan.md. Agents → server /api/agent/v1/.
 Data ownership map
 Server: auth.User (credentials, email, username-as-handle), AccountKdf, WebAuthn/TOTP/social rows, E2EE key bundles (public parts + wrapped-private ciphertext), Location, Boundary (location/wiki-owned rows), GooglePlace, LocationCache, EpaFacility, Wiki + WikiAlias/Link/Owner/PropertySale/Edit/StatVote/AutoRemoval, Article(wiki), WikiComment, wiki-parented PinMarkup, wiki media, PinRegistry (NEW: account, location, kind∈{PINNED, EXPOSED}, source_account nullable), AgentRegistration (NEW), RelayEnvelope/RelayConsent (NEW), server ApiCallLog/ApiRateLimit/SiteSettings-half, account EmailLog.
 
@@ -114,5 +114,5 @@ src/urbanlens/dashboard/services/wiki/wiki_access.py — oracle-free gate → se
 src/urbanlens/dashboard/models/location/queryset.py — matching logic the server inherits
 src/urbanlens/dashboard/external_api/authentication.py + services/auth/api_keys.py — hashed-bearer auth pattern reused for agent credentials and client PATs
 src/urbanlens/dashboard/services/sharing/share_provenance.py, community_counts.py — port to server against PinRegistry
-docs/e2ee.md — E2EE vocabulary + threat model this work extends
+docs/designs/e2ee.md — E2EE vocabulary + threat model this work extends
 docker-compose.yml, src/urbanlens/UrbanLens/settings/app.py — templates

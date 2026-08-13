@@ -101,7 +101,30 @@ class _MessagePrefixMixin:
         return ""
 
 
-class TestCase(_MessagePrefixMixin, _HypothesisMixin, test.TestCase):
+class _CacheIsolationMixin:
+    """Start every test with an empty cache.
+
+    Django rolls the database back between tests; it does not roll the cache
+    back. Those two facts interact badly, because rollback *reuses primary
+    keys*: a test that warms a cache entry keyed on a model's pk (the panel
+    system's ``ulfetch:ready:<source>:loc<id>`` markers, for one) leaves it
+    behind for the next test, whose freshly-created row is handed the same pk
+    and therefore finds a cache someone else warmed.
+
+    The failure is order-dependent, so it shows up as a test that passes alone
+    and fails in a suite - and points at whichever test happened to run first
+    rather than at itself.
+    """
+
+    def setUp(self) -> None:
+        """Clear the cache, then run the subclass's own setUp."""
+        super().setUp()
+        from django.core.cache import cache
+
+        cache.clear()
+
+
+class TestCase(_CacheIsolationMixin, _MessagePrefixMixin, _HypothesisMixin, test.TestCase):
     """
     Provides additional functionality to the django unittest TestCase.
 
@@ -179,7 +202,7 @@ class TestCase(_MessagePrefixMixin, _HypothesisMixin, test.TestCase):
         super().teardown_example(example)
 
 
-class SimpleTestCase(_MessagePrefixMixin, _HypothesisMixin, test.SimpleTestCase):
+class SimpleTestCase(_CacheIsolationMixin, _MessagePrefixMixin, _HypothesisMixin, test.SimpleTestCase):
     """
     Provides additional functionality to the django unittest SimpleTestCase.
 

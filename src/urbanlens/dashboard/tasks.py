@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import contextlib
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 import logging
 from typing import TYPE_CHECKING, Any
 
 from asgiref.sync import async_to_sync
 from celery import shared_task
 from channels.layers import get_channel_layer
+from django.utils import timezone
 
 from urbanlens.dashboard.services.core.celery import update_task_progress
+from urbanlens.dashboard.services.core.locks import acquire_lock, release_lock
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.images.model import Image
@@ -582,6 +585,8 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
     """
     from decimal import Decimal
 
+    from PIL.Image import DecompressionBombError as PILDecompressionBombError
+
     from urbanlens.dashboard.services.media.images import (
         compute_checksum,
         downscale_stored_image,
@@ -655,7 +660,14 @@ def _process_photo_upload(image: Image, image_id: int, strip_location: bool) -> 
         if max_dimension is not None or convert_webp or strip_location:
             try:
                 new_size = downscale_stored_image(image, max_dimension, convert_webp, strip_gps=strip_location)
-            except (OSError, ValueError) as exc:
+            except (OSError, ValueError, PILDecompressionBombError) as exc:
+                # DecompressionBombError inherits straight from Exception, not from
+                # OSError/ValueError like the rest of Pillow's failures (Unidentified-
+                # ImageError does), so it escaped this handler and took the whole
+                # photo-processing task down with it. Pillow's own 89MP ceiling already
+                # prevents the memory exhaustion; what was missing was degrading to the
+                # same logged warning every other unprocessable image gets, leaving the
+                # upload stored and the rest of the pipeline intact.
                 logger.warning("Downscaling failed for image %s: %s", image_id, exc, exc_info=True)
             else:
                 if new_size is not None:
@@ -671,7 +683,7 @@ def _process_video_upload(image: Image, strip_location: bool) -> _UploadProcessR
     from urbanlens.dashboard.services.media.videos import process_uploaded_video
 
     max_height = get_video_downscale_policy(image.profile) if image.profile is not None else None
-    metadata, new_size = process_uploaded_video(image, None if strip_location else max_height)
+    metadata, new_size = process_uploaded_video(image, max_height, strip_location=strip_location)
 
     update_fields: dict[str, object] = {}
     coords: tuple[float, float] | None = None
@@ -1300,6 +1312,65 @@ _MAX_CONSECUTIVE_REDATA_FAILURES = 5
 #: the pending set shrinks.
 _MAX_CONSECUTIVE_NO_PROGRESS_RETRIES = 5
 
+#: How long a deferred-lookup batch keeps trying before it gives up and turns
+#: into PinImportFailure rows for the user to resolve by hand.
+#:
+#: The counters above used to end the batch on their own, which meant ~10
+#: minutes of attempts: a REData cid that resolves an hour later - the common
+#: case for a large import - produced hundreds of import failures for work that
+#: would have completed on its own. They now only choose *how far apart* the
+#: retries are spaced; this deadline is the only thing that ends the batch.
+_DEFERRED_LOOKUP_DEADLINE = timedelta(days=2)
+
+#: Seconds between retries, indexed by attempt number (the last entry repeats).
+#: Front-loaded because a batch waiting on a rate limit usually clears in
+#: minutes, then widening sharply so two days costs ~16 attempts instead of
+#: ~1,400 - REData will not re-queue a cid it has already checked for weeks, so
+#: asking it every two minutes for two days is pure load with no new answer.
+_DEFERRED_RETRY_SCHEDULE = (120, 120, 120, 300, 600, 1800, 3600, 7200, 14400, 21600)
+
+
+def _deferred_retry_countdown(attempt: int) -> int:
+    """Seconds to wait before retry number ``attempt`` (0-based).
+
+    Args:
+        attempt: How many retries this batch has already made.
+
+    Returns:
+        The gap to the next attempt, in seconds.
+    """
+    return _DEFERRED_RETRY_SCHEDULE[min(attempt, len(_DEFERRED_RETRY_SCHEDULE) - 1)]
+
+
+def _deferred_deadline_passed(started_at: str | None) -> bool:
+    """Whether this batch has been retrying past :data:`_DEFERRED_LOOKUP_DEADLINE`.
+
+    Args:
+        started_at: ISO timestamp of the batch's first attempt, or None on that
+            first attempt (and for batches queued before this was threaded
+            through, which therefore get a fresh two-day window rather than
+            being failed immediately).
+
+    Returns:
+        True when the batch should stop retrying.
+    """
+    if not started_at:
+        return False
+    try:
+        started = datetime.fromisoformat(started_at)
+    except ValueError:
+        return False
+    if timezone.is_naive(started):
+        # The only producer stamps an aware `timezone.now().isoformat()`, but a
+        # replayed or hand-enqueued message can carry a naive one, and subtracting
+        # it raises TypeError rather than the ValueError caught above - killing the
+        # task instead of retiring the batch. Assuming the active timezone is also
+        # better than treating it as unparseable: falling back to False would let
+        # the batch retry forever, which is the exact thing the deadline exists to
+        # stop.
+        started = timezone.make_aware(started)
+    return timezone.now() - started >= _DEFERRED_LOOKUP_DEADLINE
+
 
 def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_tag: bool) -> tuple[int, int, int]:
     """Place every pin in ``deferred_lists`` whose cid this round actually resolved.
@@ -1398,6 +1469,7 @@ def resolve_deferred_pin_locations(
     original_total: int | None = None,
     consecutive_request_failures: int = 0,
     consecutive_no_progress: int = 0,
+    started_at: str | None = None,
 ) -> dict[str, int]:
     """Place pins whose Google Maps CID needed a live lookup to be accurate.
 
@@ -1443,8 +1515,10 @@ def resolve_deferred_pin_locations(
 
     from urbanlens.dashboard.models.notifications.meta import Importance, NotificationType, Status
     from urbanlens.dashboard.models.notifications.model import NotificationLog
+    from urbanlens.dashboard.models.pin_import_failures.model import PinImportFailureReason
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.apis.locations.cid_resolution import resolve_cids
+    from urbanlens.dashboard.services.pins.pin_import_failures import record_pin_import_failure
 
     empty = {"created": 0, "exists": 0, "skipped": 0}
     profile = Profile.objects.filter(pk=profile_id).first()
@@ -1468,12 +1542,8 @@ def resolve_deferred_pin_locations(
 
     if result.auth_failed:
         logger.error("resolve_deferred_pin_locations: REData rejected the API key resolving %d cid(s) for profile %s - not retrying.", len(all_cids), profile_id)
-        # Deliberately no per-cid PinImportFailure rows here - see _place_resolved_pins.
-        # A denied API key is a REData-side configuration fault that says nothing about
-        # any individual place; writing one terminal card per cid turned a single
-        # operator problem into hundreds of manual triage cards the user cannot action,
-        # in a table with a unique (profile, cid) constraint and no expiry. The
-        # aggregate notification below is the whole user-facing signal.
+        for cid in all_cids:
+            record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_ERROR)
         NotificationLog.objects.create(
             profile=profile,
             status=Status.UNREAD,
@@ -1490,16 +1560,15 @@ def resolve_deferred_pin_locations(
         return {"created": 0, "exists": 0, "skipped": len(all_cids)}
 
     consecutive_request_failures = consecutive_request_failures + 1 if result.request_failed else 0
-    if consecutive_request_failures >= _MAX_CONSECUTIVE_REDATA_FAILURES:
+    if _deferred_deadline_passed(started_at) and consecutive_request_failures:
         logger.error(
             "resolve_deferred_pin_locations: REData failed %d consecutive attempts resolving %d cid(s) for profile %s - giving up.",
             consecutive_request_failures,
             len(all_cids),
             profile_id,
         )
-        # No per-cid cards - REData being unreachable is a transient source outage, the
-        # textbook case for "never negative-cache a source error". See the auth_failed
-        # branch above.
+        for cid in all_cids:
+            record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_ERROR)
         NotificationLog.objects.create(
             profile=profile,
             status=Status.UNREAD,
@@ -1524,17 +1593,15 @@ def resolve_deferred_pin_locations(
         else:
             consecutive_no_progress = consecutive_no_progress + 1 if len(result.pending) == len(all_cids) else 0
 
-        if consecutive_no_progress >= _MAX_CONSECUTIVE_NO_PROGRESS_RETRIES:
+        if _deferred_deadline_passed(started_at):
             logger.error(
                 "resolve_deferred_pin_locations: %d cid(s) for profile %s made no progress across %d consecutive retries - giving up.",
                 len(all_cids),
                 profile_id,
                 consecutive_no_progress,
             )
-            # No per-cid cards. "REData hasn't finished yet" is the most transient state
-            # of the three give-up branches - these cids are still queued on REData's own
-            # end and will very likely resolve on a later import or sweep. This branch
-            # alone accounted for the ~600-card pile-up on a large Takeout import.
+            for cid in all_cids:
+                record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_STALLED)
             NotificationLog.objects.create(
                 profile=profile,
                 status=Status.UNREAD,
@@ -1566,10 +1633,17 @@ def resolve_deferred_pin_locations(
             if remaining_pins:
                 remaining_lists.append({**lst, "pins": remaining_pins})
 
+        # A Google rate limit clears on its own timescale and is unrelated to how
+        # long this batch has been going, so it keeps its short fixed wait.
         if result.provider == "google_places":
             countdown, message = 65, "Waiting on Google's rate limit - resuming shortly..."
         else:
-            countdown, message = 120, "Having trouble reaching the location lookup service - retrying shortly..."
+            countdown = _deferred_retry_countdown(max(consecutive_no_progress, consecutive_request_failures))
+            message = (
+                "Still waiting on the location lookup service - checking back periodically..."
+                if countdown > 600
+                else "Having trouble reaching the location lookup service - retrying shortly..."
+            )
 
         update_task_progress(self, current=total - len(result.pending), total=total, message=message)
         logger.info(
@@ -1586,7 +1660,7 @@ def resolve_deferred_pin_locations(
         # retry. Scheduling silently keeps the log free of spurious tracebacks for a
         # batch that just hasn't resolved yet.
         self.retry(
-            args=[profile_id, remaining_lists, auto_tag, total, consecutive_request_failures, consecutive_no_progress],
+            args=[profile_id, remaining_lists, auto_tag, total, consecutive_request_failures, consecutive_no_progress, started_at or timezone.now().isoformat()],
             countdown=countdown,
             max_retries=None,
             throw=False,
@@ -1958,7 +2032,8 @@ def run_scheduled_enrichment(self) -> dict:
 
     from urbanlens.dashboard.services.locations.enrichment import RUN_LOCK_CACHE_KEY, run_enrichment_cycle
 
-    if not cache.add(RUN_LOCK_CACHE_KEY, 1, 3300):
+    _lock_token = acquire_lock(RUN_LOCK_CACHE_KEY, 3300)
+    if _lock_token is None:
         logger.info("run_scheduled_enrichment: another cycle is still running; skipping")
         return {"skipped": "already_running"}
     try:
@@ -1970,7 +2045,7 @@ def run_scheduled_enrichment(self) -> dict:
         logger.warning("run_scheduled_enrichment: cycle wound down at the soft time limit")
         return {"skipped": "timed_out"}
     finally:
-        cache.delete(RUN_LOCK_CACHE_KEY)
+        release_lock(RUN_LOCK_CACHE_KEY, _lock_token)
 
 
 @shared_task(bind=True, autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -2019,7 +2094,8 @@ def send_due_checkin_reminders() -> int:
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import send_checkin_reminder
 
-    if not cache.add(_CHECKIN_REMINDER_LOCK_CACHE_KEY, value=True, timeout=_CHECKIN_LOCK_TIMEOUT_SECONDS):
+    _lock_token = acquire_lock(_CHECKIN_REMINDER_LOCK_CACHE_KEY, _CHECKIN_LOCK_TIMEOUT_SECONDS)
+    if _lock_token is None:
         logger.info("send_due_checkin_reminders: a previous run is still in flight; skipping")
         return 0
     try:
@@ -2038,7 +2114,7 @@ def send_due_checkin_reminders() -> int:
             logger.info("Sent %s safety check-in reminder(s)", count)
         return count
     finally:
-        cache.delete(_CHECKIN_REMINDER_LOCK_CACHE_KEY)
+        release_lock(_CHECKIN_REMINDER_LOCK_CACHE_KEY, _lock_token)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -2049,7 +2125,8 @@ def send_final_checkin_warnings() -> int:
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import send_final_warning
 
-    if not cache.add(_CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY, value=True, timeout=_CHECKIN_LOCK_TIMEOUT_SECONDS):
+    _lock_token = acquire_lock(_CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY, _CHECKIN_LOCK_TIMEOUT_SECONDS)
+    if _lock_token is None:
         logger.info("send_final_checkin_warnings: a previous run is still in flight; skipping")
         return 0
     try:
@@ -2064,7 +2141,7 @@ def send_final_checkin_warnings() -> int:
             logger.info("Sent %s safety check-in final warning(s)", count)
         return count
     finally:
-        cache.delete(_CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY)
+        release_lock(_CHECKIN_FINAL_WARNING_LOCK_CACHE_KEY, _lock_token)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -2075,7 +2152,8 @@ def escalate_overdue_checkins() -> int:
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import escalate_checkin
 
-    if not cache.add(_CHECKIN_ESCALATION_LOCK_CACHE_KEY, value=True, timeout=_CHECKIN_LOCK_TIMEOUT_SECONDS):
+    _lock_token = acquire_lock(_CHECKIN_ESCALATION_LOCK_CACHE_KEY, _CHECKIN_LOCK_TIMEOUT_SECONDS)
+    if _lock_token is None:
         logger.info("escalate_overdue_checkins: a previous run is still in flight; skipping")
         return 0
     try:
@@ -2094,7 +2172,7 @@ def escalate_overdue_checkins() -> int:
             logger.info("Escalated %s overdue safety check-in(s)", count)
         return count
     finally:
-        cache.delete(_CHECKIN_ESCALATION_LOCK_CACHE_KEY)
+        release_lock(_CHECKIN_ESCALATION_LOCK_CACHE_KEY, _lock_token)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -2129,7 +2207,8 @@ def sweep_due_safety_checkin_archival() -> int:
     from urbanlens.dashboard.models.safety.model import SafetyCheckin
     from urbanlens.dashboard.services.visits.safety import archive_checkin
 
-    if not cache.add(_CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY, value=True, timeout=_CHECKIN_LOCK_TIMEOUT_SECONDS):
+    _lock_token = acquire_lock(_CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY, _CHECKIN_LOCK_TIMEOUT_SECONDS)
+    if _lock_token is None:
         logger.info("sweep_due_safety_checkin_archival: a previous run is still in flight; skipping")
         return 0
     try:
@@ -2147,7 +2226,7 @@ def sweep_due_safety_checkin_archival() -> int:
             logger.info("Archived %s overdue safety check-in(s)", count)
         return count
     finally:
-        cache.delete(_CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY)
+        release_lock(_CHECKIN_ARCHIVAL_SWEEP_LOCK_CACHE_KEY, _lock_token)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -2280,7 +2359,7 @@ def hard_delete_expired_accounts() -> int:
 # sit under external_data.FLIGHT_TTL_SECONDS so a hard-killed task's
 # single-flight marker expires right after the task does.
 @shared_task(soft_time_limit=110, time_limit=130)
-def fetch_panel_source(source_key: str, pin_id: int) -> None:
+def fetch_panel_source(source_key: str, pin_id: int, flight_token: str | None = None) -> None:
     """Fetch one external-data panel's upstream data in the background.
 
     Scheduled by ``external_data.schedule_panel_fetch`` when a pin detail page
@@ -2290,6 +2369,9 @@ def fetch_panel_source(source_key: str, pin_id: int) -> None:
     Args:
         source_key: An ``external_data.panel_sources()`` key.
         pin_id: PK of the pin whose panel data should be fetched.
+        flight_token: Single-flight token from ``schedule_panel_fetch``; the
+            fetch releases the marker only while it is still its own. Absent for
+            tasks enqueued before tokens existed.
     """
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.services.pins.external_data import run_panel_fetch
@@ -2298,7 +2380,7 @@ def fetch_panel_source(source_key: str, pin_id: int) -> None:
     if pin is None:
         logger.info("fetch_panel_source: pin %s no longer exists", pin_id)
         return
-    run_panel_fetch(source_key, pin)
+    run_panel_fetch(source_key, pin, flight_token)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -2552,13 +2634,14 @@ def run_scheduled_trivia_generation() -> dict:
     from urbanlens.dashboard.services.trivia.generation import sweep_wikis_for_generation
 
     lock_key = "trivia_generation_sweep_lock"
-    if not cache.add(lock_key, 1, 3300):
+    _lock_token = acquire_lock(lock_key, 3300)
+    if _lock_token is None:
         logger.info("run_scheduled_trivia_generation: another sweep is still running; skipping")
         return {"skipped": "already_running"}
     try:
         return sweep_wikis_for_generation()
     finally:
-        cache.delete(lock_key)
+        release_lock(lock_key, _lock_token)
 
 
 @shared_task
@@ -2581,13 +2664,14 @@ def run_scheduled_trivia_wiki_incorporation() -> dict:
     from urbanlens.dashboard.services.trivia.wiki_incorporation import sweep_questions_for_wiki_incorporation
 
     lock_key = "trivia_wiki_incorporation_sweep_lock"
-    if not cache.add(lock_key, 1, 3300):
+    _lock_token = acquire_lock(lock_key, 3300)
+    if _lock_token is None:
         logger.info("run_scheduled_trivia_wiki_incorporation: another sweep is still running; skipping")
         return {"skipped": "already_running"}
     try:
         return sweep_questions_for_wiki_incorporation()
     finally:
-        cache.delete(lock_key)
+        release_lock(lock_key, _lock_token)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -2693,7 +2777,8 @@ def sweep_stalled_spotguessr_sessions() -> int:
     from urbanlens.dashboard.models.spotguessr.model import GameSession
     from urbanlens.dashboard.services.spotguessr.session import STALL_ROUND_TIMEOUT_MINUTES, force_reveal_round
 
-    if not cache.add(_SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY, value=True, timeout=_SPOTGUESSR_STALL_SWEEP_LOCK_TIMEOUT_SECONDS):
+    _lock_token = acquire_lock(_SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY, _SPOTGUESSR_STALL_SWEEP_LOCK_TIMEOUT_SECONDS)
+    if _lock_token is None:
         logger.info("sweep_stalled_spotguessr_sessions: a previous run is still in flight; skipping")
         return 0
     try:
@@ -2713,7 +2798,7 @@ def sweep_stalled_spotguessr_sessions() -> int:
             logger.info("Force-revealed %s stalled SpotGuessr round(s)", count)
         return count
     finally:
-        cache.delete(_SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY)
+        release_lock(_SPOTGUESSR_STALL_SWEEP_LOCK_CACHE_KEY, _lock_token)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -2843,7 +2928,8 @@ def sweep_stalled_trivia_sessions() -> int:
     from urbanlens.dashboard.models.trivia.model import TriviaSession
     from urbanlens.dashboard.services.trivia.session import STALL_ROUND_TIMEOUT_MINUTES, force_reveal_round
 
-    if not cache.add(_TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY, value=True, timeout=_TRIVIA_STALL_SWEEP_LOCK_TIMEOUT_SECONDS):
+    _lock_token = acquire_lock(_TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY, _TRIVIA_STALL_SWEEP_LOCK_TIMEOUT_SECONDS)
+    if _lock_token is None:
         logger.info("sweep_stalled_trivia_sessions: a previous run is still in flight; skipping")
         return 0
     try:
@@ -2863,7 +2949,7 @@ def sweep_stalled_trivia_sessions() -> int:
             logger.info("Force-revealed %s stalled Trivia round(s)", count)
         return count
     finally:
-        cache.delete(_TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY)
+        release_lock(_TRIVIA_STALL_SWEEP_LOCK_CACHE_KEY, _lock_token)
 
 
 _CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY = "urbanlens:consensus:stall-sweep-lock"
@@ -2889,7 +2975,8 @@ def sweep_stalled_consensus_sessions() -> int:
     from urbanlens.dashboard.models.consensus.model import ConsensusRoundResolution, ConsensusSession
     from urbanlens.dashboard.services.consensus.session import STALL_ROUND_TIMEOUT_MINUTES, force_resolve_vote, force_reveal_round
 
-    if not cache.add(_CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY, value=True, timeout=_CONSENSUS_STALL_SWEEP_LOCK_TIMEOUT_SECONDS):
+    _lock_token = acquire_lock(_CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY, _CONSENSUS_STALL_SWEEP_LOCK_TIMEOUT_SECONDS)
+    if _lock_token is None:
         logger.info("sweep_stalled_consensus_sessions: a previous run is still in flight; skipping")
         return 0
     try:
@@ -2919,7 +3006,7 @@ def sweep_stalled_consensus_sessions() -> int:
             logger.info("Force-resolved %s stalled Consensus round(s)", count)
         return count
     finally:
-        cache.delete(_CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY)
+        release_lock(_CONSENSUS_STALL_SWEEP_LOCK_CACHE_KEY, _lock_token)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
@@ -3151,6 +3238,7 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
         the download failed.
     """
     from urbanlens.dashboard.models.album.model import Album
+    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.media.media_materialize import MaterializeError, materialize_media_item
     from urbanlens.dashboard.services.photos.albums import add_images_to_album, album_owner
@@ -3164,11 +3252,14 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
 
     owner = album_owner(album)
     location = getattr(owner, "location", None)
-    if location is None:
+    if owner is None or location is None:
         logger.info("cache_media_item_into_album: album %s has no location to attach media to", album_id)
         return None
 
-    is_pin = album.parent_pin_id is not None
+    # isinstance rather than `album.parent_pin_id is not None`: it asks the
+    # question directly of the object album_owner actually returned, so the two
+    # cannot disagree - and unlike a boolean flag it narrows the Pin | Wiki union
+    # for the two arguments below.
     try:
         image = materialize_media_item(
             location=location,
@@ -3177,8 +3268,8 @@ def cache_media_item_into_album(album_id: int, profile_id: int, source: str, url
             url=url,
             page_url=page_url,
             caption=caption,
-            pin=owner if is_pin else None,
-            wiki=None if is_pin else owner,
+            pin=owner if isinstance(owner, Pin) else None,
+            wiki=None if isinstance(owner, Pin) else owner,
         )
     except MaterializeError:
         # The vote is already recorded and stays; only the download is lost.

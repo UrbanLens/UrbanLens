@@ -65,6 +65,41 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+#: Cache lifetime for a successfully-authorized media response. Long enough
+#: that scrolling a gallery doesn't refetch every thumbnail, short enough that
+#: revoking someone's access takes effect promptly in their own browser.
+PRIVATE_MEDIA_MAX_AGE_SECONDS = 300
+
+
+def mark_private_media[ResponseT: HttpResponseBase](response: ResponseT) -> ResponseT:
+    """Forbid shared caches from storing a per-viewer media response.
+
+    Every response these views produce is authorized *per viewer*: the same
+    URL legitimately yields bytes for one profile and a 404 for another. Django
+    emits ``Vary: Cookie`` on them, which is the correct signal, but it is not
+    a sufficient one - plenty of shared caches (CDNs in particular) honour only
+    ``Vary: Accept-Encoding`` and otherwise key purely on the URL. Media URLs
+    here end in real image extensions, which is exactly what extension-based
+    CDN cache rules match, and with no ``Cache-Control`` at all such a cache
+    falls back to its own default TTL. ``private`` is the directive that
+    actually forbids shared storage; the ``max-age`` keeps the requester's own
+    browser cache, which is per-user and therefore safe.
+
+    Generic in the response type so callers keep whatever they passed in - a
+    ``FileResponse`` stays a ``FileResponse``. Annotating this as
+    ``HttpResponseBase`` would silently widen the return type of every view that
+    wraps its response in this, which mypy then rejects at the call site.
+
+    Args:
+        response: A media response that has already passed authorization.
+
+    Returns:
+        The same response object, with its cache directives set.
+    """
+    response["Cache-Control"] = f"private, max-age={PRIVATE_MEDIA_MAX_AGE_SECONDS}"
+    return response
+
+
 class MediaThrottledError(Exception):
     """A credential-authenticated media fetch that exceeded its rate budget.
 

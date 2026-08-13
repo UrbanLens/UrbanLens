@@ -20,6 +20,7 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any
 
+from django.db import transaction
 from markdown_it import MarkdownIt
 from mdit_py_plugins.footnote import footnote_plugin
 import nh3
@@ -386,12 +387,26 @@ def save_article_checked(
             Nothing is written when this is raised.
         ValueError: Neither or both hosts were provided.
     """
-    article = get_article(pin=pin, wiki=wiki)
-    latest_id = latest_revision_id(article)
-    if latest_id is not None and latest_id != base_revision_id:
-        raise ArticleConflictError(latest_id)
+    from urbanlens.dashboard.models.article.model import Article
 
-    return save_article(editor=editor, content=content, edit_summary=edit_summary, pin=pin, wiki=wiki)
+    with transaction.atomic():
+        article = get_article(pin=pin, wiki=wiki)
+        if article is not None:
+            # Lock the article row for the read-check-write below. Without it the
+            # check is a TOCTOU: two editors who both loaded revision R both read
+            # `latest_id == R`, both pass, and both append - so one editor's save
+            # silently stops being the current article even though the conflict
+            # check exists to prevent exactly that. (Their text is not lost -
+            # history is append-only - but they were told the save succeeded.)
+            # Revisions carry no number and no unique constraint, so there is no
+            # database-level guard to fall back on. A *first* save needs no lock:
+            # Article.pin/.wiki are OneToOne, so the second insert loses there.
+            Article.objects.select_for_update().filter(pk=article.pk).first()
+        latest_id = latest_revision_id(article)
+        if latest_id is not None and latest_id != base_revision_id:
+            raise ArticleConflictError(latest_id)
+
+        return save_article(editor=editor, content=content, edit_summary=edit_summary, pin=pin, wiki=wiki)
 
 
 def restore_revision(*, scope_article: Article, revision: ArticleRevision, editor: Profile | None) -> tuple[Article, ArticleRevision | None]:

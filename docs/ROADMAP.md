@@ -2,7 +2,7 @@
 
 A strategic planning document for agents (and humans) doing implementation, bug-hunting, and
 feature work on UrbanLens. Generated 2026-07-18 from a full review of `TODO.md`,
-`docs/FEATURES.md`, `docs/NOTES.md`, `docs/api-expansion-candidates.md`, `docs/notes/ai/todo.md`,
+`docs/FEATURES.md`, `docs/NOTES.md`, `docs/reports/api-expansion-candidates.md`, `docs/notes/ai/todo.md`,
 recent git history, and the codebase structure.
 
 **How to use this document:** You are probably a capable agent who can plan your own task. What
@@ -302,7 +302,7 @@ The app now has real users with 8k+ pins; several systems were designed for hund
   the plugin contract rather than hardcoding a registry — the cost is small and it keeps
   third-party parity.
 - **Import/export formats** live in `services/import_formats/` with documented formats
-  (`docs/import_formats.md`); new formats (XLS UL-162, KML/GPX/GeoJSON/CSV *export* UL-382,
+  (`docs/designs/drafts/import_formats.md`); new formats (XLS UL-162, KML/GPX/GeoJSON/CSV *export* UL-382,
   targeted/filtered exports UL-377) should slot into that framework symmetrically.
 - **AI gateway** is pluggable (OpenAI/Cloudflare/HF/Ollama). New AI features (trip suggestions
   UL-60, chat assistant UL-293, county-strategy property lookup UL-46) go through the gateway
@@ -623,7 +623,7 @@ of them may already be complete, and "fixing" them will lead to unwanted ui chan
 - `TODO.md` hygiene (UL-363): when you complete or invalidate an item, strike it with an
   evidence note (the 2026-07-18 strike-sweep set the precedent format).
 
-### 4.7 API & data-source expansion (see `docs/api-expansion-candidates.md` for the full menu)
+### 4.7 API & data-source expansion (see `docs/reports/api-expansion-candidates.md` for the full menu)
 
 Priorities, biased free/open-first, aligned with that doc's recommendations:
 

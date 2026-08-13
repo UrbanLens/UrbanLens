@@ -28,7 +28,6 @@ priority when naming a detail/child pin's location - see that module's
 from __future__ import annotations
 
 import logging
-from math import hypot
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from urbanlens.dashboard.plugins.base import UrbanLensPlugin
@@ -60,11 +59,18 @@ def _nearest_building(buildings: list[dict[str, Any]], latitude: float, longitud
     """Pick the building closest to a coordinate.
 
     Buildings returned by :meth:`RedataGateway.lookup_buildings` are already
-    scoped to the single parcel matched at this coordinate, so a plain
-    Euclidean comparison in degree-space is enough to pick "the" building for
-    a query point without needing a real distance/threshold - a parcel with
-    several buildings (e.g. a large complex) resolves to whichever one the
-    queried coordinate is actually nearest to.
+    scoped to the single parcel matched at this coordinate, so no distance
+    threshold is needed - a parcel with several buildings (e.g. a large
+    complex) resolves to whichever one the queried coordinate is nearest to.
+
+    Ranking is by *ground* distance, via the same equirectangular helper
+    ``services.pins.pin_wiki_sync`` uses to match a marker to a building.
+    Comparing raw degree deltas instead would over-weight east-west
+    separation - a degree of longitude is only ``cos(latitude)`` as long as
+    a degree of latitude - which inverts the ranking of any two buildings
+    whose true distances differ by less than that factor (~1.36x at this
+    app's latitudes). The chosen building's name gets outright priority when
+    naming a detail pin's location, so a wrong pick is user-visible.
 
     Args:
         buildings: Building records from :meth:`RedataGateway.lookup_buildings`.
@@ -77,12 +83,14 @@ def _nearest_building(buildings: list[dict[str, Any]], latitude: float, longitud
     if not buildings:
         return None
 
+    from urbanlens.dashboard.services.locations.site_scope import meters_between
+
     def _distance(building: dict[str, Any]) -> float:
         lat = building.get("latitude")
         lng = building.get("longitude")
         if lat is None or lng is None:
             return float("inf")
-        return hypot(float(lat) - latitude, float(lng) - longitude)
+        return meters_between(float(lat), float(lng), latitude, longitude)
 
     return min(buildings, key=_distance)
 

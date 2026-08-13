@@ -16,9 +16,9 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.services.pins.external_data import InfoPanelSource, panel_sources
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -71,7 +71,10 @@ class PanelInfoDispatchTests(RedataConfiguredMixin, TestCase):
         with mock.patch("urbanlens.dashboard.tasks.fetch_panel_source") as fetch_task:
             response = self.client.get(reverse("pin.panel", args=[self.pin.slug, "photon"]))
         self.assertEqual(response.status_code, 200)
-        fetch_task.apply_async.assert_called_once_with(args=("photon", self.pin.pk), kwargs={}, queue="panel_fetch")
+        # The third arg is the single-flight token (random per call): the fetch
+        # releases the marker only while it is still its own, so the exact value
+        # is deliberately not asserted.
+        fetch_task.apply_async.assert_called_once_with(args=("photon", self.pin.pk, mock.ANY), kwargs={}, queue="panel_fetch")
         self.assertContains(response, "Photon (OpenStreetMap)")
 
     def test_render_context_returning_none_yields_204(self) -> None:

@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from django.core.cache import cache
 
 from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 if TYPE_CHECKING:
@@ -82,6 +83,15 @@ def _reverse_geocode_admin_cached(latitude: float, longitude: float) -> dict[str
 
     try:
         admin = NominatimGateway().reverse_geocode_admin(latitude, longitude)
+    except RateLimitExceededError:
+        # Expected, and the reason this cache exists: the limit is one call a
+        # minute app-wide, so any multiplayer round with more than one uncached
+        # guess a minute hits it by design. A traceback per occurrence would bury
+        # the genuine failures handled below. Cached briefly, same as those, so
+        # the next guess in this cell retries soon.
+        logger.debug("Nominatim admin reverse geocode rate-limited for %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
+        cache.set(key, None, _REVERSE_GEOCODE_ERROR_CACHE_TTL_SECONDS)
+        return None
     except Exception:
         logger.exception("Nominatim admin reverse geocode failed for %s,%s", redact_coordinate(latitude), redact_coordinate(longitude))
         cache.set(key, None, _REVERSE_GEOCODE_ERROR_CACHE_TTL_SECONDS)

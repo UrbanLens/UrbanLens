@@ -35,7 +35,17 @@ _EXIF_DATETIME_FORMAT = "%Y:%m:%d %H:%M:%S"
 # exotic formats) is stored untouched - only its size is counted.
 _PROCESSABLE_FORMATS = {"JPEG", "PNG", "WEBP", "TIFF"}
 
-_FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".tif"}
+_FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".tif", "AVIF": ".avif"}
+
+# Formats whose stored file we can rewrite carrying modified EXIF. A superset of
+# _PROCESSABLE_FORMATS on purpose: those are the formats the *downscaler* will
+# re-encode, whereas these are the ones a GPS strip can be honoured for. Keeping
+# the two separate is what stops "we would never resize an AVIF" from silently
+# turning into "we never scrub an AVIF's coordinates either".
+_EXIF_REWRITABLE_FORMATS = _PROCESSABLE_FORMATS | {"AVIF"}
+
+# EXIF tag 34853 - the GPSInfo IFD pointer.
+_GPS_IFD_TAG = 0x8825
 
 # Cap for binary EXIF payloads (e.g. MakerNote blobs) stored as hex in the
 # JSON snapshot; larger values are summarized instead of embedded.
@@ -466,16 +476,26 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
     with image.image.open("rb") as stored_file:
         img: PILImage.Image = PILImage.open(stored_file)
         source_format = (img.format or "").upper()
-        if source_format not in _PROCESSABLE_FORMATS:
+        processable = source_format in _PROCESSABLE_FORMATS
+        if not processable and source_format not in _EXIF_REWRITABLE_FORMATS:
             return None
-        needs_resize = max_dimension is not None and max(img.size) > max_dimension
-        needs_convert = convert_webp and source_format != "WEBP"
+        # Resizing/converting stays limited to _PROCESSABLE_FORMATS. A GPS strip
+        # does not: it has to happen for any format we can rewrite at all, since
+        # the alternative is leaving coordinates in a file the user asked us to
+        # scrub. AVIF is the case that matters - phones produce it, it carries a
+        # GPS IFD, and it is not a format this pipeline would otherwise touch.
+        needs_resize = processable and max_dimension is not None and max(img.size) > max_dimension
+        needs_convert = processable and convert_webp and source_format != "WEBP"
         exif_bytes = img.info.get("exif")
         has_gps = False
-        if strip_gps and exif_bytes:
+        if strip_gps:
+            # Driven off getexif() rather than info["exif"], because TIFF carries
+            # EXIF in its own native IFD and leaves info["exif"] unset - gating on
+            # that key meant a GPS-tagged TIFF was never even examined, let alone
+            # scrubbed, however explicitly the uploader had opted out.
             exif = img.getexif()
-            if exif.get_ifd(0x8825):  # 34853 - GPSInfo IFD
-                del exif[0x8825]
+            if exif.get_ifd(_GPS_IFD_TAG):
+                del exif[_GPS_IFD_TAG]
                 exif_bytes = exif.tobytes()
                 has_gps = True
         if not needs_resize and not needs_convert and not has_gps:
@@ -498,7 +518,13 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
         save_kwargs.update(quality=85, optimize=True)
     elif target_format == "PNG":
         save_kwargs.update(optimize=True)
-    if exif_bytes and target_format in {"JPEG", "WEBP", "TIFF"}:
+    # PNG included: Pillow writes an eXIf chunk, and dropping the block here loses
+    # the EXIF *Orientation* tag along with everything else. Nothing rotates the
+    # pixels to compensate - this pipeline has no `exif_transpose` - so a PNG that
+    # relied on the tag came out of a downscale rendering ninety degrees wrong,
+    # silently and permanently. (JPEG/WEBP keep the tag and their pixels; TIFF loses
+    # the tag but Pillow rotates the pixels on load, so both stay correct.)
+    if exif_bytes and target_format in {"JPEG", "WEBP", "TIFF", "AVIF", "PNG"}:
         save_kwargs["exif"] = exif_bytes
     if icc_profile:
         save_kwargs["icc_profile"] = icc_profile
@@ -571,12 +597,21 @@ def image_upload_error(file_obj: UploadedFile, declared_media_type: MediaKind, *
         ``(message, status_code)`` for the first failing check, or ``None``
         if the file passes every check and is safe to store.
     """
+    from urbanlens.dashboard.models.images.model import MediaKind
     from urbanlens.dashboard.services.media.storage import file_size_error_for_upload
-    from urbanlens.dashboard.services.security.content_sniffing import content_type_mismatch_error
+    from urbanlens.dashboard.services.security.content_sniffing import content_type_mismatch_error, unsupported_image_extension_error
 
     size_error = file_size_error_for_upload(file_obj.size)
     if size_error:
         return size_error, 413
+
+    # Before sniffing, because sniffing fails open on formats with no magic-byte
+    # signature - which is exactly what SVG is. See the helper for why the stored
+    # extension, not the bytes, is the thing that has to be constrained here.
+    if declared_media_type == MediaKind.PHOTO:
+        extension_error = unsupported_image_extension_error(file_obj.name or "")
+        if extension_error:
+            return extension_error, 400
 
     sniff_error = content_type_mismatch_error(file_obj, declared_media_type)
     if sniff_error:

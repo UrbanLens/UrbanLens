@@ -9,6 +9,7 @@ render_context/plugin-contribution shapes.
 
 from __future__ import annotations
 
+from math import cos, radians
 from unittest.mock import patch
 
 from model_bakery import baker
@@ -29,6 +30,13 @@ from urbanlens.dashboard.services.apis.property_records.redata_gateway import Pr
 _NEAR_BUILDING = {"source": "cris", "name": "Old Mill", "building_number": "72", "year_built": 1937, "latitude": 42.6501, "longitude": -73.7501}
 _FAR_BUILDING = {"source": "county_gis", "name": "Warehouse B", "building_number": "", "year_built": None, "latitude": 43.0, "longitude": -74.0}
 
+#: 20 m east and 25 m north of (42.65, -73.75), as degree offsets. At that
+#: latitude a degree of longitude is only cos(42.65 deg) ~ 0.736 as long as a
+#: degree of latitude, so the nearer (east) building has the *larger* degree
+#: delta - the inversion a degree-space comparison produces.
+_EAST_20M_DEGREES = 20.0 / (111_320.0 * cos(radians(42.65)))
+_NORTH_25M_DEGREES = 25.0 / 111_320.0
+
 
 class NearestBuildingTests(SimpleTestCase):
     def test_picks_the_closest_building(self) -> None:
@@ -43,6 +51,21 @@ class NearestBuildingTests(SimpleTestCase):
     def test_building_missing_coordinates_is_never_picked_over_one_with_coordinates(self) -> None:
         no_coords = {"name": "Mystery Building"}
         self.assertEqual(_nearest_building([no_coords, _NEAR_BUILDING], 42.65, -73.75), _NEAR_BUILDING)
+
+    def test_ranks_by_ground_distance_not_degrees(self) -> None:
+        """A degree of longitude is shorter than a degree of latitude away from the equator.
+
+        Comparing raw degree deltas therefore over-weights east-west separation and
+        can rank a genuinely farther building first. The existing cases above never
+        caught it: their far building is a third of a degree away, so no correction
+        changes the answer. This pair is the case that matters - both buildings on
+        one parcel, comparable distances, different bearings.
+        """
+        lat, lng = 42.65, -73.75
+        east = {"name": "East Wing", "latitude": lat, "longitude": lng + _EAST_20M_DEGREES}
+        north = {"name": "North Wing", "latitude": lat + _NORTH_25M_DEGREES, "longitude": lng}
+
+        self.assertEqual(_nearest_building([north, east], lat, lng), east)
 
 
 class FetchBuildingPayloadTests(TestCase):

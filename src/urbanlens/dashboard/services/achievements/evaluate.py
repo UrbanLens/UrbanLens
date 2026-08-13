@@ -26,6 +26,16 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+#: Where the nightly sweep records how far it got, so a run killed by the Celery
+#: time limit resumes instead of always truncating at the same profile. Cache
+#: rather than a table: losing it costs one sweep starting from the beginning,
+#: which is exactly the pre-existing behaviour and harmless.
+_SWEEP_CURSOR_CACHE_KEY = "urbanlens:achievements:sweep-cursor"
+
+#: Profiles between cursor writes. Bounds how much a killed run repeats without
+#: adding a cache round-trip per profile.
+_SWEEP_CURSOR_STRIDE = 500
+
 
 def active_metric_keys() -> set[str]:
     """Return the metric keys at least one active achievement measures.
@@ -231,6 +241,19 @@ def evaluate_all_profiles(*, notify: bool = True) -> int:
     "trips attended" threshold crossed simply because a trip's end date passed -
     and anything an enqueue lost when the broker was down.
 
+    Resumable. The sweep costs ~30 queries per profile and the whole thing is one
+    task under a hard 3600s limit, so at enough profiles a run gets killed
+    mid-iteration. With a plain ``iterator()`` that always truncated at the *same*
+    place, so the same tail of profiles was never evaluated - permanently, and
+    silently, because the task simply died. Progress is now checkpointed, so the
+    next run resumes where the last one stopped and then wraps to the beginning;
+    every profile is reached within two runs even when neither completes. A
+    resumed run logs a warning, which is what makes the truncation visible at all.
+
+    This does not make the sweep cheaper - see ``docs/PROBLEMS.md`` for the
+    batching fix that would - it stops the cost from silently costing a fixed
+    group of users their awards.
+
     Args:
         notify: Whether to notify recipients of new awards.
 
@@ -243,9 +266,27 @@ def evaluate_all_profiles(*, notify: bool = True) -> int:
     if not Achievement.objects.active().exists():
         return 0
 
+    from django.core.cache import cache
+
+    start_after = cache.get(_SWEEP_CURSOR_CACHE_KEY) or 0
+    if start_after:
+        logger.warning(
+            "Achievement sweep resuming after profile %s - the previous run did not finish. "
+            "Profiles at or below that id are evaluated on the following run.",
+            start_after,
+        )
+
     granted = 0
-    for profile in Profile.objects.iterator():
+    for processed, profile in enumerate(Profile.objects.filter(pk__gt=start_after).order_by("pk").iterator(), start=1):
         granted += len(evaluate_profile(profile, notify=notify))
+        # Checkpoint periodically rather than per profile: the point is only to
+        # bound how much work a killed run repeats, not to be exact.
+        if processed % _SWEEP_CURSOR_STRIDE == 0:
+            cache.set(_SWEEP_CURSOR_CACHE_KEY, profile.pk, timeout=None)
+
+    # Reached the end of the range, so the next run starts from the beginning -
+    # which is what covers any profiles skipped by having resumed mid-way.
+    cache.set(_SWEEP_CURSOR_CACHE_KEY, 0, timeout=None)
     return granted
 
 

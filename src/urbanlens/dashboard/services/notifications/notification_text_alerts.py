@@ -54,6 +54,13 @@ TEXT_ALERTABLE_TYPES: frozenset[str] = frozenset(
         "visit_suggested",
         "wiki_safety_checkin",
         "achievement_earned",
+        # Was missing while its toggle pair existed and was settable, so a user
+        # could switch on WhatsApp/SMS for partner invites and never get one.
+        # Kept as an explicit list rather than derived from the columns, because
+        # "we send texts for this" is a delivery decision - but a test asserts
+        # this set is exactly the stems with a toggle pair, minus MESSAGE, so a
+        # new stem cannot be silently omitted the way this one was.
+        "safety_ci_partner_invite",
     },
 )
 
@@ -112,7 +119,17 @@ def _enabled_channels(notification: NotificationLog) -> tuple[bool, bool]:
         prefs = notification.profile.notification_preferences
     except AttributeError:
         return False, False
-    prefix = notification.notification_type
+    # Derived from the enum *member name*, not its value. The two agree for 31 of
+    # the 32 types, but `SAFETY_CHECKIN_PARTNER_INVITE` has the value
+    # `safety_ci_partner_invite` while its columns are `safety_checkin_partner_invite*`
+    # - and every other consumer of these preferences reads them by the member-style
+    # name. Deriving from the value made this one lookup miss, and `getattr`'s False
+    # default reported it as "user does not want text alerts", so a user who had
+    # explicitly enabled WhatsApp/SMS for partner invites silently never got them.
+    # Resolving by name fixes that type and changes nothing for the other 31.
+    from urbanlens.dashboard.models.notifications.meta.type import NotificationType
+
+    prefix = NotificationType(notification.notification_type).name.lower()
     return bool(getattr(prefs, f"{prefix}_whatsapp", False)), bool(getattr(prefs, f"{prefix}_sms", False))
 
 

@@ -389,9 +389,19 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Base URL of a Gotify server (e.g. https://gotify.example.com) used to push critical site notifications. Defaults to the UL_GOTIFY_URL environment variable.",
         verbose_name="Gotify server URL",
     )
+    # fail_soft despite being a credential: the usual "fail loud so the caller
+    # drops the row and the user reconnects" rule needs a caller that can do
+    # that, and there isn't one - SiteSettings is a singleton three context
+    # processors load on every render, for anonymous visitors too. Raising here
+    # 500s every page *and* the styled 500 page, which runs the same context
+    # processors. The token is unusable either way once it can't be decrypted,
+    # so Gotify pushes stop regardless; the only choice is whether the site
+    # stays up while an admin re-enters it. The read is still logged loudly with
+    # the field name and the setting to check (see EncryptedTextField).
     notify_gotify_token = EncryptedTextField(
         blank=True,
         default=os.getenv("UL_GOTIFY_TOKEN", ""),
+        fail_soft=True,
         help_text="Gotify application token used to authenticate pushes to the server above. Defaults to the UL_GOTIFY_TOKEN environment variable.",
         verbose_name="Gotify app token",
     )

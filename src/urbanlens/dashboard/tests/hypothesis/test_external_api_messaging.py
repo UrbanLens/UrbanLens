@@ -31,9 +31,10 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
-from oauth2_provider.models import get_access_token_model, get_application_model
+from oauth2_provider.models import get_access_token_model
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.oauth import first_party_application
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
 from urbanlens.dashboard.models.direct_messages.model import DirectMessage
@@ -44,7 +45,6 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_share.exposure import LocationExposure
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
-from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message
 
@@ -54,7 +54,6 @@ from urbanlens.dashboard.services.messaging.direct_messages import create_direct
 _PNG_BYTES = base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==")
 
 AccessToken = get_access_token_model()
-Application = get_application_model()
 
 READ_WRITE = f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}"
 
@@ -70,7 +69,7 @@ def _profile() -> Profile:
 def _token_for(user: User, scope: str = READ_WRITE) -> str:
     token = AccessToken.objects.create(
         user=user,
-        application=Application.objects.get(client_id=FIRST_PARTY_CLIENT_ID),
+        application=first_party_application(),
         token=f"tok-{os.urandom(8).hex()}",
         expires=timezone.now() + timedelta(hours=1),
         scope=scope,

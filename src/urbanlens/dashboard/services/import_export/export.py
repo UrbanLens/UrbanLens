@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import csv
-from datetime import UTC, date, datetime, timezone
+from datetime import UTC, date, datetime
 import io
 import json
 import logging

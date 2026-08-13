@@ -97,7 +97,7 @@ PIN_TYPE_ICONS: dict[str, str] = {
 }
 
 
-class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel):
+class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
     """A user's personal record for a physical location.
 
     Pin is the *personal* half of the two-model design:
@@ -531,10 +531,17 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         """Label supplying the map icon, when the icon is inherited from a label."""
         if self.custom_icon or self.icon:
             return None
+        from urbanlens.dashboard.models.labels.meta import KIND_USER
+
+        # `.all()` + a Python filter, not `.exclude(kind=...)`: a filtered call on the
+        # related manager builds a fresh queryset and so ignores prefetch_related("labels"),
+        # which made this one query per pin on every list that renders effective_icon /
+        # effective_color. Unprefetched callers still pay exactly one query, as before.
+        #
         # Secondary sort by name matches services.map_pins.payload._ordered_location_labels'
         # tie-break - without it, two labels sharing the same `order` on one pin could pick
         # a different "winning" icon here than the map marker resolves to.
-        labels = sorted((label for label in self.labels.exclude(kind="user")), key=lambda label: (-label.order, label.name or ""))
+        labels = sorted((label for label in self.labels.all() if label.kind != KIND_USER), key=lambda label: (-label.order, label.name or ""))
         for label in labels:
             if label.custom_icon and not label.icon_is_overridden:
                 return label
@@ -780,21 +787,6 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         if self.date_abandoned is not None:
             return self.date_abandoned - timedelta(days=1)
         return None
-
-    @property
-    def categories(self):
-        """Labels of kind "category" attached to this pin."""
-        return self.labels.all().categories()
-
-    @property
-    def tags(self):
-        """Labels of kind "tag" attached to this pin."""
-        return self.labels.all().tags()
-
-    @property
-    def statuses(self):
-        """Labels of kind "status" attached to this pin."""
-        return self.labels.all().statuses()
 
     @property
     def rating(self) -> int:

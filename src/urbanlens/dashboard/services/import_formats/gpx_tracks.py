@@ -203,7 +203,7 @@ def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint
         profile: Owning profile - only this profile's own pins are candidates.
 
     Returns:
-        Number of PinVisit(source=GEOLOCATION) rows created.
+        Number of PinVisit(source=HISTORY) rows created.
     """
     from django.contrib.gis.measure import D
     from geopy.distance import geodesic
@@ -254,10 +254,19 @@ def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint
             qualified = True
 
         if qualified and dwell_start is not None:
+            # HISTORY, not GEOLOCATION: this visit was derived from a track file
+            # the user uploaded, which is what the enum documents HISTORY as
+            # ("imported from the user's location history") and what the sibling
+            # Google Takeout importer already records. GEOLOCATION means "the
+            # user's device provided a geolocation" - a live ping, gated by
+            # track_geolocation, which does not gate this path. Stamping an
+            # import as GEOLOCATION both mislabelled it in the UI ("Geolocation"
+            # rather than "Imported") and claimed a provenance whose own setting
+            # had no say over it.
             _, was_created = PinVisit.objects.get_or_create(
                 pin=pin,
                 visited_at=dwell_start,
-                source=VisitSource.GEOLOCATION,
+                source=VisitSource.HISTORY,
                 defaults={"route": route},
             )
             if was_created:

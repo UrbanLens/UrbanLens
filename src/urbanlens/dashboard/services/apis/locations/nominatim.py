@@ -8,6 +8,7 @@ import re
 from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.core.gateway import Gateway
+from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 from urbanlens.dashboard.services.security.redact import redact_coordinate
 
 logger = logging.getLogger(__name__)
@@ -125,6 +126,14 @@ class NominatimGateway(Gateway):
             resp = self.session.get(f"{self.base_url}/search", params=request_params, timeout=10)
             resp.raise_for_status()
             raw = resp.json()
+        except RateLimitExceededError:
+            # Propagated, not flattened to [], for the same reason
+            # ``reverse_geocode_admin`` propagates: a caller cannot otherwise tell
+            # "Nominatim knows of no such place" from "we did not ask". Callers
+            # that treat the two alike still may - they just have to say so.
+            # Logging a traceback here would also mean one per refused call, and
+            # this service is capped at one call a minute app-wide.
+            raise
         except Exception:
             logger.exception("Nominatim search failed for %r", query)
             return []
@@ -148,6 +157,8 @@ class NominatimGateway(Gateway):
             resp = self.session.get(f"{self.base_url}/lookup", params=request_params, timeout=10)
             resp.raise_for_status()
             raw = resp.json()
+        except RateLimitExceededError:
+            raise  # see search() - "we did not ask" is not "there is nothing"
         except Exception:
             logger.exception("Nominatim lookup failed for %s", osm_ids)
             return []

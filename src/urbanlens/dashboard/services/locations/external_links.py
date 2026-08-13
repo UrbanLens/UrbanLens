@@ -34,8 +34,17 @@ def add_pin_link(pin: Pin, url: str, name: str) -> bool:
 
     if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.LINK, value=url):
         return False
-    _link, created = PinLink.objects.get_or_create(pin=pin, url=url, defaults={"name": name})
-    return created
+    # filter().first() rather than get_or_create: there is no unique constraint on
+    # (pin, url), and this runs from a LocationCache signal - panel fetches run
+    # concurrently (their own queue, concurrency 20), so two panels contributing the
+    # same URL for one pin can both miss and both insert. get_or_create would then
+    # raise MultipleObjectsReturned on *every* later call for that URL, turning a
+    # harmless duplicate row into a permanent failure inside the signal. The race
+    # itself needs a unique constraint to close - see docs/PROBLEMS.md.
+    if PinLink.objects.filter(pin=pin, url=url).exists():
+        return False
+    PinLink.objects.create(pin=pin, url=url, name=name)
+    return True
 
 
 def add_wiki_link(wiki: Wiki, url: str, name: str) -> bool:
@@ -54,8 +63,17 @@ def add_wiki_link(wiki: Wiki, url: str, name: str) -> bool:
 
     if WikiAutoRemoval.objects.was_removed(wiki=wiki, kind=AutoRemovalKind.LINK, value=url):
         return False
-    _link, created = WikiLink.objects.get_or_create(wiki=wiki, url=url, defaults={"name": name})
-    return created
+    # filter().first() rather than get_or_create: there is no unique constraint on
+    # (wiki, url), and this runs from a LocationCache signal - panel fetches run
+    # concurrently (their own queue, concurrency 20), so two panels contributing the
+    # same URL for one wiki can both miss and both insert. get_or_create would then
+    # raise MultipleObjectsReturned on *every* later call for that URL, turning a
+    # harmless duplicate row into a permanent failure inside the signal. The race
+    # itself needs a unique constraint to close - see docs/PROBLEMS.md.
+    if WikiLink.objects.filter(wiki=wiki, url=url).exists():
+        return False
+    WikiLink.objects.create(wiki=wiki, url=url, name=name)
+    return True
 
 
 def add_pin_and_wiki_link(pin: Pin, location: Location, url: str, name: str) -> None:

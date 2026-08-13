@@ -248,7 +248,18 @@ class ImportPreviewDescriptionExtrasTests(TestCase):
         )
 
     def test_html_is_stripped_from_the_saved_description(self) -> None:
-        self._run('<img src="https://example.com/a.jpg"><br><br>City: Poughkeepsie<br>State: NY')
+        # The <img> makes the importer try to materialize the photo, which fetches
+        # the URL. Unmocked, that reaches the real internet: the suite's network
+        # guard raises, `import_preview_streaming` catches RuntimeError and yields
+        # "Import failed unexpectedly", and this test still passed because the pin
+        # was already created by then - so it was asserting against a *failed*
+        # import. Mocked the same way test_img_src_becomes_a_pin_photo_not_a_link
+        # already does.
+        with mock.patch(
+            "urbanlens.dashboard.services.media.media_materialize.materialize_media_item",
+            return_value=mock.Mock(pin_id=None),
+        ):
+            self._run('<img src="https://example.com/a.jpg"><br><br>City: Poughkeepsie<br>State: NY')
         pin = Pin.objects.get(profile=self.profile, name="Old Mill")
         self.assertNotIn("<img", pin.description)
         self.assertIn("City: Poughkeepsie", pin.description)

@@ -37,9 +37,10 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
-from oauth2_provider.models import get_access_token_model, get_application_model
+from oauth2_provider.models import get_access_token_model
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.oauth import first_party_application
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.direct_messages.mute import DirectMessageMute
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
@@ -49,12 +50,10 @@ from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile, VisibilityChoice
 from urbanlens.dashboard.models.reactions.model import Reaction
-from urbanlens.dashboard.oauth_clients import FIRST_PARTY_CLIENT_ID
 from urbanlens.dashboard.services.auth.api_keys import generate_api_key
 from urbanlens.dashboard.services.messaging.group_chats import create_group_chat, set_group_muted, share_pin_in_group_message
 
 AccessToken = get_access_token_model()
-Application = get_application_model()
 
 READ_WRITE = f"{ApiKeyScope.MESSAGES_READ.value} {ApiKeyScope.MESSAGES_WRITE.value}"
 
@@ -78,7 +77,7 @@ def _token_for(user: User, scope: str = READ_WRITE) -> str:
     """
     token = AccessToken.objects.create(
         user=user,
-        application=Application.objects.get(client_id=FIRST_PARTY_CLIENT_ID),
+        application=first_party_application(),
         token=f"tok-{os.urandom(8).hex()}",
         expires=timezone.now() + timedelta(hours=1),
         scope=scope,

@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from django.core.validators import MaxLengthValidator
-from django.db.models import CASCADE, SET_NULL, CharField, DecimalField, ForeignKey, Index, TextField, UniqueConstraint
+from django.db.models import CASCADE, SET_NULL, CharField, DecimalField, ForeignKey, Index, TextField, UniqueConstraint, URLField
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.pin_import_failures.queryset import PinImportFailureManager
@@ -59,6 +59,13 @@ class PinImportFailure(abstract.DashboardModel):
     cid = DecimalField(max_digits=20, decimal_places=0)
     name = CharField(max_length=255, blank=True, default="")
     description = TextField(blank=True, default="", max_length=MAX_PIN_DESCRIPTION_LENGTH, validators=[MaxLengthValidator(MAX_PIN_DESCRIPTION_LENGTH)])
+    #: The Google Maps URL this row's cid came from, when the import had one.
+    #: Kept because its ``!1s0x{s2_cell}:0x{cid}`` segment encodes an S2 cell,
+    #: which decodes to an approximate position - too unreliable to place a pin
+    #: with (~1 in 3 are wrong), but a useful corroborating signal when guessing
+    #: a location for the owner to confirm. See
+    #: ``services.pins.import_failure_guess``.
+    maps_url = URLField(max_length=2048, blank=True, default="")
     reason = CharField(max_length=20, choices=PinImportFailureReason.choices)
     status = CharField(max_length=20, choices=PinImportFailureStatus.choices, default=PinImportFailureStatus.PENDING)
 

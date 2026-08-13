@@ -24,6 +24,13 @@ class ImageQuerySet(abstract.FrontendDashboardQuerySet):
         Images uploaded by the viewer are always included regardless of settings.
         If ``viewer_profile`` is None (anonymous), only images from users who
         set ``photo_upload_visibility=ANYONE`` are returned.
+
+        Unlike an ordinary queryset method this one is **eager**: the
+        relationship rules can't be expressed in SQL, so the allowed-uploader
+        set is resolved immediately from whatever ``self`` already narrows to.
+        Narrow first - ``Image.objects.filter(pk=n).visible_to(p)`` inspects one
+        uploader, ``Image.objects.visible_to(p).filter(pk=n)`` inspects every
+        uploader on the site for the same answer.
         """
         from urbanlens.dashboard.models.profile.model import VisibilityChoice
 

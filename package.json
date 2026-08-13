@@ -6,9 +6,9 @@
     "scripts": {
         "db": "python src/bin/db.py start",
         "migrate": "python -m urbanlens.manage makemigrations & python -m urbanlens.manage migrate",
-        "sass": "sass --style=compressed --no-source-map src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
-        "sass:dev": "sass --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
-        "sass:watch": "sass --watch --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
+        "sass": "bun node_modules/sass/sass.js --style=compressed --no-source-map src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
+        "sass:dev": "bun node_modules/sass/sass.js --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
+        "sass:watch": "bun node_modules/sass/sass.js --watch --style=expanded src/urbanlens/dashboard/frontend/sass/style.scss src/urbanlens/dashboard/frontend/static/dashboard/style.css",
         "clean:js": "rm -rf src/urbanlens/dashboard/frontend/static/dashboard/js",
         "build": "bun run bin/build-frontend.ts",
         "deploy": "bun run bin/build-frontend.ts --minify",
@@ -35,7 +35,8 @@
         "@types/sortablejs": "^1.15.9",
         "@types/wicg-file-system-access": "^2023.10.7",
         "bun-types": "latest",
-        "sortablejs": "^1.15.7"
+        "sass": "^1.101.0",
+        "typescript": "^6.0.3"
     },
     "peerDependencies": {
         "typescript": "^6.0.3"
@@ -49,17 +50,10 @@
         "@tiptap/extension-table": "^3.28.0",
         "@tiptap/starter-kit": "^3.28.0",
         "@tiptap/suggestion": "^3.28.0",
-        "bun": "^1.0.15",
-        "dotenv": "^17.4.2",
-        "dotenv-expand": "^13.0.0",
         "exifr": "^7.1.3",
         "libsodium-wrappers-sumo": "^0.8.4",
-        "sass": "^1.101.0",
-        "sass-loader": "^17.0.0",
-        "semver": "^7.3.5",
-        "tiptap-markdown": "^0.9.0",
-        "typescript": "^6.0.3",
-        "yarn": "^1.22.19"
+        "sortablejs": "^1.15.7",
+        "tiptap-markdown": "^0.9.0"
     },
     "browserslist": {
         "production": [

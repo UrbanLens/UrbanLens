@@ -45,7 +45,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel):
+class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.AddressableModel, abstract.LabelledModel):
     """Community-editable page describing a shared, real-world place.
 
     Wiki is the *community* half of the place model:
@@ -318,21 +318,6 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
     # ------------------------------------------------------------------
     # Label helpers
     # ------------------------------------------------------------------
-
-    @property
-    def categories(self):
-        """Labels of kind "category" attached to this wiki."""
-        return self.labels.all().categories()
-
-    @property
-    def tags(self):
-        """Labels of kind "tag" attached to this wiki."""
-        return self.labels.all().tags()
-
-    @property
-    def statuses(self):
-        """Labels of kind "status" attached to this wiki."""
-        return self.labels.all().statuses()
 
     def add_category(self, category_name: str, save: bool = True) -> Label | None:
         """Attach a category label to this wiki by name, creating it if needed."""

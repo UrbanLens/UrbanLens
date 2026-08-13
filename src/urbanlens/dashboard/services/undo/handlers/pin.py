@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -83,6 +84,11 @@ class PinUndoHandler(UndoHandler):
             "wiki_id": pin.wiki_id,
             "parent_pin_old_pk": pin.parent_pin_id,
             "label_ids": list(pin.labels.values_list("id", flat=True)),
+            # Image.pin is SET_NULL, so deleting a pin detaches its photos rather
+            # than destroying them - the ids are captured here because nothing
+            # else records which pin they were on, and without them an undo
+            # brings the pin back empty while the photos sit unattached.
+            "image_ids": list(pin.images.values_list("pk", flat=True)),
         }
 
     @classmethod
@@ -183,5 +189,12 @@ class PinUndoHandler(UndoHandler):
             label_ids = entry["label_ids"]
             if label_ids:
                 old_to_new[entry["old_pk"]].labels.set(label_ids)
+
+            # Only photos still detached are re-linked: one the user has since
+            # attached elsewhere belongs where they put it, not back here.
+            # ``.get`` because entries stashed before image_ids existed lack it.
+            image_ids = entry.get("image_ids") or []
+            if image_ids:
+                Image.objects.filter(pk__in=image_ids, pin__isnull=True).update(pin=old_to_new[entry["old_pk"]])
 
         return restored

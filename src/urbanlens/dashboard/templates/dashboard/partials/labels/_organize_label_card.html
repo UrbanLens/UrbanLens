@@ -27,11 +27,11 @@
         <div class="tag-card-body">
             <div class="tag-card-name">
                 {{ display_name }}
-                {% if kind != 'people' and not label.profile %}<span class="tag-global-label" data-tooltip="Shared label managed site-wide. You can customize how it looks on your pins without changing it for others." data-tooltip-pos="below">global</span>{% endif %}
+                {% if kind != 'people' and label.is_global %}<span class="tag-global-label" data-tooltip="Shared label managed site-wide. You can customize how it looks on your pins without changing it for others." data-tooltip-pos="below">global</span>{% endif %}
                 {% if kind != 'people' and label.is_customized %}<span class="tag-customized-label" data-tooltip="You changed this label's icon, color, or name for your own pins only." data-tooltip-pos="below">custom</span>{% endif %}
                 {% if kind == 'status' and label.is_protected %}<span class="tag-global-label tag-global-label--protected" title="This status cannot be deleted or renamed" aria-label="Protected - cannot be deleted or renamed"><i class="material-icons" aria-hidden="true">lock</i></span>{% endif %}
                 {% if kind == 'people' and label.is_protected %}<span class="tag-global-label tag-global-label--protected"><i class="material-icons" aria-hidden="true">lock</i></span>{% endif %}
-                {% if kind == 'people' and not label.profile %}<span class="tag-global-label">global</span>{% endif %}
+                {% if kind == 'people' and label.is_global %}<span class="tag-global-label">global</span>{% endif %}
             </div>
             {% if label.description %}<div class="tag-card-desc">{{ label.description }}</div>{% endif %}
             {% with child_count=label.children.all|length %}
@@ -69,7 +69,7 @@
                 {# While stats are deferred the subtree total isn't known yet, so the link stays live; the HTMX row re-fetch renders it disabled if it turns out to be empty. #}
                 {% if stats_pending or label|tag_total_pins %}<a class="btn btn--icon" title="View on map" href="{{ label.id|label_map_url }}"><i class="material-symbols-outlined">travel_explore</i></a>{% else %}<a class="btn btn--icon" title="No pins in this label or its sub-labels" aria-disabled="true"><i class="material-symbols-outlined">travel_explore</i></a>{% endif %}
             {% endif %}
-            {% if kind != 'people' and not label.profile %}
+            {% if kind != 'people' and label.is_global %}
                 <button type="button" class="btn btn--icon{% if label.is_customized %} btn-icon--active{% endif %}" title="Customize your display of this global label" hx-get="{% url 'label.customize' label_kind=kind label_id=label.id %}" hx-target="#label-edit-dialog-body" hx-swap="innerHTML"><i class="material-symbols-outlined">tune</i></button>
                 {% if can_edit_global %}<button type="button" class="btn btn--icon btn-icon--global-edit" title="Edit global label" hx-get="{% url 'label.edit' label_kind=kind label_id=label.id %}" hx-target="#label-edit-dialog-body" hx-swap="innerHTML"><i class="material-symbols-outlined">edit</i></button><form hx-post="{{ delete_url }}" hx-target="{{ rows_target }}" hx-swap="innerHTML" hx-confirm="Delete '{{ label.name }}'? Pins will NOT be deleted." style="display:inline;">{% csrf_token %}<button type="submit" class="btn-icon btn-icon--danger" title="Delete"><i class="material-symbols-outlined">delete</i></button></form>{% endif %}
             {% elif editable %}

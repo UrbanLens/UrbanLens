@@ -2471,7 +2471,8 @@ $org-stat-col-color-w: 2.75rem;
     animation: priority-order-row-saved .6s ease-out;
 }
 
-.priority-edit-btn {
+.priority-edit-btn,
+.priority-delete-btn {
     margin-left: auto;
     flex-shrink: 0;
     display: flex;
@@ -2496,6 +2497,18 @@ $org-stat-col-color-w: 2.75rem;
     .material-icons {
         font-size: 1.05rem;
         pointer-events: none;
+    }
+}
+
+// Only the first of the two claims the free space, so the pair sits together
+// at the end of the row rather than being pushed apart.
+.priority-delete-btn {
+    margin-left: 0;
+
+    &:hover {
+        background: rgba($color-red-500, .1);
+        border-color: $color-red-300;
+        color: $color-red-600;
     }
 }
 
@@ -3124,6 +3137,7 @@ $org-stat-col-color-w: 2.75rem;
         .tag-card-actions,
         .tag-row-actions,
         .priority-edit-btn,
+        .priority-delete-btn,
         .priority-jump-actions {
             opacity: 0;
             pointer-events: none;
@@ -3141,6 +3155,8 @@ $org-stat-col-color-w: 2.75rem;
         .tag-row:focus-within .tag-row-actions,
         .priority-item:hover .priority-edit-btn,
         .priority-item:focus-within .priority-edit-btn,
+        .priority-item:hover .priority-delete-btn,
+        .priority-item:focus-within .priority-delete-btn,
         .priority-item:hover .priority-jump-actions,
         .priority-item:focus-within .priority-jump-actions {
             opacity: 1;

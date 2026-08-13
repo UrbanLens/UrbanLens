@@ -265,8 +265,14 @@ def verify_and_consume_backup_code(user: User, code: str) -> bool:
         return False
     for candidate in BackupCode.objects.unused_for(user):
         if check_password(normalized, candidate.code_hash):
-            BackupCode.objects.filter(pk=candidate.pk).update(used_at=timezone.now())
-            return True
+            # Consume with a conditional UPDATE, for the same reason verify_totp_code
+            # claims its step conditionally: `unused_for` reading the row and this
+            # marking it used are two statements, so two submissions of one
+            # intercepted code can both match before either writes. Filtering on
+            # used_at here means Postgres serialises them and only one caller sees a
+            # row matched - a backup code is single-use or it is not a second factor.
+            claimed = BackupCode.objects.filter(pk=candidate.pk, used_at__isnull=True).update(used_at=timezone.now())
+            return claimed == 1
     return False
 
 

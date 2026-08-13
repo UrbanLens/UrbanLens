@@ -520,7 +520,18 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             to the current map viewport when ``bounds`` is present.
         """
         profile, _ = Profile.objects.get_or_create(user=request.user)
-        query = Pin.objects.filter(profile=profile).root_pins().select_related("location").prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind="user").order_by("-order", "name")))
+        # location__wiki is what Location.display_name reads for every unnamed pin
+        # (see its docstring) - without it the sidebar costs a query per row.
+        query = (
+            Pin.objects.filter(profile=profile)
+            .root_pins()
+            .select_related("location", "location__wiki")
+            # with_customizations_for matches services.map_pins.payload: without it
+            # Label._get_customization silently finds no override (it reads a prefetch
+            # attr, it does not query), so a customized label rendered the user's icon
+            # on the map marker and the global one in this sidebar for the same pin.
+            .prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind="user").with_customizations_for(profile).order_by("-order", "name")))
+        )
 
         search_form = SearchForm(request.GET, profile=profile)
         if search_form.is_valid():

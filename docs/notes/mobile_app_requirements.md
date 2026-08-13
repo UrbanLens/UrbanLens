@@ -8,8 +8,8 @@ If any of these are not achievable within those constraints, create a note of th
 
 The app makes **no modifications** to the UrbanLens repository. This document is the
 **current, outstanding** list of server-side work the app depends on, in priority order.
-It follows the server's own `docs/external_app_api_plan.md` and
-`docs/designs/mobile-app-stack-r2.md`: a dedicated `dashboard/external_api/` app mounted
+It follows the server's own `docs/designs/drafts/external_app_api_plan.md` and
+`docs/designs/drafts/mobile-app-stack-r2.md`: a dedicated `dashboard/external_api/` app mounted
 at `/dashboard/api/external/v1/`, scoped credentials (PAT `ulk_…` keys and OAuth2+PKCE
 tokens), thin serializers calling the existing service layer, per-credential throttling,
 and usage logging.

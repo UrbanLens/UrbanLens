@@ -307,11 +307,18 @@ def monthly_cost_series(months: int = 12, as_of: datetime.datetime | None = None
 def api_spend_summary_30d() -> dict[str, list | int | Decimal | None]:
     """Return the trailing-30-day external API spend, split by pricing status.
 
-    Only services with a confirmed per-call price (``ServiceDefaults.cost_per_call``)
-    contribute to the total - the rest are either free, priced in a way that doesn't
-    reduce to one number per call, or not priced here yet, and are only reflected in
-    ``unpriced_service_count``. Shared by the site-admin cost tracking page and the
-    public running-costs page.
+    A service contributes to the total when it actually *recorded* cost, not when
+    it happens to carry a flat ``ServiceDefaults.cost_per_call``. Those are not the
+    same set, and keying off the flat rate lost the expensive half: exactly one of
+    the 46 registered services declares a flat rate, while every AI service prices
+    each call from real token usage and writes that to ``ApiCallLog.cost_estimate``
+    (see ``services/ai/vision.py``). Asking the flat-rate question counted all of
+    them as unpriced and dropped their spend from the figure shown on both the
+    site-admin cost page and the public running-costs page.
+
+    ``unpriced_service_count`` keeps its original meaning - services that produced
+    no cost at all, because they are free, not priced here yet, or priced in a way
+    that doesn't reduce to a number per call.
 
     Returns:
         ``{"priced_services": [{"display_name": str, "cost_30d": Decimal}, ...],
@@ -328,12 +335,9 @@ def api_spend_summary_30d() -> dict[str, list | int | Decimal | None]:
     unpriced_service_count = 0
     total_cost_30d = None
     for service, defaults in service_defaults.items():
-        if defaults.cost_per_call is None:
-            unpriced_service_count += 1
-            continue
-        row = summaries.get(service, {})
-        cost_30d = row.get("total_cost")
+        cost_30d = summaries.get(service, {}).get("total_cost")
         if cost_30d is None:
+            unpriced_service_count += 1
             continue
         total_cost_30d = cost_30d if total_cost_30d is None else total_cost_30d + cost_30d
         priced_services.append({"display_name": defaults.display_name, "cost_30d": cost_30d})

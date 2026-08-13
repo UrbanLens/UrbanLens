@@ -33,6 +33,8 @@ from typing import TYPE_CHECKING
 from django.db import IntegrityError, transaction
 from django.db.models import Q
 
+from urbanlens.dashboard.services.geo.longitude import split_at_antimeridian
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -186,7 +188,12 @@ def _pin_in_boundary(pin: Pin, pin_list: PinList) -> bool:
         return False
     from urbanlens.dashboard.models.location.model import Location
 
-    return Location.objects.filter(pk=pin.location_id, point__within=pin_list.smart_boundary).exists()
+    # Split at the antimeridian for the same reason filter_by_criteria's
+    # include_regions does: a boundary drawn across the date line arrives with
+    # unwrapped coordinates, and a planar __within against it matches nothing on
+    # the far side. Both boundary paths need it - this one decides a single pin's
+    # membership, _boundary_matching_ids resolves the whole list.
+    return Location.objects.filter(pk=pin.location_id, point__within=split_at_antimeridian(pin_list.smart_boundary)).exists()
 
 
 def filter_matching_ids(pin_list: PinList) -> set[int]:
@@ -388,5 +395,5 @@ def _boundary_matching_ids(pin_list: PinList) -> set[int]:
     from urbanlens.dashboard.models.pin.model import Pin
 
     return set(
-        Pin.objects.filter(profile=pin_list.profile, location__point__within=pin_list.smart_boundary).values_list("pk", flat=True),
+        Pin.objects.filter(profile=pin_list.profile, location__point__within=split_at_antimeridian(pin_list.smart_boundary)).values_list("pk", flat=True),
     )

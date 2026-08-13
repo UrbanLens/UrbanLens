@@ -44,6 +44,16 @@ function ask(options: LeaveConfirmationOptions): Promise<boolean | "alt"> {
 export interface LeaveConfirmationHandle {
     /** Re-arm after a confirmed leave. Test-only. */
     resetForTests(): void;
+    /**
+     * Unbind both listeners.
+     *
+     * A page installs one guard and keeps it for its lifetime, so production
+     * never calls this. Tests install one per case against a shared `document`
+     * that is never torn down between them, and without a way to unbind, every
+     * case leaves its capture-phase click listener behind for the rest of the
+     * run.
+     */
+    uninstall(): void;
 }
 
 export function installLeaveConfirmation(options: LeaveConfirmationOptions): LeaveConfirmationHandle {
@@ -59,16 +69,15 @@ export function installLeaveConfirmation(options: LeaveConfirmationOptions): Lea
 
     const blocked = (): boolean => !leaving && options.isBlocked();
 
-    window.addEventListener("beforeunload", (event: BeforeUnloadEvent) => {
+    const onBeforeUnload = (event: BeforeUnloadEvent): void => {
         if (!blocked()) return;
         // Browsers show their own wording here; ours is only used in the dialog.
         event.preventDefault();
         event.returnValue = "";
-    });
+    };
+    window.addEventListener("beforeunload", onBeforeUnload);
 
-    document.addEventListener(
-        "click",
-        (event: MouseEvent) => {
+    const onClick = (event: MouseEvent): void => {
             if (!blocked()) return;
             // A modified or non-primary click opens a new tab, window, or download
             // and leaves this page untouched, so there is nothing to warn about.
@@ -105,14 +114,17 @@ export function installLeaveConfirmation(options: LeaveConfirmationOptions): Lea
                 options.onConfirmed?.();
                 window.location.href = destination;
             });
-        },
-        // Capture phase: this has to win before a page's own click handlers act.
-        true,
-    );
+    };
+    // Capture phase: this has to win before a page's own click handlers act.
+    document.addEventListener("click", onClick, true);
 
     return {
         resetForTests: () => {
             leaving = false;
+        },
+        uninstall: () => {
+            window.removeEventListener("beforeunload", onBeforeUnload);
+            document.removeEventListener("click", onClick, true);
         },
     };
 }

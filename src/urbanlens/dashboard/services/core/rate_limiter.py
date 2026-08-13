@@ -360,7 +360,7 @@ def check_rate_limit(service: str) -> bool:
 
     try:
         if config.calls_per_minute is not None:
-            recent_minute = ApiCallLog.objects.for_service(service).since(timedelta(minutes=1)).exclude(was_geo_filtered=True).count()
+            recent_minute = ApiCallLog.objects.for_service(service).since(timedelta(minutes=1)).billable().count()
             if recent_minute >= config.calls_per_minute:
                 logger.warning(
                     "Rate limit hit for %s: %d/%d calls in last minute",
@@ -371,7 +371,7 @@ def check_rate_limit(service: str) -> bool:
                 return False
 
         if config.calls_per_day is not None:
-            today_count = ApiCallLog.objects.for_service(service).today().exclude(was_geo_filtered=True).count()
+            today_count = ApiCallLog.objects.for_service(service).today().billable().count()
             if today_count >= config.calls_per_day:
                 logger.warning(
                     "Daily rate limit hit for %s: %d/%d calls today",
@@ -382,7 +382,7 @@ def check_rate_limit(service: str) -> bool:
                 return False
 
         if config.calls_per_30_days is not None:
-            recent_30_days = ApiCallLog.objects.for_service(service).since(timedelta(days=30)).exclude(was_geo_filtered=True).count()
+            recent_30_days = ApiCallLog.objects.for_service(service).since(timedelta(days=30)).billable().count()
             if recent_30_days >= config.calls_per_30_days:
                 logger.warning(
                     "30-day rate limit hit for %s: %d/%d calls in the last 30 days",

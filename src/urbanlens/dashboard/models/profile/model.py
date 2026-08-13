@@ -96,12 +96,18 @@ _COMMUNITY_GATED_SYNC_FIELDS = (
 
 
 def _haversine_km(p1: tuple[float, float], p2: tuple[float, float]) -> float:
-    """Great-circle distance in kilometres between two (lat, lng) points."""
-    lat1, lng1 = math.radians(p1[0]), math.radians(p1[1])
-    lat2, lng2 = math.radians(p2[0]), math.radians(p2[1])
-    dlat, dlng = lat2 - lat1, lng2 - lng1
-    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlng / 2) ** 2
-    return 6_371.0 * 2 * math.asin(math.sqrt(a))
+    """Great-circle distance between two (latitude, longitude) pairs, in km.
+
+    Args:
+        p1: First (latitude, longitude).
+        p2: Second (latitude, longitude).
+
+    Returns:
+        Distance in kilometres.
+    """
+    from urbanlens.dashboard.services.geo.distance import haversine_km
+
+    return haversine_km(p1[0], p1[1], p2[0], p2[1])
 
 
 # Rough lat/lng bounding boxes for the regions that use miles for everyday road
@@ -779,6 +785,7 @@ class Profile(abstract.PublicDashboardModel):
             with resolvable coordinates.
         """
         from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.services.geo.longitude import circular_mean_longitude
 
         # A Pin's coordinates live on its linked Location (see AddressableModel).
         rows = list(Pin.objects.filter(profile=self).values_list("location__latitude", "location__longitude"))
@@ -796,7 +803,10 @@ class Profile(abstract.PublicDashboardModel):
         seed = pts[best_idx]
         cluster = [p for p in pts if _haversine_km(seed, p) <= _CLUSTER_RADIUS_KM]
         avg_lat = sum(p[0] for p in cluster) / len(cluster)
-        avg_lng = sum(p[1] for p in cluster) / len(cluster)
+        # Circular mean: the cluster is found with haversine (which handles the
+        # wrap), but averaging its longitudes arithmetically put a user whose
+        # pins straddle the date line at longitude 0 - in the Atlantic.
+        avg_lng = circular_mean_longitude([p[1] for p in cluster])
 
         Profile.objects.filter(pk=self.pk).update(
             map_center_latitude=avg_lat,
