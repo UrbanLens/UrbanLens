@@ -56,7 +56,7 @@ class TentativeAnswerRaceTests(TransactionTestCase):
                 # Both threads are inside the call before either touches the table.
                 barrier.wait(timeout=10)
                 tentative.record_tentative_answers(round_, [answer])
-            except Exception as exc:  # noqa: BLE001 - recorded and re-raised by the assertions
+            except Exception as exc:
                 errors.append(exc)
             finally:
                 connections.close_all()

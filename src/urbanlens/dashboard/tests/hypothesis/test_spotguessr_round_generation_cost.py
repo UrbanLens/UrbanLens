@@ -44,15 +44,14 @@ class RoundGenerationCostTests(TestCase):
             return None if calls["n"] <= failures else {"built": True}
 
         strategy = mock.Mock(build_round=mock.Mock(side_effect=build_round))
-        with mock.patch("urbanlens.dashboard.services.spotguessr.modes.get_strategy", return_value=strategy):
-            with mock.patch(_ELIGIBLE, wraps=eligibility.eligible_locations) as eligible:
-                result = spotguessr_session.generate_round_content(
-                    mode="classic",
-                    config=self.config,
-                    participants=[self.profile],
-                    excluded_location_ids=[],
-                    previous_location=None,
-                )
+        with mock.patch("urbanlens.dashboard.services.spotguessr.modes.get_strategy", return_value=strategy), mock.patch(_ELIGIBLE, wraps=eligibility.eligible_locations) as eligible:
+            result = spotguessr_session.generate_round_content(
+                mode="classic",
+                config=self.config,
+                participants=[self.profile],
+                excluded_location_ids=[],
+                previous_location=None,
+            )
         return result, eligible.call_count
 
     def test_eligibility_is_computed_once_when_the_first_location_works(self) -> None:

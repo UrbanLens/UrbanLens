@@ -61,7 +61,6 @@ class GeocodeAddressTests(SimpleTestCase):
     def test_direct_nominatim_exception_propagates(self) -> None:
         with (
             mock.patch(f"{_MODULE}.redata_configured", return_value=False),
-            mock.patch("geopy.geocoders.Nominatim.geocode", side_effect=GeocoderUnavailable("down")),
+            mock.patch("geopy.geocoders.Nominatim.geocode", side_effect=GeocoderUnavailable("down")),self.assertRaises(GeocoderUnavailable)
         ):
-            with self.assertRaises(GeocoderUnavailable):
-                geocode_resolution.geocode_address("1 Main St")
+            geocode_resolution.geocode_address("1 Main St")

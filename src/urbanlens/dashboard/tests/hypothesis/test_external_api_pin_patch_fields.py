@@ -38,6 +38,7 @@ from django.contrib.auth.models import User
 from hypothesis import given, settings as hypothesis_settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.external_api.serializers import PinUpdateSerializer
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -161,7 +162,7 @@ class _PinPatchTestCase(TestCase):
         Returns:
             The created label.
         """
-        return Label.objects.create(name=name, kind=kind, profile=profile if profile is not None else self.profile)
+        return ensure_label(name=name, kind=kind, profile=profile if profile is not None else self.profile)
 
 
 class PinPatchRoundTripTests(_PinPatchTestCase):
@@ -493,7 +494,7 @@ class PinPatchLabelReplacementTests(_PinPatchTestCase):
 
     def test_a_global_label_is_accepted(self) -> None:
         """Labels with no owner are usable by everyone - they are not "someone else's"."""
-        shared = Label.objects.create(name="urbex", kind=KIND_TAG, profile=None)
+        shared = ensure_label(name="urbex", kind=KIND_TAG, profile=None)
 
         response = self._patch({"label_uuids": [str(shared.uuid)]})
 

@@ -18,9 +18,9 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 
 def _hx_trigger_events(response) -> dict:

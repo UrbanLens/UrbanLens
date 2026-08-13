@@ -15,6 +15,7 @@ from django.contrib.auth.models import User
 from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.labels.model import (
     KIND_CATEGORY,
@@ -524,11 +525,11 @@ class LabelInitialOrderForParentsTests(TestCase):
         self.assertIsNone(Label.initial_order_for_parents(self.profile, [hidden.pk]))
 
     def test_single_parent_order_minus_one(self) -> None:
-        parent = baker.make(Label, name="Hospital", profile=self.profile, kind=KIND_CATEGORY, order=20)
+        parent = ensure_label( name="Hospital", profile=self.profile, kind=KIND_CATEGORY, order=20)
         self.assertEqual(Label.initial_order_for_parents(self.profile, [parent.pk]), 19)
 
     def test_multiple_parents_uses_lowest_order(self) -> None:
-        hospital = baker.make(Label, name="Hospital", profile=self.profile, kind=KIND_CATEGORY, order=20)
+        hospital = ensure_label( name="Hospital", profile=self.profile, kind=KIND_CATEGORY, order=20)
         pennsylvania = baker.make(Label, name="Pennsylvania", profile=self.profile, kind=KIND_TAG, order=35)
         self.assertEqual(
             Label.initial_order_for_parents(self.profile, [hospital.pk, pennsylvania.pk]),

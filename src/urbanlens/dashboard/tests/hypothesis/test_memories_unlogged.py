@@ -18,6 +18,7 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
@@ -65,7 +66,7 @@ class VisitedWithoutRecordQuerySetTests(TestCase):
 
     def test_pin_with_visited_label_but_no_record_is_included(self) -> None:
         pin = _make_pin(self.profile, last_visited=None)
-        label = baker.make("dashboard.Label", profile=self.profile, kind="status", name="Visited")
+        label = ensure_label( profile=self.profile, kind="status", name="Visited")
         pin.labels.add(label)
         self.assertIn(pin, self._unlogged())
 

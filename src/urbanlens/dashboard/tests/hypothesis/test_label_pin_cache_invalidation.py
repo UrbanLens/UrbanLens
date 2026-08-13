@@ -17,6 +17,7 @@ from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
@@ -64,7 +65,7 @@ class LabelCustomizePinCacheInvalidationTests(TestCase):
         self.client.force_login(self.user)
 
     def test_customizing_a_global_label_bumps_own_pins_carrying_it(self) -> None:
-        global_label = baker.make(Label, profile=None, kind="tag", name="Visited", icon="check")
+        global_label = ensure_label( profile=None, kind="tag", name="Visited", icon="check")
         pin = _make_pin_with_label(self.profile, global_label)
 
         url = reverse("label.customize", kwargs={"label_kind": "tag", "label_id": global_label.id})

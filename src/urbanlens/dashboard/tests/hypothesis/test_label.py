@@ -11,6 +11,8 @@ parents M2M.  Key invariants:
 """
 from __future__ import annotations
 
+import itertools
+
 from hypothesis import HealthCheck, assume, given, settings, strategies as st
 from model_bakery import baker
 
@@ -24,8 +26,18 @@ _db_settings = settings(
 )
 
 
-def _make_tag(name: str = "tag", **kwargs) -> Label:
-    return baker.make(Label, name=name, kind=KIND_TAG, profile=None, **kwargs)
+_counter = itertools.count()
+
+
+def _make_tag(name: str | None = None, **kwargs) -> Label:
+    """A fresh global tag with a name nothing else uses.
+
+    Names are unique per (lower(name), profile, kind) since migration 0042, and
+    these are all global (profile=None) - so a fixed default name meant every
+    call after the first collided. The hierarchy properties under test do not
+    care what the labels are called.
+    """
+    return baker.make(Label, name=name or f"tag-{next(_counter)}", kind=KIND_TAG, profile=None, **kwargs)
 
 
 class LabelDescendantSeedTests(TestCase):

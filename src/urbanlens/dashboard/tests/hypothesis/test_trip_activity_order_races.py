@@ -57,7 +57,7 @@ class TripActivityOrderRaceTests(TransactionTestCase):
                 try:
                     barrier.wait(timeout=10)
                     fn()
-                except Exception as exc:  # noqa: BLE001 - surfaced by the assertions
+                except Exception as exc:
                     errors.append(exc)
                 finally:
                     connections.close_all()

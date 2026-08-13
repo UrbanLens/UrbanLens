@@ -15,6 +15,7 @@ from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
@@ -232,8 +233,8 @@ class SavedFilterLabelPickerTests(TestCase):
         self.user = baker.make(User)
         self.client.force_login(self.user)
         self.profile = self.user.profile
-        self.selected_label = Label.objects.create(profile=self.profile, name="Abandoned", kind="tag")
-        self.other_label = Label.objects.create(profile=self.profile, name="Active", kind="tag")
+        self.selected_label = ensure_label(profile=self.profile, name="Abandoned", kind="tag")
+        self.other_label = ensure_label(profile=self.profile, name="Active", kind="tag")
 
     def test_new_filter_dialog_renders_all_labels_unselected(self) -> None:
         response = self.client.get(reverse("saved_filters.new"))

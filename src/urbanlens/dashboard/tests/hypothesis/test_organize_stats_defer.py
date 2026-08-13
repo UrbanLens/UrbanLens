@@ -17,6 +17,7 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.model import KIND_TAG, Label
 from urbanlens.dashboard.models.pin.model import Pin
@@ -33,7 +34,7 @@ class OrganizeStatsDeferralTests(TestCase):
         self.profile = Profile.objects.get(user=self.user)
         self.client.force_login(self.user)
 
-        self.label = Label.objects.create(name="Abandoned Factory", kind=KIND_TAG, profile=self.profile)
+        self.label = ensure_label(name="Abandoned Factory", kind=KIND_TAG, profile=self.profile)
         pin = baker.make(Pin, profile=self.profile)
         pin.labels.add(self.label)
 

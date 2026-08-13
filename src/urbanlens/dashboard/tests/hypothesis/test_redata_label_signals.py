@@ -17,6 +17,7 @@ from unittest import mock
 from django.contrib.auth.models import User
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
@@ -53,21 +54,21 @@ class LabelTaxonomySignalTests(TestCase):
 
     def test_creating_a_tag_queues_definition_sync(self) -> None:
         with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
-            Label.objects.create(profile=self.profile, name="Church", kind=KIND_TAG)
+            ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
         self.assertIn(tasks.sync_redata_label_definitions, _queued_tasks(enqueue))
 
     def test_creating_a_category_queues_definition_sync(self) -> None:
         with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
-            Label.objects.create(profile=self.profile, name="Hospital", kind=KIND_CATEGORY)
+            Label.objects.create(profile=self.profile, name="ZzAudit Hospital", kind=KIND_CATEGORY)
         self.assertIn(tasks.sync_redata_label_definitions, _queued_tasks(enqueue))
 
     def test_creating_a_status_does_not_queue_anything(self) -> None:
         with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
-            Label.objects.create(profile=self.profile, name="Visited", kind=KIND_STATUS)
+            Label.objects.create(profile=self.profile, name="ZzAudit Visited", kind=KIND_STATUS)
         self.assertNotIn(tasks.sync_redata_label_definitions, _queued_tasks(enqueue))
 
     def test_deleting_a_tag_queues_retirement(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Church", kind=KIND_TAG)
+        label = ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
         with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
             label.delete()
         calls = [call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_label_definitions]
@@ -76,13 +77,13 @@ class LabelTaxonomySignalTests(TestCase):
         self.assertFalse(definitions[0]["is_active"])
 
     def test_deleting_a_status_does_not_queue_anything(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Visited", kind=KIND_STATUS)
+        label = Label.objects.create(profile=self.profile, name="ZzAudit Visited", kind=KIND_STATUS)
         with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
             label.delete()
         self.assertNotIn(tasks.sync_redata_label_definitions, _queued_tasks(enqueue))
 
     def test_converting_a_tag_to_status_queues_retirement(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Church", kind=KIND_TAG)
+        label = ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
         with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
             label.kind = KIND_STATUS
             label.save()
@@ -92,7 +93,7 @@ class LabelTaxonomySignalTests(TestCase):
         self.assertFalse(definitions[0]["is_active"])
 
     def test_converting_a_status_to_category_queues_an_active_definition(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Was Status", kind=KIND_STATUS)
+        label = ensure_label(profile=self.profile, name="Was Status", kind=KIND_STATUS)
         with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
             label.kind = KIND_CATEGORY
             label.save()
@@ -102,8 +103,11 @@ class LabelTaxonomySignalTests(TestCase):
         self.assertTrue(definitions[0]["is_active"])
 
     def test_reparenting_queues_the_childs_definition(self) -> None:
-        parent = Label.objects.create(profile=self.profile, name="Hospital", kind=KIND_CATEGORY)
-        child = Label.objects.create(profile=self.profile, name="Asylum", kind=KIND_CATEGORY)
+        parent = Label.objects.create(profile=self.profile, name="ZzAudit Hospital", kind=KIND_CATEGORY)
+        # A fresh name, not a seeded default: "Asylum" ships with a parent in the
+        # default taxonomy, so reusing it would leave the child with two parents
+        # and the assertion below would see both.
+        child = Label.objects.create(profile=self.profile, name="ZzAudit Asylum", kind=KIND_CATEGORY)
         with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
             child.parents.add(parent)
         calls = [call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_label_definitions]
@@ -119,7 +123,7 @@ class PinLabelAssignmentSignalTests(TestCase):
 
     def test_adding_a_tag_to_a_pin_queues_assignment_sync(self) -> None:
         pin = _pin(self.profile, seq=1)
-        tag = Label.objects.create(profile=self.profile, name="Notable", kind=KIND_TAG)
+        tag = ensure_label(profile=self.profile, name="Notable", kind=KIND_TAG)
         with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
             pin.labels.add(tag)
         calls = [call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_pin_assignment]
@@ -128,7 +132,7 @@ class PinLabelAssignmentSignalTests(TestCase):
 
     def test_removing_a_tag_from_a_pin_queues_assignment_sync(self) -> None:
         pin = _pin(self.profile, seq=1)
-        tag = Label.objects.create(profile=self.profile, name="Notable", kind=KIND_TAG)
+        tag = ensure_label(profile=self.profile, name="Notable", kind=KIND_TAG)
         pin.labels.add(tag)
         with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
             pin.labels.remove(tag)
@@ -138,7 +142,7 @@ class PinLabelAssignmentSignalTests(TestCase):
     def test_reverse_add_from_the_label_side_queues_assignment_sync(self) -> None:
         """Mirrors services.labels.merge's ``target.pins.add(*source.pins.all())``."""
         pin = _pin(self.profile, seq=1)
-        tag = Label.objects.create(profile=self.profile, name="Notable", kind=KIND_TAG)
+        tag = ensure_label(profile=self.profile, name="Notable", kind=KIND_TAG)
         with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
             tag.pins.add(pin)
         calls = [call for call in enqueue.call_args_list if call.args and call.args[0] is tasks.sync_redata_pin_assignment]
@@ -147,7 +151,7 @@ class PinLabelAssignmentSignalTests(TestCase):
 
     def test_reverse_add_of_a_status_label_does_not_queue_anything(self) -> None:
         pin = _pin(self.profile, seq=1)
-        status = Label.objects.create(profile=self.profile, name="Visited", kind=KIND_STATUS)
+        status = Label.objects.create(profile=self.profile, name="ZzAudit Visited", kind=KIND_STATUS)
         with _redata_configured(), mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue, self.captureOnCommitCallbacks(execute=True):
             status.pins.add(pin)
         self.assertNotIn(tasks.sync_redata_pin_assignment, _queued_tasks(enqueue))

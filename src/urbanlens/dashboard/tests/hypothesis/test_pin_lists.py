@@ -31,6 +31,7 @@ from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
@@ -324,7 +325,7 @@ class SmartListLabelChangeResyncTests(TestCase):
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.profile = self.user.profile
-        self.exclude_label = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Demolished")
+        self.exclude_label = ensure_label( kind=KIND_TAG, profile=self.profile, name="Demolished")
         self.pin_list = baker.make(
             PinList,
             profile=self.profile,

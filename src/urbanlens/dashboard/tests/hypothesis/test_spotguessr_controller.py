@@ -10,9 +10,11 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.celery_inline import tasks_run_inline
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.images.model import Image, MediaKind
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -183,7 +185,7 @@ class SpotGuessrStartViewTests(TestCase):
         self.assertEqual(response.status_code, 400)
 
     def test_a_global_label_id_is_accepted(self) -> None:
-        global_label = baker.make(Label, name="Abandoned", profile=None)
+        global_label = ensure_label(name="Abandoned", kind=KIND_TAG, profile=None)
         response = self.client.post(self.start_url, {"label_id": str(global_label.pk)})
         self.assertEqual(response.status_code, 200, response.json())
 

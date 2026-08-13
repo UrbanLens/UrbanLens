@@ -28,6 +28,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.controllers.pin_suggestions import _PAGE_SIZE
 from urbanlens.dashboard.models.aliases.model import PinAlias
@@ -387,7 +388,7 @@ class AcceptPinSuggestionTests(TestCase):
         from urbanlens.dashboard.models.labels.meta import KIND_TAG
         from urbanlens.dashboard.models.labels.model import Label
 
-        label = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Abandoned")
+        label = ensure_label( kind=KIND_TAG, profile=self.profile, name="Abandoned")
         suggestion = PinSuggestion.objects.create(
             profile=self.profile,
             pin=None,
@@ -632,7 +633,7 @@ class PinSuggestionActionViewTests(TestCase):
         from urbanlens.dashboard.models.labels.meta import KIND_TAG
         from urbanlens.dashboard.models.labels.model import Label
 
-        label = baker.make(Label, kind=KIND_TAG, profile=self.profile, name="Abandoned")
+        label = ensure_label( kind=KIND_TAG, profile=self.profile, name="Abandoned")
         suggestion = self._suggestion(pin=None, latitude=Decimal("41.000000"), longitude=Decimal("-76.000000"), suggested_name="Old Mill")
         with mock.patch("urbanlens.dashboard.services.apis.locations.google.place_info.GooglePlaceService._resolve_name", return_value=None):
             self.client.post(reverse("memories.locations.action", args=[suggestion.pk, "accept"]), {"name": "Old Mill", "label_ids": [str(label.pk)]})

@@ -12,6 +12,7 @@ from django.urls import reverse
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
 from urbanlens.dashboard.models.labels.meta import KIND_STATUS, KIND_TAG
@@ -759,7 +760,7 @@ class VisitedLabelPropagationTests(TestCase):
     def setUp(self) -> None:
         self.user = baker.make(User)
         self.profile = self.user.profile
-        self.visited = baker.make(Label, kind=KIND_STATUS, name="Visited", profile=self.profile)
+        self.visited = ensure_label( kind=KIND_STATUS, name="Visited", profile=self.profile)
         self.root = _make_pin(self.profile)
         self.child = _make_pin(self.profile, parent_pin=self.root)
         self.grandchild = _make_pin(self.profile, parent_pin=self.child)
@@ -774,6 +775,6 @@ class VisitedLabelPropagationTests(TestCase):
         self.assertNotIn(self.visited, self.child.labels.all())
 
     def test_other_status_labels_do_not_cascade(self) -> None:
-        other = baker.make(Label, kind=KIND_STATUS, name="Demolished", profile=self.profile)
+        other = ensure_label( kind=KIND_STATUS, name="Demolished", profile=self.profile)
         self.grandchild.labels.add(other)
         self.assertNotIn(other, self.root.labels.all())

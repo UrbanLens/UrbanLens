@@ -18,6 +18,7 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG, KIND_USER
 from urbanlens.dashboard.models.labels.model import Label
@@ -65,7 +66,7 @@ class LabelRowsViewOnMapButtonTests(TestCase):
         self.assertContains(response, label_map_url(label.id))
 
     def test_status_row_includes_view_on_map_link(self) -> None:
-        label = baker.make(Label, profile=self.profile, kind=KIND_STATUS, name="Abandoned")
+        label = ensure_label( profile=self.profile, kind=KIND_STATUS, name="Abandoned")
         self._pin_labelled(label)
         response = self._rows("statuses")
         self.assertContains(response, label_map_url(label.id))

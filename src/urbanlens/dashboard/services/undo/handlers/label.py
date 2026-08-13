@@ -83,9 +83,16 @@ class LabelUndoHandler(UndoHandler):
 
         Raises:
             UndoExpiredError: If the owning profile was deleted during the
-                retention window. Nothing else can block: ``Label`` has no
-                unique constraints, and every relational piece restores
-                leniently.
+                retention window, or if the label's name has been taken since the
+                delete. Every relational piece still restores leniently - a
+                parent or pin that vanished meanwhile is skipped rather than
+                failing the whole restore.
+
+        The name check exists because ``Label`` gained a uniqueness constraint
+        (migration 0042). Before it, restoring onto a reused name simply produced
+        a duplicate; now it would raise `IntegrityError` from the database, which
+        reaches the user as a 500 with no explanation. Refusing with a message is
+        the graceful form of the same answer.
         """
         # Deferred import: services.undo.service imports services.undo.handlers
         # (which imports this module) before UndoExpiredError is defined there.
@@ -96,6 +103,17 @@ class LabelUndoHandler(UndoHandler):
         for entry in payload:
             if not Profile.objects.filter(pk=entry["profile_id"]).exists():
                 raise UndoExpiredError("The profile that owned this label no longer exists.")
+
+        # Checked for the whole batch before creating any of it, so a collision on
+        # the second label does not leave the first restored.
+        for entry in payload:
+            name = entry["fields"].get("name", "")
+            kind = entry["fields"].get("kind", "")
+            if Label.objects.filter(profile_id=entry["profile_id"], name__iexact=name, kind=kind).exists():
+                raise UndoExpiredError(
+                    f'A {kind} called "{name}" already exists, so this one cannot be restored. '
+                    "Rename or merge the existing one first."
+                )
 
         old_to_new: dict[int, Label] = {}
         restored: list[Label] = []

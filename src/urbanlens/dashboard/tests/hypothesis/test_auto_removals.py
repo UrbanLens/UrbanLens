@@ -15,6 +15,7 @@ from django.db import IntegrityError
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.aliases.model import PinAlias, WikiAlias
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, PinAutoRemoval, WikiAutoRemoval
@@ -204,7 +205,7 @@ class LabelDeletionTombstoneTests(TestCase):
         self.location = baker.make(Location, latitude="41.400000", longitude="-73.400000")
         self.wiki = baker.make("dashboard.Wiki", location=self.location, name="Old Factory")
         self.pin = baker.make(Pin, profile=self.profile, location=self.location, name="Old Factory")
-        self.label = baker.make(Label, kind=KIND_CATEGORY, name="Factory", profile=None)
+        self.label = ensure_label( kind=KIND_CATEGORY, name="Factory", profile=None)
         self.client.force_login(self.user)
 
     def test_removing_pin_label_records_tombstone(self) -> None:

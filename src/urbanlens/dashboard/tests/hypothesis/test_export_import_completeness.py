@@ -14,6 +14,7 @@ from django.contrib.auth.models import User
 from hypothesis import HealthCheck, given, settings, strategies as st
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.article.model import Article
 from urbanlens.dashboard.models.custom_fields.model import CustomField, CustomFieldEntity, CustomFieldType, CustomFieldValue
@@ -93,7 +94,7 @@ class ExportPhotosLabelsTests(TestCase):
 
     def test_photo_export_includes_label_uuids(self) -> None:
         profile = baker.make(User).profile
-        label = Label.objects.create(profile=profile, name="Abandoned", kind="tag")
+        label = ensure_label(profile=profile, name="Abandoned", kind="tag")
         image = baker.make(Image, profile=profile)
         image.labels.add(label)
 
@@ -505,7 +506,7 @@ class RoundTripPhotosTests(TestCase):
         self.assertTrue(any("storage quota" in w for w in result.warnings))
 
     def test_labels_reattach_via_label_uuid_map(self) -> None:
-        label = Label.objects.create(profile=self.importer, name="Abandoned", kind="tag")
+        label = ensure_label(profile=self.importer, name="Abandoned", kind="tag")
         row = {"uuid": "8a4f0a53-1111-4f77-9111-000000000007", "filename": "mill.jpg", "label_uuids": ["8a4f0a53-3333-4f77-9111-000000000001"]}
         with tempfile.TemporaryDirectory() as temp_dir:
             self._archive(temp_dir, [row], {"mill.jpg": b"fake-jpeg-bytes"})

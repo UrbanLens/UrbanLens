@@ -17,14 +17,18 @@ from django.db.models import (
     ManyToManyField,
     Min,
     TextField,
+    UniqueConstraint,
     UUIDField,
 )
+from django.db.models.functions import Lower
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIES, ICON_CHOICES, KIND_CATEGORY, KIND_CHOICES, KIND_MEDIA, KIND_STATUS, KIND_TAG, KIND_USER
 from urbanlens.dashboard.models.labels.queryset import LabelManager
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from urbanlens.dashboard.models.labels.customization import LabelCustomization
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
@@ -130,6 +134,72 @@ class Label(abstract.FrontendDashboardModel):
         """True if this user has explicitly set an icon override (bypasses custom_icon)."""
         c = self._get_customization()
         return c is not None and c.icon is not None
+
+    @classmethod
+    def prime_total_pin_counts(cls, labels: Sequence[Label]) -> None:
+        """Precompute :meth:`total_pin_count` for a whole page of labels at once.
+
+        ``total_pin_count`` is correct but per-instance: each call runs its own
+        BFS - which issues one query *per node visited* - plus a `Count`
+        aggregate, and memoizes only on that instance. Rendering N labels
+        therefore costs O(N x subtree) queries. Measured on the Organize page's
+        deferred rows endpoint: 143 labels cost 113-146 queries, growing exactly
+        one-per-label.
+
+        This resolves the same numbers in a fixed three queries by loading the
+        edge list once and doing the traversal in Python, then seeding each
+        instance's memo so the template filter and every later call read it
+        without touching the database.
+
+        Safe to skip: any label not primed still computes itself on demand, so
+        callers that render a single label need not change.
+
+        Args:
+            labels: The label instances about to be rendered. Must be the same
+                objects the template will use - priming a queryset that is
+                re-evaluated later seeds memos on discarded instances.
+        """
+        labels = list(labels)
+        if not labels:
+            return
+
+        # One query for the full edge list. The subtree of a rendered label can
+        # reach labels outside the rendered set (a tag's child that this kind's
+        # filter excluded), so this deliberately spans every label rather than
+        # only the ones on screen.
+        children_by_parent: dict[int, list[int]] = {}
+        for child_id, parent_id in cls.parents.through.objects.values_list("from_label_id", "to_label_id"):
+            children_by_parent.setdefault(parent_id, []).append(child_id)
+
+        def descendants(root: int) -> set[int]:
+            """Every id beneath *root*, cycle-safe, matching get_label_and_descendants."""
+            seen: set[int] = set()
+            queue = [root]
+            while queue:
+                current = queue.pop()
+                if current in seen:
+                    continue
+                seen.add(current)
+                queue.extend(children_by_parent.get(current, ()))
+            return seen
+
+        needed: set[int] = set()
+        subtrees: dict[int, set[int]] = {}
+        for label in labels:
+            if label.pk is None:
+                continue
+            subtree = descendants(label.pk)
+            subtrees[label.pk] = subtree
+            needed |= subtree
+
+        # One query for every pin count involved, annotated rather than counted
+        # per label.
+        counts = dict(cls.objects.filter(pk__in=needed).annotate(n=Count("pins")).values_list("pk", "n"))
+
+        for label in labels:
+            if label.pk is None:
+                continue
+            label._total_pins_memo = sum(counts.get(pk, 0) for pk in subtrees[label.pk])  # noqa: SLF001 - seeding this class's own memo on its own instances
 
     def total_pin_count(self) -> int:
         """Return this label's pin count plus every descendant's pin count (full subtree).
@@ -241,4 +311,24 @@ class Label(abstract.FrontendDashboardModel):
         indexes = [
             Index(fields=["profile"], name="idxdb_label_profile"),
             Index(fields=["profile", "order"], name="idxdb_label_pfile_ord"),
+        ]
+        constraints = [
+            # Case-insensitive, matching how PinAlias/WikiAlias already model the
+            # same "name identifies a row within its parent" relationship, and
+            # matching what callers assume: several sites treat
+            # (profile, name, kind) as identifying, and media_labels.py had to
+            # pre-filter with ``name__iexact`` because ``get_or_create(name=...)``
+            # alone is case-sensitive while the intended identity is not.
+            #
+            # ``nulls_distinct=False`` so global labels (profile IS NULL) are
+            # constrained against each other too - Postgres treats NULLs as
+            # distinct by default, which would leave duplicate globals possible.
+            # Requires Postgres 15+; this project runs 17.
+            UniqueConstraint(
+                Lower("name"),
+                "profile",
+                "kind",
+                name="uq_label_profile_name_kind_ci",
+                nulls_distinct=False,
+            ),
         ]

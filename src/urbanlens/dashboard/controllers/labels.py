@@ -43,6 +43,7 @@ from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
 from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
+from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label, label_conflict_message
 from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
@@ -368,7 +369,11 @@ def _would_create_cycle(label: Label, proposed_parent_id: int) -> bool:
 def _rows_ctx(kind: str, profile: Profile, can_edit_global: bool = False, extra: dict | None = None) -> dict:
     """Build template context for organize_label_rows.html and standalone index pages."""
     cfg = _config(kind)
-    label_list = _queryset_for_kind(kind, profile)
+    # Materialised before priming, and the same list is handed to the template:
+    # priming seeds a memo on each instance, so a queryset re-evaluated during
+    # rendering would discard it and quietly restore the per-label BFS.
+    label_list = list(_queryset_for_kind(kind, profile))
+    Label.prime_total_pin_counts(label_list)
     ctx: dict = {
         **_BASE_CTX,
         "labels": label_list,
@@ -610,6 +615,12 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
         if parent_order is not None:
             order = parent_order
 
+        # Checked before the insert so a collision is a 400 the form can show,
+        # not the IntegrityError the database would raise (a 500 to the user).
+        conflict = find_conflicting_label(profile=profile, name=name, kind=self.kind)
+        if conflict is not None:
+            return HttpResponse(label_conflict_message(conflict, singular_title=cfg.singular_title), status=400)
+
         custom_icon = _uploaded_custom_icon(request)
         if custom_icon:
             custom_icon = _resize_custom_icon(custom_icon)
@@ -717,6 +728,11 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
             name = request.POST.get("name", "").strip()
             if not name:
                 return HttpResponse("Name is required.", status=400)
+            # exclude_pk so renaming a label to its own name (or just changing its
+            # case) is not reported as colliding with itself.
+            conflict = find_conflicting_label(profile=profile, name=name, kind=new_kind, exclude_pk=label.pk)
+            if conflict is not None:
+                return HttpResponse(label_conflict_message(conflict, singular_title=self._cfg().singular_title), status=400)
             label.name = name
 
         label.description = request.POST.get("description", "").strip() or None

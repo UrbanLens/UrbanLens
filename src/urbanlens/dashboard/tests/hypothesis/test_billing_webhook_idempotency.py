@@ -21,10 +21,10 @@ from django.test import Client
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.UrbanLens.settings.app import settings as app_settings
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.billing import BillingSubscriptionStatus, RoleSubscription, StripeWebhookEvent
 from urbanlens.dashboard.models.subscriptions import SubscriptionRole
+from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 
 def _stripe_subscription() -> dict:

@@ -38,11 +38,11 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
-from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.subscriptions import SiteFeature, SubscriptionRole, grant_subscription
 from urbanlens.dashboard.plugins.builtin.epa_echo import EpaEchoDetailPanelSource, EpaEchoNearbyPanelSource
 from urbanlens.dashboard.services.pins.external_data import get_panel_source
+from urbanlens.dashboard.tests.hypothesis.redata_helpers import RedataConfiguredMixin
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.pin.model import Pin

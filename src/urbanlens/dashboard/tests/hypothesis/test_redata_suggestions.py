@@ -14,6 +14,7 @@ from unittest import mock
 from django.contrib.auth.models import User
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard import tasks
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
@@ -53,8 +54,8 @@ class LabelDefinitionTests(TestCase):
         self.profile = _profile()
 
     def test_builds_external_id_name_and_parent_ids(self) -> None:
-        parent = Label.objects.create(profile=self.profile, name="Hospital", kind=KIND_CATEGORY)
-        label = Label.objects.create(profile=self.profile, name="Asylum", kind=KIND_CATEGORY, description="Psych hospitals")
+        parent = ensure_label(profile=self.profile, name="Hospital", kind=KIND_CATEGORY)
+        label = ensure_label(profile=self.profile, name="Asylum", kind=KIND_CATEGORY, description="Psych hospitals")
         label.parents.add(parent)
         definition = redata_suggestions._label_definition(label, is_active=True)
         self.assertEqual(definition["external_id"], str(label.uuid))
@@ -64,14 +65,14 @@ class LabelDefinitionTests(TestCase):
         self.assertTrue(definition["is_active"])
 
     def test_non_suggestable_parents_are_excluded(self) -> None:
-        status_parent = Label.objects.create(profile=self.profile, name="Visited", kind=KIND_STATUS)
-        label = Label.objects.create(profile=self.profile, name="Church", kind=KIND_TAG)
+        status_parent = ensure_label(profile=self.profile, name="Visited", kind=KIND_STATUS)
+        label = ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
         label.parents.add(status_parent)
         definition = redata_suggestions._label_definition(label, is_active=True)
         self.assertEqual(definition["parent_ids"], [])
 
     def test_is_active_false_for_retirement(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Church", kind=KIND_TAG)
+        label = ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
         definition = redata_suggestions._label_definition(label, is_active=False)
         self.assertFalse(definition["is_active"])
 
@@ -79,13 +80,13 @@ class LabelDefinitionTests(TestCase):
 class ProfileIdsForLabelTests(TestCase):
     def test_owned_label_maps_to_its_one_owner(self) -> None:
         profile = _profile()
-        label = Label.objects.create(profile=profile, name="Church", kind=KIND_TAG)
+        label = ensure_label(profile=profile, name="Church", kind=KIND_TAG)
         self.assertEqual(redata_suggestions._profile_ids_for_label(label), [profile.pk])
 
     def test_global_label_maps_to_every_profile(self) -> None:
         profile_a = _profile()
         profile_b = _profile()
-        label = Label.objects.create(profile=None, name="Church", kind=KIND_CATEGORY)
+        label = ensure_label(profile=None, name="Church", kind=KIND_CATEGORY)
         profile_ids = redata_suggestions._profile_ids_for_label(label)
         self.assertIn(profile_a.pk, profile_ids)
         self.assertIn(profile_b.pk, profile_ids)
@@ -97,8 +98,8 @@ class PinAssignmentEntryTests(TestCase):
 
     def test_includes_only_suggestable_label_ids(self) -> None:
         pin = _pin(self.profile, seq=1)
-        tag = Label.objects.create(profile=self.profile, name="Notable", kind=KIND_TAG)
-        status = Label.objects.create(profile=self.profile, name="Visited", kind=KIND_STATUS)
+        tag = ensure_label(profile=self.profile, name="Notable", kind=KIND_TAG)
+        status = ensure_label(profile=self.profile, name="Visited", kind=KIND_STATUS)
         pin.labels.add(tag, status)
         entry = redata_suggestions._pin_assignment_entry(pin)
         self.assertEqual(entry["external_id"], str(pin.uuid))
@@ -149,7 +150,7 @@ class SyncPinAssignmentTests(TestCase):
 
     def test_configured_calls_gateway_with_current_labels(self) -> None:
         pin = _pin(self.profile, seq=1)
-        tag = Label.objects.create(profile=self.profile, name="Notable", kind=KIND_TAG)
+        tag = ensure_label(profile=self.profile, name="Notable", kind=KIND_TAG)
         pin.labels.add(tag)
         gateway_instance = mock.Mock()
         with _redata_configured(), mock.patch("urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway", return_value=gateway_instance):
@@ -171,19 +172,19 @@ class QueueLabelDefinitionSyncTests(TestCase):
         self.profile = _profile()
 
     def test_non_suggestable_kind_does_not_schedule_on_commit(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Visited", kind=KIND_STATUS)
+        label = ensure_label(profile=self.profile, name="Visited", kind=KIND_STATUS)
         with _redata_configured(), mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit") as on_commit:
             redata_suggestions.queue_label_definition_sync(label)
         on_commit.assert_not_called()
 
     def test_not_configured_does_not_schedule_on_commit(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Church", kind=KIND_TAG)
+        label = ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
         with _redata_not_configured(), mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit") as on_commit:
             redata_suggestions.queue_label_definition_sync(label)
         on_commit.assert_not_called()
 
     def test_suggestable_kind_enqueues_after_commit(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Church", kind=KIND_TAG)
+        label = ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
         callbacks: list = []
         with (
             _redata_configured(),
@@ -200,7 +201,7 @@ class QueueLabelRetirementTests(TestCase):
         self.profile = _profile()
 
     def test_suggestable_kind_enqueues_a_retired_definition_after_commit(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Church", kind=KIND_TAG)
+        label = ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
         callbacks: list = []
         with (
             _redata_configured(),
@@ -214,7 +215,7 @@ class QueueLabelRetirementTests(TestCase):
         self.assertFalse(definitions[0]["is_active"])
 
     def test_not_configured_does_not_schedule_on_commit(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Church", kind=KIND_TAG)
+        label = ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
         with _redata_not_configured(), mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.transaction.on_commit") as on_commit:
             redata_suggestions.queue_label_retirement(label)
         on_commit.assert_not_called()
@@ -223,7 +224,7 @@ class QueueLabelRetirementTests(TestCase):
         """A kind-change-away caller passes a label whose *current* kind is
         already the new (non-suggestable) one - retirement must not re-check
         it, since callers already decided based on the kind it *was*."""
-        label = Label.objects.create(profile=self.profile, name="Was Tag", kind=KIND_STATUS)
+        label = ensure_label(profile=self.profile, name="Was Tag", kind=KIND_STATUS)
         callbacks: list = []
         with (
             _redata_configured(),
@@ -268,8 +269,8 @@ class BackfillProfileTests(TestCase):
         # models.labels.signals.create_default_tags) - count against that
         # baseline rather than assuming an empty taxonomy.
         baseline = Label.objects.visible_to(self.profile).suggestable().count()
-        Label.objects.create(profile=self.profile, name="Church", kind=KIND_TAG)
-        Label.objects.create(profile=self.profile, name="New Status", kind=KIND_STATUS)
+        ensure_label(profile=self.profile, name="Church", kind=KIND_TAG)
+        ensure_label(profile=self.profile, name="New Status", kind=KIND_STATUS)
         _pin(self.profile, seq=1)
         gateway_instance = mock.Mock()
         with (
@@ -300,7 +301,7 @@ class GetSuggestionsTests(TestCase):
 
     def test_resolves_results_to_local_labels_and_drops_unknown_ids(self) -> None:
         pin = _pin(self.profile, seq=1)
-        label = Label.objects.create(profile=self.profile, name="Lighthouse", kind=KIND_TAG)
+        label = ensure_label(profile=self.profile, name="Lighthouse", kind=KIND_TAG)
         gateway_instance = mock.Mock()
         gateway_instance.suggest_labels.return_value = {
             "results": [

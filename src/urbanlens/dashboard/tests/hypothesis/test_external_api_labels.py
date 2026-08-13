@@ -18,6 +18,7 @@ from uuid import uuid4
 from django.contrib.auth.models import User
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.labels.customization import LabelCustomization
@@ -60,10 +61,10 @@ class LabelApiTestCase(TestCase):
         ApiKey.objects.filter(user=self.user).update(scopes=[scope.value for scope in scopes])
 
     def _mine(self, name: str = "Mine", kind: str = KIND_TAG, **kwargs) -> Label:
-        return Label.objects.create(profile=self.profile, name=f"{_TOKEN}{name}", kind=kind, **kwargs)
+        return ensure_label(profile=self.profile, name=f"{_TOKEN}{name}", kind=kind, **kwargs)
 
     def _global(self, name: str = "Shared", kind: str = KIND_CATEGORY, **kwargs) -> Label:
-        return Label.objects.create(profile=None, name=f"{_TOKEN}{name}", kind=kind, **kwargs)
+        return ensure_label(profile=None, name=f"{_TOKEN}{name}", kind=kind, **kwargs)
 
     @staticmethod
     def _names(body: dict) -> list[str]:
@@ -93,7 +94,7 @@ class LabelCollectionTests(LabelApiTestCase):
 
     def test_own_and_global_labels_are_visible_but_not_other_users(self) -> None:
         other = baker.make(User)
-        Label.objects.create(profile=Profile.objects.get(user=other), name=f"{_TOKEN}Theirs", kind=KIND_TAG)
+        ensure_label(profile=Profile.objects.get(user=other), name=f"{_TOKEN}Theirs", kind=KIND_TAG)
         self._mine("Mine")
         self._global("Shared")
 
@@ -181,7 +182,7 @@ class LabelCollectionTests(LabelApiTestCase):
 
     def test_create_with_another_users_parent_is_400(self) -> None:
         other = baker.make(User)
-        foreign = Label.objects.create(profile=Profile.objects.get(user=other), name="Theirs", kind=KIND_TAG)
+        foreign = ensure_label(profile=Profile.objects.get(user=other), name="Theirs", kind=KIND_TAG)
         response = self.client.post(
             _BASE,
             {"name": "Child", "kind": KIND_TAG, "parent_uuids": [str(foreign.uuid)]},
@@ -207,7 +208,7 @@ class LabelDetailTests(LabelApiTestCase):
 
     def test_another_users_label_is_404(self) -> None:
         other = baker.make(User)
-        theirs = Label.objects.create(profile=Profile.objects.get(user=other), name="Theirs", kind=KIND_TAG)
+        theirs = ensure_label(profile=Profile.objects.get(user=other), name="Theirs", kind=KIND_TAG)
         self.assertEqual(self.client.get(self._url(theirs), **_bearer(self.raw_key)).status_code, 404)
 
     def test_patch_own_label(self) -> None:
@@ -356,7 +357,7 @@ class LabelCustomizationEndpointTests(LabelApiTestCase):
 
     def test_another_users_label_is_404(self) -> None:
         other = baker.make(User)
-        theirs = Label.objects.create(profile=Profile.objects.get(user=other), name="Theirs", kind=KIND_TAG)
+        theirs = ensure_label(profile=Profile.objects.get(user=other), name="Theirs", kind=KIND_TAG)
         response = self.client.put(self._url(theirs), {"name": "x"}, content_type="application/json", **_bearer(self.raw_key))
         self.assertEqual(response.status_code, 404)
 
@@ -417,7 +418,7 @@ class LabelMergeEndpointTests(LabelApiTestCase):
     def test_another_users_label_cannot_be_a_source(self) -> None:
         target = self._mine("Keep")
         other = baker.make(User)
-        theirs = Label.objects.create(profile=Profile.objects.get(user=other), name="Theirs", kind=KIND_TAG)
+        theirs = ensure_label(profile=Profile.objects.get(user=other), name="Theirs", kind=KIND_TAG)
         response = self._merge(target, theirs)
         self.assertEqual(response.status_code, 400)
         self.assertTrue(Label.objects.filter(pk=theirs.pk).exists())

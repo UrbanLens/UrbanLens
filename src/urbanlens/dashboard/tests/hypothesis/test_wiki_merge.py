@@ -274,9 +274,7 @@ class GenerateLocationBoundariesIntegrationTests(TestCase):
     """generate_location_boundaries is the single choke point reconciliation hooks into."""
 
     def test_reconciliation_runs_after_boundary_generation(self) -> None:
-        from urbanlens.dashboard.services.locations.boundaries import generate_location_boundaries
-
-        from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries
+        from urbanlens.dashboard.services.locations.boundaries import ResolvedBoundaries, generate_location_boundaries
 
         location = _make_location()
         baker.make(Wiki, location=location, name="Some Wiki")

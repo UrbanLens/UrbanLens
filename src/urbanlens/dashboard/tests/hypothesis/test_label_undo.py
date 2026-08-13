@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
@@ -25,11 +26,11 @@ class LabelUndoTests(TestCase):
     def setUp(self):
         super().setUp()
         self.profile: Profile = baker.make("auth.User").profile
-        self.parent = Label.objects.create(profile=self.profile, name="Industrial", kind="tag", order=5)
-        self.label = Label.objects.create(
+        self.parent = ensure_label(profile=self.profile, name="Industrial", kind="tag", order=5)
+        self.label = ensure_label(
             profile=self.profile, name="Mills", kind="tag", order=3, icon="factory", color="#aa2200", keywords="mill, textile",
         )
-        self.child = Label.objects.create(profile=self.profile, name="Textile mills", kind="tag", order=1)
+        self.child = ensure_label(profile=self.profile, name="Textile mills", kind="tag", order=1)
         self.label.parents.add(self.parent)
         self.child.parents.add(self.label)
 
@@ -101,16 +102,24 @@ class LabelUndoTests(TestCase):
             [by_name["Industrial"].pk],
         )
 
-    def test_a_name_reused_since_does_not_block(self):
-        # Label has no unique constraints; the merge tool handles duplicates. A
-        # restore refusing here would be stricter than the app itself is.
+    def test_a_name_reused_since_is_refused_with_a_message(self):
+        """Since migration 0042 the name is unique, so restoring onto a reused one
+        would raise IntegrityError from the database - a 500 with no explanation.
+        The handler refuses first and says why.
+
+        This test previously asserted the opposite (that a duplicate was created),
+        which was correct while Label had no constraint.
+        """
+        from urbanlens.dashboard.services.undo.service import UndoExpiredError
+
         undo_action = self._delete_with_undo()
-        Label.objects.create(profile=self.profile, name="Mills", kind="tag")
+        ensure_label(profile=self.profile, name="Mills", kind="tag")
 
-        restored = restore_undo_action(undo_action)
+        with self.assertRaises(UndoExpiredError) as caught:
+            restore_undo_action(undo_action)
 
-        self.assertEqual(len(restored), 1)
-        self.assertEqual(Label.objects.filter(profile=self.profile, name="Mills").count(), 2)
+        self.assertIn("already exists", str(caught.exception))
+        self.assertEqual(Label.objects.filter(profile=self.profile, name="Mills").count(), 1)
 
     def test_the_single_delete_view_stashes(self):
         self.client.force_login(self.profile.user)

@@ -21,6 +21,7 @@ from unittest import mock
 from django.contrib.auth.models import User
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
 from urbanlens.dashboard.models.labels.model import Label
@@ -81,7 +82,7 @@ class LabelCustomizationSaveRefreshesMapPinCacheTests(TestCase):
         self.other_profile = self.other_user.profile
 
     def test_customizing_a_global_label_refreshes_only_own_pins(self) -> None:
-        global_label = baker.make(Label, profile=None, kind="tag", name="Visited", icon="check")
+        global_label = ensure_label( profile=None, kind="tag", name="Visited", icon="check")
         own_pin = _make_pin_with_label(self.profile, global_label)
         other_profiles_pin = _make_pin_with_label(self.other_profile, global_label)
 

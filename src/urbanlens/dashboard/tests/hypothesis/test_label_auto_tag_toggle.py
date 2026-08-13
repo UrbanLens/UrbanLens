@@ -18,6 +18,7 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
@@ -87,7 +88,7 @@ class LabelEditAutoTagToggleVisibilityTests(TestCase):
         self.assertNotContains(response, "allow_auto_tag")
 
     def test_status_kind_checks_ai_label_statuses(self) -> None:
-        status = baker.make(Label, profile=self.profile, kind=KIND_STATUS, name="Abandoned")
+        status = ensure_label( profile=self.profile, kind=KIND_STATUS, name="Abandoned")
         url = reverse("label.edit", kwargs={"label_kind": "status", "label_id": status.id})
         self.profile.ai_enabled = True
         self.profile.ai_label_statuses = True
@@ -150,7 +151,7 @@ class LabelEditKeywordAutoTagToggleVisibilityTests(TestCase):
         self.assertNotContains(response, "allow_auto_tag")
 
     def test_status_kind_checks_keyword_label_statuses(self) -> None:
-        status = baker.make(Label, profile=self.profile, kind=KIND_STATUS, name="Abandoned")
+        status = ensure_label( profile=self.profile, kind=KIND_STATUS, name="Abandoned")
         url = reverse("label.edit", kwargs={"label_kind": "status", "label_id": status.id})
         with patch(_AI_ENABLED_PATCH, return_value=False):
             response = self.client.get(url)

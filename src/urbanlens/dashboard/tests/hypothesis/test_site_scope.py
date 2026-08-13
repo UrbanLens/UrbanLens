@@ -20,6 +20,7 @@ from urbanlens.dashboard.models.boundary.model import Boundary, BoundaryType
 from urbanlens.dashboard.models.cache.location_cache import LocationCache
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin, PinType
+from urbanlens.dashboard.models.place.model import PlaceKind
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.locations.site_scope import (
     BUILDING_MATCH_METERS,
@@ -34,7 +35,6 @@ from urbanlens.dashboard.services.locations.site_scope import (
     nearest_building,
     parcel_buildings,
 )
-from urbanlens.dashboard.models.place.model import PlaceKind
 
 from .place_helpers import official_geometry
 

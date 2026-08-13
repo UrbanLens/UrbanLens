@@ -19,8 +19,8 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
-from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action, stash_for_undo

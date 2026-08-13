@@ -25,7 +25,7 @@ from unittest import mock
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 REDATA_TEST_URL = "https://redata.test"
-REDATA_TEST_KEY = "test-key"  # noqa: S105 # nosec B105 - a fixture value, not a credential
+REDATA_TEST_KEY = "test-key"  # nosec B105 - a fixture value, not a credential
 
 
 class RedataConfiguredMixin:

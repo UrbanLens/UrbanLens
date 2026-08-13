@@ -23,8 +23,8 @@ from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.aliases.model import WikiAlias
 from urbanlens.dashboard.models.comments.model import Comment
-from urbanlens.dashboard.models.links.model import WikiLink
 from urbanlens.dashboard.models.labels.model import Label
+from urbanlens.dashboard.models.links.model import WikiLink
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity

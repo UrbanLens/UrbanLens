@@ -77,7 +77,7 @@ class MemorySourceIsolationTests(TestCase):
         def half_broken(profile, start, end, bbox):
             yield aggregator.MemoryEvent(
                 type="photo",
-                occurred_at=aggregator._date_to_datetime(self.start),  # noqa: SLF001 - shared helper
+                occurred_at=aggregator._date_to_datetime(self.start),
                 ended_at=None,
                 title="First photo",
                 subtitle="Photo",

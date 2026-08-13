@@ -14,6 +14,7 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from django.utils import timezone
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
 from urbanlens.dashboard.models.labels.model import Label
@@ -43,8 +44,8 @@ class LabelBulkUpdateRefreshesMapPinCacheTests(TestCase):
         self.profile, _ = Profile.objects.get_or_create(user=self.user)
         self.location = Location.objects.create(latitude=40.0, longitude=-73.0)
         self.pin = Pin.objects.create(profile=self.profile, location=self.location, name="Cached pin")
-        self.label_a = Label.objects.create(profile=self.profile, name="Alpha", kind="tag", order=1, icon="star")
-        self.label_b = Label.objects.create(profile=self.profile, name="Beta", kind="tag", order=2, icon="bolt")
+        self.label_a = ensure_label(profile=self.profile, name="Alpha", kind="tag", order=1, icon="star")
+        self.label_b = ensure_label(profile=self.profile, name="Beta", kind="tag", order=2, icon="bolt")
         self.pin.labels.add(self.label_a, self.label_b)
 
     def _reorder_via_organize(self) -> mock.MagicMock:

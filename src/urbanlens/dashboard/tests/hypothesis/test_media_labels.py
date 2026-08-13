@@ -14,6 +14,7 @@ from django.core.files.uploadedfile import SimpleUploadedFile
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.model import KIND_MEDIA, KIND_TAG, KIND_USER, Label
@@ -117,7 +118,7 @@ class LabelImageMembershipViewTests(TestCase):
         self.profile = self.user.profile
         self.client.force_login(self.user)
         self.image = baker.make(Image, profile=self.profile)
-        self.label = baker.make(Label, profile=self.profile, kind=KIND_MEDIA, name="Interior")
+        self.label = ensure_label( profile=self.profile, kind=KIND_MEDIA, name="Interior")
 
     def test_add_and_remove_label(self) -> None:
         add_response = self.client.post(

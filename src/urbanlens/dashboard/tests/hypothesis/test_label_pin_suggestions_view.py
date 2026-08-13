@@ -8,6 +8,7 @@ from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
@@ -43,7 +44,7 @@ class LabelPinSuggestionsViewTests(TestCase):
         self.assertNotContains(response, "Suggested for this place")
 
     def test_renders_suggested_labels_with_confidence(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Lighthouse", kind=KIND_TAG)
+        label = ensure_label(profile=self.profile, name="Lighthouse", kind=KIND_TAG)
         with mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.get_suggestions", return_value=[(label, 0.82)]):
             response = self.client.get(self._url())
         self.assertContains(response, "Suggested for this place")
@@ -51,7 +52,7 @@ class LabelPinSuggestionsViewTests(TestCase):
         self.assertContains(response, "82%")
 
     def test_already_applied_labels_are_excluded_even_if_redata_suggests_them(self) -> None:
-        label = Label.objects.create(profile=self.profile, name="Lighthouse", kind=KIND_TAG)
+        label = ensure_label(profile=self.profile, name="Lighthouse", kind=KIND_TAG)
         self.pin.labels.add(label)
         with mock.patch("urbanlens.dashboard.services.labels.redata_suggestions.get_suggestions", return_value=[(label, 0.82)]):
             response = self.client.get(self._url())

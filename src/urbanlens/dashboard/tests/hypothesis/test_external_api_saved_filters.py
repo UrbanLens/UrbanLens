@@ -19,6 +19,7 @@ from uuid import uuid4
 from django.contrib.auth.models import User
 from model_bakery import baker
 
+from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.labels.model import Label
@@ -103,7 +104,7 @@ class SavedFilterCriteriaOwnershipTests(SavedFilterApiTestCase):
     """Criteria may only reference labels/custom fields the caller may use."""
 
     def test_own_label_is_accepted(self) -> None:
-        mine = Label.objects.create(profile=self.profile, name="Mine", kind="tag")
+        mine = ensure_label(profile=self.profile, name="Mine", kind="tag")
         response = self.client.post(
             _BASE,
             {"name": "Ok", "criteria": {"tags": [mine.pk]}},
@@ -113,7 +114,7 @@ class SavedFilterCriteriaOwnershipTests(SavedFilterApiTestCase):
         self.assertEqual(response.status_code, 201)
 
     def test_global_label_is_accepted(self) -> None:
-        shared = Label.objects.create(profile=None, name="Shared", kind="category")
+        shared = ensure_label(profile=None, name="Shared", kind="category")
         response = self.client.post(
             _BASE,
             {"name": "Ok", "criteria": {"tags": [shared.pk]}},
@@ -124,7 +125,7 @@ class SavedFilterCriteriaOwnershipTests(SavedFilterApiTestCase):
 
     def test_another_users_label_is_refused(self) -> None:
         other = baker.make(User)
-        foreign = Label.objects.create(profile=Profile.objects.get(user=other), name="Secret", kind="tag")
+        foreign = ensure_label(profile=Profile.objects.get(user=other), name="Secret", kind="tag")
         response = self.client.post(
             _BASE,
             {"name": "Probe", "criteria": {"tags": [foreign.pk]}},
@@ -137,7 +138,7 @@ class SavedFilterCriteriaOwnershipTests(SavedFilterApiTestCase):
     def test_foreign_label_inside_label_groups_is_refused(self) -> None:
         """label_groups is a second place label pks hide - it must be checked too."""
         other = baker.make(User)
-        foreign = Label.objects.create(profile=Profile.objects.get(user=other), name="Secret", kind="tag")
+        foreign = ensure_label(profile=Profile.objects.get(user=other), name="Secret", kind="tag")
         response = self.client.post(
             _BASE,
             {"name": "Probe", "criteria": {"label_groups": [{"op": "and", "ids": [foreign.pk]}]}},
@@ -239,7 +240,7 @@ class SavedFilterDetailTests(SavedFilterApiTestCase):
 
     def test_patch_refuses_foreign_label_criteria(self) -> None:
         other = baker.make(User)
-        foreign = Label.objects.create(profile=Profile.objects.get(user=other), name="Secret", kind="tag")
+        foreign = ensure_label(profile=Profile.objects.get(user=other), name="Secret", kind="tag")
         response = self.client.patch(
             self._url(),
             {"criteria": {"tags": [foreign.pk]}},

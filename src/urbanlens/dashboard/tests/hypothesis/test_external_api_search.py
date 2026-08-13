@@ -39,8 +39,8 @@ from hypothesis import HealthCheck, given, settings as hypothesis_settings, stra
 from model_bakery import baker
 from oauth2_provider.models import get_access_token_model
 
-from urbanlens.core.tests.testcase import TestCase
 from urbanlens.core.tests.oauth import first_party_application
+from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.external_api.serializers_search import parse_result_types
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.profile.model import Profile

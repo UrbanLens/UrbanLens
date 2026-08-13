@@ -182,6 +182,7 @@ from urbanlens.dashboard.models.visits.model import PinVisit
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
 from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
+from urbanlens.dashboard.services.labels.uniqueness import find_conflicting_label, label_conflict_message
 from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 from urbanlens.dashboard.services.map_pins.autocomplete import resolve_google_place, search_google_places, search_local
 from urbanlens.dashboard.services.media.images import delete_stored_file
@@ -2198,6 +2199,13 @@ class LabelsView(PaginatedListMixin, ExternalApiView):
         if error is not None:
             return error
 
+        # Same check the HTML form path runs, for the same reason: without it the
+        # unique constraint raises IntegrityError and the client gets a 500 where
+        # a 400 explaining the collision is what it can act on.
+        conflict = find_conflicting_label(profile=profile, name=data["name"], kind=data["kind"])
+        if conflict is not None:
+            return Response({"error": label_conflict_message(conflict, singular_title=data["kind"].title())}, status=409)
+
         label = Label.objects.create(
             profile=profile,
             name=data["name"],
@@ -2260,6 +2268,9 @@ class LabelDetailView(ExternalApiView):
             return error
 
         if "name" in data:
+            conflict = find_conflicting_label(profile=profile, name=data["name"], kind=label.kind, exclude_pk=label.pk)
+            if conflict is not None:
+                return Response({"error": label_conflict_message(conflict, singular_title=label.kind.title())}, status=409)
             label.name = data["name"]
         if "description" in data:
             label.description = data.get("description") or None
