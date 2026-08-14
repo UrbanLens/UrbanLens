@@ -6623,3 +6623,29 @@ out of 29 bare is the more defensible reading than any prediction that most of t
 **A hypothesis worth testing turned out to be worth weakening.** The sample that generated it was
 drawn from references I could most easily place, which is exactly the selection bias that makes a
 rule look stronger than it is.
+
+
+## Chunk 383 - what actually makes a reference findable
+
+`external_api/views.py`'s bare "Recorded in docs/PROBLEMS.md" **resolves** - to a bullet at line
+2417, not a heading, reading "`MapController.resolve_place` does not honor the
+`external_apis_enabled` profile toggle".
+
+**Tally, 11 references: 7 resolve, 1 ambiguous, 3 dangling.**
+
+This settles what the convention should actually say, and it is neither of my two earlier attempts.
+The predictor is not "has a date" (chunk 381) and not "names the heading" (chunk 370). It is
+**whether the comment contains a distinctive string to search for**:
+
+- resolves: `MapController.resolve_place`, `strict=True`, `2026-07-28`, `identity_visibility.py`,
+  `Friendship.muted` - all searchable tokens;
+- fails: "the report", "option (a)", "the trips list", "every other toggle silently did nothing" -
+  descriptions in general words, which match either nothing or everything.
+
+That is a rule about *searchability*, not citation format, and it explains all 11 outcomes including
+the two that my earlier rules got wrong. It is also cheaper to follow than either: naming the symbol
+you are already writing about requires no lookup at all.
+
+Convention note updated. Three revisions across chunks 370-383, each one narrowing toward the
+property that actually mattered - which was visible only after checking enough references to see
+which ones failed.

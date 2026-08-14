@@ -10,7 +10,10 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > a pointer to one implies it is the whole story where a bare pointer at least led to both. Headings
 > are stable here; line numbers are not. **A date works nearly as well as a heading** - `external_api/
 > serializers.py` cites "docs/PROBLEMS.md, 2026-07-28" and that alone locates the entry unambiguously,
-> because entry headings carry their date. A bare file reference is the only form that fails (this file is append-only and grew by ~800 lines on 2026-08-14
+> because entry headings carry their date. A **distinctive identifier** in the surrounding prose works
+> just as well - `external_api/views.py` says only "Recorded in docs/PROBLEMS.md" but names
+> `MapController.resolve_place`, which locates the entry immediately. What fails is a bare reference
+> whose comment describes the problem only in general words (this file is append-only and grew by ~800 lines on 2026-08-14
 > alone).
 
 ---
