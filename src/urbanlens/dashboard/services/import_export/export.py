@@ -14,6 +14,7 @@ from typing import Any
 import zipfile
 
 from django.core.cache import cache
+from django.db.models import Count
 
 logger = logging.getLogger(__name__)
 
@@ -736,7 +737,10 @@ def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") 
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
     from urbanlens.dashboard.services.messaging.direct_messages import display_identity_for
 
-    messages = DirectMessage.objects.involving(profile).select_related("sender", "recipient").prefetch_related("images").order_by("created")
+    # image_count is the only use of the images relation here, so it is annotated
+    # rather than prefetched: prefetch_related fetched every image row per message
+    # *and* .count() ignored the cache and queried anyway - paying both costs.
+    messages = DirectMessage.objects.involving(profile).select_related("sender", "recipient").annotate(image_count=Count("images")).order_by("created")
 
     identity_cache: dict[int, dict[str, Any]] = {}
 
@@ -761,7 +765,7 @@ def _export_direct_messages(profile: Any, temp_dir: str, *, base_url: str = "") 
             # them just as surely as their name.
             "partner_uuid": None if identity["is_anonymized"] else str(partner.uuid),
             "is_tombstoned": bool(tombstone),
-            "image_count": message.images.count() if not tombstone else 0,
+            "image_count": message.image_count if not tombstone else 0,
             "has_map": bool(message.markup_map_id) and not tombstone,
             "created": str(message.created),
             "read": message.read_at is not None,

@@ -6702,10 +6702,14 @@ on the label queryset, then `label.own_pins` in the comprehension. `to_attr` mat
 `label.pins.all()` would return the filtered set under a name that implies otherwise, which is a
 trap for the next reader.
 
-**`:764`** - `"image_count": message.images.count() if not tombstone else 0`, once per message.
-Wants `annotate(image_count=Count("images"))` on the message queryset and
-`message.image_count` at the site. Note the `if not tombstone` guard: the annotation is computed
-for every row regardless, so the conditional has to stay to preserve the zero.
+**`:764` - FIXED 2026-08-14, and it was worse than specified.** The message queryset *already*
+did `prefetch_related("images")`, and `message.images` is used for nothing but that count. So it
+paid **both** costs: every image row for every message was fetched into a cache, and `.count()`
+ignored the cache and issued a per-message COUNT anyway.
+
+Annotated with `Count("images")` and the prefetch **dropped** - no rows fetched, no per-message
+query. `len(message.images.all())` would have fixed the query but kept the pointless row fetching;
+that is the option to avoid when a relation is only ever counted.
 
 Both are export paths - they run over every label and every message a profile owns, so the
 multiplier is the size of the account. Neither was measured; the instrument is
