@@ -5998,3 +5998,23 @@ health before the first sync, that ambiguity would not exist.
 A useful general point for auditing a live environment: reading source is non-invasive, but the
 moment you sync files into a running container you have altered the thing you are measuring. This
 audit did that dozens of times before ever looking at whether the environment was healthy.
+
+
+## Chunk 353 - the wedge, pinned: the port is never bound
+
+Non-invasive final step on the unhealthy container, without restarting a service the user may be
+relying on. Reading `/proc/net/tcp` inside it: **nothing listens on port 8000**. The single
+listening socket is an ephemeral `0xAA29` (43561).
+
+So the diagnosis sharpens from "wedged server" to something much more actionable: `runserver` never
+reaches `bind()`. It is not hung handling requests - it is stuck in whatever runs *before* the
+server starts, with ~33 minutes of CPU burned doing it. That points at imports, Django system or
+migration checks, or the boot-time staticfiles/frontend build.
+
+Three chunks (351-353) took this from "the stack looks fine" to a named failure point, using only
+observation - `docker ps`, `docker inspect`, `ps`, `curl`, `/proc/net/tcp` - and changing nothing.
+That restraint was deliberate: a restart would have fixed the symptom and destroyed the evidence,
+and it is the user's environment to restart.
+
+It is also the strongest argument in this audit for varying the instrument. Fifty chunks of reading
+source could not have found this, and three chunks of looking at a running system did.

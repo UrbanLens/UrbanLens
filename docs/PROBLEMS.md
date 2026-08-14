@@ -7046,3 +7046,14 @@ have fired on those syncs. The **10-day failing streak predates all of that**, s
 caused by the syncs, but the *currently running* process is one they restarted. A clean
 `docker compose restart app` is the first thing to try, and would also confirm whether the wedge
 reproduces from a fresh start.
+
+**Pinned precisely (chunk 353): port 8000 is never bound.** Reading `/proc/net/tcp` inside the
+container, no socket is listening on 8000 (hex `1F40`); the only listening port is `0xAA29` (43561),
+an ephemeral socket. So `runserver` is not hung *serving* requests - it has never reached
+`bind()`. With ~33 minutes of accumulated CPU on the child process, it is stuck **before** the
+server starts: imports, system checks, migration checks, or the staticfiles/frontend build the
+Dockerfile runs at boot.
+
+That narrows the search a great deal. The next step is not networking - it is finding what runs
+before the bind and can block indefinitely. `docker exec ... py-spy dump --pid <child>` (or
+`faulthandler`) would name the exact frame.
