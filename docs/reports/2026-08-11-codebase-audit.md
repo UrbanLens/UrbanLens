@@ -6173,3 +6173,24 @@ in a file this audit has read repeatedly.
 A fitting last observation for this thread: the information was not missing, it was mis-filed. Three
 of this session's most substantial findings - the override in chunk 325, the duplicated guard in
 chunk 332, and this - were all sitting in documentation I had access to the whole time.
+
+
+## Chunk 361 - the workers are fine, and the obvious fix order would break them
+
+Checked whether syncing current code into a container with an 18-migration-behind database had
+caused runtime failures. **It has not** - zero `ProgrammingError`s since the sync, and the worker is
+completing its hourly tasks.
+
+The reason is the useful part: **Celery workers do not autoreload.** They are still executing the
+code they started with on 2026-08-04, which matches the old schema. The resynced code is sitting in
+the container unused by them.
+
+Which inverts the obvious remediation order. Restarting the stack to fix the wedged `app` container
+would make the workers load current code against the stale database and start failing - so
+`migrate` (after a snapshot) has to come **before** the restart. Recorded in `PROBLEMS.md`, since
+that ordering is exactly what someone fixing the visible problem would get wrong.
+
+**Seventh grep false positive this session.** "12 errors today" was my pattern matching the word
+`errors` inside an INFO line's JSON payload - `{'scanned': 2, 'deleted': 0, 'errors': 0}`. A count of
+zero errors, counted as an error. The tally across the session is now unambiguous: every single time
+a raw scan count looked like a finding, reading the matches changed the answer.

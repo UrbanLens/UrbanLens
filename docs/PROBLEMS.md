@@ -7168,6 +7168,16 @@ schema, but at least three carry data:
 the merge partially succeeded the second attempt operates on already-merged data. Take a database
 snapshot before running these.
 
+**Ordering matters, and the safe order is not the obvious one (chunk 361).** Celery workers do not
+autoreload, so they are still running the code they started with on 2026-08-04 - which matches the
+*old* schema, which is why no `ProgrammingError` has appeared since. The container's `/app/src` has
+since been resynced with current code, so **the moment the stack is restarted the workers pick up
+new code against the old database and the schema errors return**.
+
+So: `migrate` (after snapshotting) **before** `docker compose restart`, not after. Restarting first
+to fix the wedged `app` container will also break the workers, which are currently healthy and
+processing their hourly tasks normally.
+
 This range matches the container-drift note already in `CLAUDE.local.md` ("30 tracked files behind -
 missing `models/place`, `models/album`, `models/map_overlay` ... and migrations 0026-0038", dated
 2026-08-06), so the drift has been known for over a week in one form and unrecognised as a
