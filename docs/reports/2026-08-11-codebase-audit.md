@@ -2866,6 +2866,34 @@ This is the third distinct instance of the same root cause in one day (`to_json`
 rather than as three fixes: **only `.all()` reads a `prefetch_related` cache.** Every other related-
 manager verb issues SQL, and none of them look wrong at a glance.
 
+### Why the write-side N+1 class is mostly not fixable here
+
+Every N+1 sweep in this audit targeted *reads* - `.filter()`, `.count()`, `.exists()`, `.latest()`
+on a related manager. A loop of `.update()` calls matches none of them, so the write side stayed
+invisible until `LabelReorderView.post` turned up while reading an unrelated handler. That is a
+genuine gap in how the problem was framed, not a gap in the scans.
+
+Sweeping for it (controllers, writes inside loops, with a control): **19 sites, and only one
+`.update()`** - the reorder handler already filed. The rest are `.save()` (9), `.delete()` (3),
+`.create()` (3), `.get_or_create()` (2), `.update_or_create()` (1).
+
+The distribution is the finding. In most codebases those `.save()` loops would be `bulk_update`
+candidates; here they largely are not, because **this application depends on `post_save` signals
+for correctness**, and every bulk operation skips them. The audit has now recorded three separate
+instances of that trap:
+
+- `labels/signals.py`'s ~46 seeding `get_or_create` calls per signup look like an obvious
+  `bulk_create` - `Label` has `post_save` receivers syncing a taxonomy.
+- The Takeout importer's per-row `PinVisit.objects.create()` looks like an obvious `bulk_create` -
+  `achievements/signals.py` subscribes to `PinVisit` under `TRIGGER_VISIT`.
+- `LabelReorderView`'s per-label `.update()` wants `bulk_update` - which also skips `post_save`,
+  so an order-only change needs checking against `sync_redata_taxonomy_on_save` first.
+
+So the write-side N+1 class is real but small, and each instance needs the signal question answered
+before it can be collapsed. That is a design consequence worth stating plainly: signal-driven
+correctness buys cohesion at the cost of making bulk operations unavailable, and anyone optimising
+writes here will meet it every time.
+
 ---
 
 ## 3. Checked and clean
