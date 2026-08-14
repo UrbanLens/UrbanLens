@@ -6674,3 +6674,22 @@ Which is a limit worth stating on the triage: it works for finding *likely* fail
 tell a genuinely unfindable reference from one whose answer I happen to already know. The three
 dangling references remain dangling on evidence; the resolutions increasingly depend on context I
 accumulated over eighty chunks and a fresh reader would not have.
+
+
+## Chunk 385 - fourth dangling reference, and it resolves chunk 376's ambiguity
+
+`notification_text_alerts.py` cites "decision 2026-07-23: wire them all" - a distinctive locator,
+and **not in the file**. Fourth dangling reference.
+
+It also settles the one case I left open. Chunk 376 could not decide which of two entries
+`signals.py` meant and declined to guess. **Neither was the target**: both comments cite the same
+2026-07-23 decision, and that decision is unfiled. The ambiguity was an artifact of assuming the
+target existed and trying to pick between near-misses.
+
+**Tally, 14 references: 9 resolve, 4 dangling, 0 ambiguous.**
+
+Chunk 376's restraint paid off concretely here. Had I picked the likelier of the two candidates - the
+RESOLVED safety check-in entry - I would have written a confident pointer to an entry that is not
+what the comment means, and this chunk would have found nothing wrong with it. **Declining to guess
+kept the question open long enough for the evidence to arrive**, which is the entire argument for
+declining to guess.

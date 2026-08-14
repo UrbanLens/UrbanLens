@@ -7292,3 +7292,25 @@ should never leave a reviewer in.
 The comment is self-contained enough to stand on its own - the argument (avoid duplicating validator
 rules in TypeScript) is stated inline. The missing piece is whatever weighed option (a) against the
 alternatives, including the ones not named here.
+
+
+## Note 2026-08-14: the "wire them all" WhatsApp/SMS decision is cited twice and filed nowhere
+
+Two files cite a decision that is not in this document:
+
+- `services/notifications/notification_text_alerts.py` - "every other toggle was stored and silently
+  ignored (docs/PROBLEMS.md; **decision 2026-07-23: wire them all**)";
+- `models/notifications/signals.py` - the same situation, "silently did nothing (docs/PROBLEMS.md)".
+
+Searches for "wire them all", "_whatsapp", "_sms opt-in" and "silently ignored" find only a naming
+issue (2026-08-11, enum member vs value) and code snippets - nothing recording the decision to wire
+every `<type>_whatsapp`/`<type>_sms` toggle through.
+
+The related entries that *do* exist are narrower: a RESOLVED one about alerts never firing for safety
+check-in partner invites, and a coverage note that 20 of 32 notification types have no per-type
+delivery control. Neither is the decision, which is why an earlier attempt to place the
+`signals.py` reference could not choose between them - **the correct answer was that neither
+matched.**
+
+The code implementing the decision exists and its docstring explains the reasoning inline, so nothing
+is unexplained. What is missing is the record the two comments assert exists.
