@@ -7395,3 +7395,30 @@ Worth noting what these last two chunks are *not*: they are not more thorough th
 and they did not find anything. Their value is that their zeros mean something. **A clean result from
 an unverified instrument is indistinguishable from a clean result from a blind one**, and roughly a
 quarter of this audit's chunks were spent discovering which of mine were which.
+
+
+## Chunk 416 - the model layer is mechanically clean across six independent checks
+
+`ManyToManyField(null=True)` is a **no-op** - there is no column to be null - so it misleads anyone
+reading the model into thinking emptiness is represented differently from `blank=True`. **Zero
+instances**, control detecting an injected one.
+
+That completes six independent model-layer checks, all clean, all controlled or AST-scoped:
+
+| check | result |
+|---|---|
+| `Meta.ordering` absent where paginated | clean (ordering applied per queryset, deliberately) |
+| `null=True` on text fields | 63, harmless - the one empty-string filter targets a non-null field |
+| `on_delete` policies | 0 `DO_NOTHING`; 97 `SET_NULL`, all nullable |
+| `related_name` collisions | 0 |
+| mutable literal defaults on JSON/Array | 0 |
+| no-op `null=True` on M2M | 0 |
+
+**The model layer has no mechanical defects.** Which matches where this audit's real findings
+actually came from: not from field declarations, but from *behaviour spanning them* - a bulk write
+skipping a receiver, a denormalised copy not recomputed, a cache not invalidated. Those are relations
+between code in different files, and no declaration-level scan reaches them.
+
+Three consecutive artifact-free chunks also suggests the earlier failure rate was not inherent to
+scanning. It was inherent to scanning **without checking the scope or the control** - a habit, not a
+limitation.
