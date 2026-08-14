@@ -7774,3 +7774,26 @@ settings. **Naming it as unverified rather than either asserting a gap or implyi
 The retry ratio is the finding: 73% with explicit backoff and the remainder documented is a
 deliberate policy, not an accident - which is the same property that made most of this audit's clean
 verdicts checkable.
+
+
+## Chunk 432 - the Celery time-limit question, answered better than it was asked
+
+Chunk 431 flagged that only 2 of 75 tasks set a time limit, and declined to call it a gap without
+checking the settings. **Both global limits are set** - `CELERY_TASK_SOFT_TIME_LIMIT = 2700`,
+`CELERY_TASK_TIME_LIMIT = 3600` - so per-task limits are unnecessary.
+
+**The settings also handle a subtler hazard than the one I raised.** With a Redis broker and
+`CELERY_TASK_ACKS_LATE`, any message unacked past `visibility_timeout` is redelivered to another
+worker. Redis's default is 3600s, which *exactly equals* both the hard task limit and the longest
+`countdown=` this app schedules - so at that boundary a legitimately long task, or a countdown sitting
+in a worker, would be **duplicated right as it finishes**. The comment states this, states the rule
+("keep this comfortably above `max(time_limit, longest countdown)`"), and the line below sets
+`visibility_timeout` to 7200 - double the boundary.
+
+**That is the best single example in this audit of the property that made it tractable.** A duplicate
+task execution at a broker-timeout boundary is close to undiagnosable after the fact: it appears as
+an occasional double-send with no error, no traceback, and no correlation to load. Someone reasoned
+it out in advance and wrote down both the mechanism and the invariant to preserve.
+
+My flag was answered, and the thing I was worried about was the shallower of the two problems already
+solved here.
