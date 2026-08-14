@@ -7950,3 +7950,26 @@ myself and did not verify.
 
 That is the last and clearest instance of the session's invariant: **the artifact always overstates
 danger, never understates it.** Twenty-eight for twenty-eight.
+
+
+## Chunk 439 - internal controllers: 494 of 532 gated by inheritance, the rest are the public surface
+
+The internal counterpart to chunk 438, this time **resolving the inheritance graph transitively** -
+the fix artifact 28 taught, applied before running rather than after.
+
+**532 controller view classes. 494 (93%) reach `LoginRequiredMixin`, `PermissionRequiredMixin` or
+`UserPassesTestMixin` through their base classes.** The 38 that do not are the surface that must be
+reachable without a session:
+
+`SignupView`, `CustomLoginView`, `VerifyEmailView`, `VerifyEmailSentView`, `ResendVerificationView`,
+`E2EEPasswordResetConfirmView`, `ProfileEmailVerifyView` - and `StripeWebhookView`, authenticated by
+**signature** rather than login.
+
+So both halves of this application gate by inheritance: the external API through
+`ExternalApiView` and its scoped subclasses, the internal controllers through the Django auth mixins.
+**A new view is authenticated unless someone actively declines to inherit**, on both surfaces.
+
+That is the structural reason the games feature-gate finding (chunk 336) is a *product* question
+rather than a defect: those 49 views **do** inherit `LoginRequiredMixin` - they are authenticated,
+just not entitlement-checked. The gate that exists works; the question is only whether a second gate
+should apply.
