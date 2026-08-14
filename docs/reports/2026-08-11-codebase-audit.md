@@ -2402,6 +2402,15 @@ the pattern itself.
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
 
+- **`CalendarImportView.post`** (30 statements, never executed - 8th on the coverage list). Clean.
+  The interesting surface is `invite_profile_ids`, which arrives as raw profile ids from the
+  client and results in trip invitations - the shape an IDOR usually takes. It is scoped:
+  `invite_members` intersects the submitted ids with `get_connections(inviter)` and silently drops
+  anything that is not an accepted friend, then caps the result at `max_trip_members`. The import
+  itself re-fetches each event from Google rather than trusting submitted content ("the client
+  submits ids, never event content"), and auth-expiry and gateway failure are handled as distinct
+  502s with different messages.
+
 - **`ConsensusPhotoUploadView.post`** (31 statements, never executed - 7th on the coverage list).
   Clean, and it retroactively verifies an earlier change in this audit. The handler checks
   participation *and* `is_joined` before anything else, scopes the round to the session, validates
