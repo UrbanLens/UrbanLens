@@ -2094,6 +2094,47 @@ itself worth recording: this page carries several thousand lines of inline `<scr
 test in the repository can import or exercise. The bun suite covers `frontend/ts/`; everything
 inline in a template is, structurally, untested.
 
+### Half the frontend is untestable, and it has reimplemented HTML escaping 14 times
+
+Chunk 220 ended on the observation that inline template JavaScript cannot be reached by any test.
+This chunk measured it, because "some untested code" and what is actually there are different
+claims.
+
+**21,543 lines of inline JavaScript across 101 templates**, against 22,684 lines of TypeScript in
+`frontend/ts/` (which `tsc --noEmit` and 394 bun tests do cover). So roughly half the frontend is
+outside every automated check the project has. It is concentrated: the top five templates are
+10,736 lines, 49% of the total, led by `pages/map/index.html` at 5,175.
+
+The consequence is measurable rather than theoretical. 44 function *names* are defined in more
+than one template, and the worst case is the one that matters most: **14 separate HTML-escaping
+helpers under 9 different names** (`escapeHtml` x5, `_escHtml`, `escHtml`, `_esc`, `_escapeHtml`,
+`htmlEscape`, `escapeAttr`, plus the three added in chunk 220). They do not agree:
+
+| implementation | escapes | attribute-safe |
+|---|---|---|
+| `pin_lists/detail.html` `_escHtml`, `map` `_escapeHtml`, `_notification_push` `escapeHtml` | `&<>"` (+`'`) | yes |
+| `map` `escapeHtml` | `&<"` - no `>` | yes |
+| `location/index`, `memories/index`, `memories/photos`, `profile/index`, `_mini_calendar` | `&<>` | **no** |
+
+Six of the fourteen are text-only. That is not a bug in itself - `textContent`->`innerHTML` is
+exactly right for a text node - but there is nothing in the *name* to say so, and this audit has
+now found two places where the text-only version was sitting next to an attribute interpolation
+that needed the other kind (chunk 219's `memories/index.html`, chunk 220's `map/index.html`). A
+developer reaching for "the escape function in this file" gets a coin flip.
+
+The fix is not more escaping helpers. It is that this code should live in `frontend/ts/`, where it
+would inherit `tsc`, the bun suite, and one shared `escapeText`/`escapeAttr` pair with the
+distinction in the names. Filed in `docs/PROBLEMS.md`; the map page alone would be a meaningful
+first slice.
+
+**Methods note - the instrument was wrong twice before it was right.** The first pass reported
+every helper as unsafe, including two written earlier that afternoon; the `"` pattern had been
+over-escaped in a Python raw string. The second pass reported the two *best* implementations
+(character-class `/[&<>'"]/g` replacements) as escaping nothing, because it only recognised
+individual `/&/g` patterns. Both errors were caught only by checking the output against helpers
+whose behaviour was already known. A scanner over a language you are pattern-matching rather than
+parsing needs a known-answer control, or its confident output is noise.
+
 ---
 
 ## 3. Checked and clean

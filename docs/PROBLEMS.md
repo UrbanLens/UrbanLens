@@ -6133,3 +6133,39 @@ This is why bugs like the two above survive: the code is invisible to every auto
 project has. Moving that script into `frontend/ts/` (where it would get `tsc --noEmit`, bun tests,
 and the same review as the rest of the frontend) is a large job, but the map page is the single
 biggest concentration of untested logic in the codebase.
+
+---
+
+## Inline template JS: 21,543 lines, 14 escaping helpers, zero test coverage
+
+Measured 2026-08-14. `dashboard/templates/` contains **21,543 lines of inline JavaScript across
+101 templates**, versus 22,684 lines in `frontend/ts/` which `tsc --noEmit` and 394 bun tests
+cover. Half the frontend is outside every automated check.
+
+Concentration (top 5 = 49% of the total):
+
+| lines | template |
+|---|---|
+| 5,175 | `pages/map/index.html` |
+| 1,772 | `pages/messages/index.html` |
+| 1,377 | `pages/trips/detail.html` |
+| 1,294 | `pages/location/index.html` |
+| 1,118 | `themes/base.html` |
+
+The concrete cost, beyond "untested": 44 function names are defined in more than one template,
+including **14 HTML-escaping helpers under 9 names**, of which 6 escape `&<>` only and 8 also
+escape quotes. Nothing in any of the names distinguishes the text-node case from the attribute
+case, and the 2026-08-14 audit found two real bugs that existed precisely because the wrong one
+was in reach (`memories/index.html`, `map/index.html`).
+
+Suggested order of work, largest payoff first:
+
+1. **Move `pages/map/index.html`'s script into `frontend/ts/`.** One file, 5,175 lines, ~24% of
+   the problem, and the page where the audit found the most issues.
+2. **Add `frontend/ts/shared/escaping.ts`** exporting `escapeText` and `escapeAttr` (names that
+   say which context they are for), and have migrated code import it rather than redefine it.
+3. Migrate the next four largest templates.
+
+This is a large job and nothing above is urgent in isolation. It is recorded because every future
+bug of this shape in these files will be invisible to CI, and because the duplication means fixing
+one instance fixes nothing else.
