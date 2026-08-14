@@ -1464,7 +1464,8 @@ def _build_activity_forecasts(activities: list[TripActivity]) -> list[dict]:
         # "can't subtract offset-naive and offset-aware datetimes" and 500 the
         # trip page. This only removes the crash: the slots are still compared in
         # whatever wall clock each provider used, which is a real and separate bug
-        # for the Open-Meteo path - see docs/PROBLEMS.md, it needs the location's
+        # for the Open-Meteo path - see "trip activity weather matches against times in
+        # the wrong timezone" in docs/PROBLEMS.md; it needs the location's
         # timezone to fix properly.
         def _naive(value: datetime.datetime) -> datetime.datetime:
             return value.replace(tzinfo=None) if value.tzinfo is not None else value

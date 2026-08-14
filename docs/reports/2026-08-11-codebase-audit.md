@@ -6388,3 +6388,25 @@ cause is unchanged - a count or offset reported without reading what it selected
 
 It also demonstrates the convention added in chunk 370 within one chunk of adding it: I navigated by
 line number, and the line number was off by one.
+
+
+## Chunk 372 - the retrofit is not a batch operation
+
+Continued naming entries in the `PROBLEMS.md` references. `trip.py`'s weather reference now names
+"trip activity weather matches against times in the wrong timezone" - the entry chunk 334 read.
+**4 of 33 done.**
+
+**The remaining 29 cannot be done mechanically**, which chunk 370 implied and this chunk establishes.
+Only `media.py`'s three shared the uniform `see docs/PROBLEMS.md.` form. The rest are embedded in
+prose - "``docs/PROBLEMS.md``)." mid-sentence, "Recorded in docs/PROBLEMS.md; this surface...",
+"The open decision is recorded in ``docs/PROBLEMS.md``." Each needs its surrounding code read and
+matched to an entry by hand.
+
+**Several already carry the context the convention asks for**, in a different shape: `tasks.py`
+points at "docs/PROBLEMS.md's gevent/asyncio entry", `account.py` gives "decision 2026-07-23". So
+the practice partly exists and was never written down - which is itself the answer to why it is
+inconsistent.
+
+Revised estimate for whoever finishes it: 29 references, each a small read, no shortcut. That is
+worth stating because chunk 370 framed this as a convention with a mechanical follow-up, and it is
+not - it is 29 individual judgements about which entry a comment means.
