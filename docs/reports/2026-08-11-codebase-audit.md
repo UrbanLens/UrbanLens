@@ -6693,3 +6693,32 @@ RESOLVED safety check-in entry - I would have written a confident pointer to an 
 what the comment means, and this chunk would have found nothing wrong with it. **Declining to guess
 kept the question open long enough for the evidence to arrive**, which is the entire argument for
 declining to guess.
+
+
+## Chunk 386 - the hypothesis holds: it is the *decisions* that went unfiled
+
+Chunk 385 suggested the dangling references cite decisions while resolving ones cite bugs. Tested by
+isolating every remaining reference containing "decision"/"chose"/"option": four exist, and they
+share one date.
+
+- `account.py` - "decision 2026-07-23, option (a): a validation endpoint" - **dangling** (chunk 380).
+- `direct_messages.py` and `group_chats.py` - "decision 2026-07-23: per-recipient payloads" -
+  **dangling**. Searching "per-recipient payload" returns nothing. A *related* bug entry exists
+  ("Reply/reaction notifications named people the thread masks", 2026-08-07), but it records the
+  defect, not the design choice the comments cite.
+- `notification_text_alerts.py` / `signals.py` - "decision 2026-07-23: wire them all" - **dangling**
+  (chunk 385).
+- `e2ee.py` - "PR #111 finding; decision 2026-07-23" - unchecked.
+
+**Every dangling reference found so far cites a decision dated 2026-07-23.** The file contains 21
+mentions of that date and none of these decisions. That is not four unrelated omissions - it is one
+session's design decisions never making it into the record, while the *bugs* from the same period
+were filed thoroughly.
+
+The distinction matters for what to do about it. Bug entries describe things that were wrong and are
+now fixed; a reader can verify them against the code. Decision entries explain why one correct-looking
+option was chosen over another, and **that reasoning is unrecoverable from the code by construction** -
+the rejected alternatives left no trace. Four of these are now cited in comments that promise a record
+which does not exist.
+
+Tally, 16 references: 9 resolve, 6 dangling, 1 unchecked (e2ee).
