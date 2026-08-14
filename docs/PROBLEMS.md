@@ -6508,29 +6508,31 @@ matching its likely spellings.
 
 ---
 
-## Realising the `to_json()` prefetch win at the call sites
+## CORRECTION: the `to_json()` prefetch work does not affect the map
 
-`Pin.to_json()` is now query-flat **when the caller prefetches both `labels` and `reviews`** - see
-the resolved entry above. Whether any caller does is a separate question, and only half-answered:
+Claimed repeatedly during the 2026-08-14 audit, and wrong: that fixing `Pin.to_json()`'s prefetch
+behaviour reduced the map's per-pin query cost.
 
-- `controllers/maps.py:535` and `:667` prefetch **`labels` only** (with a `Prefetch(...)` excluding
-  `KIND_USER`). So the labels half of the fix benefits them immediately - they were paying for a
-  prefetch that `.filter()` discarded.
-- Neither of those querysets calls `to_json()` or `rating` within 100 lines, so **it is not
-  established that the map serialises pins through this method at all**. `pin_lists.py:100`
-  mentions "maps.py's post-processing of `Pin.to_json()`", which suggests it does somewhere, but
-  the path was not traced.
+**The map does not use `Pin.to_json()`.** Its payload is built by `services/map_pins/payload.py`,
+which annotates the rating with a `Subquery`:
 
-**Do not add `prefetch_related("reviews")` on that basis alone.** If the map builds its payload
-inline rather than through `to_json()`, prefetching reviews is pure waste - extra rows fetched and
-discarded on the hottest page in the application.
+    latest_rating = Review.objects.filter(pin_id=OuterRef("pk")).order_by("-created").values("rating")[:1]
+    ... .annotate(map_rating=Subquery(latest_rating), child_count=Count("detail_pins", distinct=True))
 
-The check, in order:
+That is already query-flat and does not touch `Pin.rating` or `Pin.to_json()` at all. The map was
+never paying the cost that was measured.
 
-1. Find where the map's pin payload is actually built (`to_json()`, or an inline dict in
-   `maps.py`).
-2. If it uses `to_json()`, add `"reviews"` to the two `prefetch_related` calls and re-run the
-   instrument in `test_pin_to_json_prefetch.py` against that view's queryset to confirm the
-   per-pin delta drops to zero.
-3. If it builds the payload inline, check that code for the same `.filter()`/`.latest()` trap - it
-   would have been invisible to the serialisation-method sweep, which keys on method names.
+What the work actually did:
+
+- **`Pin.to_json()`** has **no production callers** - the only textual match outside tests is a
+  *comment* in `pin_lists.py:100`. The measured 4-queries-per-pin was real, and was being paid by
+  nothing. The method is now correct if it is ever used, which is worth something but is not a
+  performance win.
+- **`Pin.rating`** *is* live: `models/pin/serializer.py:73` exposes it, so the DRF path pays one
+  query per pin unless the caller prefetches `reviews`. The `.latest()` -> `max(...)` change makes
+  that path *capable* of being flat; whether the serializer's queryset prefetches `reviews` was not
+  checked, and is the actual open question.
+
+The measurement was sound; the attribution was not. A query-count test over a method proves what
+that method costs, not that anything calls it - and `to_json()` looked like the map's serialiser
+because a comment elsewhere said so.
