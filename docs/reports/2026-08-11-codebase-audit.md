@@ -7233,3 +7233,35 @@ readers.
 **The rule that survives all of chunks 405-408**: a promise stays true when something mechanical
 depends on it. Where nothing does, it decays at roughly a third over a year, regardless of how
 carefully it was written.
+
+
+## Chunk 409 - declining to build the guard that chunk 408 implied
+
+Chunk 408 concluded that promises stay true when something mechanical depends on them, which points
+at an obvious action: a test asserting every code reference to `PROBLEMS.md` resolves. Checked first
+(no such guard exists), then decided **not to write it**.
+
+**It is not mechanizable, and that is why it rotted.** I resolved 16 of 26 citations by *reading and
+judging* - matching "the user sees `{"ok": true}` and the field silently never changes" to an entry
+titled "The internal wiki edit view silently discards invalid input". No regex reproduces that. A
+guard would either:
+
+- match on loose keywords, and produce false failures constantly - this session logged **nineteen**
+  artifacts from exactly that; or
+- carry an allowlist of the 8 known-dangling, which encodes today's rot as permanently acceptable.
+
+Both are worse than nothing. A test that fails for the wrong reason gets suppressed, and a test that
+permanently excuses the real problem is theatre.
+
+**What is mechanizable is narrower and worth doing**: 4 of the 26 citations name a date, and
+`PROBLEMS.md` headings carry dates. "Every cited date exists as a heading" is exact, cheap, and
+cannot false-fire. It would cover only those four - but it would make the *citation style that
+works* the one the build enforces, which is a better incentive than a guard nobody trusts.
+
+Not built here - the honest reason is that I have not tested whether it stays green, and shipping an
+untested guard is the mistake chunk 308 made in a form I could not catch until the full suite ran.
+Recorded as a specific, bounded proposal instead.
+
+**The larger point.** The correct response to "a third of these citations rotted" is not to automate
+the check. It is that seven of the eight dangling ones point at a **gitignored file** - fix that, and
+the decay stops at its source rather than being policed forever downstream.
