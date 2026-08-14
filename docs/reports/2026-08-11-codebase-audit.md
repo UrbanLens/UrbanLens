@@ -8018,3 +8018,20 @@ an immediate one.
 
 Scope stated: the scan covered module-level assignments in `settings/` whose *name* matches a secret
 pattern. A credential inside a dict literal, or under an unusual name, would not appear.
+
+
+## Chunk 442 - the secrets scope gap, closed
+
+Chunk 441 named a limit: its scan saw module-level assignments whose *name* matched a secret pattern,
+so a credential inside a dict literal would be invisible. Checked that case across the whole
+`src/urbanlens` tree - **0 dict entries pair a secret-ish key with a long string literal.**
+
+So by both enumerable checks, **no hardcoded secrets exist in the Python source**: none as
+assignments, none in dicts. Together with `.env` being gitignored and no `.env` file tracked, the
+credential surface is where it should be.
+
+**Closing a stated scope gap is worth a chunk.** Chunk 441's caveat was honest but load-bearing - "I
+checked names, not dict values" leaves a reader unsure whether the clean result means anything. One
+command converted it into a claim that covers both shapes. Across this session, the caveats I
+*closed* (this, the localdate sites in 335, the reference audit's remaining files in 402-405) turned
+out to be as valuable as the findings, because a bounded claim nobody extends stays bounded forever.
