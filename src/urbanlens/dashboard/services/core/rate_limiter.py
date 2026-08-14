@@ -328,9 +328,12 @@ def service_is_enabled(service: str) -> bool:
     """
     try:
         config = get_limit_config(service)
-    except Exception:
-        # TODO: Catch specific exceptions
-        logger.exception("Failed to read rate limit config for %s - allowing call", service)
+    except DatabaseError:
+        # Reports the service as disabled, which refuses the call - the opposite of
+        # check_rate_limit's choice, and deliberate: "is this service switched on" has no
+        # safe affirmative answer when it cannot be read. The log line previously said
+        # "allowing call" while returning False.
+        logger.exception("Failed to read rate limit config for %s - treating the service as disabled", service)
         return False
     return config.enabled
 

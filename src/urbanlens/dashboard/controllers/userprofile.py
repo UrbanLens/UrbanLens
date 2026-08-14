@@ -12,7 +12,6 @@ from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied, ValidationError
 from django.core.validators import validate_email
-from django.db.models import Q
 from django.http import Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.utils import timezone
@@ -25,7 +24,6 @@ from urbanlens.dashboard.forms.profile_form import (
     validate_started_exploring,
 )
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
-from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.meta import (
@@ -150,14 +148,15 @@ class ViewProfileView(LoginRequiredMixin, View):
 
         common_ids = common_pin_location_ids([my_profile, profile])
 
-        # Visited by both - has the protected "Visited" status label, or has a last_visited date
-        # TODO: Whatever is happening here is probably wrong.
-        visited_filter = Q(labels__name="Visited", labels__kind=KIND_STATUS) | Q(last_visited__isnull=False)
+        # Locations both profiles have visited. `PinQuerySet.visited()` owns the predicate
+        # ("has a last_visited timestamp or carries the profile's Visited status label") and
+        # its docstring asks callers to build on it rather than re-derive the Q, which this
+        # did - one of four inline copies that had to stay in step by hand.
         their_visited_ids = set(
-            Pin.objects.filter(profile=profile, location__isnull=False).filter(visited_filter).values_list("location_id", flat=True),
+            Pin.objects.filter(profile=profile, location__isnull=False).visited().values_list("location_id", flat=True),
         )
         my_visited_ids = set(
-            Pin.objects.filter(profile=my_profile, location__isnull=False).filter(visited_filter).values_list("location_id", flat=True),
+            Pin.objects.filter(profile=my_profile, location__isnull=False).visited().values_list("location_id", flat=True),
         )
         shared_visited_ids = their_visited_ids & my_visited_ids
 
