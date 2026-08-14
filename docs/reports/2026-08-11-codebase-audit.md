@@ -7899,3 +7899,26 @@ and written down as a rule with the quantities to re-check.
 That is the closing observation of this audit. **The comments in this codebase are not decoration -
 several are the only artifact that makes a boundary auditable at all**, and verifying six of them
 cost about ten commands total. The three real defects I found sat in code carrying no such reasoning.
+
+
+## Chunk 437 - the anti-enumeration guarantee holds, at one choke point
+
+`external_api/urls.py` states a security invariant: *"Every one of these resolves through
+`services.wiki.wiki_access.resolve_visible_wiki` - see views_wiki's module docstring for the
+anti-enumeration guarantee that depends on it."* If any wiki view skipped it, wiki existence would
+leak by enumerating location slugs.
+
+**It holds.** `WikiApiView` calls `resolve_visible_wiki` and is the base class for **22 of the 26**
+wiki API views; the remaining four are pin-scoped comment/review views under `ExternalApiView` /
+`OwnedPinMixin`, covered by a different guarantee. The enforcement is a **single inherited choke
+point**, which is why a 26-view surface can make a guarantee at all.
+
+**Twenty-seventh artifact.** My scan reported 25 of 26 views "missing" the call, because it searched
+each class body for a direct call - the fact lives in the **class hierarchy**, not the class. Same
+root cause as every artifact before it: scope narrower than the fact. Reporting that number would
+have claimed a critical enumeration vulnerability in a codebase that enforces the gate correctly.
+
+Worth noting what makes this invariant *strong* where the eight dangling `PROBLEMS.md` citations were
+weak: it is enforced by inheritance, so a new wiki view gets the gate by default and would have to
+opt *out* to break it. **The guarantee does not depend on the next author reading the comment** - the
+comment just explains why the base class exists.
