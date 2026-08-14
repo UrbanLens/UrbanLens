@@ -5021,3 +5021,33 @@ Not fixed, filed: the survivor also absorbs `PinMarkup`/`MarkupMap` (whose recei
 pin *inferences*) and `PinLink` (`resync_pin_on_link_saved`). Whether those derived values are
 recomputed anywhere after a merge was not established here - it needs reading each receiver's
 actual work, not the pattern match that found them.
+
+
+## Chunk 307 - the three filed merge repoints are clean; no change
+
+Chunk 306 filed three repoints whose receivers maintain derived state. Reading them (rather
+than matching the pattern that found them) resolves all three, and the reasons differ:
+
+- **PinMarkup** - `sync_pin_inferences_on_item_save` keys off `instance.parent_map_id`. The
+  merge repoints `parent_pin`. The receiver's subject is not what the merge touches, so the
+  map's detected pins are unaffected.
+- **MarkupMap** - `sync_pin_inferences_on_map_save` resyncs when a map's *viewport/geometry*
+  changes, and explicitly skips saves touching fields detection never reads. The merge repoints
+  the owning `pin`, not geometry.
+- **PinLink** - `resync_pin_on_link_saved` calls `_touch_pin`, whose whole mechanism is
+  `Pin.save(update_fields=["updated"])`, chosen (per its docstring) to re-fire
+  `sync_smart_list_membership` and keep `saved_filter_cache`'s `Max(Pin.updated)` fingerprint
+  current. This one *was* a live gap - a survivor gaining its first links would not re-match a
+  "has links" smart list - **and chunk 306's fix already closes it**. `sync_last_visited` saves
+  the survivor with `update_fields=["last_visited", "updated"]`, a superset of what `_touch_pin`
+  writes, and `sync_smart_list_membership` does not filter on `update_fields` (checked - it
+  resyncs on any Pin save).
+
+**First clean verdict after three consecutive finds, which is the point worth recording.** The
+prior chunks established a real pattern, and a real pattern generates real expectation - the
+pull toward finding a fourth instance was noticeable. What distinguishes these three from the
+`PinVisit` case is not subtle judgement; it is one readable fact each about what the receiver
+keys off. The pattern match found all four sites and could not rank them. Only reading could.
+
+Also worth noting: the PinLink gap was closed *incidentally*, by a fix aimed at something else.
+That is luck, not design - and it means the fix's own commit message understates what it does.
