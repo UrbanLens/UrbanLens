@@ -8,7 +8,9 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > `see "the documented docker cp resync breaks the app container" in docs/PROBLEMS.md`. Cite **every**
 > relevant entry, not the nearest one - `Friendship.muted` has two (wrong shape, and never read), and
 > a pointer to one implies it is the whole story where a bare pointer at least led to both. Headings
-> are stable here; line numbers are not (this file is append-only and grew by ~800 lines on 2026-08-14
+> are stable here; line numbers are not. **A date works nearly as well as a heading** - `external_api/
+> serializers.py` cites "docs/PROBLEMS.md, 2026-07-28" and that alone locates the entry unambiguously,
+> because entry headings carry their date. A bare file reference is the only form that fails (this file is append-only and grew by ~800 lines on 2026-08-14
 > alone).
 
 ---

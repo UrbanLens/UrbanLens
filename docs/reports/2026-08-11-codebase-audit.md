@@ -6576,3 +6576,22 @@ missing is whatever weighed that option against the ones not named.
 Filed as a note. Recovering it means finding the 2026-07-23 discussion, which may only exist in git
 history or in a session transcript - and if it exists nowhere, the honest fix is to write the
 reasoning down now rather than delete the citation.
+
+
+## Chunk 381 - a dated citation resolves as cleanly as a named heading
+
+`external_api/serializers.py` cites "``docs/PROBLEMS.md``, 2026-07-28" for friendship-level mute
+suppressing nothing. It resolves exactly - to `## 2026-07-28: Friendship.muted is stored but nothing
+reads it`, the same entry chunk 374 flagged as the more immediate of that field's two problems.
+
+**Tally, 10 references: 6 resolve, 1 ambiguous, 3 dangling.**
+
+The practical finding is about the convention rather than the entry. **Including a date locates an
+entry as reliably as naming its heading**, because headings here carry their dates - and a date is
+far cheaper to write and far more likely to survive a heading being reworded. Added to the convention
+note. The only form that reliably fails is the bare `see docs/PROBLEMS.md`, which is what all three
+dangling references and the one ambiguous reference use.
+
+That is a sharper rule than chunk 370's, and it came from the failures rather than from taste: every
+reference in this sample that carried *any* locator - a date, a subject, an entry name - resolved;
+every one that carried none either dangled or was ambiguous.
