@@ -6404,11 +6404,14 @@ look unused.
 ## 20 label-kind literals where the named constant is already used 130 times
 
 `models/labels/meta.py` defines `KIND_TAG`/`KIND_CATEGORY`/`KIND_STATUS`/`KIND_USER`/`KIND_MEDIA`,
-and the codebase imports them **130 times** outside tests. Twenty query/create sites used the bare string instead; **thirteen are done, seven remain**.
+and the codebase imports them **130 times** outside tests. Twenty query/create sites used the bare string instead; **eighteen are done, two remain**.
 
 The thirteen done are the ones where the import is provably safe: `models/labels/meta.py` contains
 *only* constants and imports nothing, so it is a leaf module that any layer can import at module
-level without circularity. The six left are in `models/pin/model.py` (5) and `models/wiki/model.py` (1).
+level without circularity. The two left are both in `models/pin/model.py`'s `to_json()` - `kind="status"` (891) and
+`kind="tag"` (896). Unlike the others they sit in a method with no local `Label` import, so each
+needs a new line rather than a word added to an existing one. (A third, at the old line 863, went
+away with the `__str__` fix - it was the query this audit removed from that method.)
 
 **One entry was withdrawn.** `services/pins/pin_suggestions.py:767` (`source="external_api"`) is
 correct as written: `PinAlias.source` has **no** `choices` - it is deliberately free-text so plugin
@@ -6441,11 +6444,11 @@ looks.** `models/labels/model.py:26` re-exports every `KIND_*` constant from `la
 | ~~`controllers/maps.py`~~ | ~~534, 666~~ | done 2026-08-14 |
 | ~~`controllers/pin_lists.py`~~ | ~~90~~ | done 2026-08-14 |
 | ~~`controllers/pin_edit.py`~~ | ~~350, 355, 357~~ | done 2026-08-14 |
-| `models/pin/model.py` | 814, 833 | `kind="category"` |
-| `models/pin/model.py` | 863, 886 | `kind="status"` |
+| ~~`models/pin/model.py`~~ | ~~814, 833~~ | done 2026-08-14 |
+| `models/pin/model.py` | 891 | `kind="status"` (863 removed with the __str__ fix) |
 | `models/pin/model.py` | 891 | `kind="tag"` |
 | ~~`models/pin/signals.py`~~ | ~~200~~ | done 2026-08-14 - the only site whose file already imported from `labels.meta` at module level |
-| `models/wiki/model.py` | 328 | `kind="category"` |
+| ~~`models/wiki/model.py`~~ | ~~328~~ | done 2026-08-14 |
 | ~~`services/labels/statuses.py`~~ | ~~26, 46~~ | done 2026-08-14 |
 | ~~`services/pins/pin_creation.py`~~ | ~~330, 333~~ | done 2026-08-14 |
 | ~~`services/visits/visits.py`~~ | ~~502, 520~~ | done 2026-08-14 |
@@ -6459,3 +6462,29 @@ particular ones matter least.
 Mechanical but not trivial: each file needs the right import, and `models/pin/model.py` and
 `models/wiki/model.py` import from `labels.model` lazily to avoid circularity, so the constants
 must follow the same pattern.
+
+---
+
+## `Pin.to_json()` may defeat label prefetching (candidate, not traced)
+
+`models/pin/model.py:to_json()` builds its payload with two separate calls:
+
+    self.labels.filter(kind=KIND_STATUS)   # statuses
+    self.labels.filter(kind=KIND_TAG)      # tags
+
+**`.filter()` on a prefetched many-to-many bypasses the prefetch cache.** A caller that does
+`prefetch_related("labels")` and then serialises N pins still pays 2N queries here, because each
+`.filter()` builds a fresh queryset rather than reading the cached list. The usual fix is to filter
+in Python over `self.labels.all()` (which *does* use the cache), or to prefetch with an explicit
+`Prefetch(..., to_attr=...)` per kind.
+
+**Not traced, and deliberately not claimed.** Confirming it needs the actual call sites of
+`Pin.to_json()` checked for prefetching, and whether the map's pin payload goes through this method
+or the separate serialisation in `controllers/maps.py` (`pin_lists.py:100` mentions "maps.py's
+post-processing of `Pin.to_json()`", which suggests it does). The verification is a
+`django-assert-num-queries` test over a list of pins with `prefetch_related("labels")`: if the count
+scales with the number of pins, the cache is being bypassed.
+
+Worth doing because the map is the hottest page in the application and the failure is invisible -
+prefetching is *present*, so the code looks correct, and the query count only shows up under load
+or in a query-count assertion.

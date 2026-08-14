@@ -321,13 +321,13 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
 
     def add_category(self, category_name: str, save: bool = True) -> Label | None:
         """Attach a category label to this wiki by name, creating it if needed."""
-        from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.models.labels.model import KIND_CATEGORY, Label
 
         category_name = category_name.lower()
         try:
             category, _created = Label.objects.get_or_create(
                 name__iexact=category_name,
-                kind="category",
+                kind=KIND_CATEGORY,
                 # profile=None belongs in the *lookup*, not just defaults: this
                 # creates a global category, so the get must find a global one.
                 # Without it the get spans every profile's labels and returns

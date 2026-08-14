@@ -808,10 +808,10 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         Args:
             category_id: Primary key of the category-kind Label to assign.
         """
-        from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.models.labels.model import KIND_CATEGORY, Label
 
-        category = Label.objects.get(id=category_id, kind="category")
-        self.labels.remove(*self.labels.filter(kind="category"))
+        category = Label.objects.get(id=category_id, kind=KIND_CATEGORY)
+        self.labels.remove(*self.labels.filter(kind=KIND_CATEGORY))
         self.labels.add(category)
         # No self.save() needed: M2M .add()/.remove() persist immediately. Calling save()
         # here would needlessly re-fire the full post_save signal chain (Redis map-cache
@@ -826,13 +826,13 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         Returns:
             The attached Label, or None if the lookup/creation failed.
         """
-        from urbanlens.dashboard.models.labels.model import Label
+        from urbanlens.dashboard.models.labels.model import KIND_CATEGORY, Label
 
         category_name = category_name.lower()
         try:
             category, _ = Label.objects.get_or_create(
                 name__iexact=category_name,
-                kind="category",
+                kind=KIND_CATEGORY,
                 # profile=None belongs in the *lookup*, not just defaults: this
                 # creates a global category, so the get must find a global one.
                 # Without it the get spans every profile's labels and returns
@@ -870,6 +870,8 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
         return self.name or f"Pin {self.pk}"
 
     def to_json(self) -> dict[str, Any]:
+        from urbanlens.dashboard.models.labels.meta import KIND_STATUS, KIND_TAG
+
         return {
             "uuid": str(self.uuid),
             "slug": self.slug or str(self.uuid),
@@ -888,12 +890,12 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             "last_visited": self.last_visited.isoformat() if self.last_visited else "never",
             "latitude": self.effective_latitude,
             "longitude": self.effective_longitude,
-            "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in self.labels.filter(kind="status")],
+            "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in self.labels.filter(kind=KIND_STATUS)],
             "profile": self.profile.id,
             "name_is_user_provided": self.name_is_user_provided,
             "rating": self.rating,
             "color": self.effective_color,
-            "tags": [{"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon} for t in self.labels.filter(kind="tag")],
+            "tags": [{"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon} for t in self.labels.filter(kind=KIND_TAG)],
         }
 
     def to_detail_json(self) -> dict:
