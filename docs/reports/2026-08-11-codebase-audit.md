@@ -2433,6 +2433,33 @@ service-layer validation exists and is being skipped. The third defect is a diff
 presentation logic, not model integrity - and would not be caught by that filter, which is worth
 knowing too.
 
+### The filter found its first bug on the first run
+
+Chunk 235's prioritiser, applied mechanically: an AST pass over every controller for
+`obj.field = <request data>` or `setattr(obj, ..., <request data>)`, intersected with the
+never-executed list. Four handlers. Two were already known (`AlbumEditView`, clean;
+`LocationWikiDetailPinEditView`, fixed). One was a boolean preference. The fourth was a bug.
+
+`EditProfileView._save_profile` does this, three lines after saving a form:
+
+    request.user.first_name = request.POST.get("first_name", "").strip()
+    request.user.last_name = request.POST.get("last_name", "").strip()
+    request.user.save(update_fields=["first_name", "last_name"])
+
+A form *is* used for the rest of the profile - these two fields are assigned outside it, so the
+form's validation never sees them. `User.first_name` and `last_name` are `max_length=150`, which
+Django enforces in `full_clean()`, which `save()` does not call. A 200-character name therefore
+reaches Postgres and returns `DataError: value too long`, i.e. a 500 on the profile edit page.
+
+Exactly the shape of the two earlier defects: a view assigning a model field directly, skipping the
+layer that owns the constraint. Fixed by truncating to the column width, which is what every other
+free-text field here does (`albums.py`: `.strip()[:_MAX_ALBUM_NAME_LENGTH]`), reading the limit off
+the field rather than hardcoding 150.
+
+The filter is worth keeping: it was derived from nine hand-examined handlers, expressed as a
+mechanical query, and returned one real defect out of four candidates on its first run - against a
+list where hand-picking by size was running at four defects in nine.
+
 ---
 
 ## 3. Checked and clean
