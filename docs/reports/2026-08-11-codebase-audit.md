@@ -6427,3 +6427,25 @@ the valuable ones.
 
 Four of the five done so far took under a minute each because the code stated its own subject. The
 remaining 28 will not be uniform, but neither will they be uniformly hard.
+
+
+## Chunk 374 - 6 of 33, and a second entry the comment does not mention
+
+`friendship/model.py` now names "`Friendship.muted` is shared by both profiles, not per-viewer".
+
+Worth noting what the search turned up alongside it: **two adjacent entries describe this field** -
+the per-viewer shape problem the comment refers to, and a separate one recording that
+`Friendship.muted` "is stored but nothing reads it - muting a friend silences nothing". The code
+comment points at the first and says nothing about the second, so a reader following it learns the
+model is wrongly shaped but not that the field is inert.
+
+Not fixed here - deciding whether the comment should cite both is a judgement about what that
+comment is for, and the field's fate depends on the `DirectMessageMute` migration it describes. But
+it is a concrete example of why "see docs/PROBLEMS.md" is worse than it looks: the bare pointer at
+least led to *everything* about the field, and a precise pointer leads to exactly one of two
+relevant entries.
+
+**Precision has a cost, and this is it.** Naming the entry is still right - one entry found reliably
+beats two entries found never - but the convention should say to cite all relevant entries, not the
+nearest one. Recorded rather than acted on, since amending the convention note is a change to advice
+I have already given twice.

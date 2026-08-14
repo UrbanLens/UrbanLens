@@ -45,7 +45,8 @@ class Friendship(DashboardModel):
     # B, B's own view of the relationship reads as muted too. The correctly
     # shaped model for this is ``DirectMessageMute``, which is keyed on
     # (viewer, sender); fixing it here means either two columns or a separate
-    # row per direction, and is tracked in docs/PROBLEMS.md. Anything
+    # row per direction, and is tracked in "`Friendship.muted` is shared by
+    # both profiles, not per-viewer" in docs/PROBLEMS.md. Anything
     # surfacing this as "muted by me" is wrong today.
     muted = BooleanField(default=False)
     relationship_type = CharField(max_length=12, choices=FriendshipType.choices)
