@@ -5205,3 +5205,22 @@ unable to run tests.
 Also worth recording: the scan was aimed at a class the codebase does not have (naive datetimes:
 zero) and found a neighbouring class it does. Aiming at a precise, decidable property makes the
 near-misses legible instead of drowning them.
+
+
+## Chunk 315 - asserts and prints in production code: clean
+
+Read-only (suite still running, ~19 min in). Two more AST-decidable classes:
+
+- **`assert` in production code: 0.** This matters because `python -O` strips assertions
+  entirely, so any `assert` doing validation silently stops validating in an optimised run. A
+  codebase that uses them for *checks* rather than *invariants* has a latent, deployment-flag
+  -dependent bug. This one uses none.
+- **`print()` in production code: 5, all in `manage.py`** - a CLI entry point, where printing is
+  the correct behaviour, not a leftover debug statement.
+
+Both were single-pass AST scans with no false positives, continuing chunk 313's pattern. Four
+consecutive structurally-decidable classes have now come back clean or near-clean (mutable
+defaults, bare excepts, asserts, prints), which is itself information: the mechanical defect
+classes are largely absent here, and the real findings in this audit have all needed a fact the
+syntax does not carry - what a receiver keys off, whether a field reaches a payload, whether a
+timezone is the server's or the user's.
