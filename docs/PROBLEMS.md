@@ -7152,3 +7152,23 @@ running app.
 Fix is `manage.py migrate` in the container, but check first whether the boot sequence failing on
 2026-08-04 left anything half-applied; the entry above about the wedged `runserver` is the likely
 reason migrations stopped running at all.
+
+**The 18 are `0026`-`0043`, and running them is not a routine catch-up (chunk 360).** Most are
+schema, but at least three carry data:
+
+- `0027_places_backfill` - backfills the whole `Place` hierarchy;
+- `0039_encrypt_contact_and_note_fields` - **encrypts existing column data**, and per
+  `docs/DATA_ENCRYPTION.md` key handling here is unforgiving; running it against a database whose
+  `UL_FIELD_ENCRYPTION_KEY` differs from the one in use when rows were written is how data is
+  orphaned;
+- `0042_label_merge_duplicates` - merges duplicate labels, i.e. deletes rows, immediately before
+  `0043_label_unique_constraint` adds the constraint that requires it.
+
+`0042`/`0043` in particular cannot be half-run: if the merge fails, the constraint fails too, and if
+the merge partially succeeded the second attempt operates on already-merged data. Take a database
+snapshot before running these.
+
+This range matches the container-drift note already in `CLAUDE.local.md` ("30 tracked files behind -
+missing `models/place`, `models/album`, `models/map_overlay` ... and migrations 0026-0038", dated
+2026-08-06), so the drift has been known for over a week in one form and unrecognised as a
+*database* problem.

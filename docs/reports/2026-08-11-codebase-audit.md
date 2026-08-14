@@ -6153,3 +6153,23 @@ That is now three findings in nine chunks that no amount of source reading could
 container (351), its `docker cp` root cause (356), and this. All three came from looking at what was
 *running* rather than what was *written*, and all three had been true for days while fifty chunks of
 static analysis returned clean.
+
+
+## Chunk 360 - naming the 18 migrations changes the recommendation
+
+Listing them costs one read-only command and materially changes the advice. `0026`-`0043`, and three
+carry data rather than schema: a `Place` backfill, a **field-encryption** migration, and a duplicate
+label merge that deletes rows immediately before the constraint requiring it is added.
+
+So "just run `migrate`" would have been poor advice. `0042`/`0043` are a pair that cannot be
+half-applied safely, and `0039` touches encrypted columns where this project's own documentation
+warns that a key mismatch orphans data. The recommendation is now: snapshot first.
+
+The range also matches a note already sitting in `CLAUDE.local.md` from 2026-08-06 - the container
+being "30 tracked files behind ... missing migrations 0026-0038". **The drift was documented eight
+days ago as a *file* problem and never recognised as a *database* one**, which is why it survived
+in a file this audit has read repeatedly.
+
+A fitting last observation for this thread: the information was not missing, it was mis-filed. Three
+of this session's most substantial findings - the override in chunk 325, the duplicated guard in
+chunk 332, and this - were all sitting in documentation I had access to the whole time.
