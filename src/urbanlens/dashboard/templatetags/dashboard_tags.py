@@ -107,7 +107,11 @@ def message_preview(message: Any, viewer_id: int) -> str:
     if message.body:
         return message.body[:80]
     images = getattr(message, "images", None)
-    if images is not None and images.exists():
+    # .all(), not .exists(): the conversation-list queryset prefetches "images"
+    # precisely to make this check free, and .exists() ignores a prefetch cache and
+    # issues its own query - so the prefetch was paying for rows and preventing
+    # nothing.
+    if images is not None and images.all():
         return "📷 Photo"
     if getattr(message, "markup_map_id", None):
         return "🗺️ Map"

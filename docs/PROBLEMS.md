@@ -6772,5 +6772,18 @@ Two shortcuts from the fixes already done:
   which fixes the query but keeps the row-fetching.
 - If the filtered rows **are** used, the answer is `Prefetch(..., queryset=..., to_attr=...)`.
 
-The three `direct_messages.py` `.images.exists()` sites are the most promising: same file, same
-relation, three times, and messaging is a hot path.
+**Verified 2026-08-14: the three `direct_messages.py` sites were real, and the worst case of this
+whole pattern.** The conversation-list queryset carries a comment stating that
+`prefetch_related("images")` exists specifically to stop the `message_preview` template tag's
+`images.exists()` from issuing a query per row - "an N+1 across the sidebar's conversation list".
+
+The diagnosis is correct and the remedy does not work: **`.exists()` never reads a prefetch
+cache**. The N+1 was still happening *and* every image row was being fetched as well - strictly
+worse than no prefetch, while reading as solved. A future reader sees a prefetch, a comment naming
+the exact symptom, and concludes it is handled; only a query count says otherwise.
+
+Fixed by making the prefetch deliver what it promises: `.exists()` -> truthiness on `.all()` in
+`templatetags/dashboard_tags.py:message_preview` and the two `direct_messages.py` previews, with
+the comment corrected so the more idiomatic-looking `.exists()` is not "restored" later.
+
+The remaining eight candidates in the table above are still unverified.

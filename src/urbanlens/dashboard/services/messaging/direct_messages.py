@@ -278,7 +278,7 @@ def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None =
         elif quoted.body:
             quoted_preview = quoted.body[:80]
         else:
-            quoted_preview = "📷 Photo" if quoted.images.exists() else ("🗺️ Map" if quoted.markup_map_id else "Message")
+            quoted_preview = "📷 Photo" if quoted.images.all() else ("🗺️ Map" if quoted.markup_map_id else "Message")
         reply_to = {
             "id": quoted.pk,
             "sender_name": _name_for(quoted.sender),
@@ -395,7 +395,7 @@ def _notify_recipient(message: DirectMessage) -> None:
         preview = message.body if len(message.body) <= 120 else message.body[:120].rstrip() + "…"
     elif message.markup_map_id:
         preview = "🗺️ Shared a map"
-    elif message.images.exists():
+    elif message.images.all():
         preview = "📷 Shared a photo"
     else:
         preview = "New message"
