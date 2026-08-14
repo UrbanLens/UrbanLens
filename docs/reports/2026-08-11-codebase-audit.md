@@ -8,7 +8,7 @@ Open items found during the sweep were filed in `docs/PROBLEMS.md` and are only 
 here.
 
 **Verification (current as of 2026-08-14).** The full Python suite runs in a single pass -
-**10,758 passed, 0 failed, 1:08:53**. That run was left strictly alone for its duration; two
+**10,765 passed, 0 failed, 1:11:17**, the run that validated the nine prefetch/N+1 fixes together. That run was left strictly alone for its duration; two
 earlier full runs had source copied into the container mid-flight and are recorded in section 4d
 as inconsistent snapshots rather than reported as results. Alongside it: **mypy clean across 784
 source files**, `ruff check src/urbanlens` clean, `bun run typecheck` clean, `bun test`
@@ -1611,6 +1611,14 @@ is running a suite.
 **2026-08-14 (chunks 225-238): 10,758 passed, 0 failed, 1:08:53.** Up from 10,736. This run was
 left strictly alone - no source copied into the container while it ran - so unlike the previous
 two it is a clean snapshot of a single commit state, which is what makes the number meaningful.
+
+**2026-08-14 (all N+1 work): 10,765 passed, 0 failed, 1:11:17.** The nine prefetch fixes had each
+been verified by a targeted selection but never together, and they touch shared code - `to_json`,
+`rating`, `PinViewSet`'s queryset, two export querysets, consensus eligibility, and the
+`message_preview` template tag. Performance changes are the least test-covered category in this
+audit (a correctness fix ships with a regression test that fails if reverted; a prefetch change is
+invisible to everything but a query count), so this run was the real check on them. Clean snapshot,
+no source copied in mid-run.
 
 
 ### "Detach location" is a guaranteed 500 (found, filed, not patched)
