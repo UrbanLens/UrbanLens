@@ -7448,3 +7448,27 @@ branch - a materially bigger tool than anything used in this audit.
 The bug class is real and worth someone building that tool for. `update_fields` silently dropping a
 write is invisible at runtime, invisible in review, and produces exactly the kind of stale-data defect
 that chunks 303-306 found by other means.
+
+
+## Chunk 418 - the same-block narrowing works: 0 real `update_fields` defects
+
+Chunk 417's check was unsound because assignments and saves in *different branches* were paired.
+Narrowed it to **the same block** - same block means same execution path, which removes the need for
+control-flow analysis entirely.
+
+**55 hits became 5, and all 5 are one known false positive**: assigning a foreign key's *attname*
+(`child.parent_pin_id = ...`) while `update_fields` lists the *field name* (`["parent_pin"]`). Django
+resolves both to the same column, so every instance is correct and idiomatic - `services/pins/
+pin_edit.py` (x3), `services/places/lineage.py`, `services/trivia/session.py`.
+
+**Zero real defects, and the check is now nearly sound** - one equivalence rule (`foo_id` == `foo`)
+away from clean. That is a usable guard for someone to finish, unlike chunk 417's version.
+
+**Twenty-fourth artifact, and the most productive one.** The previous twenty-three were failures to be
+corrected; this narrowing *converted* an unusable check into a nearly-usable one by restricting its
+scope rather than expanding its machinery. **The fix for "my scan cannot see branches" was not to
+teach it branches - it was to only look where branches cannot occur.**
+
+That is worth more than the check itself. Faced with a fact that needs analysis beyond reach, the
+options are not just "build the analysis" or "give up": there is often a **subset of the problem where
+the hard part is absent**, and on this codebase that subset held all the signal there was to find.
