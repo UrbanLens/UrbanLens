@@ -6404,7 +6404,13 @@ look unused.
 ## 20 label-kind literals where the named constant is already used 130 times
 
 `models/labels/meta.py` defines `KIND_TAG`/`KIND_CATEGORY`/`KIND_STATUS`/`KIND_USER`/`KIND_MEDIA`,
-and the codebase imports them **130 times** outside tests. Twenty query/create sites used the bare string instead; one is done, nineteen remain. Exact list, from a scan that resolves each field's own `choices` via
+and the codebase imports them **130 times** outside tests. Twenty query/create sites used the bare string instead; **seven are done, thirteen remain**.
+
+The seven done are the ones where the import is provably safe: `models/labels/meta.py` contains
+*only* constants and imports nothing, so it is a leaf module that any layer can import at module
+level without circularity. The remainder sit in `models/` and `controllers/` files whose existing
+`labels` imports are function-local - substituting there needs a new import placed with the same
+care, since these are model modules where import order matters. Exact list, from a scan that resolves each field's own `choices` via
 `Model._meta.get_field(name).choices` rather than matching values across all enums:
 
 | file | lines | literal |
@@ -6417,9 +6423,9 @@ and the codebase imports them **130 times** outside tests. Twenty query/create s
 | `models/pin/model.py` | 891 | `kind="tag"` |
 | ~~`models/pin/signals.py`~~ | ~~200~~ | done 2026-08-14 - the only site whose file already imported from `labels.meta` at module level |
 | `models/wiki/model.py` | 328 | `kind="category"` |
-| `services/labels/statuses.py` | 26, 46 | `kind="status"` |
-| `services/pins/pin_creation.py` | 330, 333 | `kind="tag"`, `kind="category"` |
-| `services/visits/visits.py` | 502, 520 | `kind="status"` |
+| ~~`services/labels/statuses.py`~~ | ~~26, 46~~ | done 2026-08-14 |
+| ~~`services/pins/pin_creation.py`~~ | ~~330, 333~~ | done 2026-08-14 |
+| ~~`services/visits/visits.py`~~ | ~~502, 520~~ | done 2026-08-14 |
 | `services/pins/pin_suggestions.py` | 767 | `source="external_api"` |
 
 Nothing is broken today - the literals match the constants. The risk is the one already fixed in

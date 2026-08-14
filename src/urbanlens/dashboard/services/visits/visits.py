@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from django.core.exceptions import ObjectDoesNotExist
 
+from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.models.notifications.meta import DeliveryPreference, Importance, NotificationType, Status
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.pin.model import Pin
@@ -499,7 +500,7 @@ def add_visited_status(pin: Pin) -> None:
     """
     from urbanlens.dashboard.models.labels.model import Label
 
-    visited_label = Label.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
+    visited_label = Label.objects.filter(profile=pin.profile, kind=KIND_STATUS, name="Visited").first()
     if visited_label and not pin.labels.filter(pk=visited_label.pk).exists():
         pin.labels.add(visited_label)
         pin.save(update_fields=["updated"])
@@ -517,7 +518,7 @@ def remove_visited_status(pin: Pin) -> None:
     """
     from urbanlens.dashboard.models.labels.model import Label
 
-    visited_label = Label.objects.filter(profile=pin.profile, kind="status", name="Visited").first()
+    visited_label = Label.objects.filter(profile=pin.profile, kind=KIND_STATUS, name="Visited").first()
     if visited_label:
         pin.labels.remove(visited_label)
     pin.last_visited = None

@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 
 from django.db import IntegrityError, transaction
 
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
@@ -327,10 +328,10 @@ def create_pin_for_profile(
         pin.labels.set(Label.objects.location_labels().visible_to(profile).filter(id__in=label_ids))
     else:
         if tag_ids:
-            pin.labels.remove(*pin.labels.filter(kind="tag"))
+            pin.labels.remove(*pin.labels.filter(kind=KIND_TAG))
             pin.labels.add(*Label.objects.tags().visible_to(profile).filter(id__in=tag_ids))
         if category_ids:
-            pin.labels.remove(*pin.labels.filter(kind="category"))
+            pin.labels.remove(*pin.labels.filter(kind=KIND_CATEGORY))
             pin.labels.add(*Label.objects.categories().visible_to(profile).filter(id__in=category_ids))
 
     # Generate slug immediately so the "View Details" URL resolves without a

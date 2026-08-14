@@ -2778,6 +2778,17 @@ rather than reported as 37 findings.
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
 
+- **Documentation cross-references** (2026-08-14). Every `docs/*.md` path this report actually
+  links to resolves - `FEATURES.md`, `NOTES.md`, `PROBLEMS.md`, `designs/plugins.md`,
+  `reports/2026-08-14-view-coverage.md`, `notes/mobile_app_requirements.md`. A first pass reported
+  21 of 38 as broken, which was two instrument failures stacked: the scanner could not distinguish
+  a *live link* from a path *quoted as an example of a broken link* (this report contains a section
+  listing exactly those), and the attribution check that was meant to separate "mine" from
+  "pre-existing" ran `git show main:docs/PROBLEMS.md` against a file that does not exist on `main` -
+  so the baseline was empty and every path was attributed to this session by default. The second
+  failure is the more instructive: an empty baseline does not error, it just silently makes
+  everything look new.
+
 - **Side effects inside transactions** (2026-08-14). **Zero** across 760 files in `controllers/`,
   `services/` and `models/`: no Celery enqueue, email send, channel broadcast or cache write sits
   inside a `transaction.atomic()` block where a rollback would leave it already done. This is the
