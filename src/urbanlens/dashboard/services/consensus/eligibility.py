@@ -38,7 +38,11 @@ def eligible_wikis(profile: Profile, *, exclude_wiki_ids: Iterable[int] = ()) ->
     exclude_ids = list(exclude_wiki_ids)
     if exclude_ids:
         candidates = candidates.exclude(pk__in=exclude_ids)
-    return candidates.distinct()
+    # The field strategies read wiki.aliases and wiki.images once per wiki, and
+    # selection calls them once per field kind - so without these prefetches the
+    # cost is kinds x wikis x relations. Only .all() reads the cache, which is why
+    # the strategies in fields.py must not use .count()/.exists()/.filter() here.
+    return candidates.prefetch_related("aliases", "images").distinct()
 
 
 def eligible_wikis_for_all(profiles: Iterable[Profile], *, exclude_wiki_ids: Iterable[int] = ()) -> QuerySet[Wiki]:
@@ -68,7 +72,11 @@ def eligible_wikis_for_all(profiles: Iterable[Profile], *, exclude_wiki_ids: Ite
     exclude_ids = list(exclude_wiki_ids)
     if exclude_ids:
         candidates = candidates.exclude(pk__in=exclude_ids)
-    return candidates.distinct()
+    # The field strategies read wiki.aliases and wiki.images once per wiki, and
+    # selection calls them once per field kind - so without these prefetches the
+    # cost is kinds x wikis x relations. Only .all() reads the cache, which is why
+    # the strategies in fields.py must not use .count()/.exists()/.filter() here.
+    return candidates.prefetch_related("aliases", "images").distinct()
 
 
 def has_eligible_wikis(profile: Profile) -> bool:

@@ -253,11 +253,13 @@ def _valid_pin_type_choices() -> set[str]:
 
 
 def _alias_find_missing(pool: Iterable[Wiki]) -> list[Wiki]:
-    return [wiki for wiki in pool if wiki.aliases.count() < ALIAS_SUGGEST_THRESHOLD]
+    # .all() throughout this module, never .count()/.exists()/.filter(): the pool is
+    # prefetched by eligibility.eligible_wikis(), and only .all() reads that cache.
+    return [wiki for wiki in pool if len(wiki.aliases.all()) < ALIAS_SUGGEST_THRESHOLD]
 
 
 def _alias_find_known(pool: Iterable[Wiki]) -> list[Wiki]:
-    return [wiki for wiki in pool if wiki.aliases.exists()]
+    return [wiki for wiki in pool if wiki.aliases.all()]
 
 
 def _alias_build_round(wiki: Wiki) -> RoundContent | None:
@@ -295,11 +297,11 @@ def _alias_apply_answer(wiki: Wiki, value: Any, profile: Profile, round_: Consen
 
 
 def _photo_find_missing(pool: Iterable[Wiki]) -> list[Wiki]:
-    return [wiki for wiki in pool if wiki.images.filter(latitude__isnull=True, longitude__isnull=True).exists()]
+    return [wiki for wiki in pool if any(image.latitude is None and image.longitude is None for image in wiki.images.all())]
 
 
 def _photo_find_known(pool: Iterable[Wiki]) -> list[Wiki]:
-    return [wiki for wiki in pool if wiki.images.filter(latitude__isnull=False, longitude__isnull=False).exists()]
+    return [wiki for wiki in pool if any(image.latitude is not None and image.longitude is not None for image in wiki.images.all())]
 
 
 def _photo_build_round(wiki: Wiki) -> RoundContent | None:

@@ -6600,7 +6600,7 @@ multiplier.
 
 | file | lines | call | note |
 |---|---|---|---|
-| `services/consensus/fields.py` | 256, 260, 298, 302 | `wiki.aliases.count()`, `.exists()`, `wiki.images.filter(...)` x2 | **four per iteration** - worst of the set; callers traced, see below |
+| ~~`services/consensus/fields.py`~~ | ~~256, 260, 298, 302~~ | | **FIXED 2026-08-14** - see below |
 | `services/pins/pin_suggestions.py` | 802, 888 | `pin.visit_history.filter(...)`, `.filter(...).exists()` | per pin |
 | `services/memories/photos.py` | 165 | `pin.visit_history.filter(visited_at__date=...)` | per candidate photo |
 | `services/import_export/export.py` | 650, 764 | `label.pins.filter(profile=...)`, `message.images.count()` | per label / per message, on an export path |
@@ -6637,8 +6637,14 @@ It is also worse than the table suggests: `_pick_normal_round` calls `strategy.f
 **once per field kind** (`for kind in fields.all_kinds()`), so the cost is
 kinds x wikis x queries-per-wiki, not wikis x 4.
 
-Left unpatched only because it spans two files and needed measuring, not because it is unclear -
-the recipe above is complete.
+**Done 2026-08-14.** Both halves applied together, since either alone regresses: the prefetches
+are on `eligible_wikis()`/`eligible_wikis_for_all()`, and all four helpers now use `.all()`. The
+two `wiki.images.filter(latitude__isnull=...)` calls became `any(image.latitude is None and ...)` -
+translating a SQL `__isnull` filter into Python needs both fields checked, and getting it wrong
+would silently change which wikis become round candidates.
+
+Each file carries a comment naming the other: the coupling is invisible from either side alone, and
+an edit to one that ignores the other reintroduces the cost silently. 76 consensus tests pass.
 
 The instrument for confirming any of them is
 `dashboard/tests/hypothesis/test_pin_to_json_prefetch.py`: capture queries over 1 and N objects and
