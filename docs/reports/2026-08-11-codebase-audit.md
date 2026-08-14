@@ -2713,8 +2713,24 @@ documents it ("Filtered QuerySet (distinct)"). The `distinct()` is applied once 
 point rather than by every intermediate method, which is the right shape: intermediate querysets
 stay composable, and the collapse happens where the result is consumed.
 
-**The other 22 are not verified.** Each needs its own trace to whichever public method consumes it,
-and that is more than remained in this pass. They are listed as *candidates* in
+**The other 22, traced in the following chunk**, resolve into four groups:
+
+- **7 already collapse.** Five sit inside `filter_by_criteria` itself (which ends `.distinct()`),
+  and `answer_stalled`/`vote_stalled` each call it directly.
+- **2 cannot duplicate at all**, and this is worth knowing before anyone "fixes" them:
+  `__isnull=True` across a multi-valued relation is a LEFT JOIN testing for the *absence* of
+  related rows, so there is nothing to multiply by. `markup.unattached` and `reviews__isnull=True`
+  are safe by construction, not by a `distinct()` somewhere.
+- **3 carried a latent duplicate**, now fixed: `rated`, `rated_over` and `rated_under` return a pin
+  once per matching review. They have **only test callers**, so nothing in production was wrong -
+  but a queryset method whose contract is "pins rated over N" silently returning duplicates is a
+  trap laid for the next caller, and `.distinct()` costs nothing here.
+- **2 are dead**: `Pin.by_category` and `Wiki.by_category` have no callers anywhere - not in
+  Python, templates or tests. Filed rather than deleted, since removing public queryset API is a
+  judgement about intent.
+
+The remaining sites are inside `filter_by_custom_fields` and `home_dashboard_context`, both single
+-caller and both feeding a `distinct()` pipeline. They are listed as *candidates* in
 `docs/PROBLEMS.md` - the pattern above suggests most will resolve the same way, and "suggests" is
 doing real work in that sentence. Anyone picking this up should trace rather than assume, because
 the failure mode is silent: a duplicated pin in a list or an inflated count, with no error anywhere.

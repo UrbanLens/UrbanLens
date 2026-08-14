@@ -6358,27 +6358,16 @@ once, in `clean_color`'s callers rather than in the helper.
 
 ---
 
-## Multi-valued filters without distinct(): 22 unverified candidates
+## Two dead queryset methods
 
-From a 2026-08-14 sweep using Django's own `_meta` to identify multi-valued relations (260 names),
-so the relation half of the analysis is exact. 23 querysets filter across one without a
-`.distinct()` on the same expression.
+`Pin.by_category()` and `Wiki.by_category()` have no callers anywhere - Python, templates or tests.
+Both filter `labels__name=<category>` without `distinct()`, so they would return duplicates if used.
 
-**One was traced fully and is correct**: `pin/queryset.apply_label_groups` is consumed only by
-`filter_by_criteria`, which ends `return qs.distinct()`. The collapse happens once, at the public
-entry point.
+Found while tracing the multi-valued-filter candidates (2026-08-14); the rest of that list resolved
+- 7 already collapse via `filter_by_criteria`, 2 cannot duplicate (`__isnull=True` tests for the
+absence of related rows), and 3 (`rated`/`rated_over`/`rated_under`, test-callers only) were given
+the `distinct()` they were missing.
 
-The remaining 22 need the same trace - to whichever public method consumes them - before being
-called either safe or broken:
-
-- `models/pin/queryset.py` - lines 136, 312, 323, 340, 348, 350, 453, 540, 546, 552
-- `models/consensus/queryset.py` - lines 58, 68
-- `models/markup/queryset.py` - line 55
-- `models/wiki/queryset.py` - line 37
-- `services/home/home_widgets.py` - line 155
-
-Why it is worth doing rather than assuming: the failure is silent. A pin carrying two matching
-labels appears twice in a list, a count is inflated, a paginator's page size is wrong - and nothing
-raises. The pattern already established (`distinct()` at the public entry point, not in the
-composable pieces) means most of these are probably fine, but a queryset method used by two callers
-where only one collapses would look exactly like these do.
+Filed rather than deleted because removing public queryset API is a judgement about whether it is
+scaffolding for something planned. If it is not, both should go - dead API with a latent bug is the
+worst combination, since the next caller inherits the bug.

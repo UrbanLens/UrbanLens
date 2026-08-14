@@ -537,19 +537,19 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         """
         Filters pins by the review.rating field
         """
-        return self.filter(reviews__rating=rating)
+        return self.filter(reviews__rating=rating).distinct()
 
     def rated_over(self, rating) -> Self:
         """
         Filters pins by the review.rating field
         """
-        return self.filter(reviews__rating__gte=rating)
+        return self.filter(reviews__rating__gte=rating).distinct()
 
     def rated_under(self, rating) -> Self:
         """
         Filters pins by the review.rating field
         """
-        return self.filter(reviews__rating__lte=rating)
+        return self.filter(reviews__rating__lte=rating).distinct()
 
 
 class PinManager(abstract.PublicDashboardManager.from_queryset(PinQuerySet)):
