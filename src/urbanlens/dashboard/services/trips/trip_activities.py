@@ -816,7 +816,7 @@ def complete_activity(trip: Trip, actor: Profile, activity_id: int, *, completed
     activity = get_activity(trip, activity_id)
 
     already_completed = activity.status == TripActivity.STATUS_COMPLETED
-    today = datetime.date.today()
+    today = timezone.localdate()
     effective_date = min(completed_date, today) if completed_date is not None else today
 
     activity.scheduled_at = timezone.make_aware(

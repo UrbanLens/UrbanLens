@@ -5224,3 +5224,27 @@ defaults, bare excepts, asserts, prints), which is itself information: the mecha
 classes are largely absent here, and the real findings in this audit have all needed a fact the
 syntax does not carry - what a receiver keys off, whether a field reaches a payload, whether a
 timezone is the server's or the user's.
+
+
+## Chunk 316 - applying the localdate fix under a testing constraint
+
+The constraint from chunk 314 turned out to be narrower than I stated. The rule is *do not
+`docker cp` mid-run* - the container tests its own synced copy, so **editing the host tree is
+safe** while a suite runs. I had generalised "cannot change code" from "cannot sync code", and
+lost a chunk of working time to it.
+
+So the four sites are now fixed: `datetime.date.today()` -> `timezone.localdate()` in
+`controllers/tools.py` (x2), `controllers/trip.py`, `services/trips/trip_activities.py`, with a
+`django.utils.timezone` import added to `tools.py` (the other two already had it). Ruff clean,
+all three compile, zero `date.today()` calls remain outside tests.
+
+**Explicitly unverified.** No test has run against this change - the container is busy, and by
+the rule above it will stay busy for another ~45 minutes. The substitution is mechanical and
+`localdate()` is the documented tz-aware equivalent, but "mechanical" is exactly the claim this
+audit has caught itself making wrongly before (five regex generations on colour literals, each
+claiming completeness). Treat as pending until the suite frees the container and this is run.
+
+The boundary test is still owed: it needs `override_settings(TIME_ZONE=...)` plus a frozen clock
+to pin the case where server-local and active timezones fall on different dates. Writing it
+blind would risk a test that passes vacuously, which is worse than no test - this audit has
+already produced two of those.

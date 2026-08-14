@@ -13,6 +13,7 @@ from django.contrib.auth.mixins import LoginRequiredMixin, PermissionRequiredMix
 from django.http import FileResponse, Http404, HttpRequest, HttpResponse, JsonResponse
 from django.shortcuts import redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views import View
 
 from urbanlens.dashboard.models.images.model import Image
@@ -253,7 +254,7 @@ class ExportDownloadView(LoginRequiredMixin, View):
 
         logger.info("Export complete, serving file: job %s, user %s", job_id, request.user.pk)
 
-        today = datetime.date.today().isoformat()
+        today = timezone.localdate().isoformat()
         fh = open(zip_path, "rb")  # noqa: SIM115 - FileResponse takes ownership and closes the handle
         response = FileResponse(fh, content_type="application/zip")
         response["Content-Disposition"] = f'attachment; filename="urbanlens_export_{today}.zip"'
@@ -296,7 +297,7 @@ class ExportFormatDownloadView(LoginRequiredMixin, View):
         writer, extension, content_type = EXPORT_FORMATS[fmt]
         content = writer(pins)
 
-        today = datetime.date.today().isoformat()
+        today = timezone.localdate().isoformat()
         response = HttpResponse(content, content_type=content_type)
         response["Content-Disposition"] = f'attachment; filename="urbanlens_pins_{today}.{extension}"'
         return response
