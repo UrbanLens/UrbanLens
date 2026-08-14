@@ -7722,3 +7722,31 @@ These are the strongest claims in this report, and the reason is structural rath
 class is *enumerable*, so "I checked all of them" is a statement I can actually support. Every weaker
 claim in this audit - the sampled bypass check, the two unresolved citations, the 187 uncovered routes
 - is weaker precisely because its population could not be enumerated.
+
+
+## Chunk 430 - no path traversal surface; eight sink classes now enumerated
+
+**0 file paths built from `request.POST`/`GET`/`data`/`FILES` or URL kwargs**, control detecting two
+when injected.
+
+The absence is structural rather than lucky: media is served through `MediaGateView` with nginx
+`X-Accel-Redirect` (per the authenticated-media entry), so the application authorises a request and
+hands nginx an internal path - it never opens a user-supplied path itself. A design that removes the
+sink is stronger than one that sanitises it.
+
+**Eight enumerable sink classes, all checked exhaustively:**
+
+| sink | result |
+|---|---|
+| `mark_safe` | 1, escaped |
+| `\|safe` | 14, JSON or sanitized HTML |
+| `HttpResponse` interpolation | 11, **one defect - fixed, tested** |
+| raw SQL | 9, identifiers only |
+| `eval` / `exec` | 0 |
+| `pickle` | 0 |
+| `shell=True` | 0 |
+| request-data file paths | 0 |
+
+One defect across every enumerable injection surface in the application. For a codebase that had two
+stored-XSS vectors when this audit opened, that is the substantive security result - and it is
+*checkable*, unlike a statement that the code "looks secure".
