@@ -6600,7 +6600,7 @@ multiplier.
 
 | file | lines | call | note |
 |---|---|---|---|
-| `services/consensus/fields.py` | 256, 260, 298, 302 | `wiki.aliases.count()`, `.exists()`, `wiki.images.filter(...)` x2 | **four per iteration** - worst of the set |
+| `services/consensus/fields.py` | 256, 260, 298, 302 | `wiki.aliases.count()`, `.exists()`, `wiki.images.filter(...)` x2 | **four per iteration** - worst of the set; callers traced, see below |
 | `services/pins/pin_suggestions.py` | 802, 888 | `pin.visit_history.filter(...)`, `.filter(...).exists()` | per pin |
 | `services/memories/photos.py` | 165 | `pin.visit_history.filter(visited_at__date=...)` | per candidate photo |
 | `services/import_export/export.py` | 650, 764 | `label.pins.filter(profile=...)`, `message.images.count()` | per label / per message, on an export path |
@@ -6615,6 +6615,21 @@ Discounted as false positives: `export.py:848,850` (`os.path.exists`, which matc
 often wants an `annotate(Count(...))` on the outer queryset; `.filter()` over a relation often
 wants `prefetch_related` plus a Python filter; `.exists()` often wants a single `__in` query
 outside the loop. Each needs its caller read.
+
+### Progress on the worst one
+
+`_alias_find_missing` / `_alias_find_known` (`fields.py:256,260`) are invoked from
+`services/consensus/selection.py:106` and `:163` as `strategy.find_missing(pool)`. **The remaining
+step is to see how `pool` is built**, because that decides the fix and the two options differ:
+
+- if `pool` is a **QuerySet**, `annotate(Count("aliases"))` and filter in SQL - one query total;
+- if it is a **list** with aliases prefetched, switch to `.all()` and use `len()`/truthiness;
+- if it is a list **without** a prefetch, `.all()` is *worse* than `.count()` - it fetches every
+  alias row to compute a number. This is the case where the obvious "use .all()" reflex, correct
+  for `Pin.to_json`, would make things worse.
+
+That last point is why this was left rather than patched: the right answer is not derivable from
+the call site alone.
 
 The instrument for confirming any of them is
 `dashboard/tests/hypothesis/test_pin_to_json_prefetch.py`: capture queries over 1 and N objects and
