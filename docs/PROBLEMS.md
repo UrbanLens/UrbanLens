@@ -5337,7 +5337,7 @@ plain `idxdb_tcl_profile_event`.
 has to be resolved first, and choosing which link survives decides which of two real trips stays
 attached to the user's calendar. That is a call about live user data, not a refactor.
 
-## OPEN 2026-08-12: `date.today()` bypasses Django's configured timezone
+## PARTLY RESOLVED 2026-08-14: `date.today()` bypasses Django's configured timezone
 
 Nine non-test call sites use `datetime.date.today()`; ten others use `timezone.localdate()`.
 `date.today()` reads the *operating system* clock, whereas `localdate()` reads Django's `TIME_ZONE`.
@@ -5371,6 +5371,23 @@ already about, which is why it is recorded here rather than as its own item.
 
 Every `datetime.fromtimestamp()` call in the codebase passes `tz=UTC` explicitly, and there are no
 `datetime.now()` or `utcnow()` calls outside tests, so the rest of that surface is clean.
+
+**CONVERTED 2026-08-14 (audit chunks 316-317), overriding the decision below - read this first.**
+All nine sites now use `timezone.localdate()`. This was done *without noticing this entry*, which had
+already identified the same nine sites and argued against exactly this sweep. The argument was sound
+and its prediction was accurate: the sweep did introduce an undefined-`timezone` `NameError` in
+`services/ai/link_extraction.py`, caught by ruff rather than by review. The `export.py` shadowing
+hazard named below was already gone, so no wrong-`timezone` reference occurred.
+
+What stands unchanged is the deeper point in the final paragraph: under `TIME_ZONE = "UTC"` with a
+UTC container clock and no per-user timezone, this conversion is **behaviour-neutral** - it prevents
+no bug that can currently occur. And when per-user timezones arrive, `localdate()` will be no more
+correct than `date.today()` was; "today" will have to resolve in the *viewer's* zone, and all nine
+sites will need revisiting regardless. The conversion is therefore a small correctness-of-intent
+improvement, not the fix, and it should not be read as closing this item.
+
+Reverting is a reasonable call if the project prefers to hold the line until that work happens; the
+changes are isolated to the nine call sites plus three added imports.
 
 **Deliberately not converted.** The rewrite changes no behaviour under the current settings, and
 the sites are not uniform: `services/import_export/export.py` imported `timezone` *from datetime*
@@ -6872,29 +6889,16 @@ Untested, so any change wants a test first: the existing behaviour to preserve i
 belonging to the profile are silently ignored rather than erroring.
 
 
-## `datetime.date.today()` used instead of `timezone.localdate()` (4 sites)
+## `datetime.date.today()` -> `timezone.localdate()` (superseded)
 
-Found 2026-08-14 (audit chunk 314). `USE_TZ = True` (`settings/base.py:407`), but four places
-compute "today" with `datetime.date.today()`, which reads the **server's** local timezone rather
-than Django's active one. The two disagree for part of every day, so a user near a date boundary
-gets the wrong day.
+Filed 2026-08-14 in audit chunk 314 as a fresh finding of 4 sites. It was neither fresh nor 4: the
+2026-08-12 entry above ("`date.today()` bypasses Django's configured timezone") had already
+recorded all **nine**, and had argued against converting them. Chunk 317 then rediscovered the
+missing five by AST scan.
 
-- `dashboard/controllers/tools.py:256`
-- `dashboard/controllers/tools.py:299`
-- `dashboard/controllers/trip.py:1515`
-- `dashboard/services/trips/trip_activities.py:819`
-
-The last is the one with visible consequence: completing a trip activity computes
-`effective_date = min(completed_date, today)`, so an activity completed late in the user's day
-can be clamped to *yesterday* - and that date feeds the visit entries created for the completed
-activity.
-
-Fix is `django.utils.timezone.localdate()` at each site. Not done in the chunk that found it: a
-full test suite was running against a synced container snapshot, and syncing source mid-run
-corrupts the run (this cost two runs earlier in the same audit). Wants a test pinning the
-boundary case, which needs `override_settings(TIME_ZONE=...)` plus a frozen clock rather than a
-plain assertion.
-
+Merged into that entry to keep one record. Kept as a pointer rather than deleted, because the
+duplication is the finding: two days of prior analysis were sitting in this file, in a section the
+audit had been appending to for dozens of chunks, and were not read before acting.
 
 ## Workflow: Django logic can be checked on the host without the container
 
