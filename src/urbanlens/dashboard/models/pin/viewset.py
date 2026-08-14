@@ -50,7 +50,10 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
     def get_queryset(self):
         if not self.request:
             return Pin.objects.none()
-        return Pin.objects.select_related("location").filter(profile__user=self.request.user)
+        # labels: categories/tags/statuses each read self.labels.all() via
+        # Labelled._labels_of_kind, so without this each pin costs a query.
+        # reviews: Pin.rating reads self.reviews.all().
+        return Pin.objects.select_related("location").prefetch_related("labels", "reviews").filter(profile__user=self.request.user)
 
     def partial_update(self, request, *args, **kwargs):
         instance = self.get_object()

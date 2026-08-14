@@ -6539,34 +6539,30 @@ because a comment elsewhere said so.
 
 ---
 
-## `PinViewSet` has no `prefetch_related` at all
+## RESOLVED: `PinViewSet` prefetches labels and reviews
 
-`models/pin/viewset.py:53`:
+`models/pin/viewset.py` did `select_related("location")` only, while the serializer exposes
+`rating`, `categories`, `tags` and `statuses` - each of which reads a related manager per pin.
 
-    return Pin.objects.select_related("location").filter(profile__user=self.request.user)
+The open question from the previous pass is answered: `categories`/`tags`/`statuses` come from
+`models/abstract/labelled.py`, whose `_labels_of_kind` is
 
-`select_related("location")` only. Meanwhile `models/pin/serializer.py` exposes:
+    [label for label in self.labels.all() if label.kind == kind]
 
-- `rating` -> `Pin.rating` -> `self.reviews.all()` -> **one query per pin** with no `reviews`
-  prefetch. (After the 2026-08-14 fix this reads a prefetch cache *when one exists*; without the
-  prefetch it costs the same as the `.latest()` it replaced. The fix makes the path *capable* of
-  being flat - the queryset has to opt in.)
-- `categories`, `tags`, `statuses` -> `LabelSerializer(many=True, read_only=True)`.
+- **already the cache-friendly form**, with a docstring noting the order "a caller's `Prefetch` may
+have ordered". The abstract base had this right all along. So the three label fields cost nothing
+*given* a prefetch, and one query each per pin without one.
 
-**Unverified, and deliberately not guessed:** `Pin` has no `tags`/`statuses`/`categories` attribute
-that this audit could find - the only occurrences of those names are keys inside `to_json()`'s
-returned dict. So how DRF resolves those three declared fields is unknown. It may be a
-`related_name`, an annotation applied elsewhere, or they may fail silently. That needs answering
-before adding prefetches, because the right prefetch depends on the answer.
+`prefetch_related("labels", "reviews")` added, justified per field rather than guessed.
 
-The check, in order:
+### Worth noting for the wider codebase
 
-1. Hit the endpoint (or call the serializer on one pin) and see what `tags`/`statuses`/`categories`
-   actually contain.
-2. Run the instrument from `test_pin_to_json_prefetch.py` against `PinViewSet.get_queryset()` over
-   1 and N pins - the per-pin delta names the cost directly.
-3. Add only the prefetches that delta justifies. `reviews` is near-certain; the label ones depend
-   on step 1.
-
-Recorded rather than fixed because the previous entry in this file is a correction of exactly this
-mistake - assuming a serialisation path without tracing it.
+`Pin.to_json()` reimplemented `_labels_of_kind` badly - it used `self.labels.filter(kind=...)`,
+which bypasses the cache, when the mixin it inherits from already provided the correct version. The
+2026-08-14 fix made `to_json` match what `Labelled` had been doing correctly all along. Any other
+model method filtering `self.labels` directly should use the inherited property instead; that is a
+one-line grep (`self.labels.filter(kind=`), run 2026-08-14: **one hit**, at
+`models/pin/model.py:820` inside `change_category`. It is a *write*
+(`labels.remove(*self.labels.filter(...))`) executed once per request rather than per row, in a
+method this audit found has no production callers - so it is not worth changing. No serialisation
+path retains the trap.
