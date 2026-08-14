@@ -6834,3 +6834,26 @@ security-phrase sweep resolvable in one chunk instead of becoming an investigati
 
 It is also the same property that made chunk 301's clean verdicts possible, and the same one whose
 *absence* would have made this audit far longer.
+
+
+## Chunk 392 - the intent-marking discipline holds in code, not just docs
+
+Chunk 391 credited the documentation with distinguishing deliberate exposure from defect. Tested
+whether that survives into the code, using the sharpest example - the endpoint that returns a user's
+**live position**, which `EXTERNAL_API.md` calls deliberate.
+
+**It is marked at the definition.** `external_api/mixins_safety.py` and `urls_safety_partner.py` both
+describe it as "live position *the explorer chose to share*", and `serializers_safety_chat.py` states
+the contrast case explicitly - "no destination, no contacts, no live position" for the chat token
+route. The consent framing sits at the URL and mixin level, where someone modifying the endpoint
+reads it, not only in a document they might not open.
+
+That matters more than it sounds. A live-position endpoint is indistinguishable from a location leak
+by inspection; the only thing separating them is a recorded statement that a user opted in. Here that
+statement exists in three places along the path, and the documentation agrees with all three.
+
+This is the property that made the whole audit tractable, stated one last time from the code side:
+**this codebase writes down why something that looks wrong is right.** Most of my "checked and clean"
+verdicts - chunk 301's task-status view, 307's receivers, 309's transient self-parent, 391's
+exposures - rest on exactly that, and the handful of real defects I found were all in places where
+no such reasoning was present.
