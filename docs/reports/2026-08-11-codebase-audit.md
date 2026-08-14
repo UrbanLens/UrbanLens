@@ -2179,6 +2179,14 @@ output alone.
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
 
+- **`docs/FEATURES.md` accuracy** (2026-08-14). Checked because `CLAUDE.md` instructs every agent
+  to consult it *before* assuming a feature is missing, so staleness here causes duplicated work
+  rather than mere confusion. Cross-referenced all 79 controllers against it. The naive
+  name-match said 23 were undocumented; checking each against the vocabulary the document actually
+  uses (`two_factor` -> "TOTP", `webauthn` -> "passkeys", `pin_restructure` -> "detail pins", and
+  so on) reduced that to **two**: `/health/` and `/thanks/`, both now added. The document is
+  otherwise accurate and current - a genuinely well-maintained inventory, and worth trusting.
+
 - **Dead weight: templates, SCSS, TypeScript, routes** (2026-08-14). Essentially none, and the
   negative result is worth as much as the scans, because every one of them over-reported and the
   reasons generalise. **Templates**: 7 of 418 are unreferenced by name, and all 7 are framework

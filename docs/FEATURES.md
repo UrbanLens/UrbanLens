@@ -507,6 +507,10 @@ paid subscription the same as an admin-issued grant. Service layer lives in `ser
 - Data export/import tooling and on-demand/scheduled database backups
 - Subscription roles grant feature flags (`SiteFeature`) per user; pending grants can attach to an
   email invite for users who haven't joined yet
+- `/health/` returns a liveness response for Docker healthchecks and load-balancer probes
+  (`controllers/health.py`, `AllowAny`) - the compose stack gates `app`/`app-ws`/`nginx` startup on it
+- `/thanks/` credits page, rendering live contributor data pulled from the GitHub API
+  (`controllers/thanks.py` via `services/apis/infra/github/contributors.py`)
 
 ## AI Integration
 
