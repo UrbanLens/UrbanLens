@@ -5850,3 +5850,23 @@ Chunk 309's verdict on `site_scope.py` is now established rather than inferred.
 of the confidence, and it is worth stating plainly: the original verdict was probably right on
 weaker evidence, and this chain only mattered because the verdict was load-bearing for calling a
 bulk write clean. Not every claim earns four chunks. The ones that let a write path past a guard do.
+
+
+## Chunk 346 - the client pin cache version is not stale
+
+`CLAUDE.md` warns that `pin-cache.ts`'s version constant "must be bumped whenever the pin payload
+shape changes - it goes silently stale otherwise". The failure mode is a client serving fields that
+no longer exist, with no error anywhere.
+
+Checked: `PIN_CACHE_VERSION = 8`, last changed 2026-07-22. `services/map_pins/payload.py` has been
+touched **4 times since**, most recently 2026-08-07 - but **none of those commits changed an
+emitted key**. They changed queries and logic (the latest joins `location__wiki` to remove a per-pin
+query), which is exactly the case where a bump would be wrong: churning the version invalidates
+every user's cache for nothing.
+
+So the constant is correct, and the discipline has held through four opportunities to break it.
+
+**Stated limitation:** this compares `+`/`-` lines matching a `"key":` shape in the payload dict. A
+key added with different formatting - built conditionally, spread from a helper, or renamed via a
+constant - would not be caught. The check is sound for the ordinary case and blind to the clever
+one, which is worth knowing before relying on it as a guard.
