@@ -6194,3 +6194,26 @@ that ordering is exactly what someone fixing the visible problem would get wrong
 `errors` inside an INFO line's JSON payload - `{'scanned': 2, 'deleted': 0, 'errors': 0}`. A count of
 zero errors, counted as an error. The tally across the session is now unambiguous: every single time
 a raw scan count looked like a finding, reading the matches changed the answer.
+
+
+## Chunk 363 - the migration graph is sound, and an eighth false positive
+
+With 18 migrations pending, `CLAUDE.md`'s warning about `makemigrations` picking dependencies from
+*uncommitted* files (which breaks other checkouts with `NodeNotFoundError`) becomes worth checking
+before anyone runs them.
+
+- `git status src/urbanlens/dashboard/migrations/` is **empty** - every migration is committed, so
+  the uncommitted-dependency hazard does not apply here.
+- All 43 migration files' `dashboard` dependencies resolve: **0 unresolvable**.
+
+So the pending batch is internally consistent and safe to apply from a graph perspective. The data
+risks recorded in chunk 360 are unchanged.
+
+**Eighth false positive, and the most instructive one.** My first pass reported *61* unresolvable
+dependencies - it matched `("dashboard", "Pin")` tuples, which are `apps.get_model()` calls and model
+references, not migration dependencies. Real dependencies name a migration (`0026_places`), so
+filtering on `\d{4}_` collapsed 61 to 0.
+
+Sixty-one is a dramatic number, and a less careful pass would have filed it as a serious finding on
+the eve of a migrate. The pattern this session has established holds without exception: **a raw scan
+count has never once survived reading the matches**. Eight for eight.
