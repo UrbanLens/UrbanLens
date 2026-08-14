@@ -6595,3 +6595,31 @@ dangling references and the one ambiguous reference use.
 That is a sharper rule than chunk 370's, and it came from the failures rather than from taste: every
 reference in this sample that carried *any* locator - a date, a subject, an entry name - resolved;
 every one that carried none either dangled or was ambiguous.
+
+
+## Chunk 382 - testing chunk 381's rule, after `-h` silently disabled a filter
+
+Chunk 381 produced a testable claim: references carrying a locator resolve, bare ones do not.
+Classifying all 33 to test it against the unexamined 23.
+
+**The first classification returned 58 references against the established 33.** An unexplained count
+discrepancy means the instrument is wrong, not the earlier number - so I did not report it. Cause:
+`grep -rhn`, where **`-h` suppresses filenames**, so the downstream `grep -v "/tests/"` had nothing
+to match and test files leaked in. One of the "findings" was a `REVIEWED` entry I wrote myself in
+chunk 332.
+
+Twelfth instance of the session's recurring failure, and a new mechanism: not a bad pattern or a
+wrong offset, but **one flag disabling a later stage of the pipeline**. The filter was correct and
+did nothing.
+
+Corrected classification of the real 33: **4 carry a locator, 29 are bare.**
+
+That result *weakens* chunk 381's rule as a predictor. My checked sample was 10, of which 6 resolved
+- but only 4 of all 33 carry locators, so most of those 6 resolved *despite* being bare, because
+their surrounding prose named the subject well enough for a full-text search to land. The rule
+"locators resolve" holds; the converse - "bare references dangle" - does not follow, and 3 dangling
+out of 29 bare is the more defensible reading than any prediction that most of them fail.
+
+**A hypothesis worth testing turned out to be worth weakening.** The sample that generated it was
+drawn from references I could most easily place, which is exactly the selection bias that makes a
+rule look stronger than it is.
