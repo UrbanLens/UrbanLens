@@ -5759,3 +5759,24 @@ automatically.
 Which suggests where the remaining value is: not another convention scan. Three consecutive
 convention checks (chunks 340-341, five rules total) have come back perfectly clean, and the
 prior probability of the next one finding something has dropped accordingly.
+
+
+## Chunk 342 - closing the incidental-invalidation claim from chunk 306
+
+Chunk 306 asserted that calling `sync_last_visited(survivor)` also refreshes the merged pin's
+cached map payload, since the merge had no invalidation of its own. Asserted, not checked - and
+chunk 307 then leaned on the same claim to declare the `PinLink` repoint clean. Verified now:
+
+- `refresh_map_pin_cache` is a plain `post_save` receiver on `Pin` with **no `update_fields`
+  filter**, so `pin.save(update_fields=["last_visited", "updated"])` fires it.
+- Its only guard is `if instance.profile_id`, which a merge survivor always satisfies.
+- `_refresh_cached_pin` defers through `transaction.on_commit`, so it runs *after* the merge
+  transaction commits rather than against half-applied state.
+
+The claim holds on all three points, including one I had not considered - the on_commit deferral,
+which matters because the merge does its work inside `transaction.atomic()` and an immediate
+refresh would have cached a survivor whose relations were still moving.
+
+Worth noting that two chunks' conclusions rested on this for six chunks before anyone checked it.
+An unverified claim does not stay isolated; chunk 307 built on it within one chunk. Verification
+debt compounds in the same direction as the reasoning that created it.
