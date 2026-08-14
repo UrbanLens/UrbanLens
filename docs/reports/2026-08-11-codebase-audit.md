@@ -6486,3 +6486,23 @@ version of the mistake would become.
 Retrofit stands at **6 of 33**, with one now explicitly marked as needing an author's judgement
 rather than a reader's inference - which is a more useful state than 7 of 33 with a wrong pointer in
 it.
+
+
+## Chunk 377 - a dangling reference, correcting chunk 369
+
+Chunk 369 concluded "the code-to-docs cross-references actually resolve", on the evidence of one
+sample (`media-auth`) plus a count of 33. **Here is a counterexample.** `trip.py`'s masking docstring
+cites a `docs/PROBLEMS.md` gap about identity masking on the *trips list*, and no such entry exists -
+the recorded masking gaps are data export, global search, and reply/reaction notifications, and the
+one trips-list entry is about query amplification.
+
+So the honest state of chunk 369's claim: **references I checked resolved; I checked two of 33.** The
+count was never evidence about the other 31, and I presented it as reassurance.
+
+The dangling one is also more interesting than a broken link. Either the gap was closed by the
+function whose docstring cites it and the entry was deleted without updating the code, or it was
+never filed and that docstring is the sole record of it. The phrasing favours the second, which would
+make this an **unfiled gap discovered through its own dangling pointer** - filed now as a note.
+
+Retrofit: 6 of 33 named, 1 unplaceable (376), 1 dangling (377). The remaining 25 are unexamined, and
+after this I will not describe them as resolving.

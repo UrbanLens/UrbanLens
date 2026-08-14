@@ -7242,3 +7242,25 @@ This range matches the container-drift note already in `CLAUDE.local.md` ("30 tr
 missing `models/place`, `models/album`, `models/map_overlay` ... and migrations 0026-0038", dated
 2026-08-06), so the drift has been known for over a week in one form and unrecognised as a
 *database* problem.
+
+
+## Note 2026-08-14: `trip.py`'s masking docstring cites an entry that is not here
+
+`controllers/trip.py:135` (`_mask_trip_identities`, or its equivalent) opens:
+
+> `docs/PROBLEMS.md` gap: ``services/identity_visibility.py`` masked the single-trip render sites
+> (member panel, activity/comment attribution) but not the trips list...
+
+**There is no such entry.** The masking gaps recorded here cover the data export, global search, and
+reply/reaction notifications (all 2026-08-07); the only trips-list entry is about *query
+amplification*, which is unrelated. Searching for "trips list" or trip identity masking finds
+nothing matching.
+
+Two readings, and the difference matters to whoever picks this up: either the gap was closed by the
+very function carrying the comment and its entry was removed without updating the reference, or it
+was never filed and the docstring is the only record. The comment's phrasing ("masked ... but not
+the trips list") reads as *describing a gap that still existed when written*, which favours the
+second.
+
+Recorded rather than resolved - deciding which requires the history behind that function, and the
+answer changes whether this is a stale pointer or an unfiled gap.
