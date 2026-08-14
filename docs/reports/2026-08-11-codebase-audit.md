@@ -8107,3 +8107,24 @@ to 3, and reading those three took it to 0.
 Four surfaces checked for central enforcement, four centralised: API auth, view auth, htmx CSRF, and
 now fetch CSRF - the last by convention rather than by mechanism, which is the weakest of the four and
 the only one where a new call site could forget.
+
+
+## Chunk 446 - the other tree, per chunk 347's lesson: 132 fetches total, all covered
+
+Chunk 445 checked `templates/` only. **Chunk 347 established that searching one tree gives a
+confidently wrong answer about client behaviour** - a flag with three writers and zero readers turned
+out to have its reader in inline template JS. So the TypeScript tree needed the same check.
+
+**44 mutating `fetch()` calls in `frontend/ts`.** One lacked a CSRF reference in the window -
+`e2ee-client.ts:252` - and it builds `new FormData(form)`, capturing the form's `{% csrf_token %}`
+input, with `credentials: "same-origin"` set. Safe.
+
+**132 mutating fetches across both trees, all carrying CSRF.**
+
+Applying that lesson cost one command and converted a claim about templates into a claim about the
+application. Without it, "all 88 covered" would have been true and useless - the 44 I had not looked
+at were exactly the ones a reader would assume were included.
+
+**That is the fourth time this session a scope-completion move mattered**: the localdate sites (335),
+the reference audit's remaining files (402-405), the secrets dict-literal case (442), and this. In
+each, the first pass was correct about what it examined and silent about what it did not.
