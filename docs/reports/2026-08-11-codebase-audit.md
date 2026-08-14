@@ -2612,6 +2612,30 @@ piece of work, which is worth knowing before treating any such sweep's output as
 The two genuine findings are fixed: the icon truncates to the column width, and unparseable ids are
 dropped rather than failing the request.
 
+### A filter validated before its result was believed
+
+The three defect species this audit found need three different searches. Two are covered: coverage
+data finds *never executed*, and AST filters on local properties find *bypasses a validator*. The
+third - `VisitSuggestionRespondView`'s silent failure, where an error flag was set and one of two
+exit paths returned without consulting it - is neither, and had been found only by reading.
+
+So: a filter for that shape. A function that assigns an error-ish local (`blocked`, `failed`,
+`refused`, ...), consults it in an `if`, and has a `return` *between* the assignment and the check -
+an exit that cannot report what was recorded. Result across every controller: **zero**.
+
+That number is only worth something because it was calibrated first. Running the same filter
+against `git show b3cad024~1` - the version of `visit_suggestions.py` from immediately before the
+chunk-230 fix - produces `CONTROL HIT: post flag=blocked 1 exit(s) before the check`. The filter
+provably detects the shape it claims to look for, so its silence on the current tree is evidence
+rather than an absence of evidence.
+
+This is the discipline the rest of the session had to learn the hard way. Five sweeps produced
+confidently wrong output before anyone noticed - the accessibility scan at 70% false positives, the
+dead-code scan where every category over-reported, the escaping-helper table that was wrong twice,
+and two generations of colour regex that each declared completeness. Every one was caught by
+checking against a case whose answer was already known, and every one was caught *after* the result
+had been written down. Doing it first costs one command.
+
 ---
 
 ## 3. Checked and clean
