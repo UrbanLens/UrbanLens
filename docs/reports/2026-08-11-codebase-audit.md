@@ -2347,6 +2347,28 @@ guessable constant** rather than a per-user string. As a speed bump against misc
 works; as a "type the name to prove you mean it" check it is weaker than it looks. Both branches
 now have tests.
 
+### A failure toast that only reached one of two exit paths (fixed)
+
+`VisitSuggestionRespondView.post`, 31 statements, never executed. Two suspicions on reading it,
+and the more dramatic one was wrong - worth recording both, since the wrong one is the kind of
+thing that gets "fixed" into a regression.
+
+*Wrong:* the `blocked` branch assigns `response["HX-Trigger"]` outright, immediately after
+`_trigger_label_refresh` has set that same header - which looks like it discards the label refresh.
+It does not: the branch re-includes `notifCountRefresh` in its own payload. Careful code, and
+"simplifying" it by using `.update()` on a header that is a JSON string would have been the actual
+bug.
+
+*Right:* the handler has two exit paths. When the response came from a pin page
+(`context=pin`), it returned `_trigger_label_refresh(response)` **before** reaching the `blocked`
+handling at the bottom. So a user on a pin page who accepted a suggested visit while visit logging
+was switched off got their visit history re-rendered, unchanged, with no explanation - the exact
+silent failure `CLAUDE.md` calls out ("Results and errors must surface as toast notifications").
+From the notification dropdown, the same action explained itself properly.
+
+The triggers are now built once and applied to whichever response is returned, so the two paths
+cannot drift again. One import became dead and went with it.
+
 ---
 
 ## 3. Checked and clean
