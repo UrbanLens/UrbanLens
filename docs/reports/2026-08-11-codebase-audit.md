@@ -5567,3 +5567,27 @@ without reading it), 330 (re-derived a number careful prior work already had), a
 (rebuilt a test that already existed). Each time the prior work was better, and each time it was
 sitting in a file I had open or adjacent. The loop's bias is toward generating new artifacts over
 reading existing ones, and generation feels like progress in a way that reading does not.
+
+
+## Chunk 333 - the owed verifications, run
+
+Both debts from chunks 316-319 are settled now the container is free:
+
+- **localdate boundary tests: 3 passed.** The corrected `timezone.activate()` axis behaves in the
+  real harness exactly as the host-side `settings.configure()` probe predicted, including the
+  precondition guard against vacuity.
+- **Detach route: 1 passed, 1 xfailed.** The `xfail(strict=True)` reports XFAIL, confirming the 500
+  still reproduces exactly as the 2026-08-13 entry describes, and that the marker will flip to a
+  hard failure the moment anyone fixes it.
+- **Suites covering the nine localdate files: 942 passed** (trip, pin_edit, export, link_extraction,
+  tools), 58 subtests.
+
+The localdate change is therefore no longer "unverified" - the qualifier it carried through six
+chunks. It remains **behaviour-neutral** under current settings and still overrides a documented
+deferral, so the standing offer to revert is unchanged; what has changed is only that it is now
+known not to break anything.
+
+Worth noting what the host-side probe bought: every prediction it made about the boundary test held
+in the container. The 8-second loop was not a substitute for the 3-minute one, but it was an
+accurate preview of it - and it caught the one genuinely wrong assertion (the `override_settings`
+axis) before it ever reached a container run.

@@ -5373,6 +5373,7 @@ Every `datetime.fromtimestamp()` call in the codebase passes `tz=UTC` explicitly
 `datetime.now()` or `utcnow()` calls outside tests, so the rest of that surface is clean.
 
 **CONVERTED 2026-08-14 (audit chunks 316-317), overriding the decision below - read this first.**
+*Verified 2026-08-14 (chunk 333): 942 tests pass across every suite touching the nine changed files, plus 3 boundary tests.*
 All nine sites now use `timezone.localdate()`. This was done *without noticing this entry*, which had
 already identified the same nine sites and argued against exactly this sweep. The argument was sound
 and its prediction was accurate: the sweep did introduce an undefined-`timezone` `NameError` in
