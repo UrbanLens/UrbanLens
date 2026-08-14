@@ -2697,6 +2697,28 @@ first - which then failed to fail.
 The `TransactionTestCase` is kept: it pins the guarantee that the decorator provides, and fails if
 anyone removes it.
 
+### Duplicate-row risk: one traced to a deliberate design, 22 left as candidates
+
+A sweep for querysets filtering across a multi-valued relation without `.distinct()`, which
+silently returns a row per match. This one asked Django for the relation names rather than guessing
+them - 260 multi-valued names straight from `_meta`, so the "which fields are multi-valued" half
+cannot be wrong. Positive and negative controls both behaved. 23 candidates after discounting the
+obvious non-issues (`exclude()` across a multi-valued relation compiles to a subquery and cannot
+duplicate; `.exists()`/`.count()`/`.first()` collapse anyway).
+
+**One traced end to end, and it is correct by design.** `pin/queryset.apply_label_groups` builds
+`filter(labels__id__in=...)` chains with no `distinct()`, which duplicates a pin matching several
+labels - but its only caller is `filter_by_criteria`, which ends `return qs.distinct()` and
+documents it ("Filtered QuerySet (distinct)"). The `distinct()` is applied once at the public entry
+point rather than by every intermediate method, which is the right shape: intermediate querysets
+stay composable, and the collapse happens where the result is consumed.
+
+**The other 22 are not verified.** Each needs its own trace to whichever public method consumes it,
+and that is more than remained in this pass. They are listed as *candidates* in
+`docs/PROBLEMS.md` - the pattern above suggests most will resolve the same way, and "suggests" is
+doing real work in that sentence. Anyone picking this up should trace rather than assume, because
+the failure mode is silent: a duplicated pin in a list or an inflated count, with no error anywhere.
+
 ---
 
 ## 3. Checked and clean

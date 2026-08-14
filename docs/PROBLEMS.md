@@ -6355,3 +6355,30 @@ with a 400 rather than coercing it. Coercion matches the HTML form paths (where 
 from a palette picker and anything else is a malformed request), but an API arguably owes its
 callers an error instead of silent data loss. If that changes, it should change for all 31 sites at
 once, in `clean_color`'s callers rather than in the helper.
+
+---
+
+## Multi-valued filters without distinct(): 22 unverified candidates
+
+From a 2026-08-14 sweep using Django's own `_meta` to identify multi-valued relations (260 names),
+so the relation half of the analysis is exact. 23 querysets filter across one without a
+`.distinct()` on the same expression.
+
+**One was traced fully and is correct**: `pin/queryset.apply_label_groups` is consumed only by
+`filter_by_criteria`, which ends `return qs.distinct()`. The collapse happens once, at the public
+entry point.
+
+The remaining 22 need the same trace - to whichever public method consumes them - before being
+called either safe or broken:
+
+- `models/pin/queryset.py` - lines 136, 312, 323, 340, 348, 350, 453, 540, 546, 552
+- `models/consensus/queryset.py` - lines 58, 68
+- `models/markup/queryset.py` - line 55
+- `models/wiki/queryset.py` - line 37
+- `services/home/home_widgets.py` - line 155
+
+Why it is worth doing rather than assuming: the failure is silent. A pin carrying two matching
+labels appears twice in a list, a count is inflated, a paginator's page size is wrong - and nothing
+raises. The pattern already established (`distinct()` at the public entry point, not in the
+composable pieces) means most of these are probably fine, but a queryset method used by two callers
+where only one collapses would look exactly like these do.
