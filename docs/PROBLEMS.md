@@ -7448,3 +7448,10 @@ So the six-mechanism table is useful for *finding* the gates but not for auditin
 uses one: a gate applied via annotation or resolved upstream is invisible to a search for the
 helper's name. **Any future check of this kind has to look for the masking's effect, not its call
 site.**
+
+**And those behavioural tests already exist (chunk 398).** `test_external_api_trips.py` has
+`test_hidden_location_omits_coordinates_entirely`, `test_masked_member_exposes_no_slug` and
+`test_comment_visibility_gate_hides_the_whole_comment`; `test_external_api_messaging.py` has
+`test_masked_sender_name_is_not_leaked_in_the_thread` and
+`test_masked_partner_display_name_is_not_the_username`. The two checks proposed above were already
+written, named almost identically, and are passing in the suite. Nothing to add here.

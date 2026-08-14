@@ -6973,3 +6973,30 @@ is exactly the test chunk 396 wrote down and did not run.
 Incidentally: `serializers_messaging.py` cites "the 2026-07-23 fix" - the same date as all six
 dangling decision references. That session did substantial identity-masking work, and its reasoning
 is the part that ended up in a gitignored file.
+
+
+## Chunk 398 - the tests I was about to write already existed, named almost identically
+
+Before writing the behavioural tests chunk 397 identified as the only real way to audit masking, I
+checked whether they existed - this session's most-repeated lesson, applied deliberately for once
+rather than after the fact.
+
+**They exist, with the exact assertions:**
+
+- `test_external_api_trips.py::test_hidden_location_omits_coordinates_entirely` - check 1;
+- `test_external_api_messaging.py::test_masked_sender_name_is_not_leaked_in_the_thread` - check 2;
+- plus `test_masked_member_exposes_no_slug`, `test_comment_visibility_gate_hides_the_whole_comment`,
+  `test_masked_partner_display_name_is_not_the_username`.
+
+All passing in the 10,781-test suite run earlier today.
+
+**Sixth instance of "the work already exists"**, after the duplicated guard (332), the overridden
+deferral (325), the pre-filed database drift (359), the encryption inventory (366), and the
+`completed.md` reasoning (388). Six times this session I was about to produce something the codebase
+already had.
+
+The difference here is that checking first cost one command, and I did it because the pattern had
+finally become predictable enough to act on rather than merely to regret. That is the practical
+version of everything above: **in a codebase this well documented, "has someone already done this?"
+is a cheaper first question than "how do I do this?"** - and the audit spent roughly ninety chunks
+learning to ask it in that order.
