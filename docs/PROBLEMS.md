@@ -7314,3 +7314,25 @@ matched.**
 
 The code implementing the decision exists and its docstring explains the reasoning inline, so nothing
 is unexplained. What is missing is the record the two comments assert exists.
+
+
+## Note 2026-08-14: `completed.md` is referenced from three places and does not exist
+
+Chasing the unfiled 2026-07-23 decisions led here. `docs/PROBLEMS.md` (~line 1508) points at
+`docs/notes/ai/completed.md` for "the whole PR #111 cluster"; `CLAUDE.local.md` points at
+`docs/prompts/completed.md` for previous agents' work. **`find docs -name completed.md` returns
+nothing** - neither path exists.
+
+Consequences, in order of how much they cost:
+
+1. The six comments citing "decision 2026-07-23" (per-recipient payloads, opaque identifiers, wire
+   them all, option (a)) point at reasoning that is now in no file under `docs/`. Searched all of
+   `docs/` for each phrase - the only hits are where this audit quoted them today.
+2. Anyone following the `PR #111 cluster` pointer, or `CLAUDE.local.md`'s guidance to read what
+   previous agents did, gets a missing file rather than an empty one - which reads as a broken
+   checkout rather than absent history.
+
+Whether `completed.md` was deleted, renamed, or never committed is not established here. If its
+content survives in git history, recovering the 2026-07-23 decisions from it would close six
+dangling code comments at once; if not, those decisions exist only as the one-line summaries in the
+comments themselves.

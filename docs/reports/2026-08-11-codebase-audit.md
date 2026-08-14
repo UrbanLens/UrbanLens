@@ -6722,3 +6722,24 @@ the rejected alternatives left no trace. Four of these are now cited in comments
 which does not exist.
 
 Tally, 16 references: 9 resolve, 6 dangling, 1 unchecked (e2ee).
+
+
+## Chunk 387 - the missing decisions trace to a missing file
+
+The last decision reference (`e2ee.py`, "PR #111 finding; decision 2026-07-23: opaque identifiers")
+is dangling like the rest - **6 of 6**. But following it produced the likely cause.
+
+`PROBLEMS.md` itself points at `docs/notes/ai/completed.md` for the PR #111 cluster, and
+`CLAUDE.local.md` points at `docs/prompts/completed.md` for previous agents' work. **Neither exists** -
+`find docs -name completed.md` returns nothing. Searching all of `docs/` for each decision phrase
+finds only today's quotations of them.
+
+So the six dangling references are probably not six omissions at all: they cite a real document that
+is no longer present. That reframes the whole thread - the 2026-07-23 session may have recorded its
+decisions perfectly well, in a file that has since been deleted, renamed, or never committed.
+
+**This is the fourth time in this session that "missing" turned out to be "moved or mis-filed"** -
+after the guard I duplicated, the deferral I overrode, and the drift documented as a files problem.
+Each time my first reading was that something had not been done, and each time the work existed
+somewhere I had not looked. Worth stating as the session's most consistent lesson about this
+codebase: **absence of a record is weak evidence of absence of work.**
