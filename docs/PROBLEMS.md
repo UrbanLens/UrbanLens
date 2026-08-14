@@ -6087,10 +6087,14 @@ injectable.
 
 ### The server-side half - RESOLVED 2026-08-14
 
-`services/core/colors.clean_color` now validates every colour write path (19 of them, across
+`services/core/colors.clean_color` now validates every colour write path (27 of them, across
 `controllers/labels.py`, `external_api/views.py`, `controllers/markup.py`,
 `controllers/detail_pins.py`, `controllers/maps.py`, `controllers/custom_layers.py` and
-`controllers/saved_filters.py`). Invalid input is coerced to each call site's existing default
+`controllers/saved_filters.py`). Eight further sites in `controllers/detail_pins.py` were missed on
+the first pass and fixed on 2026-08-14: the original sweep matched `color = X.get(...)` assignments
+but not dict-literal `"color": body.get(...)` entries, and its field list was built from request
+keys, so `detail_bg_color` (populated from `bg_color`) never appeared. Invalid input is coerced to
+each call site's existing default
 rather than raising, since these come from palette pickers and a non-colour is a malformed
 request; `"none"` is permitted only where it means "no border".
 

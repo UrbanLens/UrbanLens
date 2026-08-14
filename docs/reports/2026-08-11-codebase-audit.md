@@ -2369,6 +2369,33 @@ From the notification dropdown, the same action explained itself properly.
 The triggers are now built once and applied to whichever response is returned, so the two paths
 cannot drift again. One import became dead and went with it.
 
+### Chunk 218's "the grep comes back empty" was wrong, in two ways
+
+Working the next never-executed write handler - `LocationWikiDetailPinEditView.post`, 34
+statements - the first thing visible was three colour fields assigned straight from the request
+body with no `clean_color`. That should have been impossible: chunk 218 introduced the validator
+specifically to close every colour write path, and reported "all 19 now go through the validator,
+and the same grep comes back empty."
+
+The grep was incomplete twice over, and both failures are instructive:
+
+1. **Syntactic form.** The pattern matched `color = X.get("color")` - an assignment. These are
+   dict-literal entries: `"color": body.get("color")`. A quote sits between the field name and the
+   colon, so the pattern could not match, and `detail_pins.py` has eight of them.
+2. **Field-name coverage.** `detail_bg_color` is populated from the request key `bg_color`. My
+   field list was built from the *request keys* I had seen, so a field whose model name differs
+   from its request key was invisible to it - even in a file I had already edited.
+
+Eight sites fixed. This is the second time in this audit that a claim of completeness rested on a
+pattern rather than on the population it was meant to cover, and the first (8 colour paths that
+turned out to be 19) was caught the same way: by looking at the code rather than re-running the
+grep. Rerunning a flawed pattern only ever confirms it.
+
+Worth stating plainly: **"the grep is empty" is a statement about the grep.** The corrected sweep
+now allows an optional quote and matches any `*color*` field name, and returns zero - but that
+sentence is only worth as much as the pattern behind it, which is why the fix is recorded here with
+the pattern itself.
+
 ---
 
 ## 3. Checked and clean

@@ -170,7 +170,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             pin_type_is_user_provided=pin_type_chosen,
             icon=body.get("icon") or None,
             color=clean_color(body.get("color")),
-            detail_bg_color=body.get("bg_color") or None,
+            detail_bg_color=clean_color(body.get("bg_color"), allow_none_keyword=True),
             detail_bg_opacity=int(body.get("bg_opacity") or 80),
             detail_border_color=clean_color(body.get("border_color"), allow_none_keyword=True),
             detail_border_opacity=int(body.get("border_opacity") or 100),
@@ -215,9 +215,9 @@ class DetailPinEditView(LoginRequiredMixin, View):
             "name": body.get("name") or None,
             "description": body.get("description") or None,
             "icon": body.get("icon") or None,
-            "color": body.get("color") or None,
-            "detail_bg_color": body.get("bg_color") or None,
-            "detail_border_color": body.get("border_color") or None,
+            "color": clean_color(body.get("color")),
+            "detail_bg_color": clean_color(body.get("bg_color"), allow_none_keyword=True),
+            "detail_border_color": clean_color(body.get("border_color"), allow_none_keyword=True),
         }.items():
             if value is not None or field in body:
                 setattr(detail_pin, field, value)
@@ -372,7 +372,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             pin_type_is_user_provided=pin_type_chosen,
             icon=body.get("icon") or None,
             color=clean_color(body.get("color")),
-            detail_bg_color=body.get("bg_color") or None,
+            detail_bg_color=clean_color(body.get("bg_color"), allow_none_keyword=True),
             detail_bg_opacity=int(body.get("bg_opacity") or 80),
             detail_border_color=clean_color(body.get("border_color"), allow_none_keyword=True),
             detail_border_opacity=int(body.get("border_opacity") or 100),
@@ -430,9 +430,9 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
             "name": body.get("name") or child_wiki.name,
             "description": body.get("description") or None,
             "icon": body.get("icon") or None,
-            "color": body.get("color") or None,
-            "detail_bg_color": body.get("bg_color") or None,
-            "detail_border_color": body.get("border_color") or None,
+            "color": clean_color(body.get("color")),
+            "detail_bg_color": clean_color(body.get("bg_color"), allow_none_keyword=True),
+            "detail_border_color": clean_color(body.get("border_color"), allow_none_keyword=True),
         }.items():
             if value is not None or field in body:
                 setattr(child_wiki, field, value)
