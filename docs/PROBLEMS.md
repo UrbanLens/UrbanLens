@@ -7505,7 +7505,21 @@ and **is already used in 16 templates here**, so the idiom is known and adopted.
 predate it, or may serialise through something that escapes, or the values may not be inside the
 script blocks at all.
 
-**To settle it**, for each of the seven: (1) is the `{{ ... |safe }}` lexically inside a `<script>`
+**Check (1) is now confirmed (chunk 423).** Parsing `<script>...</script>` regions and testing
+containment: **all 14 `|safe` JSON expressions are lexically inside script blocks** -
+`site_admin_stats.html` (4), `_cost_admin_body.html` (4), `pages/map/index.html` (3), `data.html`,
+`common_pins.html`, `detail.html`. None is in an attribute or body context.
+
+**Check (2) is the only thing left.** Two payloads plainly carry user-authored text:
+`filter_labels_json` (label names) and `pin.tags_data_json` (tag names); `common_pins_json` carries
+pin names. If any is serialised with a plain `json.dumps`, a label named `</script><img src=x
+onerror=...>` closes the block and the rest parses as HTML.
+
+**This should be treated as probable rather than speculative** until someone checks how those three
+are serialised. The remaining question is narrow: does the producing code escape `<`, or use
+`DjangoJSONEncoder` without it?
+
+Original checks, for reference: (1) is the `{{ ... |safe }}` lexically inside a `<script>`
 element, and (2) can any string in the serialised payload contain user input? If both, convert to
 `{{ value|json_script:"id" }}` and read it from JS via `JSON.parse(document.getElementById(...).textContent)`,
 matching what the other 16 templates do.

@@ -7564,3 +7564,21 @@ artifact of this session. The entry states the two checks that settle it.
 This is the right note to end a long audit on. The lead is real, the fix is already the codebase's own
 established pattern, and the claim I am making is exactly as strong as the evidence I gathered - no
 stronger.
+
+
+## Chunk 423 - containment confirmed: all 14 are inside `<script>`
+
+Settled check (1) of chunk 422's lead by parsing `<script>...</script>` regions and testing offsets:
+**all 14 `|safe` JSON expressions are lexically inside script blocks.** None sits in an attribute or
+body context where the `</script>` break-out would not apply.
+
+Three of the payloads carry user-authored text - `filter_labels_json` (label names),
+`pin.tags_data_json` (tag names), `common_pins_json` (pin names). Only check (2) remains: whether the
+producing code escapes `<`.
+
+**Upgraded from speculative to probable in the filed entry**, with the remaining question stated in
+one sentence. That is as far as the evidence goes, and one more step - reading how those three are
+serialised - would confirm or dismiss it outright.
+
+Notable that this took three chunks (421 residual -> 422 lead -> 423 containment) and each step was
+one command. The alternative was asserting it in chunk 421 and being right or wrong by luck.
