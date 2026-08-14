@@ -1590,6 +1590,17 @@ constraint it adds, which is why that migration's `pending trigger events` failu
 by running it against a seeded database instead. A green suite is evidence about the code, not about
 the commit or the deploy.
 
+**2026-08-14 (chunks 206-218): 10,736 passed, 0 failed, 1:07:01.** Up from 10,708; the difference
+is tests added by these chunks. Two caveats recorded rather than glossed: an earlier coverage run
+was abandoned because files were `docker cp`'d into the container *while it ran*, making it an
+inconsistent snapshot, and this run has a smaller version of the same flaw - chunk 218's files
+landed in the container in its final minutes. Nothing failed and already-imported modules do not
+pick up mid-run changes, but the last few minutes ran against mixed source, so chunk 218 is
+covered by its own targeted run instead (824 passed across labels, markup, saved filters, custom
+layers and detail pins). The lesson is the obvious one: do not sync source into a container that
+is running a suite.
+
+
 ### "Detach location" is a guaranteed 500 (found, filed, not patched)
 
 Following the constraint-vs-check lens onto `Location`, which is `unique_together` on
