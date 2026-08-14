@@ -7529,3 +7529,31 @@ Original checks, for reference: (1) is the `{{ ... |safe }}` lexically inside a 
 element, and (2) can any string in the serialised payload contain user input? If both, convert to
 `{{ value|json_script:"id" }}` and read it from JS via `JSON.parse(document.getElementById(...).textContent)`,
 matching what the other 16 templates do.
+
+
+## Note 2026-08-14: `SECRET_KEY` falls back to a per-process random key with no environment guard
+
+Found by audit chunk 441. **No hardcoded secrets exist** - all 11 secret-named settings read from the
+environment, and `EMAIL_HOST_PASSWORD` defaults to `""` rather than a weak value. One line deserves
+a second look:
+
+```python
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or get_random_secret_key()
+```
+
+A random fallback is the right instinct - far better than a checked-in default someone forgets to
+override. But it is **generated per process**, and nothing branches on `ENVIRONMENT_NAME` (defined
+eight lines below) to require the variable outside local development. Consequences if
+`DJANGO_SECRET_KEY` is ever unset in a multi-process deployment:
+
+- gunicorn workers, the Daphne ASGI process and each Celery worker get **different keys**, so a
+  session or signed value created by one is invalid to the others - presenting as random logouts
+  rather than a configuration error;
+- `EncryptedTextField` derives from `SECRET_KEY` when `UL_FIELD_ENCRYPTION_KEY` is unset (see
+  `docs/DATA_ENCRYPTION.md`), so encrypted columns written under a random key become unreadable on
+  the next restart.
+
+**Not observed - this is a hazard, not an incident.** Production presumably sets the variable, and
+`.env` handling is in place. The cheap hardening is a startup check: if `ENVIRONMENT_NAME` is not
+local/development and `DJANGO_SECRET_KEY` is unset, raise `ImproperlyConfigured` rather than
+generating one. That converts a silent, confusing failure into a loud one at boot.

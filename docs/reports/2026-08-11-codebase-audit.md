@@ -7997,3 +7997,24 @@ authorization hierarchies, six documented invariants, and one exemption - every 
 in the single case that was not, fixed and tested. The exemption count is the tidiest result: a
 codebase can accumulate `csrf_exempt` decorators quietly, and this one has exactly the number it
 needs.
+
+
+## Chunk 441 - no hardcoded secrets, and one hazard worth a startup check
+
+**Zero secrets from string literals.** All 11 secret-named settings read from the environment, and
+`EMAIL_HOST_PASSWORD` defaults to `""` - an absent password, not a weak one.
+
+One line is worth flagging: `SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or
+get_random_secret_key()`. The random fallback is better than a checked-in default, but it is
+**per process**, and nothing requires the variable outside local development even though
+`ENVIRONMENT_NAME` is computed eight lines below. Unset in a multi-process deployment, workers
+disagree about session signatures (presenting as random logouts) and `EncryptedTextField` - which
+derives from `SECRET_KEY` absent `UL_FIELD_ENCRYPTION_KEY` - writes columns unreadable after restart.
+
+**Filed as a hazard, not an incident.** I have not observed it, production presumably sets the
+variable, and the failure mode requires a misconfiguration. The fix is a boot-time
+`ImproperlyConfigured` when the environment is not local - turning a silent, misleading failure into
+an immediate one.
+
+Scope stated: the scan covered module-level assignments in `settings/` whose *name* matches a secret
+pattern. A credential inside a dict literal, or under an unusual name, would not appear.
