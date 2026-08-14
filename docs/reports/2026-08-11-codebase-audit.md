@@ -6253,3 +6253,29 @@ neither chunk 360 (which asserted it from names) nor chunk 364 (which corrected 
 **Two name-inferred warnings, one wrong and one right** - which is the honest summary of inference
 from identifiers. It is not useless; it is a coin flip, and this session has now paid for that
 lesson four times (chunks 342, 343, 364, 365). The cheap step in every case was opening the file.
+
+
+## Chunk 366 - the encryption surface is tracked, and the gap I found is not one
+
+Followed `0039` into a security-relevant question: an `EncryptedTextField` added *after* the backfill
+migration would hold plaintext rows with nothing to convert them.
+
+Counts: **22** `EncryptedTextField` declarations in models, **14** columns backfilled by `0039`,
+**6** by `0007` (which `0039`'s docstring explicitly cites as its predecessor). So 20 of 22 are
+covered by an explicit backfill, and the remaining 2 are most likely fields created encrypted from
+the outset - which need no backfill at all.
+
+**I did not verify those last 2, so I am not claiming full coverage.** The reason to stop here is
+that `docs/DATA_ENCRYPTION.md` already maintains the inventory this check was reconstructing,
+including a "Reviewed, deliberately left plaintext" table with a *why* column. Re-deriving it badly
+from grep counts is exactly the mistake of chunks 330 and 338, where a cheap re-derivation disagreed
+with careful prior work and was wrong both times.
+
+The right follow-up is to check that inventory against the model declarations - a real task, and one
+that needs the document read properly rather than counted. Recorded as such rather than half-done.
+
+**A note on where this session ends up.** The last dozen chunks have repeatedly found that the
+careful work already existed - the guard in 332, the deferral in 325, the counts in 330 and 338, the
+inventory here. That is a genuine finding about this codebase: it is unusually well documented by
+its previous maintainers, and the highest-value move on encountering something surprising has
+consistently been to look for the existing analysis before producing a new one.
