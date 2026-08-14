@@ -5375,3 +5375,29 @@ project note that "pytest needs the container" is accurate and was never the who
 Recorded in `docs/PROBLEMS.md` as a developer-workflow note rather than a defect - it is the kind
 of thing that stays lost precisely because the existing constraint is real enough to sound
 complete.
+
+
+## Chunk 322 - spot-checking pure services on the host; the failure was mine
+
+Used the host-side Django path on two of this audit's own helpers. Both behave correctly:
+
+- `clean_color`: accepts `#abc`/`#AABBCC`, rejects `red`, `""`, `#12345`, `javascript:alert(1)`,
+  `#ff00ff; x`, `None`.
+- `safe_int`: `"5"->5`, `"  7 "->7`, `"-4"->-4`, and `"x"`/`None`/`True`/`"1e3"` all fall to the
+  default. Bool is refused explicitly (`safe_int(True, 9) == 9`), which is the point of it -
+  `int(True)` is `1` and would silently pass as a valid id.
+- `clamp_int`: clamps `"500"->100`, `"-5"->1`, and `"x"->default`.
+
+**The first run reported a failure that was not one.** It asserted `safe_int("x") is None`; the
+function returns `default: int = 0`. It also called `clamp_int(lo=..., hi=...)` when the
+parameters are `low`/`high`. I wrote both of these helpers earlier in this audit and still
+mis-stated their contracts from memory a few hundred commits later.
+
+That is a small instance of the thing this audit keeps finding at larger scale: the failure was
+in the *expectation*, not the code, and it looked exactly like a defect report until the
+signature was read. Chunk 305's false alarm, chunk 310's, chunk 312's - all the same shape. The
+check that resolves it is always the same and always cheap: read the definition before believing
+the diff.
+
+The 8-second feedback loop is what made this a footnote rather than a chunk. On the container it
+would have cost three minutes to discover I had misremembered a keyword argument.
