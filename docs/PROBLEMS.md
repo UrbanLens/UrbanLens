@@ -7264,3 +7264,26 @@ second.
 
 Recorded rather than resolved - deciding which requires the history behind that function, and the
 answer changes whether this is a stale pointer or an unfiled gap.
+
+
+## Note 2026-08-14: `account.py` cites an unfiled decision about raw-password validation
+
+`controllers/account.py` (~line 1136) documents a security-sensitive choice:
+
+> The raw password crosses HTTPS exactly once here, is validated in memory, and is never stored or
+> logged (decision 2026-07-23, `docs/PROBLEMS.md` - option (a): a validation endpoint, rather than
+> duplicating every validator's rules in TypeScript and keeping them in sync by hand).
+
+**That decision is not in this file.** Full-text searches for "option (a)", "validation endpoint",
+"breach check", "raw password" and "password validat" all return nothing, and none of the 18
+`2026-07-23` mentions covers it.
+
+This matters more than the other dangling references found today, because the citation is doing
+*justificatory* work: it tells a reader that sending the raw password to the server was chosen
+deliberately over a client-side alternative, and points at reasoning that cannot be read. Someone
+reviewing this later gets an assurance they cannot check, which is the position a security comment
+should never leave a reviewer in.
+
+The comment is self-contained enough to stand on its own - the argument (avoid duplicating validator
+rules in TypeScript) is stated inline. The missing piece is whatever weighed option (a) against the
+alternatives, including the ones not named here.

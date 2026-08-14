@@ -6556,3 +6556,23 @@ could have found the thing.**
 
 Which is also why the two dangling verdicts required re-checking rather than trust: I had reached
 them by a different method than the one that just failed, but I did not know that until I looked.
+
+
+## Chunk 380 - third dangling reference, and the one that matters most
+
+`account.py`'s raw-password comment cites a "decision 2026-07-23, docs/PROBLEMS.md - option (a)"
+that is not in the file by any search I can construct.
+
+**Tally, 9 references checked: 5 resolve, 1 ambiguous, 3 dangling.** Chunk 378's "roughly a third"
+holds at a larger sample.
+
+This one is qualitatively different from the other two. The trips-list and SpotGuessr pointers cite
+*descriptions of bugs*; this cites a *justification for a security decision* - that the raw password
+crossing HTTPS was chosen deliberately over a client-side alternative. A reader cannot check the
+reasoning, only the assurance that reasoning existed. The inline argument (avoid duplicating
+validator rules in TypeScript) survives on its own, so the code is not left unexplained; what is
+missing is whatever weighed that option against the ones not named.
+
+Filed as a note. Recovering it means finding the 2026-07-23 discussion, which may only exist in git
+history or in a session transcript - and if it exists nowhere, the honest fix is to write the
+reasoning down now rather than delete the citation.
