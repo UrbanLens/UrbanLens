@@ -5618,3 +5618,25 @@ different and less visible failure than a `NameError`, and lint cannot see it.
 Only this one of the nine converted sites has been checked this way. Recorded in `PROBLEMS.md` as
 work owed, rather than quietly assumed fine - the other eight deserve the same question, and I do
 not have grounds to claim they are clean.
+
+
+## Chunk 336 - re-verifying a filed product question rather than deciding it
+
+Took the games feature-gate entry. It is explicitly a **product decision**: a mixin applying the
+hub's check to all 49 views was written and reverted, because it broke 9 tests that exercise full
+gameplay with users who do not hold the feature. That is the behaviour the suite currently encodes,
+so tightening it would lock out anyone playing today - not a defect fix.
+
+Deciding it is not mine to do, so the contribution is confirming it is still true: an AST pass finds
+**50 game view classes, 1 gated (the hub), 49 with `LoginRequiredMixin` alone** - the entry's count,
+unchanged since 2026-08-12.
+
+**Deliberately did not add a test here**, unlike the detach case in chunk 326. There, a strict xfail
+worked because the current behaviour (a 500) is wrong under *every* candidate fix. Here the current
+behaviour is what one of the two plausible answers wants, so any test I wrote would encode a guess
+about the product question - and a test asserting "a non-entitled user can play" would actively
+obstruct the fix if the gate is meant to apply. The absence of a test is the honest state.
+
+That distinction is worth keeping: an unresolved product question sometimes takes a guard and
+sometimes must not. The test is safe only when every candidate answer agrees the present behaviour
+is wrong.

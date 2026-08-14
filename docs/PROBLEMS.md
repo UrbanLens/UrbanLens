@@ -5236,6 +5236,10 @@ non-entitled user; `test_games_controller.py::test_requires_alpha_features` cove
 That is the behaviour the suite encodes, so tightening it is a deliberate product change rather
 than a defect fix, and it would lock out anyone currently playing.
 
+*Re-verified 2026-08-14 (chunk 336):* an AST pass over the game controllers finds **50 view
+classes - 1 references the feature gate (the hub), 49 check only `LoginRequiredMixin`**, matching
+this entry's count exactly. The gap has not narrowed since it was filed.
+
 If the gate is meant to cover the games, the mechanical part is small: a `dispatch()` mixin mixed
 in *after* `LoginRequiredMixin` (so anonymous visitors still get the login redirect rather than a
 bare 403), applied to the 49 `(LoginRequiredMixin, View)` classes, plus granting the feature in
