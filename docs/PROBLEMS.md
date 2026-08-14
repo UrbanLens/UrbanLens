@@ -1,6 +1,31 @@
 # PROBLEMS
 
 Bugs or quirks identified during other work but out of scope to investigate/fix at the time.
+
+---
+
+## ⚠ Dev environment `devs1` is down - read this before restarting anything (2026-08-14)
+
+Four entries below describe one situation. They were filed in discovery order; this is the order
+they must be *acted* on, because fixing the visible problem first breaks something currently healthy.
+
+1. **Snapshot the database.** Three of the pending migrations carry data
+   (`0027_places_backfill`, `0039_encrypt_contact_and_note_fields`, `0042_label_merge_duplicates`).
+2. **`manage.py migrate`** - the dev DB is **18 migrations behind** (`0026`-`0043`). See
+   *"the dev database is 18 migrations behind the code"*.
+3. **Then** `docker compose restart app`. Not before: Celery workers do not autoreload, so they are
+   currently running old code that matches the old schema and are **healthy**. A restart makes them
+   load current code against a stale database.
+4. **Keep the `chown` on every `docker cp`** - see *"the documented `docker cp` resync breaks the
+   app container"*. Without it the app cannot write `logs/django.log`, Django's logging config
+   raises, and `runserver` dies before binding port 8000. The ownership has been repaired once
+   already; the next unguarded resync undoes it.
+
+Why this needed a summary: the underlying drift was recorded in `CLAUDE.local.md` on 2026-08-06 as a
+*stale-files* problem and went unrecognised as a *database* problem for eight days. The information
+was never missing - it was filed under a heading nobody would search when the site stopped serving.
+
+---
 Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
 to pick up without re-discovering the problem from scratch.
 
