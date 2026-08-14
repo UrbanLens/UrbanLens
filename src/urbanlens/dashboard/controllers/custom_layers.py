@@ -23,6 +23,7 @@ from urbanlens.dashboard.models.markup.meta import CUSTOM_LAYER_ICON_CHOICES
 from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.text_limits import text_length_error
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
@@ -235,7 +236,7 @@ class CustomLayerListCreateView(LoginRequiredMixin, View):
         if length_error:
             return HttpResponse(length_error, status=400)
 
-        color = request.POST.get("color") or ""
+        color = clean_color(request.POST.get("color"), default="")
         icon = request.POST.get("icon") or ""
         next_order = (qs.order_by("-order").values_list("order", flat=True).first() or 0) + 1
 

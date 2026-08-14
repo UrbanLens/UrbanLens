@@ -16,6 +16,7 @@ from urbanlens.dashboard.models.labels.meta import COLOR_CHOICES, ICON_CATEGORIE
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.geo.geo import dissolve_polygons
 from urbanlens.dashboard.services.pins.pin_list_membership import resync_lists_for_saved_filter
 from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
@@ -115,7 +116,7 @@ class SavedFilterCreateView(LoginRequiredMixin, View):
             return HttpResponse("No active filters to save.", status=400)
 
         icon = (request.POST.get("icon") or "bookmark").strip()
-        color = request.POST.get("color") or ""
+        color = clean_color(request.POST.get("color"), default="")
         SavedFilter.objects.create(
             profile=profile,
             name=name,
@@ -228,7 +229,7 @@ class SavedFilterEditView(LoginRequiredMixin, View):
         if not criteria:
             return JsonResponse({"ok": False, "error": "No active filters to save."}, status=400)
 
-        color = request.POST.get("color") or ""
+        color = clean_color(request.POST.get("color"), default="")
         saved_filter.name = name
         saved_filter.icon = (request.POST.get("icon") or "bookmark").strip()
         saved_filter.color = color if color in _ALLOWED_COLORS else ""

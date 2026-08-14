@@ -1986,6 +1986,38 @@ purpose: they are set as style properties rather than interpolated into markup, 
 value is inert there. The server-side validation gap is filed in `docs/PROBLEMS.md`, and remains
 where this should really be solved - once, on the way in.
 
+### Closing the colour class on the server, where it belongs
+
+Two chunks had now fixed the same bug in two different renderers, which is the signal that the
+renderer was the wrong place to be fixing it. The root cause is one line of Django semantics:
+`Label.color` declares `choices` and `MarkupShape.color`/`border_color` declare nothing at all,
+and field `choices` are enforced only inside `full_clean()`, which `Model.save()` does not call.
+Every write path assigned straight from request data, so the stored value was "up to N characters
+of whatever was posted".
+
+`services/core/colors.clean_color` now validates on the way in, and this is where the chunk earned
+its keep: the survey I had done while fixing the renderers found **8** write paths, all in
+`controllers/labels.py` and `external_api/views.py`. Re-grepping for the *shape* rather than for
+the files I already suspected found **11 more**, in `controllers/markup.py`,
+`controllers/detail_pins.py`, `controllers/maps.py`, `controllers/custom_layers.py` and
+`controllers/saved_filters.py` - more than half the real surface, in files the earlier pass never
+opened. All 19 now go through the validator, and the same grep comes back empty.
+
+Design notes worth keeping:
+
+- **Coerced to the caller's default, not rejected.** These values come from palette pickers, so a
+  non-colour is a malformed request rather than a user mistake worth reporting, and every one of
+  these endpoints already treated a *missing* colour that way. Each call site keeps the default it
+  had, so behaviour is unchanged for every valid input.
+- **`"none"` is opt-in per call site** (`allow_none_keyword`). Markup borders use it to mean "no
+  border" and the map renderer checks for it by name, so it is a meaningful value there - and a
+  bare CSS keyword nowhere else, which is why it is not simply allowed everywhere.
+- The renderers keep their own validation. This is the first line, not a replacement: a renderer
+  added next year should not have to rediscover the rule, and the two layers fail independently.
+
+A hypothesis property test asserts the part that actually matters - for arbitrary text input, the
+result is always a hex colour, the `"none"` sentinel, or the default. Never an arbitrary string.
+
 ---
 
 ## 3. Checked and clean

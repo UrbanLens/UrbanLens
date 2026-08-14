@@ -6085,16 +6085,17 @@ Not changed, and deliberately: the colours passed to Leaflet as *options*
 properties rather than interpolated into markup, so an invalid value is inert there rather than
 injectable.
 
-### The server-side half is still missing
+### The server-side half - RESOLVED 2026-08-14
 
-`Label.color` is `CharField(max_length=50, choices=COLOR_CHOICES)`. Django enforces `choices`
-only in `full_clean()`, which `Model.save()` does not call, and every label write path assigns it
-straight from request data:
+`services/core/colors.clean_color` now validates every colour write path (19 of them, across
+`controllers/labels.py`, `external_api/views.py`, `controllers/markup.py`,
+`controllers/detail_pins.py`, `controllers/maps.py`, `controllers/custom_layers.py` and
+`controllers/saved_filters.py`). Invalid input is coerced to each call site's existing default
+rather than raising, since these come from palette pickers and a non-colour is a malformed
+request; `"none"` is permitted only where it means "no border".
 
-- `controllers/labels.py:634, 740, 1125` (`request.POST.get("color")`)
-- `external_api/views.py:675, 2043, 2214, 2278, 2352` (`data.get("color")`)
-
-So an authenticated user can still store an arbitrary ≤50-character string in a field that
-declares a fixed set of choices. The frontend fix means it can no longer be rendered as markup,
-but the data-integrity problem is real and the right place to solve it is once, on the way in -
-a shared `clean_label_color()` used by every write path, or `full_clean()` on those saves.
+Left for a future pass: the model fields themselves are still permissive
+(`MarkupShape.color`/`border_color` have no `choices`, `Label.color` has choices Django will not
+enforce on `save()`). Validation now happens at every known entry point, but a new write path
+added without `clean_color` would reintroduce the gap. A `validators=[...]` on the fields, or a
+custom field type, would make it structural rather than conventional.

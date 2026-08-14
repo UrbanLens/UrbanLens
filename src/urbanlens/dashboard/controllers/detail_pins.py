@@ -17,6 +17,7 @@ from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
@@ -168,10 +169,10 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             pin_type=pin_type,
             pin_type_is_user_provided=pin_type_chosen,
             icon=body.get("icon") or None,
-            color=body.get("color") or None,
+            color=clean_color(body.get("color")),
             detail_bg_color=body.get("bg_color") or None,
             detail_bg_opacity=int(body.get("bg_opacity") or 80),
-            detail_border_color=body.get("border_color") or None,
+            detail_border_color=clean_color(body.get("border_color"), allow_none_keyword=True),
             detail_border_opacity=int(body.get("border_opacity") or 100),
             parent_pin=parent,
             profile=parent.profile,
@@ -370,10 +371,10 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             pin_type=pin_type,
             pin_type_is_user_provided=pin_type_chosen,
             icon=body.get("icon") or None,
-            color=body.get("color") or None,
+            color=clean_color(body.get("color")),
             detail_bg_color=body.get("bg_color") or None,
             detail_bg_opacity=int(body.get("bg_opacity") or 80),
-            detail_border_color=body.get("border_color") or None,
+            detail_border_color=clean_color(body.get("border_color"), allow_none_keyword=True),
             detail_border_opacity=int(body.get("border_opacity") or 100),
             parent_wiki=wiki,
             location=child_location,

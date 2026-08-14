@@ -179,6 +179,7 @@ from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.models.visit_suggestions.model import VisitSuggestion, VisitSuggestionStatus
 from urbanlens.dashboard.models.visits.model import PinVisit
+from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
 from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
@@ -672,7 +673,7 @@ class PinsView(ExternalApiView):
                 longitude=data.get("longitude"),
                 address=data.get("address"),
                 icon=data.get("icon"),
-                color=data.get("color"),
+                color=clean_color(data.get("color")),
                 description=data.get("description"),
                 pin_type=data.get("pin_type"),
                 client_uuid=data.get("uuid"),
@@ -2040,7 +2041,7 @@ class SavedFiltersView(PaginatedListMixin, ExternalApiView):
             profile=profile,
             name=data["name"],
             icon=data.get("icon") or "bookmark",
-            color=data.get("color") or "",
+            color=clean_color(data.get("color"), default=""),
             opacity=data.get("opacity", 100),
             criteria=criteria,
             order=data.get("order", 0),
@@ -2211,7 +2212,7 @@ class LabelsView(PaginatedListMixin, ExternalApiView):
             name=data["name"],
             description=data.get("description") or None,
             kind=data["kind"],
-            color=data.get("color") or DEFAULT_LABEL_COLOR,
+            color=clean_color(data.get("color"), default=DEFAULT_LABEL_COLOR),
             icon=data.get("icon") or None,
             order=data.get("order", 0),
             allow_auto_tag=data.get("allow_auto_tag", True),
@@ -2275,7 +2276,7 @@ class LabelDetailView(ExternalApiView):
         if "description" in data:
             label.description = data.get("description") or None
         if "color" in data:
-            label.color = data.get("color") or None
+            label.color = clean_color(data.get("color"))
         if "icon" in data:
             label.icon = data.get("icon") or None
         if "order" in data:
@@ -2349,7 +2350,7 @@ class LabelCustomizationView(ExternalApiView):
             label,
             name=data.get("name"),
             icon=data.get("icon"),
-            color=data.get("color"),
+            color=clean_color(data.get("color")),
         )
         return Response(LabelSerializer(_reload_label(label, profile)).data)
 

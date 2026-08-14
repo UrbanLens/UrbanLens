@@ -28,6 +28,7 @@ from urbanlens.dashboard.models.pin import Pin, PinQuerySet
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
+from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
@@ -273,7 +274,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             longitude = request.POST.get("longitude")
             address = request.POST.get("address", None)
             icon = request.POST.get("icon") or None
-            color = request.POST.get("color") or None
+            color = clean_color(request.POST.get("color"))
             custom_icon = request.FILES.get("custom_icon") or None
             if custom_icon:
                 from urbanlens.dashboard.models.images.model import MediaKind
@@ -775,7 +776,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         latitude = request.POST.get("latitude") or None
         longitude = request.POST.get("longitude") or None
         icon = request.POST.get("icon")
-        color = request.POST.get("color")
+        color = clean_color(request.POST.get("color"))
         custom_icon = request.FILES.get("custom_icon") or None
         if custom_icon:
             from urbanlens.dashboard.models.images.model import MediaKind

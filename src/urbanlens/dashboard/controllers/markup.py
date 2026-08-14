@@ -29,6 +29,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
 from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title, sanitize_map_data
 from urbanlens.dashboard.services.sharing.map_sharing import clone_markup_map
@@ -628,9 +629,9 @@ class MarkupView(LoginRequiredMixin, View):
             markup_type=markup_type,
             geometry=geometry,
             label=label,
-            color=body.get("color") or "#e53e3e",
+            color=clean_color(body.get("color"), default="#e53e3e"),
             stroke_width=int(body.get("stroke_width") or 3),
-            border_color=body.get("border_color") or "",
+            border_color=clean_color(body.get("border_color"), default="", allow_none_keyword=True),
             fill_opacity=fill_opacity,
             border_opacity=border_opacity,
             security_indicator=security_indicator,
