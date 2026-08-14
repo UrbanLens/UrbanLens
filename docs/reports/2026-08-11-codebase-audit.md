@@ -5472,3 +5472,32 @@ audited, then corrected. This file had 23 items already triaged by earlier work,
 me overriding one of them precisely because I had not read it. Cheap-to-run scans crowd out
 expensive-to-read backlogs, and the backlog was where the higher-value work was sitting the whole
 time.
+
+
+## Chunk 327 - verifying the xfail actually works on this project's TestCase
+
+Chunk 326's detach test depends entirely on `xfail(strict=True)` behaving a specific way, and this
+project's `TestCase` inherits from `django.test.TestCase` -> `unittest.TestCase`. Pytest documents
+real limitations on unittest subclasses (fixtures, parametrize), and I half-remembered `xfail` as
+among them. If that were true the test would be decorative.
+
+**Checked instead of assumed.** A two-method probe - one failing, one passing, both marked
+`xfail(strict=True)` - gives:
+
+```
+XFAIL  T::test_that_fails        <- suite stays green while the bug exists
+FAILED T::test_that_passes  [XPASS(strict)]  <- loud the moment it is fixed
+```
+
+Both halves work, which is exactly the contract chunk 326 relied on. The recollection was wrong.
+
+Two notes on running it. The probe had to be run from outside the project, with an explicit empty
+`-c` config: from the repo root, pytest picks up `[tool.pytest.ini_options]`, loads Django settings
+and dies on GDAL - so an isolated probe needs isolating from the project's config too, not just its
+imports. And the file landed in the scratchpad rather than `/tmp` because a `cd A || cd B` guard
+succeeded on the first branch; the follow-up command then looked in the wrong place. Both cost a
+round trip, neither cost a container cycle.
+
+This is the third memory-sourced claim this session to be checked rather than trusted, and the
+first of the three to survive being wrong at no cost - the earlier two (`safe_int`'s default,
+`clamp_int`'s keyword names) were caught only after producing a bogus FAIL line.
