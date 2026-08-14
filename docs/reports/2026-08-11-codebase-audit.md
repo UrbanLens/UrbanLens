@@ -1820,6 +1820,33 @@ every single entry, so below ~100 items one-frame-per-percent and one-frame-per-
 thing. It now uses 500 non-matching coordinates, which exercises the throttle (about 101 frames)
 without paying for 500 writes.
 
+### The malware scanner admitted unscanned files as clean (fixed)
+
+`services/security/malware_scan.py` is written to fail *closed* - its docstring says a scanner it
+cannot reach must be surfaced as a 503, "not silently admit the upload", and a connection error
+duly raises `MalwareScanUnavailableError`. Two paths did the opposite.
+
+**An `ERROR` status read as clean.** clamd does not raise when it fails to scan a particular
+target; it reports that target as `("ERROR", reason)` through the ordinary return value - clamd's
+own response regex is `(FOUND|OK|ERROR)` and its docstring gives `{filename: ('ERROR', 'reason')}`
+as an example. The result was destructured as `(result or {}).get("stream", ("OK", None))` and only
+`FOUND` rejected, so an `ERROR` fell past the check and returned `None`: upload admitted, never
+scanned. The `("OK", None)` default did the same for any response missing the `stream` key.
+
+**`ResponseError` escaped entirely.** The handler caught `(clamd.ConnectionError, OSError)`.
+`ResponseError` is a *sibling* of `ConnectionError` under `ClamdError`, not a subclass - checked
+against the installed package's MRO rather than assumed - so a garbled response from clamd
+propagated as an unhandled exception and became a 500 instead of the 503 that path exists to
+produce. Order matters in the fix: `BufferTooLongError` subclasses `ResponseError` and keeps its
+own distinct user-facing message, so it has to stay handled first, and a test pins that so the
+widened handler cannot swallow it later.
+
+Anything that is neither `OK` nor `FOUND` now raises `MalwareScanUnavailableError`. All three call
+sites (`tasks.py`, `services/media/images.py`, `services/import_export/import_data.py`) were
+already wrapping the call in `except MalwareScanUnavailableError`, so the new cases land on
+handling that exists - checked, since widening when a function raises is only safe if every caller
+already copes.
+
 ---
 
 ## 3. Checked and clean
