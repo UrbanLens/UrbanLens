@@ -12,8 +12,8 @@ from __future__ import annotations
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import Point
-from django.test.utils import CaptureQueriesContext
 from django.db import connection
+from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -63,5 +63,4 @@ class PinToJsonPrefetchTests(TestCase):
         five = self._count_for(5)
         per_pin = (five - one) / 4
 
-        print(f"\n  to_json() queries: 1 pin -> {one}, 5 pins -> {five}  ({per_pin:.1f}/pin)")
-        self.assertLessEqual(per_pin, 0, f"{per_pin:.1f} queries per pin; a prefetch is being bypassed (labels via .filter(), or reviews via .latest())")
+        self.assertLessEqual(per_pin, 0, f"{per_pin:.1f} queries per pin (1 pin -> {one}, 5 pins -> {five}); a prefetch is being bypassed - labels via .filter(), or reviews via .latest()")
