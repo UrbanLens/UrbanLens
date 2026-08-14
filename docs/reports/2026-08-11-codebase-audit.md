@@ -7020,3 +7020,63 @@ documentation than one named "map overlay", and my instrument penalised it for t
 That is a fitting note near the end of this audit. Across seventeen instances, the failures were
 never that the codebase was worse than my scan reported. They were, without exception, that the scan
 could not see what was there.
+
+
+---
+
+# Session summary (chunks 303-400, 2026-08-14)
+
+94 commits. Written at chunk 400 because 90 chronological entries is a log, not a finding.
+
+## Code defects found and fixed (all verified, all in chunks 303-310)
+
+1. **Label reorder served a stale map icon.** Label `order` decides which label supplies a pin's map
+   icon; the reorder wrote via `queryset.update()`, which fires no `post_save`, so the cache
+   receiver never ran. Also collapsed 50 `UPDATE`s to one `bulk_update`.
+2. **Trip activity reorder never reached the calendar.** `sync_trip_on_activity_save` queues a
+   calendar push on `post_save`; the reorder used `update()` in a loop under a lock.
+3. **Pin merge left `last_visited` three months stale.** Visits were repointed with `update()` while
+   `Pin.last_visited` is a denormalised copy maintained by `sync_last_visited`.
+4. **A regression I introduced**, caught by the full suite: two new `bulk_update` calls unregistered
+   in the pre-existing signal guard.
+
+All three defects are one shape: **a bulk write on a field that `post_save` receivers read**. Bulk
+writes get reached for exactly when many rows change, which is exactly when derived state matters.
+
+## Environment defects (none reachable by reading source)
+
+5. **The documented `docker cp` resync breaks the app container.** It copies host-owned `logs/` in,
+   `appuser` can no longer write `django.log`, Django's logging config raises, and `runserver` dies
+   **before binding**. Ten days unhealthy. Hidden because `docker exec` runs as root, so every
+   `pytest` run and manual check succeeded.
+6. **The dev database is 18 migrations behind** (`0026`-`0043`), with three data migrations, two of
+   them irreversible. Remediation order matters and is counter-intuitive: **snapshot -> migrate ->
+   restart**, because Celery workers do not autoreload and are currently healthy on old code.
+
+## Documentation defects
+
+7. **Six code comments cite decisions that live in a gitignored directory** (`docs/notes/ai/`), which
+   nine tracked files reference. The 2026-07-23 design reasoning is unreachable from any clone.
+8. **A design doc's "remove committed secrets" line does not describe this repository** - verified,
+   nothing under that path was ever committed.
+
+## What did not hold up
+
+Nine documented self-corrections, including a heuristic proposed and withdrawn after testing (302), a
+guard duplicating one that already existed (332), a documented deferral overridden without reading it
+(325), and a migration warning that was wrong about its own failure mode (364).
+
+**Seventeen scan artifacts.** Every raw count in this session was wrong until the matches were read,
+and every one skewed toward *alarm* - a broken extractor flags everything, so its output looks like a
+critical finding rather than a broken extractor. The most dangerous was a would-be "the entire
+encryption inventory is undocumented" from a file that is complete.
+
+**Six times the work already existed** - guard, deferral, drift note, encryption inventory,
+decision record, masking tests. In a codebase documented this well, *"has someone already done
+this?"* is a cheaper first question than *"how do I do this?"*
+
+## Left for the project owner
+
+Six product decisions (pin detach behaviour, games feature gate, backup restore path, chat rate
+limiting, fail-open policy, API colour rejection), the nine `localdate` conversions that override a
+documented deferral, and the environment remediation above.
