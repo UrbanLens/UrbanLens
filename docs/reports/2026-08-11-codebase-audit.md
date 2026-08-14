@@ -1945,6 +1945,23 @@ uncaught.
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
 
+- **Injection, deserialization, and time correctness** (whole-tree static sweeps, 2026-08-14).
+  All negative, recorded so the sweeps are not repeated. **Raw SQL**: four sites outside
+  tests/migrations, every one interpolating *identifiers* while parameterizing values. The
+  `# nosec` comments claim the identifiers come from Django's model registry and that was verified
+  rather than taken at face value - `immich/model.py` reads `_meta.db_table` and
+  `_meta.get_field("profile").column` inline, and `rotate_field_encryption` receives them as
+  arguments, so the call chain was followed to line 58 where they are built from `meta.db_table`
+  / `pk_field.column` / `field.column` while iterating `EncryptedTextField` instances. No user
+  input reaches an identifier. **Deserialization**: zero `eval`, `exec`, `pickle.loads`,
+  `yaml.load`, or `marshal`; Celery is JSON-only across task, result and accept-content. Django's
+  built-in `RedisCache` does pickle its values, which matters only if the cache is reachable - and
+  the compose file has exactly one host port binding in the whole stack (nginx), so Postgres,
+  Valkey and ClamAV are internal-only. **Time**: `USE_TZ = True` with zero naive `datetime.now()`
+  / `utcnow()` / `today()` calls outside tests and migrations. **Mutable default arguments**: zero
+  (ruff's B006 is enforcing it). **`assert` outside tests**: zero, so nothing validates via a
+  statement that `python -O` would strip.
+
 - **Middleware** (`dashboard/middleware.py` - `ProfilePreviewMiddleware`, the stack's only custom
   entry). Impersonation code is where privilege escalation lives, so this was probed for it and
   does not have it. The ghost viewer always has *less* access than the owner, never more: it is a
