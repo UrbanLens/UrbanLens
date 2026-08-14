@@ -5,8 +5,10 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > **Referencing this file from code:** name the entry, not just the file. There are 33 source
 > references reading `see docs/PROBLEMS.md`, and this document is over 7,000 lines - a bare pointer
 > costs the reader a full-text search and, in practice, they do not do it. Prefer
-> `see "the documented docker cp resync breaks the app container" in docs/PROBLEMS.md`. Headings are
-> stable here; line numbers are not (this file is append-only and grew by ~800 lines on 2026-08-14
+> `see "the documented docker cp resync breaks the app container" in docs/PROBLEMS.md`. Cite **every**
+> relevant entry, not the nearest one - `Friendship.muted` has two (wrong shape, and never read), and
+> a pointer to one implies it is the whole story where a bare pointer at least led to both. Headings
+> are stable here; line numbers are not (this file is append-only and grew by ~800 lines on 2026-08-14
 > alone).
 
 ---

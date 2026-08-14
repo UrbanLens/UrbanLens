@@ -6449,3 +6449,21 @@ relevant entries.
 beats two entries found never - but the convention should say to cite all relevant entries, not the
 nearest one. Recorded rather than acted on, since amending the convention note is a change to advice
 I have already given twice.
+
+
+## Chunk 375 - amending advice rather than leaving it half-right
+
+Acted on chunk 374. The convention note now says to cite **every** relevant entry, using
+`Friendship.muted` as the worked example - it has two (wrong shape, never read), and a pointer to
+one implies it is the whole story where the bare pointer at least led to both. The friendship
+comment now names both, flagging the "never read" one as the more immediate problem, since a field
+nothing consumes matters more today than a field shaped wrongly for a future migration.
+
+**Three revisions to one piece of advice across six chunks** - introduced in 370, found
+non-mechanical in 372, found over-narrow in 374, amended here. That is not churn; each revision came
+from applying the advice and hitting its edge. The alternative - stating the convention once and
+moving on - would have left a rule that quietly loses information, and the loss would only surface
+when someone followed a pointer and stopped at the first entry.
+
+Convention advice is cheap to give and expensive to be wrong about, because it propagates to work
+nobody reviews again.
