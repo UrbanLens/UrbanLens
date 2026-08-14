@@ -6279,3 +6279,24 @@ careful work already existed - the guard in 332, the deferral in 325, the counts
 inventory here. That is a genuine finding about this codebase: it is unusually well documented by
 its previous maintainers, and the highest-value move on encountering something surprising has
 consistently been to look for the existing analysis before producing a new one.
+
+
+## Chunk 367 - the encryption inventory is exactly complete: 22 of 22
+
+Did chunk 366's promised follow-up properly - parsed `DATA_ENCRYPTION.md`'s table and compared it to
+the model declarations rather than counting either.
+
+**22 declared, 22 documented, 0 undocumented.** Every `EncryptedTextField` in the codebase is named
+in the inventory, which also carries a separate "deliberately left plaintext" table with reasons.
+That is a maintained document, not an aspirational one.
+
+**Ninth false positive, and the sharpest.** My first attempt reported *22 of 22 undocumented* - a
+result that should have been self-evidently suspicious, since it claims a document with 15 field
+references documents nothing. The cause: the table is `| \`Model\` | \`field1\`, \`field2\` | ... |`,
+two columns, so the `Model.field` form my regex matched never appears anywhere in the file.
+
+Nine for nine now. Every raw scan count this session has been wrong until the matches were read, and
+this one would have produced a *maximally* alarming report - "the entire encryption inventory is
+undocumented" - from a file that is in fact complete. The error rate is not the interesting part; the
+direction is. A broken extractor tends to report *everything* as anomalous, which reads as a critical
+finding rather than as a broken extractor.
