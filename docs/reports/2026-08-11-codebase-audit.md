@@ -5894,3 +5894,24 @@ Sixth time this session a scan's raw output was not the finding (305, 312, 328, 
 The five before were false *positives* - noise to discard. This one would have been a false
 *negative* dressed as a discovery, and those do not announce themselves: nothing about "0 readers"
 looks like a search that missed a directory.
+
+
+## Chunk 348 - re-checking the frontend verdicts chunk 347 cast doubt on
+
+Chunk 347 showed a `frontend/ts`-scoped search can return a confident wrong answer, so the earlier
+frontend verdict in this session needed re-examining: chunk 346 declared `PIN_CACHE_VERSION` correct
+having looked only at `pin-cache.ts`.
+
+**It holds.** Templates contain no cache-version constant, no `pinCacheKey`, and no parallel pin
+cache - the TypeScript module genuinely owns that mechanism. Inline template JS touches only four
+localStorage keys in total: `ul_pins_dirty` and three `_v1`-suffixed history keys
+(`ul_addr_history_v1`, `ul_composer_search_history_v1`, `ul_safety_dest_history_v1`).
+
+So the inline-JS blind spot is narrower than chunk 347's near-miss suggested: it caught the one
+mechanism that genuinely spans both trees. That is worth knowing in both directions - the hazard is
+real and it is not everywhere, and treating "some searches are unreliable" as "no search is
+reliable" would be its own error.
+
+The four keys also happen to answer a question this audit never asked: client-side persistent state
+is small and enumerable, which makes it a poor hiding place for the kind of staleness bug chunk 304
+found server-side.
