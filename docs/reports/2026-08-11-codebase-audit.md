@@ -7650,3 +7650,23 @@ ignorance - inconsistency. Which is exactly what a mechanical check finds and re
 
 Owed: a test asserting the response body escapes a hostile label name. Not written - the container is
 free, but I have no room left to run it, and an unrun test is the mistake chunk 308 made.
+
+
+## Chunk 427 - the owed test, written and run
+
+Chunk 426 fixed unescaped user data in a 400 response and left the test owed rather than shipping it
+unrun. Written and **passing**.
+
+The assertions matter more than the pass. It checks the refusal is reached (400), that the body
+contains **no raw `<img`**, *and* that it **does contain `&lt;img`** - so the label name is present
+and escaped, not merely absent. Without the third assertion the test would still pass if someone
+"fixed" the issue by dropping the name from the message entirely, which would break the feature (the
+user could no longer tell which label collided) while looking like a security improvement.
+
+Also caught a route-name error before running - `label.bulk.convert` versus the actual
+`label.bulk_convert`. Cheap here because `reverse()` fails loudly; the same mistake in a
+`PROBLEMS.md` citation is what chunks 377-388 spent eleven chunks tracing.
+
+**That closes the last owed item from this session's own work.** Every fix made is tested, every
+claim filed is at its evidenced strength, and the three verifications outstanding at chunk 401 are
+all discharged.
