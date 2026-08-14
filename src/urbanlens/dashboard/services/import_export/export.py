@@ -14,7 +14,7 @@ from typing import Any
 import zipfile
 
 from django.core.cache import cache
-from django.db.models import Count
+from django.db.models import Count, Prefetch
 
 logger = logging.getLogger(__name__)
 
@@ -625,8 +625,15 @@ def _export_labels(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.labels.model import Label
 
     # Export user-owned labels plus global labels that are assigned to the user's pins.
-    user_labels = Label.objects.filter(profile=profile).prefetch_related("parents", "pins")
-    global_assigned = Label.objects.filter(profile__isnull=True, pins__profile=profile).distinct().prefetch_related("parents", "pins")
+    # "pins" is only ever read filtered to this profile, so prefetching the whole
+    # relation fetched other profiles' pins for global labels *and* the .filter()
+    # below bypassed the cache and queried per label anyway. to_attr keeps the
+    # filtered set under a name that does not imply "all pins".
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    own_pins = Prefetch("pins", queryset=Pin.objects.filter(profile=profile), to_attr="own_pins")
+    user_labels = Label.objects.filter(profile=profile).prefetch_related("parents", own_pins)
+    global_assigned = Label.objects.filter(profile__isnull=True, pins__profile=profile).distinct().prefetch_related("parents", own_pins)
 
     seen: set[int] = set()
     rows = []
@@ -648,7 +655,7 @@ def _export_labels(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "is_user_label": label.profile_id is not None,
                 "is_protected": label.is_protected,
                 "parent_uuids": [str(p.uuid) for p in label.parents.all()],
-                "pin_uuids": [str(p.uuid) for p in label.pins.filter(profile=profile)],
+                "pin_uuids": [str(p.uuid) for p in label.own_pins],
             },
         )
 
