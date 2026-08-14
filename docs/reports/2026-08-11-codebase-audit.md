@@ -5299,3 +5299,28 @@ Outstanding, both owed before the localdate change can be called done:
 1. A container run of the current tree.
 2. A boundary test with `override_settings(TIME_ZONE=...)` and a frozen clock, pinning the case
    where server-local and active timezones fall on different dates.
+
+
+## Chunk 319 - the owed boundary test, written against the vacuity objection
+
+Chunk 316 declined to write this test on the grounds that authoring one you cannot run risks a
+vacuous pass. That objection is answerable rather than blocking: build the vacuity check *into*
+the test.
+
+`test_the_chosen_instant_really_does_straddle_a_boundary` asserts that the frozen instant
+produces different dates under the two zones. If that ever stops holding - a changed constant, a
+tzdata update, a different default - the suite fails loudly instead of going quietly green while
+testing nothing. This is the same control discipline that caught two vacuous tests earlier in
+this audit, applied *before* the fact rather than after.
+
+The premise is verified without Django: 2026-08-14 23:30 UTC is the 14th in UTC and the 15th in
+Pacific/Auckland, confirmed with plain `zoneinfo`. So the test is blind only on whether
+`override_settings` + `timezone.deactivate()` + a patched `timezone.now` compose as expected -
+a much narrower unknown than "does this test test anything".
+
+The third test pins the *old* behaviour: `date.today()` is insensitive to the active timezone. It
+deliberately asserts insensitivity rather than a specific date, so it does not depend on the host
+machine's own zone - a test that only passes on a UTC CI box would be a trap for whoever runs the
+suite on a laptop.
+
+Still unrun; the container is busy. `SimpleTestCase`, so it needs no database when it goes.
