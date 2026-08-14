@@ -2900,6 +2900,21 @@ writes here will meet it every time.
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
 
+- **`CeleryTaskStatusView.get`** (untested per the coverage run, and clean). Probed for the obvious
+  IDOR - can one user poll another's task by id? - and the docstring had already answered it:
+  Celery's result backend has no per-task owner field, so a bare `LoginRequiredMixin` *would* allow
+  cross-account polling; a per-task ownership check is impossible without a schema change; so the
+  view is gated behind the same `dashboard.view_site_admin` permission that its only producer
+  (`BackupStartView`) requires to enqueue in the first place. The reasoning names the hole, the
+  rejected alternative, and why the chosen mitigation is equivalent.
+
+  Worth recording as a pattern, not just a result. Several of this audit's "checked and clean"
+  entries came out that way because a docstring encoded security reasoning that no amount of
+  reading the code alone would recover - the WebSocket consumers' scope-before-lookup ordering, the
+  ghost viewer's explicit `render()` inside the atomic block, the safety-chat token route's
+  withheld location group, and this. Where that reasoning is absent is a better signal of risk than
+  the code's shape.
+
 - **Interaction risk of the nine N+1 fixes** (2026-08-14). Checked, because two of them change what
   is *available* on an object rather than only what it costs: `Prefetch(..., to_attr="own_pins")`
   puts the filtered set on a new attribute, and dropping `prefetch_related("images")` in favour of
