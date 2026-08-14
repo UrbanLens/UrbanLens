@@ -1880,6 +1880,34 @@ The remaining question - whether a paid API call should proceed unmetered when t
 down, or fail - is a policy decision rather than a defect, and is filed in `docs/PROBLEMS.md`
 rather than decided here.
 
+### A credential redactor that returned the credential (fixed)
+
+Continuing the same hunt one step wider: exception handlers that swallow with no logging at all.
+511 of them, which sounds alarming and mostly is not - the bulk are narrow domain exceptions used
+as control flow (`TripError` 52, `ValueError` 45, `Pin.DoesNotExist` 23), where catching and
+returning is the design. Filtering to handlers that catch `Exception` outright leaves three, and
+that is the useful list.
+
+**`services/admin/infrastructure_stats._redact_url`** existed to hide credentials in the service
+URLs printed on the infrastructure admin page, and one of its inputs is the Celery broker URL,
+which embeds a password. It wrapped `urlparse` in `except Exception: return url` - so the single
+case it was written to handle, a URL it could not make sense of, returned the string *verbatim*,
+password included. `urlparse` does raise: an unclosed IPv6 bracket in the netloc is a `ValueError`.
+Narrowed to `ValueError`, and the failure path now returns a placeholder rather than the input,
+because at that point nothing is known about the string's structure and guessing which span was
+the credential is exactly the mistake being fixed. Three tests, one of which asserts `urlparse`
+really does raise on the fixture - otherwise the regression test would pass while quietly
+exercising the ordinary path.
+
+**`models/abstract/model._slug_max_length`** - the base class every model inherits - swallowed
+everything around `_meta.get_field("slug")`. Only `FieldDoesNotExist` should reach the fallback:
+returning the *default* length for a model whose slug column is deliberately shorter produces an
+over-long value that fails at the database instead, which is a worse and much less obvious
+outcome than the error it was hiding.
+
+The third, `boundaries/overpass._endpoint_is_down`, is correct as written - its docstring says
+"Fails open on cache errors" and a cache miss legitimately means "not known to be down".
+
 ---
 
 ## 3. Checked and clean

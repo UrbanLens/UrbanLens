@@ -6,6 +6,8 @@ import random
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
+from django.core.exceptions import FieldDoesNotExist
+
 # Django Imports
 from django.db import IntegrityError, models as django_models, transaction
 from django.db.models import UUIDField
@@ -100,7 +102,10 @@ class PublicDashboardModel(FrontendDashboardModel):
         """Return the max_length of the slug field as declared on this model."""
         try:
             return self.__class__._meta.get_field("slug").max_length or _DEFAULT_MAX_SLUG_LENGTH  # noqa: SLF001
-        except Exception:
+        except FieldDoesNotExist:
+            # Only a genuinely slug-less model should fall back. Swallowing everything
+            # here would hand back the default length for a model whose slug column is
+            # *shorter*, and the over-long value then fails at the database instead.
             return _DEFAULT_MAX_SLUG_LENGTH
 
     def _slugify_qs(self):

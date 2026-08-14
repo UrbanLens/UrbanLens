@@ -323,11 +323,26 @@ def _collect_celery_stats_live() -> InfrastructureServiceStat:
 
 
 def _redact_url(url: str) -> str:
-    """Hide credentials in service URLs displayed to admins."""
+    """Hide credentials in service URLs displayed to admins.
+
+    Args:
+        url: The service URL, which may embed a username and password (the Celery
+            broker URL does).
+
+    Returns:
+        The URL with any password replaced by ``***``, or a placeholder when it
+        cannot be parsed.
+    """
     try:
         parsed = urlparse(url)
-    except Exception:
-        return url
+    except ValueError:
+        # Returning the raw URL here defeats the one thing this function exists to
+        # do - `urlparse` raises on a malformed IPv6 URL, and the input includes the
+        # broker URL, so the failure case was displaying the password verbatim.
+        # Nothing is known about the string's structure at this point, so redact all
+        # of it rather than guess which part was the credential.
+        logger.warning("Could not parse a service URL for redaction; redacting it entirely")
+        return "<unparseable URL - redacted>"
     if not parsed.password:
         return url
     host_port = f"{parsed.hostname}:{parsed.port}" if parsed.port else (parsed.hostname or "")
