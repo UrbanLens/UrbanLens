@@ -7498,3 +7498,27 @@ The result worth keeping is the method. **A question that cannot be answered glo
 subset that can be answered locally, and that subset is worth checking even though it proves less.**
 Six call sites is not "no IDOR exists in this codebase" - it is "no fetch is unscoped in a way visible
 at the call site", which is a real, bounded, honest claim.
+
+
+## Chunk 420 - `mark_safe` audit: one call site, correctly escaped
+
+Another hard question reduced to its local subset. "Does this template escape user data?" needs
+render-path reasoning; **`mark_safe()` on a non-literal argument** is decidable from one call node,
+and it is the exact construct that produced the two stored-XSS vectors fixed earlier in this audit.
+
+**One call site across the whole codebase**, and it is correct:
+`mark_safe(urlize(segment, nofollow=True, autoescape=True))` in `services/notifications/mentions.py`.
+`urlize` escapes before linkifying when `autoescape=True`, and that flag is passed **explicitly**
+rather than left to the default - so the safety is stated at the call site rather than assumed.
+
+Every other `mark_safe` in the codebase takes a literal or a `format_html`/`escape` result, both safe
+by construction.
+
+**No artifact this chunk.** The scan was declaration-scoped from the start, excluded the
+safe-by-construction forms deliberately rather than by accident, and carried a control. That is four
+of the last seven chunks clean on the first attempt - the habits from chunks 413-418 hold, and the
+three failures in between (417, 419, and the `-h` case) were all reaches into facts those habits do
+not cover.
+
+For a codebase where two stored-XSS vectors existed at the start of this audit, a single correctly
+guarded `mark_safe` is the strongest result in this report.
