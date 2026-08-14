@@ -2671,6 +2671,18 @@ limits understood rather than assumed.
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
 
+- **Side effects inside transactions** (2026-08-14). **Zero** across 760 files in `controllers/`,
+  `services/` and `models/`: no Celery enqueue, email send, channel broadcast or cache write sits
+  inside a `transaction.atomic()` block where a rollback would leave it already done. This is the
+  most thoroughly established negative result in the audit, and the four checks behind it are the
+  point. **Detection**: a positive control (an enqueue inside `atomic()`) fires. **Precision**: a
+  negative control (the same enqueue wrapped in `transaction.on_commit`) stays silent - the check
+  the previous chunk's filter lacked. **Population**: the scan encounters **70** real `atomic()`
+  blocks, so the silence is not vacuous. **Convention**: **33** `on_commit()` calls exist, so the
+  correct pattern is not merely absent-by-accident - it is known and applied. A "zero" backed by
+  only the first of those four is worth very little, which is roughly the story of five earlier
+  sweeps in this audit.
+
 - **Production frontend build, and bundle sizes** (2026-08-14). `bun run build` succeeds with every
   change from this audit - all entry points bundle, including `core.js` (which carries the
   `safeColor` work) and `organize.js`. Worth noting because the session had verified `tsc --noEmit`
