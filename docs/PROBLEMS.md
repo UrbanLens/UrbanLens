@@ -5384,8 +5384,20 @@ activated - which is true today, so this is latent, not live.
 This is exactly the non-uniformity the "deliberately not converted" argument below predicted:
 converting a `date.today()` in isolation can leave a *comparison* half-migrated even when the call
 itself is correct. Whoever does the per-user-timezone work must treat both sides of this
-expression, not just the `localdate()` call. The same question should be asked of the other eight
-converted sites; only this one has been checked.
+expression, not just the `localdate()` call. All nine have now been checked (chunk 335), and `trip.py:1515` is the only
+half-migrated one:
+
+- `tools.py` (x2) and `export.py` (x2) - the date only formats a **download filename**; no
+  comparison exists to be half-migrated.
+- `link_extraction.py` - compares a parsed **year** against `localdate().year + 1`. A one-day
+  offset can only matter across a New Year boundary, and the `+1` tolerance absorbs it.
+- `pin_edit.py` / `pin.py` - mix the same way `trip.py` does (`localdate()`-derived bounds vs a
+  UTC-derived `last_visited.date()`), but the bound is a **100-year** range on a date input, so a
+  one-day difference cannot change the outcome. Structurally mixed, practically inert.
+- `trip_activities.py` - **correctly improved, not mixed.** `completed_date` is a user-supplied
+  calendar date, so pairing it with the user's `localdate()` is the right frame on both sides.
+  This is the site this entry named as consequential, where the server's "today" could clamp a
+  late-evening completion back to yesterday.
 All nine sites now use `timezone.localdate()`. This was done *without noticing this entry*, which had
 already identified the same nine sites and argued against exactly this sweep. The argument was sound
 and its prediction was accurate: the sweep did introduce an undefined-`timezone` `NameError` in
