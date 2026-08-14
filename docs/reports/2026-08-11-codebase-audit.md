@@ -5935,3 +5935,26 @@ behaviour the templates appear to own is properly delegated to a shared module.
 Both directions of that confusion exist in this codebase, which is the practical argument for the
 inline-JS migration: not that inline JS is untested (though it is), but that **you cannot tell from
 a call site which tree owns the behaviour**, so every frontend question costs two searches.
+
+
+## Chunk 350 - production security settings: sound, with the one known gap already filed
+
+New axis, chosen because it is decidable and classically error-prone:
+
+- `SECURE_SSL_REDIRECT`, `SESSION_COOKIE_SECURE`, `CSRF_COOKIE_SECURE` and HSTS are all derived from
+  one condition (`not UNSAFE_ALLOW_HTTP and not TESTING`), with the coupling explained in a comment
+  rather than left as coincidence - so a local HTTP dev run and the test suite cannot silently
+  diverge from production on some flags but not others.
+- `SecurityMiddleware`, `CsrfViewMiddleware` and `XFrameOptionsMiddleware` are all present.
+- `X_FRAME_OPTIONS` and `SECURE_CONTENT_TYPE_NOSNIFF` are unset, which is **correct** - Django
+  defaults them to `DENY` and `True`, and the middleware above enforces them. Setting them
+  explicitly would add nothing.
+- `environments/prod.py` contains no `DEBUG`/`SECURE_*`/cookie overrides at all. That is the failure
+  this check is really for: a staging convenience leaking into production by override.
+
+The one genuine gap on this axis - no Content-Security-Policy anywhere - is already an OPEN item
+from 2026-08-12, so the picture is consistent: the parts that are wrong here are known to be wrong.
+
+That is a reasonable note to end a long audit on. Across chunks 340-350, eleven independent
+checks - template conventions, signal discipline, cache versioning, client storage bounds, security
+settings - returned clean, and the defects that do exist were already documented by earlier work.
