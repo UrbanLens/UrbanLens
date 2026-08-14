@@ -5324,3 +5324,33 @@ machine's own zone - a test that only passes on a UTC CI box would be a trap for
 suite on a laptop.
 
 Still unrun; the container is busy. `SimpleTestCase`, so it needs no database when it goes.
+
+
+## Chunk 320 - the new test was wrong, caught without the container
+
+Chunk 319 said the boundary test was blind on one narrow axis: whether `override_settings` +
+`timezone.deactivate()` + a patched `timezone.now` compose as expected. That axis turned out to
+be testable on this host after all - `settings.configure()` builds a minimal Django without
+touching the project settings, so nothing imports GDAL.
+
+Three assumptions held. **The fourth was wrong.** `test_date_today_does_not_follow_the_active_timezone`
+asserted `date.today()` is unchanged across two `override_settings(TIME_ZONE=...)` blocks. It is
+not: Django's `setting_changed` receiver for `TIME_ZONE` also rewrites `os.environ["TZ"]` and
+calls `time.tzset()`, so the process clock moves with the setting and `date.today()` moves with
+it. The test would have failed on its first container run.
+
+The real axis is `timezone.activate()` - the per-request zone the locale middleware sets. Under
+it, `localdate()` moves and `date.today()` does not, which is precisely what the nine call sites
+were ignoring. Rewritten accordingly and re-checked on the host: `2026-08-14 -> 2026-08-15` for
+`localdate()`, unchanged for `date.today()`.
+
+**The lesson is not "write more careful tests".** It is that "I cannot verify this here" was
+false, and unexamined. Two chunks reasoned about how to *hedge* a blind test - one declining to
+write it, one building in a vacuity guard - when ten lines of `settings.configure()` would have
+removed the blindness. The constraint was inherited from `CLAUDE.local.md`'s note that pytest
+needs the container (true, because the project's settings import GeoDjango) and over-generalised
+to "no Django on the host at all".
+
+That is twice in five chunks: chunk 316 over-generalised "no `docker cp` mid-run" into "no edits
+at all". Both times the false constraint survived because it was never tested, only reasoned
+from - and both times the test was cheap.

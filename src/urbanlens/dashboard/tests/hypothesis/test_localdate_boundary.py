@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import datetime
 from unittest.mock import patch
+from zoneinfo import ZoneInfo
 
 from django.test import override_settings
 from django.utils import timezone
@@ -63,16 +64,26 @@ class LocaldateBoundaryTests(SimpleTestCase):
     def test_date_today_does_not_follow_the_active_timezone(self) -> None:
         """The behaviour the nine call sites had, pinned so the distinction stays visible.
 
-        ``date.today()`` ignores Django's active timezone entirely - it reads the process's
-        own clock and zone. This asserts only that it is *insensitive* to the setting, which
-        is true regardless of the host's zone, rather than asserting a specific date (which
-        would make the test depend on where it runs).
-        """
-        with override_settings(TIME_ZONE="UTC", USE_TZ=True):
-            timezone.deactivate()
-            first = datetime.date.today()
-        with override_settings(TIME_ZONE="Pacific/Auckland", USE_TZ=True):
-            timezone.deactivate()
-            second = datetime.date.today()
+        The axis is ``timezone.activate()`` - the per-request zone the locale middleware sets -
+        not ``override_settings(TIME_ZONE=...)``. Django's test signal for ``TIME_ZONE`` also
+        rewrites ``os.environ["TZ"]`` and calls ``time.tzset()``, so under that override
+        ``date.today()`` moves too and the distinction disappears. Activating a zone changes
+        only Django's notion of "local", which is exactly what the buggy call sites ignored.
 
-        self.assertEqual(first, second, "date.today() unexpectedly tracked the active timezone")
+        Asserts *insensitivity* rather than a specific date, so it does not depend on the zone
+        of the machine running it.
+        """
+        with self._frozen_now():
+            timezone.deactivate()
+            default_localdate = timezone.localdate()
+            default_today = datetime.date.today()
+
+            timezone.activate(ZoneInfo("Pacific/Auckland"))
+            try:
+                activated_localdate = timezone.localdate()
+                activated_today = datetime.date.today()
+            finally:
+                timezone.deactivate()
+
+        self.assertNotEqual(default_localdate, activated_localdate, "localdate() ignored the activated timezone")
+        self.assertEqual(default_today, activated_today, "date.today() unexpectedly tracked the activated timezone")
