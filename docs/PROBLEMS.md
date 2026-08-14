@@ -6605,7 +6605,7 @@ multiplier.
 | `services/pins/pin_suggestions.py` | ~~802~~ | `pin.visit_history.filter(visited_at__date__in=days)` | **false positive** - inside a dict comprehension but evaluated once, not per iteration |
 | ~~`services/memories/photos.py`~~ | ~~165~~ | | **FIXED 2026-08-14** |
 | ~~`services/import_export/export.py`~~ | ~~650, 764~~ | | **BOTH FIXED 2026-08-14** |
-| `services/import_export/import_data.py` | 1554 | `trip.profiles.count()` | per trip |
+| ~~`services/import_export/import_data.py`~~ | ~~1554~~ | `trip.profiles.count()` | **not worth fixing** - see below |
 | ~~`services/pins/pin_list_membership.py`~~ | ~~89~~ | `pin_list.items.count()` | **not a defect** - the query is load-bearing, see below |
 | ~~`controllers/pin.py`~~ | ~~227~~ | `pin.images.exclude(pk=...)[:20]` | **false positive** - one query; the comprehension iterates an already-sliced queryset |
 
@@ -6731,7 +6731,7 @@ Fourteen candidates, triaged individually:
 | **false positives** | 3 | `export.py:848/850` (`os.path.exists`), `pin_suggestions.py:802`, `controllers/pin.py:227` - all one query, flagged for appearing inside a comprehension |
 | **load-bearing, left alone** | 1 | `pin_list_membership.py:89` - reads its own writes deliberately, for ordering |
 | ~~specified, not started~~ | 0 | both `export.py` sites were subsequently fixed - see above |
-| **remaining** | 1 | `import_data.py:1554` (`trip.profiles.count()`) |
+| **remaining** | 0 | list fully triaged |
 
 *(This table said "6 fixed / 2 specified" until 2026-08-14, when the two `export.py` sites were
 done and the tally was not updated with them. Third stale count found in this audit's own
@@ -6824,3 +6824,19 @@ kinds:
 ~9% precision. That is the honest verdict on this scan: worth running **once**, immediately after
 confirming the pattern twice by hand, and not worth building into a linter. The value came from
 reading the candidates, not from the list.
+
+
+### `import_data.py:1554` - assessed, leave it
+
+`remaining = max_members - trip.profiles.count()` is computed **once per trip**, before the loop
+over members, as a capacity check that has to reflect current state - memberships are being created
+around it.
+
+There is no queryset to annotate: trips are processed one at a time from import rows, so `trip` is
+a freshly created or looked-up object rather than a row in an iterable that could carry
+`annotate(Count("profiles"))`. One cheap `COUNT` per imported trip, on an import path.
+
+Same category as `pin_list_membership.py:89` - a query inside a loop that is structurally
+necessary rather than accidental. **Two of the fourteen candidates on this list were of that kind**,
+which is the argument against treating any such list as a work queue to be cleared: a fifth of it
+was code that should not change.
