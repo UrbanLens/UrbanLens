@@ -7872,3 +7872,30 @@ something else entirely - a duplicate send, a flaky websocket, a 405 on a real r
 `<slug:pin_slug>/media/...`, so the pattern was wrong - and `n/a` in that position reads exactly like
 "nothing to check". Twenty-sixth artifact, and the same shape as chunk 412's malformed regex: **an
 empty result from a search that was not looking in the right place.**
+
+
+## Chunk 436 - the invariant sweep closes: six checked, six holding
+
+The root URLconf's two stated invariants hold. `re_path(".*", _render_404_page)` at line 121 **is**
+the final registration, and the `media/<path:path>` route required to "stay ahead of the 404 catch-all
+below" sits at 118.
+
+**Six invariants verified across chunks 433-436, all holding:**
+
+| invariant | where | status |
+|---|---|---|
+| `visibility_timeout` > max(time_limit, longest countdown) | Celery broker | 7200 vs 3600 |
+| `socket_timeout` >> `brpop_timeout` | channel layer | 20 vs 5 |
+| literal routes before slug route | `pins/...` | 304 < 305 |
+| media catch-all below specific routes | `media/<str:source>` | 452 > 434 |
+| media route ahead of 404 | root urlconf | 118 < 121 |
+| 404 catch-all is last | root urlconf | line 121, final |
+
+**Every one is a hazard whose symptom impersonates something else** - a duplicate send, a flaky
+websocket, a 405 on a route that plainly exists, a page 404ing because a regex above it matched
+first. None would be diagnosed quickly from the failure alone; all six were reasoned out in advance
+and written down as a rule with the quantities to re-check.
+
+That is the closing observation of this audit. **The comments in this codebase are not decoration -
+several are the only artifact that makes a boundary auditable at all**, and verifying six of them
+cost about ten commands total. The three real defects I found sat in code carrying no such reasoning.
