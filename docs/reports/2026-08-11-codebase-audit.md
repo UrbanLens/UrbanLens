@@ -2396,6 +2396,43 @@ now allows an optional quote and matches any `*color*` field name, and returns z
 sentence is only worth as much as the pattern behind it, which is why the fix is recorded here with
 the pattern itself.
 
+### What nine untested handlers have in common
+
+`LabelMergeView.post` (19 statements) was picked deliberately rather than by size: the defects so
+far had clustered in `labels.py` and `site_admin.py`, so the obvious next move was to finish those
+files. It is clean. The gap I expected - the GET path excludes the source from the merge candidates
+but the POST path does not, so a crafted request could merge a label into itself - is guarded one
+layer down, in `services/labels/merge._validate`: *"Cannot merge a label into itself."* The
+controller turns that into a 400.
+
+Where it sits is the point, and with nine handlers examined a better prioritiser than either size
+or subsystem has emerged:
+
+| handler | touches models how | outcome |
+|---|---|---|
+| `LabelBulkConvertView.post` | sets `label.kind` directly | **500 on collision** |
+| `LocationWikiDetailPinEditView.post` | assigns fields directly | **8 unvalidated colour writes** |
+| `VisitSuggestionRespondView.post` | delegates; own control flow | **silent failure on one exit path** |
+| `SiteAdminUsersView.post` | delegates to `request_deletion` | clean (guards were unverified) |
+| `LabelBulkEditView.post` | assigns *safe* fields only | clean |
+| `AlbumEditView.post` | assigns fields, validates each | clean |
+| `ConsensusPhotoUploadView.post` | delegates | clean |
+| `CalendarImportView.post` | delegates | clean |
+| `LabelMergeView.post` | delegates | clean |
+
+Both model-corrupting defects were in handlers that **assign model fields directly** instead of
+going through a service that owns the invariant. `LabelBulkConvertView` set `label.kind` itself and
+so never met the uniqueness check that `find_conflicting_label` performs for single edits;
+`LocationWikiDetailPinEditView` assigned colours itself and so never met `clean_color`. Every
+handler that delegated was fine - the invariant was enforced once, at the boundary, for all
+callers.
+
+That is a sharper filter for the remaining 91 write handlers than "largest first": **look for
+`setattr`/direct field assignment on a model in a view**, and check whether the corresponding
+service-layer validation exists and is being skipped. The third defect is a different species -
+presentation logic, not model integrity - and would not be caught by that filter, which is worth
+knowing too.
+
 ---
 
 ## 3. Checked and clean
