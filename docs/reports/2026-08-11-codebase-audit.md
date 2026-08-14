@@ -6410,3 +6410,20 @@ inconsistent.
 Revised estimate for whoever finishes it: 29 references, each a small read, no shortcut. That is
 worth stating because chunk 370 framed this as a convention with a mechanical follow-up, and it is
 not - it is 29 individual judgements about which entry a comment means.
+
+
+## Chunk 373 - 5 of 33, and the matching is easy when the code says what it means
+
+`e2ee/group_key.py` now names "E2EE group messages: the cryptographic membership boundary depends on
+the server". The match was unambiguous because the docstring already describes the situation
+precisely - a removed member retaining an envelope, excluded only by
+`GroupMessageQuerySet.visible_window` rather than by cryptography - and one entry in
+`PROBLEMS.md` describes exactly that.
+
+Which suggests the retrofit is easier than chunk 372 estimated, for a specific reason: **the
+references that are hardest to place are the ones whose surrounding comment is vaguest**, and those
+are also the ones adding the entry name helps most. The work sorts itself - the difficult cases are
+the valuable ones.
+
+Four of the five done so far took under a minute each because the code stated its own subject. The
+remaining 28 will not be uniform, but neither will they be uniformly hard.

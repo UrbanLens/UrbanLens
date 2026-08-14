@@ -30,7 +30,8 @@ an offline outbox replaying) or deliberately. Those messages are not exposed
 today only because a removed member has no active membership and
 ``GroupMessageQuerySet.visible_window`` never serves them the ciphertext. Do not
 add a code path that relies on the version alone to keep a removed member out.
-The open decision is recorded in ``docs/PROBLEMS.md``.
+The open decision is recorded in "E2EE group messages: the cryptographic
+membership boundary depends on the server" in ``docs/PROBLEMS.md``.
 """
 
 from __future__ import annotations
