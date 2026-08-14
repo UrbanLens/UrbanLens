@@ -6113,3 +6113,24 @@ silently unhealthy container in another slot will find the root cause there even
 Worth being explicit about that split rather than reporting "fixed the docs": the fix landed in the
 place that helps this checkout and the *diagnosis* landed in the place that travels. Only the second
 one generalises.
+
+
+## Chunk 358 - checking whether the breakage is widespread; it is not
+
+Chunk 357 worried the `docker cp` defect would affect the other parallel environment slots, each
+carrying the same documented command. Checked instead of assuming:
+
+- **Exactly one unhealthy container on the host**: `urbanlens_devs1_app`.
+- The only other running app container, `ulpindiscovery_local_app`, is **healthy after 3 weeks** -
+  a different project, not receiving these syncs.
+- No other UrbanLens slot containers are running at all, so they cannot be in this state.
+
+That is a natural control rather than an argument: the container that receives `docker cp` is
+broken, the one that does not is fine, and nothing else is affected. It also bounds the fix - the
+`chown` in this checkout's gitignored `CLAUDE.local.md` is sufficient *today*, and only becomes
+insufficient when another slot is brought up and resynced.
+
+**A worry, checked and dismissed in one command.** Chunk 357's concern was reasonable and wrong, and
+the cost of establishing that was trivial compared to the cost of acting on it (patching docs in
+checkouts I cannot see, for containers that do not exist). The same asymmetry as the rest of this
+session: the check is nearly always cheaper than the reasoning that substitutes for it.
