@@ -2665,6 +2665,38 @@ different properties, and a single positive control only ever measures the first
 No `update_fields` defects exist in the controllers - established, this time, with the filter's
 limits understood rather than assumed.
 
+### Four controls passed and the filter was still wrong
+
+A sweep for `select_for_update()` outside a transaction - `TransactionManagementError`, a hard 500 -
+carrying every check this audit had accumulated: a positive control that fired, a negative control
+that stayed silent, a population of 34 real calls, and the knowledge that `ATOMIC_REQUESTS` is
+unset. One hit: `child_pin_boundaries.py:50`, reached from Pin's `post_save`/`post_delete` signals.
+
+The chain looked serious, and each link checked out. `select_for_update` outside a transaction does
+raise - verified directly against the database, not assumed. `Pin._meta.parents` is empty, so
+`Model.save_base` uses `mark_for_rollback_on_error` rather than opening a transaction. Django's
+ordinary `TestCase` wraps every test in a transaction, so 10,758 passing tests could not have caught
+it either way. A textbook invisible bug.
+
+It is not a bug. `refit_child_pin_boundary` is decorated `@transaction.atomic`. A
+`TransactionTestCase` - written to prove the failure before fixing it - passed both cases, which is
+the only reason the reasoning got checked at all.
+
+The cause is worth more than the non-finding: **the filter had a dead code path I wrote myself.** It
+set an `_atomic_dec` flag on functions decorated with `@transaction.atomic`, and then never
+consulted it - detection looked only at `with`-block nesting. Both synthetic controls used `with`
+blocks, so the dead branch was never exercised, and all four checks passed over a filter that could
+not see the single most common way this codebase opens a transaction.
+
+So the discipline needs one more clause, and it is the hardest: **controls must cover every idiom
+the real code uses, not the ones the filter's author thought to write.** A positive and a negative
+control prove the logic you tested. They say nothing about the branch you forgot to wire up. The
+only thing that caught this was refusing to fix on reasoning alone and writing the failing test
+first - which then failed to fail.
+
+The `TransactionTestCase` is kept: it pins the guarantee that the decorator provides, and fails if
+anyone removes it.
+
 ---
 
 ## 3. Checked and clean
