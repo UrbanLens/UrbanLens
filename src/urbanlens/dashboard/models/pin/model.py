@@ -872,6 +872,12 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     def to_json(self) -> dict[str, Any]:
         from urbanlens.dashboard.models.labels.meta import KIND_STATUS, KIND_TAG
 
+        # Filtered in Python, not with .filter(): calling .filter() on a prefetched
+        # many-to-many builds a fresh queryset and ignores the prefetch cache, so a
+        # caller that prefetch_related("labels") still paid a query per kind per pin.
+        # .all() reads the cache when one is present, and costs a single query when
+        # it is not.
+        labels = list(self.labels.all())
         return {
             "uuid": str(self.uuid),
             "slug": self.slug or str(self.uuid),
@@ -890,12 +896,12 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
             "last_visited": self.last_visited.isoformat() if self.last_visited else "never",
             "latitude": self.effective_latitude,
             "longitude": self.effective_longitude,
-            "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in self.labels.filter(kind=KIND_STATUS)],
+            "statuses": [{"id": s.id, "name": s.name, "color": s.color, "icon": s.icon} for s in labels if s.kind == KIND_STATUS],
             "profile": self.profile.id,
             "name_is_user_provided": self.name_is_user_provided,
             "rating": self.rating,
             "color": self.effective_color,
-            "tags": [{"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon} for t in self.labels.filter(kind=KIND_TAG)],
+            "tags": [{"id": t.id, "name": t.name, "color": t.effective_color, "icon": t.effective_icon} for t in labels if t.kind == KIND_TAG],
         }
 
     def to_detail_json(self) -> dict:

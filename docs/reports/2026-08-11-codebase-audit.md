@@ -2801,6 +2801,38 @@ is the one that will actually catch a regression - the others document intent, t
 Checked whether this was systemic: **zero** other models query in `__str__`. A local lapse, not a
 convention, so no sweep was warranted.
 
+### Halving the query cost of the map's pin payload
+
+The last filed candidate, converted into a measurement rather than left as a hypothesis.
+`Pin.to_json()` builds its payload with `self.labels.filter(kind=...)` twice. `.filter()` on a
+prefetched many-to-many constructs a fresh queryset and **ignores the prefetch cache**, so a caller
+doing `prefetch_related("labels")` still paid per pin.
+
+Measured with `CaptureQueriesContext` over 1 and 5 pins:
+
+| | 1 pin | 5 pins | per pin |
+|---|---|---|---|
+| before | 6 | 22 | **4** |
+| after | 4 | 12 | **2** |
+
+`list(self.labels.all())` once, filtered in Python. `.all()` reads the cache when one exists and
+costs a single query when it does not, so it is strictly better in both cases - there is no
+trade-off to weigh here, which is unusual enough to be worth saying.
+
+Two queries per pin remain and are **not** labels; the debug log shows a rating fetch among them.
+The test therefore asserts `<= 2 per pin` rather than demanding zero: it fails if anyone
+reintroduces `.filter()` here, and keeps passing when the remainder is addressed. A test asserting
+an ideal nobody has reached yet is a test the next person deletes.
+
+Two things about how this was found are worth keeping. It came from **reading `to_json()` while
+placing an import** - the fourth late finding to arrive that way, after the magic string, the
+bulk-payload overflow and the `__str__` query. And the first measurement attempt failed on my own
+fixture (`Location` is `unique_together(latitude, longitude)`, and the second batch restarted its
+loop at zero), producing an `IntegrityError` that read exactly like a bug in the code under test.
+Reporting that would have manufactured a defect out of a test bug - the mirror image of chunk 248,
+where a real-looking chain turned out to be safe. Both come from trusting a result before
+understanding why it happened.
+
 ---
 
 ## 3. Checked and clean

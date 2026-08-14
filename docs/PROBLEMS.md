@@ -6465,26 +6465,26 @@ must follow the same pattern.
 
 ---
 
-## `Pin.to_json()` may defeat label prefetching (candidate, not traced)
+## `Pin.to_json()` still costs 2 queries per pin (labels half fixed)
 
-`models/pin/model.py:to_json()` builds its payload with two separate calls:
+**Measured, 2026-08-14.** Serialising pins fetched with `prefetch_related("labels")`:
 
-    self.labels.filter(kind=KIND_STATUS)   # statuses
-    self.labels.filter(kind=KIND_TAG)      # tags
+| | 1 pin | 5 pins | per pin |
+|---|---|---|---|
+| before | 6 queries | 22 | **4** |
+| after the labels fix | 4 queries | 12 | **2** |
 
-**`.filter()` on a prefetched many-to-many bypasses the prefetch cache.** A caller that does
-`prefetch_related("labels")` and then serialises N pins still pays 2N queries here, because each
-`.filter()` builds a fresh queryset rather than reading the cached list. The usual fix is to filter
-in Python over `self.labels.all()` (which *does* use the cache), or to prefetch with an explicit
-`Prefetch(..., to_attr=...)` per kind.
+The labels half is fixed: `to_json()` called `self.labels.filter(kind=...)` twice, and `.filter()`
+on a prefetched many-to-many builds a fresh queryset and ignores the cache. It now does
+`list(self.labels.all())` once and filters in Python - `.all()` reads the cache when present and
+costs one query when not, so it is strictly better either way. A regression test asserts
+`<= 2 queries per pin`.
 
-**Not traced, and deliberately not claimed.** Confirming it needs the actual call sites of
-`Pin.to_json()` checked for prefetching, and whether the map's pin payload goes through this method
-or the separate serialisation in `controllers/maps.py` (`pin_lists.py:100` mentions "maps.py's
-post-processing of `Pin.to_json()`", which suggests it does). The verification is a
-`django-assert-num-queries` test over a list of pins with `prefetch_related("labels")`: if the count
-scales with the number of pins, the cache is being bypassed.
+**Two per pin remain, and are not labels.** They come from other lookups in the same payload - the
+debug log shows a rating fetch (`no rating found for pin N`) among them. Finding them is the same
+exercise: run the test in this file, raise the threshold, and read `CaptureQueriesContext`'s SQL.
 
-Worth doing because the map is the hottest page in the application and the failure is invisible -
-prefetching is *present*, so the code looks correct, and the query count only shows up under load
-or in a query-count assertion.
+Why this matters more than the raw number: the map is the hottest page in the application, and this
+class of bug is invisible to review. The prefetch *is* present, so the code reads as correct, and
+the cost never appears as a slow query - only as a lot of fast ones, growing with the number of
+pins on screen.
