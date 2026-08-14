@@ -5737,3 +5737,25 @@ type of the operand, which is the entire question.
 
 Both rules being clean is itself worth recording. They read like the kind of convention that
 erodes quietly, and they have not.
+
+
+## Chunk 341 - two signal-discipline rules, both clean
+
+Continuing outside the backlog with `CLAUDE.md` rules that AST can decide exactly:
+
+- **`save()` inside a `post_save` receiver or `__str__`**: **0**. The failure mode is recursion -
+  a receiver that saves re-fires itself - and `__str__` doing a write is the kind of thing that
+  turns a debug print or an admin listing into a write storm.
+- **`dispatch_uid` on signal registration**: **57 registrations, 0 missing.** Without it, a module
+  imported twice registers the receiver twice and every signal fires it twice; the project has
+  already been bitten by duplicate Celery side effects, so this is a rule with history behind it.
+
+Perfect compliance on both, which is a different result from the earlier sweeps. Chunks 313 and 315
+found mechanical classes largely *absent* (mutable defaults, bare excepts, asserts); this is a
+project-specific discipline maintained at 57 out of 57. That is not the same as an absence - it is
+evidence of a convention actually being followed, in a codebase where nothing enforces it
+automatically.
+
+Which suggests where the remaining value is: not another convention scan. Three consecutive
+convention checks (chunks 340-341, five rules total) have come back perfectly clean, and the
+prior probability of the next one finding something has dropped accordingly.
