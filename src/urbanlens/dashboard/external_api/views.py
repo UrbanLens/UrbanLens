@@ -2102,7 +2102,7 @@ class SavedFilterDetailView(ExternalApiView):
         if "icon" in data:
             saved_filter.icon = data["icon"] or "bookmark"
         if "color" in data:
-            saved_filter.color = data["color"] or ""
+            saved_filter.color = clean_color(data["color"], default="")
         if "opacity" in data:
             saved_filter.opacity = data["opacity"]
         if "criteria" in data:

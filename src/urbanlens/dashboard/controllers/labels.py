@@ -737,7 +737,9 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
             label.name = name
 
         label.description = request.POST.get("description", "").strip() or None
-        label.icon = request.POST.get("icon") or None
+        # CharField(max_length=50); save() does not run full_clean(), so an over-long
+        # icon reached the database as a 500.
+        label.icon = (request.POST.get("icon") or "").strip()[: Label._meta.get_field("icon").max_length] or None  # noqa: SLF001 - _meta is public API
         label.color = clean_color(request.POST.get("color"))
         label.order = int(request.POST.get("order", label.order))
 

@@ -2391,10 +2391,23 @@ pattern rather than on the population it was meant to cover, and the first (8 co
 turned out to be 19) was caught the same way: by looking at the code rather than re-running the
 grep. Rerunning a flawed pattern only ever confirms it.
 
-Worth stating plainly: **"the grep is empty" is a statement about the grep.** The corrected sweep
-now allows an optional quote and matches any `*color*` field name, and returns zero - but that
-sentence is only worth as much as the pattern behind it, which is why the fix is recorded here with
-the pattern itself.
+Worth stating plainly: **"the grep is empty" is a statement about the grep.**
+
+**And it happened a third time.** The corrected sweep above matched `.get(` - so it missed
+subscript access. Widening the *structural* filter (any direct field assignment from request data,
+found by AST rather than regex) turned up `markup.py`'s `item.color = body["color"]` and
+`item.border_color = body["border_color"]`, plus `external_api/views_labels_bulk.py` and
+`external_api/views.py` writing `data["color"]` straight to a model. Three more real sites, on top
+of chunk 218's 19 and chunk 231's 8 - **30 in total**, found across three passes, each of which
+believed it was complete.
+
+The lesson is not "write better regexes". It is that a regex encodes a guess about *syntax*, and
+the property being checked is *semantic* - "does a value from the request reach this field
+unvalidated". The AST pass that finally found these asks a structurally different question, and it
+also correctly cleared two sites the regex flagged (`custom_layers.py` validates against an
+allowlist on the following line; `labels.py:487` is fed by `_parse_bulk_payload`, which already
+calls `clean_color`). A checker that produces both true positives *and* verifiable clears is
+worth more than one that only produces a count.
 
 ### What nine untested handlers have in common
 
@@ -2459,6 +2472,32 @@ the field rather than hardcoding 150.
 The filter is worth keeping: it was derived from nine hand-examined handlers, expressed as a
 mechanical query, and returned one real defect out of four candidates on its first run - against a
 list where hand-picking by size was running at four defects in nine.
+
+### The same bug class, three more times - and a fourth regex miss
+
+The profile-name 500 (a `CharField` assigned straight from POST, `max_length` enforced only by
+`full_clean()` which `save()` never calls) is a *class*, not an incident. Running the AST filter
+across all controllers and then checking each target's actual field type separates the harmless
+from the reachable:
+
+- **`TextField` targets are safe.** Postgres does not enforce a length on `text`, so
+  `visits.notes`, `labels.description`, `labels.keywords`, `safety.default_message` and
+  `achievements.description` cannot fail this way, whatever `max_length` the field declares.
+- **`CharField` targets are not.** Three were unbounded: `labels.icon` and `achievements.icon`
+  (`max_length=50`), and `achievements.metric` (`max_length=64`). All now truncate to the column
+  width read off the field.
+
+**And a fourth syntactic miss.** `achievement.color = (request.POST.get("color") or "").strip() or
+DEFAULT_ACHIEVEMENT_COLOR` is a colour write - the 31st - that all three regex generations missed
+because the value begins with `(` rather than `request.POST`. The AST pass *had* listed it; I did
+not act on it, because I was reading that output filtered to untested handlers and this one is
+covered. So the instrument was right and the reading was wrong, which is its own lesson: a
+structural checker only helps if its whole output gets read.
+
+Left alone deliberately: `achievements.metric` declares `choices` that `save()` will not enforce
+either, so an unknown metric can still be stored - it simply never matches a registered metric and
+the achievement quietly never awards. That is a real gap but a different one (silent bad data, not
+a crash), and it is admin-only. Noted rather than fixed.
 
 ---
 

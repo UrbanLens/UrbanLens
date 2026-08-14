@@ -18,6 +18,7 @@ reporting, and the existing endpoints already treat a missing colour the same wa
 from __future__ import annotations
 
 import re
+from typing import overload
 
 #: `#rgb` and `#rrggbb`. Everything the palettes offer is `#rrggbb`; the shorthand is
 #: accepted because it is unambiguously a colour and costs nothing to allow.
@@ -26,6 +27,14 @@ HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 #: Markup border colours use this sentinel to mean "draw no border", and the map renderer
 #: checks for it by name - it is a meaningful value, not a missing one.
 NO_COLOR = "none"
+
+
+@overload
+def clean_color(value: object, *, default: str, allow_none_keyword: bool = ...) -> str: ...
+
+
+@overload
+def clean_color(value: object, *, default: None = ..., allow_none_keyword: bool = ...) -> str | None: ...
 
 
 def clean_color(value: object, *, default: str | None = None, allow_none_keyword: bool = False) -> str | None:

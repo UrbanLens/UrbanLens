@@ -693,11 +693,11 @@ class MarkupEditView(LoginRequiredMixin, View):
                 return JsonResponse({"ok": False, "error": length_error}, status=400)
             item.label = label
         if "color" in body:
-            item.color = body["color"] or item.color
+            item.color = clean_color(body["color"], default=item.color)
         if "stroke_width" in body:
             item.stroke_width = int(body["stroke_width"])
         if "border_color" in body:
-            item.border_color = body["border_color"] or ""
+            item.border_color = clean_color(body["border_color"], default="", allow_none_keyword=True)
         if "fill_opacity" in body:
             item.fill_opacity = int(body["fill_opacity"])
         if "border_opacity" in body:

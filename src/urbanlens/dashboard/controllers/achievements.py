@@ -16,7 +16,6 @@ from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.views import View
 
-# App Imports
 from urbanlens.dashboard.models.achievements.model import (
     DEFAULT_ACHIEVEMENT_COLOR,
     DEFAULT_ACHIEVEMENT_ICON,
@@ -27,6 +26,9 @@ from urbanlens.dashboard.models.labels.model import COLOR_CHOICES, ICON_CATEGORI
 from urbanlens.dashboard.models.profile import Profile
 from urbanlens.dashboard.services.achievements.evaluate import progress_for_profile
 from urbanlens.dashboard.services.achievements.metrics import all_metrics, grouped_metric_choices, streak_summary
+
+# App Imports
+from urbanlens.dashboard.services.core.colors import clean_color
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
@@ -195,10 +197,13 @@ def _apply_form(achievement: Achievement, request: HttpRequest) -> None:
 
     achievement.name = name
     achievement.description = (request.POST.get("description") or "").strip() or None
-    achievement.metric = (request.POST.get("metric") or "").strip()
+    # Truncated to the column widths: these are assigned straight from POST, and
+    # CharField max_length is enforced by full_clean(), which save() does not call -
+    # so an over-long value reached the database and returned a 500.
+    achievement.metric = (request.POST.get("metric") or "").strip()[: Achievement._meta.get_field("metric").max_length]  # noqa: SLF001 - _meta is public API
     achievement.threshold = threshold
-    achievement.icon = (request.POST.get("icon") or "").strip() or None
-    achievement.color = (request.POST.get("color") or "").strip() or DEFAULT_ACHIEVEMENT_COLOR
+    achievement.icon = (request.POST.get("icon") or "").strip()[: Achievement._meta.get_field("icon").max_length] or None  # noqa: SLF001
+    achievement.color = clean_color(request.POST.get("color"), default=DEFAULT_ACHIEVEMENT_COLOR)
     achievement.order = int(request.POST.get("order") or 0)
     achievement.is_active = request.POST.get("is_active") == "on"
     achievement.is_secret = request.POST.get("is_secret") == "on"

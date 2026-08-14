@@ -6087,7 +6087,7 @@ injectable.
 
 ### The server-side half - RESOLVED 2026-08-14
 
-`services/core/colors.clean_color` now validates every colour write path (27 of them, across
+`services/core/colors.clean_color` now validates every colour write path (30 of them, across
 `controllers/labels.py`, `external_api/views.py`, `controllers/markup.py`,
 `controllers/detail_pins.py`, `controllers/maps.py`, `controllers/custom_layers.py` and
 `controllers/saved_filters.py`). Eight further sites in `controllers/detail_pins.py` were missed on
@@ -6327,3 +6327,31 @@ Deciding what to do needs a product call rather than a mechanical one: either de
 methods with their tests, or wire them back up if per-pin category assignment is still wanted as a
 distinct concept from labels. Deleting is the more likely answer, since `KIND_CATEGORY` labels
 already do this and have a UI.
+
+---
+
+## API behaviour change: non-hex colours are no longer stored
+
+From 2026-08-14, every colour write path runs through `services/core/colors.clean_color`, which
+accepts `#rgb`/`#rrggbb` (plus the literal `none` where a border legitimately means "no border")
+and otherwise falls back to the field's default.
+
+This is a **visible change for external API clients**. `PATCH /labels/<uuid>/`,
+`POST /labels/bulk/edit/` and the saved-filter endpoints previously stored whatever string was
+sent - `{"color": "red"}` was accepted and persisted, and one test asserted exactly that.
+
+It was never a working value:
+
+- `Label.color` declares `choices` that are all hex; `choices` is enforced by `full_clean()`, which
+  `save()` does not call, so the invalid value was stored rather than rejected.
+- Every renderer appends an alpha suffix (`color + "33"`), so `"red"` became `red33` - not a
+  colour, painting nothing. The chip rendered as though no colour had been set.
+
+So the change replaces "stored, then silently ignored by the UI" with "not stored". Clients sending
+named CSS colours will see the field come back empty rather than echoing their input.
+
+Worth deciding, and not decided here: whether these endpoints should **reject** an invalid colour
+with a 400 rather than coercing it. Coercion matches the HTML form paths (where the value comes
+from a palette picker and anything else is a malformed request), but an API arguably owes its
+callers an error instead of silent data loss. If that changes, it should change for all 31 sites at
+once, in `clean_color`'s callers rather than in the helper.

@@ -30,6 +30,7 @@ from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.labels.meta import KIND_STATUS
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.signals import refresh_map_pin_cache_for_label_ids
+from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
 from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
@@ -161,7 +162,7 @@ class LabelBulkEditView(ExternalApiView):
                     label.icon = data["icon"] or None
                     update_fields.add("icon")
                 if "color" in data:
-                    label.color = data["color"] or None
+                    label.color = clean_color(data["color"])
                     update_fields.add("color")
                 if "description" in data:
                     label.description = data["description"] or None

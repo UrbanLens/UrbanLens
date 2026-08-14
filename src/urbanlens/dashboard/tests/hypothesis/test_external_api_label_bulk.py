@@ -104,13 +104,28 @@ class LabelBulkDeleteTests(LabelBulkTestCase):
 
 class LabelBulkEditTests(LabelBulkTestCase):
     def test_sets_icon_and_color_on_every_label(self) -> None:
-        response = self._post("bulk/edit/", {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "icon": "star", "color": "red"})
+        response = self._post("bulk/edit/", {"uuids": [str(self.label_a.uuid), str(self.label_b.uuid)], "icon": "star", "color": "#F44336"})
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["count"], 2)
         self.label_a.refresh_from_db()
         self.label_b.refresh_from_db()
         self.assertEqual(self.label_a.icon, "star")
-        self.assertEqual(self.label_b.color, "red")
+        self.assertEqual(self.label_b.color, "#F44336")
+
+    def test_a_named_css_colour_is_not_stored(self) -> None:
+        """This test previously posted "red" and asserted it round-tripped.
+
+        It never was a valid label colour: `Label.color` declares `choices` that are
+        all hex, and the renderers append an alpha suffix ("red33"), which is not a
+        colour and paints nothing. Since colours are validated on write, a non-hex
+        value now falls back to the field's default instead of being stored and
+        silently breaking the chip.
+        """
+        response = self._post("bulk/edit/", {"uuids": [str(self.label_b.uuid)], "color": "red"})
+
+        self.assertEqual(response.status_code, 200, response.content)
+        self.label_b.refresh_from_db()
+        self.assertIsNone(self.label_b.color)
 
     def test_explicit_null_description_clears_it(self) -> None:
         Label.objects.filter(pk=self.label_a.pk).update(description="Old")
