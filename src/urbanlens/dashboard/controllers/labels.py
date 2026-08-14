@@ -38,6 +38,7 @@ from urbanlens.dashboard.models.labels.model import (
 )
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.models.pin.signals import refresh_map_pin_cache_for_label_ids
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.core.colors import clean_color
@@ -837,11 +838,18 @@ class LabelReorderView(_LabelKindMixin, LoginRequiredMixin, View):
 
         # Filtering on profile/kind here is what keeps ids the caller does not own out
         # of the write - the per-row form got that from re-filtering inside the loop.
-        labels = list(Label.objects.filter(id__in=desired, profile=profile, kind=self.kind))
+        # Only rows whose order actually moves are written or invalidated - the cache
+        # refresh below costs work per *pin* carrying the label, so re-sending an
+        # unchanged order would rebuild the whole map for nothing.
+        labels = [label for label in Label.objects.filter(id__in=desired, profile=profile, kind=self.kind) if label.order != desired[label.pk]]
         for label in labels:
             label.order = desired[label.pk]
         if labels:
             Label.objects.bulk_update(labels, ["order"])
+            # order decides which label supplies a pin's map icon/colour
+            # (_winning_display_label sorts by -order), and bulk_update fires no
+            # post_save, so the usual label -> cache receiver never sees this write.
+            refresh_map_pin_cache_for_label_ids([label.pk for label in labels])
         return JsonResponse({"ok": True})
 
 

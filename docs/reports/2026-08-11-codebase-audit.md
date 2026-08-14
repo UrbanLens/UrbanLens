@@ -4913,3 +4913,38 @@ query count - `_make_tags` restarted its naming at 0 on the second call and trip
 `uq_label_profile_name_kind_ci`. This is the *second* time in this audit a fixture that
 restarts a counter has produced a failure that reads like a code bug. The tell both times was
 an `IntegrityError` on a uniqueness constraint rather than an assertion failure.
+
+
+## Chunk 304 - reordering labels served a stale map icon
+
+The question chunk 303 filed is a real bug. Label `order` is not cosmetic: the map payload's
+`_ordered_location_labels` sorts by `-order`, and `_winning_display_label` takes the first
+label carrying an icon. So reordering two icon-bearing labels changes what a pin *looks like*
+on the map without touching the pin.
+
+`refresh_map_pin_cache_for_label` exists for precisely this hazard - its docstring says editing
+a label never touches `Pin.labels.through`, so nothing else invalidates the Redis payload and
+affected pins "keep serving the old baked-in icon/color". But it is a `post_save` receiver, and
+reorder wrote through `queryset.update()`. **The one write that changes `order` was the one
+write that skipped the invalidation.** Pre-existing; chunk 303's `bulk_update` neither caused
+nor worsened it, since both calls skip `post_save` alike.
+
+Fixed by invalidating explicitly after the write.
+
+**Adding the fix exposed a cost worth more than the fix.** The refresh does work per *pin*
+carrying each label, and the first version passed every reordered label - so a reorder could
+rebuild a user's entire map. Now only labels whose `order` value actually moves are written or
+invalidated, which also makes re-sending an unchanged order free. A drag typically moves a
+handful of labels, not all of them.
+
+**On the test's reach.** These assert the invalidation *contract* - that reorder asks for the
+right pins to be refreshed - not a Redis round-trip. The cache needs a live client and this
+suite's network guard permits localhost only, so end-to-end is unavailable here. That is a real
+limit on the evidence: it proves the call is made with the right ids, not that the payload
+downstream is correct.
+
+**A test that would have passed for the wrong reason.** Tightening to changed-rows-only broke
+the ownership test silently - it posted an id list under which the owned label's order happened
+not to move, so it would have been filtered out and the assertion would have held while
+testing nothing. Caught by re-running rather than by reading. Narrowing a write path can
+quietly empty a test whose subject sat *outside* the narrowed set.
