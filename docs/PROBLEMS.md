@@ -6894,3 +6894,27 @@ full test suite was running against a synced container snapshot, and syncing sou
 corrupts the run (this cost two runs earlier in the same audit). Wants a test pinning the
 boundary case, which needs `override_settings(TIME_ZONE=...)` plus a frozen clock rather than a
 plain assertion.
+
+
+## Workflow: Django logic can be checked on the host without the container
+
+Found 2026-08-14 (audit chunk 320-321). `CLAUDE.local.md` correctly notes that pytest needs the
+`app` container, because the project's settings import GeoDjango and this host has no GDAL. That
+is true, and it is easy to over-generalise into "no Django at all on the host", which is false.
+
+`django.conf.settings.configure(...)` + `django.setup()` builds a minimal Django without loading
+the project settings, so nothing imports `django.contrib.gis`:
+
+```python
+from django.conf import settings
+settings.configure(USE_TZ=True, TIME_ZONE="UTC", DATABASES={}, INSTALLED_APPS=[])
+django.setup()
+```
+
+Useful for anything not touching the ORM or geo models - timezone behaviour, template filters,
+form/field validation logic, signal wiring, pure service functions. Seconds instead of a
+multi-minute container cycle.
+
+It caught a real error this way: a test asserting `date.today()` is unaffected by
+`override_settings(TIME_ZONE=...)`, which is wrong because Django's `setting_changed` receiver
+also rewrites `os.environ["TZ"]` and calls `time.tzset()`.

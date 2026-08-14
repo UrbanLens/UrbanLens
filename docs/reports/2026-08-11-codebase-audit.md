@@ -5354,3 +5354,24 @@ to "no Django on the host at all".
 That is twice in five chunks: chunk 316 over-generalised "no `docker cp` mid-run" into "no edits
 at all". Both times the false constraint survived because it was never tested, only reasoned
 from - and both times the test was cheap.
+
+
+## Chunk 321 - the host-side Django path, used
+
+Ran all three boundary-test bodies against a `settings.configure()` Django on this host. **All
+pass**, including the corrected third one: `localdate()` moves `2026-08-14 -> 2026-08-15` under
+`timezone.activate()` while `date.today()` stays on the 14th.
+
+The test is now verified in *logic*. What remains untested is only harness integration - that
+`SimpleTestCase` and the project's conftest do not interfere - which is the part the container
+run will cover.
+
+**This path is worth keeping.** Anything not touching the database or GeoDjango models can be
+checked here in seconds, against a real Django, instead of waiting minutes for a container cycle.
+Three of this audit's fixture-shaped failures (chunks 303, 305, 306) each cost a full ~3-minute
+container run to discover a wrong keyword argument; none of them needed GDAL to find. The
+project note that "pytest needs the container" is accurate and was never the whole picture.
+
+Recorded in `docs/PROBLEMS.md` as a developer-workflow note rather than a defect - it is the kind
+of thing that stays lost precisely because the existing constraint is real enough to sound
+complete.
