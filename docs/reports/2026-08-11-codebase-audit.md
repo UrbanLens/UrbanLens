@@ -5276,3 +5276,26 @@ function, and both also call `date(...)` as a constructor on the next line, so t
 stay and only the call could change). And ruff caught `F821 Undefined name 'timezone'` in
 `link_extraction.py`, where the substitution landed but the import insertion silently did not
 match. Without that lint, this chunk would have shipped an import error into a live code path.
+
+
+## Chunk 318 - what the running suite will and will not verify
+
+The full suite launched in chunk 311 is running against the container snapshot synced **at that
+moment**. Chunks 316 and 317 edited the host tree afterwards, and syncing mid-run is forbidden -
+so the nine `timezone.localdate()` substitutions **are not in the code being tested**.
+
+Stating this before the result arrives, because a green run is exactly the kind of evidence that
+gets over-read. When it passes it will establish that chunks 303-310 hold together - the label
+reorder collapse, the two cache/calendar invalidations, and the pin-merge `sync_last_visited`
+call that now fires receivers inside the merge transaction. It will say nothing whatsoever about
+the localdate work, which needs its own run afterwards.
+
+This is a general hazard of long-running verification against a snapshot: the artifact under
+test silently ages away from the working tree, and the result keeps the authority of a full-suite
+pass while its scope quietly shrinks. The same trap as this audit's stale-container problem,
+except the drift is in *time* rather than in files.
+
+Outstanding, both owed before the localdate change can be called done:
+1. A container run of the current tree.
+2. A boundary test with `override_settings(TIME_ZONE=...)` and a frozen clock, pinning the case
+   where server-local and active timezones fall on different dates.
