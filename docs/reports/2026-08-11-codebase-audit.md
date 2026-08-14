@@ -8061,3 +8061,23 @@ mixing them up either breaks the JSON or leaves the hole.
 
 That closes the last substantive caveat in this report. Every "I did not check X" I recorded has now
 either been checked or is explicitly out of reach with the reason stated.
+
+
+## Chunk 444 - CSRF for 283 HTMX endpoints, handled at one choke point
+
+HTMX requests do not carry Django's form token automatically, so an HTMX-heavy application has to
+supply it deliberately. **283 mutating attributes exist** - 256 `hx-post`, 25 `hx-delete`, one each
+of `hx-patch`/`hx-put`.
+
+**All covered by four lines in the base template**: a `htmx:configRequest` listener on `document.body`
+that sets `evt.detail.headers['X-CSRFToken']` from `{{ csrf_token }}` for every request htmx makes.
+
+That is the same structural pattern as the two authorization hierarchies (chunks 438-439) and the
+wiki access gate (437): **enforced centrally, inherited by default, impossible to forget per call
+site.** A new `hx-post` anywhere in 418 templates is protected without its author doing anything -
+and the failure mode if it were per-attribute (283 places to forget one) is exactly the kind of
+inconsistency that produced this audit's one real escaping defect.
+
+Three surfaces now checked for the same property, all three centralised: API authentication
+(`ExternalApiView`), view authorization (Django auth mixins), CSRF (`htmx:configRequest`). The
+pattern is deliberate rather than incidental.
