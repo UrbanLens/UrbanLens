@@ -7848,3 +7848,27 @@ That is the through-line of this entire audit, stated one last time. **The defec
 code where no such reasoning existed; the code that carried it was correct every time I checked.**
 Not because writing comments prevents bugs, but because the act of working out *why* a boundary is
 safe is what makes it safe - and the comment is the residue of having done it.
+
+
+## Chunk 435 - two URL ordering invariants, both holding
+
+Route shadowing is a silent failure: a catch-all registered too early swallows every specific route
+below it, and the symptom is a 404 or a 405 on a URL that visibly exists in the file. Both stated
+invariants hold:
+
+- **Literal before slug**: 9 literal `pins/...` routes (288-304) all precede the single
+  `pins/<slug:...>` at 305.
+- **Catch-all last**: `media/relevance/` (429) and `media/send-to-wiki/` (434) both precede
+  `media/<str:source>/` (452). The comment explains the exact consequence - `<str:source>` "would
+  otherwise swallow 'relevance'/'send-to-wiki' as a provider name and 405 on their POST-only
+  methods."
+
+**Four invariants verified across chunks 433-435**, all holding: Celery `visibility_timeout`, channel
+layer `socket_timeout`, and these two orderings. Each states a hazard whose symptom looks like
+something else entirely - a duplicate send, a flaky websocket, a 405 on a real route.
+
+**A scan-scope note, since it nearly produced a false clean.** My first media check searched for
+`path("media/...")` and found **zero** routes, printing `n/a`. The routes are nested as
+`<slug:pin_slug>/media/...`, so the pattern was wrong - and `n/a` in that position reads exactly like
+"nothing to check". Twenty-sixth artifact, and the same shape as chunk 412's malformed regex: **an
+empty result from a search that was not looking in the right place.**
