@@ -7204,6 +7204,21 @@ So `migrate` forward is safe to attempt, but there is no way back to the pre-mer
 `migrate` at all. **Take a database snapshot** - that advice stands, for this reason rather than the
 one originally given.
 
+**`0039` verified too (chunk 365), and here the original warning was right.** `_encrypt_column`
+rewrites each value in place through `_field.get_prep_value()` - i.e. under whatever
+`UL_FIELD_ENCRYPTION_KEY` is active *at migrate time* - across 9+ columns including
+`dashboard_profiles.phone_number`, `.bio`, `.signal_username`, `.matrix_handle`, `.discord_username`,
+`.area`, both Google account tables' emails, and `dashboard_safety_contact_defaults.email`. Its
+`reverse_code` is `migrations.RunPython.noop`.
+
+**So both data migrations in the pending batch are irreversible**, which is the single strongest
+argument for the snapshot: `migrate` forward is attemptable, but neither `0039` nor `0042` can be
+walked back, and between them they rewrite personal contact data and delete label rows.
+
+Confirm the encryption key in the container's environment is the one you intend to keep *before*
+running this - per `docs/DATA_ENCRYPTION.md`, changing it afterwards outside the documented rotation
+procedure orphans every row this migration writes.
+
 **Ordering matters, and the safe order is not the obvious one (chunk 361).** Celery workers do not
 autoreload, so they are still running the code they started with on 2026-08-04 - which matches the
 *old* schema, which is why no `ProgrammingError` has appeared since. The container's `/app/src` has

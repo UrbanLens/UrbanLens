@@ -6238,3 +6238,18 @@ reason.
 safe direction and is not: it described a failure mode that cannot occur while missing the one that
 can, and a reader who verified the transactional claim might reasonably have discounted the whole
 entry. Corrected in place rather than appended, since the original text was the actionable part.
+
+
+## Chunk 365 - the other name-inferred warning, and this one was right
+
+Read `0039_encrypt_contact_and_note_fields` rather than trusting its name, as chunk 364 did for
+`0042`. This time the warning holds: it encrypts in place under the key active at migrate time,
+across 9+ personal-data columns, and its `reverse_code` is `RunPython.noop`.
+
+The useful new fact is the pair: **both data migrations in the pending batch are irreversible**.
+That is a stronger and more specific argument for snapshotting than either entry made alone, and
+neither chunk 360 (which asserted it from names) nor chunk 364 (which corrected one of them) had it.
+
+**Two name-inferred warnings, one wrong and one right** - which is the honest summary of inference
+from identifiers. It is not useless; it is a coin flip, and this session has now paid for that
+lesson four times (chunks 342, 343, 364, 365). The cheap step in every case was opening the file.
