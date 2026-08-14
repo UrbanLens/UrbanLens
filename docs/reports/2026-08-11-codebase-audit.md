@@ -7604,3 +7604,24 @@ each.** Every intermediate state was recorded at its actual strength - residual,
 probable, then dismissed. Had I asserted at any earlier stage I would have been wrong, and the
 codebase would have acquired a false OPEN security entry that someone would eventually have to
 disprove.
+
+
+## Chunk 425 - looking for a bypass of `safe_json_for_script`, and not finding one in the sample
+
+The pattern behind every real defect in this audit is *a correct gate a later surface forgot to call*
+- the label reorder skipping the cache receiver, the trip reorder skipping the calendar push, the
+merge skipping `sync_last_visited`. Chunk 424 found a gate (`safe_json_for_script`), so the obvious
+question is whether anything bypasses it.
+
+**6 call sites use the helper. The `json.dumps` calls I sampled in controllers are all `HX-Trigger`
+response headers** - a different sink, parsed as JSON by HTMX rather than embedded in a `<script>`
+block, and Django already rejects header newline injection. Not bypasses.
+
+**Stated as a sample, not a sweep.** I did not enumerate every path JSON takes into a template
+context - that needs tracing context dict keys to their templates, which is the kind of cross-file
+fact chunk 417 established is beyond the scanning habits used here. So the honest claim is "no bypass
+in what I looked at", which is weaker than "no bypass exists".
+
+That distinction has mattered all session: the 14 `|safe` sites were enumerable and I checked all 14;
+context-dict provenance is not, and pretending otherwise would be the twenty-sixth artifact rather
+than a finding.
