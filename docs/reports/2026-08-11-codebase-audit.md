@@ -7207,3 +7207,29 @@ Which is the useful generalisation from chunks 405-407: promise-checking finds r
 the promise is *mechanically verifiable and mechanically breakable*. Module paths qualify and are
 nearly clean. Document citations qualify but nothing checks them, so a third had rotted. `Raises:`
 clauses do not qualify at all, and the attempt produced 96 false flags.
+
+
+## Chunk 408 - 814 Sphinx cross-references, 0 broken
+
+Applied chunk 407's criterion to the highest-yield category available: Sphinx cross-references
+(`:class:`, `:meth:`, `:func:`, `:attr:`) are mechanically verifiable, break silently, and this
+project builds ReadTheDocs output from them.
+
+**814 references across 550 distinct targets. Every one resolves.** The single apparent exception,
+`:class:`requests_oauthlib.OAuth1``, is a third-party symbol - correct in Sphinx, which resolves it
+via intersphinx.
+
+**Nineteenth artifact on the way.** My first pass reported 32 unresolved by collecting only
+`class`/`def` names; `fallback_rate` and `media_scope` are `ClassVar` **attributes** (`:attr:` refs),
+which that scan structurally could not see. Counting annotated assignments as definitions collapsed
+32 to 1.
+
+That is the cleanest result of the session and the most surprising given the earlier documentation
+findings. The same codebase has **a third of its prose citations rotted** and **zero of its 814
+structured cross-references broken** - and both were written by the same people. The difference is
+that `:class:` and `:attr:` targets are consumed by a tool, and prose citations are consumed only by
+readers.
+
+**The rule that survives all of chunks 405-408**: a promise stays true when something mechanical
+depends on it. Where nothing does, it decays at roughly a third over a year, regardless of how
+carefully it was written.
