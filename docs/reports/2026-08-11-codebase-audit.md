@@ -7922,3 +7922,31 @@ Worth noting what makes this invariant *strong* where the eight dangling `PROBLE
 weak: it is enforced by inheritance, so a new wiki view gets the gate by default and would have to
 opt *out* to break it. **The guarantee does not depend on the next author reading the comment** - the
 comment just explains why the base class exists.
+
+
+## Chunk 438 - the external API's authorization is a two-layer inheritance hierarchy
+
+Chunk 437 surfaced the distinction that matters most for whether a guarantee survives: **enforced by
+inheritance (opt-out) versus by convention (opt-in)**. Checked whether the external API's auth gate
+works the same way.
+
+**It does, in two layers:**
+
+1. `ExternalApiView` - the root gate, 113 direct subclasses;
+2. resource-scoped subclasses that each add per-object authorization and themselves extend it -
+   `WikiApiView` (22), `TripScopedApiView` (19), `OwnedPinMixin` (12), `SafetyCheckinScopedView` (10),
+   `SafetyPartnerScopedView`, `PinWikiSyncApiView(OwnedPinRequiredMixin, ExternalApiView)`,
+   `FriendActionView`.
+
+Every API view inherits one of them. A new endpoint gets authentication by default and per-resource
+scoping by choosing the right base - **to ship an unauthenticated endpoint you would have to
+deliberately not inherit anything**, which is visible in review in a way that a forgotten decorator
+is not.
+
+**Twenty-eighth artifact**: my scan reported 60 views as ungated because I hardcoded five known base
+classes, and the hierarchy has more. The false claim would have been "60 external API views lack
+authorization" - the single most alarming sentence available in this codebase, from a list I wrote
+myself and did not verify.
+
+That is the last and clearest instance of the session's invariant: **the artifact always overstates
+danger, never understates it.** Twenty-eight for twenty-eight.
