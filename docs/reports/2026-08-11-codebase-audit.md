@@ -7265,3 +7265,27 @@ Recorded as a specific, bounded proposal instead.
 **The larger point.** The correct response to "a third of these citations rotted" is not to automate
 the check. It is that seven of the eight dangling ones point at a **gitignored file** - fix that, and
 the decay stops at its source rather than being policed forever downstream.
+
+
+## Chunk 410 - no dead private helpers; and the detach entry confirmed independently
+
+Scanned for module-level private functions never referenced - something ruff does not cover. Two
+candidates, **both live**:
+
+- `_parse_csv_rows` is called directly by `test_document_pin_import.py`;
+- `_create_location_with_canonical_name` is called from `services/visits/visits.py:201` and
+  `controllers/pin_edit.py:637`, both through **function-local imports**
+  (`from urbanlens.dashboard.controllers.maps import ...` inside a function body), which a
+  file-scoped AST scan structurally cannot see.
+
+**Zero dead private helpers. Twentieth artifact.**
+
+The second call site is a useful side result: `pin_edit.py:637` is exactly the fallback branch the
+2026-08-13 detach entry names as failing identically to the primary one. That entry was written from
+reading; this confirms the branch is reachable from the live code path, independently.
+
+**Twenty artifacts, one invariant.** Every single scan this session that produced a count produced a
+wrong one until the matches were read - and the mechanisms were all different: wrong regex, wrong
+offset, suppressed filter, missing category, file-scoped analysis of a cross-file fact. There is no
+class of scan that was reliable. What was reliable was reading what the scan selected, every time,
+without exception.
