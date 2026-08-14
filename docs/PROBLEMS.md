@@ -7028,5 +7028,21 @@ Two consequences worth noting:
 Also noticed: `.env` has `UL_APP_PORT=21810`, while `CLAUDE.local.md` states this slot's port is
 21811. One of the two is stale; the connection is refused on 21810 regardless.
 
-Not diagnosed further - that needs the healthcheck definition and the container's process state, and
-is environment work rather than codebase work.
+**Diagnosed one level further (chunk 352).** The cause is not a missing route or a dead process:
+
+- healthcheck is `curl -f http://localhost:8000/health/`;
+- the `health/` route **exists** (`UrbanLens/urls.py:109`, `HealthController.check`);
+- `manage.py runserver 0.0.0.0:8000` **is running** (two processes - the reloader parent from Aug 04
+  and a child);
+- yet `curl` from *inside* the container returns **HTTP 000 for both `/health/` and `/`**.
+
+So the dev server is wedged: alive, consuming CPU, not accepting connections. That rules out the
+three cheap explanations (route missing, process crashed, port misconfigured) and leaves a genuine
+hang.
+
+One complication for anyone picking this up: the child `runserver` process restarted at 00:33 today,
+which is when this session began `docker cp`-ing source into the container - the autoreloader will
+have fired on those syncs. The **10-day failing streak predates all of that**, so the wedge is not
+caused by the syncs, but the *currently running* process is one they restarted. A clean
+`docker compose restart app` is the first thing to try, and would also confirm whether the wedge
+reproduces from a fresh start.

@@ -5978,3 +5978,23 @@ The lesson for the audit's method: every chunk from 303 to 350 examined *source*
 you that the thing you are auditing does not currently run. Eleven clean checks in a row was the
 signal to change instruments, and changing instruments immediately produced a finding of a kind the
 previous forty-eight could not have.
+
+
+## Chunk 352 - the healthcheck failure is a wedged server, not a missing route
+
+Diagnosed chunk 351's finding one level deeper. The three cheap explanations are all wrong: the
+`health/` route exists, `runserver` is running, and the port is right. `curl` from *inside* the
+container still returns HTTP 000 for both `/health/` and `/`.
+
+An alive, CPU-consuming process that does not accept connections is a hang, and that is as far as
+this can be taken without process-level inspection.
+
+**Worth being explicit about a confound I introduced.** The child `runserver` restarted at 00:33
+today - when this session started `docker cp`-ing source in, firing the autoreloader. So the process
+now wedged is one my own activity restarted. The 10-day failing streak still proves the *condition*
+predates me, but I can no longer claim the *current instance* is untouched. Had I checked container
+health before the first sync, that ambiguity would not exist.
+
+A useful general point for auditing a live environment: reading source is non-invasive, but the
+moment you sync files into a running container you have altered the thing you are measuring. This
+audit did that dozens of times before ever looking at whether the environment was healthy.
