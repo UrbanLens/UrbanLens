@@ -6880,3 +6880,26 @@ than a comment, and invisible to any search looking for words.
 That is the honest limit of every documentation-shaped heuristic in this report, including the ones I
 kept. Reasoning recorded in code beats reasoning recorded in comments, and a reviewer scanning for
 comments will systematically under-credit the better practice.
+
+
+## Chunk 394 - the visible() gate is not bypassed, and the gate pattern is rarer than expected
+
+Checked whether the queryset-level control chunk 393 praised is actually applied everywhere it
+matters. Two results, one of them unexpected.
+
+**Only one model in the codebase defines a `visible()` queryset gate: `device_scan`.** I had taken
+`.visible()` as evidence of a general pattern; it is a single instance. The other visibility controls
+found in this audit are expressed differently - `viewer_hidden_activity_ids`, `display_identity_for`,
+`wiki_access`, per-view permission checks - so the mechanism varies by subsystem rather than being
+one convention.
+
+**No bypass.** Six call sites query those models without `.visible()`, and all six are server-side:
+ingestion (`get_or_create`, `create`), the clustering pipeline, and marker-matching during import.
+Those legitimately need every row - `.visible()` is a presentation gate, and the one user-facing
+path, `views_device_scans.py`, uses it.
+
+The correction to chunk 393 matters more than the clean result. I generalised "a `.visible()` manager
+method is the intent, encoded where it cannot be ignored" from **one example**, one chunk after
+withdrawing a different heuristic built the same way. The observation about that one endpoint stands;
+"this codebase encodes visibility in querysets" does not - it encodes visibility in whatever fits the
+subsystem, which is harder to audit and impossible to grep for uniformly.
