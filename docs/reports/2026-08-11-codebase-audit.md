@@ -7000,3 +7000,23 @@ finally become predictable enough to act on rather than merely to regret. That i
 version of everything above: **in a codebase this well documented, "has someone already done this?"
 is a cheaper first question than "how do I do this?"** - and the audit spent roughly ninety chunks
 learning to ask it in that order.
+
+
+## Chunk 399 - FEATURES.md is current, and my search was wrong again
+
+Checked whether the feature inventory `CLAUDE.md` tells readers to consult has kept up with the
+recent model additions (places, albums, map overlays - migrations 0026-0038).
+
+**It has.** 742 lines, last committed today, with 33 mentions of Place, 10 of SpotGuessr, 9 of
+consensus. "Map overlay" returned **0** - because the feature is documented as **"Georeferenced
+image overlays"**, complete with its module and controller paths (`models.map_overlay`,
+`controllers/map_overlays.py`).
+
+**Seventeenth artifact**, and identical in shape to chunk 393: I searched for the words I would have
+used rather than the words the codebase uses. Two-word probes of a well-written document fail exactly
+where the document is most descriptive - a feature named "Georeferenced image overlays" is *better*
+documentation than one named "map overlay", and my instrument penalised it for that.
+
+That is a fitting note near the end of this audit. Across seventeen instances, the failures were
+never that the codebase was worse than my scan reported. They were, without exception, that the scan
+could not see what was there.
