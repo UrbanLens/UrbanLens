@@ -6534,3 +6534,25 @@ references are worth walking for that reason alone, independent of whether anyon
 And it recasts chunk 377's dangling reference from an anomaly into an instance. One dangling pointer
 is a slip; two in seven is a practice - comments citing analysis that was never filed, or that was
 filed and later removed without the code being updated.
+
+
+## Chunk 379 - 8 checked, and a method error that nearly inflated the failure rate
+
+`location_wiki.py`'s reference **resolves** - but my first search missed it. I looked for a matching
+*heading* and found none; the content is a body paragraph describing exactly the `strict=True` /
+`strict=False` split the comment mentions. **"No matching heading" is not "dangling."**
+
+That is a method error that would have inflated the failure rate, so I re-checked the two dangling
+verdicts from chunks 377-378: both used full-text searches (`"trips list"`, `homepage chip`,
+`rating.*chip`), not heading-only. They hold.
+
+**Running tally, 8 distinct references:** 5 resolve, 1 ambiguous, 2 dangling.
+
+The near-miss is the eleventh instance of this session's single recurring failure, in yet another
+costume: a search that could not see what it was looking for, reported as an absence. The previous
+ten were counts; this one was a *category* of match. The invariant is not "counts are unreliable" -
+it is that **any search reports the shape it was given, and absence is only evidence when the search
+could have found the thing.**
+
+Which is also why the two dangling verdicts required re-checking rather than trust: I had reached
+them by a different method than the one that just failed, but I did not know that until I looked.
