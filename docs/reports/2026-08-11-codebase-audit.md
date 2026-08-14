@@ -6743,3 +6743,25 @@ after the guard I duplicated, the deferral I overrode, and the drift documented 
 Each time my first reading was that something had not been done, and each time the work existed
 somewhere I had not looked. Worth stating as the session's most consistent lesson about this
 codebase: **absence of a record is weak evidence of absence of work.**
+
+
+## Chunk 388 - resolved: tracked docs cite a gitignored directory
+
+`completed.md` was never committed, and `.gitignore:49` says why - `docs/notes/ai/` is ignored by
+design. The file is not lost; it is local-only, and this checkout is not the machine that wrote it.
+
+**The defect is structural, not clerical.** `docs/PROBLEMS.md` is tracked and shared and points into
+a gitignored directory. Every clone, every parallel environment slot, every future agent in a fresh
+checkout gets a citation to content that cannot travel. The six code comments citing "decision
+2026-07-23" inherit the same problem - the decisions are probably written down, somewhere no one
+else can read.
+
+That closes a chain that ran for eleven chunks: *bare reference* (370) -> *dangling* (377) ->
+*a third fail* (378) -> *all dangling ones cite decisions* (386) -> *decisions trace to one file*
+(387) -> *that file is gitignored* (388). Each step was a small check, and none of them would have
+been reached by scanning for defects - the thread only exists because a comment promised something
+and I checked whether it delivered.
+
+**Fifth and final instance of the session's pattern**: "missing" was again "somewhere else". Four
+times it was mis-filed; this time it is unreachable by construction, which is the one variant that
+cannot be fixed by looking harder.

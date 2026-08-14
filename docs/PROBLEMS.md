@@ -7332,7 +7332,19 @@ Consequences, in order of how much they cost:
    previous agents did, gets a missing file rather than an empty one - which reads as a broken
    checkout rather than absent history.
 
-Whether `completed.md` was deleted, renamed, or never committed is not established here. If its
+**Resolved (chunk 388): it is gitignored, not missing.** `.gitignore:49` ignores `docs/notes/ai/`,
+and `git log --all -- '*completed.md'` shows the file was never committed. It is a local-only agent
+notes directory.
+
+**So the real defect is structural: tracked documentation references gitignored content.**
+`docs/PROBLEMS.md` is committed and shared; `docs/notes/ai/completed.md` can never be. Anyone who
+clones this repository - or works in a different checkout, as this one is - gets a pointer to
+reasoning they have no way to obtain. The six code comments citing "decision 2026-07-23" are in the
+same position: the decisions may well be recorded, on whichever machine ran that session.
+
+Two ways out, both cheap: move decisions worth citing into a tracked file when the session that made
+them ends, or stop citing `docs/notes/ai/` from tracked files and code. The current arrangement
+promises a record that most readers structurally cannot reach. If its
 content survives in git history, recovering the 2026-07-23 decisions from it would close six
 dangling code comments at once; if not, those decisions exist only as the one-line summaries in the
 comments themselves.
