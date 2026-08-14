@@ -6604,7 +6604,7 @@ multiplier.
 | ~~`services/pins/pin_suggestions.py`~~ | ~~888~~ | | **FIXED 2026-08-14** - was one query per date in `suggestion.visit_dates`; now one `__in` query, with the set updated as visits are created so a repeated date is still skipped |
 | `services/pins/pin_suggestions.py` | ~~802~~ | `pin.visit_history.filter(visited_at__date__in=days)` | **false positive** - inside a dict comprehension but evaluated once, not per iteration |
 | ~~`services/memories/photos.py`~~ | ~~165~~ | | **FIXED 2026-08-14** |
-| `services/import_export/export.py` | 650, 764 | `label.pins.filter(profile=...)`, `message.images.count()` | per label / per message, on an export path |
+| `services/import_export/export.py` | 650, 764 | `label.pins.filter(profile=...)`, `message.images.count()` | per label / per message - **fix specified below** |
 | `services/import_export/import_data.py` | 1554 | `trip.profiles.count()` | per trip |
 | ~~`services/pins/pin_list_membership.py`~~ | ~~89~~ | `pin_list.items.count()` | **not a defect** - the query is load-bearing, see below |
 | `controllers/pin.py` | 227 | `pin.images.exclude(pk=...)` | per pin |
@@ -6685,3 +6685,28 @@ query accidentally read the loop's own writes and collapsing it changed behaviou
 patched to a pattern.
 
 Cost is one cheap `COUNT` per added pin, on a membership-sync path - worth leaving alone.
+
+
+### `export.py:650` and `:764` - fixes specified, both need the feeding queryset
+
+Neither is fixable at the loop; both need the queryset that supplies it changed. Unlike the
+`.filter()`-on-a-prefetch cases, there is no in-place rewrite that helps.
+
+**`:650`** - `"pin_uuids": [str(p.uuid) for p in label.pins.filter(profile=profile)]`, once per
+label. The filter is on the *related* side, so a plain `prefetch_related("pins")` would fetch every
+profile's pins and still need filtering. Wants an explicit:
+
+    Prefetch("pins", queryset=Pin.objects.filter(profile=profile), to_attr="own_pins")
+
+on the label queryset, then `label.own_pins` in the comprehension. `to_attr` matters - without it
+`label.pins.all()` would return the filtered set under a name that implies otherwise, which is a
+trap for the next reader.
+
+**`:764`** - `"image_count": message.images.count() if not tombstone else 0`, once per message.
+Wants `annotate(image_count=Count("images"))` on the message queryset and
+`message.image_count` at the site. Note the `if not tombstone` guard: the annotation is computed
+for every row regardless, so the conditional has to stay to preserve the zero.
+
+Both are export paths - they run over every label and every message a profile owns, so the
+multiplier is the size of the account. Neither was measured; the instrument is
+`test_pin_to_json_prefetch.py`'s approach (capture queries over 1 and N objects).
