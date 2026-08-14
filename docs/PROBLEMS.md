@@ -6371,3 +6371,30 @@ the `distinct()` they were missing.
 Filed rather than deleted because removing public queryset API is a judgement about whether it is
 scaffolding for something planned. If it is not, both should go - dead API with a latent bug is the
 worst combination, since the next caller inherits the bug.
+
+---
+
+## Queryset API with no production caller: 70 of 251 (candidate count)
+
+From a 2026-08-14 sweep of every public method on a `*/queryset.py` class:
+
+- **44** are not called from any file other than the one defining them
+- **26** are called only from tests
+
+That is 28% of the queryset API with no production consumer, which is worth a look - a custom
+queryset method exists to be the one place a piece of domain logic lives, and one nothing calls is
+either scaffolding, a leftover, or a piece of logic that got reimplemented inline somewhere else.
+The last of those is the interesting case, because it means the same rule now exists twice.
+
+**Known false-positive class, do not treat the 44 as dead.** The scan deliberately ignores calls
+within the defining file, so a method used only by its siblings is flagged. `apply_label_groups` is
+in the list and is definitely used - `filter_by_criteria` calls it, in the same file, as verified
+while tracing the duplicate-row candidates. Such methods are arguably mis-scoped (a `_`-prefixed
+helper rather than public API) but they are not dead.
+
+Two entries are confirmed dead by separate inspection: `Pin.by_category` and `Wiki.by_category`
+have no callers anywhere, in any file, including their own.
+
+Worth doing properly with a call-graph rather than a name grep, since the test-only 26 in
+particular may be exercised through the very `filter_by_criteria`-style aggregators that make them
+look unused.
