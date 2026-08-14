@@ -5051,3 +5051,36 @@ keys off. The pattern match found all four sites and could not rank them. Only r
 
 Also worth noting: the PinLink gap was closed *incidentally*, by a fix aimed at something else.
 That is luck, not design - and it means the fix's own commit message understates what it does.
+
+
+## Chunk 308 - turning the derived-state defect into a guard
+
+Chunks 304-306 found this defect three times, in three models, one chunk each. The pattern is
+understood well enough to stop hunting it: a static test now enumerates bulk writes
+(`update()`/`bulk_update()`/`bulk_create()`) on models carrying `post_save`/`post_delete`
+receivers, and fails when the set grows beyond the 22 reviewed sites.
+
+**It deliberately does not assert that every site invalidates.** Bypassing a signal is often
+correct - `NotificationLog...update(status=READ)` must *not* re-fire `enqueue_native_push` -
+and most of the 22 are right for reasons like that. A test demanding invalidation everywhere
+would be wrong and would train people to suppress it. What this asserts is narrower and
+defensible: **the set does not grow unreviewed.** A new entry is a prompt to decide, not an
+accusation.
+
+The list also fails on *stale* entries, so a moved or deleted site cannot rot into permanent
+noise.
+
+**Verified it can fail.** A guard that only ever passes is worse than no guard, and the two
+regex sanity tests do not prove the end-to-end path. Injected a real bulk write into a source
+file (in the container copy only, so the working tree stayed clean) and confirmed the test
+fails naming `dashboard/services/pins/pin_geometry.py::Pin`. This is the control that was
+missing from an earlier filter in this audit, which passed all four of its checks while blind
+to the codebase's commonest transaction idiom.
+
+Costs 8 seconds - `SimpleTestCase`, no database.
+
+**Honest limit:** it is a regex over source text. It will miss writes built dynamically, writes
+through a queryset variable (`qs.update(...)` where `qs` came from elsewhere), and any model
+whose receivers are registered by something other than the `@receiver(...)` decorator. It
+catches the literal shape that produced three real bugs, which is what it claims to do - not
+"all derived-state staleness".
