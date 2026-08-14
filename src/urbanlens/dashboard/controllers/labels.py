@@ -832,8 +832,16 @@ class LabelReorderView(_LabelKindMixin, LoginRequiredMixin, View):
 
         profile = _request_profile(request)
         total = len(label_ids)
-        for i, label_id in enumerate(label_ids):
-            Label.objects.filter(id=label_id, profile=profile, kind=self.kind).update(order=total - i)
+        # Later duplicates win, matching the per-row loop this replaces.
+        desired = {label_id: total - i for i, label_id in enumerate(label_ids)}
+
+        # Filtering on profile/kind here is what keeps ids the caller does not own out
+        # of the write - the per-row form got that from re-filtering inside the loop.
+        labels = list(Label.objects.filter(id__in=desired, profile=profile, kind=self.kind))
+        for label in labels:
+            label.order = desired[label.pk]
+        if labels:
+            Label.objects.bulk_update(labels, ["order"])
         return JsonResponse({"ok": True})
 
 

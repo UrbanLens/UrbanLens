@@ -4879,3 +4879,37 @@ see section 1.
   make a "does this check have teeth?" validation pass vacuously.
 - Full suite is ~1h25m. Narrow `-k` selections aggressively: `-k 'pin or map or label'` still
   matches ~3,200 tests.
+
+
+## Chunk 303 - label reorder wrote one UPDATE per label
+
+`LabelReorderView.post` posted the whole id list and issued one `UPDATE` per id, so
+dragging a single label in a list of 50 wrote 50 statements. The row count is chosen by
+the user's own label list, so it grows with no bound the code controls.
+
+Collapsed to a `SELECT` + one `bulk_update`. Measured before the change: **7 queries for
+5 labels, 27 for 25**. After: constant.
+
+**The caveat filed in chunk 298 dissolved on inspection.** It said `bulk_update` "does not
+fire `post_save`, and `Label` has receivers (`sync_redata_taxonomy_on_save`) - check whether
+an order-only change needs them before switching." But the code it replaced used
+`queryset.update()`, which does not fire `post_save` *either*. The receivers were already
+not running. So the switch is signal-neutral, and the question that looked like a blocker was
+never live. Worth noting because the caveat was correct about `bulk_update` in isolation and
+still pointed at nothing - the comparison that mattered was against the *existing* call, not
+against `save()`.
+
+That does surface a real and separate question: `label_refresh_map_pin_cache` is a `post_save`
+receiver on `Label`, and reordering has never invalidated the map pin cache. Whether label
+`order` reaches that payload is not something this chunk established - filed, not fixed.
+
+Two behaviours were pinned by test before the change, both of which the collapse could
+plausibly have broken: ids outside the caller's profile are silently ignored rather than
+erroring (the loop got this from re-filtering per row, so the filter had to move rather than
+disappear), and later duplicate ids win.
+
+**Process note:** the first run of the new test failed on a fixture collision, not the
+query count - `_make_tags` restarted its naming at 0 on the second call and tripped
+`uq_label_profile_name_kind_ci`. This is the *second* time in this audit a fixture that
+restarts a counter has produced a failure that reads like a code bug. The tell both times was
+an `IntegrityError` on a uniqueness constraint rather than an assertion failure.
