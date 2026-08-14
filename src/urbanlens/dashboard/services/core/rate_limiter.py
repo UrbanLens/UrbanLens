@@ -23,7 +23,7 @@ import logging
 import time
 from typing import Any
 
-from django.db import transaction
+from django.db import DatabaseError, transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.exceptions import DashboardError
@@ -353,8 +353,11 @@ def check_rate_limit(service: str) -> bool:
 
     try:
         config = get_limit_config(service)
-    except Exception:
-        # TODO: Catch specific exceptions
+    except DatabaseError:
+        # Allow the call rather than break a feature when the database is the thing
+        # that failed. Deliberately *not* a bare except: this limiter caps spend on
+        # paid third-party APIs, so a bug here silently uncapping it - a broken plugin
+        # rate-limit declaration, say - must surface rather than read as "allowed".
         logger.exception("Failed to read rate limit config for %s - allowing call", service)
         return True
 
@@ -391,8 +394,7 @@ def check_rate_limit(service: str) -> bool:
                     config.calls_per_30_days,
                 )
                 return False
-    except Exception:
-        # TODO: Catch specific exceptions
+    except DatabaseError:
         logger.exception("Failed to check rate limit counts for %s - allowing call", service)
         return True
 

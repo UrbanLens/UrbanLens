@@ -1847,6 +1847,39 @@ already wrapping the call in `except MalwareScanUnavailableError`, so the new ca
 handling that exists - checked, since widening when a function raises is only safe if every caller
 already copes.
 
+### Sweeping for the shape the scanner bug had
+
+The malware-scan finding was a *fail-open path inside a fail-closed design*, so the obvious next
+move was to ask where else that shape occurs. An AST pass over every non-test module for
+security-ish predicates (`can_`, `allow`, `verify`, `valid`, `is_`, `has_`, ...) that `return True`
+from inside an `except` handler: three hits, in two places.
+
+One is a false positive worth recording so the scan is not re-run and re-triaged: `tasks.py`'s
+`process_device_scan_upload` matched because `can_` appears inside "s**can_**upload". Its `return
+True` means "task handled" - it has already recorded `FAILED` status on the row - and is correct.
+
+The other two are both in `rate_limiter.check_rate_limit`, each a bare `except Exception` carrying
+the same `# TODO: Catch specific exceptions`. Narrowed to `DatabaseError`, which is what the TODO
+asks and what separates the two cases that were being conflated: an infrastructure failure, where
+allowing the call rather than breaking a feature is a defensible choice, and a *bug* - a broken
+plugin rate-limit declaration, say - which was being converted into "allowed" and logged.
+
+The reason that distinction matters more here than the usual style argument is what this limiter
+guards. It is not an access control; it caps calls to **paid** third-party APIs, and the project
+tracks a cost estimate per call. A bug that reads as "allowed" does not leak anything - it spends
+money, quietly, for as long as it goes unnoticed.
+
+Reading the caller changes the picture in a way worth writing down, because it cuts against the
+scary interpretation: `record_api_call` calls `check_rate_limit` *inside* a `transaction.atomic()`
+that has already executed `ApiRateLimit.objects.select_for_update().get(...)`. A genuine database
+outage therefore raises at that earlier line and never reaches the handler at all - so those two
+handlers were, in practice, catching bugs far more often than infrastructure failures. That is an
+argument for narrowing them, and against treating the remaining fail-open as urgent.
+
+The remaining question - whether a paid API call should proceed unmetered when the database is
+down, or fail - is a policy decision rather than a defect, and is filed in `docs/PROBLEMS.md`
+rather than decided here.
+
 ---
 
 ## 3. Checked and clean
