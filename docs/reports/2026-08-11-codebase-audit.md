@@ -6857,3 +6857,26 @@ This is the property that made the whole audit tractable, stated one last time f
 verdicts - chunk 301's task-status view, 307's receivers, 309's transient self-parent, 391's
 exposures - rest on exactly that, and the handful of real defects I found were all in places where
 no such reasoning was present.
+
+
+## Chunk 393 - coordinate exposure coverage: 8 of 8, and the instrument found 6
+
+Framed deliberately as a *coverage check*, not a revival of the comment-density heuristic withdrawn
+in chunk 302: do the code paths that emit coordinates carry visibility controls?
+
+Eight such serializers/views/urls. Six carry consent or masking language. The two that do not are
+both fine on inspection:
+
+- `external_api/views_device_scans.py` gates through `WikiDeviceMarker.objects.visible()` - a
+  **queryset-level** control, expressed in code rather than prose;
+- `models/pin/serializer.py` serializes a pin's coordinates to its own owner, where consent language
+  would be meaningless.
+
+**8 of 8 controlled; my search detected 6.** Fifteenth and final scan artifact of this session, and
+the most instructive one: the discipline I have been crediting all along is not only prose. A
+`.visible()` manager method *is* the intent, encoded where it cannot be ignored - which is stronger
+than a comment, and invisible to any search looking for words.
+
+That is the honest limit of every documentation-shaped heuristic in this report, including the ones I
+kept. Reasoning recorded in code beats reasoning recorded in comments, and a reviewer scanning for
+comments will systematically under-credit the better practice.
