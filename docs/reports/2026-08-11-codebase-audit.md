@@ -2230,6 +2230,65 @@ Worth noting what nearly went wrong: the "only caller of `archive_extractor`" re
 justified deleting a 380-line security-sensitive service (it is the thing doing zip-slip and
 symlink checks) on the strength of a grep that had scrolled past its second consumer.
 
+### Answering the codebase's own "this is probably wrong"
+
+The in-code marker survey is short and healthy - 27 `TODO`s, zero `FIXME`/`XXX`/`HACK`/`BUG` - and
+17 of the 27 are the same `# TODO: Catch specific exceptions` note already acted on in the rate
+limiter. Two were substantive, and both sat in `controllers/userprofile.py`, which the coverage run
+independently ranked worst in the view layer (19 never-executed callables).
+
+**`# TODO: Whatever is happening here is probably wrong.`** The code builds
+`Q(labels__name="Visited", labels__kind=KIND_STATUS) | Q(last_visited__isnull=False)` inline. Two
+suspicions, one confirmed and one dismissed:
+
+- *Dismissed:* matching a status by display name looks fragile - it is exactly the case-sensitive
+  name lookup that the Label uniqueness work had to fix in half a dozen places. Here it is safe,
+  and for a reason worth recording rather than rediscovering: `is_protected` labels cannot be
+  renamed on **either** write path (`controllers/labels.py` guards the assignment,
+  `external_api/views.py` refuses the write with 403), and "Visited" is seeded protected. The name
+  is a stable key because an invariant makes it one.
+- *Confirmed:* `PinQuerySet.visited()` already exists, and its docstring explicitly asks callers to
+  "build on it directly instead of re-deriving the `Q`" - which is precisely what this was doing.
+  It was one of **four** inline copies of the same predicate (`userprofile.py`, `queryset.py` twice,
+  `pin/signals.py`). Now calls `.visited()`; two imports became dead and went with it.
+
+**A log line that contradicted its own return value.** `rate_limiter.service_is_enabled` logged
+"Failed to read rate limit config for %s - **allowing call**" and then `return False`, which
+refuses it. The message was copy-pasted from `check_rate_limit`, where returning `True` does allow
+the call. Anyone reading logs during an incident would have drawn exactly the wrong conclusion
+about why traffic stopped. The behaviour is right and stays - "is this service switched on" has no
+safe affirmative answer when it cannot be read - so only the message changed, and the handler
+narrowed to `DatabaseError` like its neighbours.
+
+### A TODO plus coverage data, and a correction to an earlier finding
+
+Two TODOs said `change_category` was "probably deprecated since the addition of Labels more
+generically". The coverage run made that checkable rather than a judgement call, and the line
+detail is what settled it: of the handler's four statements, 616 and 617 executed and 618-619 did
+not. That shape has one explanation - `get_object_or_404` raised on every call. Something in the
+suite posts to the route, and the handler body has never once run to completion.
+
+With no template, TypeScript or inline-script reference either, that is three signals, and
+`KIND_CATEGORY` labels already provide the capability through the organize and bulk-edit paths.
+The action and its route are removed.
+
+**What that turned up about earlier work in this same audit.** Following the chain,
+`Pin.change_category`, `Pin.add_category` and `Wiki.add_category` all have zero callers outside
+tests. `add_category` is where the label-uniqueness chunk found and fixed a
+`MultipleObjectsReturned` bug - the `get_or_create` lookup was missing `profile=None`, so a
+case-insensitive match could return a global and a personal label together. That fix is correct and
+its tests are real, but **the method has no production caller, so the bug was not reachable in
+production** - and it was reported at the time as though it were. The finding was sound; its
+significance was overstated.
+
+This is the second time coverage data has changed the reading of something already "known": it
+converted "probably deprecated" into a demonstrated fact here, and downgraded a fixed bug to
+unreachable. Static reading alone had produced neither.
+
+The three orphaned methods are filed rather than deleted - removing model methods together with
+their tests is a product call, and the plausible answer (categories are labels now) deserves to be
+stated by someone who owns the roadmap.
+
 ---
 
 ## 3. Checked and clean

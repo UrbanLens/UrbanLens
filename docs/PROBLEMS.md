@@ -6294,3 +6294,32 @@ two independent signals agree that nothing reaches it.
 Caveats worth keeping attached to this number: coverage measures execution, not correctness, and
 the run was scoped to `controllers/` and `external_api/`, so a service called by an uncovered
 handler may itself be well tested.
+
+---
+
+## The category-on-pin methods have no production callers
+
+Categories became a `Label` kind (`KIND_CATEGORY`), managed generically by the organize/bulk-edit
+paths (`controllers/pin_bulk.py`, `controllers/pin_suggestions.py`). The older per-pin category
+helpers were left behind:
+
+- `Pin.change_category()` - after the 2026-08-14 removal of `MapController.change_category` and its
+  route, zero callers outside tests
+- `Pin.add_category()` - zero callers outside tests
+- `Wiki.add_category()` - zero callers outside tests
+
+Each still has tests, so the suite currently exercises code nothing reaches. That is worse than
+either extreme: the tests give the appearance of coverage, and any bug found in these methods reads
+as a production bug when it is not.
+
+**A correction that belongs with this.** During the label-uniqueness work earlier the same day, a
+`MultipleObjectsReturned` bug was found and fixed in `add_category` (the `Label.objects.get_or_create`
+lookup was missing `profile=None`, so a case-insensitive match could return both a global and a
+personal label). The fix is correct and the tests are real, but the method has no production caller
+- so that bug was **not reachable in production**, and it was reported at the time without that
+qualification.
+
+Deciding what to do needs a product call rather than a mechanical one: either delete the three
+methods with their tests, or wire them back up if per-pin category assignment is still wanted as a
+distinct concept from labels. Deleting is the more likely answer, since `KIND_CATEGORY` labels
+already do this and have a UI.

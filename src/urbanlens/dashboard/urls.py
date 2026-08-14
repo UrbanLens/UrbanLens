@@ -368,12 +368,6 @@ urlpatterns = [
                     maps.MapController.as_view({"post": "upload_image"}),
                     name="pin.upload_image",
                 ),
-                # TODO: Assess codebase, but this is probably deprecated since the addition of Labels more generically.
-                path(
-                    "change_category/<slug:pin_slug>/",
-                    maps.MapController.as_view({"post": "change_category"}),
-                    name="pin.change_category",
-                ),
                 # path('delete/<slug:pin_slug>/', MapController.delete_pin, name='delete_pin'),
                 # path('add_review/<slug:pin_slug>/', map.MapController.as_view(), name='add_review'),
                 path(

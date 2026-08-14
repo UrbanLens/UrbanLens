@@ -610,14 +610,6 @@ class MapController(LoginRequiredMixin, GenericViewSet):
         safely_enqueue_task(process_image_upload, img.pk)
         return HttpResponse(status=200)
 
-    def change_category(self, request, pin_slug, *args, **kwargs):
-        # TODO: Assess codebase, but this is probably deprecated since the addition of Labels more generically.
-
-        category_id = request.POST.get("category")
-        pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
-        pin.change_category(category_id)
-        return HttpResponseRedirect(reverse("view_map"))
-
     def map_pins_json(self, request, *args, **kwargs):
         """Return pin data as JSON with optional bbox filtering for two-phase map loading.
 
