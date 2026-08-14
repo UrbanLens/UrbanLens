@@ -2402,6 +2402,18 @@ the pattern itself.
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
 
+- **`ConsensusPhotoUploadView.post`** (31 statements, never executed - 7th on the coverage list).
+  Clean, and it retroactively verifies an earlier change in this audit. The handler checks
+  participation *and* `is_joined` before anything else, scopes the round to the session, validates
+  the upload, dedupes by checksum with a 409, and takes the quota check inside
+  `per_profile_upload_lock` rather than outside it. The malware scan runs synchronously here -
+  `image_upload_error`'s `skip_malware_scan` defaults to `False`. That last point matters because
+  chunk 211 *widened* the cases in which `malware_error_for_upload` raises: at the time only its
+  three direct callers were checked, and this is an indirect one. Traced now -
+  `image_upload_error` catches `MalwareScanUnavailableError` and returns a 503 "try again shortly",
+  so an unscannable upload on this route is refused with a readable message rather than admitted.
+  The change propagates correctly.
+
 - **`AlbumEditView.post`** (31 statements, never executed - 6th entry on the coverage list).
   Probed and clean, which is worth recording because it calibrates that list: untested does not
   mean broken. Authorization is correct on both routes and the split is documented - pin-scoped
