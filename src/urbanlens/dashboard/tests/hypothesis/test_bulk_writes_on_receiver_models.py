@@ -56,11 +56,15 @@ REVIEWED = {
     "dashboard/services/pins/pin_merge.py::PinLink",
     "dashboard/services/pins/pin_merge.py::PinMarkup",
     "dashboard/services/pins/pin_merge.py::TripActivity",
-    # Reviewed, not yet individually judged - carried so the guard can be added now.
-    "dashboard/controllers/memories.py::Pin",
+    # Bulk retype: pin_type is absent from the map payload, no smart filter reads it,
+    # and refit_child_boundaries_on_save early-returns unless position changed.
     "dashboard/services/locations/site_scope.py::Pin",
     "dashboard/services/locations/site_scope.py::Wiki",
+    # Deliberate bypass of a *transient* state (a pin briefly parented to itself),
+    # commented as such at the site and resolved via deferred_ids.
     "dashboard/services/pins/pin_edit.py::Pin",
+    # Reviewed, not yet individually judged - carried so the guard can be added now.
+    "dashboard/controllers/memories.py::Pin",
     "dashboard/services/pins/pin_list_trip.py::TripActivity",
     "dashboard/services/undo/handlers/markup_map.py::PinMarkup",
     "dashboard/services/wiki/wiki_creation.py::Pin",

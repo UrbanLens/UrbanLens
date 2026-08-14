@@ -5084,3 +5084,31 @@ through a queryset variable (`qs.update(...)` where `qs` came from elsewhere), a
 whose receivers are registered by something other than the `@receiver(...)` decorator. It
 catches the literal shape that produced three real bugs, which is what it claims to do - not
 "all derived-state staleness".
+
+
+## Chunk 309 - judging the carried sites; all clean
+
+Three of the eight sites the guard carried as "reviewed, not individually judged" are now
+judged, each resolvable from one or two checkable facts:
+
+- **`site_scope.py::Pin` / `::Wiki`** (bulk retype of `pin_type`). Clean on three counts:
+  `pin_type` is not in the map payload, no smart filter reads it (grepped - it appears nowhere
+  in `services/search` or `models/pin_list`), and `refit_child_boundaries_on_save` early-returns
+  unless the pin was created or its *position* changed. Retyping is neither.
+- **`pin_edit.py::Pin`**. Clean, and the clearest example in the codebase of the bypass used
+  *correctly*: it parks a pin as its own parent as a transient state while re-homing children,
+  with `# Bypass save() so no side effects run for this transient state` at the site and the
+  affected ids tracked in `deferred_ids` for resolution. Here running the receivers would be
+  the bug.
+
+**The same construct that caused three bugs is the right tool here.** That is the argument for
+the guard asserting only that the set does not grow unreviewed, rather than demanding
+invalidation everywhere - a stricter test would flag this correct code, and the fix for a
+false positive is usually to weaken the test.
+
+It also sharpens what the three real bugs had in common. Not "used a bulk write", but: used a
+bulk write on a field the receivers *do* read (`order`, `pin` on visits), while the code
+carried no indication anyone had considered them. `pin_edit.py` shows the considered case, and
+it reads completely differently at the site.
+
+Two sites remain carried, `controllers/memories.py::Pin` and `pin_list_trip.py::TripActivity`.
