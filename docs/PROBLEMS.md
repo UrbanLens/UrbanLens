@@ -6727,11 +6727,16 @@ Fourteen candidates, triaged individually:
 
 | outcome | count | notes |
 |---|---|---|
-| **fixed and verified** | 6 | `to_json` labels, `rating`, bulk label removal, consensus selection, suggestion acceptance, photo-visit matching |
+| **fixed and verified** | 8 | `to_json` labels, `rating`, bulk label removal, consensus selection, suggestion acceptance, photo-visit matching, **label export**, **message export** |
 | **false positives** | 3 | `export.py:848/850` (`os.path.exists`), `pin_suggestions.py:802`, `controllers/pin.py:227` - all one query, flagged for appearing inside a comprehension |
 | **load-bearing, left alone** | 1 | `pin_list_membership.py:89` - reads its own writes deliberately, for ordering |
-| **specified, not started** | 2 | `export.py:650/764` - both need the feeding queryset changed |
-| **remaining** | 2 | `import_data.py:1554` (`trip.profiles.count()`), and the `consensus/fields.py` images pair (fixed, listed for completeness) |
+| ~~specified, not started~~ | 0 | both `export.py` sites were subsequently fixed - see above |
+| **remaining** | 1 | `import_data.py:1554` (`trip.profiles.count()`) |
+
+*(This table said "6 fixed / 2 specified" until 2026-08-14, when the two `export.py` sites were
+done and the tally was not updated with them. Third stale count found in this audit's own
+documentation, after the colour-site total and the report's verification header - a number written
+once and not re-checked is the failure mode these documents keep reproducing while describing it.)*
 
 **Three different wrong answers were available for a scan to give here**: six real, three
 false-positive, and one where the "obvious fix" would have broken ordering. A tool that patched
