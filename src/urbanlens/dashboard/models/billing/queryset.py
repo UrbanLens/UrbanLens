@@ -61,9 +61,7 @@ class RoleSubscriptionQuerySet(abstract.DashboardQuerySet["RoleSubscription"]):
         from urbanlens.dashboard.models.billing.model import BillingSubscriptionStatus
 
         as_of = as_of or timezone.now()
-        return self.filter(
-            Q(status__in=(BillingSubscriptionStatus.ACTIVE, BillingSubscriptionStatus.TRIALING), threshold_met=True) | Q(usage_covered_until__gt=as_of)
-        )
+        return self.filter(Q(status__in=(BillingSubscriptionStatus.ACTIVE, BillingSubscriptionStatus.TRIALING), threshold_met=True) | Q(usage_covered_until__gt=as_of))
 
     def visible_for(self, user: User) -> Self:
         """Rows worth surfacing in Settings > Billing: anything not canceled, plus a

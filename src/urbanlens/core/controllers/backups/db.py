@@ -20,6 +20,12 @@ logger = logging.getLogger(__name__)
 # leftover `.tmp` from a killed pg_dump) as a real backup.
 BACKUP_FILENAME_RE = re.compile(r"^backup_\d{8}_\d{6}\.sql$")
 
+# A `.tmp` left by a dump that died mid-write (OOM kill, container restart) is deliberately
+# never renamed to a real backup name, which also means retention never counts or removes it -
+# so without a reaper each one lingers forever at full dump size. Only files older than this
+# are touched, which cannot be an in-flight dump.
+STALE_TEMP_AGE_SECONDS = 24 * 60 * 60
+
 # cache.add() is atomic across processes/workers, unlike a threading.Lock (which only
 # protects a single process) - see the comment on schedule_backup() for why this matters.
 _SCHEDULE_LOCK_CACHE_KEY = "urbanlens:backup:schedule-lock"
@@ -36,6 +42,18 @@ def is_backup_filename(name: str) -> bool:
         True if the name looks like a backup this class created.
     """
     return bool(BACKUP_FILENAME_RE.match(name))
+
+
+def is_backup_temp_filename(name: str) -> bool:
+    """Check whether a filename is the in-progress temp file for one of this class's backups.
+
+    Args:
+        name: A bare filename (no directory component) to check.
+
+    Returns:
+        True if the name is the ``.tmp`` path a backup is written to before being renamed.
+    """
+    return name.endswith(".tmp") and is_backup_filename(name.removesuffix(".tmp"))
 
 
 class DatabaseBackup:
@@ -97,6 +115,31 @@ class DatabaseBackup:
                     logger.info("Removed old backup: %s", file)
                 except OSError as e:
                     logger.exception("Failed to remove old backup: %s. Error: %s", file, e)
+
+        self.purge_stale_temp_files()
+
+    def purge_stale_temp_files(self) -> None:
+        """Delete ``.tmp`` dumps left behind by a dump that never finished.
+
+        A dump killed mid-write (OOM, container restart) leaves its temp file on disk by
+        design, so a partial dump can never be mistaken for a complete backup. Nothing else
+        removes those, and each is the size of a full dump, so they are reaped here once they
+        are far too old (``STALE_TEMP_AGE_SECONDS``) to be a dump still in progress.
+        """
+        cutoff = datetime.now(UTC).timestamp() - STALE_TEMP_AGE_SECONDS
+
+        for name in os.listdir(self.backup_dir):
+            if not is_backup_temp_filename(name):
+                continue
+
+            path = os.path.join(self.backup_dir, name)
+            try:
+                if os.path.getmtime(path) > cutoff:
+                    continue
+                os.remove(path)
+                logger.info("Removed stale partial backup: %s", name)
+            except OSError as e:
+                logger.exception("Failed to remove stale partial backup: %s. Error: %s", name, e)
 
     def run(self) -> bool:
         """Run ``pg_dump`` and purge old backups per the retention policy.

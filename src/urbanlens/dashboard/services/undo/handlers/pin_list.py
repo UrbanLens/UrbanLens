@@ -59,10 +59,7 @@ class PinListUndoHandler(UndoHandler):
             "smart_boundary_ewkt": pin_list.smart_boundary.ewkt if pin_list.smart_boundary else None,
             "source_saved_filter_id": pin_list.source_saved_filter_id,
             "markup_map_id": pin_list.markup_map_id,
-            "items": [
-                {"pin_id": item.pin_id, "order": item.order, "added_via": item.added_via}
-                for item in pin_list.items.order_by("order", "created")
-            ],
+            "items": [{"pin_id": item.pin_id, "order": item.order, "added_via": item.added_via} for item in pin_list.items.order_by("order", "created")],
         }
 
     @classmethod
@@ -124,11 +121,7 @@ class PinListUndoHandler(UndoHandler):
                 Pin.objects.filter(pk__in=[item["pin_id"] for item in items], profile_id=entry["profile_id"]).values_list("pk", flat=True),
             )
             PinListItem.objects.bulk_create(
-                [
-                    PinListItem(pin_list=pin_list, pin_id=item["pin_id"], order=item["order"], added_via=item["added_via"])
-                    for item in items
-                    if item["pin_id"] in surviving
-                ],
+                [PinListItem(pin_list=pin_list, pin_id=item["pin_id"], order=item["order"], added_via=item["added_via"]) for item in items if item["pin_id"] in surviving],
             )
             restored.append(pin_list)
         return restored

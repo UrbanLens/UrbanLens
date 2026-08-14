@@ -5351,6 +5351,27 @@ Where it would show first (user-visible, not cosmetic):
 - `controllers/trip.py:1515` decides which activities count as upcoming for the weather forecast
 - `controllers/pin.py:185` / `controllers/pin_edit.py` bound a date input
 
+**Same latent dependency, second form (added 2026-08-13).** Two sibling paths that both turn a form's
+date+time fields into an aware datetime use *different* patterns for it:
+
+- `controllers/safety.py:565` guards - `if checkin_by.tzinfo is None: checkin_by = checkin_by.replace(tzinfo=UTC)`
+- `controllers/visits.py:229` does not - `datetime.fromisoformat(iso_str).replace(tzinfo=UTC)`, unconditionally
+
+The unguarded one is safe *only* because its string is assembled from separate `<input type="date">`
+and `<input type="time">` values, which never carry an offset, so `fromisoformat` always returns a
+naive value. Were that ever fed an offset-bearing ISO string, `.replace(tzinfo=UTC)` would **discard**
+the offset and reinterpret the wall-clock as UTC - shifting the visit by the user's offset - where
+`.astimezone(UTC)` would convert it correctly.
+
+Both are also equivalent to Django's `timezone.make_aware()` only while `TIME_ZONE = "UTC"` and no
+per-user timezone is activated (verified: no `timezone.activate()` call exists anywhere outside
+tests). Adding per-user timezones - plausible for a travel/mapping app - makes `make_aware()` follow
+the user and `.replace(tzinfo=UTC)` silently not. That is the same single dependency this entry is
+already about, which is why it is recorded here rather than as its own item.
+
+Every `datetime.fromtimestamp()` call in the codebase passes `tz=UTC` explicitly, and there are no
+`datetime.now()` or `utcnow()` calls outside tests, so the rest of that surface is clean.
+
 **Deliberately not converted.** The rewrite changes no behaviour under the current settings, and
 the sites are not uniform: `services/import_export/export.py` imported `timezone` *from datetime*
 (shadowing Django's, now removed), `controllers/pin.py` imports `date` inside the function body,
@@ -5454,3 +5475,512 @@ internal references - a much larger change than the photo re-link, and one that 
 about how deep "undo" reaches before it is worth building. The cheaper alternative is to stop
 promising it: narrow the delete-confirmation wording to say the pins come back and the discussion
 does not.
+
+## OPEN 2026-08-13: 58 hand-declared indexes duplicate the ones Django already creates
+
+Every `ForeignKey` gets `db_index=True` by default, so Django creates a single-column B-tree for it
+automatically (`<table>_<column>_<hash>`). 25 model files additionally declare an `idxdb_*` index on
+that *same single column*, producing two byte-identical indexes:
+
+```
+CREATE INDEX idxdb_pin_profile                       ON public.dashboard_user_pins USING btree (profile_id)
+CREATE INDEX dashboard_user_pins_profile_id_7b152920 ON public.dashboard_user_pins USING btree (profile_id)
+```
+
+58 such pairs, verified against a fully-migrated database by comparing `pg_index.indkey` column lists
+rather than index names, excluding partial indexes (`indpred IS NULL`), unique indexes, and
+`varchar_pattern_ops` variants - the `_like` indexes Django creates for `LIKE` prefix matching are
+*not* redundant with a plain btree and must not be swept up in this.
+
+The cost is not the 816 kB they occupy on an empty database; it is write amplification. Every
+INSERT, UPDATE and DELETE on those 25 tables maintains a second identical B-tree forever, and every
+VACUUM and ANALYZE walks it. There is no read benefit whatsoever: the planner cannot prefer one over
+an identical twin.
+
+Distinct from the composite-prefix case. An index on `(a)` alongside one on `(a, b)` is *also*
+redundant for lookups on `a`, and roughly 20 more of those exist - but dropping those is a judgement
+call, because the narrower index is smaller and cheaper to scan. The 58 listed here are exact
+duplicates with no such trade-off.
+
+Not fixed in this pass, deliberately. It means editing 25 model files plus a migration dropping 58
+indexes, and this audit's working tree already carries 219 changed files; a schema migration of that
+size buried inside it makes the whole changeset harder to review and riskier to land. It is also
+worth the owner choosing when index drops hit production, even though each one is individually safe
+and trivially reversible (the identical twin remains, so no query plan can regress).
+
+To redo the query, or to regenerate the list: see the audit report's chunk-162 entry.
+
+Full list of the redundant (`idxdb_*`) indexes:
+
+- `idxdb_album_pin`
+- `idxdb_album_wiki`
+- `idxdb_albumitem_album`
+- `idxdb_albumitem_image`
+- `idxdb_bv_place`
+- `idxdb_cl_pin`
+- `idxdb_cl_profile`
+- `idxdb_cl_wiki`
+- `idxdb_dmlocm_message`
+- `idxdb_ecd_owner`
+- `idxdb_evp_visit`
+- `idxdb_label_profile`
+- `idxdb_loc_gplace`
+- `idxdb_loc_place`
+- `idxdb_mm_pin`
+- `idxdb_mm_profile`
+- `idxdb_mms_markup_map`
+- `idxdb_mms_to_profile`
+- `idxdb_pag_profile`
+- `idxdb_palias_pin`
+- `idxdb_pin_location`
+- `idxdb_pin_parent_pin`
+- `idxdb_pin_profile`
+- `idxdb_pinlist_profile`
+- `idxdb_pinowner_pin`
+- `idxdb_place_domain_root`
+- `idxdb_place_parent`
+- `idxdb_pli_list`
+- `idxdb_pli_pin`
+- `idxdb_plink_pin`
+- `idxdb_pm_layer`
+- `idxdb_pm_map`
+- `idxdb_pm_pin`
+- `idxdb_pm_profile`
+- `idxdb_pm_wiki`
+- `idxdb_pn_pin`
+- `idxdb_pv_pin`
+- `idxdb_react_dm`
+- `idxdb_react_gmsg`
+- `idxdb_react_trcomment`
+- `idxdb_route_profile`
+- `idxdb_savedfilter_profile`
+- `idxdb_scanentry_device`
+- `idxdb_scc_checkin`
+- `idxdb_scm_checkin`
+- `idxdb_scoo_checkin`
+- `idxdb_scoo_owner`
+- `idxdb_scoo_profile`
+- `idxdb_soc_link_pfile`
+- `idxdb_ta_trip`
+- `idxdb_taar_activity`
+- `idxdb_tav_activity`
+- `idxdb_tc_trip`
+- `idxdb_tm_trip`
+- `idxdb_walias_wiki`
+- `idxdb_we_wiki`
+- `idxdb_wiki_parent_wiki`
+- `idxdb_wlink_wiki`
+
+## LOW 2026-08-13: the generated OpenAPI schema has 224 enum-naming collisions
+
+`manage.py check --deploy` reports 237 non-security issues, all from drf-spectacular: **224 W001**
+(enum naming) and **13 W002** (views it cannot infer a serializer for).
+
+The W001s matter more than "warning" suggests, because this schema is what a native client generates
+its types from. Two shapes:
+
+- *Multiple names for one choice set* - e.g. `FriendshipStatusEnum`, `MapDarkModeEnum`,
+  `SecurityEnum` are each derived more than once. Technically correct, but a generator may emit
+  duplicate types.
+- *Unresolvable collisions*, which drf-spectacular papers over with a hash: fields named `status`
+  became `Status0ebEnum`, `Status770Enum`, `Status9a4Enum`, `StatusA4dEnum`, `StatusEa9Enum`, and
+  `kind` became `KindE9eEnum`. A client consuming that schema gets five unrelated,
+  meaninglessly-named status enums, and the names are not stable - they are derived from the
+  colliding set, so adding a sixth `status` field can renumber the others and silently change a
+  generated client's type names.
+
+The fix is mechanical but not small: add `ENUM_NAME_OVERRIDES` entries to `SPECTACULAR_SETTINGS`
+mapping each choice set to a stable, meaningful name. It is worth doing before a client is generated
+from this schema rather than after, since renaming afterwards is a breaking change for that client.
+
+The 13 W002s are `APIView` subclasses drf-spectacular cannot introspect (the E2EE key views, a few
+reaction/revert endpoints); each is simply omitted from the schema, so those endpoints are
+undocumented rather than wrongly documented. Adding `serializer_class` or an `@extend_schema`
+annotation fixes them individually.
+
+Not urgent, and not a runtime defect - filed because it is invisible from inside the app and only
+shows up when someone generates a client.
+
+## URGENT 2026-08-13: commit `c3ae4911` cannot start - it imports five files it did not commit
+
+Worse than, and separate from, the migration gap recorded below. `c3ae4911 audit` committed 139
+files but left **five non-test modules untracked**, and 19 committed files import them:
+
+| untracked module | committed importers |
+|---|---|
+| `models/abstract/labelled.py` | 1 |
+| `services/core/locks.py` | 3 |
+| `services/geo/distance.py` | 7 |
+| `services/geo/longitude.py` | 6 |
+| `services/pins/import_failure_guess.py` | 2 |
+| `core/tests/oauth.py` | 6 (test files) |
+
+And one **template**, which fails the same way one layer later - the app starts, then 500s the first
+time the view renders: committed `controllers/pin_import_failures.py` sets
+`_GUESS_PARTIAL = "dashboard/partials/memories/_pin_import_failure_guess.html"`, which is untracked.
+`PinImportFailureGuessView` raises `TemplateDoesNotExist` whenever a guess is produced.
+
+One of those sits directly on Django's model-loading path. Committed
+`models/abstract/__init__.py:10` reads:
+
+```python
+from urbanlens.dashboard.models.abstract.labelled import LabelledModel  # noqa: E402
+```
+
+and committed `models/pin/model.py:100` declares `class Pin(..., abstract.LabelledModel)`. So a
+fresh checkout raises `ModuleNotFoundError: No module named
+'urbanlens.dashboard.models.abstract.labelled'` while importing models - before any view, task or
+test runs. **The web app, every management command, both Celery workers and the whole test suite
+fail to start.**
+
+This is invisible in any working copy that still has the files on disk, which is every machine this
+audit ran on.
+
+**Fix** - add the five modules and both migrations (0040 before 0041):
+
+```
+git add src/urbanlens/dashboard/models/abstract/labelled.py \
+        src/urbanlens/dashboard/services/core/locks.py \
+        src/urbanlens/dashboard/services/geo/distance.py \
+        src/urbanlens/dashboard/services/geo/longitude.py \
+        src/urbanlens/dashboard/services/pins/import_failure_guess.py \
+        src/urbanlens/dashboard/migrations/0040_gotify_token_fail_soft.py \
+        src/urbanlens/dashboard/migrations/0041_pin_import_failure_maps_url.py \
+        src/urbanlens/core/tests/oauth.py \
+        src/urbanlens/dashboard/templates/dashboard/partials/memories/_pin_import_failure_guess.html
+```
+
+`core/tests/oauth.py` was missed by the first manual pass, which filtered `/tests/` paths out while
+looking for modules that break *startup*. It does not - but six committed test files import
+`first_party_application` from it, so they fail at collection. It was found by
+`bin/check_imports_tracked.py`, added in the same session precisely to stop this class from
+depending on someone remembering to look.
+
+78 new test files are also untracked. They do not affect startup, but without them none of this
+audit's regression guards exist in the repository.
+
+Not staged here: this audit does not commit or stage without being asked, and the commit was made
+outside it.
+
+## URGENT 2026-08-13: commit `c3ae4911` ships a model field without its migration
+
+`c3ae4911 audit` committed 139 files, including `maps_url` on `PinImportFailure`
+(`models/pin_import_failures/model.py`). It did **not** commit the two migrations that were sitting
+untracked beside it:
+
+- `0040_gotify_token_fail_soft.py`
+- `0041_pin_import_failure_maps_url.py`
+
+Both are still untracked on disk. Verified with Django rather than by inspection: with them moved
+aside, `makemigrations --check --dry-run` against the committed model state reports two pending
+changes - `+ Add field maps_url to pinimportfailure` and `~ Alter field notify_gotify_token on
+sitesettings`.
+
+**Effect on a fresh checkout of this commit:** `migrate` produces a schema with no `maps_url`
+column while the model declares one, so every query touching `PinImportFailure` - the import-failure
+queue, the per-card guess endpoint, the resolve view - fails with
+`ProgrammingError: column dashboard_pin_import_failures.maps_url does not exist`. Existing
+developer databases that already ran the untracked migrations are unaffected, which is what makes
+this easy to miss: it breaks only for someone cloning fresh or deploying.
+
+**Fix** - add both, 0040 first, since 0041 depends on it:
+
+```
+git add src/urbanlens/dashboard/migrations/0040_gotify_token_fail_soft.py \
+        src/urbanlens/dashboard/migrations/0041_pin_import_failure_maps_url.py
+```
+
+Not done here: this audit does not commit or stage without being asked, and the surrounding commit
+was made outside it. Note also that `0040` is not optional even independently of `maps_url` - the
+`fail_soft=True` model change it reflects was already committed before this audit began (see the
+entry above), so `main` was already missing a migration for it.
+
+## RESOLVED 2026-08-13: `Label` has no uniqueness constraint, and nine sites `get_or_create` on it
+
+**Resolved** by migrations 0042 (merge duplicates) and 0043 (add the constraint), plus graceful
+conflict handling on every write path. See the audit report's Label uniqueness entry.
+
+### Original report
+
+`Label` declares no `unique`, `unique_together` or `UniqueConstraint` at all - its only unique
+indexes are `id` and `uuid`. Nine non-test call sites nonetheless treat `(profile, name, kind)` as
+though it identified a row:
+
+- `models/labels/signals.py` x5 (seeding a new profile's default statuses/categories)
+- `models/pin/model.py:833`, `models/wiki/model.py:328` (`kind`+`name`, global labels)
+- `services/media/media_labels.py:99`, `services/apis/locations/google/maps.py:1150`,
+  `controllers/pin_edit.py:357`, `tasks.py:1585`
+
+Two consequences, one worse than the other:
+
+1. **Race.** `get_or_create` is a `SELECT` then an `INSERT` with no constraint to lose against, so two
+   concurrent requests - two import tasks, or a profile-creation signal racing a first pin save -
+   both miss and both insert. The user ends up with two labels of the same name, and later
+   `.get(name=...)` calls raise `MultipleObjectsReturned`.
+2. **`media_labels.py:99` shows the workaround already in the tree**: it does a
+   `filter(name__iexact=...).first()` *before* falling back to `get_or_create`, because
+   `get_or_create(name=...)` is case-sensitive while the intended identity is not. That is a
+   case-insensitivity fix layered on top of a missing constraint - and the fallback path can still
+   race.
+
+`PinAlias` and `WikiAlias` model the intended thing correctly, with
+`UniqueConstraint(Lower("name"), <parent>)`. The same shape on `Label` -
+`UniqueConstraint(Lower("name"), "profile", "kind")` plus a partial variant for global labels where
+`profile IS NULL` - would make all nine sites safe and let `media_labels.py` drop its pre-filter.
+
+Not fixed here: it needs a data migration to merge existing duplicates before the constraint can be
+added (adding it to a table that already violates it fails), and deciding how to merge two labels
+that differ only by case is a product call - the label merge machinery exists (`services/labels`),
+but which name survives is not something to guess at.
+
+## LOW 2026-08-13: two more `get_or_create` sites state a uniqueness they do not enforce
+
+Follow-up to the `Label` work, re-running the corrected sweep (one that understands functional
+constraints, `field_id` vs `field`, related managers and `**kwargs` unpacking - the first version was
+wrong all four ways). Besides `Label`, which is now fixed, two sites remain where the code's stated
+intent is not backed by a constraint:
+
+- `services/visits/safety.py:471` - `SafetyContactOptOut.objects.get_or_create(contact_profile, email,
+  scope, owner, checkin)`. The docstring says these calls "don't create duplicate rows"; the model
+  has no unique constraint, so two clicks on an opt-out magic link (or an email client prefetching
+  it) can insert two.
+- `services/import_formats/gpx_tracks.py:266` - `PinVisit.objects.get_or_create(pin, visited_at,
+  source)`. Same shape: re-importing the same track is deduplicated by the `get`, but two concurrent
+  imports are not.
+
+**Neither is worth changing on its own evidence.** `blocks_notification` answers a boolean from
+existence, so a duplicate opt-out row suppresses notifications exactly as one does; and a duplicate
+visit needs two imports of the same track running at once. Recorded because both would be caught for
+free by a `UniqueConstraint` if either model is touched for another reason, and because the *stated*
+guarantee currently rests on nothing.
+
+Not a finding: `services/facts/evidence.py:95` looked identical (`Fact.objects.get_or_create(key=...)`
+against constraints on `('key','location')`, `('image','key')`, `('key','wiki')`) but supplies the
+second half via `**lookup`, which the static sweep cannot see. It is correct.
+
+## LOW 2026-08-13: two label lookups match on name alone, ignoring kind
+
+`services/apis/locations/google/maps.py:1150` and `tasks.py:1416` both do:
+
+```python
+Label.objects.get_or_create(
+    profile=user_profile,
+    name__iexact=stem,
+    defaults={"name": stem, "kind": "category"},
+)
+```
+
+`kind` is in `defaults`, not in the lookup - so the `get` half matches on
+`(profile, lower(name))` across **every** kind. A user with a *tag* called "Factory" who imports a
+Google Maps list named "Factory" gets that tag returned and used as the list's category: the pin is
+filed under a tag, and no category is created.
+
+Predates the uniqueness work and is unaffected by it - the constraint is per-kind, so nothing here
+violates it. The fix is to move `kind` into the lookup, which is what the equivalent code in
+`controllers/pin_edit.py` and `services/media/media_labels.py` already does:
+
+```python
+Label.objects.get_or_create(profile=..., name__iexact=stem, kind="category", defaults={"name": stem})
+```
+
+Not changed here because both sites are on the Google Maps import path, which has its own
+category-creation semantics worth reading before altering (`create_category`/`stem` come from the
+imported list's title), and this audit had no test data exercising a cross-kind name collision.
+
+## OPEN 2026-08-13: "detach location" on a pin fails with a 500, every time
+
+`controllers/pin_edit.py:631` (the `else` branch of the location-change handler, reached when the
+user detaches a pin from its shared `Location`) does:
+
+```python
+lat = float(pin.effective_latitude or 0)
+lng = float(pin.effective_longitude or 0)
+location = Location.objects.create(official_name=..., latitude=lat, longitude=lng)
+```
+
+`Pin.effective_latitude` is `float(self.location.latitude)` - the pin's **current** location's
+stored coordinate. `Location` is `unique_together = ("latitude", "longitude")` (declared in
+`0001_initial`, so this is not a regression from recent work). Creating a Location at coordinates a
+Location already occupies is therefore a guaranteed constraint violation.
+
+Reproduced directly, not inferred:
+
+```
+pin.effective_latitude=42.1234  location.latitude=42.1234
+detach create: IntegrityError -> duplicate key value violates unique constraint
+               "dashboard_locations_latitude_longitude_fdb6594d_uniq"
+```
+
+Both branches fail identically - the named-location branch above, and the fallback
+`_create_location_with_canonical_name(lat, lng)`, which ends in the same bare
+`Location.objects.create` (`controllers/maps.py:1156`).
+
+**The fix is a product decision, which is why this is filed rather than patched.** `Location` is a
+*shared* record of a physical place, globally unique on its coordinates - so "give this pin its own
+Location at the same point" is not expressible. What "detach" should do instead is a design
+question with at least three defensible answers:
+
+- nudge the new Location's coordinates by the smallest representable amount, giving a genuinely
+  distinct point (changes where the pin sits, slightly);
+- keep one Location and express the separation another way - the pin already has marker-coordinate
+  fields, which may be what "detach" was reaching for;
+- refuse with an explanation, if two users pinning one physical place is *supposed* to share a
+  Location and detaching was never coherent.
+
+Whichever is right, the current behaviour - an unhandled `IntegrityError` surfacing as a 500 - is
+wrong under all three.
+
+**Why it went unnoticed: the branch has no test.** `PinRelinkView` serves two routes - `pin.link.to`
+(relink to a named Location, which *is* covered, by `test_pin_relink_access.py` and
+`test_pin_location_conflict.py`) and `pin.link` (detach, no location slug). Searching the whole test
+tree for the detach route returns nine hits, and every one is `pin.link.delete` - an unrelated
+endpoint for removing a pin's external links. Nothing posts to `pin.link`.
+
+So this is not a subtle conditional that testing missed; the code path is simply never executed.
+Whatever the fix turns out to be, a test posting to `reverse("pin.link", args=[pin.slug])` belongs
+with it - that single request is enough to catch this class permanently.
+
+## OPEN 2026-08-13: ~187 write routes have no test that names them
+
+Prompted by the detach 500 above, which survived because its route had no test while its
+*sibling* route did. Enumerating every route from the live resolver and matching each name exactly
+against the test tree (exact match, because `pin.link` is satisfied in a naive grep by
+`pin.link.delete`):
+
+- 841 project routes (excluding Django admin and `oauth2_provider`)
+- **301** never referenced by exact name in any test
+- **187** of those accept `post`/`put`/`patch`/`delete`
+
+Sampled five to check the number is real - `consensus.vote`, `dev_toolbar.toggle_theme`,
+`external_api:messages.groups.read` have no test mention at all; `consensus.answer` and
+`external_api:lists.resync` match only coincidental substrings in unrelated code
+(`record_consensus_answer_evidence`, `lists_resynced`). All five are genuinely uncovered.
+
+**Known false-positive mode, so treat 187 as an upper bound.** 92 test lines address endpoints by
+literal path (`_BASE = "/dashboard/api/external/v1/labels/"`) instead of `reverse()`, and any route
+covered only that way looks uncovered here - `external_api:labels` is one, and is well tested. The
+other 1,920 URL references in the test tree do use `reverse()`, so the skew is bounded but real.
+
+**The authoritative instrument is `coverage.py`** (already installed, 7.15.0): run the suite under it
+and report which view callables never execute. That answers the question directly instead of by
+proxy, and is the right next step before anyone works through this list.
+
+Worth doing because the one route from this set that *was* investigated - `pin.link`, the pin-detach
+endpoint - turned out to fail with a 500 on every request (see the entry above). An untested write
+route is not merely unverified; it is where a permanently broken feature can sit unnoticed.
+
+## OPEN 2026-08-13: secondary-email verification is an unbounded send to arbitrary addresses
+
+`ProfileEmailsView` (`controllers/userprofile.py`) sends a verification email to any address a user
+types, through two paths:
+
+- `_add_email` (line 769) - add a secondary email, then send;
+- `_resend_email_verification` (line 781) - resend to a pending one, with no cooldown.
+
+Both validate the address, reject one already in use, and reject one this profile already added.
+None of that bounds *volume*. There is no rate limit, no cooldown on resend, and no cap on how many
+secondary emails a profile may hold - `grep` finds no `max_secondary_email`-style setting, and the
+`SiteSettings` limits that exist for friends, trips, lists and check-in contacts have no counterpart
+here.
+
+That makes it the fourth path that mails an arbitrary address, and the only unbounded one. The other
+three are all governed by `services/security/email_safety`: friend invites and visit invites call
+`email_rate_limit_error` + `has_sent_join_email` + `record_email_sent` (per-profile hourly/daily/
+monthly caps, one join email per address ever), and safety-contact alerts are capped per check-in
+with an opt-out. `EmailType` has exactly two members - `JOIN_INVITE` and `VISIT_INVITE` - so this
+send type is not even representable in the ledger that enforces those caps.
+
+Two distinct abuses, both cheap:
+
+- **relay**: add N distinct addresses, each triggering one mail from your domain;
+- **mail-bomb**: repeatedly POST the resend action for one pending address.
+
+The fix is small because the machinery exists: add an `EmailType.EMAIL_VERIFICATION` member, call
+`email_rate_limit_error(profile)` before sending and `record_email_sent(...)` after, and give resend
+a cooldown. Filed rather than done because the per-type limits are `SiteSettings` values the owner
+sets, and picking numbers for a new category is their call.
+
+**How this was missed the first time** (audit chunk 170): that pass grouped the 21 send sites by
+file, then read the recipient expression for only three of them, and reported the classification as
+if it covered all 21. The same silent-sample error as the controller-create sweep. Re-reading the
+remaining six recipients is what surfaced this.
+
+## OPEN 2026-08-13: the hardened fetch helper is used by 11 call sites out of ~136
+
+`frontend/ts/shared/fetch-json.ts` exists precisely to fix a class of bug its own docstring names -
+"the ``!resp.ok`` check the mutating calls in the very same file were missing". It checks
+`response.ok`, extracts a server error message for a toast, distinguishes offline from HTTP failure,
+and supports a timeout. It has 22 tests. `entries-classic/core.ts` installs it globally as
+`window.ulFetchJson` / `window.ulSendJson`.
+
+**11 template call sites use it. 125 raw `fetch(` calls in templates do not.**
+
+Of those 125, 17 have neither a `response.ok` check nor a `.catch` within 14 lines. Three were read
+to check the flag is meaningful:
+
+- `pages/safety/home.html:17` - a false positive; the match is inside a Django comment.
+- `pages/trips/detail.html:717` - real. `fetch(url).then(r => r.json()).then(...)` with no `.catch`.
+  A network failure or 500 rejects unhandled, so the trip map never renders *and* the
+  `_showEmptyMap()` fallback inside the success path never runs either. The user gets a blank panel
+  and no explanation.
+- `partials/pins/pin_share_dialog.html:198` - real, and worse. `fetch(...).then(r => r.text())` with
+  no `.ok` check, then `grid.innerHTML = html`. On a 500 the body *is* Django's error page, so the
+  error markup is injected into the share dialog.
+
+So roughly two-thirds of the sampled flags are genuine; the honest read is "a real cluster of
+unhandled fetches", not a precise count of 17.
+
+**Scope correction (same day):** that sweep covered `frontend/ts/**` and `templates/**` but not
+`frontend/static/js/**` - five hand-written JS files that ship as-is. Re-checked: `cover-hero.js`
+guards its `JSON.parse`, `article-editor.js` does check `!resp.ok`, and two `fetch(` matches in
+`pin-select-map.js` are docstring examples. One more genuine site: `pin-select-map.js:133`,
+`fetch(opts.dataUrl).then(r => r.json()).then(...)` with no `.ok` check and no `.catch` - a failed
+request leaves the pin-selection map silently empty.
+
+This also breaks a documented project standard - `CLAUDE.md`: "Results and errors must surface as
+toast notifications."
+
+Not fixed here: 125 call sites across templates with no frontend tests covering them is a migration,
+not an edit, and the two worst examples above are enough to decide whether it is worth scheduling.
+The mechanical part is small per site (`fetch(u).then(r => r.json())` becomes
+`window.ulFetchJson(u)`), but each one needs its error path chosen - toast, empty state, or silent -
+and that is a judgement per feature.
+
+
+---
+
+## Database backups have no restore path, and their format defeats the only example
+
+`core/controllers/backups/db.py` produces **plain-SQL** dumps: `pg_dump -U ... -f <path>`, no
+`-Fc`, written as `backup_<YYYYMMDD>_<HHMMSS>.sql`. Creation, retention, scheduling, the atomic
+temp-file rename, and (as of the 2026-08-14 audit chunk) reaping of abandoned `.tmp` files are all
+implemented and tested.
+
+Restoring one is not implemented, not documented, and not tested.
+
+- No code path in `src/` or `bin/` restores a scheduled backup.
+- The only `pg_restore` in the repository is `bin/clone_prod_to_staging.sh:158`, which restores
+  `/tmp/clone.dump` - a *different* dump that script creates for itself with its own flags. It has
+  nothing to do with the backup directory.
+- That mismatch is a trap rather than a mere omission. `pg_restore` **cannot read a plain-format
+  dump**; it exits with *"input file appears to be a text format dump. Please use psql."* An
+  operator under pressure, reaching for the repository's only restore example, hits that error on
+  their first attempt at recovering production data.
+
+Restoring these dumps actually requires `psql -U <user> -d <db> -f backup_....sql`, into a database
+where PostGIS is already installed (a plain dump's `CREATE EXTENSION postgis` needs superuser, and
+the dump does not create the database itself). None of that is written down anywhere.
+
+Worth deciding deliberately rather than defaulting:
+
+1. **Document the procedure** - the minimum. A `docs/BACKUPS.md` with the exact `psql` invocation,
+   the PostGIS prerequisite, and whether to restore into a fresh database or an emptied one.
+2. **Consider `-Fc`** (custom format). It compresses, allows selective/parallel restore, and makes
+   `pg_restore` - the tool the repo already demonstrates - the correct one. This changes the
+   filename suffix, so `BACKUP_FILENAME_RE`, `is_backup_temp_filename`, and any existing on-disk
+   backups need handling together.
+3. **Verify a restore at least once**, into a scratch database, ideally in CI against a seeded
+   dump. Everything above is theory until a dump from this code has actually been restored.
+
+Nothing here is a defect in the backup *writer*, which is careful. The gap is that the half of the
+system that matters on the worst day has never been exercised.

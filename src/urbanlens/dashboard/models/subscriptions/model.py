@@ -119,14 +119,12 @@ class SubscriptionRole(abstract.DashboardModel):
         null=True,
         blank=True,
         validators=[MinValueValidator(0)],
-        help_text="Static minimum pledge (cents) required to hold this role when pay_what_you_want is on and "
-        "pwyw_dynamic_threshold is off. Blank or 0 means any pledge grants it.",
+        help_text="Static minimum pledge (cents) required to hold this role when pay_what_you_want is on and pwyw_dynamic_threshold is off. Blank or 0 means any pledge grants it.",
     )
     stripe_product_id = CharField(
         max_length=255,
         blank=True,
-        help_text="Stripe Product id for this role, created lazily on first checkout. Prices are generated inline "
-        "per checkout/pledge instead of being pre-created, so editing monthly_price_cents needs no Stripe sync.",
+        help_text="Stripe Product id for this role, created lazily on first checkout. Prices are generated inline per checkout/pledge instead of being pre-created, so editing monthly_price_cents needs no Stripe sync.",
     )
 
     objects = SubscriptionRoleManager()

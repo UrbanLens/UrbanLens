@@ -225,10 +225,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
     )
     community_photo_quota_bonus_votes = IntegerField(
         default=5,
-        help_text=(
-            "How many other users must mark one of a user's wiki-shared photos as relevant before that photo stops counting against their storage quota. "
-            "The uploader's own vote never counts. Set to 0 to turn the reward off."
-        ),
+        help_text=("How many other users must mark one of a user's wiki-shared photos as relevant before that photo stops counting against their storage quota. The uploader's own vote never counts. Set to 0 to turn the reward off."),
         verbose_name="Relevant votes earning a quota bonus",
         validators=[MinValueValidator(0), MaxValueValidator(10_000)],
     )
@@ -279,7 +276,6 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Also downscale video uploads from users with an active subscription. When off, subscribers keep their original video resolution (unless they opt into downscaling themselves).",
         verbose_name="Downscale subscriber videos",
     )
-
 
     external_data_cache_days = IntegerField(
         default=7,

@@ -55,20 +55,16 @@ def convert_image(src_path: Path, dest_path: Path, quality: int) -> None:
             dest_path,
             format="WEBP",
             quality=quality,
-            method=6,       # slowest/best compression effort
-            exif=b"",       # explicitly strip EXIF
+            method=6,  # slowest/best compression effort
+            exif=b"",  # explicitly strip EXIF
         )
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Convert every PNG/JPG/WebP in a directory to a 125x125 optimized WebP with EXIF stripped."
-    )
+    parser = argparse.ArgumentParser(description="Convert every PNG/JPG/WebP in a directory to a 125x125 optimized WebP with EXIF stripped.")
     parser.add_argument("indir", type=Path, help="Directory containing source images")
-    parser.add_argument("-o", "--outdir", type=Path, default=None,
-                         help="Output directory (default: <indir>/converted)")
-    parser.add_argument("-q", "--quality", type=int, default=80,
-                         help="WebP quality, 1-100 (default: 80). Lower = smaller file size.")
+    parser.add_argument("-o", "--outdir", type=Path, default=None, help="Output directory (default: <indir>/converted)")
+    parser.add_argument("-q", "--quality", type=int, default=80, help="WebP quality, 1-100 (default: 80). Lower = smaller file size.")
     args = parser.parse_args()
 
     indir = args.indir
@@ -79,10 +75,7 @@ def main():
     outdir = args.outdir if args.outdir is not None else (indir / "converted")
     outdir.mkdir(parents=True, exist_ok=True)
 
-    sources = sorted(
-        p for p in indir.iterdir()
-        if p.is_file() and p.suffix.lower() in INPUT_EXTS
-    )
+    sources = sorted(p for p in indir.iterdir() if p.is_file() and p.suffix.lower() in INPUT_EXTS)
 
     if not sources:
         print(f"No PNG/JPG/WebP files found in {indir}")

@@ -130,4 +130,3 @@ class RejectionsAreNotBilledTests(TestCase):
 
         self.assertIsNotNone(budget)
         self.assertGreater(budget, 0, "rejections consumed the enrichment budget for a service with quota left")
-

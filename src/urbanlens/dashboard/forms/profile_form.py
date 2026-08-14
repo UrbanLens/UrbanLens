@@ -79,10 +79,7 @@ class ProfileForm(forms.ModelForm):
                 attrs={"type": "date", "class": "edit-input", "data-autosave": "started_exploring"},
             ),
             **{field: forms.Select(attrs={"class": "edit-select browser-default", "data-autosave": field, "data-preference-toggle": field}) for field in _PREFERENCE_SELECT_FIELDS},
-            **{
-                field: forms.TextInput(attrs={"class": "edit-input", "data-autosave": field, "placeholder": "Describe your preference", "data-preference-other-for": field.removesuffix("_other")})
-                for field in _PREFERENCE_OTHER_FIELDS
-            },
+            **{field: forms.TextInput(attrs={"class": "edit-input", "data-autosave": field, "placeholder": "Describe your preference", "data-preference-other-for": field.removesuffix("_other")}) for field in _PREFERENCE_OTHER_FIELDS},
             "additional_preferences": forms.Textarea(attrs={"rows": 3, "class": "edit-textarea", "data-autosave": "additional_preferences"}),
         }
 

@@ -56,7 +56,5 @@ class CostsView(TemplateView):
         context["cost_per_supporter"] = cost_per_supporter()
         context["active_supporter_count"] = active_supporter_count()
         context["chart_labels"] = safe_json_for_script(series["labels"])
-        context["chart_total"] = safe_json_for_script(
-            [h + o + a for h, o, a in zip(series["hardware"], series["operating"], series["api"], strict=True)]
-        )
+        context["chart_total"] = safe_json_for_script([h + o + a for h, o, a in zip(series["hardware"], series["operating"], series["api"], strict=True)])
         return context

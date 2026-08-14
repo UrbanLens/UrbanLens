@@ -271,8 +271,7 @@ def evaluate_all_profiles(*, notify: bool = True) -> int:
     start_after = cache.get(_SWEEP_CURSOR_CACHE_KEY) or 0
     if start_after:
         logger.warning(
-            "Achievement sweep resuming after profile %s - the previous run did not finish. "
-            "Profiles at or below that id are evaluated on the following run.",
+            "Achievement sweep resuming after profile %s - the previous run did not finish. Profiles at or below that id are evaluated on the following run.",
             start_after,
         )
 

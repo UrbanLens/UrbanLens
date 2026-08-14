@@ -94,8 +94,7 @@ class Command(BaseCommand):
         if key_count == 1:
             self.stdout.write(
                 self.style.WARNING(
-                    "Only one key is configured, so this is a no-op re-write. If you are rotating, set the new key as "
-                    "UL_FIELD_ENCRYPTION_KEY and the old one in UL_FIELD_ENCRYPTION_KEY_FALLBACKS before running this.",
+                    "Only one key is configured, so this is a no-op re-write. If you are rotating, set the new key as UL_FIELD_ENCRYPTION_KEY and the old one in UL_FIELD_ENCRYPTION_KEY_FALLBACKS before running this.",
                 ),
             )
 

@@ -1543,7 +1543,9 @@ def resolve_deferred_pin_locations(
     if result.auth_failed:
         logger.error("resolve_deferred_pin_locations: REData rejected the API key resolving %d cid(s) for profile %s - not retrying.", len(all_cids), profile_id)
         for cid in all_cids:
-            record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_ERROR)
+            record_pin_import_failure(
+                profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_ERROR
+            )
         NotificationLog.objects.create(
             profile=profile,
             status=Status.UNREAD,
@@ -1568,7 +1570,9 @@ def resolve_deferred_pin_locations(
             profile_id,
         )
         for cid in all_cids:
-            record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_ERROR)
+            record_pin_import_failure(
+                profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_ERROR
+            )
         NotificationLog.objects.create(
             profile=profile,
             status=Status.UNREAD,
@@ -1601,7 +1605,9 @@ def resolve_deferred_pin_locations(
                 consecutive_no_progress,
             )
             for cid in all_cids:
-                record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_STALLED)
+                record_pin_import_failure(
+                    profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_STALLED
+                )
             NotificationLog.objects.create(
                 profile=profile,
                 status=Status.UNREAD,
@@ -1639,11 +1645,7 @@ def resolve_deferred_pin_locations(
             countdown, message = 65, "Waiting on Google's rate limit - resuming shortly..."
         else:
             countdown = _deferred_retry_countdown(max(consecutive_no_progress, consecutive_request_failures))
-            message = (
-                "Still waiting on the location lookup service - checking back periodically..."
-                if countdown > 600
-                else "Having trouble reaching the location lookup service - retrying shortly..."
-            )
+            message = "Still waiting on the location lookup service - checking back periodically..." if countdown > 600 else "Having trouble reaching the location lookup service - retrying shortly..."
 
         update_task_progress(self, current=total - len(result.pending), total=total, message=message)
         logger.info(
@@ -1677,11 +1679,7 @@ def resolve_deferred_pin_locations(
         importance=Importance.MEDIUM,
         notification_type=NotificationType.PIN_IMPORT_COMPLETE,
         title=f"Finished placing {created_count + exists_count} pin(s)",
-        message=(
-            f"{created_count} created · {exists_count} existed · {skipped_count} skipped"
-            + (f" (Google has no location data for {unresolved} of them - review them on the Locations page)" if unresolved else "")
-            + "."
-        ),
+        message=(f"{created_count} created · {exists_count} existed · {skipped_count} skipped" + (f" (Google has no location data for {unresolved} of them - review them on the Locations page)" if unresolved else "") + "."),
         url=reverse("memories.locations") if unresolved else reverse("map.view"),
     )
     update_task_progress(self, current=total, total=total, message="Done.")

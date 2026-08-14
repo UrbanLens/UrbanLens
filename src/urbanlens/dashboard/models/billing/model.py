@@ -61,14 +61,11 @@ class RoleSubscription(abstract.DashboardModel):
     # --- Pay-what-you-want usage ledger (see services.billing.banking) ---
 
     total_paid_cents = IntegerField(default=0, help_text="Cumulative amount actually paid via Stripe invoices, ever. Pay-what-you-want roles only.")
-    amount_used_cents = IntegerField(
-        default=0, help_text="Cumulative reference cost 'spent' from total_paid_cents so far, one billing period at a time."
-    )
+    amount_used_cents = IntegerField(default=0, help_text="Cumulative reference cost 'spent' from total_paid_cents so far, one billing period at a time.")
     usage_covered_until = DateTimeField(
         null=True,
         blank=True,
-        help_text="Point in time through which the usage ledger has confirmed sufficient balance - grants access "
-        "independent of live Stripe status, even after cancellation, for as long as cumulative overpayment covers it.",
+        help_text="Point in time through which the usage ledger has confirmed sufficient balance - grants access independent of live Stripe status, even after cancellation, for as long as cumulative overpayment covers it.",
     )
 
     if TYPE_CHECKING:

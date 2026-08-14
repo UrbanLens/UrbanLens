@@ -54,7 +54,16 @@ class OrganizeHeader {
 
     setSharedView(view: string): void {
         this.sharedView = view;
-        localStorage.setItem("organize_view", view);
+        // Best-effort: remembering the preference must never stop the view from
+        // actually changing. setItem throws on a full quota - which this app can
+        // genuinely reach, since the map caches every pin under `ul_pins_v5_*` -
+        // and an uncaught throw here skips syncViewButtons/applyView/filters
+        // below, so the click appears to do nothing at all.
+        try {
+            localStorage.setItem("organize_view", view);
+        } catch {
+            /* quota or blocked storage - the view still switches, it just won't persist */
+        }
         this.syncViewButtons(view);
         this.tabs.forEach((cfg) => cfg.applyView());
         applyAllOrgFilters();
@@ -216,7 +225,11 @@ export function installOrgTabSwitching(): void {
             const panel = document.getElementById(`panel-${target}`);
             if (panel) panel.hidden = false;
             orgHeader.setTab(target);
-            localStorage.setItem("organize_tab", target);
+            try {
+                localStorage.setItem("organize_tab", target);
+            } catch {
+                /* see setSharedView: a failed write must not skip the tab wiring below */
+            }
             const url = new URL(window.location.href);
             url.searchParams.set("tab", target);
             window.history.replaceState({}, "", url.toString());

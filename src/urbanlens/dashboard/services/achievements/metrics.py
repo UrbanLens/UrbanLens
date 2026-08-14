@@ -252,11 +252,7 @@ def _trips_attended(profile: Profile) -> int:
     # A trip counts as attended once it is over and the member had joined
     # without declining. end_date is optional, so fall back to start_date.
     finished = Q(trip__end_date__lt=today) | Q(trip__end_date__isnull=True, trip__start_date__lt=today)
-    return (
-        TripMembership.objects.filter(finished, profile=profile, status=TripMembership.STATUS_JOINED)
-        .exclude(rsvp=TripMembership.RSVP_NO)
-        .count()
-    )
+    return TripMembership.objects.filter(finished, profile=profile, status=TripMembership.STATUS_JOINED).exclude(rsvp=TripMembership.RSVP_NO).count()
 
 
 def _wiki_edits(profile: Profile) -> int:

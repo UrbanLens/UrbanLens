@@ -110,10 +110,7 @@ class LabelUndoHandler(UndoHandler):
             name = entry["fields"].get("name", "")
             kind = entry["fields"].get("kind", "")
             if Label.objects.filter(profile_id=entry["profile_id"], name__iexact=name, kind=kind).exists():
-                raise UndoExpiredError(
-                    f'A {kind} called "{name}" already exists, so this one cannot be restored. '
-                    "Rename or merge the existing one first."
-                )
+                raise UndoExpiredError(f'A {kind} called "{name}" already exists, so this one cannot be restored. Rename or merge the existing one first.')
 
         old_to_new: dict[int, Label] = {}
         restored: list[Label] = []
