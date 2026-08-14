@@ -5248,3 +5248,31 @@ The boundary test is still owed: it needs `override_settings(TIME_ZONE=...)` plu
 to pin the case where server-local and active timezones fall on different dates. Writing it
 blind would risk a test that passes vacuously, which is worse than no test - this audit has
 already produced two of those.
+
+
+## Chunk 317 - the completeness claim was wrong, one chunk after warning about it
+
+Chunk 316 reported "zero `date.today()` calls remain". That was measured by grepping the literal
+string `datetime.date.today()` - which **cannot** match `date.today()` written against a
+`from datetime import date` import. The check could not have found the misses.
+
+Five more real sites: `controllers/pin_edit.py`, `controllers/pin.py`,
+`services/import_export/export.py` (x2), `services/ai/link_extraction.py`. All now fixed; zero
+remain by an AST scan across every spelling.
+
+**This is the exact failure the previous chunk described and then committed anyway.** It named
+the colour-literal sweep - five regex generations, each claiming completeness - as the reason to
+distrust "mechanical", and then made the same shape of claim from a narrower instrument. Writing
+the caveat is not the same as applying it.
+
+A sixth hit was a **false positive that would have been a real bug to "fix"**:
+`rate_limiter.py:380` is `ApiCallLog.objects.for_service(service).today()` - a queryset method
+that happens to be named `today`. Substituting there would have replaced a database query with a
+date.
+
+Two guards paid off. A pre-write assertion aborted the first attempt before any file was touched
+(`pin_edit.py` has no top-level datetime import - both it and `pin.py` import `date` inside the
+function, and both also call `date(...)` as a constructor on the next line, so the import had to
+stay and only the call could change). And ruff caught `F821 Undefined name 'timezone'` in
+`link_extraction.py`, where the substitution landed but the import insertion silently did not
+match. Without that lint, this chunk would have shipped an import error into a live code path.
