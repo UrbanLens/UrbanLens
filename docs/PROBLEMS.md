@@ -6087,7 +6087,7 @@ injectable.
 
 ### The server-side half - RESOLVED 2026-08-14
 
-`services/core/colors.clean_color` now validates every colour write path (30 of them, across
+`services/core/colors.clean_color` now validates every colour write path (32 of them, across
 `controllers/labels.py`, `external_api/views.py`, `controllers/markup.py`,
 `controllers/detail_pins.py`, `controllers/maps.py`, `controllers/custom_layers.py` and
 `controllers/saved_filters.py`). Eight further sites in `controllers/detail_pins.py` were missed on

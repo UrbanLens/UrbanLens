@@ -41,6 +41,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.numbers import safe_int
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
 from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
@@ -468,12 +469,16 @@ def _parse_bulk_payload(data: dict) -> dict:
         "has_color": "color" in data,
         "has_description": "description" in data,
         "has_order": "order" in data,
-        "icon": data.get("icon") or None,
+        # icon is a CharField(max_length=50); save() does not run full_clean(), so an
+        # over-long value from the bulk path reached the database as a 500.
+        "icon": (str(data.get("icon")).strip()[: Label._meta.get_field("icon").max_length] if data.get("icon") else None),  # noqa: SLF001 - _meta is public API
         "color": clean_color(data.get("color")),
         "description": data.get("description", ""),
         "order": _safe_int(data.get("order"), 0),
-        "add_parent_ids": [int(x) for x in data.get("add_parent_ids", [])],
-        "add_child_ids": [int(x) for x in data.get("add_child_ids", [])],
+        # int() over a client-supplied list raises ValueError on any non-numeric entry;
+        # unparseable ids are dropped rather than failing the whole request.
+        "add_parent_ids": [i for i in (_safe_int(x, -1) for x in data.get("add_parent_ids", [])) if i >= 0],
+        "add_child_ids": [i for i in (_safe_int(x, -1) for x in data.get("add_child_ids", [])) if i >= 0],
     }
 
 
@@ -611,7 +616,7 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
             return HttpResponse("Name is required.", status=400)
 
         parent_ids = request.POST.getlist("parent_ids")
-        order = int(request.POST.get("order", 0))
+        order = safe_int(request.POST.get("order"))
         parent_order = Label.initial_order_for_parents(profile, parent_ids)
         if parent_order is not None:
             order = parent_order
@@ -741,7 +746,7 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         # icon reached the database as a 500.
         label.icon = (request.POST.get("icon") or "").strip()[: Label._meta.get_field("icon").max_length] or None  # noqa: SLF001 - _meta is public API
         label.color = clean_color(request.POST.get("color"))
-        label.order = int(request.POST.get("order", label.order))
+        label.order = safe_int(request.POST.get("order"), label.order)
 
         # allow_auto_tag can only be changed when the user actually has some auto-tagging
         # path available for this label's kind (AI or keyword-based); and never on the

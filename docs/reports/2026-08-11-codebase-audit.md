@@ -1600,6 +1600,10 @@ covered by its own targeted run instead (824 passed across labels, markup, saved
 layers and detail pins). The lesson is the obvious one: do not sync source into a container that
 is running a suite.
 
+**2026-08-14 (chunks 225-238): 10,758 passed, 0 failed, 1:08:53.** Up from 10,736. This run was
+left strictly alone - no source copied into the container while it ran - so unlike the previous
+two it is a clean snapshot of a single commit state, which is what makes the number meaningful.
+
 
 ### "Detach location" is a guaranteed 500 (found, filed, not patched)
 
@@ -2527,6 +2531,86 @@ pass over one function cannot decide it, and a filter that cannot decide produce
 be checked entirely by hand - at which point it has sorted the work, not done it.
 
 Recorded so the next person does not re-run this and read 76 hits as 76 problems.
+
+### Nineteen ways to turn a typo into a 500
+
+Applying the filter to another *local* property, per the previous chunk's distinction:
+`int()`/`float()` on request data with no guard. `int("abc")` raises `ValueError`, and a request
+body is free to contain "abc" wherever a view expects a number.
+
+Nineteen sites, across `achievements.py`, `detail_pins.py`, `labels.py`, `markup.py` and
+`site_admin_costs.py`. `labels.py:614` and `744` are the ordinary label create and edit forms -
+`int(request.POST.get("order", 0))` - so this is not an exotic path; it is what happens if a
+client sends `order=` as anything non-numeric.
+
+The codebase already knew the pattern, which is what makes the gap notable rather than novel:
+`site_admin.py` wraps exactly these conversions in `except (ValueError, TypeError)`, and three
+separate local helpers exist for the same job - `labels._safe_int`, `saved_filters._clamp_opacity`
+and `map_overlays._clamped_opacity`. The answer had been written three times and applied to about
+a fifth of the places that needed it.
+
+`services/core/numbers.safe_int`/`clamp_int` now hold it once, and all nineteen call sites use it.
+Deliberately conservative: each keeps the default it already had, and no clamping was introduced
+where none existed, so the only behavioural change is that a malformed number produces the default
+instead of a 500. `safe_int` also refuses `bool` explicitly - it is an `int` subclass, so `True`
+would otherwise arrive as `1`, which is almost never what a caller means.
+
+### A colour write behind a variable key - the fifth and last miss
+
+A sweep for unguarded `body["key"]` subscripts (KeyError -> 500) found 42 candidates and **no
+defects** - the guards are there, in forms the filter could not see: `if "lat" not in body` (the
+intervening `not` broke the pattern), `if body.get("pin_type") in valid_types`, and
+`_parse_bulk_payload`'s return value, which is a locally-built dict that always has its keys and is
+not request data at all. Another reminder that a filter with no notion of a variable's *origin*
+will conflate "came from the user" with "we just built this".
+
+Reading the false positives turned up the real finding. `pin_bulk.py` is the most careful handler
+this audit has read - it checks `if request_field not in data: continue`, enforces a per-field
+length with a 400, and wraps `int()` in `try/except (TypeError, ValueError)`. It also writes
+`color`, `bg_color` and `border_color` **validated by length alone**:
+
+    ("color", "color", 20),
+
+Twenty characters. `x" onmouse` is ten. And because the key is a *variable* (`data[request_field]`
+inside a loop over field tuples), no colour sweep in this audit could ever have matched it -
+not the `.get(` regex, not the subscript regex, not the AST pass keyed on field names, because the
+field name only exists at runtime.
+
+That is the **32nd** colour site, found by reading code that a filter had cleared. The count across
+five passes: 19, +8, +3, +1, +1. Every pass believed it was complete; the last three were found by
+looking at things, not by matching them.
+
+The fix reuses `clean_color`, keeping the `"none"` sentinel for the two border fields where it is
+meaningful and refusing it for `color` where it is not.
+
+### Two filters, wrong in opposite directions
+
+Sweeping request values assigned to `CharField` targets turned up two real problems, both in
+`labels._parse_bulk_payload`, and both invisible to the sweep that had just been run over the same
+file:
+
+- `"icon": data.get("icon") or None` is unbounded and lands on `Label.icon`, a
+  `CharField(max_length=50)`. The identical bug at `labels.py:740` was fixed two chunks earlier;
+  the bulk path reaches the same column by a different route.
+- `[int(x) for x in data.get("add_parent_ids", [])]` raises `ValueError` on any non-numeric entry
+  in a client-supplied list.
+
+The second is a flaw in **my own** chunk-240 filter. It excluded a function from consideration if a
+guard appeared *anywhere* in its text, and `_parse_bulk_payload` contains `_safe_int` on the line
+above - so the whole function was suppressed, list comprehension included.
+
+Re-running per call site instead flipped the error the other way: 11 new "findings", all of them
+guarded by `with contextlib.suppress(ValueError, TypeError)` - a `with` statement, which a filter
+looking only for `ast.Try` cannot see. `site_admin.py` uses that idiom nine times.
+
+So the coarse version had false negatives and the loose version had false positives, and neither
+count was trustworthy on its own. A checker for "is this guarded" has to model **every** guard
+idiom the codebase actually uses - `try/except`, `contextlib.suppress`, `.isdigit()`, a helper like
+`_safe_int` - and has to evaluate them at the call site rather than the function. That is a real
+piece of work, which is worth knowing before treating any such sweep's output as a list of bugs.
+
+The two genuine findings are fixed: the icon truncates to the column width, and unparseable ids are
+dropped rather than failing the request.
 
 ---
 
