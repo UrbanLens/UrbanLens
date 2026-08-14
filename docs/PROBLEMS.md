@@ -6995,3 +6995,38 @@ inline in other templates.
 Any audit, refactor, or dead-code sweep scoped to the TypeScript tree will draw wrong conclusions
 about client behaviour while looking thorough. Until the inline JS is migrated, searches for
 client-side behaviour must cover `templates/**/*.html` as well.
+
+
+## OPEN 2026-08-14: the dev stack's `app` container has been unhealthy for its entire uptime
+
+Found by a runtime check (audit chunk 351) rather than by reading code - the first finding in this
+audit that no static analysis could have produced.
+
+```
+urbanlens_devs1_app   Up 10 days (unhealthy)   FailingStreak=23150
+curl http://localhost:$UL_APP_PORT/dashboard/login/  ->  HTTP 000 (connection refused)
+```
+
+**The streak count matters for attribution.** 23,150 consecutive failures is on the order of the
+container's whole 10-day uptime, so this is not a side effect of this session's activity (a
+70-minute test suite and repeated `docker cp` into the same container), which was the obvious
+suspicion and is wrong.
+
+What still works: Django itself runs fine *inside* the container - the full 10,781-test suite
+executed there. So this is the serving/healthcheck path, not the application code.
+
+Two consequences worth noting:
+
+- `nginx` reports **healthy** while `app` does not, even though `CLAUDE.local.md` documents nginx as
+  waiting on `app`'s healthcheck. Either the dependency is not actually gating, or it gated once at
+  startup and never re-evaluated. Both are misleading in the same direction: the stack *looks*
+  serviceable.
+- The documented workflow - "full stack reachable at `http://localhost:$UL_APP_PORT` once healthy" -
+  cannot succeed in this checkout. Anyone following it gets a refused connection with no error to
+  read, since the app log has been silent for at least 6 hours.
+
+Also noticed: `.env` has `UL_APP_PORT=21810`, while `CLAUDE.local.md` states this slot's port is
+21811. One of the two is stale; the connection is refused on 21810 regardless.
+
+Not diagnosed further - that needs the healthcheck definition and the container's process state, and
+is environment work rather than codebase work.

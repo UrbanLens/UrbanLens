@@ -5958,3 +5958,23 @@ from 2026-08-12, so the picture is consistent: the parts that are wrong here are
 That is a reasonable note to end a long audit on. Across chunks 340-350, eleven independent
 checks - template conventions, signal discipline, cache versioning, client storage bounds, security
 settings - returned clean, and the defects that do exist were already documented by earlier work.
+
+
+## Chunk 351 - a runtime check finds what 48 chunks of reading could not
+
+After eleven consecutive clean static checks, tried a genuinely different instrument: the running
+stack. The idle app log gave nothing (0 lines in 6h - no traffic on a dev box), but container state
+did.
+
+`urbanlens_devs1_app` is **unhealthy with a failing streak of 23,150**, and the documented URL
+refuses connections. Filed in `PROBLEMS.md`.
+
+**The streak count is what makes this reportable.** My first instinct was that I had caused it -
+this session ran a 70-minute suite inside that container and `docker cp`'d into it repeatedly. 23,150
+consecutive failures spans essentially the container's entire 10-day uptime, which rules that out.
+Without that number I would have had a suspicion I could not honestly report either way.
+
+The lesson for the audit's method: every chunk from 303 to 350 examined *source*. Source cannot tell
+you that the thing you are auditing does not currently run. Eleven clean checks in a row was the
+signal to change instruments, and changing instruments immediately produced a finding of a kind the
+previous forty-eight could not have.
