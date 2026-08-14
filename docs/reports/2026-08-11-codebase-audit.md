@@ -6346,3 +6346,24 @@ the defects were already described.**
 The `media-auth` gap itself is filed and known, not a new finding here. Worth naming in this report
 anyway, since "authenticated-only, no per-object check" on media is the kind of item that stays open
 quietly.
+
+
+## Chunk 370 - the pointers resolve but do not point anywhere in particular
+
+Followed chunk 369's finding to its limit. The 33 source references to `PROBLEMS.md` cannot dangle,
+because **none of them name an entry** - they all read `see docs/PROBLEMS.md.` A reader following one
+arrives at a 7,200-line append-only document and must search it.
+
+That is a real, if mild, maintainability defect, and it is the mechanical explanation for this
+session's most-repeated failure. I read this file many times and still: overrode a documented
+deferral (325), rebuilt an existing guard (332), and missed that an eight-day-old note described the
+database drift I "found" in 359. **The analysis was reachable and unaddressed, not hidden** - I had
+no pointer telling me which of 7,200 lines to read, and neither does anyone else.
+
+Added a short convention note at the top of the file: reference the entry heading, not the file, and
+never the line number (this document grew ~800 lines on 2026-08-14 alone - chunk 337 already lost a
+navigation attempt to exactly that).
+
+Retrofitting the 33 existing references is real work and is not done here; the convention only binds
+new ones. Noting that honestly, since a convention nobody applies retroactively fixes nothing for
+the references that already exist.
