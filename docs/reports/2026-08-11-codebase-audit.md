@@ -8128,3 +8128,25 @@ at were exactly the ones a reader would assume were included.
 **That is the fourth time this session a scope-completion move mattered**: the localdate sites (335),
 the reference audit's remaining files (402-405), the secrets dict-literal case (442), and this. In
 each, the first pass was correct about what it examined and silent about what it did not.
+
+
+## Chunk 447 - WebSocket consumers: 7 of 7 authenticate
+
+HTTP middleware does not apply to WebSockets, so authentication has to be handled in the consumer -
+a distinct surface from the two checked in chunks 438-439.
+
+**7 real consumers, all 7** referencing `scope["user"]`, `is_authenticated`, `AnonymousUser`, or an
+explicit `close(code=...)`. None accepts a connection without checking who is on the other end.
+
+**Thirtieth artifact**: my scan counted 8, flagging `_CredentialScopeBase` as unchecked. It is a
+`TYPE_CHECKING` stub - `class _CredentialScopeBase(AsyncWebsocketConsumer): ...` under the type-check
+branch and a bare `class _CredentialScopeBase: ...` at runtime - so `CredentialScopeMixin` inherits
+the right base for mypy without a runtime dependency. An empty class body is not a consumer.
+
+**Five auth surfaces now verified**: external API (`ExternalApiView` hierarchy), internal controllers
+(Django auth mixins), htmx CSRF (`configRequest`), fetch CSRF (132 calls), and WebSockets. Every one
+authenticated, and four of the five by a mechanism rather than a convention.
+
+Also worth noting where this connects: pre-compaction, this audit found the consumers' scope-check
+ordering was *deliberate* - checking scope before object lookup to avoid a timing oracle. So these
+seven are not merely authenticated; the order in which they authenticate was reasoned about too.
