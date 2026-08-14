@@ -5160,3 +5160,26 @@ already *fixed* it. Here it matched code that merely *talks about* it. Same root
 locates candidates and cannot read. This one is a cheerier version of the finding, though -
 these three files documented their concurrency reasoning at the point of use, which is what made
 the false positives instantly resolvable.
+
+
+## Chunk 313 - two AST-decidable classes, both clean
+
+Read-only (full suite still running). Two classes chosen because AST answers them exactly:
+
+- **Mutable default arguments** (`def f(x=[])`, `x=dict()`, ...): **0**.
+- **Bare `except:`**: **0**. This is the one that matters most - a bare handler catches
+  `KeyboardInterrupt` and `SystemExit` too.
+- **Handlers whose entire body is `pass`**: 26, and **0 of them catch `Exception`/`BaseException`**.
+  Every one names specific types - `asyncio.CancelledError` in the consumers (the standard
+  cleanup idiom), `(ValueError, TypeError)` around optional query-param parsing in site_admin,
+  `(AttributeError, DatabaseError)` in context processors. Silently swallowing a *named*
+  exception you expect is a different act from swallowing everything.
+
+**The tool determined the failure mode.** Chunks 305, 310 and 312 all produced false positives
+from regex matching text *about* a defect - fixed code twice, explanatory prose once. These two
+scans produced none, because an AST cannot match a comment or a docstring. That is the same
+lesson as the colour-literal sweep earlier in this audit, which took five regex generations
+(19->8->3->1->1 sites, each generation claiming completeness) and was settled in one AST pass.
+
+Where a class is structurally decidable, parse it. Reach for regex only when the property is
+not in the syntax - and expect to read every hit when you do.
