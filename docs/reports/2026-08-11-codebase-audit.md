@@ -6903,3 +6903,25 @@ method is the intent, encoded where it cannot be ignored" from **one example**, 
 withdrawing a different heuristic built the same way. The observation about that one endpoint stands;
 "this codebase encodes visibility in querysets" does not - it encodes visibility in whatever fits the
 subsystem, which is harder to audit and impossible to grep for uniformly.
+
+
+## Chunk 395 - an inventory of the six visibility mechanisms
+
+Turned chunk 394's finding into something usable. Six distinct per-viewer visibility mechanisms, in
+six places: `visible()` (device scans), `viewer_hidden_activity_ids` (trips),
+`display_identity_for` (messaging), `*_for_viewer` helpers (safety, trip access), masking helpers
+(profile identity), and place-domain access (`services/wiki/wiki_access.py` - which my patterns
+missed entirely and `CLAUDE.local.md` names).
+
+Filed as a reference table in `PROBLEMS.md`, not as a defect.
+
+**The reason it is worth having**: this audit's own history shows the recurring bug shape is *a new
+surface that did not consult the gate its subsystem already had* - the calendar export leaking hidden
+coordinates, reply/reaction notifications naming masked people, the data export disclosing masked
+members, trip visibility re-implementing the shared gate more strictly. Every one of those is a
+correct gate that a later feature failed to call.
+
+A per-subsystem design makes that failure easy: the developer adding a surface has to know which of
+six mechanisms applies, and nothing in the code tells them. The table does not fix that, but it
+converts "know the codebase" into "read one table", which is the difference between an obvious
+mistake and an invisible one.

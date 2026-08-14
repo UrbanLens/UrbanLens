@@ -7377,3 +7377,27 @@ an unaddressed security item in this repo and is not one.
 Worth leaving the line alone until someone who knows the split plan can date it - but worth having
 the verification recorded next to it, because the natural reaction to "committed secrets" is to start
 rewriting history, and there is nothing here to rewrite.
+
+
+## Reference 2026-08-14: where per-viewer visibility is enforced (six mechanisms, six places)
+
+Not a defect - an inventory, recorded because audit chunk 394 established that this codebase
+enforces visibility **per subsystem** rather than through one convention. That is a reasonable design
+(each subsystem's notion of "who may see this" genuinely differs), but it means no single grep finds
+them all, and a reviewer who learns one mechanism will not recognise the others.
+
+| mechanism | where | guards |
+|---|---|---|
+| `visible()` queryset method | `models/device_scan/queryset.py` | device-scan markers |
+| `viewer_hidden_activity_ids` | `services/trips/trip_visibility.py` | trip activity locations |
+| `display_identity_for` | `services/messaging/direct_messages.py` | sender names in DMs/group chats |
+| `*_for_viewer` helpers | `controllers/safety.py`, `services/trips/trip_access.py` | safety + trip per-viewer reads |
+| masking helpers | `services/profile/identity_visibility.py` | profile identity across surfaces |
+| place-domain access | `services/wiki/wiki_access.py` | wiki visibility by place domain |
+
+**Adding a new surface that returns another user's data means picking the right one of these six**, and
+the audit found at least one historical bug in each of the first four categories' problem space
+(reply/reaction notifications naming masked people, the Google Calendar export leaking hidden
+coordinates, trip location visibility re-implementing the shared gate more strictly, the data export
+disclosing masked members). Those are the recurring shape: a *new* surface that did not consult the
+gate its subsystem already had.
