@@ -1072,7 +1072,7 @@ class LabelBulkConvertView(_LabelKindMixin, LoginRequiredMixin, View):
         # leave the user to work out which half applied.
         conflicts = [label for label in labels if find_conflicting_label(profile=profile, name=label.name, kind=new_kind, exclude_pk=label.pk) is not None]
         if conflicts:
-            names = ", ".join(sorted(f'"{label.name}"' for label in conflicts))
+            names = ", ".join(sorted(f'"{escape(label.name)}"' for label in conflicts))
             return HttpResponse(
                 f"Cannot convert {names} - a {_config(new_kind).singular_title.lower()} with that name already exists. Rename or merge first.",
                 status=400,

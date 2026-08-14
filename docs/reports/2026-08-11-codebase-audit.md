@@ -7625,3 +7625,28 @@ in what I looked at", which is weaker than "no bypass exists".
 That distinction has mattered all session: the 14 `|safe` sites were enumerable and I checked all 14;
 context-dict provenance is not, and pretending otherwise would be the twenty-sixth artifact rather
 than a finding.
+
+
+## Chunk 426 - unescaped user data in an `HttpResponse`, fixed
+
+Checked an **enumerable** sink, so a strong claim is possible: `HttpResponse` built from an
+interpolated f-string, which bypasses template escaping entirely. **11 sites.** Most interpolate
+internal config (`cfg.singular_title`, `self.kind`) or constants. One, `labels.py:803`, wraps user
+data in `escape()` explicitly.
+
+**One did not.** `labels.py:1076` built its body from `f'"{label.name}"'` for each conflicting label -
+**user-authored text, unescaped** - in a file that escapes the same value 273 lines earlier. Fixed to
+match: `escape(label.name)`.
+
+**On exploitability, honestly:** `HttpResponse` defaults to `Content-Type: text/html`, but this is a
+`status=400` response and HTMX does not swap non-2xx bodies unless configured to. So whether a label
+named `<img src=x onerror=...>` actually executes depends on the app's HTMX error handling, which I
+did not check. The fix is right regardless - it costs nothing, and the same file already treats this
+value as needing escape.
+
+**This is the pattern that produced every real defect in this audit**, one last time: a correct
+practice applied in one place and missed in another, in the same file, by the same author. Not
+ignorance - inconsistency. Which is exactly what a mechanical check finds and review does not.
+
+Owed: a test asserting the response body escapes a hostile label name. Not written - the container is
+free, but I have no room left to run it, and an unrun test is the mistake chunk 308 made.
