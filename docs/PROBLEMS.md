@@ -6607,7 +6607,7 @@ multiplier.
 | `services/import_export/export.py` | 650, 764 | `label.pins.filter(profile=...)`, `message.images.count()` | per label / per message - **fix specified below** |
 | `services/import_export/import_data.py` | 1554 | `trip.profiles.count()` | per trip |
 | ~~`services/pins/pin_list_membership.py`~~ | ~~89~~ | `pin_list.items.count()` | **not a defect** - the query is load-bearing, see below |
-| `controllers/pin.py` | 227 | `pin.images.exclude(pk=...)` | per pin |
+| ~~`controllers/pin.py`~~ | ~~227~~ | `pin.images.exclude(pk=...)[:20]` | **false positive** - one query; the comprehension iterates an already-sliced queryset |
 
 Discounted as false positives: `export.py:848,850` (`os.path.exists`, which matches the
 `obj.attr.verb(` shape).
@@ -6710,3 +6710,22 @@ for every row regardless, so the conditional has to stay to preserve the zero.
 Both are export paths - they run over every label and every message a profile owns, so the
 multiplier is the size of the account. Neither was measured; the instrument is
 `test_pin_to_json_prefetch.py`'s approach (capture queries over 1 and N objects).
+
+
+## Closing tally on this list
+
+Fourteen candidates, triaged individually:
+
+| outcome | count | notes |
+|---|---|---|
+| **fixed and verified** | 6 | `to_json` labels, `rating`, bulk label removal, consensus selection, suggestion acceptance, photo-visit matching |
+| **false positives** | 3 | `export.py:848/850` (`os.path.exists`), `pin_suggestions.py:802`, `controllers/pin.py:227` - all one query, flagged for appearing inside a comprehension |
+| **load-bearing, left alone** | 1 | `pin_list_membership.py:89` - reads its own writes deliberately, for ordering |
+| **specified, not started** | 2 | `export.py:650/764` - both need the feeding queryset changed |
+| **remaining** | 2 | `import_data.py:1554` (`trip.profiles.count()`), and the `consensus/fields.py` images pair (fixed, listed for completeness) |
+
+**Three different wrong answers were available for a scan to give here**: six real, three
+false-positive, and one where the "obvious fix" would have broken ordering. A tool that patched
+every hit would have been right less than half the time. Each entry needed its loop read - which is
+also how the correctness traps inside the six real ones were caught (`get_latest_by` ordering,
+`__isnull` conjunctions, and two loops silently reading their own writes).
