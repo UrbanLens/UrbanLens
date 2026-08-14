@@ -5915,3 +5915,23 @@ reliable" would be its own error.
 The four keys also happen to answer a question this audit never asked: client-side persistent state
 is small and enumerable, which makes it a poor hiding place for the kind of staleness bug chunk 304
 found server-side.
+
+
+## Chunk 349 - client-side history storage is bounded
+
+Followed chunk 348's four-key inventory to its one open question: the three `_v1` history keys
+accumulate user-typed queries in localStorage, and unbounded growth there is a quiet real bug
+(storage quota exhaustion, eventually breaking unrelated features that share the origin).
+
+**Bounded.** All three route through `shared/location-search-engine.ts`, whose `addToHistory` does
+`deduped.slice(0, 20)` - capped at 20, deduplicated on insert, and wrapped in try/catch so a
+storage-unavailable browser degrades rather than throws.
+
+The templates that name these keys only *remove* them (one-time cleanups of a prior key) and pass
+`historyKey` into the shared engine; none of them implement storage themselves. So this is the
+opposite of chunk 347's shape - there, behaviour I expected in TypeScript lived in a template; here,
+behaviour the templates appear to own is properly delegated to a shared module.
+
+Both directions of that confusion exist in this codebase, which is the practical argument for the
+inline-JS migration: not that inline JS is untested (though it is), but that **you cannot tell from
+a call site which tree owns the behaviour**, so every frontend question costs two searches.
