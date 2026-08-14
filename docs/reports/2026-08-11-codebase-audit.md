@@ -7973,3 +7973,27 @@ That is the structural reason the games feature-gate finding (chunk 336) is a *p
 rather than a defect: those 49 views **do** inherit `LoginRequiredMixin` - they are authenticated,
 just not entitlement-checked. The gate that exists works; the question is only whether a second gate
 should apply.
+
+
+## Chunk 440 - exactly one CSRF exemption, and it is the correct one
+
+**One `@csrf_exempt` in the entire codebase**, on the Stripe webhook - the single case where CSRF
+protection cannot apply, since the request originates from Stripe's servers rather than a browser
+session carrying a token.
+
+**And the exemption is replaced, not merely removed:**
+
+1. fails closed if `UL_STRIPE_WEBHOOK_SECRET` is unset (logs and refuses);
+2. reads `HTTP_STRIPE_SIGNATURE`;
+3. verifies through `stripe.Webhook.construct_event(request.body, sig_header, secret)`;
+4. catches `SignatureVerificationError` explicitly.
+
+This is the same view chunk 439 identified as one of the 38 without a login gate - and the two
+findings explain each other. It is unauthenticated *and* CSRF-exempt because it is authenticated by
+**signature**, which is the only mechanism available to a server-to-server callback.
+
+**That completes the security surface of this audit**: eight enumerable injection sinks, two
+authorization hierarchies, six documented invariants, and one exemption - every one either clean or,
+in the single case that was not, fixed and tested. The exemption count is the tidiest result: a
+codebase can accumulate `csrf_exempt` decorators quietly, and this one has exactly the number it
+needs.
