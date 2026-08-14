@@ -7080,3 +7080,27 @@ this?"* is a cheaper first question than *"how do I do this?"*
 Six product decisions (pin detach behaviour, games feature gate, backup restore path, chat rate
 limiting, fail-open policy, API colour rejection), the nine `localdate` conversions that override a
 documented deferral, and the environment remediation above.
+
+
+## Chunk 402 - the remaining reference audit is 9 files, not 23
+
+Counted by **file** rather than by grep line, which is the right unit: several files carry the same
+reference across a multi-line docstring, so "33 references" overstated the work.
+
+**26 files carry a `docs/PROBLEMS.md` reference. 17 are checked**: `media.py`, `trip.py`,
+`e2ee/group_key.py`, `friendship/model.py` (retrofitted); `location_wiki.py`, `serializers.py`,
+`serializers_wiki.py`, `views.py`, `visits/safety.py`, `tasks.py` (resolve as written);
+`account.py`, `spotguessr.py`, `trip.py`'s masking docstring, `notifications/signals.py`,
+`notification_text_alerts.py`, `security/e2ee.py`, `direct_messages.py`, `group_chats.py`
+(dangling, all citing 2026-07-23 decisions).
+
+**9 remain**: `achievements/evaluate.py`, `apis/assets/wikipedia.py`, `core/channel_broadcast.py`,
+`locations/external_links.py`, `messaging/direct_message_shares.py`, `spotguessr/__init__.py`,
+`spotguessr/selection.py`, `trivia/__init__.py`, `wiki/wiki_edits.py`.
+
+Correcting my own estimate twice over: chunk 372 said "29 individual judgements", chunk 377 said "25
+unexamined". Both counted lines. The real remaining task is **9 files**, each a few minutes - which
+makes finishing it a plausible single sitting rather than the open-ended chore I had been describing.
+
+A small thing, but the sort that decides whether a filed task ever gets done: "29 judgement calls"
+reads as a project, "9 files" reads as an afternoon.
