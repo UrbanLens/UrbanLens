@@ -1692,6 +1692,36 @@ repository's only restore example will run `pg_restore` against a plain dump and
 appears to be a text format dump. Please use psql."* An untested restore procedure is the ordinary
 way backups turn out not to work. Recorded in `docs/PROBLEMS.md`.
 
+### A wedged dump was the one unbounded subprocess call (fixed)
+
+Follow-on from the module above, checking whether the missing `timeout=` there was systemic. It
+was not - and the surrounding Celery configuration turns out to be the most carefully-reasoned
+part of the settings file.
+
+Ten of the eleven `subprocess.run` calls outside tests already pass a `timeout` (`media/videos.py`,
+`media/documents.py`, all seven in `core/version.py`). The lone exception was the backup dump. It
+was also bounded, just not locally: `run()` has exactly one caller, `tasks.py:1984`, so
+`CELERY_TASK_TIME_LIMIT` (3600s) does cap it - the "hangs a worker forever" reading is wrong.
+
+What the task limit produces is worse than a bounded hang, though. Hitting it SIGKILLs the worker,
+and `CELERY_TASK_ACKS_LATE` + `CELERY_TASK_REJECT_ON_WORKER_LOST` (both deliberately on) then
+redeliver the message - so a dump that wedges on an unreachable DB host is retried into the same
+wedge, each attempt leaving another abandoned `.tmp` of exactly the kind the fix above now has to
+reap. `subprocess.run` now takes `BACKUP_TIMEOUT_SECONDS` (1800s, env-overridable), chosen below
+`CELERY_TASK_SOFT_TIME_LIMIT` (2700s) so the local timeout always fires first; a test asserts that
+ordering rather than trusting the two constants to stay in sync.
+
+The handler had to widen with it. `subprocess.TimeoutExpired` is **not** a subclass of
+`CalledProcessError` - verified, not assumed; they only share `SubprocessError` - so adding a
+timeout without touching the `except` would have thrown straight out of the task and left the
+partial dump behind, converting a clean `return False` into the exact leak just fixed.
+
+Worth recording what was checked and found sound, since it is where a bug of this shape would
+otherwise live: `visibility_timeout` is raised to 2h with a written rationale for keeping it above
+`max(time_limit, longest countdown)`; the result backend has a 5s retry timeout so a dead broker
+fails the request path fast instead of after a retry storm; `worker_prefetch_multiplier` is 1.
+Nothing to fix there.
+
 ---
 
 ## 3. Checked and clean

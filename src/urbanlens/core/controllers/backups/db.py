@@ -26,6 +26,12 @@ BACKUP_FILENAME_RE = re.compile(r"^backup_\d{8}_\d{6}\.sql$")
 # are touched, which cannot be an in-flight dump.
 STALE_TEMP_AGE_SECONDS = 24 * 60 * 60
 
+# Kept below CELERY_TASK_SOFT_TIME_LIMIT (2700s) so a dump that wedges - an unreachable DB host,
+# a lock it never gets - fails here, cleaning up its temp file and returning False. Letting the
+# task limit fire instead means a SIGKILLed worker, and with acks_late the same dump is
+# redelivered to wedge again.
+BACKUP_TIMEOUT_SECONDS = int(os.getenv("UL_BACKUP_TIMEOUT_SECONDS", "1800"))
+
 # cache.add() is atomic across processes/workers, unlike a threading.Lock (which only
 # protects a single process) - see the comment on schedule_backup() for why this matters.
 _SCHEDULE_LOCK_CACHE_KEY = "urbanlens:backup:schedule-lock"
@@ -195,8 +201,8 @@ class DatabaseBackup:
             env["PGPASSWORD"] = str(db_password)
 
         try:
-            subprocess.run(pg_dump_command, check=True, env=env)  # nosec B603
-        except subprocess.CalledProcessError as e:
+            subprocess.run(pg_dump_command, check=True, env=env, timeout=BACKUP_TIMEOUT_SECONDS)  # nosec B603
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
             logger.exception("Error occurred while performing database backup: %s", e)
             with suppress(OSError):
                 os.remove(temp_path)

@@ -15,10 +15,13 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 import os
 from pathlib import Path
+import subprocess
 from tempfile import TemporaryDirectory
 from unittest import mock
 
-from urbanlens.core.controllers.backups.db import STALE_TEMP_AGE_SECONDS, DatabaseBackup, is_backup_temp_filename
+from django.conf import settings as django_settings
+
+from urbanlens.core.controllers.backups.db import BACKUP_TIMEOUT_SECONDS, STALE_TEMP_AGE_SECONDS, DatabaseBackup, is_backup_temp_filename
 from urbanlens.core.tests.testcase import SimpleTestCase
 
 
@@ -40,10 +43,10 @@ class BackupTempFilenameTests(SimpleTestCase):
 
 
 class PurgeStaleTempFilesTests(SimpleTestCase):
-    def _backup(self, backup_dir: str) -> DatabaseBackup:
+    def _backup(self, backup_dir: str | Path) -> DatabaseBackup:
         with mock.patch.object(DatabaseBackup, "schedule_backup", return_value=False):
             backup = DatabaseBackup(auto_schedule=False)
-        backup.backup_dir = backup_dir
+        backup.backup_dir = Path(backup_dir)
         backup.backup_retention = 5
         return backup
 
@@ -95,3 +98,37 @@ class PurgeStaleTempFilesTests(SimpleTestCase):
             self._backup(tmp).purge_old_backups()
 
             self.assertFalse(stale.exists())
+
+
+class BackupTimeoutTests(SimpleTestCase):
+    """A wedged pg_dump must fail cleanly rather than run to the Celery task limit.
+
+    `subprocess.TimeoutExpired` is not a `CalledProcessError`, so the original handler
+    would not have caught one had a timeout been passed - it would propagate out of the
+    task leaving the partial `.tmp` behind.
+    """
+
+    def _backup(self, backup_dir: str | Path) -> DatabaseBackup:
+        backup = DatabaseBackup(auto_schedule=False)
+        backup.backup_dir = Path(backup_dir)
+        backup.backup_retention = 5
+        return backup
+
+    def test_a_wedged_dump_returns_false_and_leaves_no_temp_file(self) -> None:
+        with TemporaryDirectory() as tmp:
+            backup = self._backup(tmp)
+
+            def _hang(cmd, **kwargs):
+                # pg_dump got as far as creating its output file, then wedged.
+                Path(cmd[cmd.index("-f") + 1]).write_bytes(b"partial")
+                raise subprocess.TimeoutExpired(cmd, kwargs.get("timeout", 1))
+
+            # `db.py` does `from shutil import which`, so the name to patch is its own.
+            with mock.patch("subprocess.run", side_effect=_hang), mock.patch("urbanlens.core.controllers.backups.db.which", return_value="/usr/bin/pg_dump"):
+                self.assertFalse(backup.run())
+
+            self.assertEqual(list(Path(tmp).iterdir()), [], "the partial dump was left on disk")
+
+    def test_the_timeout_is_below_the_celery_soft_limit(self) -> None:
+        """Otherwise the task limit fires first and the cleanup above never runs."""
+        self.assertLess(BACKUP_TIMEOUT_SECONDS, django_settings.CELERY_TASK_SOFT_TIME_LIMIT)
