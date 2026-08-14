@@ -7124,3 +7124,27 @@ All three of today's resolutions came from **the comment describing a symptom co
 `{"ok": true}` response that changes nothing, a per-user-per-night query cost, a named subsystem
 incident. That is the searchability rule from chunk 383 holding for a third consecutive batch, and it
 is now the only one of my four attempted rules that has not needed weakening.
+
+
+## Chunk 404 - 25 of 26 files checked; the reference audit is essentially complete
+
+- `messaging/direct_message_shares.py` -> **resolves**, and does it best of any reference in the
+  codebase: it *quotes the entry title* - `docs/PROBLEMS.md: "markup-map attachments..."` - matching
+  "Markup-map attachments bypass share provenance" exactly.
+- `locations/external_links.py` -> **resolves** to "OPEN 2026-08-12: `get_or_create` without a
+  backing unique constraint" (the comment says "the race itself needs a unique constraint to close").
+- `apis/assets/wikipedia.py` -> **dangling (8th)**, and honestly so: it cites
+  "docs/PROBLEMS.md**/completed.md**", naming the gitignored file where the record actually lives.
+- `spotguessr/__init__.py` and `trivia/__init__.py` -> **unresolved**. Both describe an import-order
+  failure that celery workers trigger and `manage.py check` does not. The nearest entry (a
+  `PinViewSet.basename` / `get_default_basename` problem, "root cause not found") shares the
+  *shape* - import-order-dependent, invisible to `manage.py check` - but describes router basename
+  resolution rather than package import order. **Not calling it a match**, per chunk 376.
+
+**Final tally, 25 of 26 files: 15 resolve, 8 dangling, 2 unresolved.** One file
+(`spotguessr/selection.py`) remains unchecked.
+
+Of the eight dangling, **seven cite 2026-07-23 decisions or `completed.md`** - the same gitignored
+record. So the reference audit's real finding is not scattered rot: it is one missing document,
+referenced from eight places, plus two comments whose subject may or may not be filed under a
+different description.
