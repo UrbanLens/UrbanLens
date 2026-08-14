@@ -7750,3 +7750,27 @@ sink is stronger than one that sanitises it.
 One defect across every enumerable injection surface in the application. For a codebase that had two
 stored-XSS vectors when this audit opened, that is the substantive security result - and it is
 *checkable*, unlike a statement that the code "looks secure".
+
+
+## Chunk 431 - Celery retry discipline: 55 of 75, and the exceptions are documented
+
+Moved from security to reliability, same enumerable method. **75 Celery tasks:**
+
+- **55 declare `autoretry_for` + `retry_backoff`** - a transient failure retries with backoff rather
+  than dying;
+- 20 use `bind`, 3 set `max_retries`, 2 set `time_limit`/`soft_time_limit`;
+- **15 declare nothing at all.**
+
+The 15 are cleanup tasks and REData sync tasks, and the absent retry is **deliberate and recorded**:
+`tasks.py:875` says "Best-effort - see ``submit_redata_photos``' docstring for why REData..." So a
+failed submission is dropped on purpose rather than retried into a third-party service.
+
+**Worth flagging honestly**: only 2 of 75 tasks set a time limit. A task without `soft_time_limit`
+that hangs - on a slow external API, say - occupies a worker indefinitely, and this project runs a
+dedicated `panel_fetch` queue precisely because panel fetches are slow. That is not a defect I can
+demonstrate, and Celery's global `task_time_limit` may well be configured; I did not check the
+settings. **Naming it as unverified rather than either asserting a gap or implying I cleared it.**
+
+The retry ratio is the finding: 73% with explicit backoff and the remainder documented is a
+deliberate policy, not an accident - which is the same property that made most of this audit's clean
+verdicts checkable.
