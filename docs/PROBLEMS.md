@@ -6601,7 +6601,8 @@ multiplier.
 | file | lines | call | note |
 |---|---|---|---|
 | ~~`services/consensus/fields.py`~~ | ~~256, 260, 298, 302~~ | | **FIXED 2026-08-14** - see below |
-| `services/pins/pin_suggestions.py` | 802, 888 | `pin.visit_history.filter(...)`, `.filter(...).exists()` | per pin |
+| ~~`services/pins/pin_suggestions.py`~~ | ~~888~~ | | **FIXED 2026-08-14** - was one query per date in `suggestion.visit_dates`; now one `__in` query, with the set updated as visits are created so a repeated date is still skipped |
+| `services/pins/pin_suggestions.py` | ~~802~~ | `pin.visit_history.filter(visited_at__date__in=days)` | **false positive** - inside a dict comprehension but evaluated once, not per iteration |
 | `services/memories/photos.py` | 165 | `pin.visit_history.filter(visited_at__date=...)` | per candidate photo |
 | `services/import_export/export.py` | 650, 764 | `label.pins.filter(profile=...)`, `message.images.count()` | per label / per message, on an export path |
 | `services/import_export/import_data.py` | 1554 | `trip.profiles.count()` | per trip |

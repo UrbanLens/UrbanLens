@@ -883,12 +883,17 @@ def accept_pin_suggestion(
 
     visits: list[PinVisit] = []
     if visit_logging_allowed(profile):
-        for date_str in suggestion.visit_dates:
-            day = datetime.date.fromisoformat(date_str)
-            if pin.visit_history.filter(visited_at__date=day).exists():
+        # One query for every date at once, rather than one per date. The set is
+        # updated as visits are created so a date repeated within suggestion.visit_dates
+        # is still skipped the second time - which the per-date .exists() got for free.
+        wanted_days = [datetime.date.fromisoformat(date_str) for date_str in suggestion.visit_dates]
+        existing_days = {visit.visited_at.date() for visit in pin.visit_history.filter(visited_at__date__in=wanted_days)}
+        for day in wanted_days:
+            if day in existing_days:
                 continue
             visited_at = datetime.datetime.combine(day, datetime.time(12, 0), tzinfo=datetime.UTC)
             visits.append(PinVisit.objects.create(pin=pin, visited_at=visited_at, source=VisitSource.HISTORY))
+            existing_days.add(day)
         if visits:
             sync_last_visited(pin)
             add_visited_status(pin)
