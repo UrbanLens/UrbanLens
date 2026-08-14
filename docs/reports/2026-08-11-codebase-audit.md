@@ -2735,6 +2735,42 @@ The remaining sites are inside `filter_by_custom_fields` and `home_dashboard_con
 doing real work in that sentence. Anyone picking this up should trace rather than assume, because
 the failure mode is silent: a duplicated pin in a list or an inflated count, with no error anywhere.
 
+### A magic string shadowing its own enum
+
+Following the most interesting reading of the 70 no-production-caller queryset methods - that some
+are logic which got reimplemented inline elsewhere, leaving the same rule in two places.
+`VisitQuerySet.from_takeout` is that case, with a twist.
+
+    def from_takeout(self):
+        return self.filter(source="history")
+
+Every other site in the codebase writes `source=VisitSource.HISTORY`. This one hardcodes the
+literal, so the queryset method and the twenty-odd inline filters agree only by coincidence. The
+value is currently `"history"`, so nothing is broken today; change `VisitSource.HISTORY` and this
+method starts returning an empty queryset while every caller of the enum keeps working. Silent, and
+exactly the failure the enum exists to prevent. `manual` had the same shape.
+
+Both now use the enum, imported lazily inside the method because `model.py` imports
+`VisitManager` from `queryset.py` - the dependency runs that way, so a module-level import would be
+circular. That is the codebase's established pattern for this and the reason `CLAUDE.md` lists
+`TYPE_CHECKING` guards among its common patterns.
+
+Worth noting what the sweep actually bought here. `from_takeout` was flagged as "test callers only",
+which is true and uninteresting on its own. Reading *why* it had no production callers is what
+surfaced the literal - the inline filters are not calling it because they were written
+independently, and one of them was written by me in chunk 209 while optimising the Takeout
+importer. A count of unused methods is a prompt to go and read, not a finding.
+
+**The obvious generalisation does not work, and is recorded rather than committed.** Sweeping for
+every bare string literal matching a `TextChoices` value produced 37 hits and is unusable: the map
+is keyed by *value* across all 214 enum members, so `kind="user"` on a `Label` resolves to
+`VisitSource.USER`, and `status="active"` on a group chat resolves to
+`BillingSubscriptionStatus.ACTIVE`. Same failure as the earlier field-name collision
+(`description`/`icon` matching whichever model declared them first): a value alone does not say
+which enum owns it. Doing this properly needs per-field resolution -
+`Model._meta.get_field(name).choices` - to ask which enum *that field* actually uses. Left undone
+rather than reported as 37 findings.
+
 ---
 
 ## 3. Checked and clean
