@@ -6809,3 +6809,28 @@ That is the fourteenth and last claim this session that looked serious and was n
 only one that came from the *codebase's own documentation* rather than from an instrument of mine.
 The scans manufactured alarm through broken patterns; this manufactured it through a sentence
 written about a different repository.
+
+
+## Chunk 391 - the false alarm was isolated, and the docs mark intent well
+
+Generalised chunk 390 by searching tracked documentation for other security-alarming assertions
+("committed secret", "leaked", "exposed credential", "hardcoded key/secret/password/token").
+
+**No other false alarms.** Every hit is one of three things:
+
+- **marked resolved** - `PROBLEMS.md:1033`, "FIXED 2026-07-28: Google Calendar export leaked
+  trip-mates' hidden coordinates";
+- **explicitly deliberate** - `EXTERNAL_API.md` labels a safety check-in's live position and the
+  session-only E2EE password change as intentional, in those words;
+- **a reassurance rather than a warning** - "nothing is leaked; each is commented".
+
+So the "committed secrets" line found in chunk 390 is isolated, not the tip of a pattern.
+
+The more useful observation is *why* this search was cheap to resolve: **this documentation
+distinguishes deliberate exposure from defect, in writing, at the point of description.** An
+endpoint that returns a user's live position is exactly as alarming as a leak until someone records
+that it is intended - and here someone did, every time. That is the property that made a
+security-phrase sweep resolvable in one chunk instead of becoming an investigation per hit.
+
+It is also the same property that made chunk 301's clean verdicts possible, and the same one whose
+*absence* would have made this audit far longer.
