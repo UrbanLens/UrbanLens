@@ -6788,3 +6788,24 @@ That is the last of this session's recurring failure and its clearest statement:
 wrong in a way that made the result look more important.** Every one of the thirteen skewed toward
 alarm, never toward complacency - which is why reading the matches has been worth doing every single
 time.
+
+
+## Chunk 390 - chasing an alarming line to a clean verification
+
+Following chunk 389's most consequential case - a *rejected-and-deferred* design doc citing the
+gitignored notes directory - surfaced this, in its hardening phase: "remove `docs/notes/ai/`
+committed secrets and rotate...".
+
+**Checked immediately, and it is clean.** No file under `docs/notes/ai/` has ever been committed on
+any branch; the directory is ignored and untracked, and `docs/notes/` holds only two mobile-app
+files. The line most likely describes the post-split repository the document proposes, or is stale.
+
+Filed with the verification attached, because "committed secrets" is a phrase that triggers history
+rewriting - an expensive, disruptive operation - and there is nothing here to rewrite. **A false
+alarm left sitting in a design document is a live risk of its own**, since the person who eventually
+acts on it will not necessarily check first.
+
+That is the fourteenth and last claim this session that looked serious and was not, but it is the
+only one that came from the *codebase's own documentation* rather than from an instrument of mine.
+The scans manufactured alarm through broken patterns; this manufactured it through a sentence
+written about a different repository.

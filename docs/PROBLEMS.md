@@ -7357,3 +7357,23 @@ to an unreachable file may be the only place a decision was ever explained. If i
 content survives in git history, recovering the 2026-07-23 decisions from it would close six
 dangling code comments at once; if not, those decisions exist only as the one-line summaries in the
 comments themselves.
+
+
+## Note 2026-08-14: "remove `docs/notes/ai/` committed secrets" does not describe this repository
+
+`docs/designs/rejected-and-deferred/split-architecture.md` (phase 8, Hardening) lists "remove
+`docs/notes/ai/` committed secrets and rotate...". That line will alarm anyone who reads it, so:
+**verified, and it does not apply to this repository's history.**
+
+- `git log --all -- 'docs/notes/ai/*'` returns nothing - no file under that path has ever been
+  committed on any branch.
+- `git ls-files docs/notes/` shows only `mobile_app_notes.md` and `mobile_app_requirements.md`; the
+  `ai/` subdirectory is ignored (`.gitignore:49`) and untracked.
+
+So there are no committed secrets from that path here. The line is most likely written against the
+*post-split* repository the document is proposing, or it is stale. Either way it currently reads as
+an unaddressed security item in this repo and is not one.
+
+Worth leaving the line alone until someone who knows the split plan can date it - but worth having
+the verification recorded next to it, because the natural reaction to "committed secrets" is to start
+rewriting history, and there is nothing here to rewrite.
