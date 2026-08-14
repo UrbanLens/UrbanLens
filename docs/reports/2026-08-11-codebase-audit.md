@@ -5870,3 +5870,27 @@ So the constant is correct, and the discipline has held through four opportuniti
 key added with different formatting - built conditionally, spread from a helper, or renamed via a
 constant - would not be caught. The check is sound for the ordinary case and blind to the clever
 one, which is worth knowing before relying on it as a guard.
+
+
+## Chunk 347 - nearly reported a dead invalidation path that works fine
+
+Checked the `ul_pins_dirty` mechanism (non-map pages flag the map's pin cache as stale). Searching
+`frontend/ts` found **3 production writers and zero production readers** - every `getItem` was in a
+`.test.ts`. That reads exactly like a dead invalidation: surfaces setting a flag nothing consumes,
+with the map serving stale pins until its TTL.
+
+It is not dead. The consumer is in `templates/dashboard/pages/map/index.html` at lines 1444-1445 and
+2012 - inline JS - which reads the flag and removes it. Two more writers also live in templates
+(`import_progress.html`, `_photos_tabs.html`), so the real balance is 5 writers, 2 readers, working
+as documented.
+
+**The cause is a filed problem, demonstrated.** This audit has recorded 21,543 lines of inline
+template JS as untestable and hard to search; here that directly produced a near-false-positive of
+the worst kind - a *confident negative*. Searching a `frontend/ts` tree is a reasonable way to
+answer "does anything read this flag?", and in this codebase it returns the wrong answer, because a
+quarter of the client behaviour is not in that tree.
+
+Sixth time this session a scan's raw output was not the finding (305, 312, 328, 338, 340, now 347).
+The five before were false *positives* - noise to discard. This one would have been a false
+*negative* dressed as a discovery, and those do not announce themselves: nothing about "0 readers"
+looks like a search that missed a directory.

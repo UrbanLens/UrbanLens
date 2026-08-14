@@ -6982,3 +6982,16 @@ via `queryset.update()` is therefore safe for a reason that has nothing to do wi
 skipping signals: a plain `save()` would be equally safe. Anyone converting those call sites to
 `save()` for signal-correctness reasons should know they are not fixing a re-push hazard, because
 there isn't one.
+
+
+## Note: inline template JS defeats source searches of `frontend/ts`
+
+Recorded 2026-08-14 (audit chunk 347) as concrete evidence for the inline-JS migration item.
+Searching `dashboard/frontend/ts` for readers of the `ul_pins_dirty` cache-invalidation flag returns
+**zero production hits**, which reads as a dead code path. The actual consumer is inline JS in
+`templates/dashboard/pages/map/index.html` (lines ~1444 and ~2012), and two of the five writers are
+inline in other templates.
+
+Any audit, refactor, or dead-code sweep scoped to the TypeScript tree will draw wrong conclusions
+about client behaviour while looking thorough. Until the inline JS is migrated, searches for
+client-side behaviour must cover `templates/**/*.html` as well.
