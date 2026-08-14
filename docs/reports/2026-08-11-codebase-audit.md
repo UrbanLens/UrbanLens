@@ -2864,6 +2864,18 @@ manager verb issues SQL, and none of them look wrong at a glance.
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
 
+- **Interaction risk of the nine N+1 fixes** (2026-08-14). Checked, because two of them change what
+  is *available* on an object rather than only what it costs: `Prefetch(..., to_attr="own_pins")`
+  puts the filtered set on a new attribute, and dropping `prefetch_related("images")` in favour of
+  `annotate(image_count=...)` removes a cache other code might have relied on. Both are
+  self-contained - `label.own_pins` and `message.image_count` are the only readers of those
+  relations in `export.py`, and the querysets are local variables inside their own functions, so
+  nothing outside consumes them. The remaining seven fixes change how a relation is fetched, not
+  what it returns. Worth stating because performance changes are the least test-covered category
+  in this audit: a correctness fix ships with a regression test that fails if reverted, while a
+  prefetch change is invisible to every test except the one query-count assertion added for
+  `to_json`.
+
 - **Other viewsets missing a prefetch** (2026-08-14). Zero - and the number is close to
   meaningless, which is the reason for recording it. The scan covers `models/*/viewset.py`
   paired with its `serializer.py`, and that population is **2**: one serializer has related
