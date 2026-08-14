@@ -63,8 +63,9 @@ REVIEWED = {
     # Deliberate bypass of a *transient* state (a pin briefly parented to itself),
     # commented as such at the site and resolved via deferred_ids.
     "dashboard/services/pins/pin_edit.py::Pin",
-    # Reviewed, not yet individually judged - carried so the guard can be added now.
+    # Writes a field nothing derived reads (not in the map payload, no smart filter).
     "dashboard/controllers/memories.py::Pin",
+    # Copies a list into a trip; queues the calendar push explicitly after bulk_create.
     "dashboard/services/pins/pin_list_trip.py::TripActivity",
     "dashboard/services/undo/handlers/markup_map.py::PinMarkup",
     "dashboard/services/wiki/wiki_creation.py::Pin",

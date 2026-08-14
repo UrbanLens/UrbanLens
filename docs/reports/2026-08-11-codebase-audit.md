@@ -5112,3 +5112,31 @@ carried no indication anyone had considered them. `pin_edit.py` shows the consid
 it reads completely differently at the site.
 
 Two sites remain carried, `controllers/memories.py::Pin` and `pin_list_trip.py::TripActivity`.
+
+
+## Chunk 310 - the bulk-write thread closes: 22 sites, all judged
+
+The last two carried sites are clean:
+
+- **`memories.py::Pin`** writes `unlogged_visit_dismissed`, which nothing derived reads - absent
+  from the map payload and from every smart filter. The receivers it skips have no work to do.
+- **`pin_list_trip.py::TripActivity`** already queues `queue_calendar_push` explicitly after its
+  `bulk_create`, with reasoning matching the fix chunk 305 applied to trip reorder.
+
+**Thread summary.** 22 bulk writes on receiver-bearing models; 3 real bugs (label reorder's stale
+map icon, trip reorder's missed calendar push, pin merge's three-month-stale `last_visited`); 19
+correct, most of them deliberately so. A guard now prevents the set growing unreviewed.
+
+**Third false alarm of the same kind.** `pin_list_trip` looked like a fourth instance and is
+already fixed - as two `Label` sites did in chunk 305. The guard's list will always contain
+sites that carry the defect's shape *and* its repair, because the repair lives next to the
+shape. Anything scanning for the shape must read the following lines before reporting. I have
+now made this mistake three times in seven chunks and caught it three times by reading; the
+reliable fix is that the scan output is never the finding.
+
+**What the thread cost and returned.** Seven chunks. Three user-visible bugs fixed, one of them
+data-level (a pin advertising a visit date three months older than its own history). The
+generalisable result is not the bug count - it is that a defect class found three times by
+accident became a 4-second test that cannot silently regrow, and that the class turned out to
+be 14% defective, so a guard demanding invalidation everywhere would have been wrong 19 times
+out of 22.
