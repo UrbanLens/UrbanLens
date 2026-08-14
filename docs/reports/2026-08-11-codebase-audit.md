@@ -6506,3 +6506,31 @@ make this an **unfiled gap discovered through its own dangling pointer** - filed
 
 Retrofit: 6 of 33 named, 1 unplaceable (376), 1 dangling (377). The remaining 25 are unexamined, and
 after this I will not describe them as resolving.
+
+
+## Chunk 378 - a real sample: roughly a third of these pointers do not resolve
+
+Checked a second candidate. `spotguessr.py`'s "the homepage chip just never looked at the right row
+(see docs/PROBLEMS.md/git history for the report)" has **no matching entry** - the two SpotGuessr
+entries are about down-voted photos and a leaking test cache. It is softened by offering git history
+as an alternative, but the `PROBLEMS.md` half dangles.
+
+**Sample of 7 distinct references now checked:**
+
+| outcome | count |
+|---|---|
+| resolves to a clear entry | 4 |
+| ambiguous between two entries | 1 |
+| dangling - no matching entry | 2 |
+
+So roughly **a third do not lead anywhere**, against chunk 369's confident "the cross-references
+actually resolve" from a sample of one.
+
+This changes what the retrofit is *for*. Chunk 370 framed it as a readability improvement - naming
+the entry so a reader need not search 7,200 lines. On this evidence it is also an **audit**: the act
+of naming the target is what reveals that a third of the targets are missing. The remaining 26
+references are worth walking for that reason alone, independent of whether anyone edits the comments.
+
+And it recasts chunk 377's dangling reference from an anomaly into an instance. One dangling pointer
+is a slip; two in seven is a practice - comments citing analysis that was never filed, or that was
+filed and later removed without the code being updated.
