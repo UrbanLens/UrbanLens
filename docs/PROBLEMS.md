@@ -6603,7 +6603,7 @@ multiplier.
 | ~~`services/consensus/fields.py`~~ | ~~256, 260, 298, 302~~ | | **FIXED 2026-08-14** - see below |
 | ~~`services/pins/pin_suggestions.py`~~ | ~~888~~ | | **FIXED 2026-08-14** - was one query per date in `suggestion.visit_dates`; now one `__in` query, with the set updated as visits are created so a repeated date is still skipped |
 | `services/pins/pin_suggestions.py` | ~~802~~ | `pin.visit_history.filter(visited_at__date__in=days)` | **false positive** - inside a dict comprehension but evaluated once, not per iteration |
-| `services/memories/photos.py` | 165 | `pin.visit_history.filter(visited_at__date=...)` | per candidate photo |
+| `services/memories/photos.py` | 165 | `pin.visit_history.filter(visited_at__date=...).exists()` | per candidate photo - **analysed, one check left**, see below |
 | `services/import_export/export.py` | 650, 764 | `label.pins.filter(profile=...)`, `message.images.count()` | per label / per message, on an export path |
 | `services/import_export/import_data.py` | 1554 | `trip.profiles.count()` | per trip |
 | `services/pins/pin_list_membership.py` | 89 | `pin_list.items.count()` | per list |
@@ -6650,3 +6650,25 @@ an edit to one that ignores the other reintroduces the cost silently. 76 consens
 The instrument for confirming any of them is
 `dashboard/tests/hypothesis/test_pin_to_json_prefetch.py`: capture queries over 1 and N objects and
 assert the per-object delta is zero.
+
+
+### `memories/photos.py:165` - analysed, one question left
+
+Per-candidate `.exists()` inside `for candidate in candidates`. Collapsing it to a precomputed set
+of visited dates is *probably* safe, but the loop writes, so the reasoning has to be finished
+first:
+
+- the **"exists"** branch calls `log_visit_on_pin`, which **creates** a `PinVisit`
+  (`photos.py:264`). It adds a visit to a date that already had one, so the set's membership for
+  that date is unchanged either way - safe.
+- the **"else"** branch calls `maybe_suggest_photo_visit`. **If that creates a `PinVisit`**, a later
+  candidate sharing the date would have seen "exists" under the current code and would see "not
+  exists" with a stale set - it would suggest twice instead of logging. If it only writes a
+  *suggestion* row, the set is safe as-is.
+
+So: read `maybe_suggest_photo_visit`. If it creates a visit, the set must be updated in that branch
+too; if not, a plain precomputed set is correct.
+
+This is the same hazard as the Takeout importer and the suggestion-acceptance fix, both resolved
+the same day: **a per-iteration query is often reading the loop's own writes**, and collapsing it
+changes behaviour unless that is reproduced.
