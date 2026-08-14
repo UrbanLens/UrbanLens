@@ -26,6 +26,10 @@ MAX_COMMENT_TEXT_LENGTH = 1_000
 MAX_MARKUP_LABEL_LENGTH = 500
 MAX_PIN_SHARE_MESSAGE_LENGTH = 5_000
 MAX_DIRECT_MESSAGE_LENGTH = 1_000
+#: Live session chat for SpotGuessr/Trivia/Consensus. Matches each
+#: ``*SessionChatMessage.body`` field's own ``max_length`` - raising it here alone
+#: would push the truncated body past what the column accepts.
+MAX_SESSION_CHAT_MESSAGE_LENGTH = 1_000
 MAX_FRIEND_REQUEST_MESSAGE_LENGTH = 1_000
 MAX_PREFERENCE_OTHER_LENGTH = 255
 MAX_ADDITIONAL_PREFERENCES_LENGTH = 1_000

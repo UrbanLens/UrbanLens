@@ -1722,11 +1722,78 @@ otherwise live: `visibility_timeout` is raised to 2h with a written rationale fo
 fails the request path fast instead of after a retry storm; `worker_prefetch_multiplier` is 1.
 Nothing to fix there.
 
+### Three copies of session chat, collapsed behind a generic (refactor)
+
+Sweeping the WebSocket layer - `consumers.py`, `routing.py`, the ASGI stack - which no earlier
+chunk had opened. **No bug found there**, and that is worth stating plainly, because it is the
+most defensively-written module in the codebase. Recorded in full under "Checked and clean"; the
+short version is that every consumer verifies participation before joining a group, checks API-key
+scope *before* the participant lookup (so a refused connection cannot time-oracle a real session
+against an invented one), unwinds partial group membership when `accept()` fails, withholds the
+live-location group from token-route contacts, and re-validates credentials on a timer so a dropped
+revocation broadcast cannot leave an authorised socket open forever.
+
+What the sweep did surface is on the service side. SpotGuessr, Trivia and Consensus each carried
+their own `chat.py` and `realtime.py`, and the two sets were near-identical - `realtime.py` differed
+only in a group-name prefix string, and the docstrings said so outright: *"Mirrors
+`services.spotguessr.realtime` exactly."* Three copies of `send_chat_message`, three of
+`recent_messages`, and three separate `MAX_MESSAGE_LENGTH = 1000`.
+
+That triplication is the reason this chunk found nothing to fix and still changed something. The
+consumer layer had already been generalised into `_ParticipantSessionConsumer`; the service layer
+never was, so anything that ought to apply to session chat as such - a rate limit, moderation, edit
+or delete - has to be written three times and kept in sync by hand.
+
+`services/core/session_chat.py` (`SessionChat[SessionT: Model, MessageT]`) and
+`services/core/session_realtime.py` (`SessionBroadcaster`) now hold the logic once. Each game's
+`chat`/`realtime` module is a binding over them, so all six exported names and every import path
+are unchanged - verified by enumerating what the rest of the tree actually imports from those
+modules, not by assuming. 216 lines of triplicated logic became 135 lines of binding over 163 lines
+of shared implementation; the win is single-sourcing, not line count.
+
+Two details worth recording because they are where this refactor could have gone quietly wrong:
+
+- **`SessionChat` takes the game's `realtime` *module*, not its `SessionBroadcaster`.** Binding the
+  broadcaster directly is the obvious design and it silently breaks the test suite: existing tests
+  patch `services.<game>.realtime.broadcast`, and a call to `broadcaster.broadcast` bypasses a patch
+  on the module attribute entirely. Passing the module keeps the lookup at call time, so the
+  established patch idiom still intercepts. A `SessionRealtime` Protocol types it; mypy checks the
+  module against the protocol without complaint.
+- **`MAX_MESSAGE_LENGTH` now comes from `core/text_limits.py`**, which exists precisely to be the
+  one place these numbers live and did not have this one. All three copies were already `1000` and
+  matched their `CharField(max_length=1000)` - checked, not assumed, since a constant above the
+  column width would fail the insert at the database rather than truncate.
+
+**Filed, not fixed: no rate limit on any chat socket.** Nothing in `consumers.py` throttles inbound
+frames - no size cap, no per-connection rate limit - and each accepted frame is one DB insert plus a
+broadcast amplified to every group member. It requires an authenticated participant, so it is abuse
+rather than an open vector, and picking a threshold is a product decision. The shared module above
+is now the single place to add it.
+
 ---
 
 ## 3. Checked and clean
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
+
+- **WebSocket consumers** (`dashboard/consumers.py`, 1332 lines; `routing.py`; the ASGI stack).
+  Probed for the failure modes this layer usually has, and it has none of them. Origin checking is
+  on (`AllowedHostsOriginValidator` wraps the whole websocket router). The seven routes split into
+  three authorization models and each is enforced: `_ParticipantSessionConsumer` confirms
+  participation in the specific session before joining its group, so the `<int:session_id>` routes
+  are not an IDOR; `SafetyCheckinChatConsumer`'s token route treats the magic-link token itself as
+  the authorization and deliberately withholds the live-location group from it, which the session
+  route (owner or accepted partner) joins. API-key scope is checked *before* the participant
+  lookup, with the reason written down - a refused connection must not be able to distinguish a
+  real session from an invented one by how long the refusal takes. Group membership added before a
+  failing `accept()` is unwound explicitly, because Channels only reliably fires `disconnect()` for
+  connections that reached `accept()`. Permission is re-validated on a timer rather than only at
+  connect, specifically so a dropped `*_access_revoked` broadcast cannot leave a revoked contact's
+  chat open indefinitely. Three of the four `receive()` methods parse JSON inside a
+  `JSONDecodeError`/`TypeError` guard, and the fourth takes no JSON; binary frames are accepted and
+  ignored rather than raising. Write-scoped operations require a `*_WRITE` scope separately from
+  the read scope that permitted the connection. The only gap found is volume, not access - no rate
+  limit or frame-size cap - filed in `docs/PROBLEMS.md`.
 
 - **Authorization** *(inherited claim - see the note below; not re-verified in the 2026-08-13
   session)*: 167 owner-scoped routes × GET/POST/DELETE/anonymous, plus nested-child

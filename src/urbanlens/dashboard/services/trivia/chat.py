@@ -1,43 +1,27 @@
-"""Session-scoped live text chat. Mirrors ``services.spotguessr.chat``.
+"""Session-scoped live text chat for trivia sessions.
 
-WebSocket-only send, HTTP-served history for reconnects. ``TriviaSessionConsumer``
-is the only caller of ``send_chat_message``; the HTTP chat-history endpoint is
-the only caller of ``recent_messages``.
+WebSocket-only send, HTTP-served history for reconnects. Binds
+``services.core.session_chat.SessionChat``, shared by every participant-session game;
+existing import paths and call signatures are unchanged.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from urbanlens.dashboard.models.trivia.model import TriviaSessionChatMessage
+from urbanlens.dashboard.models.trivia.model import TriviaSession, TriviaSessionChatMessage
+from urbanlens.dashboard.services.core.session_chat import CHAT_HISTORY_LIMIT, SessionChat
+from urbanlens.dashboard.services.core.text_limits import MAX_SESSION_CHAT_MESSAGE_LENGTH
 from urbanlens.dashboard.services.trivia import realtime
 from urbanlens.dashboard.services.trivia.serializers import serialize_chat_message
 
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.profile.model import Profile
-    from urbanlens.dashboard.models.trivia.model import TriviaSession
+#: Re-exported for callers that imported these from here before the shared module existed.
+MAX_MESSAGE_LENGTH = MAX_SESSION_CHAT_MESSAGE_LENGTH
+__all__ = ["CHAT_HISTORY_LIMIT", "MAX_MESSAGE_LENGTH", "recent_messages", "send_chat_message"]
 
-CHAT_HISTORY_LIMIT = 50
-MAX_MESSAGE_LENGTH = 1000
+_chat: SessionChat[TriviaSession, TriviaSessionChatMessage] = SessionChat(
+    manager=TriviaSessionChatMessage.objects,
+    realtime=realtime,
+    serialize=serialize_chat_message,
+)
 
-
-def send_chat_message(session: TriviaSession, profile: Profile, body: str) -> TriviaSessionChatMessage:
-    """Save a chat message and broadcast it to every connected participant.
-
-    Args:
-        session: The session this message belongs to.
-        profile: Who sent it - caller is responsible for confirming they're
-            an actual participant (``controllers.trivia``/
-            ``TriviaSessionConsumer`` both check this before calling).
-        body: Raw message text, truncated to ``MAX_MESSAGE_LENGTH``.
-    """
-    message = TriviaSessionChatMessage.objects.create(session=session, profile=profile, body=body.strip()[:MAX_MESSAGE_LENGTH])
-    realtime.broadcast(session.pk, "chat.message", {"message": serialize_chat_message(message)})
-    return message
-
-
-def recent_messages(session: TriviaSession, *, limit: int = CHAT_HISTORY_LIMIT) -> list[TriviaSessionChatMessage]:
-    """The most recent ``limit`` chat messages in ``session``, oldest first."""
-    messages = list(TriviaSessionChatMessage.objects.for_session(session).select_related("profile__user").order_by("-created")[:limit])
-    messages.reverse()
-    return messages
+send_chat_message = _chat.send
+recent_messages = _chat.recent

@@ -5984,3 +5984,43 @@ Worth deciding deliberately rather than defaulting:
 
 Nothing here is a defect in the backup *writer*, which is careful. The gap is that the half of the
 system that matters on the worst day has never been exercised.
+
+---
+
+## Session chat WebSockets have no rate limit or frame-size cap
+
+`dashboard/consumers.py` accepts inbound frames on four sockets (`DirectMessageConsumer`,
+`SafetyCheckinChatConsumer`, and the three game sessions via `_ParticipantSessionConsumer`). The
+authorization on those sockets is thorough - participation is verified before any group is joined,
+API-key scope is checked, credentials are re-validated on a timer. What is missing is anything
+bounding *volume*.
+
+- No per-connection or per-profile rate limit on `receive()`.
+- No frame-size cap. `body` is truncated to `MAX_SESSION_CHAT_MESSAGE_LENGTH` (1000) only *after*
+  the whole frame is read and JSON-parsed, so a multi-megabyte frame is fully processed before
+  1000 characters of it are kept.
+- Each accepted frame is one DB insert plus a channel-layer broadcast to every member of the
+  group, so the cost is amplified by the number of connected participants.
+
+This needs an authenticated, verified participant, which is what keeps it in "abuse by a member"
+territory rather than an open vector - it is not remotely triggerable. But nothing stops a
+participant from filling a session's chat table as fast as their socket allows, and the same
+applies to DMs between accepted friends.
+
+Two things to decide, both product calls rather than obvious defaults:
+
+1. **The threshold.** Something like N messages per rolling window per profile per session.
+   `services/core/rate_limiter.py` already exists for external API budgets; whether to reuse it or
+   use a plain cache counter (`cache.incr` on a windowed key) is an implementation detail, but the
+   limit itself is a judgement about what normal chat looks like.
+2. **The response to exceeding it.** The consumers' established convention is an `{"type":
+   "error"}` frame rather than a close - closing puts the client into a reconnect loop over a
+   condition retrying cannot fix (that reasoning is already written down in
+   `_ParticipantSessionConsumer.receive`). A throttle should follow it.
+
+Both game chat and DM chat now funnel through shared code - `services/core/session_chat.py` for
+games - so the limit can be implemented once per family rather than five times.
+
+A frame-size cap is separately worth setting at the server: Daphne accepts
+`--websocket_max_message_size`, which `docker-compose.yml` does not currently pass, so the
+truncation above is the only bound and it happens too late to matter.

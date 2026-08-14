@@ -1,31 +1,18 @@
 """Broadcast helpers for GameSessionConsumer's channel-layer group.
 
-See ``docs/designs/drafts/spotguessr.md`` ("Real-time sync: GameSessionConsumer")
-for the event catalogue this feeds. Kept separate from
-``services.spotguessr.session``/``chat`` so both can call it without either
-depending on the other.
+Binds ``services.core.session_realtime.SessionBroadcaster``, shared by every
+participant-session game. Kept as its own module so ``services.spotguessr.session`` and
+``services.spotguessr.chat`` can both use it without either depending on the other, and so
+existing import paths keep working.
 """
 
 from __future__ import annotations
 
-from typing import Any
+from urbanlens.dashboard.services.core.session_realtime import SessionBroadcaster
 
-from urbanlens.dashboard.services.core.channel_broadcast import send_group_message
+#: The prefix is part of the group name connected consumers have already joined -
+#: changing it orphans every open socket.
+broadcaster = SessionBroadcaster("spotguessr")
 
-
-def session_group_name(session_id: int) -> str:
-    """The channel-layer group every participant's WebSocket joins for one session."""
-    return f"spotguessr_session_{session_id}"
-
-
-def broadcast(session_id: int, event_type: str, payload: dict[str, Any]) -> None:
-    """Send ``payload`` to every connected participant of ``session_id``.
-
-    A no-op (not an error) when no channel layer is configured - mirrors
-    the existing ``push_notification_to_browser`` signal handler's
-    tolerance of a channel-layer-less environment (e.g. some test setups).
-    ``event_type`` is a dot-notation Channels event type (e.g.
-    ``"round.revealed"``), dispatched by the consumer to the matching
-    ``round_revealed`` handler method.
-    """
-    send_group_message(session_group_name(session_id), {"type": event_type, **payload})
+session_group_name = broadcaster.session_group_name
+broadcast = broadcaster.broadcast

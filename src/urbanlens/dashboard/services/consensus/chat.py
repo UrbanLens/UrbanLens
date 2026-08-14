@@ -1,41 +1,27 @@
-"""Session-scoped live text chat for competitive Consensus sessions.
+"""Session-scoped live text chat for consensus sessions.
 
-Mirrors ``services.spotguessr.chat`` - WebSocket-only send, HTTP-served
-history for reconnects.
+WebSocket-only send, HTTP-served history for reconnects. Binds
+``services.core.session_chat.SessionChat``, shared by every participant-session game;
+existing import paths and call signatures are unchanged.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from urbanlens.dashboard.models.consensus.model import ConsensusSessionChatMessage
+from urbanlens.dashboard.models.consensus.model import ConsensusSession, ConsensusSessionChatMessage
 from urbanlens.dashboard.services.consensus import realtime
 from urbanlens.dashboard.services.consensus.serializers import serialize_chat_message
+from urbanlens.dashboard.services.core.session_chat import CHAT_HISTORY_LIMIT, SessionChat
+from urbanlens.dashboard.services.core.text_limits import MAX_SESSION_CHAT_MESSAGE_LENGTH
 
-if TYPE_CHECKING:
-    from urbanlens.dashboard.models.consensus.model import ConsensusSession
-    from urbanlens.dashboard.models.profile.model import Profile
+#: Re-exported for callers that imported these from here before the shared module existed.
+MAX_MESSAGE_LENGTH = MAX_SESSION_CHAT_MESSAGE_LENGTH
+__all__ = ["CHAT_HISTORY_LIMIT", "MAX_MESSAGE_LENGTH", "recent_messages", "send_chat_message"]
 
-CHAT_HISTORY_LIMIT = 50
-MAX_MESSAGE_LENGTH = 1000
+_chat: SessionChat[ConsensusSession, ConsensusSessionChatMessage] = SessionChat(
+    manager=ConsensusSessionChatMessage.objects,
+    realtime=realtime,
+    serialize=serialize_chat_message,
+)
 
-
-def send_chat_message(session: ConsensusSession, profile: Profile, body: str) -> ConsensusSessionChatMessage:
-    """Save a chat message and broadcast it to every connected participant.
-
-    Args:
-        session: The session this message belongs to.
-        profile: Who sent it - caller is responsible for confirming they're
-            an actual participant.
-        body: Raw message text, truncated to ``MAX_MESSAGE_LENGTH``.
-    """
-    message = ConsensusSessionChatMessage.objects.create(session=session, profile=profile, body=body.strip()[:MAX_MESSAGE_LENGTH])
-    realtime.broadcast(session.pk, "chat.message", {"message": serialize_chat_message(message)})
-    return message
-
-
-def recent_messages(session: ConsensusSession, *, limit: int = CHAT_HISTORY_LIMIT) -> list[ConsensusSessionChatMessage]:
-    """The most recent ``limit`` chat messages in ``session``, oldest first."""
-    messages = list(ConsensusSessionChatMessage.objects.for_session(session).select_related("profile__user").order_by("-created")[:limit])
-    messages.reverse()
-    return messages
+send_chat_message = _chat.send
+recent_messages = _chat.recent
