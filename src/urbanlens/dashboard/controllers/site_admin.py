@@ -1093,9 +1093,14 @@ class SiteAdminPluginsView(LoginRequiredMixin, PermissionRequiredMixin, View):
 
 
 class SiteAdminUsersView(LoginRequiredMixin, PermissionRequiredMixin, View):
-    """Read-only directory of registered users for site administrators.
+    """Registered-user directory for site administrators, and account deletion.
 
     GET /site-admin/users/ → paginated, searchable list of users.
+    POST /site-admin/users/ → ``request_delete`` / ``cancel_delete`` for one account.
+
+    The listing is read-only; ``post`` is not (see its own docstring). An earlier
+    version of this docstring described the whole view as read-only, which was wrong
+    from the moment deletion was added here.
 
     This is deliberately privacy-preserving: even a site admin does not get a
     backdoor around a user's ``contact_visibility`` setting here. Email is

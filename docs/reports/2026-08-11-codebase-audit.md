@@ -2319,6 +2319,34 @@ This is what the coverage list is for. One handler, chosen because a measurement
 executed it, produced a reproducible 500 on a plausible user action within an hour. There are 99
 more write handlers on that list.
 
+### Admin account deletion had no test, and a docstring saying it did not exist
+
+Next entry on the never-executed write-handler list: `SiteAdminUsersView.post` (35 statements).
+Reading it first turned up the documentation problem before any test ran - the class docstring
+reads *"Read-only directory of registered users"* and documents only `GET`. The `post` it does not
+mention performs **admin-initiated deletion of another person's account**. The one-line summary a
+developer sees first actively misdescribes the view's most consequential behaviour. Corrected.
+
+The guards themselves read as sound - no self-deletion, no deleting superusers or site-admin group
+members, and a typed confirmation - and nothing verified any of them. Those are the guards whose
+silent failure is both catastrophic and invisible, so the contribution here is locking them down
+rather than hunting a bug that may not exist. Eight tests.
+
+**The control test paid for itself on the first run.** Six guard tests passed and the two asserting
+deletion *works* failed - which is the signature of guards passing trivially because the operation
+never happens at all. Had the control not been there, six vacuous tests would have gone in looking
+like protection.
+
+The cause was my test, not the code, and the behaviour it exposed is worth recording.
+`profile_visibility` defaults to `ANYTHING_IN_COMMON`, and a fresh admin shares nothing with a
+fresh user - so `can_view_profile` is false and the handler deliberately does **not** echo a
+username the admin is not allowed to see. It asks for the literal string `"hidden user"` instead.
+That is a thoughtful privacy choice with a side effect worth stating plainly: for every user an
+admin cannot see - which by default is most of them - the typed confirmation is a **fixed,
+guessable constant** rather than a per-user string. As a speed bump against misclicks it still
+works; as a "type the name to prove you mean it" check it is weaker than it looks. Both branches
+now have tests.
+
 ---
 
 ## 3. Checked and clean
