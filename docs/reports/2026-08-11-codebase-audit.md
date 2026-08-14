@@ -7522,3 +7522,26 @@ not cover.
 
 For a codebase where two stored-XSS vectors existed at the start of this audit, a single correctly
 guarded `mark_safe` is the strongest result in this report.
+
+
+## Chunk 421 - the `|safe` surface is sound: JSON and sanitized HTML only
+
+The template counterpart to chunk 420. **11 files use `|safe`**, and reading every one splits them
+into two groups:
+
+- **server-serialised JSON** - `chart_labels`, `chart_user_counts`, `common_pins_json`,
+  `filter_labels_json`, `pin.tags_data_json`, `smart_boundary.geojson`. Escaping these would corrupt
+  them; `|safe` is required.
+- **sanitized HTML** - `visit.notes_html` and `rendered_html`. `notes_html` returns HTML from
+  `render_article`, the shared sanitizer, and its docstring states it reuses that pipeline "rather
+  than a second sanitization pipeline" - **one sanitizer, deliberately, not two that can diverge**.
+
+**No raw user input reaches `|safe` anywhere.** Combined with chunk 420's single correctly-escaped
+`mark_safe`, the escaping surface of this application is small, enumerable, and correct - in a
+codebase that had two stored-XSS vectors when this audit began.
+
+One residual worth naming rather than claiming clean: JSON rendered through `|safe` inside a
+`<script>` block can still break out if a serialised string contains `</script>`. Django's
+`json_script` filter exists for exactly that and is the stricter choice. I have not checked whether
+these seven sit inside `<script>` tags or in attributes - **that is a real, bounded follow-up**, and
+asserting it either way without looking would be the twenty-sixth artifact.
