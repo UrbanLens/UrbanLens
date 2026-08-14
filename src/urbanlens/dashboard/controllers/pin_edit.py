@@ -13,6 +13,7 @@ from django.urls import reverse
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin, PinType
 from urbanlens.dashboard.models.pin.note import PinNote
@@ -347,16 +348,16 @@ class PinEditView(LoginRequiredMixin, View):
             category_raw = (body.get("categories") or "").strip()
             names = [n.strip().lower() for n in category_raw.split(",") if n.strip()]
             seen_names: set[str] = set()
-            pin.labels.remove(*pin.labels.filter(kind="category"))
+            pin.labels.remove(*pin.labels.filter(kind=KIND_CATEGORY))
             for name in names:
                 if name in seen_names:
                     continue
                 seen_names.add(name)
-                cat = Label.objects.filter(name__iexact=name, kind="category", profile=pin.profile).first()
+                cat = Label.objects.filter(name__iexact=name, kind=KIND_CATEGORY, profile=pin.profile).first()
                 if cat is None:
                     cat, _ = Label.objects.get_or_create(
                         name=name,
-                        kind="category",
+                        kind=KIND_CATEGORY,
                         profile=pin.profile,
                     )
                 pin.labels.add(cat)

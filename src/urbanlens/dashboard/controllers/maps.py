@@ -18,6 +18,7 @@ from rest_framework.viewsets import GenericViewSet
 
 from urbanlens.dashboard.forms.search import SearchForm
 from urbanlens.dashboard.models.images.model import Image
+from urbanlens.dashboard.models.labels.meta import KIND_USER
 from urbanlens.dashboard.models.labels.model import (
     COLOR_CHOICES,
     ICON_CATEGORIES,
@@ -531,7 +532,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             # Label._get_customization silently finds no override (it reads a prefetch
             # attr, it does not query), so a customized label rendered the user's icon
             # on the map marker and the global one in this sidebar for the same pin.
-            .prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind="user").with_customizations_for(profile).order_by("-order", "name")))
+            .prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind=KIND_USER).with_customizations_for(profile).order_by("-order", "name")))
         )
 
         search_form = SearchForm(request.GET, profile=profile)
@@ -663,7 +664,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             Pin.objects.filter(profile=profile)
             .detail_pins()
             .select_related("location", "parent_pin", "parent_pin__location")
-            .prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind="user").order_by("-order", "name")))
+            .prefetch_related(Prefetch("labels", queryset=Label.objects.exclude(kind=KIND_USER).order_by("-order", "name")))
             .annotate(child_count=Count("detail_pins", distinct=True))
         )
 
