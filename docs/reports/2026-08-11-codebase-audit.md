@@ -5591,3 +5591,30 @@ Worth noting what the host-side probe bought: every prediction it made about the
 in the container. The 8-second loop was not a substitute for the 3-minute one, but it was an
 accurate preview of it - and it caught the one genuinely wrong assertion (the `override_settings`
 axis) before it ever reached a container run.
+
+
+## Chunk 334 - reading a backlog entry found a flaw in my own fix
+
+Took the trip-activity weather timezone entry, since my localdate work touched a line it names.
+The entry's own bug (Open-Meteo returns naive *local* time while the comparison target is naive
+UTC, so slot matching is out by the location's offset) needs the provider timezone threaded
+through the resolution chain - more than could be finished safely here, and left alone.
+
+But checking whether my change interacted with it found that **my change is half a conversion**:
+
+```python
+today = timezone.localdate()               # active timezone's date, after chunk 316
+... act.scheduled_at.date() >= today       # still the UTC date of an aware datetime
+```
+
+Before, both sides were UTC. Now one side follows the user and one does not. Latent rather than
+live - they agree while nothing calls `timezone.activate()`, which is true today.
+
+**This is precisely what the deferral argument predicted** and what I dismissed by not reading it:
+"the sites are not uniform". I had read that as a claim about *import styles* - which is how the
+entry illustrates it - and the real hazard is semantic. Converting one side of a comparison is a
+different and less visible failure than a `NameError`, and lint cannot see it.
+
+Only this one of the nine converted sites has been checked this way. Recorded in `PROBLEMS.md` as
+work owed, rather than quietly assumed fine - the other eight deserve the same question, and I do
+not have grounds to claim they are clean.

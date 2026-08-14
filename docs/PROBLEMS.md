@@ -5374,6 +5374,18 @@ Every `datetime.fromtimestamp()` call in the codebase passes `tz=UTC` explicitly
 
 **CONVERTED 2026-08-14 (audit chunks 316-317), overriding the decision below - read this first.**
 *Verified 2026-08-14 (chunk 333): 942 tests pass across every suite touching the nine changed files, plus 3 boundary tests.*
+
+*Half-converted comparison found 2026-08-14 (chunk 334).* `controllers/trip.py:1515` now reads
+`today = timezone.localdate()` and compares it against `act.scheduled_at.date()`, which is the
+**UTC** date of an aware datetime. Before the conversion both sides were UTC and consistent; now
+one side follows the active timezone and the other does not. They agree only while no timezone is
+activated - which is true today, so this is latent, not live.
+
+This is exactly the non-uniformity the "deliberately not converted" argument below predicted:
+converting a `date.today()` in isolation can leave a *comparison* half-migrated even when the call
+itself is correct. Whoever does the per-user-timezone work must treat both sides of this
+expression, not just the `localdate()` call. The same question should be asked of the other eight
+converted sites; only this one has been checked.
 All nine sites now use `timezone.localdate()`. This was done *without noticing this entry*, which had
 already identified the same nine sites and argued against exactly this sweep. The argument was sound
 and its prediction was accurate: the sweep did introduce an undefined-`timezone` `NameError` in
