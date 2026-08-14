@@ -6099,3 +6099,37 @@ Left for a future pass: the model fields themselves are still permissive
 enforce on `save()`). Validation now happens at every known entry point, but a new write path
 added without `clean_color` would reintroduce the gap. A `validators=[...]` on the fields, or a
 custom field type, would make it structural rather than conventional.
+
+---
+
+## `Pin.icon` is unvalidated free text rendered into a `src` attribute
+
+`Pin.icon` is `CharField(max_length=255, null=True, blank=True)` - no validator, no choices - and
+is assigned straight from request data by the pin write paths, exactly as colours were before
+`services/core/colors.clean_color`. The map page renders it into `<img src="...">`.
+
+The client side is fixed (`_ulEscAttr` in `pages/map/index.html`), and the pre-existing
+`/^(https?:\/\/|\/)/` test in front of it blocks `javascript:`. What is missing is the server-side
+half, which is where the colour equivalent ended up:
+
+- an icon value should be validated on write (a URL, a relative media path, or an emoji/short
+  token - whichever the field is actually meant to hold; it currently holds all three depending on
+  the code path reading it)
+- `services/core/colors.py` is the model to follow - one helper, applied at every write path
+
+Related: the same sweep found ~60 further attribute interpolations across templates and TS that
+were *not* changed because the interpolated values are UUIDs, integer ids or enum keys. They are
+listed by grepping for `="' +` / `="${` in `dashboard/templates` and `dashboard/frontend/ts`. If a
+future change makes any of those values user-controlled, they become the same bug.
+
+## Inline template JavaScript is structurally untested
+
+`pages/map/index.html` contains several thousand lines of JavaScript inside a single `<script>`
+block. `bun test` covers `frontend/ts/`, so none of it can be imported, mocked or exercised - the
+helpers added there in the 2026-08-14 audit had to be verified by extracting the functions into a
+scratch file and running them separately.
+
+This is why bugs like the two above survive: the code is invisible to every automated check the
+project has. Moving that script into `frontend/ts/` (where it would get `tsc --noEmit`, bun tests,
+and the same review as the rest of the frontend) is a large job, but the map page is the single
+biggest concentration of untested logic in the codebase.

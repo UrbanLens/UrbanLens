@@ -2059,6 +2059,41 @@ come from a server JSON endpoint where `type` is an enum, `url` is built by `rev
 to be exploitable today. It is the inconsistency that is worth removing - three raw interpolations
 sitting beside two escaped ones, in a file whose own escaper cannot protect them.
 
+### A scheme guard that stopped the wrong attack (fixed)
+
+Sweeping every template and TS file for the shape chunk 219 found: a value interpolated into an
+attribute without escaping. 68 hits, and the triage matters more than the number - most are UUIDs,
+integer ids and enum keys, where nothing user-controlled reaches the string. Two groups are real,
+both in `pages/map/index.html`.
+
+**`pin.icon` into `src="…"`, behind a guard that does not guard this.** The line is preceded by
+`/^(https?:\/\/|\/)/.test(pin.icon)`, which reads like a safety check and is one - against
+`javascript:`. It does nothing about the attribute itself: `https://x" onerror="alert(1)` passes
+that regex, and then its quote ends the `src`. `Pin.icon` is `CharField(max_length=255)` with no
+validator, assigned from request data like the colours were, and pins are shared - so this is the
+same stored-value shape as the colour finding, in a field `clean_color` does not cover.
+
+**Google Places / NPS / Wikipedia payloads straight into `innerHTML`.** `place.vicinity`,
+`place.description`, `d.formatted_address`, `d.editorial_summary.overview` and `d.rating` were
+interpolated as element content with no escaping, and `place.url`/`d.website` into `href` with no
+scheme check. This is third-party data containing user-submitted business names and descriptions,
+so it is not attacker-controlled in the direct sense - but "we trust Google's payload to be
+HTML-safe" is not an assumption worth holding.
+
+The fix needed three helpers, not one, and the reason is the chunk 219 lesson applied: the file
+*did* already contain an `escapeHtml`/`escapeAttr` pair - defined at line 5681, **inside** a
+function body after an early `return`, so invisible to every site above it, and partial anyway
+(`escapeHtml` escapes only `&` and `<`; `escapeAttr` only `"`). `_ulEscText`, `_ulEscAttr` and
+`_ulSafeUrl` now sit at the top of the script with a comment on which context takes which, and
+`_ulSafeUrl` exists because escaping quotes does nothing about `javascript:` - the two defences
+are orthogonal and both were missing somewhere.
+
+Verified by extracting the three helpers and executing them (rejects `javascript:`, `data:` and
+protocol-relative `//host`; passes ordinary absolute and relative URLs). That indirection is
+itself worth recording: this page carries several thousand lines of inline `<script>`, which no
+test in the repository can import or exercise. The bun suite covers `frontend/ts/`; everything
+inline in a template is, structurally, untested.
+
 ---
 
 ## 3. Checked and clean

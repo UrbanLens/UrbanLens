@@ -649,6 +649,26 @@
 {% block scripts %}
 <script>
     // -- Constants -------------------------------------------------------------
+
+    // -- HTML-building safety ---------------------------------------------------
+    // This script builds markup by interpolation in a lot of places. The two
+    // contexts need different escaping and are easy to mix up: a quote ends an
+    // attribute but is inert in text, so a text escaper used on an attribute value
+    // looks like protection and is not. (There is a second, partial pair of these
+    // further down, local to the location-conflict dialog - these are the ones the
+    // rest of the script can see.)
+    function _ulEscText(value) {
+        return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+    function _ulEscAttr(value) {
+        return _ulEscText(value).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+    }
+    // Anything reaching href=/src= also needs its *scheme* checked - escaping quotes
+    // does nothing about `javascript:`. Relative paths and http(s) only.
+    function _ulSafeUrl(value) {
+        const url = String(value == null ? '' : value).trim();
+        return /^(?:https?:\/\/|\/(?!\/))/i.test(url) ? url : '';
+    }
     const _PROFILE_UUID = '{{ profile_uuid|default:"" }}';
     const _APP_UUID     = '{{ app_uuid|default:"" }}';   // server instance UUID - changes on DB wipe
     const _SHOW_FILTERED_PIN_COUNT = {{ show_filtered_pin_count|yesno:'true,false' }};
@@ -1485,7 +1505,7 @@
                 const iconColorStyle = hasColor ? '' : ` style="color:${color};"`;
                 iconHtml = `<i class="material-icons map-pin-icon"${iconColorStyle}>${pin.icon}</i>`;
             } else if (/^(https?:\/\/|\/)/.test(pin.icon)) {
-                iconHtml = `<img src="${pin.icon}" class="map-pin-custom-img" alt="">`;
+                iconHtml = `<img src="${_ulEscAttr(pin.icon)}" class="map-pin-custom-img" alt="">`;
             } else {
                 iconHtml = `<span class="map-pin-emoji">${pin.icon}</span>`;
             }
@@ -2942,9 +2962,9 @@
         // NPS and Wikipedia carry all detail data inline - no extra fetch needed.
         if (place.source === 'nps' || place.source === 'wikipedia') {
             const parts = [];
-            if (place.vicinity) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${place.vicinity}</div>`);
-            if (place.description) parts.push(`<div class="place-info-summary">${place.description}</div>`);
-            if (place.url) parts.push(`<div class="place-info-link"><a href="${place.url}" target="_blank" rel="noopener noreferrer">More information</a></div>`);
+            if (place.vicinity) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${_ulEscText(place.vicinity)}</div>`);
+            if (place.description) parts.push(`<div class="place-info-summary">${_ulEscText(place.description)}</div>`);
+            if (place.url) parts.push(`<div class="place-info-link"><a href="${_ulEscAttr(_ulSafeUrl(place.url))}" target="_blank" rel="noopener noreferrer">More information</a></div>`);
             if (bodyEl) bodyEl.innerHTML = parts.join('') || '<em>No details available.</em>';
             return;
         }
@@ -2957,10 +2977,10 @@
             const data = await resp.json();
             const d = data.place || {};
             const parts = [];
-            if (d.formatted_address) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${d.formatted_address}</div>`);
-            if (d.rating) parts.push(`<div class="place-info-rating">Rating: ${d.rating} ★</div>`);
-            if (d.editorial_summary?.overview) parts.push(`<div class="place-info-summary">${d.editorial_summary.overview}</div>`);
-            if (d.website) parts.push(`<div class="place-info-link"><a href="${d.website}" target="_blank" rel="noopener noreferrer">Website</a></div>`);
+            if (d.formatted_address) parts.push(`<div class="place-info-address"><i class="material-symbols-outlined">location_on</i> ${_ulEscText(d.formatted_address)}</div>`);
+            if (d.rating) parts.push(`<div class="place-info-rating">Rating: ${_ulEscText(d.rating)} ★</div>`);
+            if (d.editorial_summary?.overview) parts.push(`<div class="place-info-summary">${_ulEscText(d.editorial_summary.overview)}</div>`);
+            if (d.website) parts.push(`<div class="place-info-link"><a href="${_ulEscAttr(_ulSafeUrl(d.website))}" target="_blank" rel="noopener noreferrer">Website</a></div>`);
             if (bodyEl) bodyEl.innerHTML = parts.join('') || '<em>No details available.</em>';
         } catch (_) {
             if (bodyEl) bodyEl.innerHTML = '<em>Could not load details.</em>';
