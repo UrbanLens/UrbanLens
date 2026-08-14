@@ -2289,6 +2289,36 @@ The three orphaned methods are filed rather than deleted - removing model method
 their tests is a product call, and the plausible answer (categories are labels now) deserves to be
 stated by someone who owns the roadmap.
 
+### Using the coverage list: the first untested write handler had the bug it looked like it had
+
+The point of the never-executed list is to be worked, not filed, so this chunk took the largest
+untested write handler on it: `LabelBulkConvertView.post` (36 statements, top of the list, in a
+subsystem this audit has already had to fix several times).
+
+Reading it before testing it was enough to predict the failure. `Label` is unique on
+`(lower(name), profile, kind)`. The single create and edit paths call `find_conflicting_label`
+first and return a readable 400 - that guard was added earlier in this audit. Bulk-convert sets
+`label.kind = new_kind` and saves with no check at all, so converting a tag whose name already
+exists as a category is a constraint violation.
+
+TDD confirmed it exactly: `IntegrityError: duplicate key value violates unique constraint
+"uq_label_profile_name_kind_ci"`, `Key (lower(name::text), profile_id, kind)=(zzaudit collide, 3,
+category) already exists`. A user hits this by having "Museum" as both a tag and a category -
+which is legal, since the constraint is per-kind - and then converting one onto the other from the
+organize UI.
+
+Fixed to match the single-edit path: the whole batch is checked first and refused with a 400
+naming the offending labels. Refused rather than partially applied, because converting some and
+failing on others leaves the user to work out which half took effect.
+
+Three tests, and the third is the one that makes the other two meaningful: a *non-colliding*
+convert must still work. Without it, "no 500" and "the label is unchanged" would both pass if the
+guard simply stopped all conversion - which is the obvious way to get this wrong.
+
+This is what the coverage list is for. One handler, chosen because a measurement said nothing
+executed it, produced a reproducible 500 on a plausible user action within an hour. There are 99
+more write handlers on that list.
+
 ---
 
 ## 3. Checked and clean

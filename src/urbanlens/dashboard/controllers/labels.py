@@ -1042,6 +1042,19 @@ class LabelBulkConvertView(_LabelKindMixin, LoginRequiredMixin, View):
         # Scoped via _parent_candidates() (not a raw Label.objects.visible_to()
         # query) so this bulk path enforces the same KIND_USER/KIND_MEDIA
         # isolation as single create/edit.
+        # Label is unique on (lower(name), profile, kind), so a name that already exists in
+        # the destination kind makes the save below a constraint violation - a 500 rather
+        # than the readable refusal the single-edit path gives for the same collision.
+        # Checked for the whole batch first: converting some and failing on others would
+        # leave the user to work out which half applied.
+        conflicts = [label for label in labels if find_conflicting_label(profile=profile, name=label.name, kind=new_kind, exclude_pk=label.pk) is not None]
+        if conflicts:
+            names = ", ".join(sorted(f'"{label.name}"' for label in conflicts))
+            return HttpResponse(
+                f"Cannot convert {names} - a {_config(new_kind).singular_title.lower()} with that name already exists. Rename or merge first.",
+                status=400,
+            )
+
         valid_parents = list(_parent_candidates(profile, self.kind).filter(id__in=payload["add_parent_ids"])) if payload["add_parent_ids"] else []
         for label in labels:
             _apply_bulk_fields(label, payload)
