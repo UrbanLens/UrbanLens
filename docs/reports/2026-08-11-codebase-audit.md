@@ -1826,6 +1826,25 @@ without paying for 500 writes.
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
 
+- **Middleware** (`dashboard/middleware.py` - `ProfilePreviewMiddleware`, the stack's only custom
+  entry). Impersonation code is where privilege escalation lives, so this was probed for it and
+  does not have it. The ghost viewer always has *less* access than the owner, never more: it is a
+  freshly created throwaway user standing in a chosen relationship, so the worst a spoofed
+  `Referer` (the one client-controlled input, used to bring HTMX fragments into preview scope) can
+  achieve is running one of the owner's own GET endpoints with fewer privileges than they already
+  have, inside a transaction that is force-rolled-back. Writes are refused outright - non-GET in
+  scope returns 403. Identity is re-checked against `state["owner_id"]` on every request rather
+  than trusted from the session alone, so a stale preview state cannot outlive the session it
+  belongs to. `TemplateResponse.render()` is called explicitly inside the atomic block, because a
+  lazily-rendered response would evaluate its querysets after the ghost's rows were gone.
+  Side-effect escape from the rollback was the specific thing checked, since cache writes, emails
+  and Celery enqueues are not transactional: the only non-trivial receiver on the path is
+  `promote_first_user_if_needed`, which returns `False` as soon as any other user exists - always
+  true during a preview, since the owner is one - and everything else the path touches is ordinary
+  DB rows. Worth knowing for anyone reasoning about this: Postgres sequences are non-transactional,
+  so the ghost's `id` is consumed and never reissued, and a cache entry accidentally keyed on it
+  can never later collide with a real profile.
+
 - **WebSocket consumers** (`dashboard/consumers.py`, 1332 lines; `routing.py`; the ASGI stack).
   Probed for the failure modes this layer usually has, and it has none of them. Origin checking is
   on (`AllowedHostsOriginValidator` wraps the whole websocket router). The seven routes split into
