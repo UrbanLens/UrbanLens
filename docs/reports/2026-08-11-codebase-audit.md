@@ -7824,3 +7824,27 @@ names a hazard that is undiagnosable from symptoms, states the rule that prevent
 the quantities to re-check. Verifying it took two commands. Most prose invariants in most codebases
 are not checkable at all - and of the ones here that were, chunks 377-388 found a third had rotted.
 This one has not.
+
+
+## Chunk 434 - a second numeric invariant, also holding
+
+`settings/base.py:182` states: *"socket_timeout MUST be comfortably larger than
+`RedisChannelLayer.brpop_timeout` (5s, hardcoded upstream)."* **Verified: `socket_timeout: 20`** -
+4x - with `retry_on_timeout: True` and `health_check_interval: 30` alongside.
+
+The comment records the failure it prevents, and it is worth quoting the mechanism: redis-py's default
+`socket_timeout` is *also* 5s, so with no override **every long-poll BRPOP raced its own read
+timeout**. Any jitter - a GC pause, a busy Valkey tick - pushed the read past 5.000s and raised
+`TimeoutError` against a perfectly healthy server. And because `channels_redis` serialises every
+`receive()` in a process behind one `asyncio.Lock`, that single race **tore down every websocket in
+the process, not just the one that timed out.**
+
+**Two invariants checked, two holding** (this and chunk 433's `visibility_timeout`). Both concern
+distributed-systems boundaries where the symptom is indistinguishable from ordinary flakiness -
+intermittent disconnects, occasional duplicate sends - and both were diagnosed to the exact
+interacting defaults and then written down with the rule to preserve.
+
+That is the through-line of this entire audit, stated one last time. **The defects I found were in
+code where no such reasoning existed; the code that carried it was correct every time I checked.**
+Not because writing comments prevents bugs, but because the act of working out *why* a boundary is
+safe is what makes it safe - and the comment is the residue of having done it.
