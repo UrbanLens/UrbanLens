@@ -2141,6 +2141,23 @@ parsing needs a known-answer control, or its confident output is noise.
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
 
+- **Dead weight: templates, SCSS, TypeScript, routes** (2026-08-14). Essentially none, and the
+  negative result is worth as much as the scans, because every one of them over-reported and the
+  reasons generalise. **Templates**: 7 of 418 are unreferenced by name, and all 7 are framework
+  conventions Django or django-oauth-toolkit resolve internally (`403.html`, the five
+  `registration/` password-reset templates, `oauth2_provider/authorize.html`) - deleting any of
+  them silently breaks a flow. **SCSS**: 71 files, 0 unimported. **TypeScript**: 6 of 65 look
+  unimported and none are - `testing/dom-setup.ts` is a `bunfig.toml` preload,
+  `entries-classic/*.ts` are built by a directory glob in `bin/build-frontend.ts`, `globals.d.ts`
+  is ambient types, and `tools/generate-e2ee-fixture.ts` is run directly. **Routes**: 61 of 753
+  named routes are never referenced outside `urls.py`; 30 are assembled at runtime by
+  `reverse(f"{prefix}.{suffix}")` (15 call sites, suffixes `add`/`delete`/`detail`/`edit`/
+  `remove`/`reorder`/`upload`), 34 are in `external_api/urls.py` where the callers are API clients
+  rather than this codebase, and of the 10 left over one is Django's own
+  `password_reset_complete`. The residual nine are listed in `docs/PROBLEMS.md` as *candidates for
+  review*, not as dead code - this codebase reaches things dynamically often enough that "no
+  static reference" is weak evidence on its own.
+
 - **Injection, deserialization, and time correctness** (whole-tree static sweeps, 2026-08-14).
   All negative, recorded so the sweeps are not repeated. **Raw SQL**: four sites outside
   tests/migrations, every one interpolating *identifiers* while parameterizing values. The

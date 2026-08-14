@@ -6169,3 +6169,33 @@ Suggested order of work, largest payoff first:
 This is a large job and nothing above is urgent in isolation. It is recorded because every future
 bug of this shape in these files will be invisible to CI, and because the duplication means fixing
 one instance fixes nothing else.
+
+---
+
+## Nine named routes with no discoverable caller (candidates for review, not confirmed dead)
+
+From a 2026-08-14 sweep of all 753 named routes. 61 have no static reference outside `urls.py`;
+30 are reached via `reverse(f"{prefix}.{suffix}")` and 34 live in `external_api/urls.py` where the
+callers are API clients. `password_reset_complete` is Django's own. That leaves:
+
+- `add_review`
+- `comment.locations`
+- `dev_toolbar.toggle_map_dark_mode`
+- `label.index`
+- `location.wiki.article.restore`
+- `location.wiki.article.revision`
+- `location.wiki.gallery.image`
+- `pin.upload.takeout`
+- `safety.checkin.gallery.image`
+
+**Do not bulk-delete these.** Each needs checking individually, because the plausible explanations
+differ: `dev_toolbar.toggle_map_dark_mode` is dev tooling that may be invoked by hand;
+`pin.upload.takeout` and the two `gallery.image` routes may be hit as literal URLs built in inline
+template JavaScript (which this audit has separately measured at 21,543 untested lines, so it is
+exactly where a hardcoded path would hide); `location.wiki.article.restore`/`revision` pair with
+`services/wiki/articles.restore_revision`, which does exist, suggesting a wired-up feature whose
+entry point is somewhere the scan could not see.
+
+A route with genuinely no caller is still worth removing - it is surface area that has to be kept
+authorised and tested - but "the grep found nothing" has produced a false positive in every
+category this sweep touched.
