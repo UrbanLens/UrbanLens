@@ -2618,6 +2618,20 @@ dropped rather than failing the request.
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
 
+- **Production frontend build, and bundle sizes** (2026-08-14). `bun run build` succeeds with every
+  change from this audit - all entry points bundle, including `core.js` (which carries the
+  `safeColor` work) and `organize.js`. Worth noting because the session had verified `tsc --noEmit`
+  and the bun tests repeatedly but never a real build until now. Two bundles are large:
+  `e2ee.js` at **1.59 MB** and `article-wysiwyg.js` at **1.20 MB**. `e2ee.js` appears in
+  `themes/base.html`, which looked app-wide and is not - it sits behind
+  `{% if e2ee_needs_oauth_enroll %}`, so it loads only for a passwordless account that has not yet
+  enrolled message-encryption keys, plus the auth pages that need key derivation. Appropriate
+  placement; the *size* is still worth a look (both are almost certainly a vendored library
+  bundled whole), but nothing here loads megabytes onto pages that do not need them.
+- **Unguarded index access** (2026-08-14). One candidate,
+  `request.META.get("HTTP_HOST", "").split(":")[0]`, and it is safe: `str.split()` always returns
+  at least one element, so `[0]` cannot raise. No real `IndexError` surface in the controllers.
+
 - **JSON body parsing** (2026-08-14). Zero unguarded `json.loads(request.body)` calls in any
   controller - every one sits inside a handler catching `JSONDecodeError`/`ValueError`, so
   malformed JSON produces a 400 rather than a 500. Worth recording both as a clean result and
