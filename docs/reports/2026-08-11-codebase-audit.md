@@ -7670,3 +7670,28 @@ Also caught a route-name error before running - `label.bulk.convert` versus the 
 **That closes the last owed item from this session's own work.** Every fix made is tested, every
 claim filed is at its evidenced strength, and the three verifications outstanding at chunk 401 are
 all discharged.
+
+
+## Chunk 428 - raw SQL: 9 interpolations, all identifiers, all safe
+
+The most serious enumerable sink left. **9 raw-SQL statements built by interpolation**, all in
+migrations (`0007`, `0039`, `0042`) and `rotate_field_encryption.py`.
+
+**Every one interpolates a table or column *identifier* - which SQL cannot parameterize - and passes
+every *value* as a `%s` parameter:**
+
+```
+cursor.execute(f'UPDATE {table} SET {column} = %s WHERE id = %s', [ciphertext, pk])
+```
+
+The identifiers come from hardcoded constants at the call sites (`_encrypt_column(cursor,
+"dashboard_profiles", "phone_number")`, per chunk 365), and the code says so inline:
+`# noqa: S608 # nosec B608 - table/column are hardcoded constants below, not user input`.
+
+**No injection, and the reasoning is recorded at the site** - the same property that made most of
+this audit's clean verdicts possible, showing up in the one place where a scanner would otherwise
+have to guess.
+
+That completes the enumerable sinks: `mark_safe` (1, escaped), `|safe` (14, JSON or sanitized HTML),
+`HttpResponse` f-strings (11, one fixed), raw SQL (9, identifiers only). **Four sink classes, fully
+enumerated, one real defect found and fixed.**
