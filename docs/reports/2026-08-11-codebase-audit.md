@@ -5140,3 +5140,23 @@ generalisable result is not the bug count - it is that a defect class found thre
 accident became a 4-second test that cannot silently regrow, and that the class turned out to
 be 14% defective, so a guard demanding invalidation everywhere would have been wrong 19 times
 out of 22.
+
+
+## Chunk 312 - select_for_update: 34 sites, clean
+
+Read-only chunk (a full suite is running; no source syncs). Scanned every `select_for_update()`
+against an enclosing `transaction.atomic()`, since outside one Django either raises or fails to
+lock depending on autocommit state - a lock that silently does nothing is the worst version of
+this bug.
+
+**All clean.** 34 matches, of which 3 are *comments* describing the pattern (in `trivia/session.py`,
+`spotguessr/session.py`, `rate_limiter.py`) and 31 are real calls, every one inside an atomic
+block. The three flagged lines are prose explaining why the lock is needed - e.g.
+"``select_for_update()`` inside ``transaction.atomic()`` - so a second..." - which to a regex is
+indistinguishable from the call itself.
+
+Worth noting alongside chunks 305 and 310, where a scan for a defect's shape matched code that
+already *fixed* it. Here it matched code that merely *talks about* it. Same root cause: the scan
+locates candidates and cannot read. This one is a cheerier version of the finding, though -
+these three files documented their concurrency reasoning at the point of use, which is what made
+the false positives instantly resolvable.
