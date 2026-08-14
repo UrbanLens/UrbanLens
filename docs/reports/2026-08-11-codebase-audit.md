@@ -7695,3 +7695,30 @@ have to guess.
 That completes the enumerable sinks: `mark_safe` (1, escaped), `|safe` (14, JSON or sanitized HTML),
 `HttpResponse` f-strings (11, one fixed), raw SQL (9, identifiers only). **Four sink classes, fully
 enumerated, one real defect found and fixed.**
+
+
+## Chunk 429 - the dangerous primitives are absent entirely
+
+Final enumerable sinks, all three classic remote-code paths:
+
+| primitive | count |
+|---|---|
+| `eval` / `exec` | **0** |
+| `pickle.loads` / `pickle.load` | **0** |
+| `subprocess(..., shell=True)` | **0** |
+
+Control detects all three when injected, so these are real zeros rather than blind ones.
+
+`subprocess` *is* used - the database backup path, whose timeout handling was widened earlier in this
+audit - but always with an argument list, never through a shell. `pickle`'s absence matters most for
+a Django app with a Redis cache and Celery: both default to pickle serialisation in some
+configurations, and choosing JSON instead removes deserialisation as an attack surface entirely.
+
+**That closes the enumerable-sink sweep**: seven classes checked exhaustively - `mark_safe`, `|safe`,
+`HttpResponse` interpolation, raw SQL, `eval`/`exec`, `pickle`, `shell=True` - with **one real defect
+found, fixed, and tested** (chunks 426-427).
+
+These are the strongest claims in this report, and the reason is structural rather than diligence: each
+class is *enumerable*, so "I checked all of them" is a statement I can actually support. Every weaker
+claim in this audit - the sampled bypass check, the two unresolved citations, the 187 uncovered routes
+- is weaker precisely because its population could not be enumerated.
