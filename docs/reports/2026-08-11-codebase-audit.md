@@ -6467,3 +6467,22 @@ when someone followed a pointer and stopped at the first entry.
 
 Convention advice is cheap to give and expensive to be wrong about, because it propagates to work
 nobody reviews again.
+
+
+## Chunk 376 - the first reference I could not place, and did not guess
+
+`notifications/signals.py`'s docstring says WhatsApp/SMS toggles "silently did nothing
+(docs/PROBLEMS.md)". Two entries fit partially: a **RESOLVED** one about alerts never firing for
+safety check-in partner invites, and a coverage note that 20 of 32 notification types have no
+per-type delivery control. The docstring's phrasing spans both and matches neither exactly.
+
+**Left unchanged.** Chunk 373 predicted the vague references would be the hard ones and this is the
+first; the prediction holds. But the response to a hard one is not to pick the likelier candidate -
+a precise pointer to the wrong entry is worse than a vague pointer to the right file, because it
+looks authoritative and stops the reader searching. Chunk 374 already showed the narrowing risk with
+a case where I *could* identify the entry; here I cannot, and inventing certainty is the failure that
+version of the mistake would become.
+
+Retrofit stands at **6 of 33**, with one now explicitly marked as needing an author's judgement
+rather than a reader's inference - which is a more useful state than 7 of 33 with a wrong pointer in
+it.
