@@ -68,6 +68,16 @@ REVIEWED: dict[tuple[str, str, str], str] = {
         "exist under autocommit."
     ),
     (
+        "dashboard/controllers/labels.py",
+        "Label",
+        "bulk_update",
+    ): "The Display Order tab's drag-and-drop reorder; calls refresh_map_pin_cache_for_label_ids() immediately after, and only for labels whose order actually moved - the refresh costs work per pin carrying the label.",
+    (
+        "dashboard/services/trips/trip_activities.py",
+        "TripActivity",
+        "bulk_update",
+    ): "Reordering a trip's activities; calls queue_calendar_push(trip.pk) once afterwards, matching pin_list_trip.py below - the receiver fires per activity but the push sends the whole trip.",
+    (
         "dashboard/services/pins/pin_list_trip.py",
         "TripActivity",
         "bulk_create",

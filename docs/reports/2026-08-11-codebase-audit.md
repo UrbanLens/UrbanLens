@@ -5528,3 +5528,42 @@ method cannot see the exclusions the careful one was built around.
 Not attempting the removal. It is a migration change against a database I cannot currently test
 against, and the entry's exclusion list is precisely the kind of detail that makes a "mechanical"
 sweep dangerous - the same argument that proved correct about the `date.today()` sweep in chunk 325.
+
+
+## Chunk 332 - the suite found a regression I introduced, in a guard I had duplicated
+
+Full suite: **1 failed, 10781 passed, 1457 subtests** (1:09:50). The failure was mine, and it
+exposes a larger error.
+
+**The failing test was `test_bulk_write_signal_guard.py` - not the guard I wrote in chunk 308.**
+A guard for this exact defect class already existed, and it is better than mine on every axis:
+
+- keyed by `(path, model, operation)` rather than line numbers, explicitly "not by line number,
+  which would churn on every edit above the call and train people to update it blindly";
+- it resolves receivers through `django.apps` and the real signal registry, so it sees receivers
+  connected **dynamically** - `Image`'s achievements `post_save` is wired via `_SUBSCRIPTIONS`, not
+  a decorator, and my regex-based version was structurally blind to it;
+- every entry carries a *reason string*, so the record is the reasoning, not a checkbox.
+
+Its docstring also already described the stale-map-icon-after-label-reorder problem, and its
+`pin_list_trip.py` entry already documents "calls `queue_calendar_push(trip.pk)` once afterwards
+rather than once per activity" - the exact design decision I reached independently in chunk 305 and
+recorded as though it were novel.
+
+So chunk 308's "turning the defect into a guard" was reinventing a better wheel, and chunks 303 and
+305 then added two bulk writes that the real guard correctly flagged as unregistered. **My duplicate
+could not catch that**, because I had written my own list from a fresh scan that included them.
+
+Fixed: both new call sites registered in the real `REVIEWED` with their reasoning; my duplicate
+deleted. The real guard passes (4 tests, 15s).
+
+**The notification said exit code 0.** The suite was launched as `pytest ... | tail -6`, so the
+pipeline reported *tail's* status, not pytest's. A red build was announced as green, and only
+reading the output caught it. Chunk 311 already flagged that pipe for destroying interim
+visibility; the exit-code masking is the more dangerous half and I did not notice it then.
+
+**Three chunks, three variations of the same root error** - 325 (overrode a documented decision
+without reading it), 330 (re-derived a number careful prior work already had), and now 332
+(rebuilt a test that already existed). Each time the prior work was better, and each time it was
+sitting in a file I had open or adjacent. The loop's bias is toward generating new artifacts over
+reading existing ones, and generation feels like progress in a way that reading does not.
