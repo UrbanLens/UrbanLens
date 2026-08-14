@@ -2839,6 +2839,17 @@ understanding why it happened.
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
 
+- **Other viewsets missing a prefetch** (2026-08-14). Zero - and the number is close to
+  meaningless, which is the reason for recording it. The scan covers `models/*/viewset.py`
+  paired with its `serializer.py`, and that population is **2**: one serializer has related
+  fields (`Pin`'s, fixed the same day) and one viewset uses `prefetch_related` (the same one).
+  The DRF viewset layer under `models/` is nearly unused; the real API surface is
+  `dashboard/external_api/`, which has its own view classes and was **not** covered here. A
+  reader should not take this entry as evidence that the API has no N+1 problems - it is evidence
+  that this particular scan looked almost nowhere. The runtime instrument
+  (`test_pin_to_json_prefetch.py`: capture queries over 1 and N objects, assert the per-object
+  delta) is the one to point at `external_api/` views, and that has not been done.
+
 - **Documentation cross-references** (2026-08-14). Every `docs/*.md` path this report actually
   links to resolves - `FEATURES.md`, `NOTES.md`, `PROBLEMS.md`, `designs/plugins.md`,
   `reports/2026-08-14-view-coverage.md`, `notes/mobile_app_requirements.md`. A first pass reported
