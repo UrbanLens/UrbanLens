@@ -6536,3 +6536,37 @@ What the work actually did:
 The measurement was sound; the attribution was not. A query-count test over a method proves what
 that method costs, not that anything calls it - and `to_json()` looked like the map's serialiser
 because a comment elsewhere said so.
+
+---
+
+## `PinViewSet` has no `prefetch_related` at all
+
+`models/pin/viewset.py:53`:
+
+    return Pin.objects.select_related("location").filter(profile__user=self.request.user)
+
+`select_related("location")` only. Meanwhile `models/pin/serializer.py` exposes:
+
+- `rating` -> `Pin.rating` -> `self.reviews.all()` -> **one query per pin** with no `reviews`
+  prefetch. (After the 2026-08-14 fix this reads a prefetch cache *when one exists*; without the
+  prefetch it costs the same as the `.latest()` it replaced. The fix makes the path *capable* of
+  being flat - the queryset has to opt in.)
+- `categories`, `tags`, `statuses` -> `LabelSerializer(many=True, read_only=True)`.
+
+**Unverified, and deliberately not guessed:** `Pin` has no `tags`/`statuses`/`categories` attribute
+that this audit could find - the only occurrences of those names are keys inside `to_json()`'s
+returned dict. So how DRF resolves those three declared fields is unknown. It may be a
+`related_name`, an annotation applied elsewhere, or they may fail silently. That needs answering
+before adding prefetches, because the right prefetch depends on the answer.
+
+The check, in order:
+
+1. Hit the endpoint (or call the serializer on one pin) and see what `tags`/`statuses`/`categories`
+   actually contain.
+2. Run the instrument from `test_pin_to_json_prefetch.py` against `PinViewSet.get_queryset()` over
+   1 and N pins - the per-pin delta names the cost directly.
+3. Add only the prefetches that delta justifies. `reviews` is near-certain; the label ones depend
+   on step 1.
+
+Recorded rather than fixed because the previous entry in this file is a correction of exactly this
+mistake - assuming a serialisation path without tracing it.
