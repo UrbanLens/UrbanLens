@@ -5830,3 +5830,23 @@ Recording the verdict at its actual strength: *supported by broad absence, not e
 schema*. Chunk 309's conclusion was probably right and its evidence was thinner than the confident
 phrasing implied. This is the third claim in three chunks where the finding is not that the code is
 wrong, but that my stated confidence outran what I had checked.
+
+
+## Chunk 345 - the pin_type claim is now established, not merely supported
+
+Followed the chain chunk 344 identified as the gap: `_pin_matches_filter` -> `deserialize_criteria`
+(`services/search/filter_criteria.py`) -> `Pin.objects.filter_by_criteria` (`models/pin/queryset.py`).
+
+- `pin_type` appears **0 times** in `filter_criteria.py` and **0 times** in `pin/queryset.py`.
+- `filter_by_criteria` consumes an **enumerated key set** - `name`, `status`, `tags`,
+  `exclude_tags`, `label_groups`, `min_rating`, `max_rating`, and so on - read key by key rather
+  than splatted into `filter(**criteria)`.
+
+That is the allowlist chunk 344 said was the deciding factor. A user cannot store a `pin_type`
+criterion that later matches, because no layer of the criteria vocabulary contains the concept.
+Chunk 309's verdict on `site_scope.py` is now established rather than inferred.
+
+**Four chunks to settle one claim that took one sentence to assert.** That ratio is the honest cost
+of the confidence, and it is worth stating plainly: the original verdict was probably right on
+weaker evidence, and this chain only mattered because the verdict was load-bearing for calling a
+bulk write clean. Not every claim earns four chunks. The ones that let a write path past a guard do.
