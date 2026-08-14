@@ -5712,3 +5712,28 @@ The honest summary of the last several chunks: chunks 303-310 found and fixed th
 chunks 311-339 have mostly been verification, self-correction, and confirming that prior work was
 already right. That is worth something, but it is not the same activity, and reporting it as
 continued bug-finding would misrepresent it.
+
+
+## Chunk 340 - template rules from CLAUDE.md, both clean
+
+Looked outside the OPEN backlog at two project-specific template rules, each with a concrete
+user-visible failure mode:
+
+- **Multi-line `{# ... #}` comments** (they render straight to the page): **0** across 418
+  template files.
+- **`"prefix-"|add:obj.id`** (silently yields `''`, because `str + int` fails both the
+  int-coercion and concat paths - the bug that collapsed per-item DOM ids and made every DM map
+  bubble render the first map): **0 real instances.** No `|add:` anywhere takes a `.id` or `.pk`
+  operand.
+
+23 raw matches narrowed to 0. Most operands end in `_str` - the documented fix, already applied.
+The remaining five (`ns`, `label_url_kind`, `pin.slug`, a pre-built `visit_map_id`) are strings by
+nature, so concatenation is well-defined for them.
+
+**Fifth time a scan's raw output was not the finding**, after chunks 305, 312, 328 and 338. The
+ratio here is stark - 23 matches, 0 defects - and the reason is the same as always: the pattern
+that expresses a bug also expresses its fix and its safe uses. A grep for `|add:` cannot see the
+type of the operand, which is the entire question.
+
+Both rules being clean is itself worth recording. They read like the kind of convention that
+erodes quietly, and they have not.
