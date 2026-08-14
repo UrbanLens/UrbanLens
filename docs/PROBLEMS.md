@@ -5854,6 +5854,12 @@ tree for the detach route returns nine hits, and every one is `pin.link.delete` 
 endpoint for removing a pin's external links. Nothing posts to `pin.link`.
 
 So this is not a subtle conditional that testing missed; the code path is simply never executed.
+
+**Test added 2026-08-14 (audit chunk 326)**, `tests/hypothesis/test_pin_detach_location.py`. It
+posts to `pin.link` and is marked `xfail(strict=True)` - it does **not** assert the 500, because
+that would cement the bug as intended, and it does not presuppose which of the three fixes is
+right. When detach stops raising, the strict marker fails and tells whoever fixed it to replace
+the marker with a real assertion. The product decision above is untouched and still yours.
 Whatever the fix turns out to be, a test posting to `reverse("pin.link", args=[pin.slug])` belongs
 with it - that single request is enough to catch this class permanently.
 

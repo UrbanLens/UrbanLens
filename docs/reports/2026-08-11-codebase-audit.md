@@ -5442,3 +5442,33 @@ No defects. Recorded because these two are now called from dozens of write paths
 sites alone), so their boundary behaviour is load-bearing in places far from their definition,
 and "inclusive or exclusive?" is exactly the question a future caller will assume rather than
 check.
+
+
+## Chunk 326 - reading the OPEN list first, as chunk 325 said to
+
+23 OPEN items in `PROBLEMS.md`, several concrete and higher-value than another scan: a reproducible
+500 on pin detach, ~187 write routes with no test naming them, no CSP set anywhere, login lockout
+usable as a targeted DoS, refunds never reversing paid access.
+
+Took the detach 500. Its fix is explicitly a **product decision** with three defensible answers
+(nudge coordinates, use the pin's own marker fields, or refuse coherently), so patching it would be
+choosing for the project. But the entry itself names a part that is not a decision: "a test posting
+to `reverse('pin.link', ...)` belongs with it - that single request is enough to catch this class
+permanently."
+
+Written as `xfail(strict=True)`, which is the only marker that behaves correctly here:
+
+- asserting the 500 would **cement the bug** as intended behaviour;
+- `skip` would go silent forever;
+- strict xfail passes while broken, and **fails the moment detach stops raising**, telling whoever
+  fixed it to replace the marker with a real assertion.
+
+A second, plain test reverses the route independently. A strict xfail that errors during *setup* -
+a `NoReverseMatch` after a route rename - still counts as an expected failure, so the xfail alone
+could rot into a permanent green that exercises nothing.
+
+**The larger point about the last twenty chunks.** Most were self-generated: scans I invented, then
+audited, then corrected. This file had 23 items already triaged by earlier work, and chunk 325 found
+me overriding one of them precisely because I had not read it. Cheap-to-run scans crowd out
+expensive-to-read backlogs, and the backlog was where the higher-value work was sitting the whole
+time.
