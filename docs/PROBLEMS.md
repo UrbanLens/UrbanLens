@@ -6971,3 +6971,14 @@ multi-minute container cycle.
 It caught a real error this way: a test asserting `date.today()` is unaffected by
 `override_settings(TIME_ZONE=...)`, which is wrong because Django's `setting_changed` receiver
 also rewrites `os.environ["TZ"]` and calls `time.tzset()`.
+
+
+## Note: NotificationLog receivers self-guard on `created`
+
+Recorded 2026-08-14 (audit chunk 343) because it is easy to get backwards. The three
+`NotificationLog` `post_save` receivers - `push_notification_to_browser`, `enqueue_text_alerts`,
+`enqueue_native_push` - all begin `if created and instance.profile_id`. Marking a notification read
+via `queryset.update()` is therefore safe for a reason that has nothing to do with `update()`
+skipping signals: a plain `save()` would be equally safe. Anyone converting those call sites to
+`save()` for signal-correctness reasons should know they are not fixing a re-push hazard, because
+there isn't one.

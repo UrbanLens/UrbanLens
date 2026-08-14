@@ -5780,3 +5780,31 @@ refresh would have cached a survivor whose relations were still moving.
 Worth noting that two chunks' conclusions rested on this for six chunks before anyone checked it.
 An unverified claim does not stay isolated; chunk 307 built on it within one chunk. Verification
 debt compounds in the same direction as the reasoning that created it.
+
+
+## Chunk 343 - auditing my own load-bearing claims; one was wrong
+
+Chunk 305 marked the two `NotificationLog...update(status=READ)` sites clean, and used them as the
+headline example that "bypassing a signal is often correct - re-pushing a notification when the
+user *reads* it is precisely the bug". That reasoning was asserted from the receiver *names*, not
+read.
+
+Reading them: all three (`push_notification_to_browser`, `enqueue_text_alerts`,
+`enqueue_native_push`) open with `if created and instance.profile_id`. **They self-guard.** A
+normal `save()` on an existing row would not re-push either, because `created` is False on an
+update. The bypass prevents nothing.
+
+- **Conclusion still correct**: the sites are clean.
+- **Reason recorded for it was wrong**: I credited the `.update()` call with a safety property that
+  belongs to the receivers.
+
+This matters beyond the entry, because that example was carried forward as the argument for why the
+bulk-write guard asserts only "the set does not grow unreviewed" rather than demanding invalidation
+everywhere. The argument survives - `pin_edit.py`'s transient self-parent (chunk 309) is a genuine
+instance of a deliberate, load-bearing bypass - but it now rests on one real example instead of two,
+and the one I led with was the weaker.
+
+**The pattern across chunks 342 and 343**: both audited claims I made *about code I had not opened*,
+inferring behaviour from a name (`refresh_map_pin_cache`, `enqueue_native_push`). One held with an
+extra mechanism I had not known about; one failed. Names are a hypothesis about behaviour, and this
+session has now spent four chunks discovering that reading the definition is the cheap step.
