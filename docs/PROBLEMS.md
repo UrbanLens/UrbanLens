@@ -6753,8 +6753,9 @@ A file-level sweep for that pairing gives eleven candidates:
 
 | file | line | call |
 |---|---|---|
-| `controllers/pin_sharing.py` | 166 | `.images.filter()` |
-| `controllers/safety.py` | 747, 1520 | `.contacts.filter()`, `.contacts.exclude()` |
+| ~~`controllers/pin_sharing.py`~~ | ~~166~~ | **false positive** - one query filtering submitted ids, not in a loop |
+| ~~`controllers/safety.py`~~ | ~~747~~ | **false positive** - a single authorization check on one check-in; `.exists()` is correct there, being cheaper than fetching rows |
+| `controllers/safety.py` | 1520 | `.contacts.exclude()` - unverified |
 | `external_api/views.py` | 2006, 3369 | `.items.count()`, `.markup_maps.filter()` |
 | ~~`models/album/model.py`~~ | ~~145~~ | **false positive** - already `len(self.items.all())`; the scan matched `.items.count()` inside the docstring explaining why not to use it |
 | ~~`models/pin_list/model.py`~~ | ~~82~~ | **false positive** - same |
@@ -6792,6 +6793,15 @@ the comment corrected so the more idiomatic-looking `.exists()` is not "restored
 citing prefetch reuse - the scan matched that phrase in the prose. The two places in the codebase
 that document this rule correctly were flagged for breaking it.
 
-Worth noting for the remaining six: a text-matching scan cannot tell code from a comment about
-code, and this codebase comments unusually well - so its best-documented spots are the most likely
-to appear on such a list. Six candidates remain unverified.
+Worth noting for the remainder: a text-matching scan cannot tell code from a comment about code,
+and this codebase comments unusually well - so its best-documented spots are the most likely to
+appear on such a list.
+
+**Two more dismissed 2026-08-14**: `pin_sharing.py:166` and `safety.py:747` are single-object
+contexts, not per-row loops. `.exists()` on one check-in's contacts is the *correct* call - it is
+cheaper than fetching rows, and the prefetch-cache argument only applies when the same relation is
+read repeatedly across many objects.
+
+**Running total on this lead: 11 candidates, 1 real (the messaging previews), 5 false positives,
+1 previously assessed, 4 unverified** - `safety.py:1520`, `external_api/views.py:2006` and `:3369`.
+The one real find was worth the exercise; the hit rate was not high.
