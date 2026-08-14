@@ -236,7 +236,12 @@ class PinBulkEditView(ExternalApiView):
 
             if to_remove:
                 for pin in pins:
-                    present = [label for label in to_remove if pin.labels.filter(pk=label.pk).exists()]
+                    # One query per pin (none when labels are prefetched), instead of one
+                    # per label per pin: .filter().exists() inside the comprehension made
+                    # this len(pins) x len(to_remove) - 250 queries to strip 5 labels from
+                    # 50 pins. .all() reads a prefetch cache; .filter()/.exists() never do.
+                    attached_ids = {label.pk for label in pin.labels.all()}
+                    present = [label for label in to_remove if label.pk in attached_ids]
                     if not present:
                         continue
                     for label in present:

@@ -2833,6 +2833,31 @@ Reporting that would have manufactured a defect out of a test bug - the mirror i
 where a real-looking chain turned out to be safe. Both come from trusting a result before
 understanding why it happened.
 
+### 250 queries to strip 5 labels from 50 pins (fixed)
+
+Pointing the prefetch work at `external_api/`, where the real endpoints live - the previous chunk
+established that the `models/*/viewset.py` layer this audit had been scanning is nearly unused.
+
+The layer is generally careful: 48 `select_related` and 15 `prefetch_related` calls. Of seven
+list-building loops, six use `.all()` - the form that reads a prefetch cache. The seventh,
+`views_pin_bulk.py:239`, was:
+
+    for pin in pins:
+        present = [label for label in to_remove if pin.labels.filter(pk=label.pk).exists()]
+
+`.filter().exists()` inside a comprehension, inside a loop over pins: **len(pins) x len(to_remove)**
+queries. Removing 5 labels from 50 pins cost 250. Both verbs also bypass any prefetch the caller
+supplied, so no upstream optimisation could rescue it.
+
+Now one set of attached ids per pin, intersected in Python - `len(pins)` queries, or none when
+labels are prefetched. Semantics are identical; `present` contains exactly the same labels in the
+same order.
+
+This is the third distinct instance of the same root cause in one day (`to_json`'s `.filter()`,
+`rating`'s `.latest()`, and now `.exists()`), which is why the rule is worth stating as a rule
+rather than as three fixes: **only `.all()` reads a `prefetch_related` cache.** Every other related-
+manager verb issues SQL, and none of them look wrong at a glance.
+
 ---
 
 ## 3. Checked and clean
