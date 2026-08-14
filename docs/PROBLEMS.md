@@ -6398,3 +6398,37 @@ have no callers anywhere, in any file, including their own.
 Worth doing properly with a call-graph rather than a name grep, since the test-only 26 in
 particular may be exercised through the very `filter_by_criteria`-style aggregators that make them
 look unused.
+
+---
+
+## 20 label-kind literals where the named constant is already used 130 times
+
+`models/labels/meta.py` defines `KIND_TAG`/`KIND_CATEGORY`/`KIND_STATUS`/`KIND_USER`/`KIND_MEDIA`,
+and the codebase imports them **130 times** outside tests. Twenty query/create sites use the bare
+string instead. Exact list, from a scan that resolves each field's own `choices` via
+`Model._meta.get_field(name).choices` rather than matching values across all enums:
+
+| file | lines | literal |
+|---|---|---|
+| `controllers/maps.py` | 534, 666 | `kind="user"` |
+| `controllers/pin_lists.py` | 90 | `kind="user"` |
+| `controllers/pin_edit.py` | 350, 355, 357 | `kind="category"` |
+| `models/pin/model.py` | 814, 833 | `kind="category"` |
+| `models/pin/model.py` | 863, 886 | `kind="status"` |
+| `models/pin/model.py` | 891 | `kind="tag"` |
+| `models/pin/signals.py` | 200 | `kind="status"` |
+| `models/wiki/model.py` | 328 | `kind="category"` |
+| `services/labels/statuses.py` | 26, 46 | `kind="status"` |
+| `services/pins/pin_creation.py` | 330, 333 | `kind="tag"`, `kind="category"` |
+| `services/visits/visits.py` | 502, 520 | `kind="status"` |
+| `services/pins/pin_suggestions.py` | 767 | `source="external_api"` |
+
+Nothing is broken today - the literals match the constants. The risk is the one already fixed in
+`VisitQuerySet.from_takeout` (2026-08-14): the two agree by coincidence, so changing a constant
+leaves these silently filtering on a value nothing produces. Several are in `Pin.add_category` /
+`change_category`, which this audit separately found to have no production callers - so those
+particular ones matter least.
+
+Mechanical but not trivial: each file needs the right import, and `models/pin/model.py` and
+`models/wiki/model.py` import from `labels.model` lazily to avoid circularity, so the constants
+must follow the same pattern.
