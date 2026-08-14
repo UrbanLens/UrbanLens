@@ -5501,3 +5501,30 @@ round trip, neither cost a container cycle.
 This is the third memory-sourced claim this session to be checked rather than trusted, and the
 first of the three to survive being wrong at no cost - the earlier two (`safe_int`'s default,
 `clamp_int`'s keyword names) were caught only after producing a bogus FAIL line.
+
+
+## Chunk 330 - independently re-deriving the duplicate-index count, and deferring to the filed one
+
+Did the column-level AST comparison promised in chunk 329: per model, single-field
+`Index(fields=[...])` against columns Django already indexes (FK/O2O, `db_index=True`,
+`unique=True`). Result: **64**.
+
+The filed entry says **58**, and **the filed number is the better one.** It was verified against a
+fully-migrated database by comparing `pg_index.indkey` column lists rather than names, explicitly
+excluding partial indexes (`indpred IS NULL`), unique indexes, and `varchar_pattern_ops` variants -
+noting the `_like` indexes Django creates for prefix matching are *not* redundant with a plain
+btree and must not be swept up.
+
+My 64 is a source-level approximation that over-counts, mainly because I counted `unique=True` as
+"already indexed" - true of the column, but a unique index is exactly what the DB-level analysis
+deliberately set aside. Six of my extra hits are that.
+
+**A number that looks like a refinement of a prior finding, and is not.** Third time this session:
+chunk 305's two "extra" Label sites (already fixed), chunk 328's phantom 23rd guard entry (my own
+f-string), and now this. Each time the newer, cheaper instrument produced a number that differed
+from careful prior work, and each time the prior work was right. The tell is consistent - the cheap
+method cannot see the exclusions the careful one was built around.
+
+Not attempting the removal. It is a migration change against a database I cannot currently test
+against, and the entry's exclusion list is precisely the kind of detail that makes a "mechanical"
+sweep dangerous - the same argument that proved correct about the `date.today()` sweep in chunk 325.
