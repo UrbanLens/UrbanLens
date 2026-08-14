@@ -6325,3 +6325,24 @@ The single most repeated lesson, at nine occurrences, is mechanical and worth st
 whoever reads this next: **a raw count from a scan was wrong every single time until the matches
 were read.** Not usually wrong - always. And the failures skew alarming rather than quiet, because a
 broken extractor flags everything.
+
+
+## Chunk 369 - the code-to-docs cross-references actually resolve
+
+Checked whether the `TODO(media-auth)` markers point at anything real, since a dangling reference to
+`PROBLEMS.md` is worse than none - it reads as filed work that is not.
+
+**It resolves.** `PROBLEMS.md` carries a substantive entry describing the gap the TODOs mark: media
+access is authenticated-only with no per-object check, so any logged-in user can fetch. And there
+are **33 references to `PROBLEMS.md` from source files**, so the code-to-analysis linkage is
+systematic rather than one careful author's habit.
+
+That is the mechanism behind the pattern this audit kept hitting from the other side. Every time I
+produced something the codebase already knew - the duplicated guard, the overridden deferral, the
+re-derived counts - the existing analysis was reachable from the code itself. **I was not finding it
+because I was searching the code for defects rather than following the code's own pointers to where
+the defects were already described.**
+
+The `media-auth` gap itself is filed and known, not a new finding here. Worth naming in this report
+anyway, since "authenticated-only, no per-object check" on media is the kind of item that stays open
+quietly.
