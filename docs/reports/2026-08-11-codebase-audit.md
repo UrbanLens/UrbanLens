@@ -2402,6 +2402,17 @@ the pattern itself.
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
 
+- **`AlbumEditView.post`** (31 statements, never executed - 6th entry on the coverage list).
+  Probed and clean, which is worth recording because it calibrates that list: untested does not
+  mean broken. Authorization is correct on both routes and the split is documented - pin-scoped
+  requires ownership (`profile__user=request.user`), wiki-scoped goes through
+  `resolve_visible_wiki`, matching the shared wiki-editing model. `cover_image_id` is deliberately
+  re-scoped through the album's own contents "so a foreign image id can't be pinned as a cover".
+  Each field is applied only when present, so a partial form cannot blank the rest, and both name
+  and description are length-checked. The one nit: an unrecognised `kind` is silently dropped
+  rather than refused, unlike the name/description paths which return a 400 - not a defect, but
+  inconsistent with its neighbours.
+
 - **`docs/FEATURES.md` accuracy** (2026-08-14). Checked because `CLAUDE.md` instructs every agent
   to consult it *before* assuming a feature is missing, so staleness here causes duplicated work
   rather than mere confusion. Cross-referenced all 79 controllers against it. The naive
