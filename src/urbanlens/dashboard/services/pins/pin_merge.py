@@ -484,5 +484,14 @@ def merge_pins(survivor: Pin, loser: Pin, profile: Profile, resolutions: dict[st
 
         loser.delete()
 
+        # last_visited is a denormalized copy of the newest PinVisit, and the visits
+        # above moved across via update(), which fires no signal. Recomputing also
+        # saves the survivor, which is what refreshes its cached map payload - the
+        # merge has no other invalidation despite the survivor gaining visits,
+        # images and labels.
+        from urbanlens.dashboard.services.visits.visits import sync_last_visited
+
+        sync_last_visited(survivor)
+
     survivor.refresh_from_db()
     return survivor

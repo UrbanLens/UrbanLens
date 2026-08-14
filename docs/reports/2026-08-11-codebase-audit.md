@@ -4987,3 +4987,37 @@ writes had to leave that reasoning intact.
 its owner field is `creator`. Three chunks, three fixture-shaped failures presenting as code
 failures. The cost is one full container test cycle (~3 min) each time. Reading an existing
 test's `baker.make` line for the same model first would have caught all three.
+
+
+## Chunk 306 - merging pins left the survivor's last-visited date three months stale
+
+`merge_pins` repoints the loser's `PinVisit` rows to the survivor with `queryset.update()`.
+`Pin.last_visited` is a denormalized copy of the newest such row, maintained by
+`sync_last_visited`. Nothing recomputed it, so absorbing a more recently visited pin left the
+survivor advertising an **older** date than its own visit history supports.
+
+Reproduced before fixing: survivor showed 2026-05-16 while its absorbed history said 2026-08-12.
+User-visible on the map popup (`last_visited` is in the payload) and the pin detail page.
+
+Fixed by calling `sync_last_visited(survivor)` inside the merge's transaction. That also settles
+a second staleness found on the way: **the merge issued no cache invalidation for the survivor
+at all**, despite the survivor gaining visits, images and labels. `sync_last_visited` saves the
+pin, which fires the `post_save` receiver that refreshes the cached payload.
+
+**This is the same defect as chunks 304 and 305, third instance, third model.** The generalisation
+is now worth stating plainly: this codebase maintains denormalized/derived state through
+`post_save` receivers, and every place that writes with `update()`/`bulk_update`/`bulk_create`
+is a place that derived state silently stops tracking. Three chunks found three, in labels,
+trips and pins - the shape recurs because bulk writes are reached for exactly when a loop feels
+slow, which is exactly when many rows change.
+
+**On the value of reading the whole function.** Chunk 305's lesson (a grep for a defect's shape
+also matches code that already fixes it) applied in reverse here: the repoint block *looks*
+uniform - fourteen consecutive `update()` calls - and its correctness varies per line depending
+on what each model's receivers maintain. Uniform-looking code is not uniformly correct, and the
+grep cannot tell the difference.
+
+Not fixed, filed: the survivor also absorbs `PinMarkup`/`MarkupMap` (whose receivers maintain
+pin *inferences*) and `PinLink` (`resync_pin_on_link_saved`). Whether those derived values are
+recomputed anywhere after a merge was not established here - it needs reading each receiver's
+actual work, not the pattern match that found them.
