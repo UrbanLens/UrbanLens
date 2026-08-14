@@ -6948,3 +6948,28 @@ This is the inventory doing exactly what it was built for, one chunk after being
 "visibility is handled somewhere per subsystem" into a checkable list, and the check immediately
 produced two named gaps worth investigating. That is a better outcome than a clean verdict would
 have been.
+
+
+## Chunk 397 - the open question closes clean, and the method that raised it was wrong
+
+Traced both checks filed in chunk 396. **Both gates are applied.**
+
+- Trip activity locations: masked via an `effective_location_hidden` annotation, documented in the
+  serializer, not by calling `viewer_hidden_activity_ids`.
+- DM sender names: the messaging serializer's docstring says identity is "resolved through this
+  viewer's visibility" (the 2026-07-23 fix), with the fields populated upstream.
+
+So chunk 396's "zero direct uses" was measuring call sites when the gates are applied by annotation
+and upstream resolution. **Sixteenth artifact**, and the one that most deserved the caution it got:
+I filed it as an open question with the checks that would settle it rather than as a finding, and the
+checks settled it against me within one chunk.
+
+The correction that matters for future work: **the inventory is good for finding the gates and bad
+for auditing their use.** A gate applied as a queryset annotation, or resolved before serialization,
+leaves no trace at the surface that emits the data. Any real audit of "does this surface mask X" has
+to test the *behaviour* - a viewer who should not see something, asserted against the response - which
+is exactly the test chunk 396 wrote down and did not run.
+
+Incidentally: `serializers_messaging.py` cites "the 2026-07-23 fix" - the same date as all six
+dangling decision references. That session did substantial identity-masking work, and its reasoning
+is the part that ended up in a gitignored file.

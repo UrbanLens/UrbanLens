@@ -7403,7 +7403,7 @@ disclosing masked members). Those are the recurring shape: a *new* surface that 
 gate its subsystem already had.
 
 
-## OPEN QUESTION 2026-08-14: does the external API apply trip-activity location masking?
+## ~~OPEN QUESTION 2026-08-14: does the external API apply trip-activity location masking?~~ (ANSWERED same day - both gates ARE applied)
 
 Found by checking the six-mechanism inventory above against the newest surface (audit chunk 396).
 Across 69 `external_api/` files:
@@ -7432,3 +7432,19 @@ That trace was not completed. Two concrete checks would settle it:
 
 Both have a natural test: a viewer who should see a masked identity or hidden location, asserted
 against the API response rather than the rendered page.
+
+**ANSWERED 2026-08-14 (chunk 397) - both are masked; the zero-use table was measuring the wrong
+thing.**
+
+1. *Trip activity locations*: `external_api/serializers.py` documents masking by "the activity's own
+   `location_hidden` flag or by the adder's..." and branches on `effective_location_hidden` when
+   serializing. Applied as an **annotation**, not by calling `viewer_hidden_activity_ids`.
+2. *DM sender names*: `serializers_messaging.py`'s docstring states "identity masking (the 2026-07-23
+   fix): a sender whose ``profile_visibility``..." and "the sender's displayed identity is resolved
+   through this viewer's visibility". The `sender_name`/`sender_slug` fields are `read_only` and
+   populated upstream where `display_identity_for` runs.
+
+So the six-mechanism table is useful for *finding* the gates but not for auditing whether a surface
+uses one: a gate applied via annotation or resolved upstream is invisible to a search for the
+helper's name. **Any future check of this kind has to look for the masking's effect, not its call
+site.**
