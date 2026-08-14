@@ -790,13 +790,19 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
 
     @property
     def rating(self) -> int:
-        try:
-            review = self.reviews.all().latest()
-            if review:
-                return review.rating
-        except ObjectDoesNotExist:
+        """The most recent review's rating, or 0.
+
+        Uses `max()` over `self.reviews.all()` rather than `.latest()`: `latest()`
+        appends ORDER BY + LIMIT and so always issues a query, even when the caller
+        has done `prefetch_related("reviews")`. `.all()` reads the prefetch cache when
+        one exists and costs a single query when it does not. `Review.Meta` sets
+        `get_latest_by = "created"`, which is what the key below reproduces.
+        """
+        reviews = self.reviews.all()
+        if not reviews:
             logger.debug("no rating found for pin %s", self.id)
-        return 0
+            return 0
+        return max(reviews, key=lambda review: review.created).rating
 
     # ------------------------------------------------------------------
     # Category helpers (personal classification for this pin)

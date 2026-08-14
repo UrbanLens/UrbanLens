@@ -6465,26 +6465,43 @@ must follow the same pattern.
 
 ---
 
-## `Pin.to_json()` still costs 2 queries per pin (labels half fixed)
+## RESOLVED: `Pin.to_json()` scaled linearly in queries; now flat
 
-**Measured, 2026-08-14.** Serialising pins fetched with `prefetch_related("labels")`:
+**Measured, 2026-08-14.** Serialising pins fetched with the prefetches a caller would reasonably
+supply:
 
 | | 1 pin | 5 pins | per pin |
 |---|---|---|---|
-| before | 6 queries | 22 | **4** |
-| after the labels fix | 4 queries | 12 | **2** |
+| original | 6 | 22 | **4** |
+| after the labels fix | 4 | 12 | **2** |
+| after the rating fix | 3 | **3** | **0** |
 
-The labels half is fixed: `to_json()` called `self.labels.filter(kind=...)` twice, and `.filter()`
-on a prefetched many-to-many builds a fresh queryset and ignores the cache. It now does
-`list(self.labels.all())` once and filters in Python - `.all()` reads the cache when present and
-costs one query when not, so it is strictly better either way. A regression test asserts
-`<= 2 queries per pin`.
+Two independent causes, and they share a root worth internalising:
 
-**Two per pin remain, and are not labels.** They come from other lookups in the same payload - the
-debug log shows a rating fetch (`no rating found for pin N`) among them. Finding them is the same
-exercise: run the test in this file, raise the threshold, and read `CaptureQueriesContext`'s SQL.
+1. `self.labels.filter(kind=...)`, twice - `.filter()` on a prefetched m2m builds a fresh queryset.
+2. `Pin.rating` used `self.reviews.all().latest()` - `.latest()` appends ORDER BY + LIMIT and so
+   always queries. `Review.Meta` sets `get_latest_by = "created"`, reproduced exactly by
+   `max(reviews, key=lambda r: r.created)`; getting that key wrong would have silently changed which
+   review's rating is shown, which is a correctness bug wearing a performance fix's clothes.
 
-Why this matters more than the raw number: the map is the hottest page in the application, and this
-class of bug is invisible to review. The prefetch *is* present, so the code reads as correct, and
-the cost never appears as a slow query - only as a lot of fast ones, growing with the number of
-pins on screen.
+**The general rule: only `.all()` reads a `prefetch_related` cache.** `.filter()`, `.latest()`,
+`.count()`, `.exists()` and `.first()` on a related manager all issue a query regardless. Two of
+those appeared in a single method here.
+
+### Swept: no other serialisation method has this problem
+
+139 serialisation-ish methods (`to_json`/`serialize`/`as_dict`/`to_dict`/`_row`/`_payload`) checked
+for `self.<related>.<verb>(...)` where the verb bypasses the cache. **Zero hits.** `Pin.to_json`
+was the only one, and only one method in the codebase now uses the cache-friendly
+`self.<related>.all()` form - the one this work introduced.
+
+The first version of that sweep also returned zero, and was wrong. It required the verb to follow
+the relation *immediately* (`self.reviews.latest()`), so it missed the chained form
+`self.reviews.all().latest()` - which is one of the two bugs it was written to find. Corrected to
+match a verb anywhere in the chain, with both known bugs as controls; only then is the zero
+evidence.
+
+The runtime instrument remains the better one for anything this cannot see:
+`dashboard/tests/hypothesis/test_pin_to_json_prefetch.py` captures queries over 1 and N objects and
+asserts the per-object delta is zero. That measures the property directly rather than pattern-
+matching its likely spellings.

@@ -40,7 +40,7 @@ class PinToJsonPrefetchTests(TestCase):
             pin.labels.add(self.status, self.tag)
 
     def _count_for(self, n: int) -> int:
-        qs = Pin.objects.filter(profile=self.profile).select_related("location").prefetch_related("labels")
+        qs = Pin.objects.filter(profile=self.profile).select_related("location", "profile").prefetch_related("labels", "reviews")
         with CaptureQueriesContext(connection) as ctx:
             [p.to_json() for p in qs]
         return len(ctx)
@@ -64,4 +64,4 @@ class PinToJsonPrefetchTests(TestCase):
         per_pin = (five - one) / 4
 
         print(f"\n  to_json() queries: 1 pin -> {one}, 5 pins -> {five}  ({per_pin:.1f}/pin)")
-        self.assertLessEqual(per_pin, 2, f"{per_pin:.1f} queries per pin; the labels prefetch is being bypassed again")
+        self.assertLessEqual(per_pin, 0, f"{per_pin:.1f} queries per pin; a prefetch is being bypassed (labels via .filter(), or reviews via .latest())")
