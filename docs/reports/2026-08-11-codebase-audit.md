@@ -7148,3 +7148,18 @@ Of the eight dangling, **seven cite 2026-07-23 decisions or `completed.md`** - t
 record. So the reference audit's real finding is not scattered rot: it is one missing document,
 referenced from eight places, plus two comments whose subject may or may not be filed under a
 different description.
+
+
+## Chunk 405 - the reference audit is complete: 26 of 26
+
+`services/spotguessr/selection.py` **resolves** - its `O(pool size)` query-count comment matches an
+entry discussing the "related `O(pool size)` problem inside `pick_next_location`".
+
+**Final: 16 resolve, 8 dangling, 2 unresolved.** Summary table filed in `PROBLEMS.md` itself, where
+someone hitting a bad pointer will actually find it.
+
+A thread that began as a readability nit in chunk 370 - "these pointers do not name an entry" - ended
+up locating a single gitignored document that eight code comments depend on, and producing an
+evidence-based rule for what makes a citation work. Neither was visible from the starting question,
+and neither would have surfaced from any scan: it required following a promise the code made and
+checking whether it was kept, twenty-six times.

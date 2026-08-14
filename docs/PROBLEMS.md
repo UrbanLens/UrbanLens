@@ -7455,3 +7455,32 @@ site.**
 `test_masked_sender_name_is_not_leaked_in_the_thread` and
 `test_masked_partner_display_name_is_not_the_username`. The two checks proposed above were already
 written, named almost identically, and are passing in the suite. Nothing to add here.
+
+
+## Reference 2026-08-14: audit of all 26 code references to this file
+
+Every source file citing `docs/PROBLEMS.md` was checked (audit chunks 370-405).
+
+| outcome | files |
+|---|---|
+| resolve to an entry | 16 |
+| **dangling** | **8** |
+| unresolved (subject may be filed under another description) | 2 |
+
+**Seven of the eight dangling references cite the same thing**: a decision dated 2026-07-23, or
+`completed.md` by name. Both live in `docs/notes/ai/`, which is **gitignored** (`.gitignore:49`) and
+was never committed. So this is one absent document referenced from eight places - not eight
+independent omissions - and the fix is either to promote those decisions into a tracked file or to
+stop citing an untracked one from tracked code.
+
+The two unresolved are `services/spotguessr/__init__.py` and `services/trivia/__init__.py`,
+describing an import-order failure that celery workers trigger and `manage.py check` does not. The
+nearest entry (`PinViewSet.basename` / `get_default_basename`, root cause not found) shares the shape
+but not obviously the subject.
+
+**What makes a reference findable**, from the 16 that worked: the comment contains a *distinctive
+searchable string* - a symbol (`MapController.resolve_place`), a flag (`strict=True`), a date, a
+quoted entry title, or a concrete symptom (`{"ok": true}` and the field never changes). What fails is
+describing the problem in general words ("the report", "option (a)", "the trips list"). The single
+best example in the codebase is `services/messaging/direct_message_shares.py`, which quotes its
+entry's title verbatim.
