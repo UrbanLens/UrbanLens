@@ -6199,3 +6199,67 @@ entry point is somewhere the scan could not see.
 A route with genuinely no caller is still worth removing - it is surface area that has to be kept
 authorised and tested - but "the grep found nothing" has produced a false positive in every
 category this sweep touched.
+
+---
+
+## 46 BEM modifiers applied in templates with no CSS rule
+
+Measured 2026-08-14 against the compiled `style.css` (current at the time - no `.scss`
+was newer). Each base class *is* styled, so each of these was written to create a visual
+distinction that does not render. Not fixed, because what each should look like is a design
+decision. Sorted by how many templates apply it.
+
+| modifier | templates | first use |
+|---|---|---|
+| `card--secondary` | 8 | `pages/location/index.html` |
+| `badge--muted` | 5 | `pages/site_admin.html` |
+| `card--primary` | 3 | `pages/location/index.html` |
+| `ul-game-hud__group--lead` | 3 | `pages/consensus/index.html` |
+| `dm-composer-attachment-chip--share` | 2 | `partials/messages/_group_thread.html` |
+| `form-row--map` | 2 | `pages/safety/create.html` |
+| `btn--sel` | 1 | `pages/organize/index.html` |
+| `btn--trigger` | 1 | `partials/ui/_icon_picker.html` |
+| `btn-icon--primary` | 1 | `pages/site_admin_ui_components.html` |
+| `cf-value-input--reference` | 1 | `partials/custom_fields/_value_input.html` |
+| `cf-value-input--select` | 1 | `partials/custom_fields/_value_input.html` |
+| `cf-value-input--url` | 1 | `partials/custom_fields/_value_input.html` |
+| `comment-reply-btn--sm` | 1 | `partials/trips/trip_comments_panel.html` |
+| `detail-item--abandoned` | 1 | `partials/pins/pin_overview_partial.html` |
+| `detail-item--built` | 1 | `partials/pins/pin_overview_partial.html` |
+| `detail-item--coordinates` | 1 | `partials/pins/pin_overview_partial.html` |
+| `detail-item--last-active` | 1 | `partials/pins/pin_overview_partial.html` |
+| `dm-composer-attachment-chip--map` | 1 | `partials/messages/_thread.html` |
+| `dm-thread--group` | 1 | `partials/messages/_group_thread.html` |
+| `form-row--maps` | 1 | `pages/safety/detail.html` |
+| `form-row--message` | 1 | `pages/safety/create.html` |
+| `form-row--plan` | 1 | `pages/safety/create.html` |
+| `form-row--time` | 1 | `pages/safety/create.html` |
+| `form-row--title` | 1 | `pages/safety/create.html` |
+| `fp-cf-input--select` | 1 | `partials/custom_fields/_filter_input.html` |
+| `fp-cf-input--text` | 1 | `partials/custom_fields/_filter_input.html` |
+| `home-widget--stats` | 1 | `partials/home/_widget_stats.html` |
+| `inline-sub-form--pricing` | 1 | `pages/site_admin_subscriptions.html` |
+| `map-overlay-btn--cancel` | 1 | `partials/layout/_map_annotations_panels.html` |
+| `notif-item__icon-wrap--pin_shared` | 1 | `partials/notifications/notification_item.html` |
+| `notif-item__icon-wrap--safety_ci_due` | 1 | `partials/notifications/notification_item.html` |
+| `notif-item__icon-wrap--visit_suggested` | 1 | `partials/notifications/notification_item.html` |
+| `org-bulk-btn--edit` | 1 | `pages/organize/index.html` |
+| `org-bulk-btn--merge` | 1 | `pages/organize/index.html` |
+| `page-onboarding--wiki` | 1 | `pages/location/wiki.html` |
+| `sv-img--fallback` | 1 | `pages/location/street_view.html` |
+| `trip-map-marker-num--ghost` | 1 | `pages/trips/detail.html` |
+| `trip-panel-empty--all-completed` | 1 | `partials/trips/trip_activities_panel.html` |
+| `trip-panel-empty--tab` | 1 | `partials/trips/trip_activities_panel.html` |
+| `ul-game-hud__btn--focus` | 1 | `partials/games/_game_hud_controls.html` |
+| `visit-item--pending` | 1 | `partials/pins/_visit_history.html` |
+| `visit-list--pending` | 1 | `partials/pins/_visit_history.html` |
+| `visit-source--pending` | 1 | `partials/pins/_visit_history.html` |
+| `wiki-seed-list--aliases` | 1 | `partials/pins/pin_wiki_create_dialog.html` |
+| `wiki-stat-row--composite` | 1 | `partials/pins/_wiki_stat_rating_item.html` |
+| `wiki-stat-row--mine` | 1 | `partials/pins/_wiki_stat_rating_item.html` |
+
+Worth triaging rather than doing wholesale: `ul-game-hud__group--lead` (the leading
+score on all three game pages), the three `visit-*--pending` classes (a pending visit is
+indistinguishable from a confirmed one) and the `notif-item__icon-wrap--*` set are user-visible
+states; others are cosmetic hierarchy that may simply have been abandoned. Deleting the class
+from the template is as valid a resolution as writing the rule.

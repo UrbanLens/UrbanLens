@@ -2135,6 +2135,44 @@ individual `/&/g` patterns. Both errors were caught only by checking the output 
 whose behaviour was already known. A scanner over a language you are pattern-matching rather than
 parsing needs a known-answer control, or its confident output is noise.
 
+### 46 style modifiers that render as nothing
+
+A CSS reachability sweep: which classes do templates apply that no rule ever matches? Measured
+against the **compiled** `style.css` rather than the SCSS sources, because `&--modifier` nesting
+means a resolved class name frequently appears nowhere in the source. (Verified the compiled file
+was current first - no `.scss` is newer than it.)
+
+3,806 distinct classes are applied across the templates; 511 have no rule at all. Most of that
+number is uninteresting - JS hooks, one-off wrappers, classes that only ever carried semantics.
+The meaningful subset is BEM modifiers **whose base class is styled**: 46 of them. That pattern is
+unambiguous - somebody wrote `class="card card--secondary"` intending a visual distinction, and
+the distinction does not exist.
+
+Several are user-visible states rather than cosmetic polish:
+
+- `ul-game-hud__group--lead` - on all three game pages, marks the *leading* score. Renders
+  identically to every other group.
+- `badge--muted` - 5 templates, mostly site admin.
+- `card--secondary` / `card--primary` - 8 and 3 templates; a visual hierarchy that is currently flat.
+- `visit-list--pending`, `visit-item--pending`, `visit-source--pending` - a pending visit looks
+  exactly like a confirmed one.
+- `notif-item__icon-wrap--pin_shared`, `--safety_ci_due`, `--visit_suggested` - per-type
+  notification icon treatments.
+- `sv-img--fallback`, `trip-map-marker-num--ghost`, `dm-thread--group`.
+
+Not fixed, and deliberately: what `--lead` or `--muted` *should* look like is a design decision,
+not a defect with one correct answer. The full list of 46 is in `docs/PROBLEMS.md` so it can be
+worked through or deliberately dropped.
+
+**Methods note - the fifth bad instrument today, caught by a control.** Cross-checking a sample
+against the SCSS source appeared to contradict the compiled CSS: `card--secondary` had "3 matches".
+It did not - those were `&--secondary` blocks nested under `.btn` and two other parents, which the
+grep happily matched because it looked for the modifier suffix under *any* parent. The compiled
+CSS was right and the cross-check was wrong. That is now five sweeps in one session where the
+first instrument was misleading; the pattern is that every one of them was caught by checking
+against a case whose answer was already known, and none would have been caught by reading the
+output alone.
+
 ---
 
 ## 3. Checked and clean
