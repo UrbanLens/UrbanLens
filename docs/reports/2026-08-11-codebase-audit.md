@@ -8035,3 +8035,29 @@ checked names, not dict values" leaves a reader unsure whether the clean result 
 command converted it into a claim that covers both shapes. Across this session, the caveats I
 *closed* (this, the localdate sites in 335, the reference audit's remaining files in 402-405) turned
 out to be as valuable as the findings, because a bounded claim nobody extends stays bounded forever.
+
+
+## Chunk 443 - the last open caveat, closed: every `*_json` context key is safe
+
+Chunk 425 left a caveat I called beyond reach: whether any JSON reaches a template *without*
+`safe_json_for_script`. A bounded version is enumerable - context keys named `*_json` - so it was
+reachable after all.
+
+**Five such keys, six assignments, all safe, by two different correct mechanisms:**
+
+- `filter_labels_json` - produced by `safe_json_for_script` (the line I matched was the context-dict
+  entry, not the producer);
+- `custom_layers_json`, `map_overlays_json` - Python lists / helper output, not pre-serialised
+  strings;
+- `initial_label_groups_json` - **plain `json.dumps`**, and safe because of *where it lands*: an HTML
+  attribute, `data-initial-groups="{{ ... |default:'' }}"`, with **no `|safe`**. Django autoescapes
+  it, so a `</script>` in a label name becomes `&lt;/script&gt;` and the browser hands JS the literal
+  string back through `dataset`.
+
+**The codebase uses the right escaper for each context**: `safe_json_for_script` inside `<script>`
+blocks, autoescaping inside attributes. Those are genuinely different problems - the script-block
+case needs `<` escaped *before* the template, since `|safe` would otherwise pass it through - and
+mixing them up either breaks the JSON or leaves the hole.
+
+That closes the last substantive caveat in this report. Every "I did not check X" I recorded has now
+either been checked or is explicitly out of reach with the reason stated.
