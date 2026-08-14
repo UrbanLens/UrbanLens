@@ -2173,6 +2173,35 @@ first instrument was misleading; the pattern is that every one of them was caugh
 against a case whose answer was already known, and none would have been caught by reading the
 output alone.
 
+### The untested-view question, finally answered with the right instrument
+
+Chunk 196 estimated view coverage by counting how many routes appeared in test files, and said
+plainly that this was an upper bound - it cannot tell "imported" from "executed" - and that the
+right instrument was `coverage.py` over the real suite. Three attempts later, that measurement
+exists (`docs/reports/2026-08-14-view-coverage.md`).
+
+**80% of 22,081 statements** in `controllers/` + `external_api/` execute during the full suite.
+**208 of 1,795 callables (11%) never execute at all.** And the distribution is the finding:
+**100 of those 208 are HTTP write handlers** - `post`/`delete`/`put`/`patch` - totalling **1,217
+statements of data-mutating code that no test reaches**. Untested read paths render a wrong page;
+untested write paths lose or corrupt data, and half of what is unexercised here is a write path.
+
+Worst files by count: `userprofile.py` (19), `safety.py` (17), `consensus.py` (16),
+`site_admin.py` (13), `external_api/views.py` (12). Largest single gaps:
+`PinController.upload_takeout` (39), `LabelBulkConvertView.post` (36), `SiteAdminUsersView.post`
+(35), `LocationWikiDetailPinEditView.post` (34), `LabelBulkEditView.post` (33).
+
+One result is worth more than its size: `PinController.upload_takeout` also appeared in chunk
+222's list of routes with no discoverable caller. Two independent instruments - a static
+reference sweep and a runtime coverage run - converging on the same 39 statements is much stronger
+evidence than either alone, and makes it the clearest candidate for either deletion or a first
+test.
+
+Three attempts were needed because the first two were spoiled by my own doing: one wrote its
+marker without gating on the JSON step succeeding, and both had source `docker cp`'d into the
+container mid-run. The third was left strictly alone for its full 1:38:35, which is the only
+reason it produced a usable artifact.
+
 ---
 
 ## 3. Checked and clean
