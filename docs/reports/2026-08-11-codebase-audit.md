@@ -7289,3 +7289,26 @@ wrong one until the matches were read - and the mechanisms were all different: w
 offset, suppressed filter, missing category, file-scoped analysis of a cross-file fact. There is no
 class of scan that was reliable. What was reliable was reading what the scan selected, every time,
 without exception.
+
+
+## Chunk 411 - missing `Meta.ordering` is a design choice here, not a gap
+
+Checked for the classic Django pagination hazard: paginating an unordered queryset returns
+inconsistent pages between requests. **109 of 169 concrete models define a `Meta` without
+`ordering`.**
+
+**That count is not a finding**, and treating it as one would have been the twenty-first artifact.
+`Meta.ordering` puts an `ORDER BY` on *every* query for that model, whether or not the caller needs
+it; the precise alternative is ordering at the point of use. This codebase does the latter - **16
+queryset modules define `order_by`** - and orders explicitly where output stability matters
+(`activity_queryset` orders by scheduled time then explicit `order` then `created`; the map pin
+payload orders by `pk`).
+
+Corroborating: **no `UnorderedObjectListWarning` suppression exists anywhere in the source.** Django
+emits that warning when a paginator receives an unordered queryset, and nothing here silences it - so
+a real instance would surface rather than being hidden.
+
+So the honest verdict is clean, and the reason is worth stating: a global `Meta.ordering` would make
+this check *pass* while making every unpaginated query slower. **The configuration that looks safer
+by inspection is the worse one**, which is exactly the sort of thing a count-based audit rewards and
+a reading-based one does not.
