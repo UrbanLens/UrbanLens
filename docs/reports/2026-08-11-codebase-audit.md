@@ -5183,3 +5183,25 @@ lesson as the colour-literal sweep earlier in this audit, which took five regex 
 
 Where a class is structurally decidable, parse it. Reach for regex only when the property is
 not in the syntax - and expect to read every hit when you do.
+
+
+## Chunk 314 - naive-date sweep finds 4 real sites; filed, not fixed
+
+Scanned for timezone-naive date/time construction. Four hits, all `datetime.date.today()`. Not
+the naive-*datetime* bug the scan was aimed at - a `date` carries no timezone - but wrong anyway
+in an app with `USE_TZ = True`: `date.today()` uses the server's timezone, Django's
+`timezone.localdate()` uses the active one, and they disagree for part of every day.
+
+`trip_activities.py:819` is the one with consequence: completing an activity computes
+`effective_date = min(completed_date, today)`, so completing late in the user's day can clamp
+the date to yesterday, and that date feeds the visit entries created for the activity.
+
+**Filed to `docs/PROBLEMS.md` rather than fixed**, because a full suite is running against a
+synced container snapshot and syncing source mid-run corrupts it - a rule this audit learned by
+destroying two runs. The fix is one call per site, but it wants a boundary test with
+`override_settings(TIME_ZONE=...)` and a frozen clock, which is not a change to make while
+unable to run tests.
+
+Also worth recording: the scan was aimed at a class the codebase does not have (naive datetimes:
+zero) and found a neighbouring class it does. Aiming at a precise, decidable property makes the
+near-misses legible instead of drowning them.

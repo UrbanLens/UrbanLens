@@ -6870,3 +6870,27 @@ switching. That is the same trap recorded for the seeding loop in `labels/signal
 
 Untested, so any change wants a test first: the existing behaviour to preserve is that ids not
 belonging to the profile are silently ignored rather than erroring.
+
+
+## `datetime.date.today()` used instead of `timezone.localdate()` (4 sites)
+
+Found 2026-08-14 (audit chunk 314). `USE_TZ = True` (`settings/base.py:407`), but four places
+compute "today" with `datetime.date.today()`, which reads the **server's** local timezone rather
+than Django's active one. The two disagree for part of every day, so a user near a date boundary
+gets the wrong day.
+
+- `dashboard/controllers/tools.py:256`
+- `dashboard/controllers/tools.py:299`
+- `dashboard/controllers/trip.py:1515`
+- `dashboard/services/trips/trip_activities.py:819`
+
+The last is the one with visible consequence: completing a trip activity computes
+`effective_date = min(completed_date, today)`, so an activity completed late in the user's day
+can be clamped to *yesterday* - and that date feeds the visit entries created for the completed
+activity.
+
+Fix is `django.utils.timezone.localdate()` at each site. Not done in the chunk that found it: a
+full test suite was running against a synced container snapshot, and syncing source mid-run
+corrupts the run (this cost two runs earlier in the same audit). Wants a test pinning the
+boundary case, which needs `override_settings(TIME_ZONE=...)` plus a frozen clock rather than a
+plain assertion.
