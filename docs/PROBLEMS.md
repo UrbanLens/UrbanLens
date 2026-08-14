@@ -7344,7 +7344,16 @@ same position: the decisions may well be recorded, on whichever machine ran that
 
 Two ways out, both cheap: move decisions worth citing into a tracked file when the session that made
 them ends, or stop citing `docs/notes/ai/` from tracked files and code. The current arrangement
-promises a record that most readers structurally cannot reach. If its
+promises a record that most readers structurally cannot reach.
+
+**Scope (chunk 389): this is not one stray pointer.** `docs/notes/ai/` is cited by **9 tracked
+files**, including `docs/ROADMAP.md` and `docs/designs/place-consolidation.md` - not just this one.
+A reader in a fresh checkout following any of them lands on nothing. `.venv_windows` (also ignored)
+is cited by 3 tracked docs for the same reason.
+
+The roadmap and design-document citations are the more consequential half: `PROBLEMS.md` entries are
+usually self-contained enough to stand without their footnote, whereas a design document deferring
+to an unreachable file may be the only place a decision was ever explained. If its
 content survives in git history, recovering the 2026-07-23 decisions from it would close six
 dangling code comments at once; if not, those decisions exist only as the one-line summaries in the
 comments themselves.

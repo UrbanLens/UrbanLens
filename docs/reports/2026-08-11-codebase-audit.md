@@ -6765,3 +6765,26 @@ and I checked whether it delivered.
 **Fifth and final instance of the session's pattern**: "missing" was again "somewhere else". Four
 times it was mis-filed; this time it is unreachable by construction, which is the one variant that
 cannot be fixed by looking harder.
+
+
+## Chunk 389 - the gitignored-citation problem is nine files, not one
+
+Generalised chunk 388 by cross-referencing every `.gitignore` entry against tracked files.
+
+**`docs/notes/ai/` is cited by 9 tracked files** - `PROBLEMS.md`, `ROADMAP.md`,
+`designs/place-consolidation.md` and others. `.venv_windows`, also ignored, is cited by 3 tracked
+docs. So the pattern found via six code comments is a documentation-wide habit.
+
+The roadmap and design citations matter more than the `PROBLEMS.md` one. A problem entry usually
+stands on its own with the footnote as extra; a **design document** that defers to an unreachable
+file may be the only place a decision was explained at all.
+
+**Thirteenth scan artifact, caught by the standing rule.** `.cursor` appeared to be cited by 15
+tracked files - it is `connection.cursor()` and `schema_editor.cursor` in migrations, matching as a
+substring. Had I reported the raw output, the headline would have been "15 files cite a gitignored
+IDE directory", which is false and would have buried the true finding under a bigger fake one.
+
+That is the last of this session's recurring failure and its clearest statement: **the raw output was
+wrong in a way that made the result look more important.** Every one of the thirteen skewed toward
+alarm, never toward complacency - which is why reading the matches has been worth doing every single
+time.
