@@ -6925,3 +6925,26 @@ A per-subsystem design makes that failure easy: the developer adding a surface h
 six mechanisms applies, and nothing in the code tells them. The table does not fix that, but it
 converts "know the codebase" into "read one table", which is the difference between an obvious
 mistake and an invisible one.
+
+
+## Chunk 396 - the inventory earns its keep immediately, and raises a question I cannot close
+
+Applied chunk 395's table to the newest surface. The external API uses **4 of the 6** gates directly
+across 69 files - `identity_visibility` in 5, `wiki_access` in 7, `visible()` and `*_for_viewer` in
+one each. Two show **zero** direct uses: `viewer_hidden_activity_ids` (trip activity locations) and
+`display_identity_for` (DM sender names).
+
+Zero uses is not a defect on its own - the API imports from `services.trips.*` and may inherit
+masking by delegation. But it is precisely the shape that produced the calendar-export leak, the
+data-export disclosure, and the notification naming bug: **a newer surface not consulting a gate its
+subsystem already had.**
+
+**Filed as an open question, not a finding.** Settling it means tracing whether activity coordinates
+reach an API response for a viewer the internal UI hides them from, and that trace needs more room
+than remains. Recorded with the two specific checks that would answer it and the test that would
+prove it either way.
+
+This is the inventory doing exactly what it was built for, one chunk after being written: it turned
+"visibility is handled somewhere per subsystem" into a checkable list, and the check immediately
+produced two named gaps worth investigating. That is a better outcome than a clean verdict would
+have been.

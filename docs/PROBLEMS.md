@@ -7401,3 +7401,34 @@ the audit found at least one historical bug in each of the first four categories
 coordinates, trip location visibility re-implementing the shared gate more strictly, the data export
 disclosing masked members). Those are the recurring shape: a *new* surface that did not consult the
 gate its subsystem already had.
+
+
+## OPEN QUESTION 2026-08-14: does the external API apply trip-activity location masking?
+
+Found by checking the six-mechanism inventory above against the newest surface (audit chunk 396).
+Across 69 `external_api/` files:
+
+| gate | direct uses in external_api |
+|---|---|
+| `identity_visibility` (profile masking) | 5 files |
+| `wiki_access` (place-domain) | 7 files |
+| `visible()` (device scans) | 1 file |
+| `*_for_viewer` | 1 file |
+| **`viewer_hidden_activity_ids` (trip activity locations)** | **0** |
+| **`display_identity_for` (DM sender names)** | **0** |
+
+**Zero direct uses is not itself a defect** - the API imports from `services.trips.*` and may inherit
+masking through delegation. But it is exactly the recurring shape this codebase's history shows: a
+newer surface that does not consult the gate its subsystem already has (see the Google Calendar
+export, the data export, and reply/reaction notifications, all of which failed this way).
+
+**Unresolved.** Answering it means following `serializers_trips.py` / `serializers.py` to whether a
+trip activity's coordinates reach an API response for a viewer the internal UI would hide them from.
+That trace was not completed. Two concrete checks would settle it:
+
+1. Does any external-API trip serializer emit activity coordinates without passing through
+   `trip_visibility`?
+2. Does the DM/group-chat API emit sender names without `display_identity_for`?
+
+Both have a natural test: a viewer who should see a masked identity or hidden location, asserted
+against the API response rather than the rendered page.
