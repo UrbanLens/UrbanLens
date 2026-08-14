@@ -7797,3 +7797,30 @@ it out in advance and wrote down both the mechanism and the invariant to preserv
 
 My flag was answered, and the thing I was worried about was the shallower of the two problems already
 solved here.
+
+
+## Chunk 433 - a documented invariant, verified to still hold
+
+The Celery broker comment states an invariant in prose: *"keep this comfortably above
+`max(time_limit, longest countdown)`; raise it if either grows."* That is a **checkable promise** -
+the class chunks 405-408 established is worth auditing - and the comment even names the values it
+expects.
+
+Resolved every `countdown=` in the codebase:
+
+| constant | value |
+|---|---|
+| `ALERT_DELAY_SECONDS` | 120 |
+| `EMAIL_DELAY_SECONDS` | 120 |
+| `EXPORT_TTL_SECONDS` | 3600 |
+| `IMPORT_TTL_SECONDS` | 3600 |
+
+`max(time_limit, longest countdown) = 3600`, and `visibility_timeout = 7200` - exactly 2x. **The
+invariant holds**, and the comment's own description ("import/export cleanup at 3600s") is still
+accurate a month later.
+
+**This is the ideal case for the promise-checking method.** The comment does three things at once:
+names a hazard that is undiagnosable from symptoms, states the rule that prevents it, and specifies
+the quantities to re-check. Verifying it took two commands. Most prose invariants in most codebases
+are not checkable at all - and of the ones here that were, chunks 377-388 found a third had rotted.
+This one has not.
