@@ -7357,3 +7357,24 @@ Twenty-two artifacts now, and the mechanisms have stopped being novel: they are 
 scope is narrower than the fact it is testing**. Line vs declaration, file vs module, prose vs code,
 call site vs annotation. The invariant holds without exception - the count was wrong every time until
 the matches were read - and the cause has turned out to be singular.
+
+
+## Chunk 414 - no `related_name` collisions, and the first scan this session with no artifact
+
+Two Django relations from one model to the same target, both without `related_name`, collide on the
+reverse accessor - Django raises `fields.E304` at check time, but only when both are actually
+defined, and the failure reads as unrelated. **Zero across every model.**
+
+**The first count this session that survived contact with the matches**, and the reason is chunk
+413's rule applied *before* running rather than after: the fact ("two relations to one target within
+one class") lives at **class scope**, so the scan walks class bodies rather than lines or files. Every
+one of the twenty-two artifacts came from scoping narrower than the fact; scoping correctly produced a
+clean result first time.
+
+**Also ran a control**, per chunk 308's lesson that a guard which cannot fail is worthless: fed the
+scan a synthetic model with two un-named FKs to the same target, and it detected them. So the zero is
+a real zero rather than a blind one - which is exactly the distinction chunk 412's malformed-regex
+artifact turned on.
+
+Twenty-two artifacts to learn two habits that take one extra command each: **scope the scan to the
+fact, and prove the scan can fail.** Both were available from the start.
