@@ -7378,3 +7378,20 @@ artifact turned on.
 
 Twenty-two artifacts to learn two habits that take one extra command each: **scope the scan to the
 fact, and prove the scan can fail.** Both were available from the start.
+
+
+## Chunk 415 - no mutable literal defaults on JSON/Array fields
+
+`JSONField(default={})` binds **one dict shared by every instance** - a classic Django bug where two
+records silently mutate the same object. **Zero across all models**, with the control detecting an
+injected `default={}` (and correctly ignoring `default=list`, the right form).
+
+**Second consecutive artifact-free scan.** Both used the same two habits from chunks 413-414: scope
+the scan to the unit the fact lives in (a field declaration, so AST call nodes), and prove it can
+fail before believing a zero. Neither takes more than an extra minute, and between them they account
+for every one of the twenty-two false results this session produced.
+
+Worth noting what these last two chunks are *not*: they are not more thorough than the earlier scans,
+and they did not find anything. Their value is that their zeros mean something. **A clean result from
+an unverified instrument is indistinguishable from a clean result from a blind one**, and roughly a
+quarter of this audit's chunks were spent discovering which of mine were which.
