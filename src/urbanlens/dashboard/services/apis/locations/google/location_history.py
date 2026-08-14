@@ -27,6 +27,7 @@ from django.db import DatabaseError
 if TYPE_CHECKING:
     from collections.abc import Generator, Iterator
 
+    from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.import_formats.gpx_tracks import ParsedRoute
 
@@ -181,14 +182,30 @@ def import_location_history_streaming(
     matched = 0
     skipped = 0
 
+    # A Takeout export is mostly the same handful of everyday coordinates repeated
+    # thousands of times, and each distinct one costs a PostGIS nearest-neighbour
+    # query. Keyed on the exact pair the file carries, so this dedupes repeats
+    # without changing which pin any given coordinate resolves to.
+    nearest_pin_memo: dict[tuple[float, float], Pin | None] = {}
+
+    # One query instead of one per matched visit. Seeded from what is already
+    # stored, then kept current as rows are created, so a duplicate appearing
+    # twice within the same file is still skipped the second time.
+    seen_visits: set[tuple[int, datetime]] = set(
+        PinVisit.objects.filter(pin__profile=profile, source=VisitSource.HISTORY).values_list("pin_id", "visited_at"),
+    )
+
+    last_percent = -1
+
     for i, visit in enumerate(all_visits, 1):
-        pin = find_nearest_pin(visit["latitude"], visit["longitude"], profile, radius_m)
+        coordinates = (visit["latitude"], visit["longitude"])
+        if coordinates in nearest_pin_memo:
+            pin = nearest_pin_memo[coordinates]
+        else:
+            pin = find_nearest_pin(visit["latitude"], visit["longitude"], profile, radius_m)
+            nearest_pin_memo[coordinates] = pin
         if pin is not None:
-            already_exists = PinVisit.objects.filter(
-                pin=pin,
-                visited_at=visit["visited_at"],
-                source=VisitSource.HISTORY,
-            ).exists()
+            already_exists = (pin.pk, visit["visited_at"]) in seen_visits
             if not already_exists:
                 try:
                     PinVisit.objects.create(
@@ -196,6 +213,7 @@ def import_location_history_streaming(
                         visited_at=visit["visited_at"],
                         source=VisitSource.HISTORY,
                     )
+                    seen_visits.add((pin.pk, visit["visited_at"]))
                     if not pin.last_visited or visit["visited_at"] > pin.last_visited:
                         pin.last_visited = visit["visited_at"]
                         pin.save(update_fields=["last_visited"])
@@ -208,17 +226,24 @@ def import_location_history_streaming(
         else:
             skipped += 1
 
-        yield sse(
-            {
-                "type": "progress",
-                "current": i,
-                "total": total,
-                "percent": min(100, int(i / total * 100)),
-                "matched": matched,
-                "skipped": skipped,
-                "subtype": "location_history",
-            },
-        )
+        # One frame per whole percent (plus the first and last), not one per entry:
+        # a large Takeout export otherwise pushes tens of thousands of SSE frames
+        # for a bar that can only render 100 states, and the stream itself becomes
+        # a bottleneck on both ends.
+        percent = min(100, int(i / total * 100))
+        if percent != last_percent or i in (1, total):
+            last_percent = percent
+            yield sse(
+                {
+                    "type": "progress",
+                    "current": i,
+                    "total": total,
+                    "percent": percent,
+                    "matched": matched,
+                    "skipped": skipped,
+                    "subtype": "location_history",
+                },
+            )
 
     yield sse(
         {

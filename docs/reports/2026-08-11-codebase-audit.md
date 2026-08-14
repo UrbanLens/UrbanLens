@@ -1773,6 +1773,53 @@ broadcast amplified to every group member. It requires an authenticated particip
 rather than an open vector, and picking a threshold is a product decision. The shared module above
 is now the single place to add it.
 
+### A bulk import that queried, and streamed, once per entry (fixed)
+
+A performance sweep: an AST pass over every non-test, non-migration module for ORM calls inside
+`for` loops - 121 sites. Most are fine (bulk-creation loops, keyset batching, loops over
+single-digit candidate sets), and grepping would have drowned in them; the point of triaging by
+amplification is that only one site multiplies by *user-supplied* input.
+
+`services/apis/locations/google/location_history.py` imports a Google Takeout export, where tens of
+thousands of `placeVisit` entries is ordinary. Per entry it ran a PostGIS nearest-neighbour query, a
+duplicate-check query, a write, and an SSE frame. Three of those four are now unnecessary:
+
+- **The spatial query is memoised on the exact coordinate pair.** A location history is mostly the
+  same few everyday coordinates repeated - home, work, the same shop - and each repeat was paying
+  for its own `distance_lte` + `ORDER BY Distance` query. Keyed on the exact pair the file carries,
+  so it dedupes repeats without changing which pin any coordinate resolves to.
+- **The duplicate check is one query instead of one per matched entry**, seeded into a set of
+  `(pin_id, visited_at)`. The set is updated as rows are created, because the previous
+  implementation got intra-file duplicate protection for free by re-querying each iteration - a
+  test pins that down, since it is exactly what a naive prefetch would break.
+- **Progress frames are throttled to one per whole percent.** A 50,000-entry export was pushing
+  50,000 SSE frames at a bar that can render 100 states, making the progress stream its own
+  bottleneck at both ends.
+
+What was deliberately *not* changed is as important. `PinVisit.objects.create()` stays a per-row
+call: `models/achievements/signals.py` subscribes to `PinVisit` under `TRIGGER_VISIT`, and
+`bulk_create` does not fire `post_save`, so batching the writes would silently stop awarding
+visit achievements during an import. The same reasoning rules out the obvious fix in
+`models/labels/signals.py`, where ~46 seeding `get_or_create` calls per signup look like an
+obvious `bulk_create` candidate until you notice `Label` has `post_save` receivers syncing a
+taxonomy. Recorded here so the next person to spot either loop does not "fix" it.
+
+The module had **no tests whatsoever** before this, which is why the change ships with nine
+covering the behavioural contract (radius matching, cross-run and intra-file idempotency, the
+visit-logging setting, `last_visited` tracking) rather than only the cost properties. One of them
+had to be corrected mid-write: the importer does `from ...visits.visits import find_nearest_pin`
+*inside* the function, so the name is rebound from the source module on every call and a patch
+applied to `location_history` would never have intercepted. In this case it failed loudly
+(`AttributeError`) rather than passing vacuously, but only because `mock.patch` checks the
+attribute exists - the same mistake against a name that *does* exist on the importing module is
+the silent version, and is worth watching for anywhere this codebase imports inside a function.
+
+A second test needed correcting for the opposite reason - it was measuring nothing while passing
+its own premise. Asserting the throttle with 28 entries is vacuous: `int(i/28*100)` advances on
+every single entry, so below ~100 items one-frame-per-percent and one-frame-per-entry are the same
+thing. It now uses 500 non-matching coordinates, which exercises the throttle (about 101 frames)
+without paying for 500 writes.
+
 ---
 
 ## 3. Checked and clean
