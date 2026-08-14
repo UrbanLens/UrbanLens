@@ -6587,3 +6587,35 @@ the bug fixed earlier the same day.
 Care required if adopted: `LabelledModel` may declare the `labels` field itself, in which case
 `Image`'s own declaration has to be reconciled rather than simply adding the base class - a
 migration question, not a refactor.
+
+---
+
+## Per-row queries inside loops: 12 sites (the same root cause, unfixed)
+
+Three instances of this were fixed on 2026-08-14 (`Pin.to_json`'s `.filter()`, `Pin.rating`'s
+`.latest()`, and `views_pin_bulk`'s `.exists()` costing len(pins) x len(labels)). An AST sweep for
+the general shape - a **related-manager verb that bypasses `prefetch_related`, inside a loop or
+comprehension** - finds twelve more. None are fixed; each needs its loop read to judge the
+multiplier.
+
+| file | lines | call | note |
+|---|---|---|---|
+| `services/consensus/fields.py` | 256, 260, 298, 302 | `wiki.aliases.count()`, `.exists()`, `wiki.images.filter(...)` x2 | **four per iteration** - worst of the set |
+| `services/pins/pin_suggestions.py` | 802, 888 | `pin.visit_history.filter(...)`, `.filter(...).exists()` | per pin |
+| `services/memories/photos.py` | 165 | `pin.visit_history.filter(visited_at__date=...)` | per candidate photo |
+| `services/import_export/export.py` | 650, 764 | `label.pins.filter(profile=...)`, `message.images.count()` | per label / per message, on an export path |
+| `services/import_export/import_data.py` | 1554 | `trip.profiles.count()` | per trip |
+| `services/pins/pin_list_membership.py` | 89 | `pin_list.items.count()` | per list |
+| `controllers/pin.py` | 227 | `pin.images.exclude(pk=...)` | per pin |
+
+Discounted as false positives: `export.py:848,850` (`os.path.exists`, which matches the
+`obj.attr.verb(` shape).
+
+**The fix is not uniform** - that is why this is a list rather than a patch. `.count()` in a loop
+often wants an `annotate(Count(...))` on the outer queryset; `.filter()` over a relation often
+wants `prefetch_related` plus a Python filter; `.exists()` often wants a single `__in` query
+outside the loop. Each needs its caller read.
+
+The instrument for confirming any of them is
+`dashboard/tests/hypothesis/test_pin_to_json_prefetch.py`: capture queries over 1 and N objects and
+assert the per-object delta is zero.
