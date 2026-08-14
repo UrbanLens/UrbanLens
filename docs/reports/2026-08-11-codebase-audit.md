@@ -6090,3 +6090,26 @@ timestamps implied.
 Fixed the ownership; the process needs a restart, which is the user's call. Filed the workflow defect
 separately, since fixing the container without fixing the documented command just delays the next
 occurrence.
+
+
+## Chunk 357 - fixing the workflow, and where that fix does and does not live
+
+Added the required `chown` to the documented resync in `CLAUDE.local.md`, with an explanation of why
+the failure is near-invisible (silent `docker logs`, container still "up", `docker exec` running as
+root so every manual check succeeds while the site is down).
+
+**That file is gitignored** (`.gitignore:45`) - it is the user's private, environment-specific
+instructions, deliberately not checked in. So this fix:
+
+- is on disk and will be read by the next session in *this* checkout;
+- is **not** committed, cannot be pushed, and does not reach the other parallel checkouts under
+  `/projects/environments/{dev,staging,prod,test}/` - each of which has its own copy of the same
+  documented command, and its own container that the same `docker cp` would break.
+
+The durable half is therefore the `docs/PROBLEMS.md` entry, which *is* tracked. Anyone hitting a
+silently unhealthy container in another slot will find the root cause there even though their
+`CLAUDE.local.md` still carries the unpatched command.
+
+Worth being explicit about that split rather than reporting "fixed the docs": the fix landed in the
+place that helps this checkout and the *diagnosis* landed in the place that travels. Only the second
+one generalises.
