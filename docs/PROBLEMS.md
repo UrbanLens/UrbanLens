@@ -7484,3 +7484,28 @@ quoted entry title, or a concrete symptom (`{"ok": true}` and the field never ch
 describing the problem in general words ("the report", "option (a)", "the trips list"). The single
 best example in the codebase is `services/messaging/direct_message_shares.py`, which quotes its
 entry's title verbatim.
+
+
+## OPEN 2026-08-14: JSON rendered with `|safe` in `<script>` blocks, where `json_script` is the safe idiom
+
+Found by audit chunk 422, following chunk 421's residual. **Not confirmed exploitable** - the
+verification below was not completed - but the shape is specific enough to be worth checking properly.
+
+Seven template values pass server-serialised JSON through `|safe`: `chart_labels`,
+`chart_user_labels`, `chart_user_counts`, `chart_total`, `common_pins_json`, `filter_labels_json`,
+`pin.tags_data_json`, `pin_list.smart_boundary.geojson`. Four of them sit in templates that contain
+`<script>` blocks (`_cost_admin_body.html`, `common_pins.html`, `pages/map/index.html`, `data.html`).
+
+**Why it matters:** `json.dumps` does not escape `<`, so a user-controlled string containing
+`</script>` terminates the block early and everything after it parses as HTML. Several of these carry
+user-authored names - label names, tag names, pin names.
+
+**Why it is probably fine but needs checking:** Django's `json_script` filter exists for exactly this
+and **is already used in 16 templates here**, so the idiom is known and adopted. These sites may
+predate it, or may serialise through something that escapes, or the values may not be inside the
+script blocks at all.
+
+**To settle it**, for each of the seven: (1) is the `{{ ... |safe }}` lexically inside a `<script>`
+element, and (2) can any string in the serialised payload contain user input? If both, convert to
+`{{ value|json_script:"id" }}` and read it from JS via `JSON.parse(document.getElementById(...).textContent)`,
+matching what the other 16 templates do.

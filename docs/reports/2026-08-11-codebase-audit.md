@@ -7545,3 +7545,22 @@ One residual worth naming rather than claiming clean: JSON rendered through `|sa
 `json_script` filter exists for exactly that and is the stricter choice. I have not checked whether
 these seven sit inside `<script>` tags or in attributes - **that is a real, bounded follow-up**, and
 asserting it either way without looking would be the twenty-sixth artifact.
+
+
+## Chunk 422 - a specific XSS lead, filed unconfirmed
+
+Followed chunk 421's residual. Four of the seven JSON-through-`|safe` values sit in templates
+containing `<script>` blocks, and **`json_script` - Django's escaping-safe idiom for precisely this -
+is already used in 16 other templates here.**
+
+`json.dumps` does not escape `<`, so a user-authored label or tag name containing `</script>` would
+terminate the block and let the remainder parse as HTML. The payloads include user-authored names.
+
+**Filed as OPEN and explicitly unconfirmed.** I did not verify that the `|safe` expressions are
+lexically inside the `<script>` elements rather than elsewhere in those files - counting `<script>`
+tags per file does not establish containment, and treating it as if it did would be the twenty-sixth
+artifact of this session. The entry states the two checks that settle it.
+
+This is the right note to end a long audit on. The lead is real, the fix is already the codebase's own
+established pattern, and the claim I am making is exactly as strong as the evidence I gathered - no
+stronger.
