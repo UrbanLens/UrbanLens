@@ -6606,7 +6606,7 @@ multiplier.
 | ~~`services/memories/photos.py`~~ | ~~165~~ | | **FIXED 2026-08-14** |
 | `services/import_export/export.py` | 650, 764 | `label.pins.filter(profile=...)`, `message.images.count()` | per label / per message, on an export path |
 | `services/import_export/import_data.py` | 1554 | `trip.profiles.count()` | per trip |
-| `services/pins/pin_list_membership.py` | 89 | `pin_list.items.count()` | per list |
+| ~~`services/pins/pin_list_membership.py`~~ | ~~89~~ | `pin_list.items.count()` | **not a defect** - the query is load-bearing, see below |
 | `controllers/pin.py` | 227 | `pin.images.exclude(pk=...)` | per pin |
 
 Discounted as false positives: `export.py:848,850` (`os.path.exists`, which matches the
@@ -6666,3 +6666,22 @@ per-iteration query is safe depends on what two *other* functions write, and the
 reading both. Same hazard as the Takeout importer and the suggestion-acceptance fix, both resolved
 the same day - a per-iteration query is often reading the loop's own writes.
 changes behaviour unless that is reproduced.
+
+
+### `pin_list_membership.py:89` - the query is load-bearing, leave it
+
+`order=pin_list.items.count()` sits inside a loop that **creates** `PinListItem` rows, so each
+iteration deliberately reads the previous iteration's write to get the next order value.
+Precomputing the count would give every new item the *same* `order`.
+
+A local counter incremented per create looks like the obvious optimisation and is not safe either:
+the same loop's `elif` branch calls `existing.delete()`, so the real count moves in both directions
+and a local counter drifts from it.
+
+This is the exact inverse of the hazard that made the other fixes tricky. There, a per-iteration
+query accidentally read the loop's own writes and collapsing it changed behaviour. Here it does so
+**on purpose**, and collapsing it would break ordering. Both cases look identical to a scan for
+"query inside a loop", which is why every entry on this list needs its loop read rather than
+patched to a pattern.
+
+Cost is one cheap `COUNT` per added pin, on a membership-sync path - worth leaving alone.
