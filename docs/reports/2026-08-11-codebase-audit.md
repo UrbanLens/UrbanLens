@@ -2636,6 +2636,35 @@ and two generations of colour regex that each declared completeness. Every one w
 checking against a case whose answer was already known, and every one was caught *after* the result
 had been written down. Doing it first costs one command.
 
+### A control that proved detection but not precision
+
+Next local property: a field assigned and then omitted from `save(update_fields=[...])`, which
+Django silently drops. That is worse than a crash - the write appears to succeed and the value is
+gone.
+
+Following the previous chunk, the filter shipped with a control: a synthetic handler assigning
+`name` and `description` and saving only `name`. It fired. Against the controllers it reported
+**seven** hits.
+
+All seven are false positives, and they share one cause: the filter pools every `obj.field = ...`
+in a function and compares it against *each* `save()`, so mutually exclusive branches accuse each
+other. `e2ee.py` is the clearest example and is entirely correct - `if password_wrapped:` assigns
+three fields and saves all three, while `elif bundle.password_wrapped_secret:` assigns only
+`password_wrap_stale` and saves exactly that. `pin_bulk.py`'s two saves are 46 lines apart in
+unrelated operations.
+
+The lesson refines the previous chunk's, and is worth stating because I got it half right. A
+known-answer control proved the filter **detects** the shape. It said nothing about **precision**,
+because it contained only a true positive. A control that also included a two-branch handler which
+must *not* fire would have caught the branch-insensitivity before seven findings were written down
+and triaged by hand.
+
+So: calibrate with both a case that must fire and a case that must not. Detection and precision are
+different properties, and a single positive control only ever measures the first.
+
+No `update_fields` defects exist in the controllers - established, this time, with the filter's
+limits understood rather than assumed.
+
 ---
 
 ## 3. Checked and clean
