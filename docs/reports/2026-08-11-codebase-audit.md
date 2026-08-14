@@ -1758,7 +1758,10 @@ Two details worth recording because they are where this refactor could have gone
   patch `services.<game>.realtime.broadcast`, and a call to `broadcaster.broadcast` bypasses a patch
   on the module attribute entirely. Passing the module keeps the lookup at call time, so the
   established patch idiom still intercepts. A `SessionRealtime` Protocol types it; mypy checks the
-  module against the protocol without complaint.
+  module against the protocol without complaint. This is not a hypothetical that was reasoned
+  around - a test run launched against the intermediate version (binding the broadcaster directly)
+  came back with exactly one failure, `test_spotguessr_chat.py::test_broadcasts_the_message`, while
+  the same file passes after the change. The prediction and the observation match.
 - **`MAX_MESSAGE_LENGTH` now comes from `core/text_limits.py`**, which exists precisely to be the
   one place these numbers live and did not have this one. All three copies were already `1000` and
   matched their `CharField(max_length=1000)` - checked, not assumed, since a constant above the
