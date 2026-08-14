@@ -2402,8 +2402,9 @@ subscript access. Widening the *structural* filter (any direct field assignment 
 found by AST rather than regex) turned up `markup.py`'s `item.color = body["color"]` and
 `item.border_color = body["border_color"]`, plus `external_api/views_labels_bulk.py` and
 `external_api/views.py` writing `data["color"]` straight to a model. Three more real sites, on top
-of chunk 218's 19 and chunk 231's 8 - **30 in total**, found across three passes, each of which
-believed it was complete.
+of chunk 218's 19 and chunk 231's 8 - **30 at this point**, found across three passes, each of which
+believed it was complete. (Two more followed: see the fifth-pass entry below. The final count is
+32, and the fact that this paragraph originally read "30 in total" is the point it was making.)
 
 The lesson is not "write better regexes". It is that a regex encodes a guess about *syntax*, and
 the property being checked is *semantic* - "does a value from the request reach this field

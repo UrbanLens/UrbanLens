@@ -6,7 +6,7 @@ from django.db.models.signals import m2m_changed, post_delete, post_save, pre_sa
 from django.dispatch import receiver
 
 from urbanlens.dashboard.models.labels.customization.model import LabelCustomization
-from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
+from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin import Pin
 from urbanlens.dashboard.models.reviews.model import Review
@@ -197,7 +197,7 @@ def propagate_visited_label_to_ancestors(sender, instance: Pin, action: str, pk_
         return
     from urbanlens.dashboard.models.labels.model import Label
 
-    visited_label = Label.objects.filter(pk__in=pk_set, kind="status", name="Visited").first()
+    visited_label = Label.objects.filter(pk__in=pk_set, kind=KIND_STATUS, name="Visited").first()
     if visited_label is None:
         return
     for ancestor in instance.ancestor_chain():
