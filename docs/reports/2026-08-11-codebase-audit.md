@@ -5142,6 +5142,29 @@ be 14% defective, so a guard demanding invalidation everywhere would have been w
 out of 22.
 
 
+## Chunk 311 - full-suite run launched (bookkeeping entry, added in 324)
+
+Six code changes had landed across labels, trips and pins (chunks 303-310) without a full-suite
+run. Launched one against a freshly synced container snapshot, and inventoried the session's new
+tests: 17 across five files, all previously passing individually, plus the adjacent suites they
+could disturb (157 merge tests, the trip-activity race suite, the label organize suite).
+
+What a full run adds over those is the only thing they cannot cover: whether the fixes interact
+with anything outside the areas under examination. The pin-merge change is the one that warrants
+it - it now saves the survivor *inside* the merge transaction, firing receivers no merge test was
+written to anticipate.
+
+Two process notes, both mistakes:
+
+- The run was launched as `pytest ... | tail -6`, which buffers until completion. That discarded
+  all interim visibility for a 70-minute job - no progress, no early failure signal. `tee` to a
+  file would have cost nothing.
+- This entry was missing until chunk 324 found 21 commits against 20 documented chunks. The
+  chunk that *launched the verification* was the one that went unrecorded, which is a fair
+  illustration of where attention goes: the interesting work gets written up, the plumbing does
+  not.
+
+
 ## Chunk 312 - select_for_update: 34 sites, clean
 
 Read-only chunk (a full suite is running; no source syncs). Scanned every `select_for_update()`
