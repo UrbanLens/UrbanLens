@@ -6408,8 +6408,16 @@ and the codebase imports them **130 times** outside tests. Twenty query/create s
 
 The thirteen done are the ones where the import is provably safe: `models/labels/meta.py` contains
 *only* constants and imports nothing, so it is a leaf module that any layer can import at module
-level without circularity. The seven left are in `models/pin/model.py` (5), `models/wiki/model.py` (1) and
-`services/pins/pin_suggestions.py` (1, `source="external_api"`).
+level without circularity. The six left are in `models/pin/model.py` (5) and `models/wiki/model.py` (1).
+
+**One entry was withdrawn.** `services/pins/pin_suggestions.py:767` (`source="external_api"`) is
+correct as written: `PinAlias.source` has **no** `choices` - it is deliberately free-text so plugin
+name providers can attribute aliases to themselves, and `AliasSource` defines only `USER` and
+`OTHER`. The scan flagged it because it keyed choices by field *name* across all models rather than
+by `(model, field)`, so `source` inherited the choices of `PinSuggestion.source` and `Image.source`,
+which do define `EXTERNAL_API`. Same collision class as the earlier value-keyed version, one level
+finer. A correct version needs `(model, field)` resolution; nineteen of the twenty original hits
+were on `Label.kind`, where the ambiguity happened not to bite.
 
 **The approach for them is already established in the same files, so this is smaller than it
 looks.** `models/labels/model.py:26` re-exports every `KIND_*` constant from `labels.meta`, and
@@ -6441,7 +6449,6 @@ looks.** `models/labels/model.py:26` re-exports every `KIND_*` constant from `la
 | ~~`services/labels/statuses.py`~~ | ~~26, 46~~ | done 2026-08-14 |
 | ~~`services/pins/pin_creation.py`~~ | ~~330, 333~~ | done 2026-08-14 |
 | ~~`services/visits/visits.py`~~ | ~~502, 520~~ | done 2026-08-14 |
-| `services/pins/pin_suggestions.py` | 767 | `source="external_api"` |
 
 Nothing is broken today - the literals match the constants. The risk is the one already fixed in
 `VisitQuerySet.from_takeout` (2026-08-14): the two agree by coincidence, so changing a constant
