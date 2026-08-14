@@ -156,13 +156,19 @@ def _resuggest_nearby_unfiled_photos(profile: Profile, pin: Pin, *, exclude_imag
     already_suggested = set(
         VisitSuggestion.objects.filter(origin_image__in=candidates, status=VisitSuggestionStatus.PENDING).values_list("origin_image_id", flat=True),
     )
+    # One query for the dates in play, rather than one per candidate. Safe to compute
+    # up front because neither branch below adds a date to the set: the "already
+    # visited" branch logs another visit on a date that is already in it, and
+    # maybe_suggest_photo_visit creates a VisitSuggestion, never a PinVisit.
+    candidate_dates = {candidate.taken_at.date() for candidate in candidates if candidate.taken_at}
+    visited_dates = {visit.visited_at.date() for visit in pin.visit_history.filter(visited_at__date__in=candidate_dates)} if candidate_dates else set()
     for candidate in candidates:
         if candidate.pk in already_suggested:
             continue
         matched_pin = find_matching_pin(profile, candidate.latitude, candidate.longitude)
         if matched_pin is None or matched_pin.pk != pin.pk:
             continue
-        if pin.visit_history.filter(visited_at__date=candidate.taken_at.date()).exists():
+        if candidate.taken_at and candidate.taken_at.date() in visited_dates:
             log_visit_on_pin(profile, candidate, pin)
         else:
             maybe_suggest_photo_visit(candidate)
