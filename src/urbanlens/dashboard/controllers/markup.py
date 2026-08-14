@@ -30,6 +30,7 @@ from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckin
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.numbers import safe_int
 from urbanlens.dashboard.services.core.text_limits import MAX_MARKUP_LABEL_LENGTH, text_length_error
 from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title, sanitize_map_data
 from urbanlens.dashboard.services.sharing.map_sharing import clone_markup_map
@@ -602,8 +603,8 @@ class MarkupView(LoginRequiredMixin, View):
         if security_indicator not in _ALLOWED_SECURITY_INDICATORS:
             security_indicator = ""
 
-        fill_opacity = int(body.get("fill_opacity") or profile.markup_fill_opacity)
-        border_opacity = int(body.get("border_opacity") or profile.markup_border_opacity)
+        fill_opacity = safe_int(body.get("fill_opacity"), profile.markup_fill_opacity)
+        border_opacity = safe_int(body.get("border_opacity"), profile.markup_border_opacity)
 
         if pin_slug is not None:
             owner_kwargs = {"parent_pin": owner}
@@ -630,7 +631,7 @@ class MarkupView(LoginRequiredMixin, View):
             geometry=geometry,
             label=label,
             color=clean_color(body.get("color"), default="#e53e3e"),
-            stroke_width=int(body.get("stroke_width") or 3),
+            stroke_width=safe_int(body.get("stroke_width"), 3),
             border_color=clean_color(body.get("border_color"), default="", allow_none_keyword=True),
             fill_opacity=fill_opacity,
             border_opacity=border_opacity,
@@ -695,13 +696,13 @@ class MarkupEditView(LoginRequiredMixin, View):
         if "color" in body:
             item.color = clean_color(body["color"], default=item.color)
         if "stroke_width" in body:
-            item.stroke_width = int(body["stroke_width"])
+            item.stroke_width = safe_int(body["stroke_width"], item.stroke_width)
         if "border_color" in body:
             item.border_color = clean_color(body["border_color"], default="", allow_none_keyword=True)
         if "fill_opacity" in body:
-            item.fill_opacity = int(body["fill_opacity"])
+            item.fill_opacity = safe_int(body["fill_opacity"], item.fill_opacity)
         if "border_opacity" in body:
-            item.border_opacity = int(body["border_opacity"])
+            item.border_opacity = safe_int(body["border_opacity"], item.border_opacity)
         if "layer_uuid" in body:
             layer_uuid = body.get("layer_uuid")
             item.layer = CustomLayer.objects.filter(uuid=layer_uuid, **_owner_layer_kwargs(owner)).first() if layer_uuid else None

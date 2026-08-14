@@ -18,6 +18,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.numbers import safe_int
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
@@ -171,9 +172,9 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             icon=body.get("icon") or None,
             color=clean_color(body.get("color")),
             detail_bg_color=clean_color(body.get("bg_color"), allow_none_keyword=True),
-            detail_bg_opacity=int(body.get("bg_opacity") or 80),
+            detail_bg_opacity=safe_int(body.get("bg_opacity"), 80),
             detail_border_color=clean_color(body.get("border_color"), allow_none_keyword=True),
-            detail_border_opacity=int(body.get("border_opacity") or 100),
+            detail_border_opacity=safe_int(body.get("border_opacity"), 100),
             parent_pin=parent,
             profile=parent.profile,
             location=location,
@@ -222,9 +223,9 @@ class DetailPinEditView(LoginRequiredMixin, View):
             if value is not None or field in body:
                 setattr(detail_pin, field, value)
         if "bg_opacity" in body:
-            detail_pin.detail_bg_opacity = int(body["bg_opacity"])
+            detail_pin.detail_bg_opacity = safe_int(body["bg_opacity"], 80)
         if "border_opacity" in body:
-            detail_pin.detail_border_opacity = int(body["border_opacity"])
+            detail_pin.detail_border_opacity = safe_int(body["border_opacity"], 100)
 
         # Type is handled apart from the loop above: it is non-nullable (a
         # blank submission is the dialog's "Auto", not "clear it"), and a
@@ -373,9 +374,9 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             icon=body.get("icon") or None,
             color=clean_color(body.get("color")),
             detail_bg_color=clean_color(body.get("bg_color"), allow_none_keyword=True),
-            detail_bg_opacity=int(body.get("bg_opacity") or 80),
+            detail_bg_opacity=safe_int(body.get("bg_opacity"), 80),
             detail_border_color=clean_color(body.get("border_color"), allow_none_keyword=True),
-            detail_border_opacity=int(body.get("border_opacity") or 100),
+            detail_border_opacity=safe_int(body.get("border_opacity"), 100),
             parent_wiki=wiki,
             location=child_location,
         )
@@ -437,9 +438,9 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
             if value is not None or field in body:
                 setattr(child_wiki, field, value)
         if "bg_opacity" in body:
-            child_wiki.detail_bg_opacity = int(body["bg_opacity"])
+            child_wiki.detail_bg_opacity = safe_int(body["bg_opacity"], 80)
         if "border_opacity" in body:
-            child_wiki.detail_border_opacity = int(body["border_opacity"])
+            child_wiki.detail_border_opacity = safe_int(body["border_opacity"], 100)
 
         # Type is handled apart from the loop above - see the matching comment
         # in DetailPinEditView for why.

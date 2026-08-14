@@ -33,6 +33,7 @@ from urbanlens.dashboard.services.admin.cost_tracking import (
     total_recorded_expenses,
 )
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
+from urbanlens.dashboard.services.core.numbers import safe_int
 
 logger = logging.getLogger(__name__)
 
@@ -119,7 +120,7 @@ def _apply_component_form(component: CostComponent, request: HttpRequest) -> Non
     component.replacement_cost = replacement_cost
     component.deprecation_years = deprecation_years
     component.notes = (request.POST.get("notes") or "").strip()
-    component.order = int(request.POST.get("order") or 0)
+    component.order = safe_int(request.POST.get("order"))
     component.retired_at = None if request.POST.get("is_active") == "on" else (component.retired_at or timezone.now())
 
     component.full_clean()
@@ -147,7 +148,7 @@ def _apply_operating_cost_form(cost: OperatingCost, request: HttpRequest) -> Non
     cost.name = name
     cost.monthly_cost = monthly_cost
     cost.notes = (request.POST.get("notes") or "").strip()
-    cost.order = int(request.POST.get("order") or 0)
+    cost.order = safe_int(request.POST.get("order"))
     cost.retired_at = None if request.POST.get("is_active") == "on" else (cost.retired_at or timezone.now())
 
     cost.full_clean()

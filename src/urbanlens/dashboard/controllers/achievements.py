@@ -29,6 +29,7 @@ from urbanlens.dashboard.services.achievements.metrics import all_metrics, group
 
 # App Imports
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.numbers import safe_int
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
@@ -204,7 +205,7 @@ def _apply_form(achievement: Achievement, request: HttpRequest) -> None:
     achievement.threshold = threshold
     achievement.icon = (request.POST.get("icon") or "").strip()[: Achievement._meta.get_field("icon").max_length] or None  # noqa: SLF001
     achievement.color = clean_color(request.POST.get("color"), default=DEFAULT_ACHIEVEMENT_COLOR)
-    achievement.order = int(request.POST.get("order") or 0)
+    achievement.order = safe_int(request.POST.get("order"))
     achievement.is_active = request.POST.get("is_active") == "on"
     achievement.is_secret = request.POST.get("is_secret") == "on"
 

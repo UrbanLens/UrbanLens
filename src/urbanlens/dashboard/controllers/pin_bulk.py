@@ -20,6 +20,7 @@ from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.undo import UndoAction
+from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action, stash_for_undo
@@ -204,6 +205,11 @@ class PinBulkEditView(LoginRequiredMixin, View):
             value = str(raw_value).strip() if raw_value is not None else ""
             if len(value) > max_length:
                 return HttpResponse(f"{request_field} is too long.", status=400)
+            if model_field.endswith("color"):
+                # Length alone is not enough: these are interpolated into style="..."
+                # by the map and organize renderers, and `x" onmouse` is ten characters.
+                # Border colours keep the "none" sentinel, which means "no border".
+                value = clean_color(value, default="", allow_none_keyword=model_field != "color") or ""
             style_updates[model_field] = value or None
 
         for request_field, model_field in (
