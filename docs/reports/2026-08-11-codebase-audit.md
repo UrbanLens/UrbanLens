@@ -6039,3 +6039,24 @@ is to let the last plausible narrative stand, and chunk 353's phrasing ("it is s
 server starts") was already firmer than the evidence warranted. Naming the contradiction is more
 useful to whoever picks this up than a tidy conclusion they would have to unlearn - especially since
 the remaining step, `py-spy dump`, costs about a minute and settles it outright.
+
+
+## Chunk 355 - resolving the contradiction, and nearly reporting a permissions artifact as data
+
+Sampled CPU consumption directly: the child burns **11 ticks in 5 seconds (~2.2% of a core,
+sustained)**. It is working, not blocked - which settles chunk 354's contradiction against the
+"single blocking call" reading and in favour of a poll loop.
+
+**The first two attempts produced zeros that were permission errors, not measurements.**
+`/proc/<pid>/io` is unreadable here even under `docker exec -u root`, and `awk` reported
+"Permission denied" to stderr while the arithmetic dutifully printed `read syscalls in 4s: 0`. A
+zero that means "I could not look" is indistinguishable in the output from a zero that means
+"nothing happened" - and the first reading would have *confirmed* the blocked-process hypothesis I
+was testing.
+
+That is the same shape as chunk 347's near-miss, twice in nine chunks: a search that cannot see is
+reported as a search that found nothing. Both times the error would have supported the conclusion I
+already leaned toward, which is what makes it worth naming rather than filing as a fluke.
+
+The switch to `/proc/<pid>/stat` fields 14+15 worked because it is readable and its meaning is
+unambiguous - a counter that only ever increases, sampled twice.

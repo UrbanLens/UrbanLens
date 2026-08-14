@@ -7072,6 +7072,16 @@ crash-reload-crash cycle would keep the inner server from ever holding a binding
 has been empty for at least 6 hours**, and a repeatedly crashing `runserver` should be printing
 tracebacks. Either output is not reaching `docker logs`, or nothing is crashing.
 
-So the honest state is: never binds, sleeping not blocked, steady low CPU, silent logs - and no
-single explanation covering all four. `py-spy dump` on both pids remains the cheapest thing that
-would settle it.
+**Resolved one branch (chunk 355).** Sampling `/proc/<pid>/stat` utime+stime twice, five seconds
+apart, the child consumes **11 ticks in 5s - about 2.2% of one core, sustained**. The process is
+genuinely *working*, not blocked. That eliminates the single-blocking-call explanation and matches
+a poll loop, which is consistent with the ~33 minutes of CPU accumulated over 18 hours.
+
+So the state is: **actively looping, never binding, silent logs.** The most likely remaining
+explanation is Django's `StatReloader` polling while the inner server process fails to start or
+repeatedly exits - the reloader survives, the child never holds port 8000. Under that reading the
+silent logs are the anomaly to chase, since a failing child should print something.
+
+`py-spy dump` on both pids would still name the frame in about a minute, and is the recommended next
+step. Note that `/proc/<pid>/io` is not readable even via `docker exec -u root` here, so measure CPU
+via `/proc/<pid>/stat` fields 14+15 rather than IO counters.
