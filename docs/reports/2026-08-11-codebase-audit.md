@@ -6060,3 +6060,33 @@ already leaned toward, which is what makes it worth naming rather than filing as
 
 The switch to `/proc/<pid>/stat` fields 14+15 worked because it is readable and its meaning is
 unambiguous - a counter that only ever increases, sampled twice.
+
+
+## Chunk 356 - the root cause, and it is the documented workflow
+
+Chased chunk 355's remaining anomaly (silent logs) and found the whole chain. The container's app
+runs as `appuser` (uid 1001); the host's `src/urbanlens/logs/` is owned by uid 568; `docker cp`
+preserves source ownership; the documented resync command therefore makes the log directory
+unwritable by the app on every use. Django's logging config raises before `runserver` binds.
+
+One fact explains all four symptoms - no listener, silent logs, steady CPU, sleeping-not-blocked -
+and the 10-day failing streak, since previous sessions following the same documented step would have
+done the same thing.
+
+**Three self-corrections inside one chunk, worth recording as a sequence:**
+
+1. Read the traceback, concluded "my `docker cp` broke it" - correct.
+2. Saw the log directory owned 568:568 *unchanged since Jul 24* and `django.log` written minutes ago,
+   and started to retract - the ownership predates this session, so it looked like I was wrong.
+3. Checked the uids: host `apps`=568, container `appuser`=1001. The directory has been wrong for a
+   long time, my syncs kept it wrong, and the recent write was **my own `docker exec` running as
+   root** - which can write regardless and produced evidence pointing the wrong way.
+
+Step 2 was a near-miss in the honest direction: I nearly withdrew a correct conclusion because the
+counter-evidence was superficially strong. What resolved it was the same move that has resolved most
+things this session - checking a specific number (the uids) instead of reasoning about what the
+timestamps implied.
+
+Fixed the ownership; the process needs a restart, which is the user's call. Filed the workflow defect
+separately, since fixing the container without fixing the documented command just delays the next
+occurrence.

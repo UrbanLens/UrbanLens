@@ -7085,3 +7085,42 @@ silent logs are the anomaly to chase, since a failing child should print somethi
 `py-spy dump` on both pids would still name the frame in about a minute, and is the recommended next
 step. Note that `/proc/<pid>/io` is not readable even via `docker exec -u root` here, so measure CPU
 via `/proc/<pid>/stat` fields 14+15 rather than IO counters.
+
+
+## OPEN 2026-08-14: the documented `docker cp` resync breaks the app container
+
+**Root cause of the unhealthy-container entry above.** `CLAUDE.local.md` documents
+
+```
+docker cp src/urbanlens/. urbanlens_devs1_app:/app/src/urbanlens/   # resync without a rebuild
+```
+
+as the way to sync host changes into the container. The host tree contains
+`src/urbanlens/logs/`, owned by the host user `apps` (**uid 568**). The container's app runs as
+`appuser` (**uid 1001**). `docker cp` preserves the *source* ownership, so every resync hands the log
+directory to uid 568 with mode `rw-rw-r--` - no write bit for others - and `appuser` can no longer
+open it.
+
+Django's logging config then fails at startup:
+
+```
+PermissionError: [Errno 13] Permission denied: '/app/src/urbanlens/logs/django.log'
+ValueError: Unable to configure handler 'file'
+```
+
+which raises **before** `runserver` binds. That accounts for every symptom recorded above: no
+listener on 8000, silent `docker logs` (the file handler never configures), sustained ~2% CPU (the
+autoreloader retrying), and a process that is sleeping rather than blocked.
+
+**Why it took so long to see.** `docker exec` defaults to **root**, so every diagnostic and every
+`pytest` run in this session wrote to that log file successfully - `django.log` had a fresh
+timestamp minutes before the investigation, which reads as "permissions are fine" and is the exact
+opposite of the truth for the process that matters.
+
+Ownership has been restored (`chown -R appuser:appuser /app/src/urbanlens/logs`), but the running
+`runserver` will not recover on its own - it needs `docker compose restart app`.
+
+**The workflow itself still needs fixing**, or the next resync reintroduces it. Options: exclude
+`logs/` from the copy, `chown` after every `docker cp`, move the log directory outside the synced
+tree, or make the log path configurable so the container writes somewhere it owns. Until then the
+documented command should carry the `chown` as a second line.
