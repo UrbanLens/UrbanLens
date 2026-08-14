@@ -2202,6 +2202,34 @@ marker without gating on the JSON step succeeding, and both had source `docker c
 container mid-run. The third was left strictly alone for its full 1:38:35, which is the only
 reason it produced a usable artifact.
 
+### Removing the one thing two instruments agreed on
+
+`PinController.upload_takeout` was the single item flagged by both the static caller sweep (chunk
+222) and the coverage run (chunk 224). Following it properly produced a fourth, decisive signal
+and one correction along the way.
+
+The route is `pin.upload.takeout` at `.../import/upload/`, sitting beside `pin.import.form` -
+which templates *do* reference. So the natural reading is "the import dialog posts here". It does
+not: the wizard (`pages/location/import/csv.html`, served by `import_form`) posts to
+`pin.import.preview` and `pin.import.confirmed`, and nothing anywhere - template, TypeScript,
+inline script or Python - names `pin.upload.takeout`.
+
+Mid-investigation this looked like it might be bigger than one handler. `upload_takeout` is the
+only place importing `extract_archive`/`is_archive`... except it is not: `parse_for_preview`, 70
+lines below, imports the same pair and is very much alive - it is what `pin.import.preview`
+resolves to. So the 380-line `archive_extractor` service is fine, and the correct conclusion is
+narrower and cleaner: `upload_takeout` is a **superseded duplicate** of the preview/confirmed
+flow, which handles the same archives, nested archives and KML/JSON/CSV formats.
+
+Four independent signals, then: no static reference, never executed by 10,742 tests, no UI path,
+and a live sibling doing the same job. Removed - 76 lines from `pin.py` and its URL pattern.
+Google Takeout import itself is untouched and still documented on the help page; it runs through
+the wizard, which is the path users actually have.
+
+Worth noting what nearly went wrong: the "only caller of `archive_extractor`" reading would have
+justified deleting a 380-line security-sensitive service (it is the thing doing zip-slip and
+symlink checks) on the strength of a grep that had scrolled past its second consumer.
+
 ---
 
 ## 3. Checked and clean

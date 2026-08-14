@@ -6185,7 +6185,8 @@ callers are API clients. `password_reset_complete` is Django's own. That leaves:
 - `location.wiki.article.restore`
 - `location.wiki.article.revision`
 - `location.wiki.gallery.image`
-- `pin.upload.takeout`
+- ~~`pin.upload.takeout`~~ - RESOLVED 2026-08-14: superseded duplicate of the
+  `pin.import.preview`/`confirmed` wizard flow; handler and route removed
 - `safety.checkin.gallery.image`
 
 **Do not bulk-delete these.** Each needs checking individually, because the plausible explanations

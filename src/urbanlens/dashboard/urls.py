@@ -954,11 +954,6 @@ urlpatterns = [
                                             name="pin.import.form",
                                         ),
                                         path(
-                                            "upload/",
-                                            pin.PinController.as_view({"post": "upload_takeout"}),
-                                            name="pin.upload.takeout",
-                                        ),
-                                        path(
                                             "preview/",
                                             pin.PinController.as_view({"post": "parse_for_preview"}),
                                             name="pin.import.preview",
