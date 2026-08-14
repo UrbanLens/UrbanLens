@@ -6018,3 +6018,24 @@ and it is the user's environment to restart.
 
 It is also the strongest argument in this audit for varying the instrument. Fifty chunks of reading
 source could not have found this, and three chunks of looking at a running system did.
+
+
+## Chunk 354 - evidence that complicates the previous chunk's conclusion
+
+Checked process state and kernel wait channel: both `runserver` processes are `S (sleeping)` with
+`wchan 0`, 8 threads each, ~33 minutes of CPU accumulated over 18 hours.
+
+Chunk 353 concluded the server was "stuck before `bind()`", which implied a single blocking call.
+**This evidence does not support that.** A process blocked early in imports would not have 8
+threads, and a one-time hang would not burn CPU steadily. A poll loop (the autoreloader) fits the
+CPU profile, but a crash-reload cycle should produce tracebacks - and the app log has been empty for
+6+ hours.
+
+Four facts - never binds, sleeping not blocked, steady low CPU, silent logs - and no single story
+covering all of them.
+
+**Recorded as contradictory rather than resolved.** The temptation at the end of a long investigation
+is to let the last plausible narrative stand, and chunk 353's phrasing ("it is stuck before the
+server starts") was already firmer than the evidence warranted. Naming the contradiction is more
+useful to whoever picks this up than a tidy conclusion they would have to unlearn - especially since
+the remaining step, `py-spy dump`, costs about a minute and settles it outright.

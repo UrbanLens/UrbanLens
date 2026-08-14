@@ -7057,3 +7057,21 @@ Dockerfile runs at boot.
 That narrows the search a great deal. The next step is not networking - it is finding what runs
 before the bind and can block indefinitely. `docker exec ... py-spy dump --pid <child>` (or
 `faulthandler`) would name the exact frame.
+
+**Chunk 354 complicates that story - record the evidence, not a tidy narrative.** Both processes are
+`S (sleeping)` with `wchan 0` (an ordinary sleep, not blocked in a kernel call), each with **8
+threads**, and the child has accumulated ~33 minutes of CPU since 00:33 - roughly 3% sustained.
+
+That does not fit a single blocking call during startup:
+
+- a process stuck early in imports would not have 8 threads;
+- a one-time hang would not burn CPU steadily for 18 hours.
+
+A polling loop fits better - Django's `StatReloader` scans every file each second, and a
+crash-reload-crash cycle would keep the inner server from ever holding a binding. But **the app log
+has been empty for at least 6 hours**, and a repeatedly crashing `runserver` should be printing
+tracebacks. Either output is not reaching `docker logs`, or nothing is crashing.
+
+So the honest state is: never binds, sleeping not blocked, steady low CPU, silent logs - and no
+single explanation covering all four. `py-spy dump` on both pids remains the cheapest thing that
+would settle it.
