@@ -6622,14 +6622,23 @@ outside the loop. Each needs its caller read.
 `services/consensus/selection.py:106` and `:163` as `strategy.find_missing(pool)`. **The remaining
 step is to see how `pool` is built**, because that decides the fix and the two options differ:
 
-- if `pool` is a **QuerySet**, `annotate(Count("aliases"))` and filter in SQL - one query total;
-- if it is a **list** with aliases prefetched, switch to `.all()` and use `len()`/truthiness;
-- if it is a list **without** a prefetch, `.all()` is *worse* than `.count()` - it fetches every
-  alias row to compute a number. This is the case where the obvious "use .all()" reflex, correct
-  for `Pin.to_json`, would make things worse.
+**Answered.** `selection.py:71` builds it as `pool = list(eligibility.eligible_wikis(...))` - a
+materialised **list**, with no prefetch. So it is the third case, and the fix needs *both* halves:
 
-That last point is why this was left rather than patched: the right answer is not derivable from
-the call site alone.
+1. `prefetch_related("aliases", "images")` on the queryset inside `eligibility.eligible_wikis()`
+   (and `eligible_wikis_for_all()`);
+2. **then** change the helpers to `.all()` + `len()`/truthiness/Python filtering.
+
+Either half alone is wrong. Only (2) makes it *slower* - `.all()` fetches every alias row where
+`.count()` fetched a number. Only (1) does nothing, because `.count()`/`.exists()`/`.filter()`
+never read the cache.
+
+It is also worse than the table suggests: `_pick_normal_round` calls `strategy.find_missing(pool)`
+**once per field kind** (`for kind in fields.all_kinds()`), so the cost is
+kinds x wikis x queries-per-wiki, not wikis x 4.
+
+Left unpatched only because it spans two files and needed measuring, not because it is unclear -
+the recipe above is complete.
 
 The instrument for confirming any of them is
 `dashboard/tests/hypothesis/test_pin_to_json_prefetch.py`: capture queries over 1 and N objects and
