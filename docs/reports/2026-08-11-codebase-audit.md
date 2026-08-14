@@ -7,12 +7,20 @@ isn't re-derived), and **which audit methods produce misleading results on this 
 Open items found during the sweep were filed in `docs/PROBLEMS.md` and are only cross-referenced
 here.
 
-**Verification.** The full Python suite has been run over the complete changeset three times, in
-batches partitioned by test-file name (the runtime exceeds the available window in one pass). The
-most recent round: **10,406 passed, 0 failed.** Alongside it, and current: **mypy clean across all
-778 source files**, `ruff check src/urbanlens` clean, `bun run typecheck` clean, `bun test`
-**383 pass / 0 fail**, and the SCSS build green. See **section 4d** for the batch breakdown and for
-two earlier full-run attempts that were discarded rather than reported.
+**Verification (current as of 2026-08-14).** The full Python suite runs in a single pass -
+**10,758 passed, 0 failed, 1:08:53**. That run was left strictly alone for its duration; two
+earlier full runs had source copied into the container mid-flight and are recorded in section 4d
+as inconsistent snapshots rather than reported as results. Alongside it: **mypy clean across 784
+source files**, `ruff check src/urbanlens` clean, `bun run typecheck` clean, `bun test`
+**394 pass / 0 fail**, and `bun run build` (the real bundler, not just typecheck) green.
+
+Coverage over the view layer was measured separately and is the basis for a large part of the later
+work: **80% of 22,081 statements**, with **208 of 1,795 callables never executed** - see
+`docs/reports/2026-08-14-view-coverage.md`.
+
+An earlier version of this paragraph reported 10,406 passing over batch-partitioned runs. It was
+accurate when written and quietly wrong for some time afterwards, which is the same failure this
+report documents elsewhere: a number that was true once and never re-checked.
 
 ---
 
@@ -2771,6 +2779,27 @@ is keyed by *value* across all 214 enum members, so `kind="user"` on a `Label` r
 which enum owns it. Doing this properly needs per-field resolution -
 `Model._meta.get_field(name).choices` - to ask which enum *that field* actually uses. Left undone
 rather than reported as 37 findings.
+
+### A query in `__str__`, found while doing something else
+
+Noticed while tracing the label-kind literals rather than by any sweep. `Pin.__str__` ran
+`self.labels.filter(kind="status")` and read `effective_name`, which falls through to
+`self.location.display_name` - up to two queries every time a pin was rendered as a string. It also
+returned a five-line f-string.
+
+Both halves matter for different reasons. The query is invisible to profiling in the usual sense:
+it never appears as a slow query, only as a lot of fast ones, once per row in an admin list and
+once per log line or error page mentioning a pin. `CLAUDE.md` already forbids `save()` in `__str__`
+for the same family of reasons; a read is easier to miss because nothing is written. The multi-line
+return is a smaller thing that shows up in exactly the places `__str__` exists to serve - a select
+dropdown renders it as a paragraph, and line-oriented log tooling splits it into five records.
+
+Now `self.name or f"Pin {self.pk}"`. Checked first that nothing asserts the old format and no
+template renders `{{ pin }}`, so the change is contained. Four tests, of which `assertNumQueries(0)`
+is the one that will actually catch a regression - the others document intent, that one enforces it.
+
+Checked whether this was systemic: **zero** other models query in `__str__`. A local lapse, not a
+convention, so no sweep was warranted.
 
 ---
 
