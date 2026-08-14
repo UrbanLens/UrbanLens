@@ -6738,3 +6738,39 @@ false-positive, and one where the "obvious fix" would have broken ordering. A to
 every hit would have been right less than half the time. Each entry needed its loop read - which is
 also how the correctness traps inside the six real ones were caught (`get_latest_by` ordering,
 `__isnull` conjunctions, and two loops silently reading their own writes).
+
+---
+
+## Lead: 11 relations prefetched in a file, then read with a cache-bypassing verb
+
+The last two N+1 fixes (2026-08-14) shared a shape worth hunting: a relation named in
+`prefetch_related(...)` and then read with `.filter()`/`.count()`/`.exists()`, which ignores the
+cache. In both cases a *correct* sibling sat in the same call - `parents` with `.all()` beside
+`pins` with `.filter()`; `images` prefetched purely to be `.count()`ed. There is no visual
+asymmetry.
+
+A file-level sweep for that pairing gives eleven candidates:
+
+| file | line | call |
+|---|---|---|
+| `controllers/pin_sharing.py` | 166 | `.images.filter()` |
+| `controllers/safety.py` | 747, 1520 | `.contacts.filter()`, `.contacts.exclude()` |
+| `external_api/views.py` | 2006, 3369 | `.items.count()`, `.markup_maps.filter()` |
+| `models/album/model.py` | 145 | `.items.count()` |
+| `models/pin_list/model.py` | 82 | `.items.count()` |
+| `services/messaging/direct_messages.py` | 281, 398, 1259 | `.images.exists()` x3 |
+| ~~`models/pin/model.py`~~ | ~~820~~ | already assessed - a write in `change_category`, once per request, in a method with no production callers |
+
+**This is a lead, not a finding.** The sweep is file-level: it pairs a `prefetch_related("x")`
+*anywhere* in a file with a `.x.filter()` *anywhere else*, and those may be different functions over
+different querysets. Each needs checking that the prefetching queryset is the one feeding that call.
+
+Two shortcuts from the fixes already done:
+
+- If the relation is **only ever counted** (`.items.count()`, `.images.exists()` look like this),
+  the answer is usually `annotate(Count(...))` and **removing** the prefetch - not `len(x.all())`,
+  which fixes the query but keeps the row-fetching.
+- If the filtered rows **are** used, the answer is `Prefetch(..., queryset=..., to_attr=...)`.
+
+The three `direct_messages.py` `.images.exists()` sites are the most promising: same file, same
+relation, three times, and messaging is a hot path.
