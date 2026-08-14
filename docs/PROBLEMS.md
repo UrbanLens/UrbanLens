@@ -6840,3 +6840,33 @@ Same category as `pin_list_membership.py:89` - a query inside a loop that is str
 necessary rather than accidental. **Two of the fourteen candidates on this list were of that kind**,
 which is the argument against treating any such list as a work queue to be cleared: a fifth of it
 was code that should not change.
+
+---
+
+## `LabelReorderView.post` issues one UPDATE per label
+
+`controllers/labels.py`, in the never-executed set from the coverage run:
+
+    for i, label_id in enumerate(label_ids):
+        Label.objects.filter(id=label_id, profile=profile, kind=self.kind).update(order=total - i)
+
+Drag-and-drop reordering of 50 labels is 50 `UPDATE` statements. This is an N+1 on the **write**
+side, which the audit's earlier sweeps did not look for - they targeted reads.
+
+The handler is otherwise careful: kind is validated against `_ORGANIZE_KINDS`, the JSON parse
+catches `JSONDecodeError`/`ValueError`/`AttributeError`, and every query is scoped to
+`profile=profile, kind=self.kind`, so a crafted payload cannot reorder someone else's labels.
+
+Two options, and the choice matters:
+
+- **`bulk_update`** - fetch the scoped labels once, set `.order` in Python, `bulk_update(labels,
+  ["order"])`. Two queries, idiomatic, and keeps the scoping in the fetch.
+- **`Case`/`When`** in a single `update()` - one query, but generates SQL proportional to the
+  number of labels, which is unpleasant at a few hundred.
+
+`bulk_update` is the better default here. Note it does **not** fire `post_save`, and `Label` has
+receivers (`sync_redata_taxonomy_on_save`) - check whether an order-only change needs them before
+switching. That is the same trap recorded for the seeding loop in `labels/signals.py`.
+
+Untested, so any change wants a test first: the existing behaviour to preserve is that ids not
+belonging to the profile are silently ignored rather than erroring.
