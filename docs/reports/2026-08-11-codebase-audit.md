@@ -6649,3 +6649,28 @@ you are already writing about requires no lookup at all.
 Convention note updated. Three revisions across chunks 370-383, each one narrowing toward the
 property that actually mattered - which was visible only after checking enough references to see
 which ones failed.
+
+
+## Chunk 384 - the rule used as triage, with predictions stated first
+
+Applied chunk 383's searchability rule as a *triage* rather than advice - vague comments are where
+the dangling references will be, so check those first. Stated predictions before looking:
+
+- `services/visits/safety.py` names "the un-locked 5-minute check-in beats" -> predicted resolve.
+  **Correct**: "5-minute beat" appears at line 1716.
+- `external_api/serializers_wiki.py:63` is bare mid-sentence ("``docs/PROBLEMS.md``).") -> predicted
+  hard. **Resolved anyway**, but not by its own text: its subject (a strict `ChoiceField` 400 versus
+  the internal view's silently-skipped field) is the same `strict=True`/`strict=False` split
+  `location_wiki.py` pointed at, verified at line 2397 in chunk 379.
+
+**Tally, 13 references: 9 resolve, 1 ambiguous, 3 dangling.**
+
+The second case adds a mechanism the rule missed: **a sibling reference elsewhere in the codebase can
+make a bare comment findable**, because the two describe the same behaviour from opposite surfaces.
+That is not searchability in the comment - it is redundancy across the codebase, and it only helped
+because I had already read the sibling.
+
+Which is a limit worth stating on the triage: it works for finding *likely* failures, and it cannot
+tell a genuinely unfindable reference from one whose answer I happen to already know. The three
+dangling references remain dangling on evidence; the resolutions increasingly depend on context I
+accumulated over eighty chunks and a fresh reader would not have.
