@@ -33,6 +33,7 @@ from urbanlens.dashboard.models.trips.model import (
     TripActivityVote,
     TripMembership,
 )
+from urbanlens.dashboard.models.trips.signals import queue_calendar_push
 from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
 from urbanlens.dashboard.services.core.text_limits import MAX_TRIP_ACTIVITY_NOTES_LENGTH, text_length_error
 from urbanlens.dashboard.services.trips.trip_access import has_joined, is_organizer, require_joined, require_perform
@@ -868,5 +869,16 @@ def reorder_activities(trip: Trip, actor: Profile, order: Sequence[int]) -> None
         if not order or len(order) != len(valid_ids) or set(order) != valid_ids:
             raise TripValidationError("The order must include exactly the trip's current non-completed activities.")
 
-        for position, activity_id in enumerate(order):
-            TripActivity.objects.filter(id=activity_id, trip=trip).update(order=position)
+        # The permutation check above already proved these ids are exactly the trip's
+        # non-completed activities, so one statement is safe here - and the lock makes
+        # the read-check-write sequence atomic either way.
+        positions = {activity_id: position for position, activity_id in enumerate(order)}
+        activities = list(TripActivity.objects.filter(id__in=positions, trip=trip))
+        for activity in activities:
+            activity.order = positions[activity.pk]
+        TripActivity.objects.bulk_update(activities, ["order"])
+
+    # bulk_update (like the per-row update it replaced) fires no post_save, so
+    # sync_trip_on_activity_save never runs and an auto-synced calendar would keep the
+    # old order. Queued once per reorder, not once per row - the trip is the unit.
+    queue_calendar_push(trip.pk)

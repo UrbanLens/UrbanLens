@@ -4948,3 +4948,42 @@ the ownership test silently - it posted an id list under which the owned label's
 not to move, so it would have been filtered out and the assertion would have held while
 testing nothing. Caught by re-running rather than by reading. Narrowing a write path can
 quietly empty a test whose subject sat *outside* the narrowed set.
+
+
+## Chunk 305 - sweeping for the rest of the skipped-invalidation class
+
+Chunk 304's bug was found by accident, so this scanned for its shape systematically: models
+with `post_save`/`post_delete` receivers, cross-referenced against writes that skip them
+(`.update()`, `bulk_update`, `bulk_create`). **17 models have receivers; 26 such writes exist.**
+
+**A false alarm worth recording.** The scan flagged two more `Label.objects.bulk_update(reordered,
+["order"])` sites and I initially read them as two more copies of the same bug. They are not -
+both already invalidate, with the reasoning in a comment on the next line. The scan matched the
+`bulk_update` line without reading what followed it. A grep for the *defect* shape finds correct
+code too, because the defect and the fix live on adjacent lines.
+
+Re-run with a check for adjacent invalidation, 14 sites needed judgement. Most are correct by
+design, and the reason is usually that the receiver's job is not wanted for that write:
+`NotificationLog...update(status=READ)` deliberately skips `enqueue_native_push`, because
+re-pushing a notification when the user *reads* it is precisely the bug. Same for `Wiki`'s
+`viewed_by_other` and `parent_wiki` writes against `suggest_and_add_categories`. **Bypassing a
+signal is a legitimate technique, so the scan's output is a question list, not a defect list.**
+
+One real gap: `reorder_activities` (`services/trips/trip_activities.py`). `sync_trip_on_activity_save`
+calls `queue_calendar_push` so an auto-synced calendar follows the trip, and the reorder wrote
+each position through `queryset.update()`. The one operation whose entire purpose is changing
+activity order never reached the calendar. Fixed, and the loop collapsed to one statement -
+it was also one `UPDATE` per row while holding a `select_for_update` lock.
+
+The push is queued **once per reorder**, not once per row: the receiver fires per activity but
+`queue_calendar_push` takes a trip id, so the row-by-row equivalent would queue the same trip N
+times for one drag. Restoring a skipped signal literally is not always right.
+
+The existing race suite passes unchanged, which matters more than the new tests - the function
+carries a long comment justifying its locking against interleaved reorders, and collapsing the
+writes had to leave that reasoning intact.
+
+**Fixture errors, third occurrence.** `baker.make(Trip, profile=...)` - `Trip` has no `profile`;
+its owner field is `creator`. Three chunks, three fixture-shaped failures presenting as code
+failures. The cost is one full container test cycle (~3 min) each time. Reading an existing
+test's `baker.make` line for the same model first would have caught all three.
