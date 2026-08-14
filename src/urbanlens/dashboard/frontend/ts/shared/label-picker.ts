@@ -40,11 +40,14 @@ export interface LabelGroup {
     ids: number[];
 }
 
+import { safeColor } from "./color-safety";
+
 type ChipMode = "incl" | "excl";
 
 function escHtml(value: unknown): string {
     return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
+
 
 /**
  * True when a candidate (by kind + lowercase name) passes the active kind-tab
@@ -288,7 +291,8 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
     }
 
     // -- Chip HTML ------------------------------------------------------------
-    function chipHtml(id: string, label: string, color: string, icon: string, mode: ChipMode): string {
+    function chipHtml(id: string, label: string, rawColor: string, icon: string, mode: ChipMode): string {
+        const color = safeColor(rawColor);
         const bg = color ? color + "33" : mode === "incl" ? "rgba(34,197,94,.18)" : "rgba(239,68,68,.18)";
         const border = color ? color + "66" : mode === "incl" ? "rgba(34,197,94,.4)" : "rgba(239,68,68,.4)";
         const txtCol = mode === "incl" ? "#86efac" : "#fca5a5";
@@ -353,7 +357,7 @@ export function createFilterPicker(options: FilterPickerOptions): FilterPickerAp
     /** Visual pill for one label in the read-only formula display (see groupsToFormulaHtml). */
     function formulaPillHtml(entry: LabelEntry | undefined, fallback: string, mode: ChipMode): string {
         const label = entry?.label ?? fallback;
-        const color = entry?.color;
+        const color = safeColor(entry?.color);
         const bg = color ? color + "33" : mode === "incl" ? "rgba(148,163,184,.16)" : "rgba(239,68,68,.16)";
         const border = color ? color + "66" : mode === "incl" ? "rgba(148,163,184,.4)" : "rgba(239,68,68,.4)";
         const txtCol = color || (mode === "incl" ? "rgba(226,232,240,.92)" : "#fca5a5");

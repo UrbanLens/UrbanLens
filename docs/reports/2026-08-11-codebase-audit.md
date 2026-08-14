@@ -1939,6 +1939,42 @@ failure into lost work. A test covers the non-`OSError` case specifically, since
 its own `ConnectionError` which is not an `OSError` - narrowing here would leave the common case
 uncaught.
 
+### Stored XSS through a label colour (fixed)
+
+A frontend injection sweep. The headline numbers look reassuring and are: 150 `innerHTML` writes,
+**zero** using `${...}` interpolation; the 8 using `+` concatenation are all `.test.ts` fixtures;
+197 uses of `escHtml`/`textContent`. The codebase escapes by habit.
+
+The hole was in the one place the habit lapsed. `label-picker.ts`'s `chipHtml` carefully escapes
+`id`, `icon` and `label` - and then interpolates `color` raw into
+`style="background:${bg};border-color:${border}"`, which `insertAdjacentHTML` parses.
+`formulaPillHtml` does the same and additionally puts the raw value in `color:${txtCol}`.
+
+The delivery path is the interesting part, because at first glance Django should have prevented
+it. The colour is rendered as `data-label-color="{{ label.color }}"`, which **is** auto-escaped -
+but the JS reads it back through `btn.dataset.labelColor`, and `dataset` returns the *decoded*
+value. Escaped into an attribute, decoded out of it, then re-injected into fresh markup: the
+escaping never reaches the place that needed it.
+
+And the stored value cannot be trusted, which is the other half. `Label.color` is
+`CharField(max_length=50, choices=COLOR_CHOICES)`, but Django enforces `choices` only in
+`full_clean()`, which `save()` does not call - and all eight label write paths assign it directly
+from `request.POST.get("color")` / `data.get("color")`. A value like `x" onmouseover="alert(1)`
+fits in 50 characters and stores cleanly.
+
+Fixed with `shared/color-safety.safeColor`, applied at both `label-picker.ts` sites and at
+`organize-tab-manager.ts`'s `miniCardHtml`, which reads the same dataset-decoded colour and
+appends the same alpha suffixes. **Validated, not escaped**: escaping stops the attribute
+breakout but still allows CSS injection (`url(...)`) inside a style value, and these colours are
+only ever hex. `""` falls through to each caller's existing "no colour" branch, so nothing needed
+new failure handling. 394 frontend tests pass, `tsc --noEmit` clean.
+
+Two pieces deliberately left, both filed in `docs/PROBLEMS.md`: the three `markup-engine`/
+`markup-toolbar` sites with the same shape, because those render *annotation* colours and a
+hex-only validator could silently blank a legitimate `rgba()`/`none` value - a visible regression
+dressed up as a safe default; and the server-side half, which is where this should really be
+solved, once, on the way in.
+
 ---
 
 ## 3. Checked and clean

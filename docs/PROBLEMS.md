@@ -6055,3 +6055,36 @@ it fail? Fail-closed protects the budget and degrades the feature; fail-open doe
 Either is defensible - but it should be chosen, and the choice recorded here, rather than being a
 side effect of an exception handler. If fail-closed is chosen, the same question applies to
 `service_is_enabled`, which sits next to it in the same conditional.
+
+---
+
+## Colour values are interpolated into `style="…"` in several more places
+
+The 2026-08-14 audit closed this in the two label-colour renderers (`label-picker.ts`'s
+`chipHtml`/`formulaPillHtml` and `organize-tab-manager.ts`'s `miniCardHtml`) via
+`shared/color-safety.safeColor`. The same shape exists elsewhere and was **not** changed, because
+those consumers may legitimately accept colour formats a hex-only validator would reject:
+
+- `shared/markup-engine.ts:66` - `fill="${color}"` in generated SVG
+- `shared/markup-engine.ts:84,150` - `style="color:${color}"`
+- `shared/markup-toolbar.ts:297,299` - `style="color:${item.color};background:${bg}"`
+
+These render **map annotation** colours rather than label colours. Before applying `safeColor`
+to them, check what `MapMarkup`/annotation colour fields actually store - if `none`, `rgba(...)`
+or named colours are valid there, the hex-only regex would silently blank them, which is a
+visible regression rather than a safe default. Either widen the validator for that call site or
+give annotations their own validator.
+
+### The server-side half is still missing
+
+`Label.color` is `CharField(max_length=50, choices=COLOR_CHOICES)`. Django enforces `choices`
+only in `full_clean()`, which `Model.save()` does not call, and every label write path assigns it
+straight from request data:
+
+- `controllers/labels.py:634, 740, 1125` (`request.POST.get("color")`)
+- `external_api/views.py:675, 2043, 2214, 2278, 2352` (`data.get("color")`)
+
+So an authenticated user can still store an arbitrary ≤50-character string in a field that
+declares a fixed set of choices. The frontend fix means it can no longer be rendered as markup,
+but the data-integrity problem is real and the right place to solve it is once, on the way in -
+a shared `clean_label_color()` used by every write path, or `full_clean()` on those saves.

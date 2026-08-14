@@ -1,3 +1,4 @@
+import { safeColor } from "./color-safety";
 import { confirmAction, toast } from "./dialogs";
 import { getCsrfToken } from "./csrf";
 import { renderIconGlyphHtml, resetIconPicker } from "./icon-picker";
@@ -619,8 +620,9 @@ export class OrgTabManager {
     }
 
     private miniCardHtml(data: CardData, isTarget: boolean, hideSwap: boolean): string {
-        const colorStyle = data.color ? `background:${data.color}22;border-color:${data.color}44;` : "";
-        const iconColorStyle = data.color ? `color:${data.color}` : "";
+        const color = safeColor(data.color);
+        const colorStyle = color ? `background:${color}22;border-color:${color}44;` : "";
+        const iconColorStyle = color ? `color:${color}` : "";
         let iconHtml: string;
         if (data.customIcon) {
             iconHtml = `<img src="${escHtml(data.customIcon)}" style="width:24px;height:24px;object-fit:cover;border-radius:4px;" alt="">`;

@@ -8,7 +8,8 @@
  * the pill display instead of silently showing a misleading simplification.
  */
 import { describe, expect, test } from "bun:test";
-import { isSimpleGroups, matchesLabelFilter, type LabelGroup } from "./label-picker";
+import { isSimpleGroups, matchesLabelFilter, type LabelGroup } from "./label-picker"
+import { safeColor } from "./color-safety";
 
 describe("isSimpleGroups", () => {
     test("null/empty groups are simple (nothing selected)", () => {
@@ -116,5 +117,33 @@ describe("matchesLabelFilter", () => {
         expect(matchesLabelFilter("tag", "Demolished", "status", "demolished")).toBe(false);
         // Both right - shown.
         expect(matchesLabelFilter("status", "Demolished", "status", "demolished")).toBe(true);
+    });
+});
+
+describe("safeColor", () => {
+    // Label colours reach this module through `dataset`, which returns the *decoded*
+    // attribute value - so Django's escaping of the attribute does not survive the
+    // round trip, and a stored colour with a quote in it arrives intact and would
+    // break out of the `style="…"` the chip/pill builders construct.
+    test("passes through the hex colours the server actually stores", () => {
+        expect(safeColor("#2196F3")).toBe("#2196F3");
+        expect(safeColor("#abc")).toBe("#abc");
+        expect(safeColor("#2196f3")).toBe("#2196f3");
+    });
+
+    test("rejects a value that would break out of the style attribute", () => {
+        expect(safeColor('x" onmouseover="alert(1)')).toBe("");
+        expect(safeColor('#fff" onload="alert(1)')).toBe("");
+    });
+
+    test("rejects CSS injection that escaping alone would still allow", () => {
+        expect(safeColor("url(https://example.com/x)")).toBe("");
+        expect(safeColor("red;background:url(x)")).toBe("");
+    });
+
+    test("treats empty and missing as no colour", () => {
+        expect(safeColor("")).toBe("");
+        expect(safeColor(null)).toBe("");
+        expect(safeColor(undefined)).toBe("");
     });
 });
