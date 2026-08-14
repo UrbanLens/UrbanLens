@@ -215,7 +215,7 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
             # residual per-family risk".
             return True
         # TODO(media-auth): unknown path family - no owning model identified.
-        # Authenticated-only fallback; see docs/PROBLEMS.md.
+        # Authenticated-only fallback; see "Authenticated media gate - residual per-family risk" in docs/PROBLEMS.md.
         logger.info("Media request for unrecognized path family %r served authenticated-only", family)
         return True
 
@@ -239,7 +239,7 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
         image = Image.objects.filter(image=rel_path).select_related("direct_message").first()
         if image is None:
             # Orphan file (row deleted, file left behind) - no owner to check.
-            # TODO(media-auth): authenticated-only fallback; see docs/PROBLEMS.md.
+            # TODO(media-auth): authenticated-only fallback; see "Authenticated media gate - residual per-family risk" in docs/PROBLEMS.md.
             return True
         if image.profile_id == profile.pk:
             return True
@@ -306,5 +306,5 @@ class MediaGateView(CredentialOrSessionMediaMixin, View):
             return TripMembership.objects.filter(trip_id=trip_comment.trip_id, profile=profile).exists()
 
         # Orphan file - no surviving comment row to derive an owner from.
-        # TODO(media-auth): authenticated-only fallback; see docs/PROBLEMS.md.
+        # TODO(media-auth): authenticated-only fallback; see "Authenticated media gate - residual per-family risk" in docs/PROBLEMS.md.
         return True

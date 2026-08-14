@@ -6367,3 +6367,24 @@ navigation attempt to exactly that).
 Retrofitting the 33 existing references is real work and is not done here; the convention only binds
 new ones. Noting that honestly, since a convention nobody applies retroactively fixes nothing for
 the references that already exist.
+
+
+## Chunk 371 - retrofitting three pointers, after nearly retracting a correct finding
+
+Started chunk 370's retrofit with the three `see docs/PROBLEMS.md` references in `media.py`, whose
+target I already knew. They now read `see "Authenticated media gate - residual per-family risk" in
+docs/PROBLEMS.md` - 3 of 33 done.
+
+**A false correction, caught before it landed.** Locating the governing heading, my scan searched
+lines *up to* 1837 and returned a RESOLVED entry about data-export importers - so I concluded chunk
+369 had been wrong and the media-auth analysis was buried in an unrelated closed entry. It was an
+off-by-one: the dedicated entry begins at line **1838**, `## Authenticated media gate - residual
+per-family risk`. Chunk 369 was right.
+
+That is the tenth scan artifact this session, and the first that would have **retracted a correct
+conclusion** rather than manufacturing a false one. Both directions are now represented: chunk 367's
+artifact would have invented a crisis, this one would have destroyed a valid finding. The common
+cause is unchanged - a count or offset reported without reading what it selected.
+
+It also demonstrates the convention added in chunk 370 within one chunk of adding it: I navigated by
+line number, and the line number was off by one.
