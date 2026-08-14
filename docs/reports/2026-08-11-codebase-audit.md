@@ -2499,6 +2499,35 @@ either, so an unknown metric can still be stored - it simply never matches a reg
 the achievement quietly never awards. That is a real gap but a different one (silent bad data, not
 a crash), and it is admin-only. Noted rather than fixed.
 
+### Where the AST-filter method stops working
+
+The colour filter worked so well that the obvious next move was to point the same technique at
+authorization: find `get_object_or_404` calls in controllers with no owner scoping - the IDOR
+shape. 76 hits, and after three rounds of refinement, **zero real findings**. Every one is
+authorized. That is a good result for the codebase and a better one for knowing when this method
+applies.
+
+The 76 resolve into four different ways of being safe, which is why no single check found them:
+
+1. **In-query scoping** - `get_object_or_404(PinAlias, id=..., pin=pin)`, where `pin` was itself
+   owner-resolved. Scoped transitively through a parent the checker cannot follow.
+2. **Post-hoc comparison** - `image = get_object_or_404(Image, pk=image_id)` immediately followed
+   by `if image.profile_id != profile.pk: raise Http404` (`photos.py`).
+3. **Authorization in the caller** - `image_gallery._get_image` is genuinely unscoped; its caller
+   does the check. The property is satisfied one frame up.
+4. **A domain rule instead of ownership** - `trivia.py` fetches a question unscoped, then refuses
+   unless `TriviaAnswer.objects.filter(round__question=question, profile=profile).exists()`:
+   "you can only vote on a question you've answered". Correct, and not an ownership test at all.
+
+The difference from the colour case is worth stating, because it predicts where this technique pays
+off. *"A request value reaches this field unvalidated"* is a **local** property - decidable from one
+expression. *"This object access is authorized"* is **non-local**: it can be satisfied in the
+caller, a mixin, a decorator, a queryset manager, or a domain invariant three lines later. An AST
+pass over one function cannot decide it, and a filter that cannot decide produces a list that must
+be checked entirely by hand - at which point it has sorted the work, not done it.
+
+Recorded so the next person does not re-run this and read 76 hits as 76 problems.
+
 ---
 
 ## 3. Checked and clean
