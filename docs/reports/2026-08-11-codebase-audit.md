@@ -2908,12 +2908,27 @@ Recorded so this isn't repeated. Each was actively probed, not skimmed.
   (`BackupStartView`) requires to enqueue in the first place. The reasoning names the hole, the
   rejected alternative, and why the chosen mitigation is equivalent.
 
-  Worth recording as a pattern, not just a result. Several of this audit's "checked and clean"
-  entries came out that way because a docstring encoded security reasoning that no amount of
-  reading the code alone would recover - the WebSocket consumers' scope-before-lookup ordering, the
-  ghost viewer's explicit `render()` inside the atomic block, the safety-chat token route's
-  withheld location group, and this. Where that reasoning is absent is a better signal of risk than
-  the code's shape.
+  Several of this audit's "checked and clean" entries came out that way because a docstring
+  encoded security reasoning that no amount of reading the code alone would recover - the WebSocket
+  consumers' scope-before-lookup ordering, the ghost viewer's explicit `render()` inside the atomic
+  block, the safety-chat token route's withheld location group, and this.
+
+  **A heuristic was proposed from that and does not survive testing.** The claim was: "where such
+  reasoning is absent is a better risk signal than the code's shape." Measuring explanatory lines
+  (comments + docstring) against code lines for the handlers this audit examined gives the
+  *opposite* of the prediction - 0.18 for the four where defects were found, 0.07 for the five that
+  probed clean.
+
+  The measurement is also invalid, for two reasons worth naming because both are easy to repeat:
+  it counts comments **as they are now**, and comments were *added to the defect handlers while
+  fixing them* - so the "defect" group's density is partly this audit's own writing. And it counts
+  only *function*-level docstrings, so `CeleryTaskStatusView` - the very example that prompted the
+  idea, whose reasoning lives in a **class** docstring - scored zero.
+
+  So: an appealing heuristic, unsupported by the data, measured with an instrument that was wrong
+  in two ways. The underlying observation stands (those docstrings are genuinely load-bearing and
+  saved real time); the predictive claim built on it does not, and is withdrawn rather than left
+  standing because it sounded right.
 
 - **Interaction risk of the nine N+1 fixes** (2026-08-14). Checked, because two of them change what
   is *available* on an object rather than only what it costs: `Prefetch(..., to_attr="own_pins")`
