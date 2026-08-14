@@ -5808,3 +5808,25 @@ and the one I led with was the weaker.
 inferring behaviour from a name (`refresh_map_pin_cache`, `enqueue_native_push`). One held with an
 extra mechanism I had not known about; one failed. Names are a hypothesis about behaviour, and this
 session has now spent four chunks discovering that reading the definition is the cheap step.
+
+
+## Chunk 344 - strengthening, not proving, chunk 309's pin_type claim
+
+Chunk 309 declared `site_scope.py`'s bulk `pin_type` retype clean partly because "no smart filter
+reads it" - evidence being a grep of two directories. Re-checked more broadly:
+
+- `pin_type` appears in migrations, the retype write itself, a `_pin_type_from_hits` suggestion
+  helper, a `pin_type_icon` template filter, and one `filter(pin_type=BUILDING)` count in
+  `site_scope` - **none in any smart-list or saved-filter application path**.
+- Membership resync runs through `sync_pin_against_smart_lists`, driven by `PinList.smart_filter`,
+  a JSONField documented as "same JSON shape as `SavedFilter.criteria`".
+
+**Still not proof.** I have not enumerated the criteria schema's accepted keys, and that - not the
+absence of the string in application code - is what would settle it. If `criteria` is a
+pass-through to queryset kwargs rather than an allowlist, a user could conceivably store a
+`pin_type` criterion that no source file mentions.
+
+Recording the verdict at its actual strength: *supported by broad absence, not established by
+schema*. Chunk 309's conclusion was probably right and its evidence was thinner than the confident
+phrasing implied. This is the third claim in three chunks where the finding is not that the code is
+wrong, but that my stated confidence outran what I had checked.
