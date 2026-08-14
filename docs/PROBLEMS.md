@@ -5919,6 +5919,14 @@ literal path (`_BASE = "/dashboard/api/external/v1/labels/"`) instead of `revers
 covered only that way looks uncovered here - `external_api:labels` is one, and is well tested. The
 other 1,920 URL references in the test tree do use `reverse()`, so the skew is bounded but real.
 
+*Probed 2026-08-14 (chunk 338):* matching each route's static path prefix against the test tree
+finds only **8** routes covered by literal path but not by name - so the literal-path
+false-positive mode looks like a small correction, not a large one. Treat that as indicative
+rather than decisive: the same probe enumerated 971 routes against this entry's 841 and 419
+uncovered against its 301, so its route-set and namespace attribution differ from the careful
+count above, and it searched only `dashboard/tests`. Where the two disagree, this entry's numbers
+are the better ones.
+
 **The authoritative instrument is `coverage.py`** (already installed, 7.15.0): run the suite under it
 and report which view callables never execute. That answers the question directly instead of by
 proxy, and is the right next step before anyone works through this list.

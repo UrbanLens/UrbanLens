@@ -5660,3 +5660,25 @@ strategy, and a changelog of individual routes would make steady-looking progres
 that barely moves. What the detach case genuinely demonstrates is the *unit*: one request against a
 never-executed route was enough to pin a 500 permanently. That is an argument for a sweep, not for
 another 186 chunks.
+
+
+## Chunk 338 - attempting to tighten a filed estimate, and failing to
+
+Chunk 337 argued the uncovered-write-route gap wants a sweep rather than route-by-route chipping.
+The cheapest useful sweep is not writing tests - it is tightening the estimate, since the entry
+flags a known false-positive mode (tests addressing endpoints by literal path rather than
+`reverse()`).
+
+Result: literal-path matching adds only **8** routes. That is a genuinely useful datum - it says
+the skew the entry worried about is small.
+
+**But the same probe enumerated 971 routes where the entry has 841, and 419 uncovered where it has
+301.** So my route set is not the entry's route set - different namespace attribution on nested
+resolvers, and I searched only `dashboard/tests` rather than the whole tree. I cannot claim to have
+tightened a number I cannot reproduce.
+
+**Fourth time this session.** Chunks 305, 328, 330 and now 338: a quick instrument produces a
+number that differs from careful prior work, and the prior work is better every time. The pattern is
+stable enough to be a rule - when a cheap re-derivation disagrees with a careful one, the cheap one
+is wrong until proven otherwise, and the burden is on the new number. I recorded the 8 as
+indicative and left the entry's figures standing.
