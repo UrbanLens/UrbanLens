@@ -7337,3 +7337,23 @@ search returning nothing at all while still reading as evidence.**
 That is the strongest argument in this report against pre-writing the interpretation of a command's
 output before seeing it - a habit I used dozens of times this session for readability, and which was
 silently wrong exactly once.
+
+
+## Chunk 413 - `on_delete` policies are sound: 97 SET_NULL keys, all nullable
+
+Audited deletion behaviour across 358 foreign keys: **256 CASCADE, 100 SET_NULL, 2 RESTRICT, and
+zero `DO_NOTHING`** - the last being the one that silently orphans rows, and it is absent.
+
+The failure mode worth checking is `SET_NULL` on a **non-nullable** field, which raises at delete
+time rather than at migrate time - a bug that only appears when a parent row is actually removed.
+By AST: **97 `SET_NULL` foreign keys, 0 without `null=True`.**
+
+**Twenty-second artifact**, and the same shape as chunk 410: my first pass was **line-scoped** and
+flagged 83, because these declarations span multiple lines - `on_delete=SET_NULL,` sits on its own
+line and `null=True,` on the next. A per-line regex cannot see a per-declaration fact, exactly as a
+per-file scan could not see a cross-file one.
+
+Twenty-two artifacts now, and the mechanisms have stopped being novel: they are all **a scan whose
+scope is narrower than the fact it is testing**. Line vs declaration, file vs module, prose vs code,
+call site vs annotation. The invariant holds without exception - the count was wrong every time until
+the matches were read - and the cause has turned out to be singular.
