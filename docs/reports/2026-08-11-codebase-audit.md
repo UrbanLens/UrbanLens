@@ -8081,3 +8081,29 @@ inconsistency that produced this audit's one real escaping defect.
 Three surfaces now checked for the same property, all three centralised: API authentication
 (`ExternalApiView`), view authorization (Django auth mixins), CSRF (`htmx:configRequest`). The
 pattern is deliberate rather than incidental.
+
+
+## Chunk 445 - the CSRF bypass check: 88 fetch() calls, all covered
+
+Chunk 444 found CSRF centralised for htmx via `htmx:configRequest`. That listener covers **only htmx
+requests** - a raw `fetch()` bypasses it - which is precisely the "gate exists, later surface skips
+it" shape behind every real defect in this audit. So: **88 mutating `fetch()` calls in templates.**
+
+**All covered, by two idioms:**
+
+- explicit token - `fd.append('csrfmiddlewaretoken', CSRF_TOKEN)` before the request;
+- form-derived - `new FormData(form)`, which captures the form's `{% csrf_token %}` hidden input
+  automatically (confirmed the safety chat form carries one).
+
+Django accepts `csrfmiddlewaretoken` from POST data as readily as the `X-CSRFToken` header, so both
+are valid.
+
+**Twenty-ninth artifact, and a new dimension.** My first pass searched **forward** from each
+`fetch(` and reported 17 without CSRF - but the token is appended to the FormData *before* the call.
+Every previous artifact was scope too narrow in *structure* (line vs declaration, file vs module,
+class vs hierarchy); this one was too narrow in **direction**. Widening the window backwards took 17
+to 3, and reading those three took it to 0.
+
+Four surfaces checked for central enforcement, four centralised: API auth, view auth, htmx CSRF, and
+now fetch CSRF - the last by convention rather than by mechanism, which is the weakest of the four and
+the only one where a new call site could forget.
