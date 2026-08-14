@@ -7422,3 +7422,29 @@ between code in different files, and no declaration-level scan reaches them.
 Three consecutive artifact-free chunks also suggests the earlier failure rate was not inherent to
 scanning. It was inherent to scanning **without checking the scope or the control** - a habit, not a
 limitation.
+
+
+## Chunk 417 - a check that needs path sensitivity, not just scoping
+
+Went after a genuine bug class: assigning a field then calling `save(update_fields=[...])` that omits
+it, silently discarding the write. **55 flagged; the sampled one is a false positive**, and the
+mechanism matters.
+
+`controllers/e2ee.py` assigns `password_wrapped_secret` and `password_wrap_salt` inside
+`if password_wrapped:`, whose own save on the next line lists both correctly. The save my scan paired
+them with is in the **`elif` branch** - the two never execute together.
+
+**Twenty-third artifact, and the first that scoping alone cannot fix.** Chunks 413-416 established
+"scope the scan to the unit the fact lives in", and three consecutive clean results followed. Here the
+unit is an **execution path**, not a function, a class, or a declaration - and path-sensitivity needs
+control-flow analysis rather than an AST walk. My scan had the right *shape* and still could not see
+branches.
+
+So the check is not reportable and I am not filing its 55 hits. What is worth recording is the
+boundary: **the two habits that fixed twenty-two artifacts do not reach this class of fact.** A
+correct version would track assignments per branch and compare against the save reachable on that
+branch - a materially bigger tool than anything used in this audit.
+
+The bug class is real and worth someone building that tool for. `update_fields` silently dropping a
+write is invisible at runtime, invisible in review, and produces exactly the kind of stale-data defect
+that chunks 303-306 found by other means.
