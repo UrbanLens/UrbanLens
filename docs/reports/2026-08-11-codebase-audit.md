@@ -7186,3 +7186,24 @@ Worth separating the method from this instance: **following promises is what pro
 audit's findings**, and it works because a citation either resolves or does not. A `Raises:` clause
 is not that kind of promise - it describes behaviour under conditions, and confirming it needs
 execution or analysis, not a lookup. The method generalises less far than chunk 405 implied.
+
+
+## Chunk 407 - module citations are accurate: 10 cited, 9 exact, 1 stale by one directory
+
+A promise-check that *is* lookup-decidable, per chunk 406's boundary: comments citing a specific
+`.py` path either resolve or do not.
+
+**10 distinct module paths cited across the codebase; 9 exist exactly as written.** The tenth,
+`geo_boundary.py`'s reference to ``services/geo_filter.py``, is off by one directory - the file
+lives at ``services/geo/geo_filter.py``, presumably moved into the `geo/` subpackage alongside the
+module citing it. Corrected in place.
+
+That is a far better hit rate than the `PROBLEMS.md` citations (16 of 26), and the reason is
+structural rather than cultural: **a module path is checkable by the person writing it and breaks
+visibly when wrong**, whereas a prose citation to a 7,000-line document breaks silently. The same
+authors wrote both.
+
+Which is the useful generalisation from chunks 405-407: promise-checking finds real problems where
+the promise is *mechanically verifiable and mechanically breakable*. Module paths qualify and are
+nearly clean. Document citations qualify but nothing checks them, so a third had rotted. `Raises:`
+clauses do not qualify at all, and the attempt produced 96 false flags.

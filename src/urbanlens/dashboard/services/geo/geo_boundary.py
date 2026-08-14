@@ -1,7 +1,7 @@
 """Geographic boundary gating for plugins.
 
 Generalizes the old "USA only" plugin flag (previously three inconsistent,
-partially-enforced mechanisms - see ``services/geo_filter.py``,
+partially-enforced mechanisms - see ``services/geo/geo_filter.py``,
 ``services/apis/assets/base.py``'s ``MediaProvider.usa_only``, and
 ``services/enrichment.py``'s ``EnrichmentSource.usa_only``) into a single
 :class:`GeoBoundary` value type that can express "USA", a single US state, or
