@@ -5682,3 +5682,33 @@ number that differs from careful prior work, and the prior work is better every 
 stable enough to be a rule - when a cheap re-derivation disagrees with a careful one, the cheap one
 is wrong until proven otherwise, and the burden is on the new number. I recorded the 8 as
 indicative and left the entry's figures standing.
+
+
+## Chunk 339 - the backlog is blocked on decisions, not on effort
+
+Fourth backlog item examined in as many chunks (calendar-import duplicates), and the fourth whose
+deferral is correct on inspection:
+
+| item | why it is not an engineering task |
+|---|---|
+| pin detach 500 | three defensible behaviours; picking one is a product call |
+| games feature gate | tightening it locks out anyone currently playing |
+| 58 duplicate indexes | migration against live schema, with a careful exclusion list |
+| calendar duplicates | needs a partial unique index **plus** deleting rows - choosing which link survives decides which of two real trips keeps the user's calendar |
+
+Each was already analysed to the point where the remaining work is a *decision*, not
+implementation. The calendar entry even names the correct constraint
+(`condition=~Q(google_event_id="")`) and explains why the obvious plain unique constraint is wrong:
+a timed import deliberately stores an empty `google_event_id` on the trip-level link, and empty
+strings are not distinct to a Postgres unique index.
+
+**This reframes what this audit can still contribute.** The 23 OPEN items are not a queue of
+unfinished engineering that more chunks will drain - they are largely a queue of questions for the
+project owner, several with the implementation already specified. Continuing to "search for bugs"
+past this point has sharply diminishing returns compared to the four product decisions already
+filed, plus these.
+
+The honest summary of the last several chunks: chunks 303-310 found and fixed three real bugs;
+chunks 311-339 have mostly been verification, self-correction, and confirming that prior work was
+already right. That is worth something, but it is not the same activity, and reporting it as
+continued bug-finding would misrepresent it.
