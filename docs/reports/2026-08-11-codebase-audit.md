@@ -5401,3 +5401,21 @@ the diff.
 
 The 8-second feedback loop is what made this a footnote rather than a chunk. On the container it
 would have cost three minutes to discover I had misremembered a keyword argument.
+
+
+## Chunk 323 - boundary behaviour of the shared validators
+
+Host-side checks of the two remaining shared helpers this audit introduced or leaned on:
+
+- `text_length_error`: the limit is **inclusive** - exactly `MAX` characters is accepted and
+  `MAX+1` errors. Empty string and `None` are both non-errors, so a blank optional field does not
+  become a validation failure. That off-by-one is the one worth pinning: it decides whether a
+  user who fills a field to exactly the advertised limit gets rejected.
+- `clean_color`: an invalid value falls to the caller's supplied default (`#000000` stays
+  `#000000`, not `None`), which is what the typing overloads promise - a non-None default
+  narrows the return to `str`. The `none` keyword passes only when `allow_none_keyword=True`.
+
+No defects. Recorded because these two are now called from dozens of write paths (32 colour
+sites alone), so their boundary behaviour is load-bearing in places far from their definition,
+and "inclusive or exclusive?" is exactly the question a future caller will assume rather than
+check.
