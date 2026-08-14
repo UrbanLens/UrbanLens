@@ -860,9 +860,14 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # ------------------------------------------------------------------
 
     def __str__(self) -> str:
-        status_labels = ", ".join(s.name for s in self.labels.filter(kind="status")) if self.pk else "None"
+        """A short, query-free label for admin lists, logs and error pages.
 
-        return f"Name: {self.effective_name}\nDescription: {self.description or ''}\nPriority: {self.priority}\nLast Visited: {self.last_visited}\nStatus: {status_labels}"
+        Deliberately does not touch `labels` or `location`: `__str__` runs on every repr,
+        so a query here is one per row in an admin list and one per log line. It also
+        stays on a single line - the previous multi-line form rendered as a paragraph
+        inside select dropdowns and broke log grepping.
+        """
+        return self.name or f"Pin {self.pk}"
 
     def to_json(self) -> dict[str, Any]:
         return {
