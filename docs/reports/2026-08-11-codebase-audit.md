@@ -6300,3 +6300,28 @@ this one would have produced a *maximally* alarming report - "the entire encrypt
 undocumented" - from a file that is in fact complete. The error rate is not the interesting part; the
 direction is. A broken extractor tends to report *everything* as anomalous, which reads as a critical
 finding rather than as a broken extractor.
+
+
+## Chunk 368 - TODO discipline, and a closing note on the instrument
+
+**23 `TODO`s, and zero `FIXME`/`XXX`/`HACK`.** The absence of the latter three is the finding: those
+markers are what accumulate when something is knowingly wrong and nobody files it. `CLAUDE.md`
+prescribes marking uncertainty as a TODO rather than silencing a warning, and the codebase follows
+that literally.
+
+The TODOs themselves are load-bearing rather than decorative - several are theme-tagged
+(`(media-auth)`) and point at `docs/PROBLEMS.md`, so a reader hitting one in code lands on the
+filed analysis. That is the same pattern this audit kept rediscovering: the careful work exists and
+is cross-referenced, and the failure mode is not finding it.
+
+**Where this leaves the audit.** Sixty-six chunks in this session. The genuine code defects were
+found early (303-306: a stale map icon after label reorder, a missed calendar push, a
+three-month-stale `last_visited`), and everything since has been verification, self-correction, and
+environment work - including three findings that no static analysis could have reached (351, 356,
+359), which only appeared once the instrument changed from reading source to observing a running
+system.
+
+The single most repeated lesson, at nine occurrences, is mechanical and worth stating plainly for
+whoever reads this next: **a raw count from a scan was wrong every single time until the matches
+were read.** Not usually wrong - always. And the failures skew alarming rather than quiet, because a
+broken extractor flags everything.
