@@ -7312,3 +7312,28 @@ So the honest verdict is clean, and the reason is worth stating: a global `Meta.
 this check *pass* while making every unpaginated query slower. **The configuration that looks safer
 by inspection is the worse one**, which is exactly the sort of thing a count-based audit rewards and
 a reading-based one does not.
+
+
+## Chunk 412 - `null=True` on text fields is harmless here, and the one risky spot is correct
+
+**63 text fields declare `null=True`** - the classic Django anti-pattern, because it creates two
+representations of empty (`NULL` and `""`) so `filter(f="")` silently misses `NULL` rows.
+
+**It only bites where code filters on empty string, and there are two such filters.** The interesting
+one, `LinkQuerySet.needs_archiving()`, does `filter(wayback_url="")` - which would miss every
+unarchived link if `wayback_url` were nullable. It is not:
+`URLField(max_length=..., blank=True, default="")`, **no `null=True`**. The field can only hold `""`
+or a URL, so the filter is exact.
+
+So the field most exposed to this bug is declared exactly as the anti-pattern advice prescribes, and
+the 63 nullable ones are never filtered on empty. Clean.
+
+**Twenty-first artifact, and a new mechanism.** My first check used a regex with mismatched
+parentheses; `grep` errored out, and my hardcoded `echo "[none = no empty-string filters]"` printed
+anyway - producing a clean-looking result from a search that never ran. The label was doing the work
+the search failed to do. **Every prior artifact was a search returning wrong matches; this one was a
+search returning nothing at all while still reading as evidence.**
+
+That is the strongest argument in this report against pre-writing the interpretation of a command's
+output before seeing it - a habit I used dozens of times this session for readability, and which was
+silently wrong exactly once.
