@@ -7472,3 +7472,29 @@ teach it branches - it was to only look where branches cannot occur.**
 That is worth more than the check itself. Faced with a fact that needs analysis beyond reach, the
 options are not just "build the analysis" or "give up": there is often a **subset of the problem where
 the hard part is absent**, and on this codebase that subset held all the signal there was to find.
+
+
+## Chunk 419 - the local subset of an IDOR check, and it is clean
+
+Applied chunk 418's insight to the hardest question in this audit. "Is this access authorized?" needs
+whole-program reasoning - noted early as non-local and set aside. But a **local subset** exists: an
+ORM fetch keyed on a user-supplied id with **no owner scoping in the same expression**. That is
+decidable from one call node.
+
+**Six such fetches. None is an IDOR:**
+
+- `article.py` (x2) and `consensus.py` scope in-expression via a *relation* - `article=scope.article`,
+  `round=round` - which my owner-keyword filter simply did not list;
+- `billing.py` fetches a `SubscriptionRole` by slug - global configuration, not user-owned;
+- `trivia.py` fetches a `Location` by pk - documented in `CLAUDE.md` as **deliberately shared**
+  ("many users may have pins referencing the same Location");
+- `direct_message_shares.py` fetches a `Profile` by slug, which is how profiles are addressed.
+
+**Twenty-fifth artifact on the way there**, and a coarse one: my first pass matched any function named
+`get`, so `request.POST.get('color')` counted as an ORM fetch - **475 hits, all noise**. Narrowing to
+`objects.get` / `objects.filter` / `get_object_or_404` took it to 6.
+
+The result worth keeping is the method. **A question that cannot be answered globally often has a
+subset that can be answered locally, and that subset is worth checking even though it proves less.**
+Six call sites is not "no IDOR exists in this codebase" - it is "no fetch is unscoped in a way visible
+at the call site", which is a real, bounded, honest claim.
