@@ -6755,8 +6755,8 @@ A file-level sweep for that pairing gives eleven candidates:
 |---|---|---|
 | ~~`controllers/pin_sharing.py`~~ | ~~166~~ | **false positive** - one query filtering submitted ids, not in a loop |
 | ~~`controllers/safety.py`~~ | ~~747~~ | **false positive** - a single authorization check on one check-in; `.exists()` is correct there, being cheaper than fetching rows |
-| `controllers/safety.py` | 1520 | `.contacts.exclude()` - unverified |
-| `external_api/views.py` | 2006, 3369 | `.items.count()`, `.markup_maps.filter()` |
+| ~~`controllers/safety.py`~~ | ~~1520~~ | **false positive** - one query for one check-in's template context |
+| ~~`external_api/views.py`~~ | ~~2006, 3369~~ | **false positives** - a single count in a response, and a single map lookup on one check-in |
 | ~~`models/album/model.py`~~ | ~~145~~ | **false positive** - already `len(self.items.all())`; the scan matched `.items.count()` inside the docstring explaining why not to use it |
 | ~~`models/pin_list/model.py`~~ | ~~82~~ | **false positive** - same |
 | `services/messaging/direct_messages.py` | 281, 398, 1259 | `.images.exists()` x3 |
@@ -6802,6 +6802,20 @@ contexts, not per-row loops. `.exists()` on one check-in's contacts is the *corr
 cheaper than fetching rows, and the prefetch-cache argument only applies when the same relation is
 read repeatedly across many objects.
 
-**Running total on this lead: 11 candidates, 1 real (the messaging previews), 5 false positives,
-1 previously assessed, 4 unverified** - `safety.py:1520`, `external_api/views.py:2006` and `:3369`.
-The one real find was worth the exercise; the hit rate was not high.
+### Closed: 11 candidates, 1 real
+
+All eleven triaged. **One real** - the messaging previews, where a prefetch added specifically to
+stop an N+1, with a comment naming the symptom, never stopped it. **Ten false positives**, of three
+kinds:
+
+- **single-object contexts** (6): one count in a response, one authorization check, one template
+  context, one id filter. `.count()`/`.exists()` are the *correct* calls there - cheaper than
+  fetching rows. The prefetch-cache argument only applies when a relation is read repeatedly across
+  many objects.
+- **docstring prose** (2): `album/model.py` and `pin_list/model.py` already do `len(items.all())`
+  and were matched on the text explaining why not to use `.count()`.
+- **already assessed** (2): a write in `change_category`, and a sliced queryset evaluated once.
+
+~9% precision. That is the honest verdict on this scan: worth running **once**, immediately after
+confirming the pattern twice by hand, and not worth building into a linter. The value came from
+reading the candidates, not from the list.
