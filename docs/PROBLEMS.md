@@ -7486,7 +7486,7 @@ best example in the codebase is `services/messaging/direct_message_shares.py`, w
 entry's title verbatim.
 
 
-## OPEN 2026-08-14: JSON rendered with `|safe` in `<script>` blocks, where `json_script` is the safe idiom
+## ~~OPEN 2026-08-14: JSON rendered with `|safe` in `<script>` blocks~~ (DISMISSED same day - `safe_json_for_script` escapes `<`, `>`, `&`)
 
 Found by audit chunk 422, following chunk 421's residual. **Not confirmed exploitable** - the
 verification below was not completed - but the shape is specific enough to be worth checking properly.
@@ -7515,9 +7515,15 @@ containment: **all 14 `|safe` JSON expressions are lexically inside script block
 pin names. If any is serialised with a plain `json.dumps`, a label named `</script><img src=x
 onerror=...>` closes the block and the rest parses as HTML.
 
-**This should be treated as probable rather than speculative** until someone checks how those three
-are serialised. The remaining question is narrow: does the producing code escape `<`, or use
-`DjangoJSONEncoder` without it?
+**DISMISSED (chunk 424).** The producing code escapes. `controllers/maps.py` builds both
+`filter_labels_json` and `tags_data_json` through **`services/core/json_safety.safe_json_for_script`**,
+whose docstring states it returns "a JSON string with `<`, `>`, and `&` escaped", via
+`DjangoJSONEncoder`. A label named `</script><img ...>` serialises to `\u003c/script\u003e` and
+cannot terminate the block.
+
+So the `|safe` usage is correct: the value is already escaped for script context by a purpose-built
+helper, and `json_script` would be a second mechanism for a problem already solved. **No action
+needed** - this entry is kept as the record of the check, not as an open item.
 
 Original checks, for reference: (1) is the `{{ ... |safe }}` lexically inside a `<script>`
 element, and (2) can any string in the serialised payload contain user input? If both, convert to

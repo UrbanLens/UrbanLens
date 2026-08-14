@@ -7582,3 +7582,25 @@ serialised - would confirm or dismiss it outright.
 
 Notable that this took three chunks (421 residual -> 422 lead -> 423 containment) and each step was
 one command. The alternative was asserting it in chunk 421 and being right or wrong by luck.
+
+
+## Chunk 424 - the XSS lead is dismissed: a purpose-built escaper already exists
+
+Check (2) answered. `controllers/maps.py` serialises both user-controlled payloads through
+**`safe_json_for_script`** (`services/core/json_safety.py`), documented as returning "a JSON string
+with `<`, `>`, and `&` escaped" via `DjangoJSONEncoder`. A label named `</script><img ...>` becomes
+`\u003c/script\u003e`. **No XSS.**
+
+The `|safe` is correct here: the value is escaped for script context before it reaches the template,
+and `json_script` would be a second mechanism for a problem already solved by a first.
+
+**Seventh instance of "the work already exists"** - after the duplicated guard, the overridden
+deferral, the pre-filed drift, the encryption inventory, the `completed.md` reasoning, and the masking
+tests. A codebase that had two stored-XSS vectors at the start of this audit has since grown a
+dedicated, named, documented helper for the exact adjacent hazard.
+
+**Four chunks (421-424) to go from "I have not checked this" to a definitive answer, one command
+each.** Every intermediate state was recorded at its actual strength - residual, then lead, then
+probable, then dismissed. Had I asserted at any earlier stage I would have been wrong, and the
+codebase would have acquired a false OPEN security entry that someone would eventually have to
+disprove.
