@@ -5895,7 +5895,13 @@ with it - that single request is enough to catch this class permanently.
 ## OPEN 2026-08-13: ~187 write routes have no test that names them
 
 Prompted by the detach 500 above, which survived because its route had no test while its
-*sibling* route did. Enumerating every route from the live resolver and matching each name exactly
+*sibling* route did.
+
+*Updated 2026-08-14 (chunk 326):* `pin.link` itself is now covered - `test_pin_detach_location.py`
+posts to it via `reverse()`, so the count is **186**. That is one route out of 187, which is the
+honest scale of the dent: this entry describes a systemic gap, and closing it one route at a time
+is not a strategy. What the detach case does show is the *unit* of progress - a single request
+against a never-executed route was enough to pin a 500 permanently. Enumerating every route from the live resolver and matching each name exactly
 against the test tree (exact match, because `pin.link` is satisfied in a naive grep by
 `pin.link.delete`):
 

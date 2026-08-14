@@ -5640,3 +5640,23 @@ obstruct the fix if the gate is meant to apply. The absence of a test is the hon
 That distinction is worth keeping: an unresolved product question sometimes takes a guard and
 sometimes must not. The test is safe only when every candidate answer agrees the present behaviour
 is wrong.
+
+
+## Chunk 337 - a stale line number, and honest arithmetic on the coverage gap
+
+Went to read the secondary-email entry by line number and landed on a different one. The numbers I
+recorded in chunk 326 are stale because **I have been appending to this same file ever since**. A
+line number into a document you are actively growing is a reference with a short half-life; the
+headings are stable, the offsets are not. Worth noting since this audit has cited `PROBLEMS.md` by
+line repeatedly.
+
+The entry I landed on was the right one to look at anyway - the ~187 uncovered write routes, which
+was *prompted by* the detach 500 that chunk 326 covered. Confirmed `pin.link` is now genuinely
+referenced by `reverse()` in the test tree, so the count is **186**.
+
+**One out of 187 is the honest size of that dent**, and recording it that way matters more than
+recording the decrement. This entry describes a systemic gap; closing it route by route is not a
+strategy, and a changelog of individual routes would make steady-looking progress against a number
+that barely moves. What the detach case genuinely demonstrates is the *unit*: one request against a
+never-executed route was enough to pin a 500 permanently. That is an argument for a sweep, not for
+another 186 chunks.
