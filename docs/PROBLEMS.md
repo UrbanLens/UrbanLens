@@ -6505,3 +6505,32 @@ The runtime instrument remains the better one for anything this cannot see:
 `dashboard/tests/hypothesis/test_pin_to_json_prefetch.py` captures queries over 1 and N objects and
 asserts the per-object delta is zero. That measures the property directly rather than pattern-
 matching its likely spellings.
+
+---
+
+## Realising the `to_json()` prefetch win at the call sites
+
+`Pin.to_json()` is now query-flat **when the caller prefetches both `labels` and `reviews`** - see
+the resolved entry above. Whether any caller does is a separate question, and only half-answered:
+
+- `controllers/maps.py:535` and `:667` prefetch **`labels` only** (with a `Prefetch(...)` excluding
+  `KIND_USER`). So the labels half of the fix benefits them immediately - they were paying for a
+  prefetch that `.filter()` discarded.
+- Neither of those querysets calls `to_json()` or `rating` within 100 lines, so **it is not
+  established that the map serialises pins through this method at all**. `pin_lists.py:100`
+  mentions "maps.py's post-processing of `Pin.to_json()`", which suggests it does somewhere, but
+  the path was not traced.
+
+**Do not add `prefetch_related("reviews")` on that basis alone.** If the map builds its payload
+inline rather than through `to_json()`, prefetching reviews is pure waste - extra rows fetched and
+discarded on the hottest page in the application.
+
+The check, in order:
+
+1. Find where the map's pin payload is actually built (`to_json()`, or an inline dict in
+   `maps.py`).
+2. If it uses `to_json()`, add `"reviews"` to the two `prefetch_related` calls and re-run the
+   instrument in `test_pin_to_json_prefetch.py` against that view's queryset to confirm the
+   per-pin delta drops to zero.
+3. If it builds the payload inline, check that code for the same `.filter()`/`.latest()` trap - it
+   would have been invisible to the serialisation-method sweep, which keys on method names.
