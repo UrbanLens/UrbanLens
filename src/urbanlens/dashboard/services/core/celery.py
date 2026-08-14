@@ -43,19 +43,37 @@ class TaskProgress:
 
 
 def update_task_progress(task: Any, *, current: int, total: int, message: str = "") -> None:
-    """Update Celery task metadata in a consistent progress format."""
+    """Update Celery task metadata in a consistent progress format.
+
+    Best-effort, and deliberately broad in what it swallows, matching
+    ``channel_broadcast.send_group_message``'s "never raises" contract. Progress is a
+    side channel: ``update_state`` writes to the result backend, so a backend hiccup
+    used to propagate out of whichever task was reporting and fail work that had
+    already succeeded. With ``CELERY_TASK_ACKS_LATE`` and the ``autoretry_for=(OSError,)``
+    most tasks carry, that failure also redelivers the task, re-running side effects
+    that are not all idempotent.
+
+    Args:
+        task: The bound task instance (``self`` in a ``bind=True`` task).
+        current: Items completed so far.
+        total: Total items; coerced to at least 1 so the percentage is always defined.
+        message: Human-readable status line for polling clients.
+    """
     safe_total = max(int(total or 1), 1)
     safe_current = max(0, min(int(current or 0), safe_total))
     percent = int((safe_current / safe_total) * 100)
-    task.update_state(
-        state=PROGRESS_STATE,
-        meta={
-            "current": safe_current,
-            "total": safe_total,
-            "percent": percent,
-            "message": message,
-        },
-    )
+    try:
+        task.update_state(
+            state=PROGRESS_STATE,
+            meta={
+                "current": safe_current,
+                "total": safe_total,
+                "percent": percent,
+                "message": message,
+            },
+        )
+    except Exception:
+        logger.warning("Could not report progress for task %s", getattr(task, "name", task), exc_info=True)
 
 
 def get_task_progress(task_id: str) -> TaskProgress:

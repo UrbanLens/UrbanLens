@@ -1908,6 +1908,37 @@ outcome than the error it was hiding.
 The third, `boundaries/overpass._endpoint_is_down`, is correct as written - its docstring says
 "Fails open on cache errors" and a cache miss legitimately means "not known to be down".
 
+### Reporting progress could fail work that had already succeeded (fixed)
+
+Celery retry safety. 55 of the 75 tasks carry `autoretry_for=(OSError,)`, and
+`CELERY_TASK_ACKS_LATE` + `CELERY_TASK_REJECT_ON_WORKER_LOST` are on globally, so redelivery is
+not limited to those 55 - every task has to tolerate being run twice.
+
+The photo importers looked like the obvious risk: five retrying tasks that call `.create()` with
+no `get_or_create` guard, each downloading over the network first. They turn out to be safe, and
+the reason is worth recording so nobody "fixes" them: each loads
+`existing_checksums = set(Image.objects.filter(...).values_list("checksum", flat=True))` at the
+top of the task body, so a retry re-reads it and skips everything the previous attempt created.
+Content-hash idempotency, not luck.
+
+The real finding was underneath them. `services/core/celery.update_task_progress` - called from
+nearly every task in `tasks.py` - wrapped nothing around `task.update_state`, which writes to the
+result backend. So a backend hiccup propagated out of whichever task was reporting and failed work
+that had *already completed*. Worse, with `acks_late` and `autoretry_for=(OSError,)`, that same
+failure redelivers the task and re-runs its side effects - and not all of those are idempotent:
+`sweep_immich_library_locations` creates an unguarded `NotificationLog` on the line immediately
+before its final progress call, so the duplicate-notification window was real rather than
+theoretical.
+
+This is now best-effort, matching the contract `channel_broadcast.send_group_message` already
+documents for the other side channel in this codebase ("Never raises - ... already durably saved,
+live delivery is a bonus"). The handler is deliberately broad, which is the opposite of the
+narrowing done elsewhere in this audit, and the distinction is the point: a security predicate
+must not convert a bug into "allowed", whereas a progress reporter must never convert a cosmetic
+failure into lost work. A test covers the non-`OSError` case specifically, since redis-py raises
+its own `ConnectionError` which is not an `OSError` - narrowing here would leave the common case
+uncaught.
+
 ---
 
 ## 3. Checked and clean
