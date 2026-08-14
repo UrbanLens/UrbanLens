@@ -2618,6 +2618,14 @@ dropped rather than failing the request.
 
 Recorded so this isn't repeated. Each was actively probed, not skimmed.
 
+- **JSON body parsing** (2026-08-14). Zero unguarded `json.loads(request.body)` calls in any
+  controller - every one sits inside a handler catching `JSONDecodeError`/`ValueError`, so
+  malformed JSON produces a 400 rather than a 500. Worth recording both as a clean result and
+  because this sweep was the first written *after* the chunk-242 lesson: it models `try/except`
+  **and** `with contextlib.suppress(...)`, and evaluates protection per call site rather than per
+  function. Had it been written the way the numeric sweep was, it would have produced the same
+  mixture of false negatives and false positives.
+
 - **`CalendarImportView.post`** (30 statements, never executed - 8th on the coverage list). Clean.
   The interesting surface is `invite_profile_ids`, which arrives as raw profile ids from the
   client and results in trip invitations - the shape an IDOR usually takes. It is scoped:
