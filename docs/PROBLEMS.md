@@ -6566,3 +6566,24 @@ one-line grep (`self.labels.filter(kind=`), run 2026-08-14: **one hit**, at
 (`labels.remove(*self.labels.filter(...))`) executed once per request rather than per row, in a
 method this audit found has no production callers - so it is not worth changing. No serialisation
 path retains the trap.
+
+---
+
+## `Image` carries labels but does not inherit `LabelledModel`
+
+`Pin` and `Wiki` both inherit `abstract.LabelledModel`, which supplies `categories`/`tags`/
+`statuses` as prefetch-friendly properties over `self.labels.all()`. `Image` declares its own
+`labels = ManyToManyField(...)` and does not inherit the mixin.
+
+**Not a defect.** Checked 2026-08-14: `Image` does not reimplement those accessors badly - it does
+not have them at all, and no code filters an image's labels by kind inline. Nothing is paying a
+per-row query because of this.
+
+It is an inconsistency worth resolving *if* image label access grows: the next person needing
+"an image's media labels" will write `image.labels.filter(kind=...)`, which bypasses any prefetch,
+rather than inheriting the version that does not. That is precisely how `Pin.to_json()` acquired
+the bug fixed earlier the same day.
+
+Care required if adopted: `LabelledModel` may declare the `labels` field itself, in which case
+`Image`'s own declaration has to be reconciled rather than simply adding the base class - a
+migration question, not a refactor.
