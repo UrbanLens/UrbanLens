@@ -7163,3 +7163,26 @@ up locating a single gitignored document that eight code comments depend on, and
 evidence-based rule for what makes a citation work. Neither was visible from the starting question,
 and neither would have surfaced from any scan: it required following a promise the code made and
 checking whether it was kept, twenty-six times.
+
+
+## Chunk 406 - a promise-check whose design was wrong, not just its pattern
+
+Applied the reference audit's method - follow a promise the code makes, check whether it is kept - to
+docstring `Raises:` sections. **353 functions document exceptions; 96 contain no literal `raise`.**
+
+**That is not 96 defects, and the check was misconceived.** Documenting an exception that *propagates
+from a callee* is correct, useful practice. `_parse_optional_float` promises "`ValueError`: raw was
+non-blank but not a valid float" and its body is `return float(stripped)` - `float()` raises it, the
+caller needs to know, and the docstring is exactly right. The same holds for `_config` promising
+`KeyError` from a dict lookup and `trip()` promising `TripNotFoundError` from the service it calls.
+
+**Eighteenth artifact, and the first where the design was wrong rather than the pattern too loose.**
+The previous seventeen were instruments that matched the wrong text; this one matched the right text
+and drew a conclusion the evidence never supported. A correct version needs call-graph analysis -
+does the promised exception *reach* this function from anything it calls - which is a different and
+much more expensive question.
+
+Worth separating the method from this instance: **following promises is what produced the reference
+audit's findings**, and it works because a citation either resolves or does not. A `Raises:` clause
+is not that kind of promise - it describes behaviour under conditions, and confirming it needs
+execution or analysis, not a lookup. The method generalises less far than chunk 405 implied.
