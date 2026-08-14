@@ -6408,11 +6408,24 @@ and the codebase imports them **130 times** outside tests. Twenty query/create s
 
 The thirteen done are the ones where the import is provably safe: `models/labels/meta.py` contains
 *only* constants and imports nothing, so it is a leaf module that any layer can import at module
-level without circularity. The seven left are all in `models/pin/model.py` (5), `models/wiki/model.py` (1) and
-`services/pins/pin_suggestions.py` (1, `source="external_api"`). The two model modules are the
-genuinely delicate ones: their existing `labels` imports are function-local precisely because
-`labels.model` imports back, so a module-level constant import needs checking against that cycle
-rather than assuming the leaf-module argument covers it. Exact list, from a scan that resolves each field's own `choices` via
+level without circularity. The seven left are in `models/pin/model.py` (5), `models/wiki/model.py` (1) and
+`services/pins/pin_suggestions.py` (1, `source="external_api"`).
+
+**The approach for them is already established in the same files, so this is smaller than it
+looks.** `models/labels/model.py:26` re-exports every `KIND_*` constant from `labels.meta`, and
+`models/pin/model.py` already does function-local imports of both (`labels.meta` at line 534,
+`labels.model` at 811 and 829) - the local import is how these modules avoid the `labels.model`
+<-> `pin.model` cycle. So:
+
+- Sites at 814 and 833 sit in methods that *already* do `from ...labels.model import Label`.
+  Extending that to `import KIND_CATEGORY, Label` is a one-word change with no new statement and
+  no new import edge.
+- Sites at 863, 886 and 891 are in `__str__` and a serialisation method with no local Label
+  import; they need one line each, matching line 534's `from ...labels.meta import ...` pattern.
+- Worth noticing while there: line 863 runs a **database query inside `__str__`**
+  (`self.labels.filter(kind="status")`). `CLAUDE.md` already forbids `save()` in `__str__`; a query
+  there is the same class of problem - it fires on every repr, in admin lists, logs and error
+  pages. Exact list, from a scan that resolves each field's own `choices` via
 `Model._meta.get_field(name).choices` rather than matching values across all enums:
 
 | file | lines | literal |
