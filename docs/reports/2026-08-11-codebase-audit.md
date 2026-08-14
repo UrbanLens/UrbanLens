@@ -2029,6 +2029,36 @@ Design notes worth keeping:
 A hypothesis property test asserts the part that actually matters - for arbitrary text input, the
 result is always a hex colour, the `"none"` sentinel, or the default. Never an arbitrary string.
 
+### An escaper that is safe for text and unsafe for attributes (fixed)
+
+Started as an accessibility sweep of all 418 templates, which found nothing - see the methods note
+below, because the instrument was worse than the result. What it did surface, incidentally, was two
+JS-generated `<img>` tags in `pages/memories/index.html`, and reading them turned up the same shape
+as the label-colour bug one layer along.
+
+`popupHtml`/the card builder escape `event.title` and `event.subtitle` with `escapeHtml(...)` and
+then interpolate `event.thumbnail_url` into `src="..."`, `event.url` into `href="..."`, and
+`event.type` into a `class="..."` completely raw.
+
+The trap is what "fixing" it naively would have done. That file's `escapeHtml` is
+`div.textContent = value; return div.innerHTML` - which escapes `&`, `<` and `>` but **leaves
+quotes untouched**, because quotes are not special in a text node. It is correct everywhere it is
+currently used, and would have been useless in exactly the places that needed it: a `"` ends the
+attribute regardless. Wrapping the three sites in the escaper already sitting there would have
+looked like a fix and changed nothing.
+
+Added `escapeAttr` alongside it, with a comment stating which of the two belongs in which context,
+and applied it to the three attribute interpolations. `event.icon` goes into element *content*, so
+it takes `escapeHtml` - the distinction the new comment exists to keep straight. The two `<img>`
+tags also gained the `alt=""` they were missing, which is the correct value for a decorative
+thumbnail sitting next to its own title text.
+
+Unlike the colour finding, this is defence in depth rather than a demonstrated hole: these values
+come from a server JSON endpoint where `type` is an enum, `url` is built by `reverse()`, and
+`thumbnail_url` is a media path whose filename Django has already sanitised. Nothing here is known
+to be exploitable today. It is the inconsistency that is worth removing - three raw interpolations
+sitting beside two escaped ones, in a file whose own escaper cannot protect them.
+
 ---
 
 ## 3. Checked and clean
@@ -3667,6 +3697,24 @@ budget discovering that the cheap version does not work.
 ---
 
 ## 4. Audit methods that mislead on this codebase
+
+### Regex over templates: a 70% false-positive rate
+
+The accessibility sweep in chunk 219 reported 7 `<img>` tags missing `alt` and 2 icon-only buttons
+missing a label. The true counts were 2 and 0.
+
+- **5 of the 7** `<img>` hits were the string `<img` inside a **JavaScript comment** - prose like
+  "(including `<img onerror>`)" explaining an XSS guard. A regex scanning `.html` files cannot tell
+  a comment inside an inline `<script>` from markup.
+- **Both** button hits had a perfectly good `<span>{{ tab.label }}</span>`. The scanner stripped
+  `{% %}`/`{{ }}` before checking for text, which is right for deciding "is this icon-only" and
+  wrong here: the label *is* the template variable.
+
+The two real findings were JS-generated `<img>` tags built by string concatenation - which the
+regex found only by accident, since they are not literal markup either. A template-aware or
+DOM-based instrument would have inverted both error directions. Worth remembering before reporting
+a count from a template regex as if it were a finding list.
+
 
 Same spirit as the note at the top of `code_audit_status.txt`. Each of these produced a
 confident-looking wrong answer during this sweep.

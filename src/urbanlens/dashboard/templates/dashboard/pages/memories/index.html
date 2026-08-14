@@ -198,11 +198,11 @@
     function popupHtml(event) {
         var html = '<div class="memories-popup">';
         if (event.thumbnail_url) {
-            html += '<img class="memories-popup-thumb" src="' + event.thumbnail_url + '">';
+            html += '<img class="memories-popup-thumb" alt="" src="' + escapeAttr(event.thumbnail_url) + '">';
         }
         html += '<div class="memories-popup-title">' + escapeHtml(event.title) + '</div>';
         if (event.subtitle) { html += '<div class="memories-popup-subtitle">' + escapeHtml(event.subtitle) + '</div>'; }
-        if (event.url) { html += '<a class="memories-popup-link" href="' + event.url + '">View details &rarr;</a>'; }
+        if (event.url) { html += '<a class="memories-popup-link" href="' + escapeAttr(event.url) + '">View details &rarr;</a>'; }
         html += '</div>';
         return html;
     }
@@ -211,6 +211,18 @@
         var div = document.createElement('div');
         div.textContent = value || '';
         return div.innerHTML;
+    }
+
+    // escapeHtml() goes through textContent, which escapes & < > but leaves quotes
+    // alone - correct for text nodes, unsafe for an attribute value, where a quote
+    // ends the attribute. Anything interpolated inside src="..."/href="..."/class="..."
+    // needs this instead.
+    function escapeAttr(value) {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
     }
 
     function clearLayers() {
@@ -298,8 +310,8 @@
                     card.addEventListener('click', function (e) { e.preventDefault(); });
                 }
                 var media = event.thumbnail_url
-                    ? '<img class="memories-card-thumb" src="' + event.thumbnail_url + '">'
-                    : '<div class="memories-card-icon memories-type-' + event.type + '"><i class="material-symbols-outlined">' + event.icon + '</i></div>';
+                    ? '<img class="memories-card-thumb" alt="" src="' + escapeAttr(event.thumbnail_url) + '">'
+                    : '<div class="memories-card-icon memories-type-' + escapeAttr(event.type) + '"><i class="material-symbols-outlined">' + escapeHtml(event.icon) + '</i></div>';
                 card.innerHTML = media +
                     '<div class="memories-card-body">' +
                     '<div class="memories-card-title">' + escapeHtml(event.title) + '</div>' +
