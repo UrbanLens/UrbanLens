@@ -6756,8 +6756,8 @@ A file-level sweep for that pairing gives eleven candidates:
 | `controllers/pin_sharing.py` | 166 | `.images.filter()` |
 | `controllers/safety.py` | 747, 1520 | `.contacts.filter()`, `.contacts.exclude()` |
 | `external_api/views.py` | 2006, 3369 | `.items.count()`, `.markup_maps.filter()` |
-| `models/album/model.py` | 145 | `.items.count()` |
-| `models/pin_list/model.py` | 82 | `.items.count()` |
+| ~~`models/album/model.py`~~ | ~~145~~ | **false positive** - already `len(self.items.all())`; the scan matched `.items.count()` inside the docstring explaining why not to use it |
+| ~~`models/pin_list/model.py`~~ | ~~82~~ | **false positive** - same |
 | `services/messaging/direct_messages.py` | 281, 398, 1259 | `.images.exists()` x3 |
 | ~~`models/pin/model.py`~~ | ~~820~~ | already assessed - a write in `change_category`, once per request, in a method with no production callers |
 
@@ -6786,4 +6786,12 @@ Fixed by making the prefetch deliver what it promises: `.exists()` -> truthiness
 `templatetags/dashboard_tags.py:message_preview` and the two `direct_messages.py` previews, with
 the comment corrected so the more idiomatic-looking `.exists()` is not "restored" later.
 
-The remaining eight candidates in the table above are still unverified.
+**Two more resolved, as false positives of a kind worth knowing about.**
+`models/album/model.py:145` and `models/pin_list/model.py:82` already do
+`len(self.items.all())`, with docstrings explaining *"rather than `self.items.count()`"* and
+citing prefetch reuse - the scan matched that phrase in the prose. The two places in the codebase
+that document this rule correctly were flagged for breaking it.
+
+Worth noting for the remaining six: a text-matching scan cannot tell code from a comment about
+code, and this codebase comments unusually well - so its best-documented spots are the most likely
+to appear on such a list. Six candidates remain unverified.
