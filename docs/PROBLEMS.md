@@ -7189,9 +7189,20 @@ schema, but at least three carry data:
 - `0042_label_merge_duplicates` - merges duplicate labels, i.e. deletes rows, immediately before
   `0043_label_unique_constraint` adds the constraint that requires it.
 
-`0042`/`0043` in particular cannot be half-run: if the merge fails, the constraint fails too, and if
-the merge partially succeeded the second attempt operates on already-merged data. Take a database
-snapshot before running these.
+**Corrected 2026-08-14 (chunk 364) after reading the migrations rather than their names.** The
+claim that `0042`/`0043` "cannot be half-run" was wrong: neither sets `atomic = False`, so on
+Postgres Django wraps each in its own transaction - `0042` either fully applies or fully rolls back,
+and a failure in `0043` leaves merged data without the constraint, which is retryable.
+
+The real risk is **irreversibility, not partial application**. `0042`'s reverse is a documented
+no-op:
+
+> "Merging cannot be undone - the dropped rows are gone. Reversing the migration removes the
+> constraint, which is enough to get the schema back; the merged data stays merged."
+
+So `migrate` forward is safe to attempt, but there is no way back to the pre-merge label data via
+`migrate` at all. **Take a database snapshot** - that advice stands, for this reason rather than the
+one originally given.
 
 **Ordering matters, and the safe order is not the obvious one (chunk 361).** Celery workers do not
 autoreload, so they are still running the code they started with on 2026-08-04 - which matches the

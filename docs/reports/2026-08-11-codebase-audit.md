@@ -6217,3 +6217,24 @@ filtering on `\d{4}_` collapsed 61 to 0.
 Sixty-one is a dramatic number, and a less careful pass would have filed it as a serious finding on
 the eve of a migrate. The pattern this session has established holds without exception: **a raw scan
 count has never once survived reading the matches**. Eight for eight.
+
+
+## Chunk 364 - reading the migrations corrects my own warning about them
+
+Chunk 360 warned that `0042`/`0043` "cannot be half-run". That was inferred from their **names** -
+a merge followed by the constraint requiring it - and names have misled me twice already this
+session (chunks 342, 343).
+
+Reading them: neither sets `atomic = False`, so Postgres wraps each migration in its own
+transaction. `0042` fully applies or fully rolls back; a `0043` failure leaves merged data without
+a constraint, which is simply retryable. **The warning was overstated.**
+
+The genuine risk is one I had not identified: `0042`'s reverse is an explicit no-op, and says so -
+"Merging cannot be undone - the dropped rows are gone." Forward is safe to attempt; there is no
+route back through `migrate`. The snapshot recommendation survives, for a different and better
+reason.
+
+**A cautious-sounding warning can still be wrong.** Mine erred toward alarm, which feels like the
+safe direction and is not: it described a failure mode that cannot occur while missing the one that
+can, and a reader who verified the transactional claim might reasonably have discounted the whole
+entry. Corrected in place rather than appended, since the original text was the actionable part.
