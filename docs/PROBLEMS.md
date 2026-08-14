@@ -7124,3 +7124,31 @@ Ownership has been restored (`chown -R appuser:appuser /app/src/urbanlens/logs`)
 `logs/` from the copy, `chown` after every `docker cp`, move the log directory outside the synced
 tree, or make the log path configurable so the container writes somewhere it owns. Until then the
 documented command should carry the `chown` as a second line.
+
+
+## OPEN 2026-08-14: the dev database is 18 migrations behind the code
+
+Found by reading Celery worker logs (audit chunk 359) - another finding no source analysis could
+produce.
+
+`manage.py showmigrations dashboard` inside `urbanlens_devs1_app` reports **18 unapplied
+migrations**. The consequence is already visible in the worker log, 16 `django.db.utils.
+ProgrammingError`s dated **2026-08-04**:
+
+```
+column dashboard_wikis.officially_created does not exist
+column dashboard_site_settings.public_costs_page_enabled does not exist
+column dashboard_profiles.photo_taking_preference does not exist
+```
+
+Same date the `app` container went unhealthy, so the two may share a cause (a boot sequence that
+stopped part-way through migrate/collectstatic) or merely a trigger.
+
+**Why the test suite cannot catch this.** pytest builds a *fresh* database from the migration files,
+so a full green suite - 10,781 passing, run today - says nothing about whether the long-lived dev
+database has had those migrations applied. The two are independent, and only the dev DB serves the
+running app.
+
+Fix is `manage.py migrate` in the container, but check first whether the boot sequence failing on
+2026-08-04 left anything half-applied; the entry above about the wedged `runserver` is the likely
+reason migrations stopped running at all.

@@ -6134,3 +6134,22 @@ insufficient when another slot is brought up and resynced.
 the cost of establishing that was trivial compared to the cost of acting on it (patching docs in
 checkouts I cannot see, for containers that do not exist). The same asymmetry as the rest of this
 session: the check is nearly always cheaper than the reasoning that substitutes for it.
+
+
+## Chunk 359 - the worker logs had been holding the answer for ten days
+
+Returned to code work and checked a runtime signal first: Celery container logs. `celery_worker` has
+**1,892 lines and 175 errors**, against 0 for beat and panels - and the errors resolve to 16
+`ProgrammingError`s naming three missing columns, all dated 2026-08-04.
+
+`showmigrations` confirms: **18 unapplied migrations** in `dashboard`.
+
+**The test suite is structurally blind to this.** It builds a fresh database from the migration
+files, so today's 10,781 passing tests are entirely compatible with a dev database 18 migrations
+behind. I reported that green suite as evidence the session's changes were sound - which it was -
+but it was never evidence the environment was.
+
+That is now three findings in nine chunks that no amount of source reading could reach: the wedged
+container (351), its `docker cp` root cause (356), and this. All three came from looking at what was
+*running* rather than what was *written*, and all three had been true for days while fifty chunks of
+static analysis returned clean.
