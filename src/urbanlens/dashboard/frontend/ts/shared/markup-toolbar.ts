@@ -1,3 +1,4 @@
+import { safeColor } from "./color-safety";
 import { getCsrfToken } from "./csrf";
 import { toast, confirmAction } from "./dialogs";
 import type { ShapeSpec } from "./markup-engine";
@@ -266,8 +267,12 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
     }
 
     function textBackground(item: MarkupItem): string {
+        // Validated before it reaches the `style="…"` these labels build - markup colours
+        // are free-form on the server (`CharField(max_length=20)` with no `choices` on
+        // MarkupShape.color/border_color), so the stored value is not necessarily a colour.
         if (item.border_color === "none") return "transparent";
-        if (item.border_color) return item.border_color;
+        const bc = safeColor(item.border_color);
+        if (bc) return bc;
         return "rgba(255,255,255,0.94)";
     }
 
@@ -294,9 +299,9 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         // around that text instead of the box height dictating the font size.
         const sz = textFontSize(item);
         if (rect) {
-            return `<span class="map-text-label map-text-label--box" style="color:${item.color};background:${bg};` + `width:${rect.w}px;height:${rect.h}px;font-size:${sz}px;">${escapeMarkupLabel(label) || "&nbsp;"}</span>`;
+            return `<span class="map-text-label map-text-label--box" style="color:${safeColor(item.color)};background:${bg};` + `width:${rect.w}px;height:${rect.h}px;font-size:${sz}px;">${escapeMarkupLabel(label) || "&nbsp;"}</span>`;
         }
-        return `<span class="map-text-label" style="color:${item.color};font-size:${sz}px;background:${bg}">${escapeMarkupLabel(label) || "&nbsp;"}</span>`;
+        return `<span class="map-text-label" style="color:${safeColor(item.color)};font-size:${sz}px;background:${bg}">${escapeMarkupLabel(label) || "&nbsp;"}</span>`;
     }
 
     function textIcon(item: MarkupItem): L.DivIcon {

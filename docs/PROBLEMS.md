@@ -6058,22 +6058,32 @@ side effect of an exception handler. If fail-closed is chosen, the same question
 
 ---
 
-## Colour values are interpolated into `style="…"` in several more places
+## Colour values interpolated into `style="…"` - resolved for the renderers, open on the server
 
-The 2026-08-14 audit closed this in the two label-colour renderers (`label-picker.ts`'s
-`chipHtml`/`formulaPillHtml` and `organize-tab-manager.ts`'s `miniCardHtml`) via
-`shared/color-safety.safeColor`. The same shape exists elsewhere and was **not** changed, because
-those consumers may legitimately accept colour formats a hex-only validator would reject:
+**Superseded note (corrected 2026-08-14).** An earlier version of this entry listed
+`markup-engine.ts:66/84/150` and `markup-toolbar.ts:297/299` as unfixed because a hex-only
+validator might blank a legitimate `rgba()`/`none` value. That was half wrong, and the correction
+is worth keeping:
 
-- `shared/markup-engine.ts:66` - `fill="${color}"` in generated SVG
-- `shared/markup-engine.ts:84,150` - `style="color:${color}"`
-- `shared/markup-toolbar.ts:297,299` - `style="color:${item.color};background:${bg}"`
+- `markup-engine.ts` was **already safe**. It defines its own `safeColor(v, fallback)` and
+  `safeOptionalColor` (which returns `"none"` unchanged), and runs the value through them before
+  interpolating - e.g. `const color = safeColor(s.color, "#e53e3e")` on the line above the
+  `style="color:${color}"` that the grep flagged. The flagged lines were reading
+  already-sanitised locals.
+- `markup-toolbar.ts` was **not** safe and now is. It imported no validator and interpolated
+  `item.color` and `textBackground()`'s `item.border_color` straight into `style="…"`. Those are
+  fixed with the shared `shared/color-safety.safeColor`; the `"none"` case that made this look
+  risky is handled explicitly, exactly as `markup-engine.safeOptionalColor` already did.
 
-These render **map annotation** colours rather than label colours. Before applying `safeColor`
-to them, check what `MapMarkup`/annotation colour fields actually store - if `none`, `rgba(...)`
-or named colours are valid there, the hex-only regex would silently blank them, which is a
-visible regression rather than a safe default. Either widen the validator for that call site or
-give annotations their own validator.
+Markup colours are *less* validated than label colours server-side, which is what made this worth
+chasing: `MarkupShape.color` is `CharField(max_length=20, default="#e53e3e")` and `border_color`
+`CharField(max_length=20, blank=True)` - **no `choices` at all**. `x" onmouseover="a` is 17
+characters.
+
+Not changed, and deliberately: the colours passed to Leaflet as *options*
+(`markup-toolbar.ts:318, 345, 348` - `fillColor:`, `color:`) are set programmatically as style
+properties rather than interpolated into markup, so an invalid value is inert there rather than
+injectable.
 
 ### The server-side half is still missing
 

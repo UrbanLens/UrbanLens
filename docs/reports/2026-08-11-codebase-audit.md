@@ -1969,11 +1969,22 @@ breakout but still allows CSS injection (`url(...)`) inside a style value, and t
 only ever hex. `""` falls through to each caller's existing "no colour" branch, so nothing needed
 new failure handling. 394 frontend tests pass, `tsc --noEmit` clean.
 
-Two pieces deliberately left, both filed in `docs/PROBLEMS.md`: the three `markup-engine`/
-`markup-toolbar` sites with the same shape, because those render *annotation* colours and a
-hex-only validator could silently blank a legitimate `rgba()`/`none` value - a visible regression
-dressed up as a safe default; and the server-side half, which is where this should really be
-solved, once, on the way in.
+**Correction to what this section first claimed.** It deferred the three `markup-engine`/
+`markup-toolbar` sites on the grounds that a hex-only validator might blank a legitimate
+`rgba()`/`none` value. Looking properly, that reasoning was sound but the premise was half wrong.
+`markup-engine.ts` was *already* safe - it defines `safeColor(v, fallback)` and
+`safeOptionalColor` (which passes `"none"` through) and sanitises into a local one line above the
+interpolation the grep flagged. `markup-toolbar.ts` genuinely was not, and is now fixed with the
+same shared helper, with `"none"` handled explicitly. The deferral was the right instinct applied
+to a misread: the codebase had already answered the question I was hesitating over.
+
+That leaves markup *less* validated server-side than labels, which is the part still open:
+`MarkupShape.color` is `CharField(max_length=20, default="#e53e3e")` and `border_color`
+`CharField(max_length=20, blank=True)` - no `choices` at all, and `x" onmouseover="a` is 17
+characters. Colours handed to Leaflet as *options* (`fillColor:`, `color:`) are left alone on
+purpose: they are set as style properties rather than interpolated into markup, so an invalid
+value is inert there. The server-side validation gap is filed in `docs/PROBLEMS.md`, and remains
+where this should really be solved - once, on the way in.
 
 ---
 
