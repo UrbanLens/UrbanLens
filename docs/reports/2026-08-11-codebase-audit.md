@@ -7104,3 +7104,23 @@ makes finishing it a plausible single sitting rather than the open-ended chore I
 
 A small thing, but the sort that decides whether a filed task ever gets done: "29 judgement calls"
 reads as a project, "9 files" reads as an afternoon.
+
+
+## Chunk 403 - three more resolve; 20 of 26 checked, six left
+
+- `core/channel_broadcast.py` names "docs/PROBLEMS.md's **gevent/asyncio entry**" -> resolves to the
+  2026-07-31 entry about gunicorn's gevent worker corrupting `SynchronousOnlyOperation` checks.
+- `services/achievements/evaluate.py` cites "the batching fix that would [make the sweep cheaper]"
+  -> resolves to the entry costing the nightly sweep at ~30 queries per user, ~300k at 10k users.
+- `services/wiki/wiki_edits.py` describes "the user sees `{"ok": true}` and the field silently never
+  changes" -> resolves to "The internal wiki edit view silently discards invalid input (**NOT fixed -
+  deliberate**)" - the same `strict=False` cluster chunk 379 found from `location_wiki.py`.
+
+**Running total: 20 of 26 files. 13 resolve, 7 dangling.** Six left:
+`apis/assets/wikipedia.py`, `locations/external_links.py`, `messaging/direct_message_shares.py`,
+`spotguessr/__init__.py`, `spotguessr/selection.py`, `trivia/__init__.py`.
+
+All three of today's resolutions came from **the comment describing a symptom concretely** - a
+`{"ok": true}` response that changes nothing, a per-user-per-night query cost, a named subsystem
+incident. That is the searchability rule from chunk 383 holding for a third consecutive batch, and it
+is now the only one of my four attempted rules that has not needed weakening.
