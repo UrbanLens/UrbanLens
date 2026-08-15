@@ -7647,6 +7647,17 @@ generating one. That converts a silent, confusing failure into a loud one at boo
 
 ## OPEN 2026-08-15: `test_only_submitted_fields_ever_move` fails in the full suite, passes alone and at module scope
 
+**Two more of the same species (2026-08-15).** `test_spotguessr_socket_scopes.py::
+GameSessionSocketScopeTests::test_a_session_connection_is_unaffected` (seen once, chunk 489) and
+`test_safety_contact_revocation.py::ContactAccessRevocationTests::
+test_owner_and_contact_exchange_messages` (seen once, chunk 505) each failed in one large
+multi-module run and pass standalone *and* at module scope. In the safety case the only touching
+change was an additive `aria-label` on two form controls - markup that cannot influence message
+exchange - which rules out the obvious suspect and points at cross-module state, same as the
+other two. Three now recorded; if a fourth appears, the shared cause is worth hunting properly
+(candidate: a module leaving `cache`/`override_settings` state behind, since all three failures
+involve state read at request time).
+
 `SetTripPermissionsPresenceTests::test_only_submitted_fields_ever_move`
 (`test_external_api_trip_settings.py`) failed in the chunk-455 full-suite run (10,838 others
 passed) and passes both standalone and with its whole module. Its traceback was not captured (the

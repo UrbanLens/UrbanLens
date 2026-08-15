@@ -9254,3 +9254,18 @@ directly rather than inheriting them.
 The 38th scan artifact, and a new species: modern generic syntax defeating a regex written for
 plain base lists. Same discipline as always caught it - a flagged count worth reading before
 reporting. Fourteenth verified-safe area.
+
+## Chunk 505 - the aria-label edits are clean; a third order-dependent flake filed
+
+The chunk-503 validation batch (2,085 tests across map/trip/safety/memories/filter rendering)
+came back with one failure: a safety contact-messaging test. **Not mine**: it passes standalone
+and at module scope (14/14), and the only change touching that template was two additive
+`aria-label` attributes on form controls - markup that cannot affect message exchange. Verified
+by reading the diff rather than assuming, since "my last change broke it" is the right first
+suspicion.
+
+That makes three order-dependent flakes recorded this session (trip-settings presence, SpotGuessr
+socket scopes, safety contact messaging), each seen exactly once in a large run and green in
+isolation. Folded into the existing PROBLEMS entry with the pattern noted and a candidate cause
+(cross-module cache/override state) for whoever hunts it - three is enough to call it a shared
+condition rather than three coincidences, but not enough to chase blind mid-audit.
