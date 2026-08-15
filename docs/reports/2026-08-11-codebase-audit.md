@@ -8933,3 +8933,15 @@ least-obvious sites (DM detection, trip tracking) read in full show the exact pa
 `resolve_origin_share`/`resolve_and_stamp_origin_share` before the create, `record_share_exposure`
 after. Group chats' share path carries its own exposure call. The `LocationExposure` chain is
 intact; nothing this session added a share path, and nothing pre-existing drifted.
+
+
+## Chunk 485 - admin surfaces: 30 views, one permission, all by inheritance
+
+Every site-admin view across the three modules gates on `dashboard.view_site_admin`:
+`site_admin.py`'s 18 (13 direct declarations + 5 via `_AdminPermissionMixin`),
+`site_admin_costs.py`'s 6 (all via `_CostAdminMixin`), `achievements.py`'s 3 admin views (via
+`_AchievementAdminMixin`; its user-facing achievement pages are correctly LoginRequired-only).
+The 6-views/3-markers count discrepancy that started this check resolved to inheritance, not
+gaps - read before concluding, as ever. One permission string, no variants, every mixin also
+setting `raise_exception` with the anonymous-redirect handler. The admin surface joins the
+gated-by-inheritance pattern chunk 439 documented for the app at large.
