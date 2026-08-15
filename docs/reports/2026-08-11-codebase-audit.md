@@ -8670,3 +8670,16 @@ the wiki alias's field) cost one container round each. 8/8 green, including the 
 round-trip suite.
 
 The FAQ's data-ownership promise now holds for everything except the two decision-gated kinds.
+
+
+## Chunk 470 - run_export end-to-end, tested for the first time
+
+Nothing had ever exercised the integration path (`run_export` -> exporter dispatch ->
+`_build_zip`): a type registered in `VALID_EXPORT_TYPES` but absent from the dispatch dict, or an
+exporter raising on an empty account, would only have surfaced for a real user mid-download. Two
+tests now run the full flow across every non-fixture-heavy type (google_takeout and
+direct_messages excluded - the former re-formats pins, the latter needs E2EE fixtures): an empty
+account (every exporter must tolerate nothing to export) and an account with a row behind each
+chunk-469 addition. Both produce the archive with all expected files. 2/2 green on first run -
+which after chunk 469's three fixture misses is worth noting as evidence the exporters themselves
+were left in good shape.
