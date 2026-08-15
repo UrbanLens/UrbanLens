@@ -9482,3 +9482,21 @@ and uses the slug only to exclude the current trip from its own results.
 shared adapter's name and stopped before delegating bodies. That would have been the session's
 most alarming false report; it took two reads to dissolve. 39th-species artifact, same lesson,
 and the reason the number never left this file. Fifteenth verified-safe area.
+
+## Chunk 517 - pin merge: three independent layers guard an unrecoverable operation
+
+Swept the merge path, chosen because a wrong merge cannot be undone by the framework - the loser
+row is deleted and its dependents reparented. Defence is layered, and each layer is sufficient
+alone:
+
+1. **Controller**: the suggestion is fetched, then `suggestion.profile_id != profile.pk` raises
+   **404** - not 403, matching the trip gate's anti-enumeration stance so a probe cannot learn
+   that someone else's suggestion exists.
+2. **Service**: `merge_pins` re-validates that *both* pins belong to the merging profile and
+   refuses a self-merge, so even a caller that skipped step 1 cannot merge across owners.
+3. **Integrity**: unresolved field conflicts raise before anything is written, and the whole
+   merge runs inside `transaction.atomic()`, so a failure mid-reparent leaves both pins intact.
+
+`_reparent_children` carries a comment explaining that children must move *before* the delete or
+`CASCADE` would take them - the kind of hazard that is invisible until it has eaten someone's sub
+pins. Sixteenth verified-safe area; no change needed.
