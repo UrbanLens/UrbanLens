@@ -8907,3 +8907,18 @@ push_device (profile), routes (profile), safety x3 (profile x2/checkin), spotgue
 (session/image), trips (trip), trivia (session), undo (profile), visit_suggestions
 (suggested_to), visits x3 (pin), wiki_edit (wiki), wiki_stat_vote (wiki).
 </details>
+
+
+## Chunk 483 - the beat schedule stampede, staggered
+
+All 24 scheduled tasks exist (verified name-by-name against tasks.py). The finding was spacing:
+interval schedules fire relative to beat start, so the eleven hourly entries fired
+**simultaneously** every hour - and they share the default queue with user-facing work, so photo
+processing queued behind an eleven-sweep stampede once an hour, worst at the daily boundary when
+the five 24h entries piled on too.
+
+Hourly work now runs on crontab at distinct minutes (:02 through :57), daily work at staggered
+off-peak UTC hours (03:10-05:40). The 5-minute safety-check-in chain and the 2-minute game stall
+sweeps stay interval-based deliberately: time-critical, cheap, and internally sequenced by their
+own due-time filters. Verified in-container: 24 entries load, 17 crontab + 7 interval, exactly
+the intended split. The schedule block now carries the why.

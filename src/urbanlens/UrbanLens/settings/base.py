@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+
+from celery.schedules import crontab
 from pathlib import Path
 import sys
 
@@ -267,26 +269,33 @@ UL_BACKUP_RETENTION = int(os.getenv("UL_BACKUP_RETENTION", "30"))
 # arrow pointing toward, or shape overlap) count.
 UL_MAP_SHARE_ZOOM_THRESHOLD = float(os.getenv("UL_MAP_SHARE_ZOOM_THRESHOLD", "14"))
 
+# Interval schedules all fire relative to beat start, so same-interval entries
+# fire *simultaneously* - eleven hourly sweeps used to stampede the default
+# queue at once each hour, delaying user-facing tasks (image processing shares
+# it). Hourly work is therefore staggered across distinct crontab minutes and
+# daily work across off-peak UTC hours. The 5-minute safety-check-in chain
+# stays interval-based on purpose: it is time-critical, cheap, and its four
+# tasks are sequenced by their own due-time filters rather than by spacing.
 CELERY_BEAT_SCHEDULE = {
     "scheduled-database-backup-check": {
         "task": "urbanlens.dashboard.tasks.run_scheduled_database_backup",
-        "schedule": 60 * 60,
+        "schedule": crontab(minute=2),
     },
     "scheduled-vestigial-asset-cleanup": {
         "task": "urbanlens.dashboard.tasks.cleanup_vestigial_assets_task",
-        "schedule": 60 * 60,
+        "schedule": crontab(minute=7),
     },
     "scheduled-location-enrichment": {
         "task": "urbanlens.dashboard.tasks.run_scheduled_enrichment",
-        "schedule": 60 * 60,
+        "schedule": crontab(minute=12),
     },
     "scheduled-trivia-generation": {
         "task": "urbanlens.dashboard.tasks.run_scheduled_trivia_generation",
-        "schedule": 60 * 60,
+        "schedule": crontab(minute=17),
     },
     "scheduled-trivia-wiki-incorporation": {
         "task": "urbanlens.dashboard.tasks.run_scheduled_trivia_wiki_incorporation",
-        "schedule": 60 * 60,
+        "schedule": crontab(minute=22),
     },
     "spotguessr-stall-sweep": {
         "task": "urbanlens.dashboard.tasks.sweep_stalled_spotguessr_sessions",
@@ -304,20 +313,20 @@ CELERY_BEAT_SCHEDULE = {
     # because a trip's end date passed - and anything a signal enqueue lost.
     "achievements-sweep": {
         "task": "urbanlens.dashboard.tasks.sweep_achievements",
-        "schedule": 24 * 60 * 60,
+        "schedule": crontab(hour=3, minute=10),
     },
     # Safety net for missed Stripe webhook deliveries - the core "did this
     # charge clear the threshold" mechanic runs at webhook time, not here.
     "stripe-subscriptions-sync": {
         "task": "urbanlens.dashboard.tasks.sync_stripe_subscriptions",
-        "schedule": 24 * 60 * 60,
+        "schedule": crontab(hour=4, minute=10),
     },
     # Keeps a canceled pay-what-you-want subscription's banked-access balance counting
     # down over time - invoice.payment_succeeded is the only other trigger, and it stops
     # firing entirely once Stripe considers the subscription gone.
     "pwyw-usage-ledger-sweep": {
         "task": "urbanlens.dashboard.tasks.advance_pwyw_usage_ledgers",
-        "schedule": 24 * 60 * 60,
+        "schedule": crontab(hour=4, minute=40),
     },
     "safety-checkin-due-reminders": {
         "task": "urbanlens.dashboard.tasks.send_due_checkin_reminders",
@@ -337,44 +346,44 @@ CELERY_BEAT_SCHEDULE = {
     },
     "account-deletion-reminders": {
         "task": "urbanlens.dashboard.tasks.send_account_deletion_reminders",
-        "schedule": 60 * 60,
+        "schedule": crontab(minute=27),
     },
     "account-deletion-hard-delete": {
         "task": "urbanlens.dashboard.tasks.hard_delete_expired_accounts",
-        "schedule": 60 * 60,
+        "schedule": crontab(minute=32),
     },
     "safety-checkin-auto-delete": {
         "task": "urbanlens.dashboard.tasks.delete_expired_safety_checkins",
-        "schedule": 60 * 60,
+        "schedule": crontab(minute=37),
     },
     "undo-action-pruning": {
         "task": "urbanlens.dashboard.tasks.prune_expired_undo_actions",
-        "schedule": 60 * 60,
+        "schedule": crontab(minute=42),
     },
     "direct-message-hard-delete": {
         "task": "urbanlens.dashboard.tasks.hard_delete_expired_direct_messages",
-        "schedule": 60 * 60,
+        "schedule": crontab(minute=47),
     },
     "upgrade-placeholder-pin-names": {
         "task": "urbanlens.dashboard.tasks.upgrade_placeholder_pin_names",
-        "schedule": 60 * 60,
+        "schedule": crontab(minute=52),
     },
     # Daily is plenty: retention is measured in hundreds of days
     # (services.pins.pin_sync.TOMBSTONE_RETENTION), and the pins/deleted/ feed's 410
     # full-resync signal guards clients against any pruning-induced gap.
     "pin-tombstone-pruning": {
         "task": "urbanlens.dashboard.tasks.prune_pin_tombstones",
-        "schedule": 24 * 60 * 60,
+        "schedule": crontab(hour=5, minute=10),
     },
     # Daily. Retention (400 days) is set by the costs page's 12-month spend
     # chart, the longest reader of this table - see prune_api_call_logs.
     "api-call-log-pruning": {
         "task": "urbanlens.dashboard.tasks.prune_api_call_logs",
-        "schedule": 24 * 60 * 60,
+        "schedule": crontab(hour=5, minute=40),
     },
     "public-pin-candidate-evaluation": {
         "task": "urbanlens.dashboard.tasks.evaluate_public_pin_candidates",
-        "schedule": 60 * 60,
+        "schedule": crontab(minute=57),
     },
 }
 
