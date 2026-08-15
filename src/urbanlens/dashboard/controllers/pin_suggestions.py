@@ -218,6 +218,43 @@ class PinSuggestionImmichThumbnailView(LoginRequiredMixin, View):
         return mark_private_media(HttpResponse(content, content_type=content_type))
 
 
+def _bulk_accept_suggestion(suggestion: PinSuggestion, profile: Profile, *, resolve_names_async: bool) -> None:
+    """Accept one suggestion of a bulk batch without any inline external API call.
+
+    Passes ``fetch_if_missing=False`` down the accept chain so a brand-new
+    Location is created unnamed instead of blocking the request on a live
+    Google lookup per suggestion (a batch may hold up to
+    ``_MAX_BULK_SUGGESTIONS`` of them). The canonical name backfills in the
+    background via ``tasks.resolve_location_place_name`` - the same lazy path
+    PinOverviewView dispatches - so only the shared Location's official name
+    arrives late; the pin's own name comes from the suggestion and is set
+    immediately.
+
+    Args:
+        suggestion: The pending suggestion to accept.
+        profile: The accepting profile (must be ``suggestion.profile``).
+        resolve_names_async: Whether to dispatch the background name backfill
+            for a still-nameless Location - callers pass
+            ``profile.external_apis_enabled``, the same gate PinOverviewView
+            applies before enqueueing this task.
+    """
+    result = accept_pin_suggestion(suggestion, profile, fetch_if_missing=False)
+    if result.immich_import_visits:
+        from urbanlens.dashboard.tasks import import_immich_photos
+
+        safely_enqueue_task(
+            import_immich_photos,
+            result.pin.pk,
+            profile.pk,
+            list(result.immich_import_visits),
+            result.immich_import_visits,
+        )
+    if resolve_names_async and result.pin.location is not None and not result.pin.location.cached_place_name:
+        from urbanlens.dashboard.tasks import resolve_location_place_name
+
+        safely_enqueue_task(resolve_location_place_name, result.pin.location_id)
+
+
 class PinSuggestionBulkActionView(LoginRequiredMixin, View):
     """Accept or reject many pin suggestions at once.
 
@@ -251,23 +288,14 @@ class PinSuggestionBulkActionView(LoginRequiredMixin, View):
             return JsonResponse({"error": "Invalid suggestion id."}, status=400)
 
         suggestions = PinSuggestion.objects.filter(pk__in=suggestion_ids, profile=profile, status=PinSuggestionStatus.PENDING).select_related("pin")
+        resolve_names_async = profile.external_apis_enabled
         processed = 0
         for suggestion in suggestions:
             try:
                 if action == "reject":
                     reject_pin_suggestion(suggestion)
                 else:
-                    result = accept_pin_suggestion(suggestion, profile)
-                    if result.immich_import_visits:
-                        from urbanlens.dashboard.tasks import import_immich_photos
-
-                        safely_enqueue_task(
-                            import_immich_photos,
-                            result.pin.pk,
-                            profile.pk,
-                            list(result.immich_import_visits),
-                            result.immich_import_visits,
-                        )
+                    _bulk_accept_suggestion(suggestion, profile, resolve_names_async=resolve_names_async)
                 processed += 1
             except Exception:
                 logger.exception("Bulk pin suggestion action '%s' failed for suggestion %s", action, suggestion.pk)
@@ -290,20 +318,11 @@ class PinSuggestionAcceptAllView(LoginRequiredMixin, View):
     def post(self, request: HttpRequest) -> JsonResponse:
         profile, _ = Profile.objects.get_or_create(user=request.user)
         suggestions = list(_pending_suggestions(profile)[:_MAX_BULK_SUGGESTIONS])
+        resolve_names_async = profile.external_apis_enabled
         processed = 0
         for suggestion in suggestions:
             try:
-                result = accept_pin_suggestion(suggestion, profile)
-                if result.immich_import_visits:
-                    from urbanlens.dashboard.tasks import import_immich_photos
-
-                    safely_enqueue_task(
-                        import_immich_photos,
-                        result.pin.pk,
-                        profile.pk,
-                        list(result.immich_import_visits),
-                        result.immich_import_visits,
-                    )
+                _bulk_accept_suggestion(suggestion, profile, resolve_names_async=resolve_names_async)
                 processed += 1
             except Exception:
                 logger.exception("Accept-all pin suggestions failed for suggestion %s", suggestion.pk)
