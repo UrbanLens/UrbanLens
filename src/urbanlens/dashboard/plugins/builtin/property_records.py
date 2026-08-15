@@ -106,15 +106,78 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
         # today). Best-effort: the record card stands on its own, so a
         # failure or no-coverage answer here must not blank it - the history
         # simply reappears on the next refresh cycle.
+        gateway = RedataGateway()
         try:
-            rows = RedataGateway().lookup_assessments(payload["uuid"])
+            rows = gateway.lookup_assessments(payload["uuid"])
         except PropertyRecordsUnavailableError:
             rows = []
         history = _assessment_history(rows, payload.get("apn") or "")
         if history:
             payload["assessment_history"] = history
 
+        # Supplementary recorded sales (CT OPM, Cook County) - same
+        # best-effort stance. Matched rows are appended to sales_history so
+        # the existing OFFICIAL-sale pipeline ingests them unchanged.
+        try:
+            sale_rows = gateway.lookup_sale_records(payload["uuid"])
+        except PropertyRecordsUnavailableError:
+            sale_rows = []
+        supplementary = _supplementary_sales(sale_rows, payload.get("situs_address") or "", payload.get("apn") or "")
+        if supplementary:
+            payload["sales_history"] = list(payload.get("sales_history") or []) + supplementary
+
     return payload
+
+
+def _supplementary_sales(rows: list[dict[str, Any]], situs_address: str, apn: str) -> list[dict[str, Any]]:
+    """Sale rows attributable to *this* parcel, shaped for the sales_history pipeline.
+
+    The endpoint answers for parcels *near* the coordinate and links no row to
+    a parcel, so attribution is on us: a row counts only when its
+    ``situs_address`` equals the record's own (compared with punctuation and
+    case stripped), or its raw Cook County ``attributes`` carry a PIN matching
+    the record's APN. An unmatched row is a neighbour's sale and is dropped -
+    misattributing one would be worse than missing it.
+
+    Rows the county itself marks as unrepresentative
+    (``attributes.arms_length`` explicitly false - bundle sales, nominal
+    transfers) are excluded: their ``sale_price`` is not this parcel's market
+    price, and the sales pipeline has no way to carry the caveat.
+
+    Args:
+        rows: Raw rows from :meth:`RedataGateway.lookup_sale_records`.
+        situs_address: The record payload's own street address, possibly blank.
+        apn: The record payload's own parcel number, possibly blank.
+
+    Returns:
+        ``{"date", "price", "grantor", "grantee"}`` dicts (the shape
+        ``_write_official_owners_and_sales`` reads; these providers publish no
+        party names, so grantor/grantee are blank), oldest first.
+    """
+
+    def normalize(value: str) -> str:
+        return "".join(ch for ch in value if ch.isalnum()).casefold()
+
+    our_address = normalize(situs_address)
+    our_apn = normalize(apn)
+
+    matched: list[dict[str, Any]] = []
+    for row in rows:
+        attributes = row.get("attributes") or {}
+        if attributes.get("arms_length") is False:
+            continue
+        row_address = normalize(str(row.get("situs_address") or ""))
+        row_pin = normalize(str(attributes.get("pin") or attributes.get("parcel_identifier") or ""))
+        address_match = bool(our_address) and row_address == our_address
+        pin_match = bool(our_apn) and row_pin == our_apn
+        if not (address_match or pin_match):
+            continue
+        if not (row.get("sale_date") or row.get("sale_price")):
+            continue
+        matched.append({"date": row.get("sale_date") or "", "price": row.get("sale_price") or "", "grantor": "", "grantee": ""})
+
+    matched.sort(key=lambda sale: sale["date"] or "")
+    return matched
 
 
 def _assessment_history(rows: list[dict[str, Any]], apn: str) -> list[dict[str, Any]]:

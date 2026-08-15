@@ -263,7 +263,10 @@ direct-only because REData's contract can't reproduce what they show:
   programmes were authorised), via REData's hazards registry (`plugins.builtin.hazard_history`)
 - The Property Records card also lists the parcel's **assessment history** (annual assessor
   valuations with their review stage — mailed/certified/board — Cook County today, via REData's
-  `/parcels/{uuid}/assessments/`)
+  `/parcels/{uuid}/assessments/`), and **supplementary recorded sales** (CT OPM, Cook County via
+  `/parcels/{uuid}/sale-records/`) feed the Sale History cards — matched to the parcel by
+  address/PIN before attribution, with non-arms-length transfers excluded (see
+  `docs/designs/redata-integration.md`)
 - **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available. Via REData when configured, falling back to a direct OpenWeatherMap/Open-Meteo call
 - **Sunrise/sunset & golden hour** — via REData when configured, falling back to direct Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the pin detail page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
 - Satellite imagery carousel: Google Maps and Esri (incl. up to 5 historical Wayback releases) are

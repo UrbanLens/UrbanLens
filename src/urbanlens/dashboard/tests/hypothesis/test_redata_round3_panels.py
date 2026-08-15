@@ -13,7 +13,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.plugins.builtin.hazard_history import HazardHistoryPanelSource
-from urbanlens.dashboard.plugins.builtin.property_records import _assessment_history, _render_available
+from urbanlens.dashboard.plugins.builtin.property_records import _assessment_history, _render_available, _supplementary_sales
 from urbanlens.dashboard.plugins.builtin.redata_aerial_media import AerialMediaSource
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope, LocationContextUnavailableError
 
@@ -61,6 +61,45 @@ class AssessmentHistoryTests(SimpleTestCase):
         context = _render_available(data, show_owner=False)
         values = {entry["label"]: entry["value"] for entry in context["meta"]}
         self.assertEqual(values.get("Assessed 2024"), "$45,000 (board)")
+
+
+class SupplementarySalesTests(SimpleTestCase):
+    def test_matches_by_normalized_situs_address(self) -> None:
+        rows = [
+            {"situs_address": "323 BEAVER ST.", "sale_date": "2021-04-14", "sale_price": "248400.00"},
+            {"situs_address": "325 Beaver St", "sale_date": "2020-01-01", "sale_price": "99000.00"},
+        ]
+        sales = _supplementary_sales(rows, "323 Beaver St", "")
+        self.assertEqual(len(sales), 1)
+        self.assertEqual(sales[0]["date"], "2021-04-14")
+
+    def test_matches_by_raw_pin_when_the_address_differs(self) -> None:
+        rows = [{"situs_address": "UNIT 4B", "sale_date": "2019-06-01", "sale_price": "150000", "attributes": {"pin": "16-07-114-011-0000"}}]
+        sales = _supplementary_sales(rows, "323 Beaver St", "1607114011 0000")
+        self.assertEqual(len(sales), 1)
+
+    def test_unmatched_rows_are_dropped_not_attributed(self) -> None:
+        """A near-parcel row that matches neither address nor PIN is a neighbour's sale."""
+        rows = [{"situs_address": "999 Other Ave", "sale_date": "2021-04-14", "sale_price": "1000000"}]
+        self.assertEqual(_supplementary_sales(rows, "323 Beaver St", "our-pin"), [])
+
+    def test_non_arms_length_rows_are_excluded(self) -> None:
+        """A $1 trust conveyance or a bundle sale is a real transfer but not this parcel's market price."""
+        rows = [
+            {"situs_address": "323 Beaver St", "sale_date": "2021-04-14", "sale_price": "1", "attributes": {"arms_length": False}},
+            {"situs_address": "323 Beaver St", "sale_date": "2018-02-02", "sale_price": "200000", "attributes": {"arms_length": True}},
+            {"situs_address": "323 Beaver St", "sale_date": "2015-03-03", "sale_price": "180000"},
+        ]
+        sales = _supplementary_sales(rows, "323 Beaver St", "")
+        self.assertEqual([sale["date"] for sale in sales], ["2015-03-03", "2018-02-02"])
+
+    def test_rows_without_date_or_price_are_dropped_and_output_is_pipeline_shaped(self) -> None:
+        rows = [
+            {"situs_address": "323 Beaver St", "sale_date": None, "sale_price": None},
+            {"situs_address": "323 Beaver St", "sale_date": "2021-04-14", "sale_price": "248400.00"},
+        ]
+        sales = _supplementary_sales(rows, "323 Beaver St", "")
+        self.assertEqual(sales, [{"date": "2021-04-14", "price": "248400.00", "grantor": "", "grantee": ""}])
 
 
 class HazardHistoryPanelTests(TestCase):

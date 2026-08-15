@@ -24,25 +24,17 @@ Every REData endpoint family is consumed except the four listed under
 | `/reference-documents/search/` `chronicling_america` | Historic Newspapers gallery provider |
 | `/parcels/{uuid}/assessments/` | Assessment history on the Property Records card |
 | `/capabilities/` | REData-capabilities card on `/site-admin/api-limits/` |
+| `/parcels/{uuid}/sale-records/` | Supplementary sales merged into `sales_history` → `OFFICIAL` `WikiPropertySale` rows. Rows are near-parcel with no parcel link, so attribution is by normalized situs-address (or raw Cook County PIN) match - unmatched rows are dropped rather than misattributed - and explicitly non-arms-length rows (bundle sales, nominal transfers) are excluded because the pipeline can't carry the price caveat |
 
 ## Designed follow-ups (deliberately deferred, not overlooked)
 
-1. **`/parcels/{uuid}/sale-records/`** (supplementary recorded sales; Cook County
-   added recently). Mirror the assessments integration exactly:
-   `RedataGateway.lookup_sale_records(parcel_uuid)` → merge rows into the
-   payload the existing `_write_official_owners_and_sales` pipeline reads, so
-   supplementary sales land as `OFFICIAL` `WikiPropertySale` rows like the
-   record's own `sales_history` does. Mind `attributes.arms_length` (21% of
-   Cook County rows price a *bundle* of parcels; 8% are nominal transfers) -
-   those need flagging or excluding before they feed any price display.
-
-2. **`/weather/history/`** (ERA5 daily weather back to 1940). The natural
+1. **`/weather/history/`** (ERA5 daily weather back to 1940). The natural
    surface is the visit record: "what was the weather when I was there" on the
    shared visit dialog / Memories, and retro-filling a trip activity's
    conditions. Needs a small gateway method plus a place in the visit dialog's
    template - the endpoint is cheap (cached per day, only gaps fetched).
 
-3. **`/imagery/timeline/` + `POST /imagery/capture/`** (which dates exist at a
+2. **`/imagery/timeline/` + `POST /imagery/capture/`** (which dates exist at a
    point; materialize one). The right UX is a time slider on the satellite
    carousel - `POST /imagery/timeline/` when the slider opens (it queues
    permanent archiving), `providers_timeline.time_series` for the continuous
@@ -51,7 +43,7 @@ Every REData endpoint family is consumed except the four listed under
    still 404 - not an error). This is a real frontend feature, not a panel;
    scope it as its own piece of work.
 
-4. **`/tiles/` basemap catalogue**. REData publishes a basemap-layer catalogue
+3. **`/tiles/` basemap catalogue**. REData publishes a basemap-layer catalogue
    (`/tiles/sources/`) that could extend the map's base-layer set beyond the
    built-in street/dark/topo/satellite. Needs the same key-hiding tile-proxy
    treatment as historical maps (`historical_map_tiles.py` is the template to

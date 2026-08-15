@@ -227,6 +227,32 @@ class RedataGateway(Gateway):
         body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/assessments/") or {}
         return list(body.get("results") or [])
 
+    def lookup_sale_records(self, parcel_uuid: str) -> list[dict[str, Any]]:
+        """Return supplementary recorded sales near a parcel.
+
+        See REData's ``docs/api-reference.md``, "GET /parcels/{uuid}/sale-records/":
+        recorded sales from providers outside the tiered property-records
+        pipeline (Connecticut OPM statewide; Cook County). Rows are
+        **near-parcel** - ``parcel`` is null and nothing links a row to a
+        specific parcel - so callers must match by address (or a raw PIN in
+        ``attributes``) before attributing a sale to a property.
+        ``attributes.arms_length`` is the field to read before quoting a
+        price: false marks bundle sales and nominal transfers whose
+        ``sale_price`` is not the parcel's market price (Cook County only;
+        Connecticut publishes no such flag).
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            The raw sale rows; empty outside covered areas.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/sale-records/") or {}
+        return list(body.get("results") or [])
+
     def lookup_listings(self, parcel_uuid: str) -> dict[str, Any]:
         """Return cached LoopNet commercial listings for a parcel.
 
