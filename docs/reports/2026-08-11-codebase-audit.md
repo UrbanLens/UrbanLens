@@ -8399,3 +8399,32 @@ chunk 372 said they were:
 With chunk 454's six decision repointings, every `docs/PROBLEMS.md` citation in source now either
 names its entry, points at a tracked record, or is explicitly recorded as unresolvable. Full
 suite running in the background against the chunk-454 tree; these edits are comment-only.
+
+
+## Chunk 456 - Celery duplicate-delivery tolerance: designed in, the seventh default-safe subsystem
+
+With `CELERY_TASK_ACKS_LATE` + `CELERY_TASK_REJECT_ON_WORKER_LOST` + a Redis broker, any task
+whose worker dies (or that outlives the visibility timeout) runs again. Verified the mechanism
+first, per the standing method: the settings file *knows* - its `visibility_timeout = 2h` comment
+derives the value from max(hard time limit, longest countdown) and warns future editors, and
+`update_task_progress`'s docstring names the redelivery hazard explicitly.
+
+Then checked the riskiest side-effect families for double-run safety:
+
+| task | duplicate-run behavior |
+|---|---|
+| WhatsApp/SMS text alerts | **Race-guarded**: atomic `cache.add` debounce claims (recipient, type) in one step - two racing workers cannot both send |
+| `archive_link_to_wayback` | Row-guarded (`link.wayback_url` early exit) and prefers an existing snapshot over re-crawling |
+| `push_trip_to_calendar` | Pushes *current state* - an upsert by design |
+| `import_immich_photos` | Already-imported assets are skipped per-asset |
+| `submit_redata_photos` | Re-submission is the documented recovery path ("a later submission will pick it up") |
+| `ensure_draft_wiki_for_location`, cache rebuilds | Idempotent by name and shape |
+
+**Two narrow residuals, recorded rather than fixed**: a data-export redelivered in the
+crash-after-email-before-ack window sends a second identical link email (the mid-run-crash case,
+which is the realistic one, *should* re-run - the email only fires at the end); and a Wayback
+crawl double-submitted between availability check and save is dedup'd by the Archive itself.
+Neither warrants a guard's complexity.
+
+Seventh default-safe subsystem, after authorization, CSRF, wiki access, rate limiting, cost
+logging, and timeouts: duplicate delivery is tolerated by design, not by luck.
