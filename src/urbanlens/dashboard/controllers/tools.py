@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.pin_suggestions.model import MAX_STORED_VISIT_DA
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.import_export.export import (
     EXPORT_TTL_SECONDS as _EXPORT_TTL_SECONDS,
+    REGISTERED_EXPORT_TYPES,
     VALID_EXPORT_TYPES,
     ExportJobStatus,
     cleanup_export_artifacts,
@@ -115,6 +116,7 @@ class ToolsIndexView(LoginRequiredMixin, View):
                 "profile_uuid": profile.uuid,
                 "immich_account": ImmichAccount.objects.get_for_profile(profile),
                 "immich_active_scan_task_id": get_active_scan_task_id(profile.pk),
+                "registered_export_types": REGISTERED_EXPORT_TYPES,
             },
         )
 
