@@ -9418,3 +9418,25 @@ survives.
 The internal surfaces keep calling `gate()` directly on purpose: one panel per request means a
 raising gate there is a visible bug in exactly one place, which is where a programming error
 should be loud.
+
+## Chunk 514 - boundary voting: consensus mechanics verified, and one subtle contract pinned
+
+Swept the boundary-vote consensus, where a tallying error silently changes what every user sees.
+It holds up: `(place, profile)` carries a real `UniqueConstraint`, so `update_or_create` cannot
+double-weight a voter under concurrency (the shape chunk 490 found unbacked elsewhere); weights
+decay on a half-life with future timestamps clamped rather than given super-unit weight; ties
+break deterministically by source priority then pk; consensus needs the leader to beat the
+runner-up by a ratio, not merely lead.
+
+**The one thing worth a test**: `cast_boundary_vote` promises that re-affirming an unchanged
+choice still refreshes the vote's recency. That depends on `update_or_create` bumping an
+`auto_now` field - and Django only refreshes `auto_now` fields that appear in `update_fields`,
+which `update_or_create` began passing in 5.0. If that ever stops holding, every re-affirmed vote
+keeps decaying and consensus drifts toward whoever voted most recently by accident - silently.
+Verified empirically: **the behaviour is correct today**, and a test now pins it (with an
+anti-vacuity arm asserting the decay it depends on is real).
+
+Three fixture iterations to get there - a votable candidate needs external source, property type,
+real MultiPolygon geometry, and no pin/wiki/profile owner. Each failure was read before being
+called a bug, which is what kept the first one (`BoundaryVoteError`) from being reported as a
+defect in the voting service.
