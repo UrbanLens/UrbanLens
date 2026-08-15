@@ -8596,3 +8596,10 @@ chunk to 5 views believing that was the whole list. Same lesson as ever - the co
 disagreed with the extraction (5), and the discrepancy was the tell.
 
 Full suite running in background (task blnsvs5tv) over the session's 13 behavior-changing chunks.
+
+
+## Chunk 466 (interim) - chunk 465's annotations validated; suite still running
+
+The 22 external-API schema tests (including the E2EE schema suite) pass with the five new
+`extend_schema` annotations - the part the in-flight full run could not cover, since it snapshot
+the tree before those edits. The full-suite verdict lands next.
