@@ -7658,6 +7658,15 @@ other two. Three now recorded; if a fourth appears, the shared cause is worth hu
 (candidate: a module leaving `cache`/`override_settings` state behind, since all three failures
 involve state read at request time).
 
+**Two candidates eliminated (chunk 506)**: the base `TestCase` already clears the Django cache in
+`setUp` (`_CacheIsolationMixin`, whose docstring names this exact hazard), and `SiteSettings`'
+process-level memo is armed only inside a request scope (`request_started`/`request_finished`)
+and is not touched by any of the three flaky tests. So the shared cause is neither stale Django
+cache nor a pinned settings row. Remaining candidates for whoever picks this up: connection-level
+state that survives rollback (advisory locks, `SET LOCAL`), a module-scope `mock.patch` left
+active by a failed cleanup, or Hypothesis' database of previously-failing examples interacting
+with run order.
+
 `SetTripPermissionsPresenceTests::test_only_submitted_fields_ever_move`
 (`test_external_api_trip_settings.py`) failed in the chunk-455 full-suite run (10,838 others
 passed) and passes both standalone and with its whole module. Its traceback was not captured (the

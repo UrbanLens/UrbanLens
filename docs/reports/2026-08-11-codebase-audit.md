@@ -9269,3 +9269,20 @@ socket scopes, safety contact messaging), each seen exactly once in a large run 
 isolation. Folded into the existing PROBLEMS entry with the pattern noted and a candidate cause
 (cross-module cache/override state) for whoever hunts it - three is enough to call it a shared
 condition rather than three coincidences, but not enough to chase blind mid-audit.
+
+## Chunk 506 - the flake hunt's cheap half: two candidates eliminated, honestly
+
+Spent one chunk on the hypothesis chunk 505 recorded, and it was wrong in a useful way. **Django
+cache isolation already exists**: the base `TestCase` clears the cache in `setUp` via
+`_CacheIsolationMixin`, whose docstring names precisely the hazard I suspected ("Django rolls the
+database back between tests; it does not roll the cache back"). **`SiteSettings`' process-level
+memo is also innocent**: it is armed only between `request_started`/`request_finished`, was
+designed with the test-mutation case explicitly in mind (its module docstring explains why a
+process-wide or TTL cache was rejected), and none of the three flaky tests mutate settings at all.
+
+So the shared cause is neither of the obvious two. Recorded the eliminations in the PROBLEMS entry
+along with the remaining candidates (connection-level state surviving rollback, a module-scope
+patch left active by a failed cleanup, Hypothesis' example database interacting with run order) -
+which is worth more to the next investigator than a fourth guess would have been. The eliminations
+also raise the codebase's standing: both mechanisms I suspected turned out to be not just present
+but *designed against this exact failure*, with the reasoning written down.
