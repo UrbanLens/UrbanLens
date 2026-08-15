@@ -8855,3 +8855,17 @@ passes with the restructure.
 The 36th scan artifact en route: my consultation-counting grep piped through `-v "= "`, which
 discards assignment-shaped reads - the exact shape consultations take (`pref = ...`). Four
 false zero-counts; reading the sites found three real consultations and the one true gap.
+
+
+## Chunk 480 - games integrity sweep: one discipline, three games, nothing to fix
+
+Checked the submission paths that guard scoring integrity. All three games use the identical
+pattern: `select_for_update()` on the round serializes the read-count-decide critical section,
+the duplicate-submission guard is a unique constraint caught as `IntegrityError` (race-proof, not
+check-then-act), and the round's terminal state (`revealed_at` / resolution) is checked *inside*
+the lock so only one submission can close a round. SpotGuessr (`session.py:630`), trivia
+(`session.py:360`), consensus (three locked sections including its trust-check branch). Replay,
+double-guess, and guess-after-reveal are all closed by construction. Ninth verified-safe area.
+
+Third consolidation full-suite run in background (task bzc5hqyzf) covering the friendship
+restructure, the wiki revert fix, the operationId changes and the notification wiring.
