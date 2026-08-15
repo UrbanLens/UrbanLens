@@ -203,6 +203,30 @@ class RedataGateway(Gateway):
         body = self._lookup_parcel_body(latitude, longitude, situs_address=situs_address, apn=apn)
         return body.get("uuid") or None
 
+    def lookup_assessments(self, parcel_uuid: str) -> list[dict[str, Any]]:
+        """Return annual assessor valuations near a parcel.
+
+        See REData's ``docs/api-reference.md``, "GET /parcels/{uuid}/assessments/":
+        one row per **parcel-year** (``parcel_identifier`` is the assessor's own
+        PIN, ``tax_year`` the tax year). ``total_value`` is an *assessed* value -
+        a statutory fraction of market value (``assessment_basis`` states the
+        publisher's own terms) - and ``value_stage`` says which review stage it
+        came from (``mailed``/``certified``/``board``, the last being
+        post-appeal). Rows cover parcels *near* the coordinate, so callers
+        filter by ``parcel_identifier`` for a single parcel's history.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            The raw assessment rows; empty outside covered counties.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/assessments/") or {}
+        return list(body.get("results") or [])
+
     def lookup_listings(self, parcel_uuid: str) -> dict[str, Any]:
         """Return cached LoopNet commercial listings for a parcel.
 

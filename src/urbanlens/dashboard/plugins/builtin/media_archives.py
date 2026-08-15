@@ -108,3 +108,18 @@ class InternetArchivePlugin(UrbanLensPlugin):
         from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import InternetArchiveMediaProvider
 
         return [MediaPanelSource("internet_archive", InternetArchiveMediaProvider.service_key, InternetArchiveMediaProvider)]
+
+
+class ChroniclingAmericaPlugin(UrbanLensPlugin):
+    """Historic newspaper coverage for pinned locations."""
+
+    name: ClassVar[str] = "chronicling_america"
+    verbose_name: ClassVar[str] = "Historic Newspapers (Chronicling America)"
+    description: ClassVar[str] = "Adds dated historic-newspaper pages (Library of Congress Chronicling America, 1794-1963) to the pin detail page's Media gallery. USA only. Via REData."
+    author: ClassVar[str] = "UrbanLens"
+
+    def get_panel_sources(self) -> list[PanelSource]:
+        """Contribute the Chronicling America media-gallery provider."""
+        from urbanlens.dashboard.services.apis.locations.redata_reference_documents_gateway import ChroniclingAmericaMediaProvider
+
+        return [MediaPanelSource("chronicling_america", ChroniclingAmericaMediaProvider.service_key, ChroniclingAmericaMediaProvider)]

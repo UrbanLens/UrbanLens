@@ -100,7 +100,59 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
         return result
 
     payload["available"] = True
+
+    if payload.get("uuid"):
+        # Supplementary assessor history (annual valuations; Cook County
+        # today). Best-effort: the record card stands on its own, so a
+        # failure or no-coverage answer here must not blank it - the history
+        # simply reappears on the next refresh cycle.
+        try:
+            rows = RedataGateway().lookup_assessments(payload["uuid"])
+        except PropertyRecordsUnavailableError:
+            rows = []
+        history = _assessment_history(rows, payload.get("apn") or "")
+        if history:
+            payload["assessment_history"] = history
+
     return payload
+
+
+def _assessment_history(rows: list[dict[str, Any]], apn: str) -> list[dict[str, Any]]:
+    """One parcel's assessment rows, newest tax year first.
+
+    The endpoint answers for parcels *near* the coordinate, so this filters to
+    ours: rows matching the record's own APN when it is known (compared with
+    punctuation stripped - assessors and GIS vendors format the same PIN
+    differently), else the identifier with the most rows, which for a
+    parcel-centred query is the parcel itself.
+
+    Args:
+        rows: Raw rows from :meth:`RedataGateway.lookup_assessments`.
+        apn: The record payload's own parcel number, possibly blank.
+
+    Returns:
+        Compact ``{"tax_year", "total_value", "value_stage"}`` dicts, capped
+        at ten years.
+    """
+
+    def normalize(value: str) -> str:
+        return "".join(ch for ch in value if ch.isalnum()).casefold()
+
+    keyed: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        identifier = normalize(str(row.get("parcel_identifier") or ""))
+        if identifier:
+            keyed.setdefault(identifier, []).append(row)
+    if not keyed:
+        return []
+
+    ours = keyed.get(normalize(apn)) if apn else None
+    if ours is None:
+        ours = max(keyed.values(), key=len)
+
+    ours = [row for row in ours if row.get("total_value")]
+    ours.sort(key=lambda row: row.get("tax_year") or 0, reverse=True)
+    return [{"tax_year": row.get("tax_year"), "total_value": row["total_value"], "value_stage": row.get("value_stage") or ""} for row in ours[:10]]
 
 
 def _get_or_create_official_owner(location: Location, name: str, *, mailing_address: str = "") -> WikiOwner | None:
@@ -239,6 +291,11 @@ def _render_available(data: dict[str, Any], *, show_owner: bool) -> dict[str, An
     if assessed.get("total"):
         year_suffix = f" ({assessed['year']})" if assessed.get("year") else ""
         meta.append({"label": f"Assessed value{year_suffix}", "value": f"${assessed['total']:,.0f}"})
+    for row in (data.get("assessment_history") or [])[:5]:
+        # An assessed value is a statutory fraction of market value; the
+        # stage matters because a Board of Review figure is post-appeal.
+        stage_suffix = f" ({row['value_stage']})" if row.get("value_stage") else ""
+        meta.append({"label": f"Assessed {row.get('tax_year') or '?'}", "value": f"${row['total_value']:,.0f}{stage_suffix}"})
     if data.get("market_value"):
         meta.append({"label": "Market value", "value": f"${data['market_value']:,.0f}"})
     if building.get("outbuilding_value"):

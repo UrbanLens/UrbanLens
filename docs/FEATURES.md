@@ -201,6 +201,10 @@ direct-only because REData's contract can't reproduce what they show:
 - **Wikipedia** — best-matching article
 - **Wikimedia Commons** — archival photos/media, direct (REData has no equivalent provider)
 - **Smithsonian Open Access**, **Library of Congress**, **Internet Archive** — archival photos/media, via REData
+- **Historic Newspapers (Chronicling America)** — dated newspaper pages (1794-1963) about the
+  place, in the Media gallery; USA only, via REData (`ChroniclingAmericaMediaProvider`)
+- **Aerial & Drone footage** — a Media-gallery tab of overhead views, from REData's pooled media
+  index filtered with `is_aerial` (`plugins.builtin.redata_aerial_media`)
 - **Digital Commonwealth** (Massachusetts) — photographs, maps, and documents from MA libraries/museums/archives, via REData; Massachusetts pins only
 - **Media previews** — Media-gallery items in formats no browser renders (archival TIFFs, scanned
   PDF inventory/nomination forms, HEIC) are rasterized to JPEG/PNG server-side rather than left as
@@ -254,6 +258,12 @@ direct-only because REData's contract can't reproduce what they show:
   REData (`plugins.builtin.redata_site_conditions`)
 - **Air Quality** — current modelled readings (Copernicus CAMS, worldwide) with a count — never an
   average — of nearby community sensors, via REData (`plugins.builtin.redata_air_quality`)
+- **Fire & Disaster History** (USA) — NIFC wildfire perimeters that reached the site (back to
+  ~1900) and FEMA disaster declarations for its county (since 1953, with which assistance
+  programmes were authorised), via REData's hazards registry (`plugins.builtin.hazard_history`)
+- The Property Records card also lists the parcel's **assessment history** (annual assessor
+  valuations with their review stage — mailed/certified/board — Cook County today, via REData's
+  `/parcels/{uuid}/assessments/`)
 - **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available. Via REData when configured, falling back to a direct OpenWeatherMap/Open-Meteo call
 - **Sunrise/sunset & golden hour** — via REData when configured, falling back to direct Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the pin detail page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
 - Satellite imagery carousel: Google Maps and Esri (incl. up to 5 historical Wayback releases) are

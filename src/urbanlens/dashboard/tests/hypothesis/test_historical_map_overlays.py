@@ -134,6 +134,20 @@ class HistoricalMapBrowseTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(MapImageOverlay.objects.filter(parent_pin=self.pin).exists())
 
+    def test_post_with_a_match_missing_bounds_errors_cleanly(self) -> None:
+        """A georeference without a bounds array must refuse, not 500 on unpacking."""
+        broken = _match(self.georeference_uuid)
+        broken["georeference"]["bounds"] = None
+        with (
+            mock.patch(_CONFIGURED_PATH, return_value=True),
+            mock.patch(_GATEWAY_PATH) as gateway_cls,
+        ):
+            gateway_cls.return_value.get_maps_covering.return_value = [broken]
+            response = self.client.post(self.url, data={"georeference_uuid": self.georeference_uuid})
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(MapImageOverlay.objects.filter(parent_pin=self.pin).exists())
+
     def test_tile_overlays_are_renderable_and_serialized(self) -> None:
         overlay = MapImageOverlay(
             tile_url_template="/dashboard/map/historical-tiles/abc/{z}/{x}/{y}.png",

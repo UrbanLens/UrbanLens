@@ -460,11 +460,12 @@ class HistoricalMapBrowseView(LoginRequiredMixin, View):
         except LocationContextUnavailableError:
             return _render_overlay_list(request, owner, qs, error="Historical map search is temporarily unavailable.")
         match = next((m for m in matches if (m.get("georeference") or {}).get("uuid") == georeference_uuid), None)
-        if match is None:
+        bounds = ((match or {}).get("georeference") or {}).get("bounds") or []
+        if match is None or len(bounds) != 4:
             return _render_overlay_list(request, owner, qs, error="That historical map doesn't cover this location.")
 
         sheet = match.get("sheet") or {}
-        min_lon, min_lat, max_lon, max_lat = (match.get("georeference") or {}).get("bounds")
+        min_lon, min_lat, max_lon, max_lat = bounds
 
         # reverse() can't emit literal {z}/{x}/{y}, so build with sentinels and
         # substitute - keeping the stored template tied to URL routing rather

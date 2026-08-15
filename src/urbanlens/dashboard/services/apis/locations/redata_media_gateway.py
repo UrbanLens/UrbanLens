@@ -50,6 +50,7 @@ class RedataMediaGateway(RedataLocationContextGateway):
         provider: str | list[str] | None = None,
         radius_meters: float | None = None,
         limit: int | None = None,
+        is_aerial: bool = False,
         force_refresh: bool = False,
     ) -> list[dict[str, Any]]:
         """Look up media items near a coordinate.
@@ -65,6 +66,8 @@ class RedataMediaGateway(RedataLocationContextGateway):
                 are fixed at 100m on REData's own side regardless of this value;
                 harmless to pass for the other registered media providers.
             limit: Bounded positive integer (REData caps at 200).
+            is_aerial: Only drone/aerial footage, recognised by REData from
+                each item's own title and description.
             force_refresh: Bypass REData's cache and re-query live.
 
         Returns:
@@ -75,7 +78,11 @@ class RedataMediaGateway(RedataLocationContextGateway):
             Empty when nothing is nearby - see :meth:`near_point` for when this
             raises instead.
         """
-        extra_params: dict[str, Any] | None = {"kind": kind} if kind is not None else None
+        extra_params: dict[str, Any] = {}
+        if kind is not None:
+            extra_params["kind"] = kind
+        if is_aerial:
+            extra_params["is_aerial"] = "true"
         envelope = self.near_point(
             _MEDIA_LOOKUP_PATH,
             latitude,

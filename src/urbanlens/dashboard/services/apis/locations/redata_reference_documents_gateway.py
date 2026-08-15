@@ -253,3 +253,30 @@ class InternetArchiveMediaProvider(_RedataReferenceDocumentProvider):
     # A pin whose only "name" is its raw street address gives the name clause
     # no real narrowing power, so skip the provider rather than guarantee noise.
     reject_address_derived_names: ClassVar[bool] = True
+
+
+@dataclass(slots=True, kw_only=True)
+class ChroniclingAmericaMediaProvider(_RedataReferenceDocumentProvider):
+    """Chronicling America historic newspapers (1794-1963), via REData.
+
+    The Library of Congress's digitised-newspaper corpus, published separately
+    from the general ``library_of_congress`` search so dated press coverage
+    can be requested without photographs and maps drowning it out. Results
+    are newspaper *pages* with the paper's own title and city - for a site's
+    back-story ("MILL DESTROYED BY FIRE", the sale notice, the strike
+    coverage), the local paper is routinely the only surviving record.
+    """
+
+    service_key: ClassVar[str] = "chronicling_america"
+    display_name: ClassVar[str] = "Historic Newspapers"
+    paid_service: ClassVar[bool] = False
+    #: The corpus is US newspapers only, same reasoning as LOC's USA gate.
+    geo_boundary: ClassVar[GeoBoundary | None] = USA
+    _redata_provider: ClassVar[str] = "chronicling_america"
+
+    # Same LOC search infrastructure as library_of_congress (word-independent
+    # relevance ranking, punctuation-hostile quoting), and 1794-1963 newspaper
+    # text never contains a modern street address anyway.
+    include_address: ClassVar[bool] = False
+    search_with_country: ClassVar[bool] = False
+    reject_address_derived_names: ClassVar[bool] = True
