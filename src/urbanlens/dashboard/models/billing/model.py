@@ -11,7 +11,12 @@ from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.billing.meta import BillingSubscriptionStatus
-from urbanlens.dashboard.models.billing.queryset import BillingCustomerManager, RoleSubscriptionManager, StripeWebhookEventManager
+from urbanlens.dashboard.models.billing.queryset import (
+    BillingCustomerManager,
+    RoleSubscriptionManager,
+    StripeProcessedRefundManager,
+    StripeWebhookEventManager,
+)
 
 
 class BillingCustomer(abstract.DashboardModel):
@@ -129,3 +134,26 @@ class StripeWebhookEvent(abstract.DashboardModel):
 
     def __str__(self) -> str:
         return f"{self.event_type} ({self.stripe_event_id})"
+
+
+class StripeProcessedRefund(abstract.DashboardModel):
+    """Idempotency record for individual Stripe refund objects already applied.
+
+    ``StripeWebhookEvent`` dedups whole event deliveries, but ``charge.refunded`` is
+    cumulative: a second partial refund on the same charge arrives as a *fresh* event
+    (new event id) whose ``refunds.data`` re-contains every earlier refund object. Each
+    refund id (``re_...``) is claimed here exactly once - within the receiving view's
+    transaction, so the claim commits atomically with the ledger decrement it produced.
+    """
+
+    stripe_refund_id = CharField(max_length=255, unique=True)
+    stripe_charge_id = CharField(max_length=255, blank=True)
+    amount_cents = IntegerField(default=0, help_text="The refunded amount applied against the banked balance, in cents.")
+
+    objects = StripeProcessedRefundManager()
+
+    class Meta(abstract.DashboardModel.Meta):
+        ordering = ["-created"]
+
+    def __str__(self) -> str:
+        return f"{self.stripe_refund_id} ({self.amount_cents}c)"

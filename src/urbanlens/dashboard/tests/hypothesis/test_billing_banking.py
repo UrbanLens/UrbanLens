@@ -8,6 +8,7 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.utils import timezone
+from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -155,3 +156,89 @@ class ApplyPaymentTests(TestCase):
         sub.refresh_from_db()
         self.assertTrue(sub.has_banked_access)
         self.assertEqual(sub.amount_used_cents, 0)
+
+
+class ApplyRefundTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.sub = baker.make(RoleSubscription, user=self.user, role=self.role, total_paid_cents=2000)
+        _set_created(self.sub, timezone.now() - timedelta(days=1))
+
+    def test_subtracts_from_total_paid_and_persists(self) -> None:
+        banking.apply_refund(self.sub, 500)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 1500)
+
+    def test_clamps_at_zero_when_refund_exceeds_balance(self) -> None:
+        banking.apply_refund(self.sub, 5000)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 0)
+
+    def test_consumed_periods_are_forgiven_not_reversed(self) -> None:
+        """A refund stops future periods from being affordable but never claws back
+        access the ledger already granted - amount_used_cents and usage_covered_until
+        stay exactly where the last tick left them."""
+        _set_created(self.sub, timezone.now() - timedelta(days=31))
+        banking.advance_usage_ledger(self.sub)
+        self.sub.refresh_from_db()
+        used_before = self.sub.amount_used_cents
+        covered_before = self.sub.usage_covered_until
+        self.assertGreater(used_before, 0)
+
+        banking.apply_refund(self.sub, 5000)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 0)
+        self.assertEqual(self.sub.amount_used_cents, used_before)
+        self.assertEqual(self.sub.usage_covered_until, covered_before)
+
+    def test_non_pwyw_role_is_a_no_op(self) -> None:
+        role = baker.make(SubscriptionRole, pay_what_you_want=False, monthly_price_cents=500)
+        sub = baker.make(RoleSubscription, user=self.user, role=role, total_paid_cents=2000)
+        banking.apply_refund(sub, 500)
+        sub.refresh_from_db()
+        self.assertEqual(sub.total_paid_cents, 2000)
+
+    def test_zero_amount_is_a_no_op(self) -> None:
+        banking.apply_refund(self.sub, 0)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
+    def test_negative_amount_is_a_no_op(self) -> None:
+        banking.apply_refund(self.sub, -500)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
+
+class RefundRoundTripPropertyTests(TestCase):
+    """apply_payment then apply_refund of the same amount is a no-op on the banked
+    balance, and never rewinds what the ledger already consumed."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.sub = baker.make(RoleSubscription, user=self.user, role=self.role)
+        _set_created(self.sub, timezone.now() - timedelta(days=45))
+
+    @settings(max_examples=25, deadline=None)
+    @given(initial_paid=st.integers(min_value=0, max_value=5000), amount=st.integers(min_value=1, max_value=10_000))
+    def test_full_refund_restores_the_prior_banked_balance(self, initial_paid: int, amount: int) -> None:
+        RoleSubscription.objects.filter(pk=self.sub.pk).update(total_paid_cents=initial_paid)
+        self.sub.refresh_from_db()
+        banking.advance_usage_ledger(self.sub)
+        self.sub.refresh_from_db()
+        balance_before = self.sub.total_paid_cents
+
+        banking.apply_payment(self.sub, amount)
+        self.sub.refresh_from_db()
+        used_after_payment = self.sub.amount_used_cents
+        covered_after_payment = self.sub.usage_covered_until
+
+        banking.apply_refund(self.sub, amount)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, balance_before)
+        # Consumed periods stay consumed - the refund forgives access already granted.
+        self.assertEqual(self.sub.amount_used_cents, used_after_payment)
+        self.assertEqual(self.sub.usage_covered_until, covered_after_payment)

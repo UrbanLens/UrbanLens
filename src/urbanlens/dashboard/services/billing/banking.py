@@ -92,3 +92,24 @@ def apply_payment(role_subscription: RoleSubscription, amount_paid_cents: int, a
     role_subscription.total_paid_cents += amount_paid_cents
     role_subscription.save(update_fields=["total_paid_cents", "updated"])
     advance_usage_ledger(role_subscription, as_of)
+
+
+def apply_refund(role_subscription: RoleSubscription, amount_refunded_cents: int) -> None:
+    """Claw back a refunded (or lost-dispute) amount from the banked balance, in full.
+
+    Policy: the refunded amount comes straight out of ``total_paid_cents`` (clamped at
+    zero), so future periods simply stop being affordable. Access already consumed is
+    forgiven - ``amount_used_cents`` and ``usage_covered_until`` are left untouched, so
+    periods the ledger has already entered stay covered through their end.
+
+    A no-op for non-PWYW roles or a non-positive amount.
+
+    Args:
+        role_subscription: The subscription to debit. Reads role_subscription.role, so
+            callers should have it select_related.
+        amount_refunded_cents: The amount refunded or lost to a dispute, in cents.
+    """
+    if not role_subscription.role.pay_what_you_want or amount_refunded_cents <= 0:
+        return
+    role_subscription.total_paid_cents = max(0, role_subscription.total_paid_cents - amount_refunded_cents)
+    role_subscription.save(update_fields=["total_paid_cents", "updated"])
