@@ -9239,3 +9239,18 @@ each now carries e.g. "Visited on or after"), trip activity start/end date+time 
 memories date range, safety check-in title/message, group rename, grace-period slider. **52 -> 29
 remaining**, the rest being file pickers and single-purpose inputs whose surrounding text a
 screen reader does reach.
+
+## Chunk 504 - external API throttling: all 202 views covered, by inheritance or declaration
+
+Checked whether any external endpoint escapes rate limiting. The throttles are read/write-tiered
+by scope suffix (`:write`/`:manage` land in the tighter bucket) with per-credential cache keys,
+plus purpose-built throttles for expensive paths (resync, location search, chat). Coverage is
+structural: `ExternalApiView` declares them, and **all 202 view classes in `external_api/` reach
+them** - 195 by inheritance, and the 7 my scan flagged resolve on reading: six descend from
+`PinSubResourceView[SubResourceT: Model]`, whose PEP 695 generic subscript my base-name parser
+dropped, and `DualAuthJsonView` (the E2EE base) declares the same three throttle classes
+directly rather than inheriting them.
+
+The 38th scan artifact, and a new species: modern generic syntax defeating a regex written for
+plain base lists. Same discipline as always caught it - a flagged count worth reading before
+reporting. Fourteenth verified-safe area.
