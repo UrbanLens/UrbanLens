@@ -387,6 +387,15 @@ equally account-level, *is* imported.
 Not a UI problem, checked: `_IMPORT_ORDER` doesn't list `profile`, so no misleading "Importing
 profile..." step is ever shown - it is simply absent.
 
+**Resolved (chunk 467, 2026-08-15): the round trip closes.** `_import_profile` restores bio,
+area, the dates, first/last name and every contact handle; identity (username/email/date_joined)
+stays untouched by design - an archive must not overwrite the login identity of the account it
+is imported into. Absent keys leave current values alone, so pre-gap archives blank nothing.
+Round-trip, identity-protection and pre-gap-archive behavior pinned by `test_import_profile.py`.
+The 7 uncontroversial missing *export* kinds (safety plans, markup, saved filters, routes,
+aliases, social links, secondary emails) remain open above; ProfileNote/WikiEdit still need the
+decision the entry describes.
+
 ## NOTE 2026-08-11: do not naively wrap `PinShareCreateView.post` in `transaction.atomic`
 
 `ATOMIC_REQUESTS` is unset, so views run in autocommit. `controllers/pin_sharing.py:137` performs

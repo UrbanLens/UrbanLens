@@ -8616,3 +8616,19 @@ schema annotations were validated separately (22 schema tests) since this run pr
 
 Read from the output file, not the pipe's exit code, per the standing rule - though this time
 both agreed.
+
+
+## Chunk 467 - the profile export/import round trip closes
+
+The export gap entry's sharpest edge: `_export_profile` wrote bio, area, dates and six contact
+handles into the archive, and nothing ever read them back - a user could *see* the data in their
+own export and still lose it on import. `_import_profile` now restores the content fields;
+identity (username/email/date_joined) is untouched by design and pinned by a test that plants an
+impostor identity in the archive and asserts it does not apply. Absent keys leave current values
+alone, so archives from before this change blank nothing (also pinned). The Profile `.update()`
+write follows the same pattern `_import_settings` already uses, and the bulk-write signal guard
+passes.
+
+Remaining from the entry, queued: the 7 uncontroversial missing export kinds (safety plans,
+markup/overlays, saved filters, routes, pin aliases, social links, secondary emails); ProfileNote
+and WikiEdit stay decision-gated.

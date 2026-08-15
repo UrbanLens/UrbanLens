@@ -1659,7 +1659,61 @@ def _import_direct_messages(
 
 # -- Dispatch table -------------------------------------------------------------
 
-_IMPORT_ORDER = ["labels", "pins", "custom_fields", "pin_lists", "visit_history", "comments", "photos", "trips", "direct_messages", "connections", "settings"]
+def _import_profile(
+    profile: Any,
+    data_dir: str,
+    result: ImportResult,
+    *,
+    pin_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
+) -> None:
+    """Import the profile's own content fields from ``profile.json``.
+
+    Closes the round-trip gap recorded in ``docs/PROBLEMS.md`` ("`profile` is
+    exported but never imported"): bio, area, the dates, and every contact
+    handle were visible in the user's own archive and silently dropped on
+    import. Identity stays untouched by design - ``username``/``email``/
+    ``date_joined`` describe the *account* being imported into, and
+    overwriting them from an archive would let one account impersonate
+    another's login identity.
+
+    Only keys present in the archive are applied, and empty strings are
+    written as-is (clearing a handle is a real instruction); absent keys
+    leave the current value alone, so a pre-gap archive without a contact
+    block does not blank anything.
+    """
+    from urbanlens.dashboard.models.profile.model import Profile
+
+    data = _read_json(data_dir, "profile.json")
+    if not data:
+        return
+
+    update_fields: dict[str, Any] = {}
+    for key in ("bio", "area"):
+        if key in data:
+            update_fields[key] = data[key] or ""
+    for key in ("birth_date", "started_exploring"):
+        if key in data:
+            update_fields[key] = data[key] or None
+
+    contact = data.get("contact") or {}
+    for key in ("phone_number", "signal_username", "discord_username", "whatsapp_number", "telegram_username", "matrix_handle"):
+        if key in contact:
+            update_fields[key] = contact[key] or ""
+
+    if update_fields:
+        Profile.objects.filter(pk=profile.pk).update(**update_fields)
+
+    user_fields: dict[str, Any] = {}
+    for key in ("first_name", "last_name"):
+        if key in data:
+            user_fields[key] = data[key] or ""
+    if user_fields:
+        type(profile.user).objects.filter(pk=profile.user.pk).update(**user_fields)
+
+
+_IMPORT_ORDER = ["labels", "pins", "custom_fields", "pin_lists", "visit_history", "comments", "photos", "trips", "direct_messages", "connections", "profile", "settings"]
 
 _IMPORTERS: dict[str, Any] = {
     "labels": _import_labels,
@@ -1672,10 +1726,12 @@ _IMPORTERS: dict[str, Any] = {
     "trips": _import_trips,
     "direct_messages": _import_direct_messages,
     "connections": _import_connections,
+    "profile": _import_profile,
     "settings": _import_settings,
 }
 
 _STEP_MESSAGES = {
+    "profile": "Importing profile details...",
     "labels": "Importing labels...",
     "pins": "Importing pins and locations...",
     "custom_fields": "Importing custom fields...",
