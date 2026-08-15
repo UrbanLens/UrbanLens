@@ -25,7 +25,7 @@ def get_pin_by_address(address: str) -> tuple[float | None, float | None]:
         address doesn't resolve to a place.
 
     Raises:
-        GeocoderTimedOut: The direct Nominatim fallback didn't respond in time.
-        GeocoderUnavailable: The direct Nominatim fallback is unreachable.
+        RateLimitExceededError: The app-wide Nominatim budget refused the
+            direct fallback call.
     """
     return geocode_address(address)

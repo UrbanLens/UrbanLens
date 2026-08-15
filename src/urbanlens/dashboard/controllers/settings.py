@@ -421,16 +421,17 @@ def geocode_address(request: HttpRequest) -> JsonResponse:
     except (ImportError, OSError, ValueError):
         logger.warning("Google geocoding unavailable for %r", address, exc_info=True)
 
-    # Fall back to Nominatim (OpenStreetMap) - no API key required.
-    try:
-        from geopy.geocoders import Nominatim
+    # Fall back to Nominatim (OpenStreetMap) - no API key required. Through
+    # the shared rate-limited gateway helper, never a raw geopy client.
+    from urbanlens.dashboard.services.apis.locations.geocode_resolution import nominatim_geocode
+    from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
 
-        geolocator = Nominatim(user_agent="urbanlens-settings/1.0")
-        location = geolocator.geocode(address, timeout=5)
-        if location:
-            return JsonResponse({"lat": location.latitude, "lng": location.longitude})
-    except (ImportError, OSError, ValueError):
-        logger.warning("Nominatim geocoding failed for %r", address, exc_info=True)
+    try:
+        latitude, longitude = nominatim_geocode(address)
+    except RateLimitExceededError:
+        return JsonResponse({"error": "Address lookups are momentarily rate limited - try again shortly."}, status=429)
+    if latitude is not None and longitude is not None:
+        return JsonResponse({"lat": latitude, "lng": longitude})
 
     return JsonResponse({"error": "Location not found."}, status=404)
 

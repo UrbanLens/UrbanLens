@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest import mock
 
-from geopy.exc import GeocoderUnavailable
-
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.apis.locations import geocode_resolution
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope, LocationContextUnavailableError
@@ -37,30 +35,38 @@ class GeocodeAddressTests(SimpleTestCase):
         self.assertEqual(result, (None, None))
 
     def test_redata_not_configured_uses_direct_nominatim(self) -> None:
-        fake_location = mock.Mock(latitude=42.6, longitude=-73.6)
+        """The fallback is NominatimGateway, not a raw geopy client - see test_nominatim_fallback.py."""
         with (
             mock.patch(f"{_MODULE}.redata_configured", return_value=False),
-            mock.patch("geopy.geocoders.Nominatim.geocode", return_value=fake_location),
+            mock.patch("urbanlens.dashboard.services.apis.locations.nominatim.NominatimGateway") as gateway_cls,
         ):
+            gateway_cls.return_value.search.return_value = [{"lat": "42.6", "lon": "-73.6"}]
             result = geocode_resolution.geocode_address("1 Main St")
 
         self.assertEqual(result, (42.6, -73.6))
 
     def test_redata_failure_falls_back_to_direct_nominatim(self) -> None:
-        fake_location = mock.Mock(latitude=42.6, longitude=-73.6)
         with (
             mock.patch(f"{_MODULE}.redata_configured", return_value=True),
-            mock.patch(f"{_MODULE}.RedataGeocodeGateway") as gateway_cls,
-            mock.patch("geopy.geocoders.Nominatim.geocode", return_value=fake_location),
+            mock.patch(f"{_MODULE}.RedataGeocodeGateway") as redata_cls,
+            mock.patch("urbanlens.dashboard.services.apis.locations.nominatim.NominatimGateway") as gateway_cls,
         ):
-            gateway_cls.return_value.geocode.side_effect = LocationContextUnavailableError("source_error", "boom")
+            redata_cls.return_value.geocode.side_effect = LocationContextUnavailableError("source_error", "boom")
+            gateway_cls.return_value.search.return_value = [{"lat": "42.6", "lon": "-73.6"}]
             result = geocode_resolution.geocode_address("1 Main St")
 
         self.assertEqual(result, (42.6, -73.6))
 
-    def test_direct_nominatim_exception_propagates(self) -> None:
+    def test_a_rate_limit_refusal_propagates(self) -> None:
+        """A caller must be able to tell "we did not ask" from "no such place"."""
+        import pytest
+
+        from urbanlens.dashboard.services.core.rate_limiter import RateLimitExceededError
+
         with (
             mock.patch(f"{_MODULE}.redata_configured", return_value=False),
-            mock.patch("geopy.geocoders.Nominatim.geocode", side_effect=GeocoderUnavailable("down")),self.assertRaises(GeocoderUnavailable)
+            mock.patch("urbanlens.dashboard.services.apis.locations.nominatim.NominatimGateway") as gateway_cls,
         ):
-            geocode_resolution.geocode_address("1 Main St")
+            gateway_cls.return_value.search.side_effect = RateLimitExceededError("nominatim")
+            with pytest.raises(RateLimitExceededError):
+                geocode_resolution.geocode_address("1 Main St")

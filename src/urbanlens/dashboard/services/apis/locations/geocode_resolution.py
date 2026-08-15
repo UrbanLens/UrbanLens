@@ -10,9 +10,12 @@ decision, mirroring ``cid_resolution.py``/``places_resolution.py``/
   in one call; the first result of the first provider REData lists is used,
   matching the "take the first result of the first provider you trust"
   guidance in REData's own ``docs/api-reference.md``.
-- REData not configured, or its request fails - falls back to the existing
-  direct geopy/Nominatim gateway (``services.locations.geocoding``),
-  preserving today's behavior exactly.
+- REData not configured, or its request fails - falls back to a direct
+  Nominatim search through :class:`NominatimGateway`, so the fallback is
+  rate-limited, cost-logged and timeout-bounded like every other outbound
+  call (it used to construct a raw geopy client under a tutorial user agent
+  Nominatim's operators block - see the 2026-08-15 STATUS entry in
+  ``docs/reports/2026-08-11-codebase-audit.md``).
 
 Only used for the simple "resolve an address typed into a pin-creation form"
 flow - the richer, OSM-metadata-heavy Nominatim reverse-geocode panel
@@ -41,8 +44,8 @@ def geocode_address(address: str) -> tuple[float | None, float | None]:
         address doesn't resolve to a place anywhere.
 
     Raises:
-        GeocoderTimedOut: The direct Nominatim fallback didn't respond in time.
-        GeocoderUnavailable: The direct Nominatim fallback is unreachable.
+        RateLimitExceededError: The app-wide Nominatim budget refused the
+            fallback call (see :func:`nominatim_geocode`).
     """
     if redata_configured():
         try:
@@ -57,18 +60,41 @@ def geocode_address(address: str) -> tuple[float | None, float | None]:
                     return float(latitude), float(longitude)
             return None, None
 
-    from geopy.exc import GeocoderTimedOut, GeocoderUnavailable
-    from geopy.geocoders import Nominatim
+    return nominatim_geocode(address)
 
-    try:
-        geolocator = Nominatim(user_agent="geoapiExercises")
-        pin = geolocator.geocode(address)
-        if pin:
-            return (pin.latitude, pin.longitude)
-    except GeocoderTimedOut:
-        logger.exception("Geocoder service timed out.")
-        raise
-    except GeocoderUnavailable:
-        logger.exception("Geocoder service unavailable.")
-        raise
+
+def nominatim_geocode(address: str) -> tuple[float | None, float | None]:
+    """Forward-geocode one address through the project's Nominatim gateway.
+
+    The shared direct-Nominatim fallback (also used by
+    ``controllers.settings.geocode_address``). Goes through
+    :class:`~urbanlens.dashboard.services.apis.locations.nominatim.NominatimGateway`
+    rather than a raw geopy client so the call is rate-limited (Nominatim's
+    usage policy is one request/second; the app-wide budget enforces it),
+    cost-logged, timeout-bounded, and sent under the project's own user agent.
+
+    Args:
+        address: The address string to geocode.
+
+    Returns:
+        A ``(latitude, longitude)`` tuple, or ``(None, None)`` when Nominatim
+        has no such place or the request failed (the gateway flattens
+        failures to an empty result).
+
+    Raises:
+        RateLimitExceededError: The app-wide Nominatim budget refused the
+            call - propagated so a caller cannot mistake "we did not ask"
+            for "no such place".
+    """
+    from urbanlens.dashboard.services.apis.locations.nominatim import NominatimGateway
+
+    results = NominatimGateway().search(address, limit=1)
+    if results:
+        first = results[0]
+        latitude, longitude = first.get("lat"), first.get("lon")
+        if latitude is not None and longitude is not None:
+            try:
+                return float(latitude), float(longitude)
+            except (TypeError, ValueError):
+                logger.warning("Nominatim returned unparseable coordinates for %r: %r, %r", address, latitude, longitude)
     return (None, None)

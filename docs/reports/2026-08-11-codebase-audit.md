@@ -8310,3 +8310,34 @@ to keep the nine `localdate` conversions; the dev-environment remediation
 artifacts, all skewed toward false alarm); verify the mechanism exists before checking
 compliance with it; six default-on subsystems now verified (authorization, CSRF, wiki access,
 rate limiting, cost logging, timeouts).
+
+
+## Chunk 453 - the Nominatim fallback now goes through the gateway (STATUS item 1, TDD)
+
+*(Chunks 452.1-452.5, between this and chunk 452: the user-directed REData integration loop -
+five rounds, commits `e3272d5e`..`6b624579`, coverage map in `docs/designs/redata-integration.md`.)*
+
+Fixed the chunk-452 finding. Both direct-geopy fallbacks now route through `NominatimGateway`
+via a shared helper (`geocode_resolution.nominatim_geocode`):
+
+- `geocode_resolution.geocode_address` no longer constructs `Nominatim(user_agent="geoapiExercises")`
+  - the copy-pasted tutorial agent Nominatim's operators block - and no longer bypasses the
+  rate limiter, call logging, and timeout injection.
+- `controllers/settings.geocode_address`'s fallback likewise; a rate-limit refusal now surfaces
+  as a 429 with a human message instead of whatever geopy would have done.
+
+**The error contract improved as a side effect.** The callers of `get_pin_by_address`
+(pin creation, import-failure repair, the external API) only ever handled `(None, None)`;
+geopy's `GeocoderTimedOut`/`GeocoderUnavailable` escaped them as 500s. The gateway flattens
+failures to `[]`, which resolves to each caller's own clean "couldn't convert address" path.
+`RateLimitExceededError` still propagates - deliberately, so a caller cannot mistake "we did
+not ask" for "no such place" - and the docstrings now say so.
+
+TDD as required: 5 failing tests written first (verified red), then the fix (verified green,
+11/11 across both geocode test modules). One regression guard is a source-text scan asserting
+neither module reintroduces `geoapiExercises` or a raw geopy geocoder - deliberately textual,
+because the guarded failure mode is someone re-adding the "simple" direct client, which no
+mock-based test would see. Amusing wrinkle: the scan's first red run caught *my own docstring*
+naming the banned literal; the docstring now describes it without spelling it.
+
+geopy itself stays a dependency - `geopy.distance.geodesic` is real use in the import pipeline.
