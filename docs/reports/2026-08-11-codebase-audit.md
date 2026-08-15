@@ -9397,3 +9397,24 @@ not a plausible guess.
 Also recorded for the a11y thread as a whole: the pattern that worked was always *find the
 existing source of truth* - the shared header include (chunk 501), the pre-existing title id
 (502), the author's own dialog id (512) - rather than writing new copy per element.
+
+## Chunk 513 - panel plugins: fetch and render are isolated; the API's list endpoint was not
+
+Chunk 512's nineteen dialog labels validated (1,740 rendering tests). Then swept plugin panel
+failure handling, and the shape is mostly excellent: `run_panel_fetch` catches everything, records
+a skip TTL so a broken source backs off instead of retrying forever, distinguishes rate-limit and
+soft-time-limit cases, and releases its single-flight token in a `finally` - so a crashing fetch
+cannot wedge a panel permanently. Render failures are contained by architecture: the pin page
+loads one panel per HTMX request, so a raising `render_context` costs that panel alone.
+
+**The exception was the external API's panel *list*.** It evaluated every source's `gate()` in one
+comprehension, so a single misbehaving plugin - and panels are a documented third-party
+contribution surface - answered a native client with **zero** panels instead of one fewer. Added
+`gate_allows()` (log and treat a raising gate as "not applicable", matching the fetch path's
+stance) and used it at both API sites. Three tests, including the regression that matters: with a
+deliberately exploding source in the registry, evaluation completes and every healthy panel
+survives.
+
+The internal surfaces keep calling `gate()` directly on purpose: one panel per request means a
+raising gate there is a visible bug in exactly one place, which is where a programming error
+should be loud.

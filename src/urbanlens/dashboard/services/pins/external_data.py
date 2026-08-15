@@ -1121,6 +1121,31 @@ def _fresh_location_cache_sources(pin: Pin) -> set[str]:
     return set(LocationCache.objects.filter(location_id=pin.location_id, updated__gte=cutoff).values_list("source", flat=True))
 
 
+def gate_allows(source: PanelSource, pin: Pin) -> bool:
+    """Whether *source* applies to *pin*, treating a raising gate as "no".
+
+    Panel sources are plugin-contributed (see ``docs/designs/plugins.md``), and
+    a gate is ordinary Python that can raise - a missing related row, a
+    provider config change, a third-party bug. Per-panel surfaces survive that
+    on their own (one HTMX request, one panel), but any surface that evaluates
+    *every* source in one pass would answer with no panels at all rather than
+    one fewer. Suppressing here matches the fetch path's stance in
+    ``run_panel_fetch``: a broken source disappears, the rest keep working.
+
+    Args:
+        source: The panel source to test.
+        pin: The pin being rendered.
+
+    Returns:
+        The source's own ``gate`` result, or False when it raised.
+    """
+    try:
+        return bool(source.gate(pin))
+    except Exception:
+        logger.exception("Panel source %s raised from gate(); treating as not applicable", getattr(source, "key", source))
+        return False
+
+
 def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None) -> dict[str, bool]:
     """Whether each panel source already has data for ``pin``, in one pass.
 
