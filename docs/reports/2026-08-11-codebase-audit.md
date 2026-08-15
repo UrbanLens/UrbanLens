@@ -9120,3 +9120,22 @@ Unlike chunk 495, no guard was added: the obligation here is already documented 
 and the exemptions are self-describing at each site. The distinction worth recording is *why*
 that is enough here and wasn't there - a missed quota check costs storage and is visible in
 usage numbers; a missed EXIF dispatch silently publishes someone's home coordinates.
+
+
+## Chunk 497 - global search: all 10 providers scope to the viewer
+
+Checked whether search can surface a row its viewer could not otherwise reach - the highest-value
+question for a subsystem that queries ten models at once. Every provider filters by the requesting
+profile at the queryset level: pins by ownership plus accepted shares, photos by owner/pin/location
+ownership, wikis by pinned-location access *and* `community_enabled`, trips by membership or
+authorship, visits/markup/safety/comments by ownership, and DMs through
+`involving(profile).visible_to(profile)` - which also honours per-viewer deletion, so a message
+one side deleted stays out of that side's search. The base class states the contract in its
+docstring, and no provider departs from it.
+
+**Two false alarms, both my scanner's**: `TripSearchProvider` uses `Q(profiles=profile)` (plural
+M2M) and `DirectMessageSearchProvider` delegates to `message_search_queryset`, neither matching my
+pattern list. Reading them took a minute and confirmed both correct - the 37th artifact of the
+session, and again a zero-count that was wrong about the code rather than about the codebase.
+
+Eleventh verified-safe area. No change needed.
