@@ -2288,8 +2288,8 @@ def detect_dm_address_mentions(message_id: int) -> int:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def hard_delete_expired_direct_messages() -> int:
-    """Permanently delete every direct message past its sender's disappearing-message window.
+def hard_delete_expired_direct_messages(batch_size: int = 5000) -> int:
+    """Permanently delete direct messages past their sender's disappearing-message window.
 
     Unlike delete_message_for_everyone (a tombstone - the row and its content
     stay in the DB, just hidden from both parties' rendered view),
@@ -2298,12 +2298,20 @@ def hard_delete_expired_direct_messages() -> int:
     what actually removes it. Image.direct_message is SET_NULL (not CASCADE),
     so attached images are explicitly deleted here too - otherwise they'd
     survive as orphaned, still-unencrypted files after the message is gone.
+
+    Args:
+        batch_size: Maximum number of messages to delete in one run, bounding
+            the materialised id list and the ``IN`` clauses sent to Postgres;
+            any backlog remainder is picked up by the next scheduled run.
+
+    Returns:
+        Number of direct messages hard-deleted this run.
     """
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.services.media.images import delete_stored_file
 
-    due_ids = list(DirectMessage.objects.due_for_hard_delete().values_list("id", flat=True))
+    due_ids = list(DirectMessage.objects.due_for_hard_delete().values_list("id", flat=True)[:batch_size])
     if not due_ids:
         return 0
 
@@ -2319,7 +2327,10 @@ def hard_delete_expired_direct_messages() -> int:
 
     count = len(due_ids)
     DirectMessage.objects.filter(id__in=due_ids).delete()
-    logger.info("Hard-deleted %s expired direct message(s)", count)
+    if count == batch_size:
+        logger.info("Hard-deleted a full batch of %s expired direct message(s); any backlog remainder will drain on subsequent runs", count)
+    else:
+        logger.info("Hard-deleted %s expired direct message(s)", count)
     return count
 
 

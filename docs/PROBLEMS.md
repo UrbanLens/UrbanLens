@@ -447,7 +447,15 @@ Found during a sweep of read-then-unconditional-write single-use markers; every 
 (`BackupCode` after its fix, `SafetyCheckinPartner`, `PushDevice`, `ApiKey`, `UserSubscription`)
 is either conditional or genuinely idempotent.
 
-## LOW 2026-08-11: the hourly DM retention sweep seq-scans, then materialises its whole result set
+## ~~LOW 2026-08-11: the hourly DM retention sweep seq-scans, then materialises its whole result set~~ RESOLVED 2026-08-15 (batching; index still deliberately deferred)
+
+**RESOLVED (the batching half)**: `hard_delete_expired_direct_messages()` now takes
+`batch_size: int = 5000` (mirroring `upgrade_placeholder_pin_names`) and slices the due-id query,
+bounding the materialised list and every downstream `IN` clause; a backlog drains across hourly
+runs, with an info log when a full batch is hit. 3 new tests in
+`test_direct_message_hard_delete.py` (20/20 passing). The partial index proposed below remains
+deliberately NOT added - that stays a measured production decision per this entry's own
+reasoning; the proposed index definition is preserved below for whoever measures. Original entry:
 
 `DirectMessageQuerySet.due_for_hard_delete` (`models/direct_messages/queryset.py:98`) filters on
 `sender_delete_after` + `read_at`. Confirmed against a real database - the only indexes on

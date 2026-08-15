@@ -149,6 +149,49 @@ class HardDeleteExpiredDirectMessagesTaskTests(TestCase):
         self.assertEqual(hard_delete_expired_direct_messages(), 0)
 
 
+class HardDeleteBatchingTests(TestCase):
+    """The sweep bounds each run to batch_size; a backlog drains across successive runs."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.sender = _profile()
+        self.recipient = _profile()
+        self.messages = [
+            _make_message(
+                self.sender,
+                self.recipient,
+                sender_delete_after=MessageRetentionChoice.ONE_DAY,
+                read_at=timezone.now() - datetime.timedelta(days=2),
+            )
+            for _ in range(3)
+        ]
+
+    def test_first_run_deletes_exactly_batch_size(self) -> None:
+        count = hard_delete_expired_direct_messages(batch_size=2)
+        self.assertEqual(count, 2)
+        self.assertEqual(DirectMessage.objects.filter(pk__in=[m.pk for m in self.messages]).count(), 1)
+
+    def test_second_run_removes_the_remainder(self) -> None:
+        self.assertEqual(hard_delete_expired_direct_messages(batch_size=2), 2)
+        self.assertEqual(hard_delete_expired_direct_messages(batch_size=2), 1)
+        self.assertFalse(DirectMessage.objects.filter(pk__in=[m.pk for m in self.messages]).exists())
+
+    def test_images_beyond_the_batch_survive_the_first_run(self) -> None:
+        images_by_message = {
+            message.pk: baker.make(Image, profile=self.sender, direct_message=message, pin=None)
+            for message in self.messages
+        }
+        hard_delete_expired_direct_messages(batch_size=2)
+        surviving_message_ids = set(DirectMessage.objects.filter(pk__in=images_by_message).values_list("pk", flat=True))
+        self.assertEqual(len(surviving_message_ids), 1)
+        for message_pk, image in images_by_message.items():
+            self.assertEqual(
+                Image.objects.filter(pk=image.pk).exists(),
+                message_pk in surviving_message_ids,
+                f"image for message {message_pk} should survive iff its message survived",
+            )
+
+
 class WhenReadFirstOpenTests(TestCase):
     """A "delete as soon as read" message is readable exactly once on a cold open.
 
