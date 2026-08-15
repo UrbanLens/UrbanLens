@@ -10,6 +10,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils import timezone
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -294,7 +295,7 @@ class PinEditView(LoginRequiredMixin, View):
                 except ValueError:
                     continue
             if last_visited:
-                today = date.today()
+                today = timezone.localdate()
                 min_date = date(today.year - 100, today.month, today.day)
                 lv_date = last_visited.date()
                 if lv_date > today:

@@ -5509,7 +5509,26 @@ plain `idxdb_tcl_profile_event`.
 has to be resolved first, and choosing which link survives decides which of two real trips stays
 attached to the user's calendar. That is a call about live user data, not a refactor.
 
-## OPEN 2026-08-12: `date.today()` bypasses Django's configured timezone
+## ~~OPEN 2026-08-12: `date.today()` bypasses Django's configured timezone~~ RESOLVED 2026-08-15
+
+**RESOLVED**: all nine non-test call sites now use `django.utils.timezone.localdate()` -
+`controllers/trip.py`, `controllers/tools.py` (×2), `controllers/pin.py`,
+`controllers/pin_edit.py`, `services/trips/trip_activities.py`,
+`services/import_export/export.py` (×2), `services/ai/link_extraction.py`; four of those files
+needed a `from django.utils import timezone` added. Each was converted individually rather than
+by a mechanical sweep, since several still legitimately need the `date` import for `date(...)`
+construction.
+
+This entry argued for deferring until per-user timezones exist. That reasoning does not hold for
+the *server*-side bug: `date.today()` reads the host OS clock, which is not `TIME_ZONE` even
+today, so the deployment's own configured zone was already being ignored. Per-user timezones
+remain future work and are unaffected by this change.
+
+One regression test guards the most user-visible site (the trip-activity completion clamp):
+`TIME_ZONE="Pacific/Kiritimati"` (UTC+14) with `timezone.now` patched to `2026-01-01T20:00Z`,
+where the configured zone is already Jan 2 while UTC is still Jan 1 - so a `date.today()` clamp
+caps a legitimately-"today" completion a day early. 183 tests pass across the touched modules.
+Deliberately no trivial per-site assertions for the other eight. Original entry below.
 
 Nine non-test call sites use `datetime.date.today()`; ten others use `timezone.localdate()`.
 `date.today()` reads the *operating system* clock, whereas `localdate()` reads Django's `TIME_ZONE`.

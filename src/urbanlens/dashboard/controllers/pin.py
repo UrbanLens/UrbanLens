@@ -182,7 +182,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         profile, _ = Profile.objects.get_or_create(user=request.user)
 
-        today = date.today()
+        today = timezone.localdate()
         min_date = date(today.year - 100, today.month, today.day)
 
         detail_pin_icon_choices = [

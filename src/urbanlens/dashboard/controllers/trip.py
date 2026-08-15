@@ -1526,7 +1526,7 @@ class TripWeatherView(LoginRequiredMixin, View):
         if not profile.external_apis_enabled:
             error = "External weather lookups are turned off in your settings."
         else:
-            today = datetime.date.today()
+            today = timezone.localdate()
             activities = [act for act in _activity_qs(trip) if act.status != TripActivity.STATUS_COMPLETED and (act.scheduled_at is None or act.scheduled_at.date() >= today)]
             if not activities:
                 pass  # no upcoming activities - leave error/grouped empty to hide the section

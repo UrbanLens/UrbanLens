@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any, ClassVar
 import zipfile
 
 from django.core.cache import cache
+from django.utils import timezone
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
@@ -243,7 +244,7 @@ def _resolve_target(obj: Any) -> tuple[str, str, str]:
 
 
 def _build_zip(export_dir_path: str, temp_dir: str) -> None:
-    today = date.today().isoformat()
+    today = timezone.localdate().isoformat()
     zip_path = os.path.join(export_dir_path, "export.zip")
     with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
         for root, _dirs, files in os.walk(temp_dir):
@@ -296,7 +297,7 @@ def send_export_email(user: Any, export_dir_path: str, base_url: str, *, job_id:
 
     attach = zip_size <= EMAIL_ATTACHMENT_MAX_BYTES
     download_url = f"{base_url.rstrip('/')}{reverse('tools.export.download', kwargs={'job_id': job_id})}"
-    today = date.today().isoformat()
+    today = timezone.localdate().isoformat()
     filename = f"urbanlens_export_{today}.zip"
 
     subject = "Your UrbanLens data export is ready"
