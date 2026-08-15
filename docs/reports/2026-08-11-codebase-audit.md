@@ -8224,3 +8224,27 @@ The scan worked; it answered "do gateways declare X" correctly. I had assumed de
 required, and a 0-of-55 result should have been read as "my model of this system is wrong" long
 before it was read as "55 defects". The tell was there immediately - the list included exception
 classes, and no codebase has 55 unthrottled external API clients while shipping a rate limiter.
+
+
+## Chunk 451 - API cost tracking is built, and the roadmap says it is not
+
+`CLAUDE.md` states a requirement - "When calling any API, track usage and cost per call (keep a
+running estimate). This is required groundwork for future cost reporting" - and lists **"API cost
+tracking: Log and aggregate cost estimates on every external API call"** as a roadmap TODO.
+
+**It is implemented.** `ApiCallLog` exists as a model with a `cost_estimate` field, its queryset
+aggregates `Sum("cost_estimate")`, there is an admin for it, and - decisively - the `Gateway` base
+class docstring states it wraps **"every request and writes an `ApiCallLog` row after."**
+
+So cost tracking is a **base-class mechanism, not a per-integration convention**: all 55 gateways
+record calls without their authors doing anything. That is the fifth default-on subsystem found in
+this audit, after authorization, CSRF, wiki access, and rate limiting.
+
+**The finding is the stale roadmap, not the code.** Someone reading `CLAUDE.md` would plan work that
+already exists - which is exactly the failure this audit hit six times from the other direction
+(building things the codebase already had). `docs/FEATURES.md` is explicitly maintained to prevent
+that, and was current when checked in chunk 399; the roadmap section of `CLAUDE.md` is not.
+
+Applied chunk 450's lesson deliberately here: **checked whether the mechanism existed before checking
+compliance with it.** Had I gone straight to "do gateways record costs", I would have found no
+per-gateway code and reported 55 integrations skipping a documented requirement.
