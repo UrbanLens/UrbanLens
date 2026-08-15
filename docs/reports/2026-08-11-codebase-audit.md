@@ -8813,3 +8813,23 @@ restore path.
 class that cannot match "E2EE"); every one caught by a count disagreeing with an extraction.
 The trip-settings order-dependent flake remains the one open test issue, filed with reproduction
 guidance. User-decision items and the dev-environment remediation remain untouched, as directed.
+
+
+## Chunk 478 - import formats: hardened at every layer, nothing to fix
+
+Swept the untrusted-file-input surface across its three attack classes:
+
+- **XML** (GPX, OSM, and gpxpy's internal tree): `defusedxml` everywhere, including the
+  pre-validation pattern for gpxpy (which builds its own lxml tree and accepts no hardened
+  parser - the same text is defused-parsed first, purely as a gate). XXE and entity expansion
+  are closed.
+- **Archives** (KMZ/ZIP/TGZ): `archive_extractor` verifies magic bytes over extensions, skips
+  traversal and symlink entries, enforces per-file and cumulative uncompressed limits plus a file
+  count cap, allowlists extensions, and reads one byte past the declared size to catch
+  compression-ratio lies. Textbook.
+- **KML descriptions** (the HTML-injection path into pin descriptions): flattened to plain text
+  on import (`<br>` to newline, tags stripped); any residual malformed fragment is inert text
+  under Django autoescape at render.
+
+Size caps (`DocumentTooLargeError`, the archive limits) bound the parser DoS surface. The eighth
+audited area to verify safe-by-construction. No change needed.
