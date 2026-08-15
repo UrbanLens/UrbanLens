@@ -9512,3 +9512,44 @@ could not distinguish "fixed" from "not provoked"; this one was provoked and sta
 Eight consolidations: 10,849 / 10,859 / 10,863 / 10,865(2 resolved) / 10,873 / 10,875 / 10,878 /
 10,883. Every chunk from 453 to 517 now covered, and the test count has grown by 34 across the
 session - all of it this audit's own additions.
+
+## Chunk 519 - summary of chunks 477-518
+
+The second-half summary (chunk 477) covered 453-476. What followed:
+
+**Fixed** (each tested; all validated by at least one of four further green consolidations):
+- **Data round-trip**: three new export kinds import back (safety history, map annotations, saved
+  searches/routes), with live-status check-ins deliberately *not* importable - restoring one would
+  re-arm reminders and page someone's emergency contacts.
+- **Abuse surface**: secondary-email verification joined the rate-limit ledger (relay and
+  mail-bomb closed); Gotify stopped swallowing rejected sends.
+- **Scheduling**: eleven hourly Celery tasks no longer fire simultaneously against the queue that
+  serves user-facing work.
+- **Correctness**: reverting a wiki revert un-marks the original edit (its content is back in
+  force, and both the history view and the achievement metric read that flag); import category
+  lookups match on kind, so a same-named tag is no longer used as a category.
+- **Robustness**: one broken plugin gate no longer empties the external API's whole panel list;
+  three unhandled `fetch()` sites now surface failure instead of blank panels or an injected
+  Django error page.
+- **Truthfulness**: the pin-delete dialog stopped promising an undo it cannot deliver; photo
+  deletion now says it is permanent; saved-filter deletion now says it is not.
+- **Test infrastructure**: `UL_TEST_DB_NAME` isolated Postgres but not the channel layer, so
+  concurrent runs collided on pk-derived channel groups - the cause of two of three flakes, fixed
+  and since proved under load.
+- **Accessibility**: 28 icon buttons, 77 of 82 dialogs and *every* form control now have
+  accessible names, found by locating each element's existing source of truth rather than writing
+  new copy.
+
+**Verified safe, no change** (nine areas this half): Celery duplicate-delivery tolerance, panel
+API exposure, TS dirty-flag protocol, import-format hardening, global-search viewer scoping, the
+malware-scan deferral, external-API throttling, boundary-vote consensus, trip permissions, pin
+merge.
+
+**Filed for the owner**: the root-owned Hypothesis example store (three remedies, all touching
+either test policy or container state), the 62 composite-prefix index pairs (needs production
+scan statistics), and the standing six product decisions.
+
+**Method note**: this half produced artifacts 33-39, including the first from *my own conclusion*
+rather than a scan (chunk 507's over-claim, caught in 508) and the most dangerous single false
+alarm of the session (56 "ungated" trip endpoints, chunk 516, dissolved by two reads). Every one
+was caught by the same habit: a count is a claim about the search until the matches are read.
