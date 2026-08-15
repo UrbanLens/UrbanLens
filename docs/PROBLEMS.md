@@ -1888,6 +1888,16 @@ comments in `src/urbanlens/dashboard/controllers/media.py`:
   Image/Comment/TripComment row no longer exists, e.g. row deleted without file cleanup):
   authenticated-only, since there is no owner left to check. Residual risk: pre-existing orphans
   from deletions remain fetchable by any logged-in user who knows the filename.
+
+  **Update (chunk 520, 2026-08-15): the orphan *source* is closed for comments.** Swept every
+  delete path: all `Image` paths already removed their file (bulk ones with a shared-file
+  reference rule), but `comment.delete()` did not - Django stopped deleting `FileField` files in
+  1.3 - so every deleted comment-with-photo stranded a file that this branch then served to any
+  authenticated user. Both comment delete paths (pin/wiki and trip) now discard the file;
+  `attach_existing_comment_image` copies rather than sharing storage, which is what makes that
+  safe. Two tests. The residual risk is now bounded to *historical* orphans and crash windows
+  rather than accumulating with normal use - a one-time sweep of `comment_images/` against
+  surviving rows would close it entirely.
 - **Unknown path families** (anything under MEDIA_ROOT outside the cataloged prefixes
   `pin_images/`, `comment_images/`, `avatars/`, `pin_custom_icons/`, `label_icons/`):
   authenticated-only, logged at INFO. Any future `upload_to` prefix must get an explicit branch

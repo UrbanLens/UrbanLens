@@ -100,6 +100,32 @@ def start_comment_image_scan(comment) -> None:
     safely_enqueue_task(task, comment.pk)
 
 
+def _discard_comment_image(comment) -> None:
+    """Remove a deleted comment's stored photo from disk.
+
+    Django stopped deleting ``FileField`` files on row deletion in 1.3, so a
+    deleted comment used to leave its photo under ``comment_images/`` forever -
+    where the media gate's orphan branch serves it to any authenticated user
+    who knows the name (see "Authenticated media gate - residual per-family
+    risk" in docs/PROBLEMS.md). Each comment owns its file outright:
+    :func:`attach_existing_comment_image` *copies* rather than sharing storage,
+    precisely so one deletion cannot strand another row's image.
+
+    Best-effort - the row is already gone, and a storage hiccup must not turn a
+    successful delete into a 500.
+
+    Args:
+        comment: The comment whose file should be discarded. Safe to call when
+            it has no image.
+    """
+    if not comment.image:
+        return
+    try:
+        comment.image.delete(save=False)
+    except OSError:
+        logger.warning("Could not delete stored image for deleted comment %s", comment.pk, exc_info=True)
+
+
 def attach_existing_comment_image(comment: Comment, existing_image_id: str, profile: Profile) -> None:
     """Copy one of the poster's own already-uploaded photos onto a comment.
 
@@ -322,6 +348,7 @@ class PinCommentDeleteView(LoginRequiredMixin, View):
             return HttpResponse("Forbidden", status=403)
         markup_map = comment.markup_map
         comment.delete()
+        _discard_comment_image(comment)
         if markup_map is not None:
             # The comment itself is not restorable, but the map attached to it is
             # hand-drawn work - stash it so deleting the comment can't silently
@@ -393,6 +420,7 @@ class WikiCommentDeleteView(LoginRequiredMixin, View):
             return HttpResponse("Forbidden", status=403)
         markup_map = comment.markup_map
         comment.delete()
+        _discard_comment_image(comment)
         if markup_map is not None:
             # The comment itself is not restorable, but the map attached to it is
             # hand-drawn work - stash it so deleting the comment can't silently

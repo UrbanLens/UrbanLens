@@ -9553,3 +9553,22 @@ scan statistics), and the standing six product decisions.
 rather than a scan (chunk 507's over-claim, caught in 508) and the most dangerous single false
 alarm of the session (56 "ungated" trip endpoints, chunk 516, dissolved by two reads). Every one
 was caught by the same habit: a count is a claim about the search until the matches are read.
+
+## Chunk 520 - the media gate's orphan class was still being fed; the source is now closed
+
+The filed entry treats orphan media files as incidental residue ("row deleted without file
+cleanup"). Checking which paths actually orphan files found that every `Image` delete removes its
+file - including both bulk paths, which collect names first and pass an `also_deleting` reference
+set so a photo shared across rows is not pulled from under a survivor. **`comment.delete()` did
+not.** Django stopped deleting `FileField` files in 1.3, so every deleted comment-with-photo left
+its image on disk, where the gate's orphan branch hands it to any authenticated user who knows the
+name. A deleted comment's photo is exactly the thing a user expects deletion to destroy.
+
+Both comment delete paths (pin/wiki controller, trip service) now discard the file, best-effort
+after the row is gone so a storage hiccup cannot turn a successful delete into a 500. Safe because
+`attach_existing_comment_image` *copies* rather than sharing storage - its docstring says so, and
+that design intent is what licensed the change. Two tests, including the precondition that the
+file exists before deletion so the assertion cannot pass vacuously.
+
+The entry is updated rather than closed: historical orphans and crash windows remain, but they no
+longer accumulate with ordinary use, and a one-time sweep would finish the job.

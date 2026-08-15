@@ -224,7 +224,7 @@ def add_comment(
             shared limit, or the image was rejected.
         TripNotFoundError: ``parent_id`` is not a comment on this trip.
     """
-    from urbanlens.dashboard.controllers.comments import attach_existing_comment_image, comment_image_error, start_comment_image_scan
+    from urbanlens.dashboard.controllers.comments import _discard_comment_image, attach_existing_comment_image, comment_image_error, start_comment_image_scan
     from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 
     require_perform(actor, trip, trip.allow_comments, COMMENT_DENIED)
@@ -275,10 +275,13 @@ def delete_comment(trip: Trip, actor: Profile, comment: TripComment) -> None:
         TripPermissionError: The actor is neither the comment's author nor the
             trip's creator.
     """
+    from urbanlens.dashboard.controllers.comments import _discard_comment_image
+
     if not can_delete_comment(comment, actor, trip):
         raise TripPermissionError(COMMENT_DELETE_DENIED)
     markup_map = comment.markup_map
     comment.delete()
+    _discard_comment_image(comment)
     if markup_map is not None:
         markup_map.delete()
 
