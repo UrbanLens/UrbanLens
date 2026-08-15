@@ -628,7 +628,7 @@ class PinsView(ExternalApiView):
         "POST": frozenset({ApiKeyScope.PINS_WRITE}),
     }
 
-    @extend_schema(parameters=[PinSyncQuerySerializer], responses={200: PinSyncResponseSerializer, 400: ErrorSerializer})
+    @extend_schema(operation_id="pins_list", parameters=[PinSyncQuerySerializer], responses={200: PinSyncResponseSerializer, 400: ErrorSerializer})
     def get(self, request: Request) -> Response:
         """Return one page of the key owner's pins changed since ``modified_since``."""
         serializer = PinSyncQuerySerializer(data=request.query_params)
@@ -1159,7 +1159,7 @@ class PhotosView(PaginatedListMixin, ExternalApiView):
     }
     parser_classes = [MultiPartParser]
 
-    @extend_schema(parameters=[PhotoListQuerySerializer], responses={200: PhotoListResponseSerializer, 400: ErrorSerializer})
+    @extend_schema(operation_id="photos_list", parameters=[PhotoListQuerySerializer], responses={200: PhotoListResponseSerializer, 400: ErrorSerializer})
     def get(self, request: Request) -> Response:
         """Return one page of the key owner's own photos."""
         serializer = PhotoListQuerySerializer(data=request.query_params)
@@ -3012,7 +3012,7 @@ class SafetyCheckinsView(SafetyCheckinScopedView, PaginatedListMixin):
         "POST": frozenset({ApiKeyScope.SAFETY_WRITE}),
     }
 
-    @extend_schema(responses={200: SafetyCheckinListResponseSerializer})
+    @extend_schema(operation_id="safety_checkins_list", responses={200: SafetyCheckinListResponseSerializer})
     def get(self, request: Request) -> Response:
         """Return one page of the caller's check-ins, newest deadline first."""
         queryset = (

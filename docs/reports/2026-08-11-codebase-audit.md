@@ -8765,3 +8765,14 @@ to follow.
 
 No change needed. The two halves of wiki history are now both audited: the diff-based half
 needed one integrity fix (chunk 474); the content-based half was right all along.
+
+
+## Chunk 476 - operationId collisions resolved: every published operation now has a stable name
+
+The six list-vs-detail collisions (pins, photos, groups, safety check-ins, partner check-ins,
+E2EE keys) were resolved by spectacular with numeral suffixes - names derived from the colliding
+set, so adding one more endpoint could renumber the others and silently retype a generated
+client. Each list endpoint now declares an explicit `operation_id` (`pins_list`, ...; the E2EE
+own-keys GET named `e2ee_own_keys_retrieve` against the partner-key detail). Spectacular:
+20 -> 14 warnings, errors still 0. The remaining 14 are the cosmetic multiple-names-for-one-set
+tail plus enum notes - stable schema, no client impact. 22 schema tests pass.

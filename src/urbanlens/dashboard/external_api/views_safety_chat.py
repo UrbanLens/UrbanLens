@@ -382,7 +382,7 @@ class SafetyPartnerCheckinsView(SafetyPartnerScopedView, PaginatedListMixin):
         "GET": frozenset({ApiKeyScope.SAFETY_READ}),
     }
 
-    @extend_schema(responses={200: PartneredCheckinListResponseSerializer})
+    @extend_schema(operation_id="safety_partner_checkins_list", responses={200: PartneredCheckinListResponseSerializer})
     def get(self, request: Request) -> Response:
         """Return one page of the check-ins the caller partners on.
 

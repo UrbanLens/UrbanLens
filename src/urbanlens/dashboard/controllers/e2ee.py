@@ -314,7 +314,7 @@ class E2EEOwnKeysView(DualAuthJsonView):
         "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
     }
 
-    @extend_schema(responses={200: e2ee_schema.E2EEOwnKeysResponseSerializer})
+    @extend_schema(operation_id="e2ee_own_keys_retrieve", responses={200: e2ee_schema.E2EEOwnKeysResponseSerializer})
     def get(self, request: Request) -> Response:
         """Return the caller's bundle, or an "enrolled: false" body when not enrolled.
 

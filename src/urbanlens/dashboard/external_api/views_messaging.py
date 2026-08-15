@@ -536,7 +536,7 @@ class GroupsView(ExternalApiView):
         "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
     }
 
-    @extend_schema(responses={200: PageSerializer})
+    @extend_schema(operation_id="messages_groups_list", responses={200: PageSerializer})
     def get(self, request: Request) -> Response:
         """Return one page of the caller's group chats, most recently active first."""
         profile = request.user.profile
