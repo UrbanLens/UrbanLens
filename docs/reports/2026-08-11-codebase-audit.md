@@ -9057,3 +9057,15 @@ pin", "Use my name", "Select this map"; lightbox navs say "Previous/Next photo")
 re-run: zero remaining. The five `<img>`-without-`alt` hits were all `<img` inside JS comments -
 read before believing, even for a scanner you wrote this minute. 496 template-rendering tests
 pass with the changes (markup-only additions).
+
+
+## Chunk 493 (housekeeping) - one count corrected; the open ledger is clean
+
+PROBLEMS.md's chunk-462 resolution claimed 58 declarations were removed from "22 model files";
+the commit's own stat says 25 - corrected (the miscount came from pass-1 of the removal script,
+whose per-file tally I quoted without re-checking against the final commit). Swept the 33
+remaining OPEN/LOW/PARTLY headings against this session's fixes: every resolved item is marked;
+what remains is user-decision-gated (pin detach among the six), environment-gated (the three dev
+stack entries), filed migrations (fetch-helper adoption, untested write routes, deep-restore
+undo, E2EE... no - E2EE closed), or the two honest flake records. Fifth consolidation running in
+background (task brnamq3or) over chunks 489-492.
