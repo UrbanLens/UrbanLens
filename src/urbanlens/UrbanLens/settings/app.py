@@ -132,6 +132,15 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "Only takes effect in development, local, or testing environments - ignored in staging/production."
         ),
     )
+    csp_enforce: bool = Field(
+        default=False,
+        description=(
+            "Send the Content-Security-Policy as an enforcing header instead of "
+            "Content-Security-Policy-Report-Only. Defaults to report-only so a deployment collects "
+            "violation reports for a release before anything is actually blocked. Set UL_CSP_ENFORCE=true "
+            "per environment once the reports for that environment are clean - see docs/NOTES.md."
+        ),
+    )
 
     # Classes
     default_auto_field: str = Field(default="django.db.models.BigAutoField", description="The default auto field")
