@@ -8632,3 +8632,23 @@ passes.
 Remaining from the entry, queued: the 7 uncontroversial missing export kinds (safety plans,
 markup/overlays, saved filters, routes, pin aliases, social links, secondary emails); ProfileNote
 and WikiEdit stay decision-gated.
+
+
+## Chunk 468 (scoping) - the seven export kinds, designed before written
+
+Export types are user-facing selection units, so seven new checkboxes would be over-fine.
+Grouping for the implementation chunk:
+
+- **`safety`**: SafetyCheckin + its contacts and messages (one file, nested) - the FAQ's
+  data-ownership promise cuts sharpest here.
+- **`map_annotations`**: MarkupMap (+ PinMarkup rows), MapImageOverlay - the hand-drawn work.
+- **`saved_searches`**: SavedFilter + Route.
+- Fold into existing files: PinAlias into the pins exporter (alias list per pin), SocialLink and
+  ProfileEmail into profile.json (they are profile content, and the new `_import_profile` gives
+  them a natural import path later).
+
+Shape rules from the existing exporters: uuid-keyed rows, `str(created)`, geometry as GeoJSON,
+`for_profile`-scoped querysets, one JSON file per type. ProfileNote and WikiEdit stay
+decision-gated and are NOT exported. Implementation is the next chunk's work: read the seven
+models' fields first, then write exporters + register in VALID_EXPORT_TYPES/_ORDERED_TYPES +
+extend the UI's type list wherever it enumerates + tests per file.
