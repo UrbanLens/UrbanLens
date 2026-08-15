@@ -9326,3 +9326,24 @@ corrected in place with the error named rather than quietly edited.
 the same failure mode in a new position: I reported a property of a set (all three) after
 examining one member (the one whose stack trace I had read). The habit that catches scans has to
 point at conclusions too.
+
+## Chunk 509 - the other two flakes: a channel-layer isolation gap, found and fixed
+
+Read the two unexplained tests instead of theorising: both are WebSocket consumer tests, and the
+shared mechanism is concrete. Tests use the **real Valkey channel layer**; channel groups are
+named from model pks (`profile_notifications_<id>`); every test database restarts its sequences
+at 1. `UL_TEST_DB_NAME` therefore isolates Postgres but leaves the channel layer shared - two
+concurrent runs address identical groups, and a socket test in one consumes or loses the other's
+messages. Both sightings happened in runs that overlapped another suite (chunk 489's consolidation
+against my chunk-488 batches; chunk 503's batch against the sixth consolidation), and neither ever
+reproduced alone. **The condition was partly self-inflicted by this audit's own parallelism** -
+which is also why it surfaced at all.
+
+Fixed: the test channel layer gets a per-run `prefix` from `UL_TEST_DB_NAME`, under `TESTING`
+only. Proved by running both previously-flaky modules *simultaneously* against different test
+databases - 5/5 and 14/14 - reproducing the exact configuration that failed twice before.
+
+All three flakes now have mechanisms: one the Hypothesis replay store (filed, owner's call), two
+this isolation gap (fixed here). Worth noting the sequence: chunk 505 guessed, 506 eliminated two
+guesses, 507 found a real mechanism but over-claimed its scope, 508 caught that, and 509 found the
+rest by reading the tests first. The guessing chunks cost the most and produced the least.

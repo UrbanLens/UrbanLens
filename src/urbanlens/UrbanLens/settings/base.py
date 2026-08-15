@@ -215,6 +215,16 @@ if VALKEY_URL:
                 ],
                 "capacity": 1500,
                 "expiry": 60,
+                # Channel-group names are derived from model pks
+                # (``profile_notifications_<id>``), and every test database
+                # restarts its sequences at 1 - so two concurrent test runs
+                # produce identical group names. UL_TEST_DB_NAME isolates
+                # Postgres but not this layer, which left websocket tests in
+                # one run receiving (or losing) another run's messages: a
+                # flake that only ever appeared when suites overlapped. The
+                # per-run prefix closes that; outside tests it is the
+                # channels_redis default.
+                **({"prefix": f"asgi-test-{os.getenv('UL_TEST_DB_NAME', 'default')}"} if TESTING else {}),
             },
         },
     }

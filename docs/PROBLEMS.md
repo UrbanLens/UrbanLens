@@ -7682,6 +7682,20 @@ and no `subTest`** - the example database cannot touch them, and their cause rem
 Chunk 507's write-up said "all three involve `@given` or subtests", which was asserted rather
 than verified and is false.
 
+**The other two explained (chunk 509) - and fixed.** Both are WebSocket consumer tests
+(`TransactionTestCase` + channels). Tests run against the **real Valkey channel layer**, and
+channel-group names derive from model pks (`profile_notifications_<id>`, and likewise per
+check-in/session) - while every test database restarts its sequences at 1. So `UL_TEST_DB_NAME`
+isolates Postgres but **not** the channel layer: two concurrent runs address the same groups, and
+a websocket test in one run can consume or lose a message belonging to the other. Both sightings
+occurred in runs that overlapped another suite; neither ever reproduced alone.
+
+Fixed by giving the test channel layer a per-run `prefix` derived from `UL_TEST_DB_NAME`
+(`settings/base.py`, under `TESTING` only - outside tests the channels_redis default is
+unchanged). Verified by running both previously-flaky modules *simultaneously* against different
+test databases: 5/5 and 14/14, the exact configuration that produced the failures. This also
+removes a real hazard for any parallel CI, not just this audit's concurrent runs.
+
 Two aggravating details:
 
 - The directory is **owned by root and mode 755**, while tests run as `appuser` - writes fail
