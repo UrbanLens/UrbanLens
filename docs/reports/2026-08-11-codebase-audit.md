@@ -8698,3 +8698,20 @@ serializers document, never validate, and the module docstring says so.
 `manage.py spectacular`: **0 errors** (45 at the start of chunk 463), 20 warnings (the cosmetic
 tail). 94 E2EE tests pass unchanged. A native client can now generate correct types for every
 published operation, E2EE included.
+
+
+## Chunk 472 - frontend TS state audit: the dirty-flag protocol is exactly right-sized
+
+Audited the three interacting state mechanisms. The map's pin poll compares only the newest
+`updated` timestamp, so it is blind to exactly two mutations: deletion (nothing advances) and
+undo-restore (the restored row's timestamp may predate the newest). The `ul_pins_dirty`
+localStorage flag has exactly two setters - `confirm-dialog.ts` on delete and
+`undo-map-refresh.ts` on restore - matching the blind spots one-for-one, with every other write
+path caught by the poll because edits advance `updated`. External-API deletions (a different
+client, no shared localStorage) remain poll-blind for an already-open web map; inherent to the
+flag design and bounded by the pin cache's own expiry. `PIN_CACHE_VERSION` needed no bump this
+session (nothing touched the map pin payload; the new `tile_url_template` rides in the overlay
+payload, which is server-rendered per page, not client-cached) and its contract test is among the
+394 passing TS tests; `tsc` clean.
+
+Final consolidation full-suite run in background (task b1ylv0hqq) over the second half's changes.
