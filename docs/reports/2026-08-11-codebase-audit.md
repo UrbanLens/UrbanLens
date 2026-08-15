@@ -9100,3 +9100,23 @@ asserts every caller of the helper also enqueues the task, with an anti-vacuity 
 fails loudly instead of passing empty.
 
 Tenth verified-safe area, with the first that needed a guard rather than a fix.
+
+
+## Chunk 496 - photo quota enforcement: coherent, and the exemptions are all reasoned
+
+Applied chunk 495's lens to the quota obligation. Of 19 `Image` creation sites, 16 sit within 40
+lines of a `quota_error_for_upload` check; the three that do not are each **exempt with the
+reason stated in the code**: enrichment images are profile-less (nobody to charge), materialized
+media is "a cached copy of someone else's photo... the user who upvoted it into the cache didn't
+author it" (with a per-item download cap still applying), and the third match is
+`image_upload_error`'s own definition, whose docstring explains that quota is deliberately
+checked per-call-site because it is scope-dependent (per-pin/per-wiki/per-profile).
+
+Tested that stated contract too: of 13 `image_upload_error` callers, four have no quota check -
+and all four store to a **non-`Image` field** (achievement/label custom icons, profile avatars,
+comment attachments), so the gallery quota genuinely does not apply. No gap.
+
+Unlike chunk 495, no guard was added: the obligation here is already documented at the helper,
+and the exemptions are self-describing at each site. The distinction worth recording is *why*
+that is enough here and wasn't there - a missed quota check costs storage and is visible in
+usage numbers; a missed EXIF dispatch silently publishes someone's home coordinates.
