@@ -9366,3 +9366,14 @@ Postgres only, the fix derives the channel prefix from it, and everything else p
 thing that costs an hour to rediscover and a line to record.
 
 Seventh consolidation running (task ba9qeg6py), covering the channel-prefix change suite-wide.
+
+## Chunk 511 - seventh consolidation: 10,878 passed, 0 failed
+
+Validates the channel-layer prefix fix suite-wide plus chunks 500-509 (Gotify status check, dialog
+and form-control names, throttling verification, the flake investigation). **Zero failures, and
+notably no flakes** - this run was deliberately given the machine to itself, which is both the
+control the previous runs lacked and the condition the chunk-509 fix now makes unnecessary.
+
+Seven consolidations this session: 10,849 / 10,859 / 10,863 / 10,865(2 resolved) / 10,873 /
+10,875 / 10,878. Every chunk from 453 to 509 covered by at least one green full-suite run;
+chunk 510's dialog labels are in a targeted rendering batch running now.
