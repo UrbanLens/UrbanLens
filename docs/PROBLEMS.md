@@ -324,7 +324,7 @@ profile, absent meaning zero - is pinned by `test_achievement_bulk_metrics.py`, 
 drifting bulk variant would make awards flap between the nightly and signal paths. Fix (2)
 (chunking the task) is now moot at realistic scales; the checkpoint/resume guard stays.
 
-## FEATURE GAP 2026-08-11: the data export omits 11 kinds of user-authored content
+## MOSTLY RESOLVED 2026-08-11: the data export omits 11 kinds of user-authored content
 
 `VALID_EXPORT_TYPES` covers 13 areas (profile, settings, custom fields, pins, google_takeout,
 labels, connections, visit history, comments, photos, trips, pin lists, direct messages). Pins
@@ -365,6 +365,15 @@ user-authored and mostly meaningless outside the app.
 *about another person* (and encrypted at rest), and `WikiEdit` is community content the user
 authored but does not solely own. Both are defensible either way; neither should be added on
 autopilot.
+
+**Mostly resolved (chunk 469, 2026-08-15).** New export types `safety` (check-ins with contacts
+and messages nested; contact-portal tokens deliberately omitted from a forwardable archive),
+`map_annotations` (markup maps with their shapes, image overlays), `saved_searches` (saved
+filters + routes as GeoJSON); `PinAlias` rides inside each pin's row; `SocialLink` and
+`ProfileEmail` ride in profile.json, with social links imported back (idempotent on
+platform+handle) and secondary emails deliberately NOT imported (verification state is an
+account-security decision). UI checkboxes added. `ProfileNote` and `WikiEdit` remain
+decision-gated, exactly as this entry argued.
 
 ### The round trip is also lossy in the other direction: `profile` is exported but never imported
 

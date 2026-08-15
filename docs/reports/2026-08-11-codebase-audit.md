@@ -8652,3 +8652,21 @@ Shape rules from the existing exporters: uuid-keyed rows, `str(created)`, geomet
 decision-gated and are NOT exported. Implementation is the next chunk's work: read the seven
 models' fields first, then write exporters + register in VALID_EXPORT_TYPES/_ORDERED_TYPES +
 extend the UI's type list wherever it enumerates + tests per file.
+
+
+## Chunk 469 - the export gap closes: three new types, two fold-ins, tokens kept out
+
+Implemented chunk 468's scoping. `safety`/`map_annotations`/`saved_searches` export types (with
+UI checkboxes), pin aliases folded into pin rows, social links and secondary emails into
+profile.json - social links import back idempotently; secondary emails deliberately do not
+(materialising verification state from an archive is an account-security call, stated in code).
+The safety exporter omits contact-portal tokens: an archive the user may forward must not carry
+live magic-link credentials, and a test pins that with a whole-payload scan.
+
+The tests caught a real exporter bug before it shipped: the safety filter was written
+`owner=profile` against a model whose FK is `profile` - the fixture failed with the same wrong
+name, which is what surfaced it. Two fixture-name misses (PinAlias has no `created_by`; that is
+the wiki alias's field) cost one container round each. 8/8 green, including the profile
+round-trip suite.
+
+The FAQ's data-ownership promise now holds for everything except the two decision-gated kinds.

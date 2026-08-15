@@ -1712,6 +1712,22 @@ def _import_profile(
     if user_fields:
         type(profile.user).objects.filter(pk=profile.user.pk).update(**user_fields)
 
+    # Social links: recreate any the account does not already have (matched on
+    # platform+handle, so re-importing the same archive is idempotent).
+    # Secondary emails are deliberately NOT imported: their rows carry
+    # verification state, and materialising a "verified" address from an
+    # archive - or spawning unverified ones with no verification flow attached
+    # - is an account-security decision, not an importer's call.
+    from urbanlens.dashboard.models.social_link.model import SocialLink
+
+    for link in data.get("social_links") or []:
+        platform = (link.get("platform") or "").strip()
+        handle = (link.get("handle") or "").strip()
+        if not platform or not handle:
+            continue
+        if not SocialLink.objects.filter(profile=profile, platform=platform, handle=handle).exists():
+            SocialLink.objects.create(profile=profile, platform=platform, handle=handle)
+
 
 _IMPORT_ORDER = ["labels", "pins", "custom_fields", "pin_lists", "visit_history", "comments", "photos", "trips", "direct_messages", "connections", "profile", "settings"]
 

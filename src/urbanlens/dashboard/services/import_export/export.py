@@ -41,6 +41,9 @@ VALID_EXPORT_TYPES = frozenset(
         "google_takeout",
         "direct_messages",
         "pin_lists",
+        "safety",
+        "map_annotations",
+        "saved_searches",
     },
 )
 
@@ -58,6 +61,9 @@ _ORDERED_TYPES = [
     "trips",
     "pin_lists",
     "direct_messages",
+    "safety",
+    "map_annotations",
+    "saved_searches",
 ]
 
 
@@ -170,6 +176,9 @@ def run_export(user_id: int, export_types: list[str], export_dir_path: str, base
         "trips": (_export_trips, "Exporting trips..."),
         "pin_lists": (_export_pin_lists, "Exporting lists..."),
         "direct_messages": (_export_direct_messages, "Exporting direct messages..."),
+        "safety": (_export_safety, "Exporting safety check-ins..."),
+        "map_annotations": (_export_map_annotations, "Exporting map annotations..."),
+        "saved_searches": (_export_saved_searches, "Exporting saved searches and routes..."),
     }
 
     try:
@@ -364,8 +373,111 @@ def _export_profile(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
             "matrix_handle": profile.matrix_handle or "",
         },
     }
+    data["social_links"] = [{"platform": link.platform, "handle": link.handle} for link in profile.social_links.all().order_by("pk")]
+    data["secondary_emails"] = [{"email": email.email, "is_verified": email.is_verified} for email in profile.secondary_emails.all().order_by("pk")]
     with open(os.path.join(temp_dir, "profile.json"), "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2, ensure_ascii=False)
+
+
+def _export_safety(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+    """Export every safety check-in the user authored, with contacts and messages nested.
+
+    Contact emails and message bodies are the user's own authored safety plans -
+    the FAQ's data-ownership promise cuts sharpest here. Tokens (the contacts'
+    magic-link credentials) are deliberately omitted: an archive the user may
+    forward must not carry live credentials.
+    """
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin
+
+    rows = []
+    checkins = SafetyCheckin.objects.filter(profile=profile).prefetch_related("contacts", "messages__sender_contact", "messages__sender_profile").order_by("created")
+    for checkin in checkins:
+        rows.append(
+            {
+                "uuid": str(checkin.uuid),
+                "title": checkin.title,
+                "plan_details": checkin.plan_details or "",
+                "contact_message": checkin.contact_message or "",
+                "checkin_by": str(checkin.checkin_by),
+                "grace_period_seconds": int(checkin.grace_period.total_seconds()),
+                "status": checkin.status,
+                "destination_latitude": float(checkin.destination_latitude) if checkin.destination_latitude is not None else None,
+                "destination_longitude": float(checkin.destination_longitude) if checkin.destination_longitude is not None else None,
+                "created": str(checkin.created),
+                "contacts": [{"name": contact.name or "", "email": contact.email or "", "notified_at": str(contact.notified_at) if contact.notified_at else None} for contact in checkin.contacts.all()],
+                "messages": [{"sender": message.sender_name, "body": message.body, "created": str(message.created)} for message in checkin.messages.all()],
+            },
+        )
+    with open(os.path.join(temp_dir, "safety.json"), "w", encoding="utf-8") as fh:
+        json.dump(rows, fh, indent=2, ensure_ascii=False)
+
+
+def _export_map_annotations(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+    """Export hand-drawn markup maps (with their shapes) and georeferenced image overlays."""
+    from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
+    from urbanlens.dashboard.models.markup.model import MarkupMap
+
+    maps = []
+    for markup_map in MarkupMap.objects.filter(profile=profile).prefetch_related("items").order_by("created"):
+        maps.append(
+            {
+                "uuid": str(markup_map.uuid),
+                "title": markup_map.title or "",
+                "center_latitude": markup_map.center_latitude,
+                "center_longitude": markup_map.center_longitude,
+                "zoom": markup_map.zoom,
+                "layer_mode": markup_map.layer_mode,
+                "pin_uuid": str(markup_map.pin.uuid) if markup_map.pin_id and markup_map.pin else None,
+                "created": str(markup_map.created),
+                "markups": [{"markup_type": markup.markup_type, "geometry": markup.geometry, "label": markup.label or ""} for markup in markup_map.items.all()],
+            },
+        )
+
+    overlays = []
+    for overlay in MapImageOverlay.objects.filter(profile=profile).order_by("created"):
+        overlays.append(
+            {
+                "uuid": str(overlay.uuid),
+                "name": overlay.name or "",
+                "image_url": overlay.source_url,
+                "tile_url_template": overlay.tile_url_template,
+                "corners": overlay.corners(),
+                "opacity": overlay.opacity,
+                "created": str(overlay.created),
+            },
+        )
+
+    with open(os.path.join(temp_dir, "map_annotations.json"), "w", encoding="utf-8") as fh:
+        json.dump({"markup_maps": maps, "image_overlays": overlays}, fh, indent=2, ensure_ascii=False)
+
+
+def _export_saved_searches(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
+    """Export saved filters and recorded routes (route paths as GeoJSON)."""
+    import json as json_module
+
+    from urbanlens.dashboard.models.routes.model import Route
+    from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+
+    filters = [
+        {"name": saved.name, "icon": saved.icon, "color": saved.color, "opacity": saved.opacity, "criteria": saved.criteria, "order": saved.order, "created": str(saved.created)}
+        for saved in SavedFilter.objects.filter(profile=profile).order_by("order", "created")
+    ]
+    routes = [
+        {
+            "uuid": str(route.uuid),
+            "name": route.name or "",
+            "source": route.source,
+            "source_filename": route.source_filename or "",
+            "path": json_module.loads(route.path.geojson) if route.path else None,
+            "distance_meters": route.distance_meters,
+            "started_at": str(route.started_at) if route.started_at else None,
+            "ended_at": str(route.ended_at) if route.ended_at else None,
+            "created": str(route.created),
+        }
+        for route in Route.objects.filter(profile=profile).order_by("created")
+    ]
+    with open(os.path.join(temp_dir, "saved_searches.json"), "w", encoding="utf-8") as fh:
+        json.dump({"saved_filters": filters, "routes": routes}, fh, indent=2, ensure_ascii=False)
 
 
 def _export_settings(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
@@ -559,7 +671,7 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.reviews.model import Review
 
-    pins = Pin.objects.filter(profile=profile).select_related("location", "article").prefetch_related("labels").order_by("created")
+    pins = Pin.objects.filter(profile=profile).select_related("location", "article").prefetch_related("labels", "aliases").order_by("created")
     ratings = dict(Review.objects.filter(profile=profile).values_list("pin_id", "rating"))
 
     rows = []
@@ -578,6 +690,7 @@ def _export_pins(profile: Any, temp_dir: str, *, base_url: str = "") -> None:
                 "rating": ratings.get(pin.pk),
                 "security": {field_name: getattr(pin, field_name) for field_name, _label in SECURITY_FIELDS},
                 "pin_type": pin.pin_type,
+                "aliases": [{"name": alias.name, "kind": alias.kind} for alias in pin.aliases.all()],
                 "latitude": str(pin.effective_latitude) if pin.effective_latitude is not None else None,
                 "longitude": str(pin.effective_longitude) if pin.effective_longitude is not None else None,
                 "last_visited": str(pin.last_visited) if pin.last_visited else None,
