@@ -8869,3 +8869,12 @@ double-guess, and guess-after-reveal are all closed by construction. Ninth verif
 
 Third consolidation full-suite run in background (task bzc5hqyzf) covering the friendship
 restructure, the wiki revert fix, the operationId changes and the notification wiring.
+
+
+## Chunk 481 - third consolidation: 10,863 passed, 0 failed
+
+Validates chunks 474-480: the wiki revert-of-revert fix, the six stable operationIds, the
+friend_accepted wiring with the acceptance-flow restructure, and the four tests those added.
+Three consolidations green in one session (10,849 / 10,859 / 10,863) with zero failures across
+all three - the order-dependent trip-settings flake has not recurred since its one appearance,
+though its PROBLEMS entry rightly stands.
