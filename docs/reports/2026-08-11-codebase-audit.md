@@ -9045,3 +9045,15 @@ chain's *existing* silent catch and produced unbalanced parens - caught by grep 
 adjacent `.catch` lines, repaired to a single honest handler, and the whole script block
 syntax-verified with node after Django-tag stubbing (whose first version stubbed `{% if %}` into
 a syntax error of its own - the check must be checked too).
+
+
+## Chunk 492 - accessibility: 28 unnamed icon buttons labeled; the image scan was all false positives
+
+First accessibility pass, scoped to what is mechanically verifiable. **28 icon-only buttons had
+no accessible name** - lightbox close/prev/next, dialog closes, add-sub-pin/alias/activity/member,
+reaction pickers, a send button, the share-map selector - invisible to a screen reader beyond
+"button". All now carry `aria-label`s, contextual where the icon alone is ambiguous ("Add a sub
+pin", "Use my name", "Select this map"; lightbox navs say "Previous/Next photo"). Scanner
+re-run: zero remaining. The five `<img>`-without-`alt` hits were all `<img` inside JS comments -
+read before believing, even for a scanner you wrote this minute. 496 template-rendering tests
+pass with the changes (markup-only additions).

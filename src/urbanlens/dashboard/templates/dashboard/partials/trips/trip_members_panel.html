@@ -6,7 +6,7 @@
         {% if members %}<span class="badge">{{ members|length }}</span>{% endif %}
         {% if can_add_members %}
         <button type="button" class="btn btn--icon-sm"
-                onclick="document.getElementById('add-member-dialog').showModal()">
+                onclick="document.getElementById('add-member-dialog').showModal()" aria-label="Add member">
             <i class="material-symbols-outlined">add</i>
         </button>
         {% endif %}

@@ -206,14 +206,14 @@
     {# -- Shared lightbox for photos attached to a visit ------------------ #}
     <dialog id="visit-photo-lightbox-{{ pin.slug }}" class="gallery-lightbox visit-photo-lightbox ul-dialog">
         <div class="lightbox-inner">
-            <button type="button" class="lightbox-close" onclick="this.closest('dialog').close()">
+            <button type="button" class="lightbox-close" onclick="this.closest('dialog').close()" aria-label="Close">
                 <i class="material-symbols-outlined">close</i>
             </button>
-            <button type="button" class="lightbox-nav lightbox-prev" onclick="visitLightboxNav(-1)">
+            <button type="button" class="lightbox-nav lightbox-prev" onclick="visitLightboxNav(-1)" aria-label="Previous">
                 <i class="material-symbols-outlined">chevron_left</i>
             </button>
             <img class="lightbox-img" src="" alt="">
-            <button type="button" class="lightbox-nav lightbox-next" onclick="visitLightboxNav(1)">
+            <button type="button" class="lightbox-nav lightbox-next" onclick="visitLightboxNav(1)" aria-label="Next">
                 <i class="material-symbols-outlined">chevron_right</i>
             </button>
             <p class="lightbox-caption"></p>

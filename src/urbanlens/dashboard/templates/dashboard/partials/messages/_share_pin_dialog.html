@@ -10,7 +10,7 @@ chat (the staged share then posts to the group share endpoint instead).
 <dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="pin" data-field-name="pin_slug"{% if group %} data-group-uuid="{{ group.uuid }}"{% endif %}>
   <div class="dialog-header">
     <span>Share a pin with {% if group %}{{ group.name }}{% else %}{{ partner.username }}{% endif %}</span>
-    <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+    <button type="button" class="dialog-close" onclick="this.closest('dialog').close()" aria-label="Close">
       <i class="material-symbols-outlined">close</i>
     </button>
   </div>

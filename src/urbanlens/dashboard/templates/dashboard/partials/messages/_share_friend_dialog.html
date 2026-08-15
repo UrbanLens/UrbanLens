@@ -6,7 +6,7 @@ attachment - see `_share_pin_dialog.html`. Context: `partner`, `friends`.
 <dialog id="dm-share-dialog" class="dm-share-dialog ul-dialog" data-kind="friend" data-field-name="recommended_slug">
   <div class="dialog-header">
     <span>Recommend a friend to {{ partner.username }}</span>
-    <button type="button" class="dialog-close" onclick="this.closest('dialog').close()">
+    <button type="button" class="dialog-close" onclick="this.closest('dialog').close()" aria-label="Close">
       <i class="material-symbols-outlined">close</i>
     </button>
   </div>

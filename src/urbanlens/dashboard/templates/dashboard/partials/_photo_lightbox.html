@@ -49,17 +49,17 @@ Context:
 <dialog id="{{ lightbox_id }}" class="gallery-lightbox ul-dialog">
   <div class="lightbox-inner">
     <div class="lightbox-media-area">
-      <button type="button" class="lightbox-close" onclick="document.getElementById('{{ lightbox_id }}').close()">
+      <button type="button" class="lightbox-close" onclick="document.getElementById('{{ lightbox_id }}').close()" aria-label="Close">
         <i class="material-symbols-outlined">close</i>
       </button>
-      <button type="button" id="lightbox-prev-btn" class="lightbox-nav lightbox-prev" onclick="galleryLightboxNav(-1)">
+      <button type="button" id="lightbox-prev-btn" class="lightbox-nav lightbox-prev" onclick="galleryLightboxNav(-1)" aria-label="Previous">
         <i class="material-symbols-outlined">chevron_left</i>
       </button>
       <img id="lightbox-img" src="" alt="" class="lightbox-img">
       <span id="lightbox-fallback-note" class="lightbox-fallback-note" hidden>
         <i class="material-symbols-outlined">image</i> Showing a smaller preview - the full-size file isn't viewable in this browser
       </span>
-      <button type="button" id="lightbox-next-btn" class="lightbox-nav lightbox-next" onclick="galleryLightboxNav(1)">
+      <button type="button" id="lightbox-next-btn" class="lightbox-nav lightbox-next" onclick="galleryLightboxNav(1)" aria-label="Next">
         <i class="material-symbols-outlined">chevron_right</i>
       </button>
     </div>
