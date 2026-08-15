@@ -92,6 +92,16 @@ def upload_photo_for_owner(owner: Pin | Wiki, profile: Profile, image_file: Uplo
         The created :class:`Image`, or an :class:`UploadRejection` explaining
         why it was refused. Callers are expected to branch on the type rather
         than assume success.
+    
+
+    **The caller must enqueue ``tasks.process_image_upload`` for the returned
+    row.** This function stores the file as uploaded - EXIF (including GPS)
+    stripping, downscaling and format conversion all happen in that task, so
+    a caller that skips it leaves a user's camera GPS in a stored, servable
+    file. Enforced by a test rather than by this function because the task
+    dispatch belongs to the request cycle (it is the controller that knows
+    whether to respond before or after enqueueing); see
+    ``test_photo_upload_dispatches_processing.py``.
     """
     if (upload_error := image_upload_error(image_file, MediaKind.PHOTO)) is not None:
         message, status = upload_error

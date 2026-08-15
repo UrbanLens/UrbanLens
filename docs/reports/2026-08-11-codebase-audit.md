@@ -9080,3 +9080,23 @@ SpotGuessr socket scopes) did not recur, consistent with their filed order-depen
 
 **Five consolidations this session**: 10,849 / 10,859 / 10,863 / 10,865 (2 resolved) / 10,873.
 Every chunk from 453 to 493 is now covered by at least one green full-suite run.
+
+
+## Chunk 495 - the EXIF-stripping guarantee: holds today, now guarded for tomorrow
+
+Traced the privacy-critical path: `upload_photo_for_owner` stores a user's file **exactly as
+uploaded**, and every protection - GPS/EXIF stripping, downscale, conversion - lives in
+`tasks.process_image_upload`, dispatched by the *caller*. Checked all 22 `Image` creation sites:
+the four in `tasks.py` are the processing path itself; `photo_enrichment`/`pin_suggestions`/
+`media_materialize` create rows from external-API downloads (someone else's photo, not a user's
+camera - different risk class); and the one user-upload helper has exactly one caller, the
+gallery controller, which does dispatch. **No leak exists today.**
+
+The finding is structural: the guarantee rests entirely on caller discipline, with nothing saying
+so at the helper and nothing catching a future caller that forgets - the same shape as chunk
+479's dead notification toggle (scattered creation, per-site obligation). The helper's docstring
+now states the obligation and why it cannot enforce it itself, and a source-level guard test
+asserts every caller of the helper also enqueues the task, with an anti-vacuity arm so a rename
+fails loudly instead of passing empty.
+
+Tenth verified-safe area, with the first that needed a guard rather than a fix.
