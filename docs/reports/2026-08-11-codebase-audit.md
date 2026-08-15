@@ -8428,3 +8428,25 @@ Neither warrants a guard's complexity.
 
 Seventh default-safe subsystem, after authorization, CSRF, wiki access, rate limiting, cost
 logging, and timeouts: duplicate delivery is tolerated by design, not by luck.
+
+
+## Chunk 457 - the new panels' external-API exposure, reviewed and clean
+
+This session added seven API-visible sources without anyone deciding they should be:
+`InfoPanelSource`/`GalleryMediaSource` subclasses inherit non-empty `api_kinds`, so the six REData
+panels and the aerial media tab are now published on `GET /pins/{slug}/panels/`. Checked the two
+things that could make that wrong:
+
+1. **Docs drift**: none. `docs/EXTERNAL_API.md` documents the *mechanism* (dynamic enumeration,
+   closed-by-default base, five named ToS opt-outs) rather than a static list, so new sources
+   flow in without an edit. The five-opt-out count is still accurate.
+2. **Redistribution posture**, source by source: underground (OSM/ODbL), permits + incidents
+   (municipal open data), hydrology + site conditions + hazard history (federal public data),
+   air quality (Open-Meteo CC-BY / Sensor.Community ODbL), aerial media (URL + credit
+   pass-through, same pattern as the already-exposed gallery sources). None is in the
+   LoopNet/Yelp/Google category that forced the existing opt-outs. The incidents panel's
+   block-scale precision caveat travels with the payload, since `api_payload` derives from the
+   same `render_context` that renders it.
+
+No change needed - recorded because the default-on exposure means nobody *else* made this call
+either, and the next plugin author should know the review is expected, not automatic.
