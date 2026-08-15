@@ -175,6 +175,32 @@ def has_sent_join_email(profile: Profile, email: str) -> bool:
     ).exists()
 
 
+#: Resending a verification to the same address within this window is refused -
+#: a code constant like the notification debounce TTLs, not a SiteSettings
+#: value: it guards against mail-bombing one inbox via the resend button, and
+#: no deployment wants that configurable to zero.
+VERIFICATION_RESEND_COOLDOWN_SECONDS = 5 * 60
+
+
+def verification_recently_sent(profile: Profile, email: str) -> bool:
+    """Whether a verification email went to this address from this profile within the cooldown.
+
+    Args:
+        profile: The sender.
+        email: Raw recipient address.
+
+    Returns:
+        True when a resend should be refused for now.
+    """
+    cutoff = timezone.now() - datetime.timedelta(seconds=VERIFICATION_RESEND_COOLDOWN_SECONDS)
+    return EmailSendLog.objects.filter(
+        sender=profile,
+        recipient_hash=hash_email(email),
+        email_type=EmailType.EMAIL_VERIFICATION,
+        created__gte=cutoff,
+    ).exists()
+
+
 def record_email_sent(profile: Profile, email: str, email_type: EmailType | str) -> EmailSendLog:
     """Log one user-triggered outbound email (hashed recipient only).
 

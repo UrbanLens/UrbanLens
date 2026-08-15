@@ -8973,3 +8973,18 @@ filters defer to the user's existing same-named filter (they may have refined it
 exporting); routes rebuild their LineString from GeoJSON with source-choice validation.
 Everything is idempotent under re-import. 11/11 green first try; FEATURES.md's "export-only so
 far" note replaced with the real contract.
+
+
+## Chunk 488 - the last ungoverned email path, closed (and the deferral premise was wrong)
+
+The entry deferred because "picking numbers for a new category is the owner's call" - but reading
+`email_rate_limit_error` shows the caps are **per-profile across all types**; there are no
+per-type numbers to pick, so the wiring uses limits the owner already set. Both verification-send
+paths (add, resend) now consult the ledger and record under the new `EmailType.EMAIL_VERIFICATION`
+(migration 0046, depends on 0045); resend gains a fixed 5-minute per-address cooldown; a blocked
+add creates no unverifiable pending row. Relay and mail-bomb both closed. 4 tests (including that
+the cooldown expires); the choices change was about to be silent schema drift until
+`makemigrations --check` flagged it - the migration is generated, not hand-written.
+
+Fourth consolidation still running in background (task bn7au1ggf) - it predates this chunk's
+changes, so these get their validation from the targeted runs plus the next consolidation.

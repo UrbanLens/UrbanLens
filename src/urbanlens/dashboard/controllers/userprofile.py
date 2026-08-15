@@ -766,8 +766,18 @@ class EditProfileView(LoginRequiredMixin, View):
             elif profile.secondary_emails.filter(normalized_email=normalized).exists():
                 email_error = "You've already added that email address."
             else:
-                secondary_email = ProfileEmail.objects.create(profile=profile, email=raw)
-                _send_profile_email_verification(request, secondary_email)
+                from urbanlens.dashboard.models.email_log.model import EmailType
+                from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent
+
+                # The only unbounded arbitrary-address send path before this
+                # guard - the same per-profile ledger caps as invites.
+                limit_error = email_rate_limit_error(profile)
+                if limit_error:
+                    email_error = limit_error
+                else:
+                    secondary_email = ProfileEmail.objects.create(profile=profile, email=raw)
+                    _send_profile_email_verification(request, secondary_email)
+                    record_email_sent(profile, raw, EmailType.EMAIL_VERIFICATION)
         return self._emails_response(request, profile, email_error=email_error)
 
     def _remove_email(self, request: HttpRequest, profile: Profile) -> HttpResponse:
@@ -779,8 +789,17 @@ class EditProfileView(LoginRequiredMixin, View):
         email_status = ""
         secondary_email = profile.secondary_emails.filter(pk=request.POST.get("email_id", ""), is_verified=False).first()
         if secondary_email:
-            _send_profile_email_verification(request, secondary_email)
-            email_status = f"Verification email resent to {secondary_email.email}."
+            from urbanlens.dashboard.models.email_log.model import EmailType
+            from urbanlens.dashboard.services.security.email_safety import email_rate_limit_error, record_email_sent, verification_recently_sent
+
+            if verification_recently_sent(profile, secondary_email.email):
+                email_status = "A verification email was just sent to that address - check your inbox (and spam), and try again in a few minutes."
+            elif (limit_error := email_rate_limit_error(profile)) is not None:
+                email_status = limit_error
+            else:
+                _send_profile_email_verification(request, secondary_email)
+                record_email_sent(profile, secondary_email.email, EmailType.EMAIL_VERIFICATION)
+                email_status = f"Verification email resent to {secondary_email.email}."
         return self._emails_response(request, profile, email_status=email_status)
 
     def _emails_response(

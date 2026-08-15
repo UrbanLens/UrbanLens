@@ -30,6 +30,7 @@ class EmailType(abstract.TextChoices):
 
     JOIN_INVITE = "join_invite", "Friend invitation"
     VISIT_INVITE = "visit_invite", "Visit participant invitation"
+    EMAIL_VERIFICATION = "email_verification", "Secondary-email verification"
 
 
 # Email types that invite the recipient to join the site. A given user sends

@@ -6025,7 +6025,7 @@ Worth doing because the one route from this set that *was* investigated - `pin.l
 endpoint - turned out to fail with a 500 on every request (see the entry above). An untested write
 route is not merely unverified; it is where a permanently broken feature can sit unnoticed.
 
-## OPEN 2026-08-13: secondary-email verification is an unbounded send to arbitrary addresses
+## RESOLVED 2026-08-15 (chunk 488): secondary-email verification is an unbounded send to arbitrary addresses
 
 `ProfileEmailsView` (`controllers/userprofile.py`) sends a verification email to any address a user
 types, through two paths:
@@ -6055,6 +6055,13 @@ The fix is small because the machinery exists: add an `EmailType.EMAIL_VERIFICAT
 `email_rate_limit_error(profile)` before sending and `record_email_sent(...)` after, and give resend
 a cooldown. Filed rather than done because the per-type limits are `SiteSettings` values the owner
 sets, and picking numbers for a new category is their call.
+
+**Resolved (chunk 488, 2026-08-15) - the deferral premise was wrong**: `email_rate_limit_error`
+enforces the owner's existing *per-profile* hour/day/month caps across all types - no new numbers
+exist to pick. `EmailType.EMAIL_VERIFICATION` added (migration 0046), both send paths now guard
+with the ledger and record their sends, and resend has a fixed 5-minute per-address cooldown (a
+code constant like the notification debounce, deliberately not configurable). A blocked add
+creates no pending row. Both abuse shapes (relay, mail-bomb) closed; 4 tests.
 
 **How this was missed the first time** (audit chunk 170): that pass grouped the 21 send sites by
 file, then read the recipient expression for only three of them, and reported the classification as
