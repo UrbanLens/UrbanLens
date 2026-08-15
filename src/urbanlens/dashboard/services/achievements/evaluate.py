@@ -250,7 +250,8 @@ def evaluate_all_profiles(*, notify: bool = True) -> int:
     every profile is reached within two runs even when neither completes. A
     resumed run logs a warning, which is what makes the truncation visible at all.
 
-    This does not make the sweep cheaper - see ``docs/PROBLEMS.md`` for the
+    This does not make the sweep cheaper - see "the nightly achievement sweep is
+    O(profiles x metrics) and gets killed at 3600s" in ``docs/PROBLEMS.md`` for the
     batching fix that would - it stops the cost from silently costing a fixed
     group of users their awards.
 

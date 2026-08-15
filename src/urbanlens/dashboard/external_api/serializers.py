@@ -1859,8 +1859,8 @@ class FriendshipSerializer(serializers.Serializer):
     #: the single shared row joining the pair, so it is not per-viewer - label
     #: it "muted", never "muted by you". Second, and more important:
     #: *friendship-level mute does not currently suppress anything*. No
-    #: notification delivery path consults it yet (see ``docs/PROBLEMS.md``,
-    #: 2026-07-28), so the muter still receives friend-request, pin-share,
+    #: notification delivery path consults it yet (see "`Friendship.muted` is
+    #: stored but nothing reads it" in ``docs/PROBLEMS.md``), so the muter still receives friend-request, pin-share,
     #: trip-invite and safety notifications from that profile. The preference is
     #: recorded faithfully and will start being honored when delivery is wired
     #: up; until then a UI that promises silence would be lying. The two mute

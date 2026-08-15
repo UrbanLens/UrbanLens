@@ -2,7 +2,8 @@
 # The ordering below is NOT alphabetical - it's dependency ordering, and
 # ruff/isort's automatic sorting would silently break it (see the comment on
 # the `session` import further down, and services/spotguessr/__init__.py's
-# identical warning / docs/PROBLEMS.md for the failure mode this avoids).
+# identical warning, and "Package __init__ import ordering" in
+# docs/NOTES.md for the failure mode this avoids).
 # Do not let `ruff --fix` (or an editor's organize-imports action) re-sort
 # this file.
 from urbanlens.dashboard.services.trivia.voting import EXPLICIT_KINDS, backfill_no_reaction, effective_score, record_vote
@@ -34,8 +35,7 @@ from urbanlens.dashboard.services.trivia.wiki_incorporation import incorporate_q
 # above) before this import runs - importing session any earlier can
 # intermittently raise ImportError ("partially initialized module")
 # depending on which process happens to trigger this package's import
-# first - see services/spotguessr/__init__.py's identical precedent and
-# docs/PROBLEMS.md.
+# first - see "Package __init__ import ordering" in docs/NOTES.md.
 from urbanlens.dashboard.services.trivia.session import (
     TriviaConfig,
     TriviaError,

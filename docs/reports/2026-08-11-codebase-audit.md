@@ -8372,3 +8372,30 @@ bypasses `self.session`). The roadmap bullet is struck through with the verifica
 
 STATUS items 1-4 are all closed (1 in chunk 453). Remaining open work from the pause: the
 bare-citation retrofit tail, and the user-decision items which stay untouched.
+
+
+## Chunk 455 - the citation retrofit closes: 13 more named, 2 promoted, 2 exposed as dangling
+
+The bare `see docs/PROBLEMS.md` tail from chunks 370-373, finished as the individual judgements
+chunk 372 said they were:
+
+- **Named their entry** (13 citations across 11 files): `external_links.py` x2 (the
+  `get_or_create`-without-constraint entry), `selection.py` (Unit 24/25), `evaluate.py` (the
+  achievement-sweep entry), `wiki_edits.py` + `serializers_wiki.py` + `location_wiki.py` +
+  `external_api/views.py` (all four resolve to items inside the "Messaging / external API (noted
+  2026-07-26)" grab-bag entry), `serializers.py` (the Friendship.muted entry), `media.py`'s module
+  docstring (the authenticated-media-gate entry).
+- **Promoted to a real record** (2 citations): the trivia/spotguessr `__init__` import-ordering
+  comments cited a PROBLEMS.md entry that never existed. The hazard is NOTES-shaped (non-obvious
+  behavior, nothing to fix), so it is now "Package `__init__` import ordering" in `docs/NOTES.md`
+  and both comments point there. Verified the dependency ordering and `isort: skip_file` guards
+  survived the edit - the exact hazard those comments guard.
+- **Dangling half dropped** (1): `spotguessr.py`'s "docs/PROBLEMS.md/git history" - no entry
+  exists; the comment now says plainly that the report predates the filing convention.
+- **Left deliberately**: `trip.py:135`'s masking citation (PROBLEMS.md records why it cannot be
+  resolved without history); `tasks.py`/`channel_broadcast.py`/`safety.py` already carry their
+  entry names.
+
+With chunk 454's six decision repointings, every `docs/PROBLEMS.md` citation in source now either
+names its entry, points at a tracked record, or is explicitly recorded as unresolvable. Full
+suite running in the background against the chunk-454 tree; these edits are comment-only.

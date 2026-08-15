@@ -41,7 +41,8 @@ of the owning model's file field):
 - ``avatars/`` - profile avatars render site-wide next to usernames, so any
   authenticated user may fetch them.
 - ``pin_custom_icons/`` / ``label_icons/`` - map/label icon decorations;
-  authenticated-only (see the TODOs inline and docs/PROBLEMS.md).
+  authenticated-only (see the TODOs inline, and "Authenticated media gate -
+  residual per-family risk" in docs/PROBLEMS.md).
 
 Unknown prefixes and files with no surviving owner row fall back to
 authenticated-only access rather than 404, since the file may legitimately

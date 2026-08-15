@@ -250,7 +250,8 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
         # Whichever mode the player most recently played, not hardcoded to
         # Photos - a rating for a Named Place/Street View-only player was
         # updating correctly all along, the homepage chip just never looked
-        # at the right row (see docs/PROBLEMS.md/git history for the report).
+        # at the right row (see git history for the report - it predates the
+        # convention of filing these in docs/PROBLEMS.md and has no entry there).
         # Shared with the external API's overview endpoint via
         # ``services.spotguessr.overview`` so the two can't answer differently.
         own_rating = spotguessr_overview.most_recent_rating(profile)

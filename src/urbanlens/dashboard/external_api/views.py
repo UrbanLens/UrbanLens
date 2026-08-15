@@ -2914,7 +2914,8 @@ class PlaceResolveView(ExternalApiView):
         # The internal MapController.resolve_place omits this gate even though
         # its own autocomplete_places applies it - so a user who turned
         # external lookups off can still trigger a Places Details call by
-        # selecting a suggestion. Recorded in docs/PROBLEMS.md; this surface
+        # selecting a suggestion. Recorded under "Messaging / external API (noted
+        # 2026-07-26)" in docs/PROBLEMS.md; this surface
         # does not reproduce the omission.
         if not profile.external_apis_enabled:
             return Response({"error": "External lookups are turned off in your settings."}, status=403)

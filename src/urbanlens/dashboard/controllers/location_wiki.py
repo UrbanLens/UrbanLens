@@ -353,7 +353,8 @@ class LocationWikiEditView(LoginRequiredMixin, View):
             body = request.POST.dict()
 
         # strict=False keeps this view's long-standing skip-invalid-and-continue
-        # behavior (see apply_wiki_edit's docstring and docs/PROBLEMS.md); the
+        # behavior (see apply_wiki_edit's docstring, and "Messaging / external API
+        # (noted 2026-07-26)" in docs/PROBLEMS.md, the strict-vs-lenient item); the
         # external API passes strict=True and gets a hard rejection instead.
         try:
             edit = apply_wiki_edit(wiki, profile, body, strict=False)

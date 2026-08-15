@@ -523,3 +523,14 @@ original notes surface, replace this section with them.
   rather than duplicating every configured validator's rules in TypeScript and keeping them in
   sync by hand (option b). The raw password crosses HTTPS exactly once, is validated in memory,
   and is never stored or logged.
+
+## Package `__init__` import ordering in `services/trivia` and `services/spotguessr`
+
+Both packages' `__init__.py` files import their submodules in **dependency order, not
+alphabetical order**, and each carries an `# isort: skip_file` guard. The `session` submodule must
+be imported last: it imports back into the package, so importing it before the package's other
+attributes are set intermittently raises `ImportError: partially initialized module` depending on
+which process triggers the package import first - celery workers hit it, a plain `manage.py
+check` didn't. Letting `ruff --fix` or an editor's organize-imports re-sort either file
+reintroduces the race. (Promoted here 2026-08-15 from the two files' comments, which previously
+pointed at a PROBLEMS.md entry that never existed.)

@@ -43,7 +43,8 @@ from urbanlens.dashboard.services.spotguessr.street_view import candidate_street
 # this import runs - importing session any earlier intermittently raises
 # ImportError ("partially initialized module") depending on which process
 # happens to trigger this package's import first (celery workers hit it,
-# a plain `manage.py check` didn't) - see docs/PROBLEMS.md.
+# a plain `manage.py check` didn't) - see "Package __init__ import
+# ordering" in docs/NOTES.md.
 from urbanlens.dashboard.services.spotguessr.session import (
     GameConfig,
     SpotGuessrError,

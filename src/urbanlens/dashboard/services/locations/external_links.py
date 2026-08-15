@@ -40,7 +40,8 @@ def add_pin_link(pin: Pin, url: str, name: str) -> bool:
     # same URL for one pin can both miss and both insert. get_or_create would then
     # raise MultipleObjectsReturned on *every* later call for that URL, turning a
     # harmless duplicate row into a permanent failure inside the signal. The race
-    # itself needs a unique constraint to close - see docs/PROBLEMS.md.
+    # itself needs a unique constraint to close - see "OPEN 2026-08-12:
+    # `get_or_create` without a backing unique constraint" in docs/PROBLEMS.md.
     if PinLink.objects.filter(pin=pin, url=url).exists():
         return False
     PinLink.objects.create(pin=pin, url=url, name=name)
@@ -69,7 +70,8 @@ def add_wiki_link(wiki: Wiki, url: str, name: str) -> bool:
     # same URL for one wiki can both miss and both insert. get_or_create would then
     # raise MultipleObjectsReturned on *every* later call for that URL, turning a
     # harmless duplicate row into a permanent failure inside the signal. The race
-    # itself needs a unique constraint to close - see docs/PROBLEMS.md.
+    # itself needs a unique constraint to close - see "OPEN 2026-08-12:
+    # `get_or_create` without a backing unique constraint" in docs/PROBLEMS.md.
     if WikiLink.objects.filter(wiki=wiki, url=url).exists():
         return False
     WikiLink.objects.create(wiki=wiki, url=url, name=name)

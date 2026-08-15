@@ -60,7 +60,8 @@ class WikiSecurityUpdateSerializer(serializers.Serializer):
     Every field is optional, so a caller may submit only the indicators they
     actually observed. Each is a strict ``ChoiceField`` - an unrecognized value
     is a 400, never a silently-skipped field (the internal view's behavior; see
-    ``docs/PROBLEMS.md``).
+    "Messaging / external API (noted 2026-07-26)" in ``docs/PROBLEMS.md``, the
+    strict-vs-lenient wiki edit item).
     """
 
     fences = serializers.ChoiceField(choices=SecurityLevel.choices, required=False)

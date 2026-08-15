@@ -77,7 +77,9 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, st
             ``False`` (the internal HTMX view) skips the offending field and
             continues, preserving that view's long-standing behavior. This is a
             real defect - the user sees ``{"ok": true}`` and the field silently
-            never changes - and is recorded in ``docs/PROBLEMS.md`` rather than
+            never changes - recorded under "Messaging / external API (noted
+            2026-07-26)" in ``docs/PROBLEMS.md`` (the strict-vs-lenient wiki
+            edit item) rather than
             being changed blind here, because fixing it properly needs
             field-level error rendering in the About card.
 
