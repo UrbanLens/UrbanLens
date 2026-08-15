@@ -8922,3 +8922,14 @@ off-peak UTC hours (03:10-05:40). The 5-minute safety-check-in chain and the 2-m
 sweeps stay interval-based deliberately: time-critical, cheap, and internally sequenced by their
 own due-time filters. Verified in-container: 24 entries load, 17 crontab + 7 interval, exactly
 the intended split. The schedule block now carries the why.
+
+
+## Chunk 484 - the share-provenance invariant holds at all six creation sites
+
+Re-verified CLAUDE.md's named invariant after the session's churn. Six `PinShare.objects.create`
+sites exist (pin sharing controller x2 and service, map sharing, DM location detection, trip
+share tracking); every one sits in a file that also calls the provenance pair, and the two
+least-obvious sites (DM detection, trip tracking) read in full show the exact pattern:
+`resolve_origin_share`/`resolve_and_stamp_origin_share` before the create, `record_share_exposure`
+after. Group chats' share path carries its own exposure call. The `LocationExposure` chain is
+intact; nothing this session added a share path, and nothing pre-existing drifted.
