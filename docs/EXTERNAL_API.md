@@ -632,8 +632,9 @@ discovered, via the same `wiki_access` visibility gate every other wiki-scoped r
 
 ### Push Devices
 
-- `POST /push-devices/` — register/re-activate this device — `address` never echoed back — idempotent on submitted address (safe to re-register every app launch).
+- `POST /push-devices/` — register/re-activate this device — `address` never echoed back — idempotent on submitted address (safe to re-register every app launch) — 201 response: `{uuid, transport, name, created, dispatch_enabled}`.
 - `DELETE /push-devices/{device_uuid}/` — unregister.
+- `dispatch_enabled` (read-only bool) says whether the server will actually push to the device. **`transport: "fcm"` registrations are accepted and stored but never dispatched to** — no FCM sender exists yet (it needs a Google service-account credential), so only `transport: "unifiedpush"` returns true; see `docs/PROBLEMS.md`. A 201 alone does **not** mean delivery works — a Play-flavor client should read this field rather than show a notification setting that is silently dead.
 
 ---
 
