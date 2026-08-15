@@ -8203,3 +8203,24 @@ declared (fail cleanly). The current behaviour is the first, undocumented.
 Worth recording because the *shape* is familiar - it is the same "partial application" concern as the
 `0042`/`0043` migration pair in chunk 364, where I was wrong about the risk. Here it is real: nothing
 wraps the hook in a transaction because there is nothing transactional about in-memory registration.
+
+
+## Chunk 450 - rate limiting is opt-out, not opt-in - the question was wrong
+
+Asked whether all 55 `Gateway` subclasses declare a rate-limited service name. **0 of 55 did**, which
+is not a finding about 55 unthrottled external APIs - it is a finding about the question.
+
+`rate_limiter.py` states that limits **"are auto-created on first access using"** defaults, with
+"plugin-declared defaults win over" them. So a gateway needs to declare nothing: **throttling applies
+automatically and a declaration is an override, not an opt-in.** A new API integration is rate
+limited the moment it makes its first call, without its author doing anything.
+
+That is the same architectural stance found in chunks 437-439 and 444 - authorization by inheritance,
+CSRF by global listener, and now rate limiting by default-on registry. **Four subsystems where the
+safe behaviour is what you get by not acting.**
+
+**Thirty-first artifact, and the first where the *question* was malformed rather than the search.**
+The scan worked; it answered "do gateways declare X" correctly. I had assumed declaring X was
+required, and a 0-of-55 result should have been read as "my model of this system is wrong" long
+before it was read as "55 defects". The tell was there immediately - the list included exception
+classes, and no codebase has 55 unthrottled external API clients while shipping a rate limiter.
