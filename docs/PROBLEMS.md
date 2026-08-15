@@ -113,7 +113,17 @@ Swept the rest of the import surface the same way afterwards: `-k 'import or pre
 guard's own exception, so an unmocked integration shows up as a passing test plus a log line
 rather than a failure. Grepping ERROR logs across passing tests is the way to find the rest.
 
-## OPEN 2026-08-12: trip activity weather matches against times in the wrong timezone
+## ~~OPEN 2026-08-12: trip activity weather matches against times in the wrong timezone~~ RESOLVED 2026-08-15 (`f3acdf56`)
+
+**RESOLVED without a timezone library.** This entry framed the fix as needing a per-location
+timezone (and therefore a product decision); it does not. Open-Meteo's `timezone=auto` response
+already carries a top-level `utc_offset_seconds`, which is enough to recover the real instant.
+`ForecastSlot` now has an aware-UTC `date_utc` populated by all three converters (Open-Meteo via
+that offset, OpenWeatherMap from its UTC `dt_txt`, REData from its parsed value - documented as
+the TypedDict's contract), and `_build_activity_forecasts` matches slots and computes `gap_hours`
+against it, with the old naive comparison kept as a fallback for slots lacking it. The AI
+suggestion day-bucketing got the same correction. Display still uses the naive local `date`, so
+no panel changed. The crash half was already fixed earlier. Original entry below.
 
 `ForecastSlot.date` has no timezone contract, and the three providers that populate it disagree.
 `controllers/trip.py::_build_activity_forecasts` then compares them against an activity's
@@ -165,7 +175,18 @@ Found by chasing the single `RuntimeWarning` in a full test run (a naive datetim
 `Pin.last_visited`). That warning itself is only test-fixture hygiene -
 `test_pin_queryset.py:134` passes `date.today()` - but it prompted the sweep that turned this up.
 
-## OPEN 2026-08-11: bulk-accepting pin suggestions makes up to 200 live API calls inside one request
+## ~~OPEN 2026-08-11: bulk-accepting pin suggestions makes up to 200 live API calls inside one request~~ RESOLVED 2026-08-15 (`683f0632`)
+
+**RESOLVED**: the product blocker this entry named ("do we accept placeholder names?") had already
+dissolved - lazy name resolution exists end to end (`resolve_location_place_name` backfills in the
+background, and `place_info.py`'s own docstring blesses `fetch_if_missing=False` for bulk paths).
+So `fetch_if_missing` is now threaded through `_create_location_with_canonical_name` →
+`resolve_location_for_point` → `accept_pin_suggestion`; both bulk views pass `False` and enqueue
+the backfill per newly created Location, gated on `external_apis_enabled`. **No user-visible
+naming change**: `pin.name` comes from the suggestion regardless, so no placeholder ever appears -
+only the shared Location's official name backfills asynchronously. Single-accept stays
+synchronous. Tests assert the Google entry point is never called from either bulk endpoint.
+Original entry below.
 
 Found by root-causing the last failing test in the suite (`test_pin_suggestion_bulk_partial::
 test_accepting_marks_the_suggestions_handled`, which was reaching the real internet). The test is
@@ -226,7 +247,16 @@ is the one that turns a bounded cost into an unbounded one, and is worth address
 even before the broader Celery migration. (13 test modules already mock
 `GooglePlaceService._resolve_name`, which is a good independent map of everything on this path.)
 
-## PARTLY RESOLVED 2026-08-12: the nightly achievement sweep is O(profiles × metrics) and gets killed at 3600s
+## ~~PARTLY RESOLVED 2026-08-12: the nightly achievement sweep is O(profiles × metrics) and gets killed at 3600s~~ RESOLVED 2026-08-15 (`5ac09566`)
+
+**RESOLVED - both remaining halves.** (2) `sweep_achievements` is now a dispatcher that slices
+profiles into pk ranges and enqueues a per-chunk subtask, so no single invocation can approach the
+3600s `CELERY_TASK_TIME_LIMIT` and a crashed chunk affects only its own range. (1) `Metric` gained
+an optional `compute_bulk` implemented via grouped aggregates for the count-shaped metrics, with
+`compute_values_bulk` falling back to per-profile `value_for` where a grouped aggregate is not
+equivalent - the streak metrics stay per-profile deliberately, since they are path-dependent.
+Property tests assert `compute_bulk` agrees with per-profile `compute`. The resume/checkpoint
+cursor from the earlier pass is retained. Original entry below.
 
 `tasks.sweep_achievements` → `evaluate_all_profiles` iterates **every** `Profile` and evaluates
 every active achievement for each one. Each metric is an independent per-profile query -
@@ -276,7 +306,26 @@ still worth doing if the run time keeps growing.
 Not attempted here: (1) is a refactor across the metric registry, and (2) changes the shape of a
 scheduled job - both want a maintainer's call on batch size and ordering guarantees.
 
-## FEATURE GAP 2026-08-11: the data export omits 11 kinds of user-authored content
+## ~~FEATURE GAP 2026-08-11: the data export omits 11 kinds of user-authored content~~ MOSTLY RESOLVED 2026-08-15 (`a2743a29`)
+
+**RESOLVED for 9 of the 11**, via a declarative `ExportType` registry rather than nine more
+copy-pasted exporters: `VALID_EXPORT_TYPES`, the run order and `run_export`'s dispatch table all
+derive from one tuple, so a tenth area is a class plus one entry. New areas: **safety_checkins**
+(check-ins + contacts + messages), **map_annotations** (MarkupMap/PinMarkup/MapImageOverlay incl.
+overlay image files), **saved_filters**, **routes**. **PinAlias** folds into the per-pin dicts;
+**SocialLink** and **ProfileEmail** fold into the profile. The reverse-direction gap is closed too
+- there is now a `_import_profile` restoring content fields only (bio/area/dates/contact block),
+explicitly skipping username/email/date_joined.
+
+Registry entries also carry a `label`/`description`, and the Tools page renders them from the
+registry, so a future export area needs no template edit - the four new areas were otherwise
+unreachable in the UI, since that checkbox list is hardcoded.
+
+**Still deliberately excluded, pending a product decision** (the two this entry itself flagged):
+`ProfileNote` (a note *about* another user - exporting one user's private characterization of
+another is a real disclosure question) and `WikiEdit` (community-shared revision history, not
+solely the exporter's content). Recommendation if asked: export ProfileNote but never import it,
+and leave WikiEdit alone. Original entry below.
 
 `VALID_EXPORT_TYPES` covers 13 areas (profile, settings, custom fields, pins, google_takeout,
 labels, connections, visit history, comments, photos, trips, pin lists, direct messages). Pins
@@ -1496,7 +1545,16 @@ with a toggle pair is alertable, so a settable-but-unfirable toggle cannot be in
 updated to resolve by member name too - it derived columns from the value, which only held while
 the broken type was absent from the set.
 
-## OPEN 2026-07-26: FCM push transport is registered but never dispatched
+## ~~OPEN 2026-07-26: FCM push transport is registered but never dispatched~~ RESOLVED 2026-08-15 (`60c6f6cb`, tier 1 - honesty, not dispatch)
+
+**RESOLVED for the harm actually recorded here** (a registrant getting silence with no signal):
+`PushDevice.dispatch_enabled` (true only for UnifiedPush) is now surfaced read-only on
+`PushDeviceResponseSerializer`, so both the register 201 and any future list response say plainly
+whether the server will ever push to that device, and `docs/EXTERNAL_API.md` documents the field
+plus the FCM caveat. FCM registrations are still **accepted deliberately** - rejecting them would
+break the documented contract and the module keeps them so re-registration is seamless once a
+sender exists. Actual FCM dispatch (HTTP v1, service-account credential, google-auth dependency)
+remains unbuilt and is correctly gated on the mobile client existing. Original entry below.
 
 `services/notifications/push.py` accepts and stores FCM device registrations, but only the UnifiedPush
 transport actually dispatches; FCM rows are skipped at send time until a Play-flavor client
@@ -5223,7 +5281,18 @@ is a write path where getting it wrong locks a user out of their own key permane
 review rather than an unattended change. Clamping the *unwrap* paths is not the answer: it would
 make any bundle legitimately below the floor permanently unopenable.
 
-## OPEN 2026-08-12: no Content-Security-Policy is set anywhere
+## ~~OPEN 2026-08-12: no Content-Security-Policy is set anywhere~~ RESOLVED 2026-08-15 (`92182388`, report-only first)
+
+**RESOLVED as a phased rollout.** django-csp is added with `CSPMiddleware` after
+`SecurityMiddleware`, and the policy is honest about the app as it stands: `script-src` and
+`style-src` still carry `'unsafe-inline'` because of the ~99 inline `<script>` blocks and HTMX
+`hx-on:` attributes, so the XSS-blocking benefit is deferred - but `object-src 'none'`,
+`base-uri`, `frame-ancestors`, `form-action` and a real `img-src` allowlist (tile/imagery hosts
+grepped from the templates and TS, not guessed) apply immediately. It ships as
+**Content-Security-Policy-Report-Only**; the new `UL_CSP_ENFORCE` Pydantic toggle flips a given
+environment to enforcing once its reports are clean. Threading nonces through the templates to
+drop `'unsafe-inline'` is separate follow-up work, tied to the inline-JS extraction effort.
+Verified: full-page renders still pass with the middleware active. Original entry below.
 
 Found while fixing the SVG upload hole (fixed; see the audit report). The SVG was exploitable
 partly *because* there is no CSP: the app sends no `Content-Security-Policy` header from Django or
@@ -5290,7 +5359,17 @@ already consumed is forfeited or forgiven. Whichever is chosen, the mechanical p
 handler that decrements `total_paid_cents` by the refunded amount, reusing the existing
 idempotency, since Stripe delivers these as ordinary events with their own ids.
 
-## OPEN 2026-08-12: the games feature gate exists on the hub only, not on the games
+## ~~OPEN 2026-08-12: the games feature gate exists on the hub only, not on the games~~ RESOLVED 2026-08-15 (`7a652cfa`)
+
+**RESOLVED by gating the games**, which is what `SiteFeature.ALPHA_FEATURES`'s own definition
+comment describes ("Gates access to features still under active development") - so the product
+question this entry raised is answered by the enum, not left open. A new
+`AlphaFeatureRequiredMixin` raises `PermissionDenied` for users without the feature and is applied
+to every game view class across `spotguessr.py`, `trivia.py` and `consensus.py`, with
+`GamesOverviewView`'s inline check replaced by the same mixin. It sits **after**
+`LoginRequiredMixin` in the MRO so anonymous users still get a login redirect rather than a 403.
+Gameplay test fixtures grant the feature through a shared helper, constructing a throwaway first
+user so the probe account is not the auto-promoted site admin. Original entry below.
 
 `SiteFeature.ALPHA_FEATURES` gates two things: the nav item (`context_processors.show_games_nav`)
 and the hub view (`controllers/games.py::GamesOverviewView`, which raises `PermissionDenied`).
@@ -5331,7 +5410,17 @@ that calls `baker.make("auth.User")` once measures an admin and concludes the fe
 by default - which is exactly what the first attempt here reported before the second user was
 added.
 
-## OPEN 2026-08-12: login lockout is identifier-only, so it doubles as a targeted DoS
+## ~~OPEN 2026-08-12: login lockout is identifier-only, so it doubles as a targeted DoS~~ RESOLVED 2026-08-15 (`ea366476`)
+
+**RESOLVED**: a per-IP failure throttle now runs alongside the identifier lockout, reusing the
+cache-counter pattern already in `account.py` for the passphrase throttle and the existing
+`_client_ip` helper. It is checked before authentication and incremented on every failure, and
+deliberately **not** cleared on success (a failure-only window that simply expires). The entry's
+"needs a human to pick a number" concern is resolved by making it an admin-tunable
+`SiteSettings.login_ip_max_attempts` (default 30, 0 disables) rather than hardcoding a NAT-hostile
+constant. The refusal reuses the identifier-lockout error text verbatim, so the no-enumeration
+property holds - a test asserts the two responses' error strings are equal rather than pinning a
+literal. Original entry below.
 
 `controllers/account.py` locks an account after `login_max_attempts` consecutive failures
 (default 5) for `login_lockout_minutes` (default 15). The lockout key is derived **only** from the
