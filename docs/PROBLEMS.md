@@ -5533,7 +5533,7 @@ so an upload slower than the 30s timeout - already having lost the lock to its s
 *that* upload's lock on the way out. It now uses the token-checked release from
 `services.core.locks` (see the 2026-08-12 sweep-lock entry; same defect, same fix).
 
-## OPEN 2026-08-13: undoing a pin delete does not bring back its comments, albums or links
+## PARTLY RESOLVED 2026-08-13: undoing a pin delete does not bring back its comments, albums or links
 
 `Image.pin`, `MarkupMap.pin` and `TripActivity.pin` are `SET_NULL`, so deleting a pin deliberately
 preserves the user's irreplaceable content and merely detaches it. Everything else FK'd to Pin
@@ -5560,6 +5560,12 @@ internal references - a much larger change than the photo re-link, and one that 
 about how deep "undo" reaches before it is worth building. The cheaper alternative is to stop
 promising it: narrow the delete-confirmation wording to say the pins come back and the discussion
 does not.
+
+**Partly resolved (chunk 461, 2026-08-15): the promise is narrowed.** The delete dialog now says
+the pin and its photos come back and its comments, albums and links do not; the two docstrings
+claiming "all of it restorable" now state the real scope and point at `PinUndoHandler`. The
+deep-restore question (serialising whole CASCADEd object graphs) remains the open product call
+above.
 
 ## OPEN 2026-08-13: 58 hand-declared indexes duplicate the ones Django already creates
 

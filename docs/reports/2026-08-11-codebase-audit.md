@@ -8504,3 +8504,18 @@ files - the forward path is untouched, only the previously-noop unapply path cha
 
 Both in-place encryption migrations now roll back honestly: decrypt what they encrypted, skip
 what they never touched, refuse loudly what they cannot restore. PROBLEMS entry resolved.
+
+
+## Chunk 461 - the pin-delete undo promise, narrowed to the truth
+
+The filed gap (PROBLEMS 2026-08-13): `PinUndoHandler` restores the pin, its detail-pin subtree
+and its detached photos - but everything that CASCADEs (comments, albums, links, notes, visits,
+reviews) is gone the moment the delete commits, while the delete dialog said "You can restore it"
+and two docstrings said "all of it restorable from Undo History".
+
+**How deep undo should reach is the product call and stays filed.** What did not need a decision
+is the false promise: the dialog now says the pin and its photos come back and its comments,
+albums and links do not; both docstrings state the real scope and point at `PinUndoHandler`. A
+user deleting by mistake now knows the cost *before* confirming, which is the moment it matters.
+The dialog's message text is not asserted by its tests (12/12 still pass, tsc clean), so no test
+churn. PROBLEMS entry moved to PARTLY RESOLVED with the deep-restore question left open.
