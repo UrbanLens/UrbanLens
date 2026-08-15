@@ -157,7 +157,7 @@
 </div>
 
 {# -- Edit list dialog ------------------------------------------------------ #}
-<dialog id="edit-list-dialog" class="ul-dialog">
+<dialog id="edit-list-dialog" class="ul-dialog" aria-labelledby="dialog-title-edit-list">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit List" %}
     <div class="ul-dialog-body">
         <form onsubmit="return pinListSaveEdit(event)">
@@ -178,7 +178,7 @@
 </dialog>
 
 {# -- Add pins dialog --------------------------------------------------------#}
-<dialog id="add-pins-dialog" class="ul-dialog">
+<dialog id="add-pins-dialog" class="ul-dialog" aria-labelledby="dialog-title-add-pins">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Pins" %}
     <div class="ul-dialog-body">
         <p class="pin-list-smart-hint">Search your pins, or an address, place, or coordinates to add somewhere new.</p>
@@ -189,7 +189,7 @@
 </dialog>
 
 {# -- Confirm creating a new pin from an Add Pins search result ---------------#}
-<dialog id="add-pins-create-confirm-dialog" class="ul-dialog">
+<dialog id="add-pins-create-confirm-dialog" class="ul-dialog" aria-labelledby="dialog-title-create-a-new-pin">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a New Pin?" %}
     <div class="ul-dialog-body">
         <p id="add-pins-create-confirm-text"></p>
@@ -209,7 +209,7 @@
 <dialog id="saved-filter-form-dialog" class="ul-dialog saved-filter-form-dialog"></dialog>
 
 {# -- Add to trip dialog ------------------------------------------------------#}
-<dialog id="add-to-trip-dialog" class="ul-dialog">
+<dialog id="add-to-trip-dialog" class="ul-dialog" aria-labelledby="dialog-title-add-to-trip">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add to Trip" %}
     <div class="ul-dialog-body">
         <input type="search" id="add-to-trip-search" class="pin-list-add-results-search" placeholder="Search your trips..." oninput="pinListFilterTrips(this.value)" autocomplete="off">
@@ -226,7 +226,7 @@
     </div>
 </dialog>
 
-<dialog id="export-list-dialog" class="ul-dialog">
+<dialog id="export-list-dialog" class="ul-dialog" aria-labelledby="dialog-title-export-list">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Export list" %}
     <div class="ul-dialog-body">
         <p class="form-hint">Choose a format to download every pin on this list.</p>
@@ -256,7 +256,7 @@
 </form>
 
 {# -- >100 pins confirmation dialog ------------------------------------------#}
-<dialog id="pin-list-confirm-bulk-add-dialog" class="ul-dialog">
+<dialog id="pin-list-confirm-bulk-add-dialog" class="ul-dialog" aria-labelledby="dialog-title-add-a-lot-of-pins">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add a lot of pins?" %}
     <div class="ul-dialog-body">
         <p id="pin-list-confirm-bulk-add-text"></p>

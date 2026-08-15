@@ -52,7 +52,7 @@ Context:
         </div>
     </div>
 
-    <dialog id="pin-import-failure-place-dialog-{{ failure.pk }}" class="pin-import-failure-place-dialog ul-dialog">
+    <dialog id="pin-import-failure-place-dialog-{{ failure.pk }}" class="pin-import-failure-place-dialog ul-dialog" aria-labelledby="dialog-title-place-pin">
         {% include "dashboard/partials/ui/_dialog_header.html" with title="Place Pin" %}
         <div class="ul-dialog-body">
             <p class="pin-import-failure-dialog-caption">

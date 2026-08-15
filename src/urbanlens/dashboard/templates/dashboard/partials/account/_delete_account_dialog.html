@@ -1,5 +1,5 @@
 {# Password + type-to-confirm dialog for the "Delete my account" danger-zone action. #}
-<dialog id="delete-account-dialog" class="ul-dialog delete-account-dialog">
+<dialog id="delete-account-dialog" class="ul-dialog delete-account-dialog" aria-labelledby="delete-account-dialog-title">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Delete your account" title_id="delete-account-dialog-title" %}
     <form method="post" action="{% url 'account.delete.request' %}" id="delete-account-form">
         {% csrf_token %}

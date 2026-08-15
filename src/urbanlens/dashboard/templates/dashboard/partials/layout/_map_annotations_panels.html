@@ -84,7 +84,7 @@ a sibling #map-annotations-config element, not from this partial).
 {# -- Manage Layers dialog: create/rename/recolor/reorder/delete custom  --- #}
 {# layers for this pin/wiki. Body is HTMX-loaded by the layers panel's     --- #}
 {# "Manage Layers" button (see _layers_panel.html / map_layers_panel()).   --- #}
-<dialog id="custom-layers-dialog" class="custom-layers-dialog ul-dialog">
+<dialog id="custom-layers-dialog" class="custom-layers-dialog ul-dialog" aria-labelledby="dialog-title-manage-layers">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Manage Layers" %}
     <div id="custom-layers-dialog-body" class="custom-layers-dialog-body ul-dialog-body"></div>
 </dialog>
@@ -92,7 +92,7 @@ a sibling #map-annotations-config element, not from this partial).
 {# -- Manage Image Overlays dialog: add/remove georeferenced images and set -- #}
 {# their opacity/lock state. Aligning happens on the map itself, not here.  -- #}
 {% if manage_overlays_url %}
-<dialog id="map-overlays-dialog" class="custom-layers-dialog ul-dialog">
+<dialog id="map-overlays-dialog" class="custom-layers-dialog ul-dialog" aria-labelledby="dialog-title-image-overlays">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Image Overlays" %}
     <div id="map-overlays-dialog-body" class="custom-layers-dialog-body ul-dialog-body"
          hx-get="{{ manage_overlays_url }}" hx-trigger="load" hx-swap="innerHTML"></div>

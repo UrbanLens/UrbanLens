@@ -130,7 +130,7 @@
 </div>
 
 {# -- Edit trip dialog ----------------------------------------------------- #}
-<dialog id="edit-trip-dialog" class="trip-create-dialog ul-dialog">
+<dialog id="edit-trip-dialog" class="trip-create-dialog ul-dialog" aria-labelledby="dialog-title-edit-trip">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Trip" %}
     <form hx-post="{% url 'trips.edit' trip.slug %}"
           hx-target="#trip-header"
@@ -178,7 +178,7 @@
 </dialog>
 
 {# -- Add activity dialog -------------------------------------------------- #}
-<dialog id="add-activity-dialog" class="trip-create-dialog ul-dialog">
+<dialog id="add-activity-dialog" class="trip-create-dialog ul-dialog" aria-labelledby="dialog-title-add-activity">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Activity" %}
     <form id="add-activity-form"
           hx-post="{% url 'trips.activities' trip.slug %}"
@@ -286,7 +286,7 @@
 </dialog>
 
 {# -- Edit activity dialog ------------------------------------------------- #}
-<dialog id="edit-activity-dialog" class="trip-create-dialog ul-dialog">
+<dialog id="edit-activity-dialog" class="trip-create-dialog ul-dialog" aria-labelledby="dialog-title-edit-activity">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Activity" %}
     <form id="edit-activity-form"
           hx-post=""
@@ -423,7 +423,7 @@
 </dialog>
 
 {# -- Mark as completed dialog ---------------------------------------------- #}
-<dialog id="trip-complete-dialog" class="trip-create-dialog ul-dialog">
+<dialog id="trip-complete-dialog" class="trip-create-dialog ul-dialog" aria-labelledby="dialog-title-mark-as-completed">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Mark as Completed" %}
     <form id="trip-complete-form"
           hx-post=""
@@ -451,7 +451,7 @@
 
 {# -- Trip settings dialog --------------------------------------------------- #}
 {% if viewer_is_organizer %}
-<dialog id="trip-settings-dialog" class="trip-create-dialog ul-dialog">
+<dialog id="trip-settings-dialog" class="trip-create-dialog ul-dialog" aria-labelledby="dialog-title-trip-settings">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Trip Settings" %}
     <div id="trip-settings-content">
         {% include "dashboard/partials/trips/trip_settings_partial.html" %}

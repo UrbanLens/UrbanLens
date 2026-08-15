@@ -120,7 +120,7 @@
 {# -- Add member dialog - lives here (not detail.html) so it refreshes with #}
 {# this panel and never shows a friend who was just added as still addable. #}
 {% if can_add_members %}
-<dialog id="add-member-dialog" class="trip-create-dialog ul-dialog">
+<dialog id="add-member-dialog" class="trip-create-dialog ul-dialog" aria-labelledby="dialog-title-add-member">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Add Member" %}
     {% if addable_friends %}
     <div class="trip-add-friend-section">

@@ -9,7 +9,7 @@ already returns.
 Context: home_widget_priority_items (list of (key, label, enabled) tuples),
 home_widget_current_value (comma-separated enabled keys, in order).
 {% endcomment %}
-<dialog id="home-customize-dialog" class="ul-dialog home-customize-dialog">
+<dialog id="home-customize-dialog" class="ul-dialog home-customize-dialog" aria-labelledby="dialog-title-customize-your-homepage">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Customize your homepage" %}
     <div class="ul-dialog-body">
         <p class="home-customize-hint">Choose which widgets appear on your homepage, and drag to reorder them.</p>

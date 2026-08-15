@@ -9193,3 +9193,19 @@ never arrives. Now logs an error naming the status and the two settings to check
 whatever raised the notification).
 
 Thirteenth area swept; sixth consolidation running in background (task b0zbsv2as).
+
+## Chunk 501 - dialogs get accessible names: 0 of 81, now 37, via one shared include
+
+Second accessibility dimension. **Every one of the site's 81 `<dialog>` elements lacked an
+accessible name** - a screen reader announced each as just "dialog", with no indication of what
+had opened. Two-thirds carry no nearby heading, so `aria-labelledby` needed a source; the leverage
+point was `_dialog_header.html`, one shared include used by 41 templates whose title span was
+previously id-less unless a caller passed `title_id`.
+
+The span now always carries an id (falling back to a slug of its title), and 24 template files'
+dialogs point `aria-labelledby` at it - **37 dialogs named, from zero**, with no per-dialog
+copywriting and nothing for a future dialog author to remember beyond using the standard header.
+The remaining 44 build their own headers or have no title at all; recorded rather than
+hand-labeled, since each needs a name chosen from what it actually contains.
+
+262 dialog-rendering tests pass; tsc clean. Sixth consolidation still running (task b0zbsv2as).

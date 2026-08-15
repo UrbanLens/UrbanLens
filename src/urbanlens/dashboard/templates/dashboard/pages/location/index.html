@@ -866,7 +866,7 @@
 </dialog>
 
 {# -- Pin edit dialog ------------------------------------------------------ #}
-<dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog">
+<dialog id="pin-edit-dialog" class="pin-edit-dialog ul-dialog" aria-labelledby="dialog-title-edit-pin">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Edit Pin" %}
     <form id="pin-edit-form"
           hx-post="{% url 'pin.edit' pin.slug %}"

@@ -1,5 +1,5 @@
 {# Type-to-confirm bulk delete dialog. Compact by design so highlighted map markers stay visible around it. #}
-<dialog id="bulk-delete-dialog" class="ul-dialog bulk-delete-dialog">
+<dialog id="bulk-delete-dialog" class="ul-dialog bulk-delete-dialog" aria-labelledby="bulk-delete-dialog-title">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Delete pins" title_id="bulk-delete-dialog-title" %}
     <div class="ul-dialog-body bulk-delete-dialog-body">
         <p id="bulk-delete-warning" class="bulk-delete-warning"></p>

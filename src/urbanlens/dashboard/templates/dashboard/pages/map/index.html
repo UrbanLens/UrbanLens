@@ -390,7 +390,7 @@
     </button>
 
     {# -- Save Filter dialog ------------------------------------------------ #}
-    <dialog id="save-filter-dialog" class="ul-dialog">
+    <dialog id="save-filter-dialog" class="ul-dialog" aria-labelledby="dialog-title-save-filter">
         {% include "dashboard/partials/ui/_dialog_header.html" with title="Save Filter" %}
         <div class="ul-dialog-body">
             <form hx-post="{% url 'saved_filters.create' %}" hx-include="#filter-form"
@@ -567,7 +567,7 @@
 </dialog>
 
 {# Mini dialog: "Create a label" from the add-pin label selector #}
-<dialog id="apdlg-create-label-dialog" class="ul-dialog tag-create-card">
+<dialog id="apdlg-create-label-dialog" class="ul-dialog tag-create-card" aria-labelledby="dialog-title-create-a-label">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Create a label" %}
     <div class="ul-dialog-body">
         <div class="form-field">
@@ -613,7 +613,7 @@
 </script>
 
 {# -- New-user pin-suggestions intro dialog ------------------------------- #}
-<dialog id="pin-suggestions-intro-dialog" class="ul-dialog">
+<dialog id="pin-suggestions-intro-dialog" class="ul-dialog" aria-labelledby="dialog-title-suggested-pins-near-you">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Suggested pins near you" %}
     <div class="ul-dialog-body">
         <p>We've found public locations other explorers have shared that you haven't pinned yet.</p>

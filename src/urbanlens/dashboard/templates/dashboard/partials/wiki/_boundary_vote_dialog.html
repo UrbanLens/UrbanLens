@@ -12,7 +12,7 @@ Usage:
   {% include "dashboard/partials/wiki/_boundary_vote_dialog.html" with location=location boundary_vote=boundary_vote %}
 {% endcomment %}
 {% if boundary_vote %}
-<dialog id="boundary-vote-dialog" class="ul-dialog boundary-vote-dialog">
+<dialog id="boundary-vote-dialog" class="ul-dialog boundary-vote-dialog" aria-labelledby="dialog-title-which-boundary-looks-right">
     {% include "dashboard/partials/ui/_dialog_header.html" with title="Which boundary looks right?" %}
     <p class="boundary-vote-intro">
         More than one official data source has a boundary for this place.
