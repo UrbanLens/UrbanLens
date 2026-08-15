@@ -7667,6 +7667,27 @@ state that survives rollback (advisory locks, `SET LOCAL`), a module-scope `mock
 active by a failed cleanup, or Hypothesis' database of previously-failing examples interacting
 with run order.
 
+**Mechanism found (chunk 507) - the Hypothesis example database is real, shared, and
+root-owned.** `/app/.hypothesis/examples/` exists in the test container with stored entries dating
+from 2026-08-06 and 2026-08-15. Hypothesis replays previously-failing examples *first* on every
+subsequent run, so a `@given` test that failed once keeps re-trying that input - which produces
+exactly the observed signature: a failure that appears in one large run and vanishes in isolation
+(different worker, different container state) with no code change between.
+
+Two aggravating details:
+
+- The directory is **owned by root and mode 755**, while tests run as `appuser` - writes fail
+  silently, so the store is *read-only in practice*: bad examples are replayed forever and newly
+  discovered ones are never recorded. (`docker exec` defaults to root, which is how it came to be
+  root-owned in the first place - the same footgun recorded for `logs/` in CLAUDE.local.md.)
+- Nothing registers a Hypothesis profile, so this is the library default rather than a decision.
+
+Three fixes, owner's choice: (a) `derandomize=True` or an explicit `database=None` profile for CI
+determinism, (b) chown the directory to `appuser` so the store works as designed, or (c) delete it
+and let it regenerate under the right owner. Recorded rather than applied because (a) changes
+test-determinism policy for everyone and (b)/(c) touch a container whose state the owner manages -
+the same reasoning as the dev-stack entries.
+
 `SetTripPermissionsPresenceTests::test_only_submitted_fields_ever_move`
 (`test_external_api_trip_settings.py`) failed in the chunk-455 full-suite run (10,838 others
 passed) and passes both standalone and with its whole module. Its traceback was not captured (the

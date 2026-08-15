@@ -9286,3 +9286,20 @@ patch left active by a failed cleanup, Hypothesis' example database interacting 
 which is worth more to the next investigator than a fourth guess would have been. The eliminations
 also raise the codebase's standing: both mechanisms I suspected turned out to be not just present
 but *designed against this exact failure*, with the reasoning written down.
+
+## Chunk 507 - the flake mechanism, found: a root-owned Hypothesis example database
+
+The last cheap candidate turned out to be the answer. `/app/.hypothesis/examples/` exists in the
+test container with entries from 2026-08-06 and 2026-08-15, and **Hypothesis replays
+previously-failing examples first on every run** - which is precisely the observed signature: a
+`@given`-driven failure that shows up in one large run and vanishes in isolation, with no code
+change in between. All three filed flakes involve `@given` or subtests.
+
+The aggravating half is the ownership: the directory is **root-owned, mode 755, while tests run as
+`appuser`** - so writes fail silently and the store is read-only in practice. Bad examples replay
+forever; newly found ones are never saved. That is the same `docker exec`-runs-as-root footgun
+`CLAUDE.local.md` already records for `logs/`, hitting a second directory.
+
+Filed with three remedies (a determinism profile, a chown, or deleting the store) rather than
+applied: one changes test policy for everyone and two touch container state the owner manages -
+the same line this audit has held for the dev-stack entries throughout.
