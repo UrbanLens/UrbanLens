@@ -9069,3 +9069,14 @@ what remains is user-decision-gated (pin detach among the six), environment-gate
 stack entries), filed migrations (fetch-helper adoption, untested write routes, deep-restore
 undo, E2EE... no - E2EE closed), or the two honest flake records. Fifth consolidation running in
 background (task brnamq3or) over chunks 489-492.
+
+
+## Chunk 494 - fifth consolidation: 10,873 passed, 0 failed
+
+Validates chunks 489-493: the beat-lock test's crontab period derivation, the cross-kind label
+lookup fix, the three unhandled-fetch fixes, the 28 aria-labels, and the housekeeping. Zero
+failures - and notably the two flakes that appeared in earlier runs (trip-settings presence,
+SpotGuessr socket scopes) did not recur, consistent with their filed order-dependent character.
+
+**Five consolidations this session**: 10,849 / 10,859 / 10,863 / 10,865 (2 resolved) / 10,873.
+Every chunk from 453 to 493 is now covered by at least one green full-suite run.
