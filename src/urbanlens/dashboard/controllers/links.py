@@ -11,6 +11,7 @@ import logging
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.core.exceptions import ValidationError
 from django.core.validators import URLValidator
+from django.db import IntegrityError, transaction
 from django.http import HttpResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
@@ -19,7 +20,7 @@ from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, Wiki
 from urbanlens.dashboard.models.links.model import MAX_LINK_URL_LENGTH, PinLink, WikiLink
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
-from urbanlens.dashboard.services.pins.pin_subresources import InvalidLinkError, create_pin_link, delete_pin_link
+from urbanlens.dashboard.services.pins.pin_subresources import InvalidLinkError, LinkExistsError, create_pin_link, delete_pin_link
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 logger = logging.getLogger(__name__)
@@ -91,7 +92,7 @@ class PinLinksView(LoginRequiredMixin, View):
         pin = get_object_or_404(Pin, slug=pin_slug, profile__user=request.user)
         try:
             create_pin_link(pin, name=(request.POST.get("name") or ""), url=(request.POST.get("url") or ""))
-        except InvalidLinkError as exc:
+        except (InvalidLinkError, LinkExistsError) as exc:
             return HttpResponse(exc.safe_message, status=400)
         return _render_pin_links(request, pin)
 
@@ -117,7 +118,16 @@ class LocationLinksView(LoginRequiredMixin, View):
         if isinstance(cleaned, HttpResponse):
             return cleaned
         name, url = cleaned
-        WikiLink.objects.create(wiki=wiki, name=name, url=url, created_by=profile)
+        try:
+            # A wiki is edited by many people at once, so two of them adding the
+            # same url is ordinary rather than exceptional. The unique constraint
+            # decides; a duplicate is reported as a 400, and notably writes no
+            # WikiEdit - recording an edit that changed nothing would put a
+            # phantom entry in the wiki's revision history.
+            with transaction.atomic():
+                WikiLink.objects.create(wiki=wiki, name=name, url=url, created_by=profile)
+        except IntegrityError:
+            return HttpResponse("That link is already on this page.", status=400)
         WikiEdit.objects.create(
             wiki=wiki,
             editor=profile,

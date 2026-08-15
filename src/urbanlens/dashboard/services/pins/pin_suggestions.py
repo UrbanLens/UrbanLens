@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from django.core.files.base import ContentFile
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 import requests
 
 from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
@@ -780,7 +780,13 @@ def _apply_suggested_enrichment(pin: Pin, suggestion: PinSuggestion) -> None:
                 continue
             if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.LINK, value=url):
                 continue
-            PinLink.objects.create(pin=pin, name=link.get("name", ""), url=url)
+            try:
+                # existing_urls covers duplicates within this call; the unique
+                # constraint covers a concurrent accept adding the same url.
+                with transaction.atomic():
+                    PinLink.objects.create(pin=pin, name=link.get("name", ""), url=url)
+            except IntegrityError:
+                pass
             existing_urls.add(url)
 
 

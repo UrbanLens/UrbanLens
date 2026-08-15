@@ -38,7 +38,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from django.contrib.gis.geos import GEOSException
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import F
 from django.http import Http404
 from django.shortcuts import get_object_or_404
@@ -711,7 +711,14 @@ class WikiLinksView(WikiApiView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
-        link = WikiLink.objects.create(wiki=wiki, name=data.get("name", ""), url=data["url"], created_by=profile)
+        try:
+            # Wikis are edited concurrently by many people, so a duplicate url is
+            # an ordinary client outcome, not a server fault - the unique
+            # constraint decides and this reports 400 rather than 500.
+            with transaction.atomic():
+                link = WikiLink.objects.create(wiki=wiki, name=data.get("name", ""), url=data["url"], created_by=profile)
+        except IntegrityError:
+            return Response({"detail": "That link is already on this page."}, status=400)
         return Response(WikiLinkSerializer(link).data, status=201)
 
 

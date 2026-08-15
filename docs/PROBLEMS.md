@@ -4,6 +4,137 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
 to pick up without re-discovering the problem from scratch.
 
+## OPEN 2026-08-15: frontend TypeScript audit - remaining findings
+
+Full-tree audit of `dashboard/frontend/ts/` (every file read, eight passes). The four
+security/safety items were fixed in the same pass; everything below was found but **not** fixed.
+Line numbers are as of 2026-08-15 and will drift.
+
+**Highest-value single change:** ~40 raw `fetch()` call sites bypass `shared/fetch-json.ts`
+(`fetchJson`/`sendJson`), several with no `response.ok` check at all, so a non-2xx dies in a
+`void`-ed promise with no toast. Six hand-rolled wrappers exist beside it: `postForm`/`getJson`
+(triplicated across the three games), `postForHtml` (organize-tab-manager), `postJson`
+(album-items), `savePosition` (album-map). Migrating them is mechanical, adds timeouts (several
+uploads can currently hang forever), and converts the dominant silent-failure mode into the
+required toast-on-error behaviour. Two deliberate exceptions to keep: `webauthn-client.ts`
+(self-contained for the minimal auth layout, already ok-checked) and the two E2EE calls that need
+raw `Response` semantics (201-vs-200, `redirected`).
+
+**Correctness, user-visible:**
+
+- `entries/map-annotations.ts:2264` - right-click-to-delete-vertex is dead code:
+  `m.on("contextmenu.rcdelete" as never, ...)` is jQuery-style event namespacing that Leaflet does
+  not support, so it binds a literal event name that never fires - while the toast at :2338 tells
+  the user to right-click. The `as never` casts were the compiler flagging exactly this.
+- `entries/map-annotations.ts:1371` - `loadDetailPins` has no ok-check and **clears the existing
+  pin layer and list** on failure (console.warn only). :2558 `flushDpAutoSave` swallows validation
+  errors, so autosaved edits are silently lost. :2047 `placeMediaItemAt` has no ok-check and no
+  loading indicator for a server-side image materialize. :1643/:1712 bulk promote/delete
+  `Promise.all` paths have no `.catch`, so one failure is an unhandled rejection with the
+  selection never cleared.
+- `entries/photo-location-scan.ts:207` - the `webkitdirectory` fallback path (Firefox/Safari)
+  reuses an already-aborted `AbortController`, so after one Stop click **every** later scan halts
+  on the first file. Also: hits accumulate across scans (re-scanning double-counts into clusters),
+  and the photo uploads that run *after* the "Uploaded" toast have no progress indicator.
+- `shared/map-export.ts:270` + `themes/base.html:816` - `download()` awaits tile fetches (up to 8s
+  each) but no caller awaits it: no spinner, no toast, unhandled rejections, and the save flow
+  closes the composer mid-export so shapes project against a map being torn down.
+- `shared/markup-toolbar.ts:748` - `flushMarkupAutoSave` never checks `r.ok`, so a 400 (e.g.
+  over-long label) reports success; the single pending-save slot also means editing item A then B
+  inside the 500ms debounce silently discards A's changes, and nothing flushes on unload.
+- `entries/organize.ts:106,311` - the Media tab is **fully dead UI**: the template renders it
+  selectable with checkboxes, a filter bar and Edit buttons, but no `OrgTabManager` is built for
+  it, `ORG_FILTER_NAMESPACES`/`TAB_FILTER_NS` omit it, and the consolidated dialog opener has no
+  `media-label-edit-dialog-body` case, so Edit swaps a form into a dialog nothing opens.
+  Separately, `_organize_label_card.html:77` references `peopleMergeSingle`, which is defined
+  nowhere in the codebase.
+- `shared/organize-filter-engine.ts:188` - `countVisibleCards` tests `card.style.display`, but
+  tree view sets `display` on the `.tag-tree-item` *wrapper*, so cross-tab match counts and the
+  "N categories also match" footer count every card as visible. It duplicates `getOrgVisibleCards`
+  (:99), which gets it right.
+- `shared/map-image-overlays.ts:209` - corner drag never handles `pointercancel`; an interrupted
+  touch gesture leaves `map.dragging` disabled permanently.
+- `entries/spotguessr.ts:1491` - `submitGuess` has no in-flight guard, so a double-click posts
+  twice and double-counts the session score; :840 `reportRoundTimeout` has no error handling, so a
+  failed timeout POST hangs the round forever. All three games silently null the WebSocket on
+  close with no reconnect and no "connection lost" notice.
+- `entries/trivia.ts:856` and `entries/consensus.ts:1051` - missing the round-id guard spotguessr
+  has (`lastRevealedRoundId`), so the last player to answer double-counts HUD points.
+- `shared/organize-priority.ts:69` and `shared/album-items.ts:118` - optimistic reorder with no
+  rollback on failure and no save sequencing, so two rapid drags can persist the stale order while
+  the DOM shows the new one. `shared/album-map.ts:113` is the model to copy - it rethrows after
+  toasting so the marker snaps back.
+- `shared/confirm-dialog.ts:90` - re-entrancy: opening a second dialog while one is open
+  overwrites `resolveCurrent` (first promise pends forever) and `showModal()` on an open dialog
+  throws into the promise executor.
+- `shared/scroll-to-hash.ts:50` - re-scrolls on *every* `htmx:afterSettle` for the page's life, so
+  any later swap yanks the reader back to the original anchor.
+- `shared/onboarding-tour.ts:87` - auto-dismiss hooks bind only to elements present at init; HTMX
+  swaps orphan them, so dismissed cards reappear.
+- `shared/organize-header.ts:113` - a transient window resize below 768px *permanently* overwrites
+  the stored gallery view preference.
+- `entries/article-wysiwyg.ts:532` - the first WYSIWYG keystroke re-serializes the whole article
+  through a lossy `tiptap-markdown` parse (`html: false`), rewriting content document-wide, not
+  just at the edit point. Needs round-trip tests over real saved articles before it is trusted.
+- `shared/e2ee-client.ts:238` - the `e2ee-busy` class it sets during login has **no CSS rule
+  anywhere**, so the ~1s synchronous Argon2id derivation shows no indicator at all; the unlock
+  dialog (:682) has no busy state either, while the reset dialog next to it does it correctly.
+- `shared/e2ee-client.ts:1326` - retry storm: a thread with an unreadable key re-fetches the same
+  conversation/group key once per message (50 sequential identical failing requests on a
+  50-message thread). :1459 `decryptDom` also strips `data-e2ee-*` *before* attempting decryption,
+  so a transient failure is permanently unrecoverable on WS-appended messages.
+- E2EE keys persist in IndexedDB across logout - `clearProfileKeys` is called only from
+  `resetKeys`. Possibly intended (documented same-origin trust boundary), but the logout gap looks
+  unconsidered rather than chosen; decide it explicitly and add a "forget this device" action.
+
+**Operational:**
+
+- `shared/location-search-engine.ts:140,197,916` - three direct browser-to-Nominatim calls bypass
+  the server-side rate limiter and cost tracking and violate Nominatim's usage policy. The file's
+  own comment already flags this as a KNOWN GAP. Needs the server-side geocode proxy (mirroring
+  the Google Places one), which would also enable one aggregated suggestion endpoint.
+
+**Structural (no user-visible symptom):**
+
+- The three games triplicate ~1,500 lines of session/lobby/chat/invite/fetch plumbing (19 blocks
+  differing only by an `sg-`/`cs-`/`trivia-` prefix). Extracting `game-net` / `game-session` /
+  `game-friends` / `score-rows` removes ~1,000 net lines and makes the next game cost ~500 lines
+  instead of ~1,300.
+- `entries/map-annotations.ts` is eight features in one 2,645-line `init()` closure. Three
+  extractions are nearly free today: rectangle-select (already generic, zero closure deps), the
+  satellite/street-view carousel twins (95% identical), and the building-import dialog.
+- `shared/e2ee-client.ts` (1,537 lines) mixes key-lifecycle service code with three hand-built
+  `innerHTML` dialogs; the crypto/store layering beneath it is clean and should not be disturbed.
+- Five picker widgets reimplement the same dropdown mechanics (four different blur-close timeouts,
+  three chip implementations, five `escapeHtml` variants, keyboard nav missing entirely from
+  `createChipPicker` and `label-rel-picker`). Note these files are otherwise **correctly**
+  HTMX-shaped - the server renders their option lists and TS only filters - so do not "fix" them
+  by adding round trips.
+- Organize's five modules communicate over four channels at once (imports, 13 window globals with
+  last-writer-wins handler slots, CustomEvents, an htmx response header), and the kind/ns/tab
+  vocabulary is encoded in five separate places. It also runs a private copy of the shared
+  `window.ulBulkToolbar` that `static/js/bulk-toolbar.js` says it mirrors.
+- `shared/map-layers.ts:198` has no `destroy()`, so document/matchMedia/map listeners accumulate
+  on per-dialog maps (the comment-map composer). `shared/photo-map.ts:204` is the model.
+- Test coverage is inverted: all test files cover the small shared modules; the four largest files
+  (`map-annotations`, `spotguessr`, `e2ee-client`, `consensus`) had zero until this pass added
+  `e2ee-client.test.ts`/`e2ee-store.test.ts` (see `ts/testing/fake-indexeddb.ts` - happy-dom has
+  no IndexedDB, which is why the store was untested).
+
+**HTMX opportunities** (per the HTMX-first rule) - roughly 1,500-2,000 lines of DOM templating
+that the server could render: game lobby lists/summaries/friend pickers, map-annotations' detail
+sidebar + photo panel + bulk-edit dialog + `doSendSelectedDpToWiki` (which hand-parses
+`HX-Trigger` over raw fetch - it is hand-rolled htmx already), organize's merge dialog (a third
+copy of card rendering the server owns) and `postForHtml`/`replaceRows` (a hand-rolled
+`hx-post`+`hx-swap`), album add/remove (two round trips where sibling flows do one `hx-post`), the
+article live preview (already POSTs to a server render endpoint), and the three E2EE dialog shells.
+
+**Out of scope but larger than all of the above:** 21,378 lines of untyped, untested, unlinted
+inline JavaScript across 131 template `<script>` blocks - `map/index.html` alone is 5,152 lines
+(and holds the pin-cache *writer*), `messages/index.html` 1,771, `trips/detail.html` 1,375,
+`location/index.html` 1,284, `base.html` 1,116. Several audited bugs sit on the inline side of a
+TS/template seam; that is where bugs collect, because the types stop there.
+
 ## RESOLVED 2026-08-12: a 225 KB generated source map was tracked while its stylesheet was ignored
 
 `.gitignore` ignores `**/frontend/static/**/*.css`, which does **not** match `.css.map` - so
@@ -5250,7 +5381,39 @@ that trade belongs to whoever owns the settings copy.
 If the answer is "both must be on", the change is one `and` in `save_routes_streaming`; if it is
 "track_routes alone owns it", `track_pin_visits`' help text should stop advertising imports.
 
-## OPEN 2026-08-12: `get_or_create` without a backing unique constraint
+## PARTLY RESOLVED 2026-08-15: `get_or_create` without a backing unique constraint
+
+**Links are done** (migration 0047); `Label` was already done earlier (0042/0043).
+**Still open: `SafetyContactOptOut` and `PinVisit`** - see the original entry below for both.
+
+`PinLink` and `WikiLink` now carry `UniqueConstraint(F(owner), MD5("url"))`. The URL is **hashed
+rather than indexed directly** - it holds up to 2000 characters, and a btree entry over that in
+multibyte UTF-8 can exceed Postgres' ~2704-byte row limit, so a plain unique index would have
+traded a duplicate row for an *insert failure on long URLs*, which is worse.
+
+The migration keeps the lowest-pk row per group. Links have no dependent rows, and the survivor is
+the one every existing reader already returned via `.filter(...).first()`.
+
+**Adding a constraint is the easy half; the call sites were the real work.** Six write paths
+existed, and only one was already safe:
+- `external_links.py` (both helpers) - kept the `exists()` check as a fast path that avoids a
+  savepoint, and now absorbs `IntegrityError`. These run inside a `LocationCache` signal on a
+  Celery queue, where an escaping error is a task failure.
+- `pin_subresources.create_pin_link` - raises a new `LinkExistsError`, mirroring the existing
+  `AliasExistsError` precedent right above it.
+- `controllers/links.py` (wiki add) - returns 400, and deliberately writes **no `WikiEdit`** on the
+  duplicate path; recording an edit that changed nothing would leave a phantom revision.
+- `external_api/views_wiki.py` - returns 400; `_SUBRESOURCE_ERROR_STATUS` maps `LinkExistsError`
+  to 409, matching `AliasExistsError`.
+- `pin_suggestions.py` - its in-call `existing_urls` set does not cover a concurrent accept.
+- `google/maps.py` - already caught `DatabaseError`; unchanged.
+
+Without those, a user adding a link they already had would have gone from a harmless duplicate to
+a 500. `test_external_link_duplicates.py` was inverted from "tolerates pre-existing duplicates" to
+"the database refuses them", plus a race test that neuters the fast path to prove the loser gets
+False rather than an exception. 30 tests on a fresh DB, 121 in the surrounding link suites.
+
+### Original entry (SafetyContactOptOut and PinVisit still apply)
 
 Five models are looked up with `get_or_create` on a field combination the database does not
 enforce as unique. Two concurrent callers both miss, both insert, and the duplicate is permanent —

@@ -83,6 +83,13 @@ class InvalidLinkError(PinSubResourceError):
     """The submitted link url is missing, too long, or not a valid http(s) url."""
 
 
+class LinkExistsError(PinSubResourceError):
+    """The pin already has a link with this url."""
+
+    def __init__(self, message: str = "That link is already on this pin.") -> None:
+        super().__init__(message)
+
+
 def touch_pin(pin: Pin) -> None:
     """Bump the pin's ``updated`` stamp so delta-sync clients see the change.
 
@@ -257,7 +264,12 @@ def create_pin_link(pin: Pin, *, name: str, url: str) -> PinLink:
     except DjangoValidationError as exc:
         raise InvalidLinkError("That doesn't look like a valid http(s) url.") from exc
 
-    link = PinLink.objects.create(pin=pin, name=cleaned_name, url=cleaned_url)
+    try:
+        # Same savepoint reasoning as add_pin_alias above.
+        with transaction.atomic():
+            link = PinLink.objects.create(pin=pin, name=cleaned_name, url=cleaned_url)
+    except IntegrityError as exc:
+        raise LinkExistsError from exc
     touch_pin(pin)
     return link
 

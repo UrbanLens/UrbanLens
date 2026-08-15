@@ -228,6 +228,7 @@ from urbanlens.dashboard.services.pins.pin_subresources import (
     AliasExistsError,
     AliasIsCurrentNameError,
     InvalidLinkError,
+    LinkExistsError,
     PinSubResourceError,
     create_pin_alias,
     create_pin_link,
@@ -2440,6 +2441,7 @@ _SUBRESOURCE_ERROR_STATUS: dict[type[PinSubResourceError], int] = {
     AliasExistsError: 409,
     AliasIsCurrentNameError: 400,
     InvalidLinkError: 400,
+    LinkExistsError: 409,
 }
 
 

@@ -12,8 +12,9 @@ import logging
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
-from django.db.models import CASCADE, SET_NULL, ForeignKey, Index
+from django.db.models import CASCADE, SET_NULL, F, ForeignKey, Index, UniqueConstraint
 from django.db.models.fields import CharField, IntegerField, URLField
+from django.db.models.functions import MD5
 
 from urbanlens.dashboard.models import abstract
 from urbanlens.dashboard.models.links.queryset import LinkManager
@@ -76,6 +77,14 @@ class PinLink(_LinkBase):
 
     class Meta(_LinkBase.Meta):
         db_table = "dashboard_pin_links"
+        constraints = [
+            # Hashed rather than indexing `url` directly: it holds up to 2000
+            # characters, and a btree entry over that in multibyte UTF-8 can
+            # exceed Postgres' ~2704-byte row limit - which would turn a long
+            # link into an insert error, a worse failure than the duplicate row
+            # this prevents.
+            UniqueConstraint(F("pin"), MD5("url"), name="db_plink_pin_url_unique"),
+        ]
         indexes = [
             Index(fields=["pin"], name="idxdb_plink_pin"),
         ]
@@ -103,6 +112,10 @@ class WikiLink(_LinkBase):
 
     class Meta(_LinkBase.Meta):
         db_table = "dashboard_wiki_links"
+        constraints = [
+            # Hashed for the same reason as PinLink's - see the note there.
+            UniqueConstraint(F("wiki"), MD5("url"), name="db_wlink_wiki_url_unique"),
+        ]
         indexes = [
             Index(fields=["wiki"], name="idxdb_wlink_wiki"),
         ]
