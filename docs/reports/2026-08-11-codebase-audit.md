@@ -8578,3 +8578,21 @@ differently on the nightly path than the signal path - award flapping, the user-
 One integration break caught and fixed: the sweep-resume tests' recorder stub didn't accept the
 new kwarg - `**kwargs` added, and 9/9 achievement suites pass. The entry's earlier
 checkpoint/resume guard stays (it protects against *any* future slowness, not just this one).
+
+
+## Chunk 465 - five W002 schema gaps annotated; the E2EE eight filed honestly
+
+The 13 "unable to guess serializer" views published operations with no request or response shape.
+Five were action views whose inputs ride in the URL (reaction PUT/DELETE via the shared mixin -
+one annotation covers both reaction endpoints - wiki revert/restore, SpotGuessr round expire):
+`request=None` plus response declarations fixed them, 13 -> 8 unique errors. The remaining eight
+are the E2EE key-distribution views, deliberately NOT stamped with `OpenApiTypes.OBJECT`: their
+bodies are structured key bundles, and a native client generating E2EE payload types from
+`object` would be worse off than from nothing. Filed as its own work item with the list.
+
+The 35th scan artifact of the session on the way: `[A-Za-z]+` cannot match "E2EE" (it contains a
+digit), so a view-name extraction silently dropped all eight E2EE views and nearly scoped this
+chunk to 5 views believing that was the whole list. Same lesson as ever - the count (13 unique)
+disagreed with the extraction (5), and the discrepancy was the tell.
+
+Full suite running in background (task blnsvs5tv) over the session's 13 behavior-changing chunks.

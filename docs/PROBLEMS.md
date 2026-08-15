@@ -7631,3 +7631,11 @@ choice sets are referenced by import string so they follow the model. Remaining:
 "multiple names for one set" warnings (technically-correct schema), ~15 operationId collisions
 (list-vs-detail on one path prefix, resolved with numerals - stable but ugly), and the 13 W002
 serializer-inference errors, all pre-existing.
+
+**Update (chunk 465): 5 of the 13 W002s fixed** - the reaction mixin's PUT/DELETE, the wiki
+revert/restore POSTs and the SpotGuessr round-expire POST now declare `request=None` (their
+inputs ride in the URL) plus response shapes. The remaining 8 are the E2EE key-distribution
+views (`E2EEEnrollView`, `E2EEOwnKeysView`, rewrap/reset, conversation/group/partner key views),
+whose request/response bodies are structured key bundles - annotating them honestly means
+writing real serializers for those shapes, not `OpenApiTypes.OBJECT`; a client generating types
+for E2EE payloads deserves better than `object`. Filed as its own piece of work.

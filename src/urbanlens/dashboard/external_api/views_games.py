@@ -665,7 +665,7 @@ class SpotGuessrRoundExpireView(SpotGuessrSessionScopedView):
         "POST": frozenset({ApiKeyScope.GAMES_WRITE}),
     }
 
-    @extend_schema(responses={200: SpotGuessrRoundExpireResponseSerializer, 404: ErrorSerializer, 409: ErrorSerializer})
+    @extend_schema(request=None, responses={200: SpotGuessrRoundExpireResponseSerializer, 404: ErrorSerializer, 409: ErrorSerializer})
     def post(self, request: Request, session_id: int, round_id: int) -> Response:
         """Reveal the round if its timer has genuinely expired, and report its state."""
         session, refusal = self.resolve_solo_session(request, session_id)

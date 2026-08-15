@@ -42,6 +42,7 @@ from django.db import transaction
 from django.db.models import F
 from django.http import Http404
 from django.shortcuts import get_object_or_404
+from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, extend_schema_view
 from rest_framework.response import Response
 
@@ -286,6 +287,7 @@ class WikiRevertView(WikiApiView):
     }
 
     @extend_schema(responses={200: WikiDetailSerializer, 400: ErrorSerializer, 404: ErrorSerializer})
+    @extend_schema(request=None, responses={200: OpenApiTypes.OBJECT, 400: ErrorSerializer, 404: ErrorSerializer})
     def post(self, request: Request, location_slug: str, edit_id: int) -> Response:
         """Revert one edit, recording the reversal as a new edit."""
         location, wiki, profile = self.resolve(request, location_slug)
@@ -979,6 +981,7 @@ class WikiArticleRevisionRestoreView(WikiApiView):
     }
 
     @extend_schema(responses={200: ArticleDetailSerializer, 404: ErrorSerializer})
+    @extend_schema(request=None, responses={200: OpenApiTypes.OBJECT, 404: ErrorSerializer})
     def post(self, request: Request, location_slug: str, revision_id: int) -> Response:
         """Restore one revision's content, appending it as a new revision."""
         _location, wiki, profile = self.resolve(request, location_slug)
