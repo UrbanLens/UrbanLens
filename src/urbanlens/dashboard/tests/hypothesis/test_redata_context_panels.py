@@ -63,10 +63,15 @@ class UndergroundPanelTests(TestCase):
         assert ctx is not None
         self.assertIn("disused/abandoned", ctx["meta"][0]["value"])
 
-    def test_fetch_caches_results(self) -> None:
+    def test_fetch_caches_results_without_geometry(self) -> None:
+        """The panel renders no geometry, so a LineString per tunnel segment must not bloat the cache row."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-        envelope = LocationContextEnvelope(count=1, complete=True, results=[{"kind": "chamber", "is_enterable": True}])
+        envelope = LocationContextEnvelope(
+            count=1,
+            complete=True,
+            results=[{"kind": "chamber", "is_enterable": True, "geometry": {"type": "LineString", "coordinates": [[0, 0], [1, 1]]}}],
+        )
         with mock.patch("urbanlens.dashboard.services.apis.locations.redata_underground_gateway.RedataUndergroundGateway") as gateway_cls:
             gateway_cls.return_value.get_underground_structures.return_value = envelope
             self.source.fetch(self.pin)
@@ -74,6 +79,7 @@ class UndergroundPanelTests(TestCase):
         cached = LocationCache.get_fresh(self.pin.location, "redata_underground")
         assert cached is not None
         self.assertEqual(cached.data["structures"][0]["kind"], "chamber")
+        self.assertNotIn("geometry", cached.data["structures"][0])
 
 
 class BuildingPermitsPanelTests(TestCase):
@@ -168,6 +174,17 @@ class HydrologyPanelTests(TestCase):
         self.assertIn("Unnamed stream", ctx["meta"][0]["value"])
         self.assertIn("seasonally flooded", ctx["meta"][1]["value"])
 
+    def test_waterbody_pluralizes_as_waterbodies(self) -> None:
+        data = {
+            "features": [
+                {"kind": "waterbody", "name": "Pond A", "distance_meters": 10.0},
+                {"kind": "waterbody", "name": "Pond B", "distance_meters": 20.0},
+            ],
+        }
+        ctx = self.source.render_context(self.pin, data)
+        assert ctx is not None
+        self.assertIn("2 waterbodies within 1 km", ctx["chips"])
+
 
 class SiteConditionsPanelTests(TestCase):
     def setUp(self) -> None:
@@ -247,3 +264,7 @@ class AirQualityPanelTests(TestCase):
 
     def test_no_readings_hides_the_panel(self) -> None:
         self.assertIsNone(self.source.render_context(self.pin, {"readings": []}))
+
+    def test_a_modelled_row_with_no_numbers_hides_the_panel(self) -> None:
+        """A lone "modelled (CAMS)" chip with no facts would be an empty shell of a panel."""
+        self.assertIsNone(self.source.render_context(self.pin, {"readings": [{"source_kind": "modelled"}]}))

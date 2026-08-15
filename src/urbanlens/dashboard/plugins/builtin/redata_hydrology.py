@@ -65,7 +65,10 @@ class HydrologyPanelSource(CoordinateGatedInfoPanelSource):
         for feature in nearby:
             kind = feature.get("kind") or "stream"
             by_kind[kind] = by_kind.get(kind, 0) + 1
-        context["chips"] = [f"{count} {HYDROLOGY_KIND_LABELS.get(kind, kind).lower()}{'s' if count != 1 else ''} within 1 km" for kind, count in sorted(by_kind.items())]
+        plurals = {"stream": "streams", "waterbody": "waterbodies", "wetland": "wetlands"}
+        context["chips"] = [
+            f"{count} {(plurals.get(kind, kind + 's') if count != 1 else HYDROLOGY_KIND_LABELS.get(kind, kind).lower())} within 1 km" for kind, count in sorted(by_kind.items())
+        ]
 
         # Features with a measured distance first, nearest first; unmeasurable
         # rows (NWI wetlands - the source layer has no geometry) follow rather

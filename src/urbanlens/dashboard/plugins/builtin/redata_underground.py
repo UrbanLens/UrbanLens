@@ -43,7 +43,11 @@ class UndergroundPanelSource(CoordinateGatedInfoPanelSource):
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
         envelope = RedataUndergroundGateway().get_underground_structures(lat, lng, limit=25)
-        LocationCache.set(pin.location, self.cache_source, {"structures": envelope.results}, query_key=f"{lat:.5f},{lng:.5f}")
+        # The panel renders names/kinds/flags only; a LineString per tunnel
+        # segment would bloat the cache row for nothing. A future map-overlay
+        # consumer should fetch its own geometry rather than reading this cache.
+        structures = [{key: value for key, value in structure.items() if key != "geometry"} for structure in envelope.results]
+        LocationCache.set(pin.location, self.cache_source, {"structures": structures}, query_key=f"{lat:.5f},{lng:.5f}")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the structure list, enterable features first."""

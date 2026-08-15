@@ -66,7 +66,8 @@ class AirQualityPanelSource(CoordinateGatedInfoPanelSource):
             ozone = modelled.get("ozone")
             if ozone is not None:
                 facts.append({"icon": "wb_sunny", "text": f"Ozone {ozone:.0f} ug/m3"})
-            chips.append("modelled (CAMS)")
+            if facts:
+                chips.append("modelled (CAMS)")
         if sensors:
             # Deliberately a count, not values: volunteer sensors of unknown
             # calibration are not summarizable into one number.
