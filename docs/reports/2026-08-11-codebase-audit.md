@@ -8878,3 +8878,32 @@ friend_accepted wiring with the acceptance-flow restructure, and the four tests 
 Three consolidations green in one session (10,849 / 10,859 / 10,863) with zero failures across
 all three - the order-dependent trip-settings flake has not recurred since its one appearance,
 though its PROBLEMS entry rightly stands.
+
+
+## Chunk 482 - composite-prefix near-duplicates: 62 systematically derived, deliberately not dropped
+
+The entry estimated ~20; the static derivation (every multi-column `idxdb_*` whose first column
+is a ForeignKey keeping its automatic index) finds **62**. The redundant member of each pair is
+now the FK *auto*-index - chunk 462 removed the hand-declared singles, and a composite serves its
+prefix's lookups. But unlike chunk 462's byte-identical pairs, dropping these is a real trade:
+the auto-index is smaller (better for pure-FK scans under memory pressure), and whether it earns
+its write amplification depends on production scan statistics this checkout does not have.
+Recorded the full 62-row table (below, and pointed to from the PROBLEMS entry) with the per-pair
+decision procedure (`pg_stat_user_indexes.idx_scan` on a production-shaped database, then
+`db_index=False` per FK). Not a deferral for lack of nerve - a drop without scan data would be
+guessing with other people's read latency.
+
+<details>
+The 62 pairs, by model file (composite index → redundant FK prefix): achievements x2 (profile),
+aliases x4 (pin/wiki), article (article), auto_removals x2 (pin/wiki), location_cache (location),
+calendar_sync (profile), consensus x2 (session/wiki), custom_fields x4 (profile/field x3),
+device_scan (wiki), direct_messages x2 (recipient/sender), e2ee conversation_key (profile_low),
+email_log x2 (sender), facts (fact), group_chats x2 (profile/group), images x2
+(location/profile), relevance (profile), labels (profile), link_extraction (profile), markup
+(profile), notifications (profile), pin x3 (profile), pin_import_failures (profile),
+pin_merge_suggestions (profile), exposure (profile), pin_share x3 (from/to_profile),
+pin_suggestions (profile), pin_tombstone (profile), property_owner x2 (pin/location),
+push_device (profile), routes (profile), safety x3 (profile x2/checkin), spotguessr x2
+(session/image), trips (trip), trivia (session), undo (profile), visit_suggestions
+(suggested_to), visits x3 (pin), wiki_edit (wiki), wiki_stat_vote (wiki).
+</details>

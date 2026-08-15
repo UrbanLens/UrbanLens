@@ -5620,6 +5620,16 @@ redundant for lookups on `a`, and roughly 20 more of those exist - but dropping 
 call, because the narrower index is smaller and cheaper to scan. The 58 listed here are exact
 duplicates with no such trade-off.
 
+**Update (chunk 482, 2026-08-15): the composite-prefix set is systematically 62, not ~20** - the
+full table (file, composite name, columns, redundant FK prefix) is in the audit report's
+chunk-482 entry. After chunk 462 dropped the 58 exact duplicates, the redundant member of each
+remaining pair is the FK *auto*-index (the composite covers its prefix lookups); dropping one
+means `db_index=False` on that FK plus a migration. **Deliberately not dropped**: whether a given
+auto-index earns its write cost depends on production scan counts. Decision procedure per pair:
+check `pg_stat_user_indexes.idx_scan` for the auto-index on a production-shaped database; if the
+composite absorbs those scans (it will, for pure prefix lookups, unless the planner prefers the
+smaller index under memory pressure), set `db_index=False`. Judgement is the owner's, with data.
+
 Not fixed in this pass, deliberately. It means editing 25 model files plus a migration dropping 58
 indexes, and this audit's working tree already carries 219 changed files; a schema migration of that
 size buried inside it makes the whole changeset harder to review and riskier to land. It is also
