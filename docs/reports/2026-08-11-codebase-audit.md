@@ -9159,3 +9159,21 @@ So the window a hostile file exists in is: uploaded, stored, visible to its uplo
 is the correct shape - the alternative (blocking the POST on antivirus) traded availability for
 nothing, since the file is unreachable either way until it clears. Twelfth verified-safe area, no
 change needed.
+
+## Chunk 499 - undo coverage: every promise is backed; two confirmations were misdescribing reality
+
+Checked both directions. **Forward**: every user-facing "Undo History" promise (pins, detail
+pins/wikis, lists, community wikis, saved filters, check-ins) traces to a real `stash_for_undo`
+call - the two files my scan flagged as promising-without-staging turned out to be docstrings,
+one of them the line chunk 461 corrected. Eight handlers, no orphan promises.
+
+**Reverse**: 44 delete/destroy handlers live in modules with no undo staging, which is a question
+about product scope rather than a defect list (site-admin cost rows, calendar links, custom
+layers - none are user-authored content worth a restore path). Sampling the highest-loss ones
+surfaced the real finding: **two confirmation dialogs describe the wrong reality**. Deleting a
+photo is genuinely permanent (the file is unlinked from storage, no handler exists) but asked
+only "Delete this photo?"; deleting a saved filter *is* restorable but said nothing. Both now say
+what actually happens - the same class of fix as chunk 461's pin dialog, in both directions:
+under-promising is as wrong as over-promising when the user is deciding whether to click.
+
+257 undo/filter/gallery tests pass; tsc clean.

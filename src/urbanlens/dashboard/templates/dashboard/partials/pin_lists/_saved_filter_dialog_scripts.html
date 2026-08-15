@@ -49,7 +49,7 @@ Context:
 
     const SAVED_FILTER_DELETE_URL_TEMPLATE = "{% url 'saved_filters.delete' '00000000-0000-0000-0000-000000000000' %}";
     window.savedFilterDelete = function (uuid, name) {
-        if (!confirm('Delete the saved filter "' + name + '"?')) return;
+        if (!confirm('Delete the saved filter "' + name + '"?\n\nYou can restore it from Settings \u2192 Undo History.')) return;
         const url = SAVED_FILTER_DELETE_URL_TEMPLATE.replace('00000000-0000-0000-0000-000000000000', uuid);
         fetch(url, { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
             .then((r) => {

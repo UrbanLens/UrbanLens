@@ -379,7 +379,7 @@ Context:
 
   // -- Delete -----------------------------------------------------------------
   window.galleryDelete = function (imgId) {
-    if (!confirm('Delete this photo?')) return;
+    if (!confirm('Delete this photo?\n\nThis cannot be undone - the file is removed permanently.')) return;
     fetch(REPOSITION_BASE + imgId + '/', {
       method: 'DELETE',
       headers: { 'X-CSRFToken': CSRF_TOKEN },
