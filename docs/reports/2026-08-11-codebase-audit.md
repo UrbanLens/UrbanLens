@@ -8248,3 +8248,65 @@ that, and was current when checked in chunk 399; the roadmap section of `CLAUDE.
 Applied chunk 450's lesson deliberately here: **checked whether the mechanism existed before checking
 compliance with it.** Had I gone straight to "do gateways record costs", I would have found no
 per-gateway code and reported 55 integrations skipping a documented requirement.
+
+
+## Chunk 452 - roadmap TODOs vs reality; one real defect in the Nominatim fallback
+
+Checked the remaining `CLAUDE.md` roadmap entries against the codebase, per chunk 451's plan:
+
+- **AI support** ("a pluggable AI gateway ... exists - extend it"): accurate. 20 modules under
+  `services/ai/`; the entry acknowledges the infrastructure and asks for continuation.
+- **Hypothesis tests** ("wherever possible"): accurate as a continuation. 140 test files import
+  hypothesis; 138 use `@given`.
+- **Celery** ("keep moving remaining slow operations onto it"): fair. `tasks.py` (3,333 lines)
+  already covers the roadmap's own named examples - import/export jobs, geocoding backfill,
+  external-data prefetch, image processing. The 18 synchronous gateway calls remaining in
+  controllers are legitimately request-shaped (thumbnail proxies where the response *is* the
+  fetched bytes, search-as-you-type, a connectivity ping, upload-preview parsing).
+
+Along the way, verified a **sixth default-on subsystem**: `_RateLimitedSession._do_request`
+injects `timeout=(5, 30)` into every gateway call that doesn't set its own - with a comment
+naming exactly the hazard (requests has no default timeout). The metaclass auto-derives
+`service_key` for every Gateway subclass and overwrites even an explicit `None`, so no gateway
+can accidentally opt out; all 20 `__post_init__` overrides call the base (verified).
+
+AI cost logging is also sound: `vision.py` prices OpenAI calls from the response's own token
+counts and records via `log_api_call`; the Cloudflare vision/classifier paths and
+`assistant.py`/`article_safety.py`/`article_expansion.py` all log at the framework layer.
+
+**One real defect found**: `services/apis/locations/geocode_resolution.py`'s Nominatim fallback
+constructs geopy's `Nominatim(user_agent="geoapiExercises")` directly - the copy-pasted tutorial
+user agent that Nominatim's operators block, with geopy's 1s default timeout, bypassing the
+project's rate limiter entirely - while `NominatimGateway` (rate-limited, logged, properly
+identified) exists in the same directory. `controllers/settings.py:426` has the same
+direct-geopy bypass with a proper user agent. Both should route through `NominatimGateway`.
+**Not fixed this chunk** - the user redirected priorities mid-chunk; filed in the status section
+below.
+
+
+## STATUS - 2026-08-15 (audit paused here; user redirected to REData integration work)
+
+**Where this line of work left off**: 452 chunks complete, 148+ commits, full suite green
+(10,781 passing). Chunk 452 (above) closed out the roadmap-vs-reality check.
+
+**Open work for when the audit resumes** (ordered by value):
+
+1. **Fix the Nominatim fallback** (chunk 452, above): route `geocode_resolution.py` and
+   `controllers/settings.py:426` through `NominatimGateway`; kill the `geoapiExercises` user
+   agent. TDD: assert the fallback path goes through the rate-limited session.
+2. **Retrofit remaining PROBLEMS.md citations** to name their entries - 6 of 26 done, 8 dangling
+   identified (chunk list in the citation-audit table in PROBLEMS.md).
+3. **`SECRET_KEY` startup guard**: an `ImproperlyConfigured` when `SECRET_KEY` is unset outside
+   local environments (owed since the encryption chunks; low risk, small).
+4. **Update the `CLAUDE.md` roadmap**: cost tracking is built (chunk 451); reword the entry or
+   point it at `docs/FEATURES.md`.
+
+**Blocked on user decisions** (do not act without input): pin detach behaviour; games feature
+gate; backup restore path; chat rate limiting; fail-open policy; API colour rejection; whether
+to keep the nine `localdate` conversions; the dev-environment remediation
+(snapshot -> migrate -> restart, in that order - Celery workers don't autoreload).
+
+**Method notes that must survive the pause**: read the matches before trusting any count (31
+artifacts, all skewed toward false alarm); verify the mechanism exists before checking
+compliance with it; six default-on subsystems now verified (authorization, CSRF, wiki access,
+rate limiting, cost logging, timeouts).
