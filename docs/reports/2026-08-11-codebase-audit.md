@@ -8957,3 +8957,19 @@ CLAUDE.md as the authority on what is and isn't encrypted, so rollback semantics
 "full dataset" (which pre-469 was an over-claim). Everything else checked current: FEATURES.md
 was updated in-stride during the REData rounds, NOTES.md gained its two sections when the
 content landed, and the CLAUDE.md gotchas remain accurate.
+
+
+## Chunk 487 - the three new export kinds import back; the archive round-trips
+
+Importers for safety, map annotations, and saved searches, mirroring the profile importer. The
+design decisions the tests pin: **live-status safety check-ins never import** - restoring a
+`scheduled`/`overdue` plan would re-arm the reminder and escalation sweeps against a moment
+that has passed, and an archive restore must never page someone's emergency contacts (concluded
+check-ins import as history, contacts as unnotified snapshots, messages unattributed - the
+archive stores display names, not identities). Overlays attach only through `pin_uuid_map` and
+are skipped rather than orphaned when the parent pin is absent (the export gained
+`parent_pin_uuid` to make this possible at all - a gap the importer design surfaced). Saved
+filters defer to the user's existing same-named filter (they may have refined it since
+exporting); routes rebuild their LineString from GeoJSON with source-choice validation.
+Everything is idempotent under re-import. 11/11 green first try; FEATURES.md's "export-only so
+far" note replaced with the real contract.

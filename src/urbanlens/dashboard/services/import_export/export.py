@@ -434,10 +434,11 @@ def _export_map_annotations(profile: Any, temp_dir: str, *, base_url: str = "") 
         )
 
     overlays = []
-    for overlay in MapImageOverlay.objects.filter(profile=profile).order_by("created"):
+    for overlay in MapImageOverlay.objects.filter(profile=profile).select_related("parent_pin").order_by("created"):
         overlays.append(
             {
                 "uuid": str(overlay.uuid),
+                "parent_pin_uuid": str(overlay.parent_pin.uuid) if overlay.parent_pin_id and overlay.parent_pin else None,
                 "name": overlay.name or "",
                 "image_url": overlay.source_url,
                 "tile_url_template": overlay.tile_url_template,

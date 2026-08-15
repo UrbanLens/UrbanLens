@@ -1659,6 +1659,198 @@ def _import_direct_messages(
 
 # -- Dispatch table -------------------------------------------------------------
 
+def _import_safety(
+    profile: Any,
+    data_dir: str,
+    result: ImportResult,
+    *,
+    pin_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
+) -> None:
+    """Import concluded safety check-ins from ``safety.json`` as history.
+
+    Only terminal-status check-ins (found_safe / cancelled / checked_in) are
+    recreated: importing a ``scheduled``/``awaiting_checkin``/``overdue`` row
+    would re-arm the reminder/escalation sweeps against a plan whose moment
+    has passed - an archive restore must never page someone's emergency
+    contacts. Contacts are recreated as name/email snapshots (each gets a
+    fresh, unused portal token; the portal is only ever linked from
+    notifications, which history never sends). Chat messages import as
+    unattributed history - the archive stores display names, not identities.
+    Dedup is by (title, checkin_by): re-importing the same archive is a no-op.
+    """
+    from django.utils.dateparse import parse_datetime
+
+    from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinMessage, SafetyCheckinStatus
+
+    rows = _read_json(data_dir, "safety.json")
+    if not rows:
+        return
+
+    terminal = set(SafetyCheckinStatus.terminal_statuses()) if hasattr(SafetyCheckinStatus, "terminal_statuses") else {SafetyCheckinStatus.CHECKED_IN, SafetyCheckinStatus.FOUND_SAFE, SafetyCheckinStatus.CANCELLED}
+    for row in rows:
+        status = row.get("status") or ""
+        if status not in terminal:
+            continue
+        checkin_by = parse_datetime(row.get("checkin_by") or "")
+        if checkin_by is None:
+            continue
+        if SafetyCheckin.objects.filter(profile=profile, title=row.get("title") or "", checkin_by=checkin_by).exists():
+            continue
+        checkin = SafetyCheckin.objects.create(
+            profile=profile,
+            title=(row.get("title") or "")[:200],
+            plan_details=row.get("plan_details") or "",
+            contact_message=row.get("contact_message") or "",
+            checkin_by=checkin_by,
+            status=status,
+            destination_latitude=row.get("destination_latitude"),
+            destination_longitude=row.get("destination_longitude"),
+        )
+        for contact in row.get("contacts") or []:
+            SafetyCheckinContact.objects.create(checkin=checkin, name=(contact.get("name") or "")[:150], email=contact.get("email") or None)
+        for message in row.get("messages") or []:
+            body = (message.get("body") or "").strip()
+            if body:
+                SafetyCheckinMessage.objects.create(checkin=checkin, body=body)
+
+
+def _import_map_annotations(
+    profile: Any,
+    data_dir: str,
+    result: ImportResult,
+    *,
+    pin_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
+) -> None:
+    """Import markup maps (with their shapes) and pin-parented image overlays.
+
+    Markup maps dedupe by (profile, title, created-date irrelevance aside) -
+    matched on title + shape count, the closest thing to identity the archive
+    carries. Overlays attach through ``pin_uuid_map`` (their parent pin must
+    have imported in the same run or already exist); an overlay whose parent
+    is absent is skipped rather than orphaned - the model requires a parent
+    to render anywhere. External image URLs are re-validated like the manual
+    add path.
+    """
+    from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
+    from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    data = _read_json(data_dir, "map_annotations.json")
+    if not data:
+        return
+
+    for row in data.get("markup_maps") or []:
+        title = (row.get("title") or "")[:200]
+        markups = row.get("markups") or []
+        if MarkupMap.objects.filter(profile=profile, title=title).exists():
+            continue
+        markup_map = MarkupMap.objects.create(
+            profile=profile,
+            title=title,
+            center_latitude=row.get("center_latitude"),
+            center_longitude=row.get("center_longitude"),
+            zoom=row.get("zoom"),
+            pin_id=pin_uuid_map.get(row.get("pin_uuid") or ""),
+        )
+        for markup in markups:
+            geometry = markup.get("geometry")
+            markup_type = markup.get("markup_type") or ""
+            if not geometry or not markup_type:
+                continue
+            PinMarkup.objects.create(parent_map=markup_map, profile=profile, markup_type=markup_type, geometry=geometry, label=(markup.get("label") or "")[:500])
+
+    for row in data.get("image_overlays") or []:
+        pin_id = pin_uuid_map.get(row.get("parent_pin_uuid") or "")
+        if pin_id is None:
+            continue
+        corners = row.get("corners") or []
+        if len(corners) != 4:
+            continue
+        name = (row.get("name") or "")[:100]
+        if MapImageOverlay.objects.filter(profile=profile, parent_pin_id=pin_id, name=name).exists():
+            continue
+        overlay = MapImageOverlay(
+            profile=profile,
+            parent_pin=Pin.objects.get(pk=pin_id),
+            name=name,
+            image_url=(row.get("image_url") or "")[:1000],
+            tile_url_template=(row.get("tile_url_template") or "")[:500],
+            opacity=int(row.get("opacity") or 70),
+        )
+        overlay.set_corners(corners)
+        overlay.save()
+
+
+def _import_saved_searches(
+    profile: Any,
+    data_dir: str,
+    result: ImportResult,
+    *,
+    pin_uuid_map: dict[str, int],
+    label_uuid_map: dict[str, int],
+    report_progress: ProgressReporter | None = None,
+) -> None:
+    """Import saved filters and routes from ``saved_searches.json``.
+
+    Saved filters dedupe on the model's own (profile, name) uniqueness -
+    an existing filter of the same name wins over the archive's copy (the
+    user may have refined it since exporting). Routes dedupe by
+    (name, started_at); the path rebuilds from GeoJSON.
+    """
+    from django.contrib.gis.geos import LineString
+    from django.utils.dateparse import parse_datetime
+
+    from urbanlens.dashboard.models.routes.model import Route
+    from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+
+    data = _read_json(data_dir, "saved_searches.json")
+    if not data:
+        return
+
+    for row in data.get("saved_filters") or []:
+        name = (row.get("name") or "")[:100]
+        if not name or SavedFilter.objects.filter(profile=profile, name__iexact=name).exists():
+            continue
+        SavedFilter.objects.create(
+            profile=profile,
+            name=name,
+            icon=(row.get("icon") or "bookmark")[:64],
+            color=(row.get("color") or "")[:20],
+            opacity=int(row.get("opacity") or 100),
+            criteria=row.get("criteria") or {},
+            order=int(row.get("order") or 0),
+        )
+
+    for row in data.get("routes") or []:
+        path_geojson = row.get("path") or {}
+        coordinates = path_geojson.get("coordinates") or []
+        if len(coordinates) < 2:
+            continue
+        name = (row.get("name") or "")[:255]
+        source = row.get("source") or ""
+        from urbanlens.dashboard.models.routes.model import RouteSource
+
+        if source not in RouteSource.values:
+            continue
+        started_at = parse_datetime(row.get("started_at") or "")
+        if Route.objects.filter(profile=profile, name=name, started_at=started_at).exists():
+            continue
+        Route.objects.create(
+            profile=profile,
+            name=name,
+            source=source,
+            source_filename=(row.get("source_filename") or "")[:255],
+            path=LineString(coordinates, srid=4326),
+            distance_meters=float(row.get("distance_meters") or 0.0),
+            started_at=started_at,
+            ended_at=parse_datetime(row.get("ended_at") or ""),
+        )
+
+
 def _import_profile(
     profile: Any,
     data_dir: str,
@@ -1729,7 +1921,7 @@ def _import_profile(
             SocialLink.objects.create(profile=profile, platform=platform, handle=handle)
 
 
-_IMPORT_ORDER = ["labels", "pins", "custom_fields", "pin_lists", "visit_history", "comments", "photos", "trips", "direct_messages", "connections", "profile", "settings"]
+_IMPORT_ORDER = ["labels", "pins", "custom_fields", "pin_lists", "visit_history", "comments", "photos", "trips", "direct_messages", "connections", "safety", "map_annotations", "saved_searches", "profile", "settings"]
 
 _IMPORTERS: dict[str, Any] = {
     "labels": _import_labels,
@@ -1742,11 +1934,17 @@ _IMPORTERS: dict[str, Any] = {
     "trips": _import_trips,
     "direct_messages": _import_direct_messages,
     "connections": _import_connections,
+    "safety": _import_safety,
+    "map_annotations": _import_map_annotations,
+    "saved_searches": _import_saved_searches,
     "profile": _import_profile,
     "settings": _import_settings,
 }
 
 _STEP_MESSAGES = {
+    "safety": "Importing safety check-in history...",
+    "map_annotations": "Importing map annotations...",
+    "saved_searches": "Importing saved searches and routes...",
     "profile": "Importing profile details...",
     "labels": "Importing labels...",
     "pins": "Importing pins and locations...",
