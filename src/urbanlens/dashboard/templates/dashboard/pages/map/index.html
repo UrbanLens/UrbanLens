@@ -454,7 +454,7 @@
     <div id="map-body"></div>
 
 </div>
-<dialog id="add-pin-dialog" class="add-pin-dialog ul-dialog" data-closefn="closeAddPinDialog">
+<dialog id="add-pin-dialog" class="add-pin-dialog ul-dialog" data-closefn="closeAddPinDialog" aria-label="Add pin">
     <div class="apdlg-header">
         <h2><i class="material-icons" style="font-size:1.1rem;vertical-align:-.15em;margin-right:.35rem;">add_location</i>Add Pin</h2>
         <button class="btn-close" onclick="closeAddPinDialog()" aria-label="Close">x</button>
@@ -5797,7 +5797,7 @@
 {% include "dashboard/partials/ui/_dual_range_slider_script.html" %}
 
 {# -- Location conflict picker dialog ------------------------------------------ #}
-<dialog id="loc-conflict-dialog" class="loc-conflict-dialog ul-dialog">
+<dialog id="loc-conflict-dialog" class="loc-conflict-dialog ul-dialog" aria-label="Multiple locations match">
     <div class="dialog-header">
         <i class="material-icons" style="font-size:1.1rem;color:#f59e0b">warning_amber</i>
         <span>Multiple locations match this area</span>

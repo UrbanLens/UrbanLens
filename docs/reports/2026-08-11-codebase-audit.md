@@ -9377,3 +9377,23 @@ control the previous runs lacked and the condition the chunk-509 fix now makes u
 Seven consolidations this session: 10,849 / 10,859 / 10,863 / 10,865(2 resolved) / 10,873 /
 10,875 / 10,878. Every chunk from 453 to 509 covered by at least one green full-suite run;
 chunk 510's dialog labels are in a targeted rendering batch running now.
+
+## Chunk 512 - dialog naming finished: 77 of 82, and the last five are honest exclusions
+
+Chunk 510's twelve labels validated (993 rendering tests). Then finished the tail by
+distinguishing *contentless* from *unnameable*: eleven "shells" carry author-written descriptive
+ids (`pin-wiki-create-dialog`, `building-import-dialog`, `markup-map-share-dialog`, ...), and
+naming from those is inference from the feature author's own vocabulary rather than invention -
+the objection I raised in chunk 510 applied to guessing from *nothing*, not from a name the
+author chose. Nineteen more named that way, including both remaining photo lightboxes, the
+SpotGuessr settings dialog and the link-add dialog.
+
+**77 of 82 named** (0 at chunk 501). The final five: two are `<dialog>` tags *inside*
+`{% comment %}` blocks - documentation, not markup, and correctly left alone - and three are
+genuinely anonymous shells whose id says nothing (`index.html:5207`,
+`_saved_filter_dialog_scripts.html:360`, `_photo_lightbox.html:132`). Those want their author,
+not a plausible guess.
+
+Also recorded for the a11y thread as a whole: the pattern that worked was always *find the
+existing source of truth* - the shared header include (chunk 501), the pre-existing title id
+(502), the author's own dialog id (512) - rather than writing new copy per element.

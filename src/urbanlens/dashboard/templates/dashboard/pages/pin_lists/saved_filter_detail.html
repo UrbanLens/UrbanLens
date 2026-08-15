@@ -78,7 +78,7 @@
 {# below) sends the user back to the Filters tab after either action, matching #}
 {# how the dialog's own Save/Delete already behave everywhere else on the site. #}
 {% url 'organize.index' as organize_url %}
-<dialog id="saved-filter-form-dialog" hidden data-success-redirect="{{ organize_url }}?tab=filters"></dialog>
+<dialog id="saved-filter-form-dialog" hidden data-success-redirect="{{ organize_url }}?tab=filters" aria-label="Saved filter"></dialog>
 {% include "dashboard/partials/pin_lists/_saved_filter_dialog_scripts.html" %}
 <script>
 (function () {
