@@ -78,7 +78,10 @@ built, and `docs/NOTES.md` for non-obvious behavior behind these features.
   Shapefile, WKT/WKB, KML/KMZ; AI-assisted import from freeform documents/notes
 - Targeted export of a pin selection (main map's multi-select toolbar) or a whole saved list
   (a list's "more actions" menu) as GeoJSON, KML, GPX, or CSV
-- Data export/import of a user's full dataset, plus scheduled/on-demand backups
+- Data export/import of a user's full dataset, plus scheduled/on-demand backups. The archive also
+  carries safety check-ins, map annotations, saved searches/routes and pin aliases (export-only so
+  far) and the profile's contact/social fields (which do round-trip - except secondary emails,
+  whose verification state must not import)
 
 ## Public Locations
 

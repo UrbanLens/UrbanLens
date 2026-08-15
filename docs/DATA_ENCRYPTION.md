@@ -184,3 +184,12 @@ that caught it lived in `test_global_search_engine.py`, which nothing about the 
 have pointed you to. Note also that a negative-assertion test (`assertEqual(results, [])`)
 still passes when the feature is entirely dead — passing tests around the field are not
 sufficient evidence on their own.
+
+## Migration rollbacks decrypt (2026-08-15)
+
+The two in-place encryption migrations (`0007` tokens, `0039` contact/note fields) carry real
+decrypting reverses: `migrate` below either one restores plaintext for every Fernet-shaped value
+(recognised by the `gAAAA` prefix; never-encrypted rows pass through untouched) and **aborts the
+whole rollback** if any value cannot be decrypted under the configured keys - refusing beats
+silently writing garbage where pre-migration code expects plaintext. Before 2026-08-15 both
+reverses were no-ops, which made a rollback succeed while corrupting every encrypted column.

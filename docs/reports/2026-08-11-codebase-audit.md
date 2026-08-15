@@ -8945,3 +8945,15 @@ The 6-views/3-markers count discrepancy that started this check resolved to inhe
 gaps - read before concluding, as ever. One permission string, no variants, every mixin also
 setting `raise_exception` with the anonymous-redirect handler. The admin surface joins the
 gated-by-inheritance pattern chunk 439 documented for the app at large.
+
+
+## Chunk 486 - the anti-stale-docs pass on our own output
+
+Applied chunk 451's standard to this session's changes. Two gaps found and closed:
+`DATA_ENCRYPTION.md` now documents that the encryption migrations' rollbacks decrypt in place
+and abort on an undecryptable value (behavior chunks 459-460 created; the doc is named by
+CLAUDE.md as the authority on what is and isn't encrypted, so rollback semantics belong there);
+`FEATURES.md`'s export line now names the chunk-469 coverage rather than generically claiming
+"full dataset" (which pre-469 was an over-claim). Everything else checked current: FEATURES.md
+was updated in-stride during the REData rounds, NOTES.md gained its two sections when the
+content landed, and the CLAUDE.md gotchas remain accurate.
