@@ -7582,3 +7582,16 @@ the test client keeps state across generated examples; suspect order-dependent s
 earlier module rather than a product bug. Next full-suite run should capture full tracebacks for
 this module (`-q` plus an un-truncated tail, or `--tb=long -k` on rerun) before anyone chases the
 product code.
+
+
+## OPEN 2026-08-15: migration 0007's token encryption has the same noop reverse 0039 had
+
+The migrations 0026-0044 irreversibility audit (chunk 459) fixed 0039's in-place field
+encryption to carry a real decrypting reverse - `RunPython.noop` there meant `migrate dashboard
+0038` *succeeded* while leaving ciphertext where pre-0039 code expects plaintext. Migration
+`0007_pinshare_bundled_with_markup_map_removed_flags` encrypts credential tokens
+(`encrypt_existing_tokens`) with the same noop-reverse pattern and has the same silent-corruption
+rollback. Lower urgency only because rolling back to <0007 is far less plausible than to 0038,
+but the fix is mechanical: copy 0039's `_decrypt_column`/shared-columns-constant shape (the
+`gAAAA` Fernet-prefix discriminator handles pre-encryption plaintext rows). Credential fields
+fail hard rather than soft, so the raising behavior on an undecryptable value is already right.

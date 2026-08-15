@@ -8470,3 +8470,23 @@ The chunk-455 full run (1h31m, 10,838 passed / 1,484 subtests / 1 xfail) surface
 Also a lesson repeated from chunk 316: the background task reported **exit code 0** because the
 suite was piped through `tail` - the notification's status line is the pipe's, never pytest's.
 Reading the output remains the only honest check.
+
+
+## Chunk 459 - migrations 0026-0044: one silent-corruption rollback, fixed
+
+Classified all 19 pending-in-dev migrations. Seventeen are schema-only or carry an acceptable
+reverse (0027's places backfill has a real `unbackfill`; 0033's and 0042's noops reverse into a
+dropped column / an inherently unmergeable merge). The finding was **0039**: in-place field
+encryption with `RunPython.noop` as its reverse, meaning `migrate dashboard 0038` would succeed
+while leaving Fernet ciphertext in thirteen columns the pre-0039 code reads as plaintext - a
+rollback that corrupts silently instead of failing loudly.
+
+Fixed with a real decrypting reverse: a shared `_ENCRYPTED_COLUMNS` constant (forward and reverse
+can no longer drift), a `LIKE 'gAAAA%'` discriminator so plaintext rows the forward never touched
+pass through untouched (Fernet tokens always begin with the 0x80 version byte, base64'd), and a
+raising - therefore transaction-rolling-back - failure when no configured key can decrypt a
+value, rather than writing garbage. Three tests pin the discriminator, the round-trip, and the
+wiring (editing an applied migration's `reverse_code` is safe - it only runs on unapply).
+
+Migration 0007 encrypts credential tokens with the same noop-reverse pattern; filed in
+PROBLEMS.md with the 0039 fix named as the template rather than rushed here.

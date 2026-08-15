@@ -26,21 +26,61 @@ def _encrypt_column(cursor, table: str, column: str) -> None:
         cursor.execute(f"UPDATE {table} SET {column} = %s WHERE id = %s", [ciphertext, pk])  # noqa: S608 # nosec B608 - table/column are hardcoded constants below, not user input
 
 
+#: Every (table, column) the forward pass encrypts - shared with the reverse
+#: so the two can never drift.
+_ENCRYPTED_COLUMNS = (
+    ("dashboard_safety_contact_defaults", "email"),
+    ("dashboard_google_calendar_accounts", "google_email"),
+    ("dashboard_google_photos_accounts", "google_email"),
+    ("dashboard_profiles", "area"),
+    ("dashboard_profiles", "bio"),
+    ("dashboard_profiles", "discord_username"),
+    ("dashboard_profiles", "matrix_handle"),
+    ("dashboard_profiles", "phone_number"),
+    ("dashboard_profiles", "signal_username"),
+    ("dashboard_profiles", "telegram_username"),
+    ("dashboard_profiles", "whatsapp_number"),
+    ("dashboard_profileemail", "email"),
+    ("dashboard_profilenote", "content"),
+)
+
+
 def encrypt_existing_contact_and_note_fields(apps, schema_editor) -> None:
     with schema_editor.connection.cursor() as cursor:
-        _encrypt_column(cursor, "dashboard_safety_contact_defaults", "email")
-        _encrypt_column(cursor, "dashboard_google_calendar_accounts", "google_email")
-        _encrypt_column(cursor, "dashboard_google_photos_accounts", "google_email")
-        _encrypt_column(cursor, "dashboard_profiles", "area")
-        _encrypt_column(cursor, "dashboard_profiles", "bio")
-        _encrypt_column(cursor, "dashboard_profiles", "discord_username")
-        _encrypt_column(cursor, "dashboard_profiles", "matrix_handle")
-        _encrypt_column(cursor, "dashboard_profiles", "phone_number")
-        _encrypt_column(cursor, "dashboard_profiles", "signal_username")
-        _encrypt_column(cursor, "dashboard_profiles", "telegram_username")
-        _encrypt_column(cursor, "dashboard_profiles", "whatsapp_number")
-        _encrypt_column(cursor, "dashboard_profileemail", "email")
-        _encrypt_column(cursor, "dashboard_profilenote", "content")
+        for table, column in _ENCRYPTED_COLUMNS:
+            _encrypt_column(cursor, table, column)
+
+
+def _decrypt_column(cursor, table: str, column: str) -> None:
+    """Decrypt every Fernet-encrypted value in ``table.column`` in place.
+
+    A value not shaped like a Fernet token (they always begin ``gAAAA`` - a
+    version byte of 0x80, base64'd) is left untouched: it was written before
+    the forward pass ran, or the forward pass never reached it, and
+    re-processing it would corrupt real plaintext. A token-shaped value that
+    no configured key can decrypt raises, aborting (and rolling back) the
+    reverse rather than writing garbage where the pre-0039 code expects
+    plaintext.
+    """
+    cursor.execute(f"SELECT id, {column} FROM {table} WHERE {column} LIKE 'gAAAA%%'")  # noqa: S608 # nosec B608 - table/column are hardcoded constants above, not user input
+    rows = cursor.fetchall()
+    for pk, ciphertext in rows:
+        plaintext = _field.from_db_value(ciphertext, None, None)
+        cursor.execute(f"UPDATE {table} SET {column} = %s WHERE id = %s", [plaintext, pk])  # noqa: S608 # nosec B608 - table/column are hardcoded constants above, not user input
+
+
+def decrypt_existing_contact_and_note_fields(apps, schema_editor) -> None:
+    """Real reverse for the in-place encryption above.
+
+    ``RunPython.noop`` here would let ``migrate dashboard 0038`` *succeed*
+    while leaving ciphertext in columns the pre-0039 code reads as plaintext -
+    a silent-corruption rollback. Decrypting is symmetric and cheap, so the
+    reverse does it properly (and raises, wholesale, if any value cannot be
+    decrypted under the configured keys).
+    """
+    with schema_editor.connection.cursor() as cursor:
+        for table, column in _ENCRYPTED_COLUMNS:
+            _decrypt_column(cursor, table, column)
 
 
 class Migration(migrations.Migration):
@@ -153,6 +193,6 @@ class Migration(migrations.Migration):
         ),
         migrations.RunPython(
             code=encrypt_existing_contact_and_note_fields,
-            reverse_code=migrations.RunPython.noop,
+            reverse_code=decrypt_existing_contact_and_note_fields,
         ),
     ]
