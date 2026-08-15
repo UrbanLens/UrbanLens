@@ -8150,3 +8150,25 @@ authenticated, and four of the five by a mechanism rather than a convention.
 Also worth noting where this connects: pre-compaction, this audit found the consumers' scope-check
 ordering was *deliberate* - checking scope before object lookup to avoid a timing oracle. So these
 seven are not merely authenticated; the order in which they authenticate was reasoned about too.
+
+
+## Chunk 448 - the plugin system's trust and failure model
+
+43 plugins load at startup, so the registry is worth characterising. Two properties:
+
+- **Discovery is by `importlib.metadata.entry_points`** plus bundled builtins - so any installed
+  Python package can contribute a plugin. There is no sandboxing, and there could not usefully be:
+  an installed package already runs in-process with full access. This is the same trust model as
+  pytest plugins or Django apps, and **installing a plugin package is equivalent to granting full
+  application access** - worth stating explicitly since a "plugin" often implies isolation.
+- **Failure is contained**: each `register()` runs inside `try/except Exception` that logs with
+  `logger.exception` and continues to the next plugin. One broken plugin degrades its own feature
+  rather than preventing startup - correct for a system where a third party supplies the code.
+
+**Not a defect, and I am not filing one.** The one question I could not answer in the remaining scope
+is whether a plugin that fails *midway* through `register()` leaves partial contributions behind -
+the exception is caught around the whole call, so a plugin that registered two panels and then raised
+would keep those two. Whether that matters depends on how contributions are consumed downstream.
+
+Recording it as a characterisation rather than a finding, because "no sandboxing" reads as a
+vulnerability and is not one - it is the only workable model for in-process Python extensions.
