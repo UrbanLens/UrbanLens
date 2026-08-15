@@ -495,3 +495,31 @@ Two things that look like they could be simplified but can't:
 `?preview=1` is not involved here: an overlay's image must be something a browser renders directly,
 which is why the external-URL path rejects PDFs/TIFFs and tells the user to upload instead (the
 upload path runs through the normal media pipeline).
+
+## Decisions from the 2026-07-23 session (reconstructed 2026-08-15)
+
+Six code comments cite "decision 2026-07-23, docs/PROBLEMS.md" for decisions that were never in
+that file - the originals lived in `docs/notes/ai/`, which is gitignored, so no fresh checkout can
+read them (see PROBLEMS.md, "`completed.md` is referenced from three places"). What follows is
+**reconstructed from the citing comments' own one-line summaries** - the reasoning as recorded at
+the call sites, promoted to a tracked file so the citations point at something reachable. If the
+original notes surface, replace this section with them.
+
+- **Per-recipient payloads** (`services/messaging/direct_messages.py`,
+  `services/messaging/group_chats.py`): a live incoming message is serialized once *per viewer*,
+  resolving sender identity through the viewer's own masking (and, for DMs, image-consent) rules -
+  never one shared payload for all recipients, which had leaked names the server-rendered thread
+  would mask.
+- **Opaque identifiers** (`services/security/e2ee.py`): the E2EE group key-rotation API keys its
+  payload by a deterministic per-(group, member) HMAC token rather than profile slugs, which had
+  handed every member the real slug of masked members (the PR #111 finding). Group-scoped so tokens
+  cannot correlate a member across groups.
+- **Wire them all** (`services/notifications/notification_text_alerts.py`,
+  `models/notifications/signals.py`): every `<type>_whatsapp`/`<type>_sms` preference toggle
+  delivers, via central `post_save` wiring - previously only safety check-ins and DMs read their
+  toggles and every other stored preference silently did nothing.
+- **Option (a): a validation endpoint** (`controllers/account.py`): E2EE signup/password flows
+  validate the raw password server-side through a dedicated rate-limited endpoint (option a),
+  rather than duplicating every configured validator's rules in TypeScript and keeping them in
+  sync by hand (option b). The raw password crosses HTTPS exactly once, is validated in memory,
+  and is never stored or logged.

@@ -103,8 +103,8 @@ def group_member_token(group_uuid: Any, profile_id: int) -> str:
 
     The rotation payload used to be keyed by profile slugs, which handed every
     group member the real slug of members whose ``profile_visibility`` masks
-    them elsewhere (docs/PROBLEMS.md PR #111 finding; decision 2026-07-23:
-    opaque identifiers). This token is deterministic (the client round-trips
+    them elsewhere (the PR #111 finding; decision 2026-07-23: "Opaque
+    identifiers" in docs/NOTES.md). This token is deterministic (the client round-trips
     it between GET and POST, and the server just recomputes the mapping -
     nothing is decoded), scoped to one group by the uuid in the HMAC input (so
     tokens can't correlate a member across groups), and reveals nothing about

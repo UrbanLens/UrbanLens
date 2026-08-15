@@ -7273,6 +7273,12 @@ answer changes whether this is a stale pointer or an unfiled gap.
 
 ## Note 2026-08-14: `account.py` cites an unfiled decision about raw-password validation
 
+**Resolved (chunk 454, 2026-08-15): the decision family now has a tracked record.** The four
+2026-07-23 decisions (per-recipient payloads, opaque identifiers, wire them all, option (a))
+were reconstructed from the citing comments' own summaries into "Decisions from the 2026-07-23
+session (reconstructed)" in `docs/NOTES.md` - explicitly labeled a reconstruction - and all six
+citing comments now point there instead of at this file.
+
 `controllers/account.py` (~line 1136) documents a security-sensitive choice:
 
 > The raw password crosses HTTPS exactly once here, is validated in memory, and is never stored or
@@ -7295,6 +7301,12 @@ alternatives, including the ones not named here.
 
 
 ## Note 2026-08-14: the "wire them all" WhatsApp/SMS decision is cited twice and filed nowhere
+
+**Resolved (chunk 454, 2026-08-15): the decision family now has a tracked record.** The four
+2026-07-23 decisions (per-recipient payloads, opaque identifiers, wire them all, option (a))
+were reconstructed from the citing comments' own summaries into "Decisions from the 2026-07-23
+session (reconstructed)" in `docs/NOTES.md` - explicitly labeled a reconstruction - and all six
+citing comments now point there instead of at this file.
 
 Two files cite a decision that is not in this document:
 

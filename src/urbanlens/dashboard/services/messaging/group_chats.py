@@ -328,8 +328,8 @@ def serialize_group_message(message: GroupMessage, *, viewer: Profile | None = N
         viewer: The member this payload will be delivered to. When given, the
             sender's name is resolved through ``resolve_visible_identity`` so
             a live incoming message never reveals a name the server-rendered
-            thread would mask for that viewer (docs/PROBLEMS.md; decision
-            2026-07-23: per-recipient payloads). None keeps the raw name -
+            thread would mask for that viewer (decision 2026-07-23:
+            "Per-recipient payloads" in docs/NOTES.md). None keeps the raw name -
             correct only for the sender's own sessions.
         has_share: Whether `message` has any attached `GroupMessageShare` rows.
             Callers serializing the same message once per group member (e.g.

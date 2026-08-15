@@ -8341,3 +8341,34 @@ mock-based test would see. Amusing wrinkle: the scan's first red run caught *my 
 naming the banned literal; the docstring now describes it without spelling it.
 
 geopy itself stays a dependency - `geopy.distance.geodesic` is real use in the import pipeline.
+
+
+## Chunk 454 - STATUS items 2-4: the dangling decisions get a tracked record; the SECRET_KEY guard; the roadmap unstales
+
+**Item 2 (the consequential half).** The six comments citing "decision 2026-07-23,
+docs/PROBLEMS.md" pointed at records that were never in that file - the originals live in
+gitignored `docs/notes/ai/`, unreachable from any fresh checkout (chunks 388-389). The fix the
+audit had already identified: the four decisions (per-recipient payloads, opaque identifiers,
+wire them all, option (a)) are now **reconstructed from the citing comments' own summaries** into
+"Decisions from the 2026-07-23 session (reconstructed)" in `docs/NOTES.md`, explicitly labeled a
+reconstruction. All six comments repointed; `wikipedia.py`'s pointer at gitignored
+`completed.md` dropped; both PROBLEMS.md notes marked resolved. The remaining bare
+`see docs/PROBLEMS.md` citations (true but unnamed) stay on the backlog - chunk 372 established
+each is an individual judgement.
+
+**Item 3.** `settings/base.py` now raises `ImproperlyConfigured` at startup when
+`DJANGO_SECRET_KEY` is unset outside `local`. Without it, each process invents a random key:
+sessions/CSRF break across workers and - the real hazard - `EncryptedTextField` derives its key
+from `SECRET_KEY`, so one process's writes are unreadable to every other and to every restart.
+Startup failure turns silent data corruption into a configuration error. Tested via subprocess
+(the in-process settings are already loaded), with `DJANGO_SECRET_KEY=""` rather than popped so
+`load_dotenv` cannot silently re-fill it from a `.env` on disk: production and development refuse
+to boot, local still boots. 3/3.
+
+**Item 4.** `dashboard/CLAUDE.md` and `CLAUDE.local.md` no longer instruct per-call cost
+tracking as future groundwork: both now state it is automatic via the `Gateway` base (chunk 451's
+finding), with `log_api_call` named for the only case that needs manual recording (code that
+bypasses `self.session`). The roadmap bullet is struck through with the verification date.
+
+STATUS items 1-4 are all closed (1 in chunk 453). Remaining open work from the pause: the
+bare-citation retrofit tail, and the user-decision items which stay untouched.

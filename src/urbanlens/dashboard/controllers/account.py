@@ -1133,8 +1133,8 @@ def validate_password_policy(request: HttpRequest) -> JsonResponse:
     configured validators (length 12, complexity, common-password, HIBP
     breach check) would otherwise never run against the real password at all.
     The raw password crosses HTTPS exactly once here, is validated in memory,
-    and is never stored or logged (decision 2026-07-23, docs/PROBLEMS.md -
-    option (a): a validation endpoint, rather than duplicating every
+    and is never stored or logged (decision 2026-07-23, "Option (a): a
+    validation endpoint" in docs/NOTES.md - rather than duplicating every
     validator's rules in TypeScript and keeping them in sync by hand).
 
     Anonymous by design (signup has no session yet). Rate-limited per IP

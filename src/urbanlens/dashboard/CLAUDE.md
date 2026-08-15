@@ -37,7 +37,10 @@ The project connects to many external APIs via service classes in `dashboard/ser
 
 External integrations are wired into the app through the plugin system: the API client stays a `Gateway` subclass in `dashboard/services/apis/`, and a small `UrbanLensPlugin` subclass (bundled ones live in `dashboard/plugins/builtin/`) declares its rate-limit defaults and contributions (pin-detail panels, imagery providers, hook callbacks). New integrations should be added as plugins; services not yet converted still register their defaults in `rate_limiter.SERVICE_REGISTRY`.
 
-When calling any API, track usage and cost per call (keep a running estimate). This is required groundwork for future cost reporting.
+API usage and cost tracking is **automatic**: the `Gateway` base wraps every request in a
+rate-limited session that writes an `ApiCallLog` row (with a `cost_estimate`) per call - no
+per-integration code needed. Only code that bypasses `self.session` (a bare `requests.*` call,
+an SDK client) must record itself via `rate_limiter.log_api_call`, as the AI services do.
 
 ## Gotchas
 

@@ -88,7 +88,8 @@ def enqueue_text_alerts(sender: type[NotificationLog], instance: NotificationLog
     Central wiring for every notification type with a ``<type>_whatsapp``/
     ``<type>_sms`` preference pair - previously only safety check-ins and DMs
     ever delivered to these channels and every other toggle silently did
-    nothing (docs/PROBLEMS.md). The scheduling helper no-ops cheaply for
+    nothing (decision 2026-07-23: "Wire them all" in docs/NOTES.md). The
+    scheduling helper no-ops cheaply for
     types without toggles and for recipients who left them off (the default),
     and the delayed task re-checks read-state before ever sending. Runs after
     commit so the Celery worker is guaranteed to see the row.

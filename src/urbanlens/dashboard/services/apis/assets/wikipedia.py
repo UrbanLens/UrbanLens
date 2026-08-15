@@ -233,7 +233,7 @@ class WikipediaGateway(Gateway):
         ``WikimediaGateway``), this reads the article's own curated media list,
         so it also picks up images that are only reachable through an in-body
         gallery and aren't independently discoverable by name (a known gap:
-        see docs/PROBLEMS.md/completed.md for the original report). Should
+        see docs/PROBLEMS.md for the original report). Should
         only be called once an article has already been confidently matched
         to a location (e.g. via ``get_article_for_location``) - this takes the
         article title directly, not a search query.

@@ -3,8 +3,8 @@
 ``NotificationPreference`` has carried independent ``<type>_whatsapp`` /
 ``<type>_sms`` opt-in booleans for every notification type since the settings
 UI shipped, but only the safety check-in and direct-message paths ever read
-them - every other toggle was stored and silently ignored (docs/PROBLEMS.md;
-decision 2026-07-23: wire them all).
+them - every other toggle was stored and silently ignored (decision
+2026-07-23: "Wire them all" in docs/NOTES.md).
 
 This module is the generic counterpart of the DM implementation in
 ``services.messaging.direct_messages`` and follows the same shape:

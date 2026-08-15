@@ -15,13 +15,24 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # repo-root .env is found regardless of working directory.
 load_dotenv(find_dotenv())
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or get_random_secret_key()
-
 # Detect the current environment early - other settings branch on it.
 ENVIRONMENT_NAME = os.getenv("UL_ENVIRONMENT", "local").lower()
 _is_local = ENVIRONMENT_NAME == "local"
 _is_dev = ENVIRONMENT_NAME in {"local", "development"}
+
+# SECURITY WARNING: keep the secret key used in production secret!
+_secret_key_env = os.environ.get("DJANGO_SECRET_KEY")
+if not _secret_key_env and not _is_local:
+    # A missing key would otherwise fall back to a fresh random key *per
+    # process*: sessions and CSRF break across workers, and - much worse -
+    # EncryptedTextField derives its encryption key from SECRET_KEY, so rows
+    # written by one process become unreadable to every other and to every
+    # restart. Failing at startup turns silent data corruption into a
+    # configuration error.
+    from django.core.exceptions import ImproperlyConfigured
+
+    raise ImproperlyConfigured(f"DJANGO_SECRET_KEY must be set when UL_ENVIRONMENT is {ENVIRONMENT_NAME!r} (only 'local' may run without one).")
+SECRET_KEY = _secret_key_env or get_random_secret_key()
 
 
 def _env_bool(name: str, default: bool) -> bool:

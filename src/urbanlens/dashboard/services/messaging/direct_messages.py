@@ -250,8 +250,8 @@ def serialize_direct_message(message: DirectMessage, *, viewer: Profile | None =
         viewer: The profile this payload will be delivered to. When given,
             sender names are resolved through ``display_identity_for`` so a
             live incoming message never reveals a name the server-rendered
-            thread would mask for that viewer (docs/PROBLEMS.md; decision
-            2026-07-23: per-recipient payloads), and image URLs are withheld
+            thread would mask for that viewer (decision 2026-07-23:
+            "Per-recipient payloads" in docs/NOTES.md), and image URLs are withheld
             unless that viewer has consented to see them. None keeps the raw
             names and *omits every image URL* - a payload with no identified
             viewer cannot be shown to have consent, so it fails closed.
