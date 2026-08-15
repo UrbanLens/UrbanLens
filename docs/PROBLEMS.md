@@ -7584,7 +7584,7 @@ this module (`-q` plus an un-truncated tail, or `--tb=long -k` on rerun) before 
 product code.
 
 
-## OPEN 2026-08-15: migration 0007's token encryption has the same noop reverse 0039 had
+## ~~OPEN~~ RESOLVED 2026-08-15 (chunk 460): migration 0007's token encryption has the same noop reverse 0039 had
 
 The migrations 0026-0044 irreversibility audit (chunk 459) fixed 0039's in-place field
 encryption to carry a real decrypting reverse - `RunPython.noop` there meant `migrate dashboard
@@ -7595,3 +7595,5 @@ rollback. Lower urgency only because rolling back to <0007 is far less plausible
 but the fix is mechanical: copy 0039's `_decrypt_column`/shared-columns-constant shape (the
 `gAAAA` Fernet-prefix discriminator handles pre-encryption plaintext rows). Credential fields
 fail hard rather than soft, so the raising behavior on an undecryptable value is already right.
+
+**Resolved (chunk 460, same day): 0007 now carries `decrypt_existing_tokens`, the exact 0039 shape** (shared column constant, `gAAAA` discriminator, raising failure). Wiring pinned by `test_migration_0039_reverse.py`.

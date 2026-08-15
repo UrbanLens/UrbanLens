@@ -40,3 +40,10 @@ class Migration0039ReverseTests(SimpleTestCase):
         """The shared _ENCRYPTED_COLUMNS constant is what makes drift impossible - pin its size against the AlterFields."""
         alter_fields = [op for op in _migration.Migration.operations if type(op).__name__ == "AlterField"]
         self.assertEqual(len(_migration._ENCRYPTED_COLUMNS), len(alter_fields))
+
+    def test_migration_0007_wires_its_token_decrypt_reverse_too(self) -> None:
+        """0007 encrypts credential tokens with the same in-place pattern; its rollback must decrypt, not noop."""
+        migration_0007 = importlib.import_module("urbanlens.dashboard.migrations.0007_pinshare_bundled_with_markup_map_removed_flags")
+        token_ops = [op for op in migration_0007.Migration.operations if type(op).__name__ == "RunPython" and op.code is migration_0007.encrypt_existing_tokens]
+        self.assertEqual(len(token_ops), 1)
+        self.assertIs(token_ops[0].reverse_code, migration_0007.decrypt_existing_tokens)

@@ -8490,3 +8490,17 @@ wiring (editing an applied migration's `reverse_code` is safe - it only runs on 
 
 Migration 0007 encrypts credential tokens with the same noop-reverse pattern; filed in
 PROBLEMS.md with the 0039 fix named as the template rather than rushed here.
+
+
+## Chunk 460 - migration 0007's rollback decrypts too; the pattern is now closed
+
+Applied chunk 459's fix shape to the other in-place encryption: 0007's `encrypt_existing_tokens`
+(Google Calendar access/refresh tokens, the Gotify token) now reverses through
+`decrypt_existing_tokens` - shared column constant, `gAAAA` Fernet-prefix discriminator, raising
+failure on an undecryptable value. Credential fields fail hard rather than soft, so refusing the
+rollback outright was already the right semantic. The 0039 test module gained a wiring assertion
+for 0007, and a fresh test-database build (which applies every migration) passes with both edited
+files - the forward path is untouched, only the previously-noop unapply path changed.
+
+Both in-place encryption migrations now roll back honestly: decrypt what they encrypted, skip
+what they never touched, refuse loudly what they cannot restore. PROBLEMS entry resolved.
