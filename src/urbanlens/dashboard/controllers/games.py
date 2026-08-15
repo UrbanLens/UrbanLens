@@ -20,6 +20,29 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
 
     from django.http import HttpRequest, HttpResponse
+    from django.http.response import HttpResponseBase
+
+
+class AlphaFeatureRequiredMixin:
+    """Refuses users who do not hold :attr:`SiteFeature.ALPHA_FEATURES`.
+
+    The games (SpotGuessr, Trivia, Consensus) are alpha features: the same
+    entitlement that hides the games nav and the hub must also gate every
+    in-game route, otherwise anyone with a URL can play.
+
+    Mix this in **after** ``LoginRequiredMixin`` (e.g.
+    ``class FooView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View)``)
+    so anonymous visitors are redirected to the login page first rather than
+    receiving a bare 403.
+
+    Raises:
+        PermissionDenied: When the authenticated user lacks the feature.
+    """
+
+    def dispatch(self, request: HttpRequest, *args: Any, **kwargs: Any) -> HttpResponseBase:
+        if not user_has_feature(request.user, SiteFeature.ALPHA_FEATURES):
+            raise PermissionDenied
+        return super().dispatch(request, *args, **kwargs)
 
 
 class GameEntry:
@@ -112,13 +135,11 @@ def rating_stats(own_rating: RatedRow | None, friend_ratings: Iterable[Mapping[s
     return stats
 
 
-class GamesOverviewView(LoginRequiredMixin, View):
+class GamesOverviewView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The games hub: every built-in game.
 
     GET /games/
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        if not user_has_feature(request.user, SiteFeature.ALPHA_FEATURES):
-            raise PermissionDenied
         return render(request, "dashboard/pages/games/index.html", {"page_name": "games", "games": GAMES})

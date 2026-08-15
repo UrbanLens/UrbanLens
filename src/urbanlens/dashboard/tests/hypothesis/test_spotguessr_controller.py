@@ -10,6 +10,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.celery_inline import tasks_run_inline
+from urbanlens.core.tests.features import grant_alpha_features
 from urbanlens.core.tests.labels import ensure_label
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.model import Friendship
@@ -32,7 +33,9 @@ def _make_location() -> Location:
 
 
 def _make_profile() -> Profile:
-    return Profile.objects.get(user=baker.make("auth.User"))
+    user = baker.make("auth.User")
+    grant_alpha_features(user)  # every game route is behind SiteFeature.ALPHA_FEATURES
+    return Profile.objects.get(user=user)
 
 
 class SpotGuessrStartViewTests(TestCase):

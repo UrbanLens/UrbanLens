@@ -18,7 +18,7 @@ from django.shortcuts import get_object_or_404, render
 from django.urls import reverse
 from django.views import View
 
-from urbanlens.dashboard.controllers.games import GAMES, rating_stats
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, rating_stats
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import (
     PlayerTriviaRating,
@@ -86,7 +86,7 @@ def _url_templates() -> dict[str, str]:
     }
 
 
-class TriviaHomeView(LoginRequiredMixin, View):
+class TriviaHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The Trivia overview page: own rating, last-used settings, start-game form.
 
     GET /games/trivia/
@@ -126,7 +126,7 @@ class TriviaHomeView(LoginRequiredMixin, View):
         )
 
 
-class TriviaStartView(LoginRequiredMixin, View):
+class TriviaStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Start a new session - solo (immediately active) or multiplayer (a lobby to invite friends into).
 
     POST /games/trivia/start/   body: ``difficulty``, ``total_rounds``,
@@ -181,7 +181,7 @@ class TriviaStartView(LoginRequiredMixin, View):
         return JsonResponse({"session_id": game_session.pk, "finished": False, "round": serializers.serialize_round(round_)})
 
 
-class TriviaFriendsView(LoginRequiredMixin, View):
+class TriviaFriendsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The profile's friends, for the multiplayer invite picker.
 
     GET /games/trivia/friends/
@@ -193,7 +193,7 @@ class TriviaFriendsView(LoginRequiredMixin, View):
         return JsonResponse({"friends": [{"profile_id": friend.pk, "username": friend.username} for friend in friends]})
 
 
-class TriviaSettingsView(LoginRequiredMixin, View):
+class TriviaSettingsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Update Trivia preferences.
 
     POST /games/trivia/settings/   body: ``show_ratings_to_friends`` ("on"/"off")
@@ -207,7 +207,7 @@ class TriviaSettingsView(LoginRequiredMixin, View):
         return JsonResponse({"show_ratings_to_friends": preference.show_ratings_to_friends})
 
 
-class TriviaLobbyView(LoginRequiredMixin, View):
+class TriviaLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The lobby's current state: status and every participant (invited or joined).
 
     GET /games/trivia/session/<session_id>/lobby/
@@ -219,7 +219,7 @@ class TriviaLobbyView(LoginRequiredMixin, View):
         return JsonResponse(serializers.serialize_session(game_session))
 
 
-class TriviaInviteView(LoginRequiredMixin, View):
+class TriviaInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Invite one more friend to a still-open lobby. Host-only.
 
     POST /games/trivia/session/<session_id>/invite/   body: ``profile_id``
@@ -241,7 +241,7 @@ class TriviaInviteView(LoginRequiredMixin, View):
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
-class TriviaJoinView(LoginRequiredMixin, View):
+class TriviaJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Accept an invitation to a lobby.
 
     POST /games/trivia/session/<session_id>/join/
@@ -258,7 +258,7 @@ class TriviaJoinView(LoginRequiredMixin, View):
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
-class TriviaBeginView(LoginRequiredMixin, View):
+class TriviaBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Host starts the game: locks the roster and creates round 1.
 
     POST /games/trivia/session/<session_id>/begin/
@@ -281,7 +281,7 @@ class TriviaBeginView(LoginRequiredMixin, View):
         return JsonResponse({"finished": False, "round": serializers.serialize_round(round_)})
 
 
-class TriviaEndSessionView(LoginRequiredMixin, View):
+class TriviaEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Host ends the game immediately - the manual escape hatch for a stalled or AFK multiplayer session.
 
     POST /games/trivia/session/<session_id>/end/
@@ -304,7 +304,7 @@ class TriviaEndSessionView(LoginRequiredMixin, View):
         return JsonResponse({"finished": True, "summary": trivia_session.session_summary(game_session)})
 
 
-class TriviaLeaveSessionView(LoginRequiredMixin, View):
+class TriviaLeaveSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The calling profile leaves this session - or declines an invitation to it.
 
     POST /games/trivia/session/<session_id>/leave/
@@ -321,7 +321,7 @@ class TriviaLeaveSessionView(LoginRequiredMixin, View):
         return JsonResponse({"left": True})
 
 
-class TriviaKickParticipantView(LoginRequiredMixin, View):
+class TriviaKickParticipantView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Host removes another participant from the session. Host-only.
 
     POST /games/trivia/session/<session_id>/kick/   body: ``profile_id``
@@ -343,7 +343,7 @@ class TriviaKickParticipantView(LoginRequiredMixin, View):
         return JsonResponse({"kicked": True})
 
 
-class TriviaChatHistoryView(LoginRequiredMixin, View):
+class TriviaChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Recent chat messages, for reconnects/late page-opens - live messages arrive over the WebSocket.
 
     GET /games/trivia/session/<session_id>/chat/
@@ -356,7 +356,7 @@ class TriviaChatHistoryView(LoginRequiredMixin, View):
         return JsonResponse({"messages": [serializers.serialize_chat_message(message) for message in messages]})
 
 
-class TriviaRoundView(LoginRequiredMixin, View):
+class TriviaRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The session's current round (for reloads/reconnects).
 
     GET /games/trivia/session/<session_id>/round/
@@ -376,7 +376,7 @@ class TriviaRoundView(LoginRequiredMixin, View):
         return JsonResponse({"finished": False, "round": serializers.serialize_round(round_)})
 
 
-class TriviaAnswerView(LoginRequiredMixin, View):
+class TriviaAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Submit an answer for the session's current round.
 
     POST /games/trivia/session/<session_id>/round/<round_id>/answer/   body: ``answer``
@@ -400,7 +400,7 @@ class TriviaAnswerView(LoginRequiredMixin, View):
         return JsonResponse(serializers.serialize_reveal(round_, answer))
 
 
-class TriviaSummaryView(LoginRequiredMixin, View):
+class TriviaSummaryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The session's final scoreboard.
 
     GET /games/trivia/session/<session_id>/summary/
@@ -412,7 +412,7 @@ class TriviaSummaryView(LoginRequiredMixin, View):
         return JsonResponse(trivia_session.session_summary(game_session))
 
 
-class TriviaQuestionVoteView(LoginRequiredMixin, View):
+class TriviaQuestionVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Upvote, downvote, or report the question just answered. Host-agnostic - any participant may vote.
 
     POST /games/trivia/questions/<question_id>/vote/   body: ``kind``
@@ -436,7 +436,7 @@ class TriviaQuestionVoteView(LoginRequiredMixin, View):
         return JsonResponse({"kind": vote.kind})
 
 
-class TriviaQuestionSubmitView(LoginRequiredMixin, View):
+class TriviaQuestionSubmitView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Submit a user-written trivia question about a location the profile has pinned.
 
     POST /games/trivia/questions/submit/   body: ``location_id``, ``prompt``, ``answer``

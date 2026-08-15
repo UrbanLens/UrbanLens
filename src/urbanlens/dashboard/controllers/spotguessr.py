@@ -27,7 +27,7 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
-from urbanlens.dashboard.controllers.games import GAMES, rating_stats
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin, rating_stats
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
@@ -238,7 +238,7 @@ def _prewarm_solo_start(profile_id: int, mode: str, last_config: dict) -> None:
     safely_enqueue_task(prewarm_spotguessr_solo_start, profile_id, mode, last_config)
 
 
-class SpotGuessrHomeView(LoginRequiredMixin, View):
+class SpotGuessrHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The SpotGuessr overview page: own rating, friends' ratings, start-game form.
 
     GET /spotguessr/
@@ -306,7 +306,7 @@ class SpotGuessrHomeView(LoginRequiredMixin, View):
         )
 
 
-class SpotGuessrSettingsView(LoginRequiredMixin, View):
+class SpotGuessrSettingsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Update SpotGuessr preferences.
 
     POST /spotguessr/settings/   body: ``show_ratings_to_friends`` ("on"/"off")
@@ -320,7 +320,7 @@ class SpotGuessrSettingsView(LoginRequiredMixin, View):
         return JsonResponse({"show_ratings_to_friends": preference.show_ratings_to_friends})
 
 
-class SpotGuessrFriendsView(LoginRequiredMixin, View):
+class SpotGuessrFriendsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The profile's friends, for the multiplayer invite picker.
 
     GET /spotguessr/friends/
@@ -332,7 +332,7 @@ class SpotGuessrFriendsView(LoginRequiredMixin, View):
         return JsonResponse({"friends": [{"profile_id": friend.pk, "username": friend.username} for friend in friends]})
 
 
-class SpotGuessrStartView(LoginRequiredMixin, View):
+class SpotGuessrStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Start a new session - solo (immediately active) or multiplayer (a lobby to invite friends into).
 
     POST /spotguessr/start/   body: ``mode``, ``total_rounds``, difficulty/toggle fields,
@@ -392,7 +392,7 @@ class SpotGuessrStartView(LoginRequiredMixin, View):
         return JsonResponse({"session_id": result.session.pk, "finished": False, "round": serializers.serialize_round(result.round)})
 
 
-class SpotGuessrLobbyView(LoginRequiredMixin, View):
+class SpotGuessrLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The lobby's current state: mode, status, and every participant (invited or joined).
 
     GET /spotguessr/session/<session_id>/lobby/
@@ -404,7 +404,7 @@ class SpotGuessrLobbyView(LoginRequiredMixin, View):
         return JsonResponse(serializers.serialize_session(game_session))
 
 
-class SpotGuessrInviteView(LoginRequiredMixin, View):
+class SpotGuessrInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Invite one more friend to a still-open lobby. Host-only.
 
     POST /spotguessr/session/<session_id>/invite/   body: ``profile_id``
@@ -426,7 +426,7 @@ class SpotGuessrInviteView(LoginRequiredMixin, View):
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
-class SpotGuessrJoinView(LoginRequiredMixin, View):
+class SpotGuessrJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Accept an invitation to a lobby.
 
     POST /spotguessr/session/<session_id>/join/
@@ -443,7 +443,7 @@ class SpotGuessrJoinView(LoginRequiredMixin, View):
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
-class SpotGuessrBeginView(LoginRequiredMixin, View):
+class SpotGuessrBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Host starts the game: locks the roster and creates round 1.
 
     POST /spotguessr/session/<session_id>/begin/
@@ -473,7 +473,7 @@ class SpotGuessrBeginView(LoginRequiredMixin, View):
         return JsonResponse({"finished": False, "round": serializers.serialize_round(round_)})
 
 
-class SpotGuessrEndSessionView(LoginRequiredMixin, View):
+class SpotGuessrEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Host ends the game immediately - the manual escape hatch for a stalled or AFK multiplayer session.
 
     POST /spotguessr/session/<session_id>/end/
@@ -496,7 +496,7 @@ class SpotGuessrEndSessionView(LoginRequiredMixin, View):
         return JsonResponse({"finished": True, "summary": spotguessr_session.session_summary(game_session)})
 
 
-class SpotGuessrRoundView(LoginRequiredMixin, View):
+class SpotGuessrRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The session's current round (for reloads/reconnects).
 
     GET /spotguessr/session/<session_id>/round/
@@ -520,7 +520,7 @@ class SpotGuessrRoundView(LoginRequiredMixin, View):
         return JsonResponse({"finished": False, "round": serializers.serialize_round(round_)})
 
 
-class SpotGuessrGuessView(LoginRequiredMixin, View):
+class SpotGuessrGuessView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Submit a guess for the session's current round.
 
     POST /spotguessr/session/<session_id>/round/<round_id>/guess/   body: ``latitude``, ``longitude``, optional ``guessed_date`` (YYYY-MM-DD)
@@ -558,7 +558,7 @@ class SpotGuessrGuessView(LoginRequiredMixin, View):
         return JsonResponse(serializers.serialize_reveal(round_, guess, bonus_tiers, rating_change))
 
 
-class SpotGuessrRoundTimeoutView(LoginRequiredMixin, View):
+class SpotGuessrRoundTimeoutView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Force-reveal the current round because its configured round timer expired.
 
     POST /spotguessr/session/<session_id>/round/<round_id>/timeout/
@@ -589,7 +589,7 @@ class SpotGuessrRoundTimeoutView(LoginRequiredMixin, View):
         return JsonResponse({"revealed": round_.revealed_at is not None})
 
 
-class SpotGuessrPhotoFeedbackView(LoginRequiredMixin, View):
+class SpotGuessrPhotoFeedbackView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Thumbs up/down, or report, the photo a Photos-mode round just showed.
 
     POST /spotguessr/session/<session_id>/round/<round_id>/feedback/   body: ``kind`` (thumbs_up/thumbs_down/reported)
@@ -622,7 +622,7 @@ class SpotGuessrPhotoFeedbackView(LoginRequiredMixin, View):
         return JsonResponse({"kind": feedback.kind})
 
 
-class SpotGuessrChatHistoryView(LoginRequiredMixin, View):
+class SpotGuessrChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Recent chat messages, for reconnects/late page-opens - live messages arrive over the WebSocket.
 
     GET /spotguessr/session/<session_id>/chat/
@@ -635,7 +635,7 @@ class SpotGuessrChatHistoryView(LoginRequiredMixin, View):
         return JsonResponse({"messages": [serializers.serialize_chat_message(message) for message in messages]})
 
 
-class SpotGuessrPinsView(LoginRequiredMixin, View):
+class SpotGuessrPinsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The profile's own pins, for the "search my pins to guess" input.
 
     GET /spotguessr/pins/
@@ -667,7 +667,7 @@ class SpotGuessrPinsView(LoginRequiredMixin, View):
         )
 
 
-class SpotGuessrAreaPinCountView(LoginRequiredMixin, View):
+class SpotGuessrAreaPinCountView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """How many of the profile's own pins fall inside a candidate ``geo_bounds`` selection.
 
     GET /spotguessr/area_pin_count/?geo_bounds=<geojson>
@@ -690,7 +690,7 @@ class SpotGuessrAreaPinCountView(LoginRequiredMixin, View):
         return JsonResponse({"count": count})
 
 
-class SpotGuessrSummaryView(LoginRequiredMixin, View):
+class SpotGuessrSummaryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The session's final scoreboard.
 
     GET /spotguessr/session/<session_id>/summary/
