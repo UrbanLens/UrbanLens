@@ -364,7 +364,18 @@ transaction, but the count is inflated by dispatchers: the top hit
 (`controllers/settings.py:159`, "18 writes") is a 15-branch `if/elif` on `section` where exactly
 one branch runs. Only paths whose writes share an invariant are worth looking at.
 
-## LOW 2026-08-11: one notification preference is named after the enum *member*, not its *value*
+## ~~LOW 2026-08-11: one notification preference is named after the enum *member*, not its *value*~~ RESOLVED (verified 2026-08-15)
+
+**RESOLVED**: the trap is closed, not merely dormant. `_enabled_channels`
+(`notification_text_alerts.py:132-133`) now derives the preference prefix from the enum *member
+name* (`NotificationType(...).name.lower()`), which matches the `safety_checkin_partner_invite*`
+columns, and `safety_ci_partner_invite` is now listed in `TEXT_ALERTABLE_TYPES`
+(`notification_text_alerts.py:63`). Regression coverage:
+`tests/hypothesis/test_text_alert_preference_stems.py` asserts `TEXT_ALERTABLE_TYPES` equals
+exactly the stems with a toggle pair and that the mismatched type's toggles are read correctly;
+`test_external_api_notifications.py:99` pins the known stem/value divergence. The suggested column
+rename was not done, but no remaining code derives preference field names from the type *value*,
+so the two lookup styles no longer need to agree. Original entry below for context.
 
 `NotificationType.SAFETY_CHECKIN_PARTNER_INVITE` has the **value**
 `"safety_ci_partner_invite"`, but its three preference columns on `NotificationPreference` are
@@ -816,7 +827,16 @@ Found 2026-08-04 during the Place refactor; deliberately not fixed there, since 
 command's behaviour should not change as a side effect of an unrelated refactor. The fix looks
 like uncommenting the line, but someone should confirm it wasn't disabled on purpose first.
 
-## `.badge--muted` is used everywhere but never defined (and it is not the only one)
+## ~~`.badge--muted` is used everywhere but never defined (and it is not the only one)~~ RESOLVED 2026-08-15 (`1e799da9`)
+
+**RESOLVED**: `.badge.badge--muted` (doubled class so its overrides beat `span.badge`'s 0-1-1
+specificity) and `.ul-alert`/`.ul-alert--error` are now defined in `_components.scss`, mirroring
+`.safety-badge--muted` and the theme-aware `--ul-color-danger-*` tokens respectively; compiled and
+grep-verified in `static/dashboard/style.css`. One correction to this entry's later 2026-08-11
+update: `.dm-bubble-menu__item` (+`--danger`) was **never** missing - it is defined via SCSS
+`&__item` parent-selector nesting inside `.dm-bubble-menu` (`_messages.scss:1649-1668`), which a
+literal-selector grep cannot see. When re-enumerating undefined classes, grep the *compiled*
+`style.css`, not the SCSS sources. Original entry below for context.
 
 **Update 2026-08-11**: this is a small class of issue, not a one-off. Two more components are
 referenced only by templates and defined in *no* stylesheet - not the SCSS, not any inline
@@ -948,7 +968,19 @@ Deliberately left out of the schema change: wiring a new suppression rule into e
 notification producer is a behaviour change of its own size, and the external API's `is_muted`
 surface (Batch S) needs the flag to exist first.
 
-## 2026-07-28: Satellite/street-view imagery render path re-runs the full provider chain even when "ready"
+## ~~2026-07-28: Satellite/street-view imagery render path re-runs the full provider chain even when "ready"~~ RESOLVED (verified 2026-08-15)
+
+**RESOLVED**: the harm named here - unbounded full-chain latency with no fast-placeholder
+short-circuit - no longer exists. `controllers/pin.py:1043-1044` now returns a fast polling
+placeholder (`_pending_panel` → `schedule_panel_fetch`) whenever `is_ready` is false, including
+the lapsed-but-not-rewarmed gap this entry describes; the comment at `pin.py:1040-1042` states the
+chain "must never run on the request path". The ready path runs `collect()` against warm
+per-provider caches bounded by `call_with_deadline(EXTERNAL_CALL_DEADLINE=20s)`
+(`pin.py:1059-1064`), and `SLIDES_READY_TTL_SECONDS=12h` is deliberately shorter than the 24h
+slide caches so the marker lapses before entries can expire mid-render
+(`external_data.py:918-922`). Residual (accepted trade-off, documented at `pin.py:1046-1049`): a
+per-provider cache eviction inside the ready window can still refetch inline, bounded to 20s -
+"bounded staleness beats an unbounded inline refetch". Original entry below for context.
 
 `services/pins/external_data.py`'s `SlidesPanelSource` (base of `SatellitePanelSource`/street-view
 equivalent) tracks readiness with a summary marker (`is_ready`, `ready_key`) set after a background
@@ -5360,7 +5392,15 @@ cannot currently occur. The right moment to do it is when per-user timezones are
 work has to revisit every one of these sites anyway - at which point neither `date.today()` nor
 `localdate()` is correct, and "today" has to be resolved in the *viewer's* zone.
 
-## OPEN 2026-08-12: trip location visibility re-implements the shared gate, and is stricter
+## ~~OPEN 2026-08-12: trip location visibility re-implements the shared gate, and is stricter~~ RESOLVED 2026-08-15 (`f8d2de98`)
+
+**RESOLVED**: the entry's core risk ("no test pins the stricter behaviour as intentional") was
+closed by `03383698` (`tests/hypothesis/test_trip_visibility_is_stricter.py` pins both
+divergences, each with a precondition assert that `Profile.visibility_permits` answers the
+opposite way), and the remaining gap - no in-module statement that the divergence is deliberate -
+is now a paragraph in `trip_visibility.py`'s module docstring naming both differences, that they
+fail closed, and that loosening either is a product decision to be made in the same commit that
+updates those tests. The divergence itself is intentionally unchanged. Original entry below.
 
 `Profile.visibility_permits` is documented as the "shared evaluator for every per-field
 `VisibilityChoice` setting on this model ... so the friend/common-pin/common-friend/common-trip
@@ -5427,7 +5467,16 @@ so an upload slower than the 30s timeout - already having lost the lock to its s
 *that* upload's lock on the way out. It now uses the token-checked release from
 `services.core.locks` (see the 2026-08-12 sweep-lock entry; same defect, same fix).
 
-## OPEN 2026-08-13: undoing a pin delete does not bring back its comments, albums or links
+## ~~OPEN 2026-08-13: undoing a pin delete does not bring back its comments, albums or links~~ RESOLVED 2026-08-15 (`966d924e`, honest-wording option)
+
+**RESOLVED via this entry's own "cheaper alternative"**: the app no longer over-promises. The
+delete-pin confirm dialog now says "The pin and its photos can be restored from Settings → Undo
+History. Comments, albums and links are deleted permanently." (photos claim verified:
+`handlers/pin.py` serializes `image_ids` and reattaches on restore since `Image.pin` is SET_NULL),
+and the two docstrings claiming full-subtree restorability (`models/pin/viewset.py`,
+`services/pins/pin_edit.py`) were corrected. Deep-graph restore (PinNote/Link/Alias/PinVisit
+first, comments/albums as documented exclusions) remains a possible future feature - the sketch
+lives in the original entry below - but is deliberately not promised anywhere in the UI now.
 
 `Image.pin`, `MarkupMap.pin` and `TripActivity.pin` are `SET_NULL`, so deleting a pin deliberately
 preserves the user's irreplaceable content and merely detaches it. Everything else FK'd to Pin
