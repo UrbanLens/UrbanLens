@@ -232,6 +232,21 @@ direct-only because REData's contract can't reproduce what they show:
   Also shown on the wiki page
 - **News** — recent news coverage scoped to the location (appears for notable locations), via
   REData's GDELT-backed search
+- **Underground Structures** — OSM-mapped tunnels, culverts, station levels, shafts and buried
+  utility runs within 250 m, enterable features first, via REData (`plugins.builtin.redata_underground`)
+- **Permits & Violations** (US cities) — the site's building-permit/code-violation/site-plan filing
+  chronology with deep links to city records and plan drawings where published, via REData
+  (`plugins.builtin.redata_permits`); flags when a dense block capped the result
+- **Reported Incidents** (US cities) — block-scale police-incident reports from city open-data
+  portals as visit-safety context, via REData (`plugins.builtin.redata_incidents`); traffic
+  collisions excluded, block-scale location precision stated on the panel
+- **Water & Hydrology** (USA) — streams, waterbodies, wetlands (USFWS NWI decoded) within 1 km and
+  the containing HUC12 watershed, via REData (`plugins.builtin.redata_hydrology`)
+- **Site Conditions** (USA) — NLCD land cover, EPA walkability index (incl. transit distance), and
+  USDA SSURGO soil composition (dominant-first, no invented averages) folded into one panel, via
+  REData (`plugins.builtin.redata_site_conditions`)
+- **Air Quality** — current modelled readings (Copernicus CAMS, worldwide) with a count — never an
+  average — of nearby community sensors, via REData (`plugins.builtin.redata_air_quality`)
 - **OpenWeatherMap** — weather forecast; appears on Trip detail pages (keyed to activity location) and on the pin detail page when weather data is available. Via REData when configured, falling back to a direct OpenWeatherMap/Open-Meteo call
 - **Sunrise/sunset & golden hour** — via REData when configured, falling back to direct Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the pin detail page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
 - Satellite imagery carousel: Google Maps and Esri (incl. up to 5 historical Wayback releases) are
