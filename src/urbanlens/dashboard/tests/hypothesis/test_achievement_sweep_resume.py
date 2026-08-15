@@ -40,7 +40,7 @@ class SweepResumeTests(TestCase):
         """Run the sweep, recording which profiles it actually evaluated."""
         seen: list[int] = []
 
-        def _record(profile, notify=True):
+        def _record(profile, notify=True, **kwargs):
             seen.append(profile.pk)
             return []
 

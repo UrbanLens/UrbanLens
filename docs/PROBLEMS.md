@@ -265,7 +265,7 @@ is the one that turns a bounded cost into an unbounded one, and is worth address
 even before the broader Celery migration. (13 test modules already mock
 `GooglePlaceService._resolve_name`, which is a good independent map of everything on this path.)
 
-## PARTLY RESOLVED 2026-08-12: the nightly achievement sweep is O(profiles × metrics) and gets killed at 3600s
+## RESOLVED 2026-08-15 (chunk 464): the nightly achievement sweep is O(profiles × metrics) and gets killed at 3600s
 
 `tasks.sweep_achievements` → `evaluate_all_profiles` iterates **every** `Profile` and evaluates
 every active achievement for each one. Each metric is an independent per-profile query -
@@ -314,6 +314,15 @@ still worth doing if the run time keeps growing.
 
 Not attempted here: (1) is a refactor across the metric registry, and (2) changes the shape of a
 scheduled job - both want a maintainer's call on batch size and ordering guarantees.
+
+**Resolved (chunk 464, 2026-08-15): fix (1) is in.** Every builtin metric carries a
+`compute_bulk` returning `{profile_id: value}` from one grouped query; the sweep computes them
+once up front and each profile's evaluation becomes dictionary lookups plus award writes -
+~30 queries/profile drops to ~19 queries/run plus the award path. The per-write signal path is
+untouched (it never bulk-computes). The agreement invariant - bulk equals per-profile for every
+profile, absent meaning zero - is pinned by `test_achievement_bulk_metrics.py`, because a
+drifting bulk variant would make awards flap between the nightly and signal paths. Fix (2)
+(chunking the task) is now moot at realistic scales; the checkpoint/resume guard stays.
 
 ## FEATURE GAP 2026-08-11: the data export omits 11 kinds of user-authored content
 

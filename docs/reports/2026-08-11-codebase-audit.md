@@ -8558,3 +8558,23 @@ hand-transcribing values read through a window. Zero hashed enums remain; 22 sch
 
 Residual 20 warnings and 13 W002 errors are pre-existing and filed (operationId numerals,
 serializer-inference gaps, three cosmetic multi-name sets).
+
+
+## Chunk 464 - the achievement sweep batched: ~30 queries/profile -> ~19 queries/run
+
+Implemented the PROBLEMS entry's fix (1), the one it called "the real fix". `Metric` gains an
+optional `compute_bulk` (one grouped aggregate returning `{profile_id: value}`; absent = 0 - the
+memory contract that keeps 100k-profile deployments from holding 100k zeros per metric), all 19
+builtin metrics carry one (14 direct groupings, the friendship pair-row double-count via Counter,
+the two-model comment sum, five streaks from one `values_list` each), and
+`evaluate_all_profiles` computes the dicts once and threads them through a new `precomputed`
+parameter on `evaluate_profile`. The per-write signal path is untouched.
+
+The test that matters is **agreement**: for every metric with a bulk variant, bulk equals
+per-profile for every profile on unevenly-spread fixture data, with a floor assertion of 19
+covered metrics so unwiring can't pass vacuously. A drifting bulk variant would grant awards
+differently on the nightly path than the signal path - award flapping, the user-visible failure.
+
+One integration break caught and fixed: the sweep-resume tests' recorder stub didn't accept the
+new kwarg - `**kwargs` added, and 9/9 achievement suites pass. The entry's earlier
+checkpoint/resume guard stays (it protects against *any* future slowness, not just this one).

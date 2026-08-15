@@ -70,6 +70,7 @@ def evaluate_profile(
     metric_keys: Iterable[str] | None = None,
     *,
     notify: bool = True,
+    precomputed: dict[str, dict[int, int]] | None = None,
 ) -> list[UserAchievement]:
     """Grant every active achievement *profile* now qualifies for.
 
@@ -82,6 +83,11 @@ def evaluate_profile(
             metrics. None evaluates every active achievement.
         notify: Whether to raise an in-app notification per new award. Turned
             off for bulk backfills of historical activity.
+        precomputed: Bulk metric values (``{metric_key: {profile_id: value}}``,
+            from :func:`~urbanlens.dashboard.services.achievements.metrics.compute_values_bulk`).
+            Metrics present here are read from it (absent profile = 0) instead
+            of being queried per profile - the nightly sweep's batching. Keys
+            not present fall back to per-profile computation.
 
     Returns:
         The awards newly granted by this call, in grant order. Empty when the
@@ -105,7 +111,14 @@ def evaluate_profile(
     if not pending:
         return []
 
-    values = compute_values(profile, {a.metric for a in pending})
+    wanted = {a.metric for a in pending}
+    values: dict[str, int] = {}
+    if precomputed:
+        for key in wanted & precomputed.keys():
+            values[key] = precomputed[key].get(profile.pk, 0)
+        wanted -= values.keys()
+    if wanted:
+        values.update(compute_values(profile, wanted))
 
     granted: list[UserAchievement] = []
     for achievement in pending:
@@ -250,10 +263,14 @@ def evaluate_all_profiles(*, notify: bool = True) -> int:
     every profile is reached within two runs even when neither completes. A
     resumed run logs a warning, which is what makes the truncation visible at all.
 
-    This does not make the sweep cheaper - see "the nightly achievement sweep is
-    O(profiles x metrics) and gets killed at 3600s" in ``docs/PROBLEMS.md`` for the
-    batching fix that would - it stops the cost from silently costing a fixed
-    group of users their awards.
+    Batched: every metric with a bulk implementation is computed once for all
+    profiles up front (~one grouped query per metric) and each profile's
+    evaluation becomes dictionary lookups plus the award writes - what used to
+    be ~30 queries per profile. The bulk dicts hold one int per profile with a
+    nonzero value per metric; at 100k profiles that is tens of megabytes for
+    the duration of the nightly task, which is the accepted trade. See the
+    now-resolved "nightly achievement sweep is O(profiles x metrics)" entry in
+    ``docs/PROBLEMS.md``.
 
     Args:
         notify: Whether to notify recipients of new awards.
@@ -276,9 +293,13 @@ def evaluate_all_profiles(*, notify: bool = True) -> int:
             start_after,
         )
 
+    from urbanlens.dashboard.services.achievements.metrics import compute_values_bulk
+
+    precomputed = compute_values_bulk(active_metric_keys())
+
     granted = 0
     for processed, profile in enumerate(Profile.objects.filter(pk__gt=start_after).order_by("pk").iterator(), start=1):
-        granted += len(evaluate_profile(profile, notify=notify))
+        granted += len(evaluate_profile(profile, notify=notify, precomputed=precomputed))
         # Checkpoint periodically rather than per profile: the point is only to
         # bound how much work a killed run repeats, not to be exact.
         if processed % _SWEEP_CURSOR_STRIDE == 0:
