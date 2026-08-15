@@ -145,7 +145,7 @@ selected_tag_ids, selected_exclude_tag_ids, custom_field_values.
 
 <div class="form-row">
     <label>Has links</label>
-    <select name="has_links" class="fp-select">
+    <select name="has_links" class="fp-select" aria-label="Has links">
         <option value="" {% if not criteria.has_links %}selected{% endif %}>Any</option>
         <option value="yes" {% if criteria.has_links == "yes" %}selected{% endif %}>Has links</option>
         <option value="no" {% if criteria.has_links == "no" %}selected{% endif %}>No links</option>

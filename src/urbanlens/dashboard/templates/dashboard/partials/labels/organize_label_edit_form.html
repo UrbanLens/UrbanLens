@@ -35,7 +35,7 @@
             {% if label.is_protected %}
             <input type="text" class="form-input" value="{{ label.name }}" disabled title="This status name cannot be changed">
             {% else %}
-            <input name="name" type="text" class="form-input" value="{{ label.name }}" required>
+            <input name="name" type="text" class="form-input" value="{{ label.name }}" required aria-label="Label name">
             {% endif %}
         </div>
     </div>
@@ -43,7 +43,7 @@
 
     <div class="form-field">
         <label class="form-label">Description (optional)</label>
-        <textarea name="description" class="form-input" rows="2">{{ label.description|default:'' }}</textarea>
+        <textarea name="description" class="form-input" rows="2" aria-label="Label description">{{ label.description|default:'' }}</textarea>
     </div>
 
     <div class="tag-icon-color-row">

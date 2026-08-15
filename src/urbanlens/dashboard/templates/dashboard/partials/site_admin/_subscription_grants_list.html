@@ -52,7 +52,7 @@
                               hx-swap="outerHTML">
                             {% csrf_token %}
                             <input type="hidden" name="subscription_id" value="{{ grant.id }}">
-                            <select name="duration_months">
+                            <select name="duration_months" aria-label="Duration in months">
                                 <option value="1">1 month</option>
                                 <option value="3">3 months</option>
                                 <option value="6">6 months</option>

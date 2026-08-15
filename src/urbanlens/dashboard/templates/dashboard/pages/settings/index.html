@@ -797,7 +797,7 @@
             <form class="settings-form" id="password-change-form"
                   data-has-password="{% if e2ee_has_password %}1{% else %}0{% endif %}"
                   data-username="{{ request.user.username }}">
-                <input type="text" name="username" value="{{ request.user.username }}" autocomplete="username" style="display:none" aria-hidden="true" tabindex="-1">
+                <input type="text" name="username" value="{{ request.user.username }}" autocomplete="username" style="display:none" aria-hidden="true" tabindex="-1" aria-label="Confirm your username">
                 {% if e2ee_has_password %}
                 <div class="settings-field">
                     <label class="settings-label" for="password-current">Current password</label>
@@ -1094,7 +1094,7 @@
                     <input type="range" id="cluster-radius-slider"
                            min="10" max="200" step="5"
                            value="{{ is_custom|default:80 }}"
-                           oninput="updateClusterRadius(this.value)">
+                           oninput="updateClusterRadius(this.value)" aria-label="Cluster radius">
                     <span class="settings-cluster-value">
                         <span id="cluster-radius-display">{{ is_custom|default:80 }}</span> px
                     </span>
@@ -1233,7 +1233,7 @@
                             <div class="cop-alpha-row">
                                 <input type="range" class="cop-alpha-slider" id="cop-fill-opacity"
                                        min="0" max="100" value="{{ markup_defaults_form.markup_fill_opacity.value|default:87 }}"
-                                       oninput="copUpdate('fill')">
+                                       oninput="copUpdate('fill')" aria-label="Fill opacity">
                                 <span class="cop-alpha-val" id="cop-fill-opacity-val">{{ markup_defaults_form.markup_fill_opacity.value|default:87 }}</span><span class="cop-pct">%</span>
                             </div>
                         </div>
@@ -1253,7 +1253,7 @@
                             <div class="cop-alpha-row">
                                 <input type="range" class="cop-alpha-slider" id="cop-border-opacity"
                                        min="0" max="100" value="{{ markup_defaults_form.markup_border_opacity.value|default:100 }}"
-                                       oninput="copUpdate('border')">
+                                       oninput="copUpdate('border')" aria-label="Border opacity">
                                 <span class="cop-alpha-val" id="cop-border-opacity-val">{{ markup_defaults_form.markup_border_opacity.value|default:100 }}</span><span class="cop-pct">%</span>
                             </div>
                         </div>

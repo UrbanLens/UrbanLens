@@ -9440,3 +9440,20 @@ Three fixture iterations to get there - a votable candidate needs external sourc
 real MultiPolygon geometry, and no pin/wiki/profile owner. Each failure was read before being
 called a bug, which is what kept the first one (`BoundaryVoteError`) from being reported as a
 defect in the voting service.
+
+## Chunk 515 - form controls: the tail closes at zero unnamed
+
+Labeled the final 26 controls, each from its own `name`/`id` or adjacent label text: label
+name/description, sale date, three file pickers ("Choose photos to share/add", "Attach photos"),
+the two delete-account username confirmations, custom field name, subscription role/duration,
+the profile note textarea, four opacity/radius sliders, both has-links selects, the comment image
+picker, the consensus answer box, and the profile first/last-name autosave inputs (which had a
+`<label>` beside them but not `for`-linked, so a screen reader never connected the two).
+
+**Zero unnamed form controls remain**, from 52 genuine at chunk 503 (and 107 before the scanner
+was corrected for wrapping labels and comment blocks). Combined with dialogs at 77/82 and 28 icon
+buttons, the accessibility thread has named every element it could name from evidence in the
+codebase, leaving only the handful that need their author's intent.
+
+Eighth consolidation running (task bre6rjpob) over chunks 510-514; this chunk's controls have a
+targeted rendering batch behind it.

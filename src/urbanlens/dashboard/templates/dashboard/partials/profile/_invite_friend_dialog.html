@@ -24,13 +24,13 @@
             <div class="invite-subscription-panel">
                 <label><i class="material-symbols-outlined">workspace_premium</i> Optional subscription</label>
                 {% subscription_role_choices as subscription_roles %}
-                <select name="subscription_role">
+                <select name="subscription_role" aria-label="Subscription role">
                     <option value="">No subscription</option>
                     {% for role in subscription_roles %}
                     <option value="{{ role.slug }}">{{ role.name }}</option>
                     {% endfor %}
                 </select>
-                <select name="subscription_duration">
+                <select name="subscription_duration" aria-label="Subscription duration">
                     <option value="1">1 month</option>
                     <option value="3">3 months</option>
                     <option value="6">6 months</option>

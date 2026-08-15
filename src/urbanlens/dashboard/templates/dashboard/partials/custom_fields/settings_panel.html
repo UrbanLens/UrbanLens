@@ -36,7 +36,7 @@
                       hx-target="#custom-fields-settings"
                       hx-swap="innerHTML">
                     {% csrf_token %}
-                    <input type="text" name="name" class="cf-input cf-name-input" value="{{ field.name }}" maxlength="100" required>
+                    <input type="text" name="name" class="cf-input cf-name-input" value="{{ field.name }}" maxlength="100" required aria-label="Custom field name">
                     {% include "dashboard/partials/custom_fields/_definition_fields.html" with field=field show_display=group.supports_display %}
                     <button type="submit" class="btn btn--icon-sm" title="Save">
                         <i class="material-symbols-outlined">check</i>

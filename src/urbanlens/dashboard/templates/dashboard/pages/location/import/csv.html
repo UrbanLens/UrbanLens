@@ -540,7 +540,7 @@
                     Drop files here or <strong id="iw-browse-label">browse</strong>
                 </span>
                 <input type="file" class="iw-file-input" id="iw-file-input" multiple
-                       accept=".kml,.kmz,.json,.geojson,.gpx,.osm,.wkt,.wkb,.csv,.html,.zip,.tgz,.tar.gz{% if can_use_ai_features and profile.ai_enabled %},.txt,.docx{% endif %}{% if import_variant != "memories" %},image/*{% if can_upload_videos %},video/*{% endif %}{% endif %}">
+                       accept=".kml,.kmz,.json,.geojson,.gpx,.osm,.wkt,.wkb,.csv,.html,.zip,.tgz,.tar.gz{% if can_use_ai_features and profile.ai_enabled %},.txt,.docx{% endif %}{% if import_variant != "memories" %},image/*{% if can_upload_videos %},video/*{% endif %}{% endif %}" aria-label="Choose files to import">
             </div>
             <div class="iw-selected-files" id="iw-selected-files"></div>
             <div class="iw-media-progress" id="iw-media-progress" hidden>

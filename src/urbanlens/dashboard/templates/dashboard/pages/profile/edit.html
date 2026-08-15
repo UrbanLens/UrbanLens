@@ -61,7 +61,7 @@
                 <span class="edit-username-at">@</span>
                 <input type="text" class="edit-input edit-username-input" id="username-input"
                        maxlength="30" value="{{ request.user.username }}"
-                       autocomplete="username" spellcheck="false">
+                       autocomplete="username" spellcheck="false" aria-label="Username">
                 <span class="edit-username-hint" id="username-hint"></span>
             </div>
             <p class="edit-field-hint" id="username-requirements-hint" style="display:none">3-30 characters: letters, numbers, and underscores only.</p>
@@ -128,7 +128,7 @@
                 </label>
                 <input type="text" class="edit-input" maxlength="150"
                        value="{{ request.user.first_name }}"
-                       data-autosave="first_name">
+                       data-autosave="first_name" aria-label="First name">
             </div>
             <div class="edit-field">
                 <label class="edit-label">
@@ -137,7 +137,7 @@
                 </label>
                 <input type="text" class="edit-input" maxlength="150"
                        value="{{ request.user.last_name }}"
-                       data-autosave="last_name">
+                       data-autosave="last_name" aria-label="Last name">
             </div>
         </div>
 
