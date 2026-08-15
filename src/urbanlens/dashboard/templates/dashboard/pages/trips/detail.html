@@ -233,16 +233,16 @@
                 <label>Start</label>
                 <div class="activity-datetime-row">
                     <input type="date" name="scheduled_date" id="activity-date"
-                           value="{{ trip.start_date|date:'Y-m-d'|default:'' }}">
-                    <input type="time" name="scheduled_time" id="activity-time">
+                           value="{{ trip.start_date|date:'Y-m-d'|default:'' }}" aria-label="Start date">
+                    <input type="time" name="scheduled_time" id="activity-time" aria-label="Start time">
                 </div>
             </div>
 
             <div class="form-row" id="add-activity-end-date-wrap" hidden>
                 <label>End</label>
                 <div class="activity-datetime-row">
-                    <input type="date" name="scheduled_end_date" id="activity-end-date">
-                    <input type="time" name="scheduled_end_time" id="activity-end-time">
+                    <input type="date" name="scheduled_end_date" id="activity-end-date" aria-label="End date">
+                    <input type="time" name="scheduled_end_time" id="activity-end-time" aria-label="End time">
                 </div>
             </div>
             <div class="form-row" id="add-activity-end-date-toggle-row" style="margin-bottom:.1rem">
@@ -331,8 +331,8 @@
         <div class="form-row">
             <label>Start</label>
             <div class="activity-datetime-row">
-                <input type="date" name="scheduled_date" id="edit-activity-date">
-                <input type="time" name="scheduled_time" id="edit-activity-time">
+                <input type="date" name="scheduled_date" id="edit-activity-date" aria-label="Start date">
+                <input type="time" name="scheduled_time" id="edit-activity-time" aria-label="Start time">
                 <button type="button" class="btn btn--ghost"
                         style="font-size:.78rem;padding:.2rem .5rem;white-space:nowrap"
                         onclick="document.getElementById('edit-activity-date').value='';document.getElementById('edit-activity-time').value=''">
@@ -344,8 +344,8 @@
         <div class="form-row" id="edit-activity-end-date-wrap" hidden>
             <label>End</label>
             <div class="activity-datetime-row">
-                <input type="date" name="scheduled_end_date" id="edit-activity-end-date">
-                <input type="time" name="scheduled_end_time" id="edit-activity-end-time">
+                <input type="date" name="scheduled_end_date" id="edit-activity-end-date" aria-label="End date">
+                <input type="time" name="scheduled_end_time" id="edit-activity-end-time" aria-label="End time">
                 <button type="button" class="btn btn--ghost"
                         style="font-size:.78rem;padding:.2rem .5rem;white-space:nowrap"
                         onclick="document.getElementById('edit-activity-end-date').value='';document.getElementById('edit-activity-end-time').value=''">

@@ -9223,3 +9223,19 @@ it.
 **46 of 82 dialogs now named, from zero two chunks ago**, and the unnamed 36 are the long tail:
 lightboxes and panels with no title element to point at, each needing a name written from what it
 contains. 394 TS tests, 219 dialog/messaging rendering tests, tsc all clean.
+
+## Chunk 503 - sixth consolidation green (10,875), and 23 form controls gain names
+
+**Consolidation verdict**: 10,875 passed, 0 failed, covering chunks 495-499 (EXIF guard, quota
+sweep, search scoping, malware-scan verification, undo confirmations). Six consolidations this
+session, all green.
+
+**Form-label sweep** (a11y dimension 3): the first scan flagged 107 unnamed controls, but it
+counted `<input>`s inside JS comments and missed *wrapping* `<label>text <input></label>` markup -
+the dominant pattern here. Corrected scanner: **52 genuinely unnamed of 421**. Fixed the clusters
+where the missing name costs the most: the map filter panel's and saved-filter form's ten
+date-range inputs (visually a row labelled "After"/"Before" - which never says after *what*, so
+each now carries e.g. "Visited on or after"), trip activity start/end date+time pairs, the
+memories date range, safety check-in title/message, group rename, grace-period slider. **52 -> 29
+remaining**, the rest being file pickers and single-purpose inputs whose surrounding text a
+screen reader does reach.

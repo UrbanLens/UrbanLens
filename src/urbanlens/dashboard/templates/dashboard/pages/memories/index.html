@@ -74,9 +74,9 @@
 
         <div class="memories-controls">
             <div class="memories-date-range">
-                <input type="date" id="memories-start-date" min="{{ earliest_date }}" max="{{ today }}">
+                <input type="date" id="memories-start-date" min="{{ earliest_date }}" max="{{ today }}" aria-label="Memories from date">
                 <span>&ndash;</span>
-                <input type="date" id="memories-end-date" min="{{ earliest_date }}" max="{{ today }}">
+                <input type="date" id="memories-end-date" min="{{ earliest_date }}" max="{{ today }}" aria-label="Memories to date">
                 <button type="button" class="btn btn--sm btn--secondary" id="memories-apply-range">Apply</button>
             </div>
             <div class="memories-quick-range">

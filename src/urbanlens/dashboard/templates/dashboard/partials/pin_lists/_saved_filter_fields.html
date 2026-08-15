@@ -99,11 +99,11 @@ selected_tag_ids, selected_exclude_tag_ids, custom_field_values.
     <div class="fp-date-block" id="sf-visits-dates" style="display:none">
         <div class="fp-date-row">
             <span class="fp-date-label">After</span>
-            <input type="date" name="visited_after" id="sf-visited-after" class="fp-date-input" value="{{ criteria.visited_after|date:'Y-m-d'|default:'' }}">
+            <input type="date" name="visited_after" id="sf-visited-after" class="fp-date-input" value="{{ criteria.visited_after|date:'Y-m-d'|default:'' }}" aria-label="Visited on or after">
         </div>
         <div class="fp-date-row">
             <span class="fp-date-label">Before</span>
-            <input type="date" name="visited_before" id="sf-visited-before" class="fp-date-input" value="{{ criteria.visited_before|date:'Y-m-d'|default:'' }}">
+            <input type="date" name="visited_before" id="sf-visited-before" class="fp-date-input" value="{{ criteria.visited_before|date:'Y-m-d'|default:'' }}" aria-label="Visited on or before">
         </div>
     </div>
 </div>
@@ -111,35 +111,35 @@ selected_tag_ids, selected_exclude_tag_ids, custom_field_values.
 <div class="saved-filter-date-grid">
     <div class="form-row">
         <label for="id_created_after">Pinned after</label>
-        <input type="date" name="created_after" id="id_created_after" value="{{ criteria.created_after|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="created_after" id="id_created_after" value="{{ criteria.created_after|date:'Y-m-d'|default:'' }}" aria-label="Pinned on or after">
     </div>
     <div class="form-row">
         <label for="id_created_before">Pinned before</label>
-        <input type="date" name="created_before" id="id_created_before" value="{{ criteria.created_before|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="created_before" id="id_created_before" value="{{ criteria.created_before|date:'Y-m-d'|default:'' }}" aria-label="Pinned on or before">
     </div>
     <div class="form-row">
         <label for="id_date_built_after">Built after</label>
-        <input type="date" name="date_built_after" id="id_date_built_after" value="{{ criteria.date_built_after|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="date_built_after" id="id_date_built_after" value="{{ criteria.date_built_after|date:'Y-m-d'|default:'' }}" aria-label="Built on or after">
     </div>
     <div class="form-row">
         <label for="id_date_built_before">Built before</label>
-        <input type="date" name="date_built_before" id="id_date_built_before" value="{{ criteria.date_built_before|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="date_built_before" id="id_date_built_before" value="{{ criteria.date_built_before|date:'Y-m-d'|default:'' }}" aria-label="Built on or before">
     </div>
     <div class="form-row">
         <label for="id_date_abandoned_after">Abandoned after</label>
-        <input type="date" name="date_abandoned_after" id="id_date_abandoned_after" value="{{ criteria.date_abandoned_after|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="date_abandoned_after" id="id_date_abandoned_after" value="{{ criteria.date_abandoned_after|date:'Y-m-d'|default:'' }}" aria-label="Abandoned on or after">
     </div>
     <div class="form-row">
         <label for="id_date_abandoned_before">Abandoned before</label>
-        <input type="date" name="date_abandoned_before" id="id_date_abandoned_before" value="{{ criteria.date_abandoned_before|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="date_abandoned_before" id="id_date_abandoned_before" value="{{ criteria.date_abandoned_before|date:'Y-m-d'|default:'' }}" aria-label="Abandoned on or before">
     </div>
     <div class="form-row">
         <label for="id_last_viewed_after">Last viewed after</label>
-        <input type="date" name="last_viewed_after" id="id_last_viewed_after" value="{{ criteria.last_viewed_after|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="last_viewed_after" id="id_last_viewed_after" value="{{ criteria.last_viewed_after|date:'Y-m-d'|default:'' }}" aria-label="Last viewed on or after">
     </div>
     <div class="form-row">
         <label for="id_last_viewed_before">Last viewed before</label>
-        <input type="date" name="last_viewed_before" id="id_last_viewed_before" value="{{ criteria.last_viewed_before|date:'Y-m-d'|default:'' }}">
+        <input type="date" name="last_viewed_before" id="id_last_viewed_before" value="{{ criteria.last_viewed_before|date:'Y-m-d'|default:'' }}" aria-label="Last viewed on or before">
     </div>
 </div>
 
