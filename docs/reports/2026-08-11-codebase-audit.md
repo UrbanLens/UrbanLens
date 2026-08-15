@@ -8988,3 +8988,11 @@ the cooldown expires); the choices change was about to be silent schema drift un
 
 Fourth consolidation still running in background (task bn7au1ggf) - it predates this chunk's
 changes, so these get their validation from the targeted runs plus the next consolidation.
+
+
+## Chunk 489 (interim) - chunk 488 validated: 282 email/profile/invite tests green with migration 0046
+
+The targeted follow-up the fourth consolidation could not cover (it snapshot the tree before
+chunk 488): every email-safety, userprofile and invite suite passes with the new EmailType member,
+the ledger wiring, and migration 0046 applied on a fresh database. The consolidation verdict for
+chunks up to 487 lands next.
