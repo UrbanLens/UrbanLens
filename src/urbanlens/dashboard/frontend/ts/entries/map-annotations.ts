@@ -97,6 +97,7 @@ function readConfig(el: HTMLElement) {
         pinSlug: d.pinSlug || "",
         locationSlug: d.locationSlug || "",
         defaultMapView: d.defaultMapView || "satellite",
+        profileUuid: d.profileUuid || "",
         openweathermapApiKey: d.openweathermapApiKey || "",
         mainMarkerOwnerUuid: d.mainMarkerOwnerUuid || "",
         markupJsonUrl: d.markupJsonUrl || "",
@@ -698,6 +699,11 @@ function init(): void {
         root: document.getElementById("detail-map-layers"),
         apiKey: cfg.openweathermapApiKey || null,
         defaultBase: cfg.defaultMapView,
+        // Same per-profile key the main map, trip and Memories maps use, so the
+        // remembered layer is one site-wide choice. Null without a uuid: that
+        // makes defaultBase "remember" degrade to street rather than sharing one
+        // unscoped bucket between accounts on a shared browser.
+        storageKey: cfg.profileUuid ? `ul_layers_v1_${cfg.profileUuid}` : null,
         onAttribution: (text) => {
             const el = document.getElementById("page-footer-attribution-text");
             if (el) el.textContent = text;
