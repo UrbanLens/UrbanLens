@@ -5241,7 +5241,29 @@ either nonces threaded through those templates or a deliberately permissive `scr
 honest about what it does and does not buy. `django-csp` plus report-only mode for a release, to
 collect violations before enforcing, is the usual way in.
 
-## OPEN 2026-08-12: refunds and chargebacks never reverse pay-what-you-want access
+## ~~OPEN 2026-08-12: refunds and chargebacks never reverse pay-what-you-want access~~ RESOLVED 2026-08-15 (`b453dc42`)
+
+**RESOLVED** with the policy "clawback the money, forgive the access already consumed":
+`banking.apply_refund()` decrements `total_paid_cents` clamped at 0 and deliberately never touches
+`amount_used_cents`/`usage_covered_until`, and `charge.refunded` + `charge.dispute.closed`
+(acting only on `status == "lost"`) are registered in `_HANDLERS`.
+
+**The idempotency subtlety worth remembering**: `charge.refunded` is *cumulative*, so the
+controller's existing per-**event-id** dedup is NOT sufficient - a second partial refund arrives as
+a new event whose `refunds.data` re-contains the first refund object, which event-level dedup
+would happily re-apply. Claiming is therefore per **refund id**, via a new `StripeProcessedRefund`
+model (migration 0044) claimed with `get_or_create` inside the view's existing `atomic()`, so the
+claim commits with the decrement it caused. Both layers hold: redelivery is stopped by
+`processed_at`, a different event carrying an applied refund is stopped by the refund-id row.
+
+55 tests pass (including a hypothesis property that payment-then-full-refund restores the prior
+banked balance while consumed usage stays consumed); ruff/mypy clean. **Two known limits, not
+defects**: (1) a charge with >10 refunds truncates Stripe's `refunds.data` and is logged rather
+than paginated, so the ledger would under-debit in that case; (2) `StripeProcessedRefund` is not
+registered in `admin.py` (skipped to avoid a hot shared file), unlike `StripeWebhookEventAdmin` -
+worth adding for audit parity. **Operator action required**: the two new event types must be
+enabled on the Stripe dashboard endpoint's subscribed-events list; there is no in-code allowlist.
+Original entry below.
 
 `services/billing/webhooks.py::_HANDLERS` registers five Stripe event types
 (`checkout.session.completed`, `customer.subscription.{updated,deleted}`,
