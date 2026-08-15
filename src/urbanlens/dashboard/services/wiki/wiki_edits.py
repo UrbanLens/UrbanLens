@@ -251,4 +251,15 @@ def revert_wiki_edit(location: Location, wiki: Wiki, profile: Profile, target_ed
     target_edit.reverted_by = revert_edit
     target_edit.save(update_fields=["reverted", "reverted_by", "updated"])
 
+    # Reverting a *revert* puts the original edit's content back in force, so
+    # its "reverted" flag would now lie - the history display and the
+    # wiki-edits achievement metric (which excludes reverted rows) both read
+    # it. Cleared only when this revert applied fully: after a partial revert
+    # (skipped_fields non-empty) the earlier edit is only partially back, and
+    # a conservative flag beats a false "in force".
+    if not skipped_fields:
+        undone_ids = list(target_edit.reverts.values_list("pk", flat=True))
+        if undone_ids:
+            WikiEdit.objects.filter(pk__in=undone_ids).update(reverted=False, reverted_by=None)
+
     return revert_edit, skipped_fields

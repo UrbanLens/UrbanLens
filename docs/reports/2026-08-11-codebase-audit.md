@@ -8731,3 +8731,21 @@ stable enums + zero W002 errors, the batched achievement sweep, the citation ret
 the pin-delete promise narrowed, the export gap closed with round-trip import, and three clean
 verification audits (Celery duplicate-tolerance, panel API exposure, TS state). Every chunk
 committed, every change tested, both full-suite consolidations green.
+
+
+## Chunk 474 - wiki edit history: one integrity fix, the rest holds
+
+Audited revert/restore semantics against the edit log. The design is sound in the ways that
+matter: reverts are append-only WikiEdit rows carrying the inverted diff; the per-field conflict
+check (current value must still equal the edit's "to") both protects later edits from being
+clobbered and doubles as an idempotency guard against racing reverts of the same edit - the loser
+finds nothing left to revert and records no-op-free history.
+
+**The one integrity gap: reverting a revert left the original edit flagged `reverted`** while its
+content stood back in force - and both the history display and the wiki-edits achievement metric
+(which excludes reverted rows) read that flag, so the original author's contribution counted as
+dead while live on the page. Fixed: a *full* revert-of-a-revert clears the flags on whatever the
+reverted edit had itself reverted; a partial one (fields skipped for conflicts) leaves the
+conservative flag, since the earlier edit is only partially back. Two tests pin it (including
+that reverting an unrelated edit resurrects nothing); the existing 10-test wiki-edits suite and
+the signal guard pass unchanged. One fixture miss (Location has no `name`) cost a round.
