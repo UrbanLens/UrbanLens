@@ -130,7 +130,10 @@
         }
 
         function reload() {
-            fetch(opts.dataUrl).then(function (r) { return r.json(); }).then(function (data) {
+            fetch(opts.dataUrl).then(function (r) {
+                if (!r.ok) throw new Error('pin select data: HTTP ' + r.status);
+                return r.json();
+            }).then(function (data) {
                 markerMap.forEach(function (marker) { map.removeLayer(marker); });
                 markerMap.clear();
                 itemById.clear();
@@ -158,6 +161,9 @@
                 syncToolbar();
                 if (bounds.length === 1) map.setView(bounds[0], 14);
                 else if (bounds.length > 1) map.fitBounds(bounds, { padding: [40, 40], maxZoom: 15 });
+            }).catch(function () {
+                // A failed load used to leave the selection map silently empty.
+                if (window.toastr) toastr.error('Could not load pins for the map. Refresh to try again.');
             });
         }
 

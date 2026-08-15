@@ -9029,3 +9029,19 @@ uniqueness constraint. Diagnosed by printing the rows rather than theorizing (th
 hypotheses about baker/signals fell to one query); recorded in the PROBLEMS resolution for the
 next fixture author. The other LOW entry (two `get_or_create`s without backing constraints)
 stays filed on its own stated judgement - "neither is worth changing on its own evidence" holds.
+
+
+## Chunk 491 - the three named unhandled-fetch defects, fixed; the migration stays filed
+
+The entry's mass migration (125 raw fetches, each needing an error-path judgement) remains a
+scheduled piece of work, but its three concrete named defects are closed: the trip map's blank
+panel (its `.catch` existed but only hid the wrapper - the entry's "no catch" was near-right,
+the effect identical), the share dialog injecting a 500's Django error page as markup, and the
+silently-empty pin-selection map. Each now checks `r.ok`, and each failure surfaces per the
+documented toast standard while keeping its feature-appropriate empty state.
+
+One self-inflicted splice en route: my regex for attaching the trip-map catch matched through the
+chain's *existing* silent catch and produced unbalanced parens - caught by grep showing two
+adjacent `.catch` lines, repaired to a single honest handler, and the whole script block
+syntax-verified with node after Django-tag stubbing (whose first version stubbed `{% if %}` into
+a syntax error of its own - the check must be checked too).

@@ -196,7 +196,12 @@ function _pinShareNewMap() {
         context: { pinSlug: form.dataset.pinSlug },
         onSaved: function (uuid) {
             fetch("{% url 'pin.share.maps' pin.slug %}", { credentials: 'same-origin' })
-                .then(function (r) { return r.text(); })
+                .then(function (r) {
+                    // A 500's body is Django's error page - it must never be
+                    // injected into the dialog as markup.
+                    if (!r.ok) throw new Error('share maps: HTTP ' + r.status);
+                    return r.text();
+                })
                 .then(function (html) {
                     var grid = document.getElementById('pin-share-map-grid');
                     grid.innerHTML = html;
@@ -204,6 +209,9 @@ function _pinShareNewMap() {
                     if (tile) _pinSharePickMap(tile);
                     if (window._initThumbs) window._initThumbs();
                     document.body.dispatchEvent(new CustomEvent('refreshMarkupMaps'));
+                })
+                .catch(function () {
+                    if (window.toastr) toastr.error('Could not refresh the map list. Close and reopen the dialog.');
                 });
         },
     });

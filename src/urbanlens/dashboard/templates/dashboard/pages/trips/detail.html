@@ -717,7 +717,10 @@
         fetch(url, {
             headers: {'X-Requested-With': 'XMLHttpRequest'}
         })
-        .then(function (r) { return r.json(); })
+        .then(function (r) {
+            if (!r.ok) throw new Error('trip map data: HTTP ' + r.status);
+            return r.json();
+        })
         .then(function (data) {
             var points = data.points || [];
 
@@ -818,7 +821,10 @@
             window.applyTripMapTabFilter();
         })
         .catch(function () {
-            if (wrapEl) wrapEl.hidden = true;
+            // A failed load must not leave a blank panel with no explanation -
+            // the old handler only hid the wrapper, silently.
+            _showEmptyMap();
+            if (window.toastr) toastr.error('Could not load the trip map. Refresh to try again.');
         });
     }
 

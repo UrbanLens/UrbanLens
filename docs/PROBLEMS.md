@@ -6076,7 +6076,7 @@ file, then read the recipient expression for only three of them, and reported th
 if it covered all 21. The same silent-sample error as the controller-create sweep. Re-reading the
 remaining six recipients is what surfaced this.
 
-## OPEN 2026-08-13: the hardened fetch helper is used by 11 call sites out of ~136
+## PARTLY RESOLVED 2026-08-13: the hardened fetch helper is used by 11 call sites out of ~136
 
 `frontend/ts/shared/fetch-json.ts` exists precisely to fix a class of bug its own docstring names -
 "the ``!resp.ok`` check the mutating calls in the very same file were missing". It checks
@@ -6116,6 +6116,14 @@ not an edit, and the two worst examples above are enough to decide whether it is
 The mechanical part is small per site (`fetch(u).then(r => r.json())` becomes
 `window.ulFetchJson(u)`), but each one needs its error path chosen - toast, empty state, or silent -
 and that is a judgement per feature.
+
+**Partly resolved (chunk 491, 2026-08-15): the three named defects are fixed.** The trip map's
+failure path now shows the empty state plus a toast (its existing `.catch` only hid the wrapper,
+silently - the blank panel the entry described); the share dialog checks `r.ok` before injecting
+(a 500's Django error page can no longer become dialog markup) and toasts on failure; the
+pin-selection map toasts instead of staying silently empty. All three verified with `node
+--check`; 394 TS tests pass. The 120-odd-site migration itself stays filed - per-site error-path
+judgement, as the entry says.
 
 
 ---
