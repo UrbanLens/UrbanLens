@@ -5,7 +5,7 @@ Shared dialog header. Usage:
   Optional: title_id="my-title-id" - adds an id to the title span for dynamic JS updates
 
 The title span always carries an id (falling back to a slug of the title) so a
-host <dialog> can point aria-labelledby at it: without a name, a screen reader
+host <dialog aria-labelledby="{% if title_id %}{{ title_id }}{% else %}dialog-title-{{ title|slugify }}{% endif %}"> can point aria-labelledby at it: without a name, a screen reader
 announces every dialog on the site as just "dialog".
 {% endcomment %}
 <div class="dialog-header">

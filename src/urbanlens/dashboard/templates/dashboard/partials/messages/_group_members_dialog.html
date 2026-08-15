@@ -10,9 +10,9 @@ is_masked/avatar_color_class directly on it - a member added by someone
 else may not be friends with everyone here, so their real name/avatar only
 shows when their own privacy settings permit this viewer to see it.
 {% endcomment %}
-<dialog id="dm-group-members-dialog" class="dm-share-dialog ul-dialog">
+<dialog id="dm-group-members-dialog" class="dm-share-dialog ul-dialog" aria-labelledby="dm-group-members-dialog-title">
   <div class="dialog-header">
-    <span>Members of {{ group.name }}</span>
+    <span id="dm-group-members-dialog-title">Members of {{ group.name }}</span>
     <button type="button" class="dialog-close" onclick="this.closest('dialog').close()" aria-label="Close">
       <i class="material-symbols-outlined">close</i>
     </button>

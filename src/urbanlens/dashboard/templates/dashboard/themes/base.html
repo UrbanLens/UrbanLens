@@ -238,9 +238,9 @@
     {# closing in shared/dialog-backdrop.ts. All are installed by core.js above. #}
 
     {# -- Comment map composer dialog -------------------------------------------- #}
-    <dialog id="comment-map-composer" class="comment-map-composer-dialog ul-dialog">
+    <dialog id="comment-map-composer" class="comment-map-composer-dialog ul-dialog" aria-labelledby="comment-map-composer-title">
       <div class="dialog-header">
-        <span>Attach a Map</span>
+        <span id="comment-map-composer-title">Attach a Map</span>
         <button type="button" class="dialog-close" id="comment-map-composer-close" aria-label="Close">
           <i class="material-symbols-outlined">close</i>
         </button>
@@ -342,9 +342,9 @@
     {# picker) or "Choose Existing" (one of the poster's own already-uploaded #}
     {# photos, via CommentImagePickerView). Reuses the .cmc-tabs/.cmc-tab #}
     {# strip styling from the map composer above for a consistent look. #}
-    <dialog id="comment-image-composer" class="comment-image-composer-dialog ul-dialog">
+    <dialog id="comment-image-composer" class="comment-image-composer-dialog ul-dialog" aria-labelledby="comment-image-composer-title">
       <div class="dialog-header">
-        <span>Attach a Photo</span>
+        <span id="comment-image-composer-title">Attach a Photo</span>
         <button type="button" class="dialog-close" id="comment-image-composer-close" aria-label="Close">
           <i class="material-symbols-outlined">close</i>
         </button>
@@ -378,7 +378,7 @@
     </dialog>
 
     {# -- Global confirm dialog (replaces browser confirm()) -------------------- #}
-    <dialog id="confirm-dialog" class="confirm-dialog ul-dialog">
+    <dialog id="confirm-dialog" class="confirm-dialog ul-dialog" aria-labelledby="confirm-dialog-title">
         <div class="dialog-header">
             <span id="confirm-dialog-title">Are you sure?</span>
             <button type="button" id="confirm-dialog-x" class="dialog-close" aria-label="Close">

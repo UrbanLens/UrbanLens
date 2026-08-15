@@ -9209,3 +9209,17 @@ The remaining 44 build their own headers or have no title at all; recorded rathe
 hand-labeled, since each needs a name chosen from what it actually contains.
 
 262 dialog-rendering tests pass; tsc clean. Sixth consolidation still running (task b0zbsv2as).
+
+## Chunk 502 - dialog names: 46 of 82, including every high-traffic one
+
+Continued chunk 501 into the bespoke-header dialogs. Eight more wired by giving their header
+spans ids and pointing at them (the DM share/friend/members dialogs, the safety map picker, the
+comment map/image composers, the map view dialog), plus a sweep for dialogs whose title span
+*already* had an id while the dialog itself never pointed at it - which caught the most-used
+dialog on the site: **`confirm-dialog`**, the shared confirmation used by every destructive
+action. Its title span had carried `id="confirm-dialog-title"` all along; one attribute connected
+it.
+
+**46 of 82 dialogs now named, from zero two chunks ago**, and the unnamed 36 are the long tail:
+lightboxes and panels with no title element to point at, each needing a name written from what it
+contains. 394 TS tests, 219 dialog/messaging rendering tests, tsc all clean.

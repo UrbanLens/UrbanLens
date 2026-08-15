@@ -5,9 +5,9 @@ map" button (see _attached_maps.html) and re-filled live as the user types.
 
 Expects: checkin.
 {% endcomment %}
-<dialog id="safety-map-picker-dialog" class="ul-dialog safety-map-picker-dialog">
+<dialog id="safety-map-picker-dialog" class="ul-dialog safety-map-picker-dialog" aria-labelledby="safety-map-picker-dialog-title">
     <div class="dialog-header">
-        <span>Attach an existing map</span>
+        <span id="safety-map-picker-dialog-title">Attach an existing map</span>
         <button type="button" class="dialog-close" onclick="document.getElementById('safety-map-picker-dialog').close()" aria-label="Close">
             <i class="material-symbols-outlined">close</i>
         </button>
