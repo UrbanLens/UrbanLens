@@ -9500,3 +9500,15 @@ alone:
 `_reparent_children` carries a comment explaining that children must move *before* the delete or
 `CASCADE` would take them - the kind of hazard that is invisible until it has eaten someone's sub
 pins. Sixteenth verified-safe area; no change needed.
+
+## Chunk 518 - eighth consolidation: 10,883 passed, and the channel fix proved under load
+
+10,883 passed, 0 failed, covering chunks 510-514 (dialog and form labels, the panel-gate fix,
+boundary-vote contract). **The condition matters more than the count**: this run overlapped four
+of my targeted batches - exactly the concurrency that produced both websocket flakes before chunk
+509 - and produced no flakes at all. The seventh consolidation was clean but solitary, so it
+could not distinguish "fixed" from "not provoked"; this one was provoked and stayed green.
+
+Eight consolidations: 10,849 / 10,859 / 10,863 / 10,865(2 resolved) / 10,873 / 10,875 / 10,878 /
+10,883. Every chunk from 453 to 517 now covered, and the test count has grown by 34 across the
+session - all of it this audit's own additions.
