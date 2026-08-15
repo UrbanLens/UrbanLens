@@ -49,6 +49,4 @@ class MarkupMapShare(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_markup_map_shares"
         indexes = [
-            Index(fields=["to_profile"], name="idxdb_mms_to_profile"),
-            Index(fields=["markup_map"], name="idxdb_mms_markup_map"),
         ]

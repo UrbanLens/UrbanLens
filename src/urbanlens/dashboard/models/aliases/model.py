@@ -110,7 +110,6 @@ class PinAlias(_AliasBase):
     class Meta(_AliasBase.Meta):
         db_table = "dashboard_pin_aliases"
         indexes = [
-            Index(fields=["pin"], name="idxdb_palias_pin"),
             Index(fields=["pin", "kind"], name="idxdb_palias_pin_kind"),
             Index(fields=["pin", "source"], name="idxdb_palias_pin_source"),
         ]
@@ -150,7 +149,6 @@ class WikiAlias(_AliasBase):
     class Meta(_AliasBase.Meta):
         db_table = "dashboard_wiki_aliases"
         indexes = [
-            Index(fields=["wiki"], name="idxdb_walias_wiki"),
             Index(fields=["wiki", "kind"], name="idxdb_walias_wiki_kind"),
             Index(fields=["wiki", "source"], name="idxdb_walias_wiki_source"),
         ]

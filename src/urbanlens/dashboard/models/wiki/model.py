@@ -451,5 +451,4 @@ class Wiki(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addre
         indexes = [
             Index(fields=["name"], name="idxdb_wiki_name"),
             Index(fields=["location"], name="idxdb_wiki_location"),
-            Index(fields=["parent_wiki"], name="idxdb_wiki_parent_wiki"),
         ]

@@ -113,7 +113,4 @@ class Reaction(abstract.DashboardModel):
         ]
         indexes = [
             models.Index(fields=["comment"], name="reaction_comment_idx"),
-            models.Index(fields=["trip_comment"], name="idxdb_react_trcomment"),
-            models.Index(fields=["direct_message"], name="idxdb_react_dm"),
-            models.Index(fields=["group_message"], name="idxdb_react_gmsg"),
         ]

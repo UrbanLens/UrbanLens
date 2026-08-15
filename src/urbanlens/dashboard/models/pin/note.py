@@ -43,5 +43,4 @@ class PinNote(abstract.DashboardModel):
         # timestamps leave "newest first" order up to the database.
         ordering = ["-created", "-pk"]
         indexes = [
-            Index(fields=["pin"], name="idxdb_pn_pin"),
         ]

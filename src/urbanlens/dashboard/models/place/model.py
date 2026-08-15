@@ -231,8 +231,6 @@ class Place(abstract.DashboardModel):
         db_table = "dashboard_places"
         get_latest_by = "updated"
         indexes = [
-            Index(fields=["domain_root"], name="idxdb_place_domain_root"),
-            Index(fields=["parent"], name="idxdb_place_parent"),
             Index(fields=["status", "is_aggregate"], name="idxdb_place_resolvable"),
         ]
         constraints = [
@@ -293,5 +291,4 @@ class PlaceAccessGrant(abstract.DashboardModel):
             UniqueConstraint(fields=["profile", "place"], name="place_access_grant_unique"),
         ]
         indexes = [
-            Index(fields=["profile"], name="idxdb_pag_profile"),
         ]

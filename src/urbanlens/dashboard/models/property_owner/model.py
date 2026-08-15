@@ -65,7 +65,6 @@ class PinOwner(_OwnerBase):
 
     class Meta(_OwnerBase.Meta):
         db_table = "dashboard_pin_owner"
-        indexes = [Index(fields=["pin"], name="idxdb_pinowner_pin")]
         constraints = [
             # Backs the case-insensitive dedup both PinOwnershipPanelView and
             # PinPropertySaleTabView already perform in Python

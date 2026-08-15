@@ -491,8 +491,6 @@ class Location(abstract.PublicDashboardModel):
             Index(fields=["uuid"], name="idxdb_loc_uuid"),
             Index(fields=["latitude", "longitude"], name="idxdb_loc_lat_long"),
             Index(fields=["official_name"], name="idxdb_loc_offname"),
-            Index(fields=["google_place"], name="idxdb_loc_gplace"),
-            Index(fields=["place"], name="idxdb_loc_place"),
         ]
         unique_together = [
             ["latitude", "longitude"],

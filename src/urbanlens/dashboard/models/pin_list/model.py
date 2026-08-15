@@ -105,7 +105,6 @@ class PinList(abstract.PublicDashboardModel):
             UniqueConstraint(fields=["profile", "name"], name="uq_pin_list_profile_name"),
             UniqueConstraint(fields=["profile", "slug"], name="uq_pin_list_profile_slug"),
         ]
-        indexes = [Index(fields=["profile"], name="idxdb_pinlist_profile")]
 
 
 class PinListItem(abstract.DashboardModel):
@@ -139,6 +138,4 @@ class PinListItem(abstract.DashboardModel):
         ordering = ["order", "created"]
         constraints = [UniqueConstraint(fields=["pin_list", "pin"], name="uq_pin_list_item")]
         indexes = [
-            Index(fields=["pin_list"], name="idxdb_pli_list"),
-            Index(fields=["pin"], name="idxdb_pli_pin"),
         ]

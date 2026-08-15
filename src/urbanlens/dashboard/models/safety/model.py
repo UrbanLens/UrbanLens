@@ -132,7 +132,6 @@ class EmergencyContactDefault(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_contact_defaults"
         ordering = ["order", "created"]
-        indexes = [Index(fields=["owner"], name="idxdb_ecd_owner")]
         constraints = [
             CheckConstraint(
                 condition=Q(contact_profile__isnull=False) ^ Q(email__isnull=False),
@@ -462,7 +461,6 @@ class SafetyCheckinContact(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_checkin_contacts"
         indexes = [
-            Index(fields=["checkin"], name="idxdb_scc_checkin"),
             Index(fields=["token"], name="idxdb_scc_token"),
         ]
         constraints = [
@@ -516,10 +514,7 @@ class SafetyContactOptOut(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_contact_opt_outs"
         indexes = [
-            Index(fields=["contact_profile"], name="idxdb_scoo_profile"),
             Index(fields=["email"], name="idxdb_scoo_email"),
-            Index(fields=["owner"], name="idxdb_scoo_owner"),
-            Index(fields=["checkin"], name="idxdb_scoo_checkin"),
         ]
         constraints = [
             CheckConstraint(
@@ -678,4 +673,3 @@ class SafetyCheckinMessage(abstract.DashboardModel):
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_safety_checkin_messages"
         ordering = ["created"]
-        indexes = [Index(fields=["checkin"], name="idxdb_scm_checkin")]

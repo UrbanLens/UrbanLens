@@ -284,9 +284,7 @@ class MarkupMap(abstract.FrontendDashboardModel):
         ordering = ["-updated"]
         indexes = [
             Index(fields=["uuid"], name="idxdb_mm_uuid"),
-            Index(fields=["profile"], name="idxdb_mm_profile"),
             Index(fields=["profile", "cloned_from"], name="idxdb_mm_profile_clonedfrom"),
-            Index(fields=["pin"], name="idxdb_mm_pin"),
         ]
 
 
@@ -378,9 +376,6 @@ class CustomLayer(abstract.FrontendDashboardModel):
         db_table = "dashboard_custom_layers"
         ordering = ["order", "created"]
         indexes = [
-            Index(fields=["parent_pin"], name="idxdb_cl_pin"),
-            Index(fields=["parent_wiki"], name="idxdb_cl_wiki"),
-            Index(fields=["profile"], name="idxdb_cl_profile"),
         ]
 
 
@@ -647,9 +642,4 @@ class PinMarkup(abstract.FrontendDashboardModel):
         db_table = "dashboard_pin_markup"
         ordering = ["created"]
         indexes = [
-            Index(fields=["parent_pin"], name="idxdb_pm_pin"),
-            Index(fields=["parent_wiki"], name="idxdb_pm_wiki"),
-            Index(fields=["parent_map"], name="idxdb_pm_map"),
-            Index(fields=["profile"], name="idxdb_pm_profile"),
-            Index(fields=["layer"], name="idxdb_pm_layer"),
         ]

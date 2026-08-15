@@ -64,5 +64,4 @@ class ExternalVisitParticipant(abstract.DashboardModel):
         db_table = "dashboard_external_visit_participants"
         indexes = [
             Index(fields=["email_hash"], name="idxdb_evp_email_hash"),
-            Index(fields=["visit"], name="idxdb_evp_visit"),
         ]

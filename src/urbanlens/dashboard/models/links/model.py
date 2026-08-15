@@ -77,7 +77,6 @@ class PinLink(_LinkBase):
     class Meta(_LinkBase.Meta):
         db_table = "dashboard_pin_links"
         indexes = [
-            Index(fields=["pin"], name="idxdb_plink_pin"),
         ]
 
 
@@ -104,5 +103,4 @@ class WikiLink(_LinkBase):
     class Meta(_LinkBase.Meta):
         db_table = "dashboard_wiki_links"
         indexes = [
-            Index(fields=["wiki"], name="idxdb_wlink_wiki"),
         ]

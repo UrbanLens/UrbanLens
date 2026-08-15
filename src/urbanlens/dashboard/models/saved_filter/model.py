@@ -58,4 +58,3 @@ class SavedFilter(abstract.FrontendDashboardModel):
         db_table = "dashboard_saved_filters"
         ordering = ["order", "-created"]
         constraints = [UniqueConstraint(fields=["profile", "name"], name="uq_saved_filter_profile_name")]
-        indexes = [Index(fields=["profile"], name="idxdb_savedfilter_profile")]

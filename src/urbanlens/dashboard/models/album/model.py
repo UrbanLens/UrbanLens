@@ -175,8 +175,6 @@ class Album(abstract.PublicDashboardModel):
             UniqueConstraint(fields=["parent_wiki", "slug"], name="uq_album_wiki_slug"),
         ]
         indexes = [
-            Index(fields=["parent_pin"], name="idxdb_album_pin"),
-            Index(fields=["parent_wiki"], name="idxdb_album_wiki"),
         ]
 
 
@@ -214,6 +212,4 @@ class AlbumItem(abstract.DashboardModel):
         ordering = ["order", "created"]
         constraints = [UniqueConstraint(fields=["album", "image"], name="uq_album_item")]
         indexes = [
-            Index(fields=["album"], name="idxdb_albumitem_album"),
-            Index(fields=["image"], name="idxdb_albumitem_image"),
         ]

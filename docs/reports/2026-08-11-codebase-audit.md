@@ -8519,3 +8519,23 @@ albums and links do not; both docstrings state the real scope and point at `PinU
 user deleting by mistake now knows the cost *before* confirming, which is the moment it matters.
 The dialog's message text is not asserted by its tests (12/12 still pass, tsc clean), so no test
 churn. PROBLEMS entry moved to PARTLY RESOLVED with the deep-restore question left open.
+
+
+## Chunk 462 - the 58 duplicate FK indexes dropped, with the analysis re-verified first
+
+The 2026-08-13 entry deferred this because the then-dirty working tree would have buried a
+58-index migration; the tree is clean now and the migration is its own commit (and committing it
+applies nothing anywhere - the owner still chooses when `migrate` runs).
+
+Re-verified before touching anything, per the read-the-matches rule: all 58 names statically
+confirmed as single-column `Index` declarations on `ForeignKey` fields that keep their automatic
+index - the only configuration where the pair is byte-identical (a plain `Index(fields=[...])`
+cannot be partial, unique, or pattern-ops). The check had to tolerate two declaration shapes
+(list-item vs inline `indexes = [...]`), which the first regex pass missed for 6 of the 58 - the
+per-file "removed N" counts flagged the shortfall immediately, which is the read-the-matches rule
+doing its job on my own tooling.
+
+Migration `0045_drop_duplicate_fk_indexes`: autodetected, exactly 58 `RemoveIndex`, depends on
+the committed 0044, `makemigrations --check` clean, fresh test DB builds through it, 65
+model-heavy tests pass. Write amplification on every insert/update/delete of 22 tables halves for
+those columns; no query plan can regress because the identical twin remains.

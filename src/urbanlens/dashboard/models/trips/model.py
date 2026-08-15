@@ -348,7 +348,6 @@ class TripActivity(abstract.DashboardModel):
         db_table = "dashboard_trip_activities"
         ordering = ["scheduled_at", "order", "created"]
         indexes = [
-            Index(fields=["trip"], name="idxdb_ta_trip"),
             Index(fields=["trip", "scheduled_at"], name="idxdb_ta_trip_dt"),
         ]
 
@@ -414,7 +413,6 @@ class TripMembership(abstract.DashboardModel):
         db_table = "dashboard_trip_memberships"
         unique_together = [("trip", "profile")]
         indexes = [
-            Index(fields=["trip"], name="idxdb_tm_trip"),
         ]
         permissions = [
             ("remove_trip_members", "Can remove members from trips"),
@@ -473,7 +471,6 @@ class TripActivityRSVP(abstract.DashboardModel):
         db_table = "dashboard_trip_activity_rsvps"
         unique_together = [("activity", "membership")]
         indexes = [
-            Index(fields=["activity"], name="idxdb_taar_activity"),
         ]
 
 
@@ -547,7 +544,6 @@ class TripComment(abstract.DashboardModel):
         db_table = "dashboard_trip_comments"
         ordering = ["created"]
         indexes = [
-            Index(fields=["trip"], name="idxdb_tc_trip"),
         ]
 
 
@@ -589,5 +585,4 @@ class TripActivityVote(abstract.DashboardModel):
         db_table = "dashboard_trip_activity_votes"
         unique_together = [("activity", "profile")]
         indexes = [
-            Index(fields=["activity"], name="idxdb_tav_activity"),
         ]

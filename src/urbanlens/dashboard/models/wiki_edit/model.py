@@ -80,6 +80,5 @@ class WikiEdit(abstract.DashboardModel):
         ordering = ["-created"]
         get_latest_by = "created"
         indexes = [
-            Index(fields=["wiki"], name="idxdb_we_wiki"),
             Index(fields=["wiki", "created"], name="idxdb_we_created"),
         ]
