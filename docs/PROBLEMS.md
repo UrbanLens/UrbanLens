@@ -668,7 +668,16 @@ threshold (pairs and halves both come back clean, so it is not a simple poisoner
 happy-dom than 20.11.2; or run this one file in its own bun process so it stops sharing a
 `GlobalWindow` at all, which sidesteps rather than diagnoses.
 
-## LOW 2026-08-11: `check_in`/`cancel_checkin` still write `status` from a possibly-stale instance
+## ~~LOW 2026-08-11: `check_in`/`cancel_checkin` still write `status` from a possibly-stale instance~~ RESOLVED 2026-08-15
+
+**RESOLVED**: both functions now use the `_resolve_as_found_safe` compare-and-set shape
+(`filter(pk=...).exclude(status__in=resolved_statuses()).update(...)`) and return bool; a lost
+race returns False with zero side effects (no re-broadcast, no `_conclude_checkin`, no archival
+scheduling - the winner already did them), and the external API's mark-safe/cancel endpoints 409
+on a lost race instead of silently no-opping. Controller callers ignore the bool by design (their
+`is_resolved` pre-checks remain the fast path; a lost race correctly no-ops). 4 new race tests in
+`test_safety_resolution_races.py`; 173/173 tests across the six safety-related files pass.
+Original entry below.
 
 Found 2026-08-11 while fixing the sweep-driven resolution races (see
 `test_safety_resolution_races.py`). `services/visits/safety.py`'s `check_in` and
