@@ -8715,3 +8715,19 @@ payload, which is server-rendered per page, not client-cached) and its contract 
 394 passing TS tests; `tsc` clean.
 
 Final consolidation full-suite run in background (task b1ylv0hqq) over the second half's changes.
+
+
+## Chunk 473 - second consolidation: 10,859 passed, 0 failed
+
+The 1h34m run validates everything since chunk 466's run: the capabilities-card exception fix,
+the profile importer, the three export types and their fold-ins, the run_export end-to-end
+coverage, the E2EE schema serializers and the nine decorated methods. Zero failures, one xfail
+(the deliberate pin-detach marker), and the order-dependent trip-settings flake did not recur in
+this ordering either. Ten more tests than the chunk-466 run - the session's own additions.
+
+The audit's second half (chunks 453-473 since the REData loop closed): the Nominatim fallback
+fix, the SECRET_KEY guard, both encryption-migration reverses, the 58-index drop, schema auth +
+stable enums + zero W002 errors, the batched achievement sweep, the citation retrofit completed,
+the pin-delete promise narrowed, the export gap closed with round-trip import, and three clean
+verification audits (Celery duplicate-tolerance, panel API exposure, TS state). Every chunk
+committed, every change tested, both full-suite consolidations green.
