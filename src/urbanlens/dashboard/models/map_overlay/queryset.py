@@ -23,7 +23,7 @@ class MapImageOverlayQuerySet(abstract.FrontendDashboardQuerySet):
         return self.filter(profile=profile)
 
     def renderable(self) -> Self:
-        """Overlays that still have an image to draw.
+        """Overlays that still have something to draw - an image or a tile template.
 
         An overlay whose uploaded ``Image`` was deleted elsewhere (gallery
         cleanup, a quota sweep) keeps its georeferencing but has nothing to
@@ -32,7 +32,7 @@ class MapImageOverlayQuerySet(abstract.FrontendDashboardQuerySet):
         """
         from django.db.models import Q
 
-        return self.exclude(Q(image__isnull=True) & Q(image_url=""))
+        return self.exclude(Q(image__isnull=True) & Q(image_url="") & Q(tile_url_template=""))
 
 
 class MapImageOverlayManager(abstract.FrontendDashboardManager.from_queryset(MapImageOverlayQuerySet)):

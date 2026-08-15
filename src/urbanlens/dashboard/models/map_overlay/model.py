@@ -58,8 +58,14 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
             are materialized into a real ``Image`` first, so the overlay keeps
             working when the provider's URL rots).
         image_url: An external image URL instead, for a user who would rather
-            reference a remote sheet than store a copy. Exactly one of this and
-            ``image`` is set.
+            reference a remote sheet than store a copy.
+        tile_url_template: An XYZ tile URL template (``.../{z}/{x}/{y}.png``)
+            instead of an image - used for already-georeferenced historical
+            maps served as warped tile pyramids (REData's ``/maps/``, via
+            UrbanLens's tile proxy). A tile overlay is pre-placed by its
+            georeference, so the corner handles don't apply to it; the corner
+            fields store its bounds for zoom-to-extent. Exactly one of
+            ``image``, ``image_url`` and this is set.
         nw_latitude: Latitude of the image's top-left corner. Likewise for the
             other three corners, in :data:`CORNERS` order.
         opacity: Percent opacity, so a user can see the real map underneath -
@@ -88,6 +94,7 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
         related_name="map_overlays",
     )
     image_url = URLField(max_length=1000, blank=True, default="")
+    tile_url_template = CharField(max_length=500, blank=True, default="")
 
     nw_latitude = FloatField()
     nw_longitude = FloatField()
@@ -200,6 +207,7 @@ class MapImageOverlay(abstract.FrontendDashboardModel):
             "uuid": str(self.uuid),
             "name": self.name,
             "url": self.source_url,
+            "tile_url_template": self.tile_url_template,
             "corners": self.corners(),
             "opacity": self.opacity,
             "order": self.order,

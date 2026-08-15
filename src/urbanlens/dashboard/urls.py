@@ -42,6 +42,7 @@ from urbanlens.dashboard.controllers import (
     labels,
     links,
     location_wiki,
+    historical_map_tiles,
     map_overlays,
     map_sharing,
     maps,
@@ -283,6 +284,11 @@ urlpatterns = [
                     "infrastructure/",
                     maps.MapController.as_view({"get": "infrastructure_features"}),
                     name="map.infrastructure",
+                ),
+                path(
+                    "historical-tiles/<uuid:georeference_uuid>/<int:z>/<int:x>/<int:y>.png",
+                    historical_map_tiles.HistoricalMapTileView.as_view(),
+                    name="map.historical_tiles",
                 ),
                 path("pins/", maps.MapController.as_view({"get": "map_pins_json"}), name="map.pins"),
                 path("pins/children/", maps.MapController.as_view({"get": "map_child_pins_json"}), name="map.pins.children"),
@@ -567,6 +573,11 @@ urlpatterns = [
                                 "<slug:pin_slug>/overlays/",
                                 map_overlays.MapOverlayListView.as_view(),
                                 name="pin.overlays",
+                            ),
+                            path(
+                                "<slug:pin_slug>/overlays/historical/",
+                                map_overlays.HistoricalMapBrowseView.as_view(),
+                                name="pin.overlays.historical",
                             ),
                             path(
                                 "<slug:pin_slug>/overlays/<uuid:overlay_uuid>/",
@@ -1351,6 +1362,11 @@ urlpatterns = [
                     "<slug:location_slug>/wiki/overlays/",
                     map_overlays.MapOverlayListView.as_view(),
                     name="location.wiki.overlays",
+                ),
+                path(
+                    "<slug:location_slug>/wiki/overlays/historical/",
+                    map_overlays.HistoricalMapBrowseView.as_view(),
+                    name="location.wiki.overlays.historical",
                 ),
                 path(
                     "<slug:location_slug>/wiki/overlays/<uuid:overlay_uuid>/",

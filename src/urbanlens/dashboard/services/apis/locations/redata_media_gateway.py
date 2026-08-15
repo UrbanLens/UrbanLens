@@ -1,14 +1,15 @@
-"""REData-backed street-view carousel providers (Mapillary, KartaView, Panoramax).
+"""REData media client plus the street-view carousel providers (Mapillary, KartaView, Panoramax).
 
-REData's ``GET /api/v1/media/lookup/`` (``../REData/docs/api-reference.md``, "Media")
-now fronts these three crowdsourced street-level imagery networks worldwide, each
-fixed at a 100m search radius on REData's own side regardless of what
-``radius_meters`` is sent. UrbanLens used to call each network directly
-(``mapillary.py``/``kartaview.py``/``panoramax.py``, now deleted) with its own
-auth/parsing quirks; :class:`RedataMediaGateway` replaces all three call sites with
-one REData client, and the three :class:`StreetViewProvider` subclasses below are
-thin wrappers that differ only in which ``?provider=`` tag they pass and their
-display name - REData is now the only outbound caller, so there is no fallback.
+:class:`RedataMediaGateway` wraps ``GET /api/v1/media/lookup/``
+(``../REData/docs/api-reference.md``, "Media") - each network's current
+photos near a point. The three :class:`StreetViewProvider` subclasses below
+used to draw from it, but now source their slides from REData's
+``/street-view/timeline/`` (see ``redata_street_view_gateway``) instead: one
+dated slide per capture date rather than an undated handful of recent
+frames. UrbanLens used to call each network directly
+(``mapillary.py``/``kartaview.py``/``panoramax.py``, now deleted) with its
+own auth/parsing quirks; REData is now the only outbound caller, so there is
+no fallback.
 """
 
 from __future__ import annotations
@@ -88,23 +89,6 @@ class RedataMediaGateway(RedataLocationContextGateway):
         return envelope.results
 
 
-def _capture_date(item: dict[str, Any]) -> str:
-    """Best-effort human-readable capture date for a REData media row.
-
-    REData's generic media-item contract promotes no capture-date column of
-    its own (only ``record_retrieved_at``/``created``/``updated``, timestamps
-    for when REData itself last touched the row) - a per-source capture date,
-    if the source publishes one, would only ever appear inside the verbatim
-    ``attributes`` bag. Checked defensively since the exact key REData uses
-    there (if any) isn't part of the documented contract; falls back to
-    REData's own record timestamp, which is at least a real date rather than
-    a fabricated one.
-    """
-    attributes = item.get("attributes") or {}
-    captured = attributes.get("captured_at") or attributes.get("date") or item.get("record_retrieved_at") or item.get("created") or ""
-    return str(captured)[:10] or "Unknown"
-
-
 @dataclass(slots=True, kw_only=True)
 class _RedataStreetViewProvider(StreetViewProvider):
     """Base for one REData ``media/lookup`` provider surfaced in the street-view carousel.
@@ -130,32 +114,46 @@ class _RedataStreetViewProvider(StreetViewProvider):
     _display_name: ClassVar[str] = ""
 
     def _generate_street_view_slides(self, latitude: float, longitude: float, *, radius: float = 50, limit: int = 5) -> Generator[StreetViewSlide]:
-        """Yield street-level photos from this provider, via REData.
+        """Yield one dated slide per capture *date* from this provider, newest first.
+
+        Sourced from REData's ``/street-view/timeline/`` rather than
+        ``/media/lookup/``: the timeline holds every date a camera passed the
+        point (not just each network's current nearby photos), and its
+        ``representative`` is the frame taken nearest the query point - an
+        arbitrary pick shows a picture down the street about half the time.
+        The result is a decay progression: the same site on every date it was
+        photographed.
 
         Args:
             latitude: WGS-84 latitude.
             longitude: WGS-84 longitude.
-            radius: Search radius in meters - see :meth:`RedataMediaGateway.lookup`.
-            limit: Maximum number of slides to request from REData.
+            radius: Unused - REData pins the street-view search at 100 m per
+                provider; kept for the ``StreetViewProvider`` signature.
+            limit: Maximum number of dated slides to yield.
 
         Yields:
-            ``StreetViewSlide`` entries in the order REData returns them.
+            ``StreetViewSlide`` entries, newest capture date first.
         """
-        gateway = RedataMediaGateway()
-        results = gateway.lookup(latitude, longitude, kind="photo", provider=self._redata_provider, radius_meters=radius, limit=limit)
-        for item in results:
-            img_src = item.get("url") or item.get("thumbnail_url")
+        from urbanlens.dashboard.services.apis.locations.redata_street_view_gateway import RedataStreetViewGateway
+
+        timeline = RedataStreetViewGateway().get_timeline(latitude, longitude, provider=self._redata_provider)
+        dates = sorted(timeline.get("dates") or [], key=lambda entry: entry.get("captured_on") or "", reverse=True)
+        for entry in dates:
+            representative = entry.get("representative") or {}
+            # download_url (REData's archived copy) needs API auth, so the
+            # browser gets the network's own copy - which attribution
+            # requires linking anyway.
+            img_src = representative.get("image_url") or representative.get("thumbnail_url")
             if not img_src:
                 continue
-            attributes = item.get("attributes") or {}
-            heading = attributes.get("heading_degrees")
+            heading = representative.get("heading_degrees")
             yield StreetViewSlide(
                 img_src=img_src,
                 source=self._display_name,
-                date=_capture_date(item),
+                date=str(entry.get("captured_on") or "")[:10] or "Unknown",
                 heading=float(heading) if heading is not None else None,
-                latitude=item.get("latitude"),
-                longitude=item.get("longitude"),
+                latitude=representative.get("latitude"),
+                longitude=representative.get("longitude"),
             )
 
 

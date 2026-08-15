@@ -23,6 +23,13 @@ export interface MapOverlayEntry {
     uuid: string;
     name: string;
     url: string;
+    /**
+     * XYZ tile template (`.../{z}/{x}/{y}.png`) instead of an image, for
+     * already-georeferenced historical maps served as warped tile pyramids.
+     * A tile overlay is pre-placed by its georeference: no corner dragging,
+     * and `corners` only records its bounds.
+     */
+    tile_url_template: string;
     /** `[[lat, lng], ...]` for NW, NE, SE, SW - clockwise from the image's top-left. */
     corners: [number, number][];
     opacity: number;
@@ -130,9 +137,13 @@ export function matrix3dForCorners(points: { x: number; y: number }[], width: nu
 
 interface LiveOverlay {
     entry: MapOverlayEntry;
-    img: HTMLImageElement;
+    /** The positioned `<img>` - null for tile-pyramid overlays. */
+    img: HTMLImageElement | null;
+    /** The Leaflet tile layer - null for image overlays. */
+    tileLayer: L.TileLayer | null;
     handles: HTMLElement[];
     aligning: boolean;
+    visible: boolean;
 }
 
 /**
@@ -163,6 +174,8 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
 
     function redraw(item: LiveOverlay): void {
         const { img, entry } = item;
+        // Tile overlays are drawn by Leaflet itself - nothing to reposition.
+        if (!img) return;
         if (!img.naturalWidth || !img.naturalHeight) return;
         const points = entry.corners.map(pixelFor);
         // Everything is positioned in layer-point space, the same coordinates
@@ -232,14 +245,34 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
         return handle;
     }
 
+    function boundsFor(entry: MapOverlayEntry): L.LatLngBounds {
+        return leaflet.latLngBounds(entry.corners.map((corner) => leaflet.latLng(corner[0], corner[1])));
+    }
+
     function add(entry: MapOverlayEntry): void {
+        if (entry.tile_url_template) {
+            // Pre-georeferenced tile pyramid: Leaflet's own tile layer does
+            // the drawing, and `bounds` stops it requesting tiles outside
+            // the sheet's footprint (the proxy would 404 them anyway).
+            const tileLayer = leaflet.tileLayer(entry.tile_url_template, {
+                opacity: entry.opacity / 100,
+                bounds: boundsFor(entry),
+                maxZoom: 21,
+                maxNativeZoom: 19,
+            });
+            const item: LiveOverlay = { entry, img: null, tileLayer, handles: [], aligning: false, visible: false };
+            live.set(entry.uuid, item);
+            setVisible(entry.uuid, entry.default_visible);
+            return;
+        }
+
         const img = document.createElement("img");
         img.className = "ul-map-overlay-image";
         img.alt = entry.name || "Map overlay";
         img.draggable = false;
         img.src = entry.url;
 
-        const item: LiveOverlay = { entry, img, handles: [], aligning: false };
+        const item: LiveOverlay = { entry, img, tileLayer: null, handles: [], aligning: false, visible: false };
         item.handles = entry.corners.map((_corner, index) => makeHandle(item, index));
 
         container.appendChild(img);
@@ -253,7 +286,8 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
     function remove(uuid: string): void {
         const item = live.get(uuid);
         if (!item) return;
-        item.img.remove();
+        item.img?.remove();
+        if (item.tileLayer) map.removeLayer(item.tileLayer);
         item.handles.forEach((handle) => handle.remove());
         live.delete(uuid);
     }
@@ -261,7 +295,13 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
     function setVisible(uuid: string, visible: boolean): void {
         const item = live.get(uuid);
         if (!item) return;
-        item.img.hidden = !visible;
+        item.visible = visible;
+        if (item.tileLayer) {
+            if (visible && !map.hasLayer(item.tileLayer)) item.tileLayer.addTo(map);
+            if (!visible && map.hasLayer(item.tileLayer)) map.removeLayer(item.tileLayer);
+            return;
+        }
+        if (item.img) item.img.hidden = !visible;
         item.handles.forEach((handle) => {
             handle.hidden = !visible || item.entry.locked || !item.aligning;
         });
@@ -283,10 +323,21 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
                     add(entry);
                     return;
                 }
-                const wasVisible = !existing.img.hidden;
+                // An overlay changing representation (image <-> tiles) or
+                // tile template is rebuilt outright - rare, and simpler than
+                // teaching every code path both shapes at once.
+                if (!!existing.tileLayer !== !!entry.tile_url_template || (existing.tileLayer && existing.entry.tile_url_template !== entry.tile_url_template)) {
+                    const wasShown = existing.visible;
+                    remove(entry.uuid);
+                    add(entry);
+                    setVisible(entry.uuid, wasShown);
+                    return;
+                }
+                const wasVisible = existing.visible;
                 const urlChanged = existing.entry.url !== entry.url;
                 existing.entry = entry;
-                if (urlChanged) existing.img.src = entry.url;
+                if (urlChanged && existing.img) existing.img.src = entry.url;
+                existing.tileLayer?.setOpacity(entry.opacity / 100);
                 setVisible(entry.uuid, wasVisible);
                 redraw(existing);
             });
@@ -310,13 +361,13 @@ export function createMapImageOverlays(leaflet: typeof L, map: L.Map, options: M
             const item = live.get(uuid);
             if (!item) return;
             item.entry.opacity = opacity;
-            item.img.style.opacity = String(opacity / 100);
+            if (item.img) item.img.style.opacity = String(opacity / 100);
+            item.tileLayer?.setOpacity(opacity / 100);
         },
         setVisible,
         /** Whether an overlay is currently drawn. */
         isVisible(uuid: string): boolean {
-            const item = live.get(uuid);
-            return !!item && !item.img.hidden;
+            return !!live.get(uuid)?.visible;
         },
         /** The uuids currently rendered, in draw order. */
         uuids(): string[] {

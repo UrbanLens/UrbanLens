@@ -178,6 +178,13 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   to stop a placed sheet drifting, and either its own layers-panel toggle or membership in a
   custom layer (`models.map_overlay`, `controllers/map_overlays.py`,
   `frontend/ts/shared/map-image-overlays.ts`)
+- **Georeferenced historical map overlays** — "Browse georeferenced historical maps" in the same
+  manage-overlays dialog lists REData's community-georeferenced sheets covering the location
+  (Sanborn plans, cadastral atlases, panoramic views placed by real control points via Allmaps/Map
+  Warper) and adds one as a pre-placed, warped **tile** overlay - no corner dragging needed, same
+  opacity/visibility/layer controls. Tiles stream through UrbanLens's own authenticated proxy
+  (`controllers/historical_map_tiles.py`; 200s and definitive 404s cached, institutional outages
+  never cached) so REData's API key stays server-side
 
 ## External Data Enrichment (Pin Detail Page)
 
@@ -251,7 +258,10 @@ direct-only because REData's contract can't reproduce what they show:
 - **Sunrise/sunset & golden hour** — via REData when configured, falling back to direct Open-Meteo (its 5-day/3-hour OpenWeatherMap counterpart has no sunrise/sunset field), shown alongside the pin detail page's weather panel; golden hour is approximated as the hour after sunrise / before sunset
 - Satellite imagery carousel: Google Maps and Esri (incl. up to 5 historical Wayback releases) are
   direct; additional providers (NASA GIBS, Mapbox, Bing Maps, OpenAerialMap, OpenTopoMap) via REData
-- Street-view carousel: Google Street View is direct; Mapillary, KartaView, and Panoramax are via REData
+- Street-view carousel: Google Street View is direct; Mapillary, KartaView, and Panoramax are via
+  REData's `/street-view/timeline/` - one dated slide per capture date (representative frame
+  nearest the pin, newest first), so the carousel reads as a decay progression rather than an
+  undated handful of recent frames
 - Debug overlay (admin-only) to inspect raw external-API responses per panel
 
 All external integrations are cached (DB-backed, per-Location) and rate-limited per service, with

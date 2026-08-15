@@ -1,10 +1,15 @@
-"""Tests for the REData-backed street-view carousel providers (Mapillary,
-KartaView, Panoramax) - ``services.apis.locations.redata_media_gateway``.
+"""Tests for the REData media gateway and the street-view carousel providers.
+
+The three providers (Mapillary, KartaView, Panoramax) now source their slides
+from REData's ``/street-view/timeline/`` - one dated slide per capture date,
+representative frame nearest the point - rather than ``/media/lookup/``'s
+undated recent photos. ``RedataMediaGateway.lookup`` itself remains (the
+``/media/lookup/`` contract still serves other consumers), so its tests stay.
 
 Mirrors ``test_redata_context_gateway.py``'s conventions: a mocked ``session``
 for the gateway-level tests (no DB, no network), and a mocked
-``RedataMediaGateway.lookup`` for the provider-level slide-mapping tests, since
-those only care about turning a result dict into a ``StreetViewSlide``.
+``RedataStreetViewGateway.get_timeline`` for the provider-level slide-mapping
+tests.
 """
 
 from __future__ import annotations
@@ -22,6 +27,7 @@ from urbanlens.dashboard.services.apis.locations.redata_media_gateway import (
     PanoramaxStreetViewProvider,
     RedataMediaGateway,
 )
+from urbanlens.dashboard.services.apis.locations.redata_street_view_gateway import RedataStreetViewGateway
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.services.apis.locations.base import StreetViewProvider, StreetViewSlide
@@ -88,44 +94,68 @@ class RedataMediaGatewayLookupTests(SimpleTestCase):
             _gateway(session).lookup(1.0, 2.0, kind="photo", provider="mapillary")
 
 
+class RedataStreetViewGatewayTimelineTests(SimpleTestCase):
+    def test_requests_the_timeline_path_with_provider(self) -> None:
+        session = mock.Mock()
+        session.get.return_value = _response(200, {"dates": [], "years": [], "providers": []})
+
+        gateway = RedataStreetViewGateway(base_url="https://redata.example.test", api_key="test-key", session=session)
+        body = gateway.get_timeline(38.456, -77.123, provider="mapillary")
+
+        self.assertEqual(body["dates"], [])
+        url = session.get.call_args.args[0]
+        self.assertEqual(url, "https://redata.example.test/api/v1/street-view/timeline/")
+        params = session.get.call_args.kwargs["params"]
+        self.assertEqual(params["provider"], "mapillary")
+
+
+def _timeline(dates: list[dict]) -> dict:
+    return {"dates": dates, "years": [], "earliest": None, "latest": None, "providers_timeline": [], "providers": []}
+
+
+def _date_entry(captured_on: str, **representative: object) -> dict:
+    return {"captured_on": captured_on, "count": 3, "is_panoramic": False, "representative": representative}
+
+
 class _ProviderSlideMappingMixin(_MixinBase):
     """Shared assertions for each thin street-view provider, run against a
-    mocked ``RedataMediaGateway.lookup`` so these stay pure unit tests."""
+    mocked ``RedataStreetViewGateway.get_timeline`` so these stay pure unit tests."""
 
     provider_cls: type[StreetViewProvider]
     redata_provider: str
     display_name: str
 
-    def _slides(self, results: list[dict]) -> tuple[list[StreetViewSlide], mock.Mock]:
-        # __post_init__ is neutralised alongside lookup because the provider
-        # builds its own RedataMediaGateway() from the module-level settings,
-        # and that constructor raises unless UL_REDATA_API_URL/API_KEY happen
-        # to be set in the environment running the tests. These are pure
-        # slide-mapping assertions - what they must not depend on is whether
-        # the machine has REData credentials configured.
+    def _slides(self, dates: list[dict]) -> tuple[list[StreetViewSlide], mock.Mock]:
+        # __post_init__ is neutralised alongside get_timeline because the
+        # provider builds its own RedataStreetViewGateway() from the
+        # module-level settings, and that constructor raises unless
+        # UL_REDATA_API_URL/API_KEY happen to be set in the environment
+        # running the tests. These are pure slide-mapping assertions - what
+        # they must not depend on is whether the machine has REData
+        # credentials configured.
         with (
-            mock.patch.object(RedataMediaGateway, "__post_init__", return_value=None),
-            mock.patch.object(RedataMediaGateway, "lookup", return_value=results) as mock_lookup,
+            mock.patch.object(RedataStreetViewGateway, "__post_init__", return_value=None),
+            mock.patch.object(RedataStreetViewGateway, "get_timeline", return_value=_timeline(dates)) as mock_timeline,
         ):
             slides = list(self.provider_cls()._generate_street_view_slides(38.456, -77.123, radius=50))
-        return slides, mock_lookup
+        return slides, mock_timeline
 
-    def test_requests_photo_kind_and_its_own_provider_tag(self) -> None:
-        _slides, mock_lookup = self._slides([])
-        mock_lookup.assert_called_once_with(38.456, -77.123, kind="photo", provider=self.redata_provider, radius_meters=50, limit=5)
+    def test_requests_its_own_provider_tag(self) -> None:
+        _slides, mock_timeline = self._slides([])
+        mock_timeline.assert_called_once_with(38.456, -77.123, provider=self.redata_provider)
 
-    def test_maps_url_heading_and_coordinates(self) -> None:
-        results = [
-            {
-                "url": "https://example.test/full.jpg",
-                "thumbnail_url": "https://example.test/thumb.jpg",
-                "attributes": {"heading_degrees": 87.5, "family": "street_level"},
-                "latitude": 38.1,
-                "longitude": -77.2,
-                "record_retrieved_at": "2026-07-01T00:00:00Z",
-            },
+    def test_maps_representative_url_heading_coordinates_and_date(self) -> None:
+        dates = [
+            _date_entry(
+                "2019-06-01",
+                image_url="https://example.test/full.jpg",
+                thumbnail_url="https://example.test/thumb.jpg",
+                heading_degrees=87.5,
+                latitude=38.1,
+                longitude=-77.2,
+            ),
         ]
-        slides, _ = self._slides(results)
+        slides, _ = self._slides(dates)
         self.assertEqual(len(slides), 1)
         slide = slides[0]
         self.assertEqual(slide.img_src, "https://example.test/full.jpg")
@@ -133,23 +163,28 @@ class _ProviderSlideMappingMixin(_MixinBase):
         self.assertEqual(slide.heading, 87.5)
         self.assertEqual(slide.latitude, 38.1)
         self.assertEqual(slide.longitude, -77.2)
-        self.assertEqual(slide.date, "2026-07-01")
+        self.assertEqual(slide.date, "2019-06-01")
 
-    def test_falls_back_to_thumbnail_url_when_url_missing(self) -> None:
-        slides, _ = self._slides([{"thumbnail_url": "https://example.test/thumb.jpg"}])
+    def test_yields_newest_capture_date_first(self) -> None:
+        """The decay progression starts from the most recent look at the site."""
+        dates = [
+            _date_entry("2015-04-02", image_url="https://example.test/old.jpg"),
+            _date_entry("2023-09-14", image_url="https://example.test/new.jpg"),
+        ]
+        slides, _ = self._slides(dates)
+        self.assertEqual([slide.date for slide in slides], ["2023-09-14", "2015-04-02"])
+
+    def test_falls_back_to_thumbnail_url_when_image_url_missing(self) -> None:
+        slides, _ = self._slides([_date_entry("2020-01-01", thumbnail_url="https://example.test/thumb.jpg")])
         self.assertEqual(slides[0].img_src, "https://example.test/thumb.jpg")
 
-    def test_skips_items_with_no_url_at_all(self) -> None:
-        slides, _ = self._slides([{"attributes": {}}])
+    def test_skips_dates_whose_representative_has_no_url(self) -> None:
+        slides, _ = self._slides([_date_entry("2020-01-01")])
         self.assertEqual(slides, [])
 
     def test_missing_heading_is_none(self) -> None:
-        slides, _ = self._slides([{"url": "https://example.test/a.jpg", "attributes": {}}])
+        slides, _ = self._slides([_date_entry("2020-01-01", image_url="https://example.test/a.jpg")])
         self.assertIsNone(slides[0].heading)
-
-    def test_missing_capture_date_falls_back_to_unknown(self) -> None:
-        slides, _ = self._slides([{"url": "https://example.test/a.jpg"}])
-        self.assertEqual(slides[0].date, "Unknown")
 
     def test_service_key_is_the_historical_per_provider_tag(self) -> None:
         self.assertEqual(self.provider_cls.service_key, self.redata_provider)
@@ -159,8 +194,8 @@ class _ProviderSlideMappingMixin(_MixinBase):
         provider raising (see ``collect_street_view_slides``) - this provider
         must not duplicate that handling by swallowing the error itself."""
         with (
-            mock.patch.object(RedataMediaGateway, "__post_init__", return_value=None),
-            mock.patch.object(RedataMediaGateway, "lookup", side_effect=LocationContextUnavailableError("source_error", "down")),
+            mock.patch.object(RedataStreetViewGateway, "__post_init__", return_value=None),
+            mock.patch.object(RedataStreetViewGateway, "get_timeline", side_effect=LocationContextUnavailableError("source_error", "down")),
             pytest.raises(LocationContextUnavailableError),
         ):
             list(self.provider_cls()._generate_street_view_slides(38.456, -77.123))

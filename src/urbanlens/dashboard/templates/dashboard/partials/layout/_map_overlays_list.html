@@ -15,8 +15,14 @@ dialog only owns the presentation settings.
 <ul id="map-overlay-manage-list" class="map-overlay-manage-list">
     {% for row in rows %}
     <li class="map-overlay-manage-row" id="map-overlay-row-{{ row.overlay.uuid }}" data-overlay-uuid="{{ row.overlay.uuid }}">
+        {% if row.overlay.tile_url_template %}
+        <span class="map-overlay-manage-thumb map-overlay-manage-thumb--tiles" title="Georeferenced tile overlay">
+            <i class="material-symbols-outlined">map</i>
+        </span>
+        {% else %}
         <img class="map-overlay-manage-thumb" src="{{ row.overlay.source_url }}" alt="" loading="lazy"
              onerror="urbanlensMediaThumbFallback(this, 'broken_image', 'map-overlay-manage-thumb')">
+        {% endif %}
         <div class="map-overlay-manage-fields">
             <input type="text" name="name" class="map-overlay-manage-name" value="{{ row.overlay.name }}" maxlength="100"
                    placeholder="Overlay name"
@@ -62,10 +68,12 @@ dialog only owns the presentation settings.
             {% endif %}
         </div>
         <input type="hidden" name="order" value="{{ row.overlay.order }}">
+        {% if not row.overlay.tile_url_template %}
         <button type="button" class="btn btn--icon" title="Align on map"
                 onclick="window.ulMapOverlayStartAlign && window.ulMapOverlayStartAlign('{{ row.overlay.uuid }}')">
             <i class="material-symbols-outlined">open_with</i>
         </button>
+        {% endif %}
         <button type="button" class="btn btn--icon btn--danger" title="Remove overlay"
                 hx-delete="{{ row.delete_url }}"
                 hx-confirm="Remove this image overlay from the map? The image itself is kept."
@@ -122,4 +130,13 @@ dialog only owns the presentation settings.
         <i class="material-symbols-outlined">add_photo_alternate</i> Add overlay
     </button>
 </form>
+
+<div class="map-overlay-historical">
+    <button type="button" class="btn"
+            hx-get="{{ historical_url }}"
+            hx-target="#map-overlay-historical-results" hx-swap="innerHTML">
+        <i class="material-symbols-outlined">history_edu</i> Browse georeferenced historical maps
+    </button>
+    <div id="map-overlay-historical-results"></div>
+</div>
 {% endif %}

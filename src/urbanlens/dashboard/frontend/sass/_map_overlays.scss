@@ -139,3 +139,56 @@
   font-size: .78rem;
   margin: 0;
 }
+
+.map-overlay-manage-thumb--tiles {
+  align-items: center;
+  background: var(--ul-grey-2);
+  color: var(--ul-grey-5);
+  display: inline-flex;
+  justify-content: center;
+}
+
+.map-overlay-historical {
+  border-top: 1px solid var(--ul-grey-2);
+  display: flex;
+  flex-direction: column;
+  gap: .5rem;
+  margin-top: .75rem;
+  padding-top: .75rem;
+}
+
+.map-overlay-historical-list {
+  display: flex;
+  flex-direction: column;
+  gap: .4rem;
+  list-style: none;
+  margin: 0;
+  max-height: 14rem;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.map-overlay-historical-row {
+  align-items: center;
+  display: flex;
+  gap: .6rem;
+  justify-content: space-between;
+}
+
+.map-overlay-historical-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.map-overlay-historical-title {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.map-overlay-historical-meta {
+  color: var(--ul-grey-5);
+  font-size: .78rem;
+}

@@ -266,6 +266,7 @@ def _render_overlay_list(request: HttpRequest, owner: Pin | Wiki, qs: MapImageOv
         {
             "rows": rows,
             "create_url": reverse(url_prefix, args=[owner_slug]),
+            "historical_url": reverse(f"{url_prefix}.historical", args=[owner_slug]),
             "layers": CustomLayer.objects.filter(**_owner_kwargs(owner)).order_by("order", "id"),
             "at_limit": len(overlays) >= MAX_OVERLAYS_PER_MAP,
             "max_overlays": MAX_OVERLAYS_PER_MAP,
@@ -380,4 +381,108 @@ class MapOverlayDeleteView(LoginRequiredMixin, View):
         """Remove one overlay from its map."""
         owner, qs = _resolve_owner(request, pin_slug, location_slug)
         get_object_or_404(qs, uuid=overlay_uuid).delete()
+        return _render_overlay_list(request, owner, qs)
+
+
+class HistoricalMapBrowseView(LoginRequiredMixin, View):
+    """Browse REData's georeferenced historical maps covering this pin/wiki, and add one as an overlay.
+
+    ``GET pin/<slug>/overlays/historical/`` (and the wiki counterpart) lists
+    sheets whose georeferenced footprint covers or nears the location - fire
+    insurance plans, cadastral atlases, panoramic views - already placed by
+    real control points, so no corner-dragging is needed. ``POST`` with a
+    ``georeference_uuid`` from that list creates a tile overlay for it.
+
+    The overlay's ``tile_url_template`` points at UrbanLens's own tile proxy
+    (``map.historical_tiles``) rather than REData's template - REData's API
+    key must never reach the browser.
+    """
+
+    def get(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
+        """Render the list of georeferenced sheets covering the owner's location, most detailed first."""
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+        from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway
+
+        owner, _qs = _resolve_owner(request, pin_slug, location_slug)
+        is_pin = isinstance(owner, Pin)
+        url_prefix = "pin.overlays" if is_pin else "location.wiki.overlays"
+        owner_slug = owner.slug if is_pin else owner.location.slug
+        context: dict = {"post_url": reverse(f"{url_prefix}.historical", args=[owner_slug]), "maps": [], "error": None}
+
+        if not redata_configured():
+            context["error"] = "Historical map search isn't available on this install."
+            return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
+
+        location = _owner_location(owner)
+        try:
+            matches = RedataHistoricalMapsGateway().get_maps_covering(float(location.latitude), float(location.longitude), radius_meters=2000, limit=25)
+        except LocationContextUnavailableError:
+            context["error"] = "Historical map search is temporarily unavailable."
+            return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
+
+        for match in matches:
+            sheet = match.get("sheet") or {}
+            georeference = match.get("georeference") or {}
+            if not georeference.get("uuid") or not georeference.get("bounds"):
+                continue
+            context["maps"].append(
+                {
+                    "georeference_uuid": georeference["uuid"],
+                    "title": sheet.get("title") or "Untitled map",
+                    "date_text": sheet.get("date_text") or "",
+                    "kind": (sheet.get("kind") or "other").replace("_", " "),
+                    "attribution": sheet.get("attribution") or "",
+                    "contains_point": bool(match.get("contains_point")),
+                },
+            )
+        return render(request, "dashboard/partials/layout/_historical_maps_list.html", context)
+
+    def post(self, request: HttpRequest, pin_slug: str | None = None, location_slug: str | None = None) -> HttpResponse:
+        """Create a tile overlay for one georeferenced sheet from the GET list."""
+        from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+        from urbanlens.dashboard.services.apis.locations.redata_historical_maps_gateway import RedataHistoricalMapsGateway
+
+        owner, qs = _resolve_owner(request, pin_slug, location_slug)
+        profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        if qs.count() >= MAX_OVERLAYS_PER_MAP:
+            return _render_overlay_list(request, owner, qs, error=f"A map can hold at most {MAX_OVERLAYS_PER_MAP} image overlays.")
+        if not redata_configured():
+            return _render_overlay_list(request, owner, qs, error="Historical map search isn't available on this install.")
+
+        georeference_uuid = (request.POST.get("georeference_uuid") or "").strip()
+        location = _owner_location(owner)
+        # Re-query REData rather than trusting posted bounds/titles: the uuid
+        # must actually be a sheet covering this location, and the canonical
+        # metadata comes back with it.
+        try:
+            matches = RedataHistoricalMapsGateway().get_maps_covering(float(location.latitude), float(location.longitude), radius_meters=2000, limit=25)
+        except LocationContextUnavailableError:
+            return _render_overlay_list(request, owner, qs, error="Historical map search is temporarily unavailable.")
+        match = next((m for m in matches if (m.get("georeference") or {}).get("uuid") == georeference_uuid), None)
+        if match is None:
+            return _render_overlay_list(request, owner, qs, error="That historical map doesn't cover this location.")
+
+        sheet = match.get("sheet") or {}
+        min_lon, min_lat, max_lon, max_lat = (match.get("georeference") or {}).get("bounds")
+
+        # reverse() can't emit literal {z}/{x}/{y}, so build with sentinels and
+        # substitute - keeping the stored template tied to URL routing rather
+        # than a hardcoded path prefix.
+        tile_template = reverse("map.historical_tiles", args=[georeference_uuid, 0, 0, 0]).replace("/0/0/0.png", "/{z}/{x}/{y}.png")
+
+        name_parts = [part for part in (sheet.get("title"), sheet.get("date_text")) if part]
+        overlay = MapImageOverlay(
+            name=" - ".join(name_parts)[:_MAX_NAME_LENGTH],
+            tile_url_template=tile_template,
+            opacity=_clamped_opacity(request.POST.get("opacity"), 70),
+            order=(qs.order_by("-order").values_list("order", flat=True).first() or 0) + 1,
+            # Pre-placed by its georeference: the corner handles don't apply,
+            # so it is born locked; the corners record its bounds.
+            locked=True,
+            profile=profile,
+            **_owner_kwargs(owner),
+        )
+        overlay.set_corners([[max_lat, min_lon], [max_lat, max_lon], [min_lat, max_lon], [min_lat, min_lon]])
+        overlay.save()
         return _render_overlay_list(request, owner, qs)

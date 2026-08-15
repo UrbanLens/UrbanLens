@@ -1,0 +1,31 @@
+{% comment %}
+Georeferenced historical maps covering this pin/wiki's location, from REData -
+HTMX-loaded into #map-overlay-historical-results by the "Browse historical
+maps" button in _map_overlays_list.html. Each Add button POSTs back to the
+same endpoint, which creates a tile overlay and re-renders the whole manage
+dialog body.
+{% endcomment %}
+{% if error %}
+<p class="map-overlay-manage-empty">{{ error }}</p>
+{% elif not maps %}
+<p class="map-overlay-manage-empty">No georeferenced historical maps cover this spot yet.</p>
+{% else %}
+<ul class="map-overlay-historical-list">
+    {% for map in maps %}
+    <li class="map-overlay-historical-row">
+        <div class="map-overlay-historical-info">
+            <span class="map-overlay-historical-title">{{ map.title }}</span>
+            <span class="map-overlay-historical-meta">
+                {{ map.kind }}{% if map.date_text %} - {{ map.date_text }}{% endif %}{% if map.attribution %} - {{ map.attribution }}{% endif %}{% if not map.contains_point %} - nearby{% endif %}
+            </span>
+        </div>
+        <button type="button" class="btn btn--icon" title="Add as overlay"
+                hx-post="{{ post_url }}"
+                hx-vals='{"georeference_uuid": "{{ map.georeference_uuid }}"}'
+                hx-target="#map-overlays-dialog-body" hx-swap="innerHTML">
+            <i class="material-symbols-outlined">add</i>
+        </button>
+    </li>
+    {% endfor %}
+</ul>
+{% endif %}
