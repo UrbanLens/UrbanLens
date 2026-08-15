@@ -9457,3 +9457,10 @@ codebase, leaving only the handful that need their author's intent.
 
 Eighth consolidation running (task bre6rjpob) over chunks 510-514; this chunk's controls have a
 targeted rendering batch behind it.
+
+## Chunk 516 (interim) - chunk 515's form labels validated: 1,952 tests green
+
+The profile/settings/label/custom-field/consensus rendering batch passes with all 26 new
+`aria-label` attributes, including the profile name inputs whose adjacent `<label>` was never
+`for`-linked - markup that looked right in review and was invisible to a screen reader. The
+eighth consolidation (chunks 510-514) is still running.
