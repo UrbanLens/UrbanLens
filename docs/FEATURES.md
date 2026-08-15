@@ -535,6 +535,9 @@ paid subscription the same as an admin-issued grant. Service layer lives in `ser
 
 ## Site Administration
 
+- The api-limits page also shows a **REData capabilities** card - every domain the connected
+  REData instance can answer, its endpoint, prewarm status, and providers (with billable/pinned
+  flags), generated from REData's own registries and cached for an hour
 - `/site-admin/` panel: user management, site-wide settings, usage stats (KPIs, system, API),
   subscription role management, per-service API rate-limit toggles, plugin inventory,
   achievement definitions, cost tracking, UI component showcase, dev toolbar (theme/map-dark-mode

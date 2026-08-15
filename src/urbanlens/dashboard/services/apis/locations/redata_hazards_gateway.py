@@ -29,6 +29,7 @@ class RedataHazardsGateway(RedataLocationContextGateway):
         longitude: float,
         *,
         radius_meters: float | None = None,
+        providers: list[str] | None = None,
         min_magnitude: float | None = None,
         years: int | None = None,
         limit: int | None = None,
@@ -39,8 +40,12 @@ class RedataHazardsGateway(RedataLocationContextGateway):
         Args:
             latitude: WGS-84 latitude.
             longitude: WGS-84 longitude.
-            radius_meters: Search radius in meters. REData defaults to 100 km
-                (ceiling 250 km) when omitted.
+            radius_meters: Search radius in meters. Each provider applies its
+                own default/ceiling when omitted (earthquakes 100/250 km,
+                wildfires 2/25 km, FEMA fixed).
+            providers: Restrict which sources actually run (REData's
+                ``?provider=`` semantics) - a panel wanting only one hazard
+                family should say so rather than fetching and discarding.
             min_magnitude: Minimum event magnitude to include. Narrows the
                 *fetch*, not the cache - a lower floor than a cached search
                 used returns the cached set until it expires (pair with
@@ -71,6 +76,7 @@ class RedataHazardsGateway(RedataLocationContextGateway):
             latitude,
             longitude,
             radius_meters=radius_meters,
+            provider=providers,
             force_refresh=force_refresh,
             limit=limit,
             extra_params=extra_params or None,

@@ -901,6 +901,39 @@ _API_LIMIT_CATEGORIES: dict[str, str] = {
 }
 
 
+def _redata_capabilities() -> dict | None:
+    """REData's capability index for the api-limits page, cached for an hour.
+
+    The index changes on REData deploys, not per request, and this page must
+    render whether or not REData is configured or reachable - so a failure is
+    a ``None`` (the template hides the card), never an exception.
+
+    Returns:
+        The ``{"domains", "text_domains"}`` body, or None when REData is
+        unconfigured or unreachable.
+    """
+    from django.core.cache import cache
+
+    from urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway import RedataCapabilitiesGateway
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+
+    if not redata_configured():
+        return None
+    cache_key = "ul_redata_capabilities"
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached or None
+    try:
+        body = RedataCapabilitiesGateway().get_capabilities()
+    except LocationContextUnavailableError:
+        # Cache the miss briefly too, so an outage doesn't add a failing
+        # round-trip to every admin page load.
+        cache.set(cache_key, {}, 300)
+        return None
+    cache.set(cache_key, body, 3600)
+    return body
+
+
 class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
     """API rate limit configuration page.
 
@@ -966,6 +999,7 @@ class SiteAdminApiLimitsView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "page_name": "site-admin-api-limits",
                 "services": enriched,
                 "tabs": tabs,
+                "redata_capabilities": _redata_capabilities(),
             },
         )
 

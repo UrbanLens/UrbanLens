@@ -56,7 +56,8 @@ class HazardHistoryPanelSource(CoordinateGatedInfoPanelSource):
 
         lat = float(pin.effective_latitude or 0)
         lng = float(pin.effective_longitude or 0)
-        envelope = RedataHazardsGateway().get_hazard_events(lat, lng, years=80, limit=40)
+        envelope = RedataHazardsGateway().get_hazard_events(lat, lng, providers=list(_PROVIDERS), years=80, limit=40)
+        # Belt-and-braces: ?provider= already restricts which sources run.
         events = [event for event in envelope.results if event.get("provider") in _PROVIDERS]
         LocationCache.set(pin.location, self.cache_source, {"events": events}, query_key=f"{lat:.5f},{lng:.5f}")
 

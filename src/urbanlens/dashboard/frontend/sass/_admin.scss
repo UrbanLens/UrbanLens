@@ -1712,3 +1712,33 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
     }
 
 }
+.api-limits-capabilities {
+  margin-top: 1.5rem;
+
+  .table-scroll {
+    overflow-x: auto;
+  }
+
+  .api-limits-capabilities-note {
+    color: var(--ul-grey-5);
+    font-size: .85rem;
+  }
+
+  .api-limits-capabilities-table {
+    border-collapse: collapse;
+    width: 100%;
+
+    th,
+    td {
+      border-bottom: 1px solid var(--ul-grey-2);
+      font-size: .85rem;
+      padding: .35rem .6rem;
+      text-align: left;
+      vertical-align: top;
+    }
+  }
+
+  .api-limits-capability-provider {
+    white-space: nowrap;
+  }
+}

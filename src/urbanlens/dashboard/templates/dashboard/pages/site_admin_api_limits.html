@@ -144,6 +144,55 @@
     </div>
     {% endfor %}
     </div>
+
+    {% if redata_capabilities %}
+    <section class="api-limits-capabilities card">
+        <div class="card-header">
+            <i class="material-symbols-outlined">hub</i>
+            <h3>REData capabilities</h3>
+        </div>
+        <div class="card__body">
+            <p class="api-limits-capabilities-note">
+                What the connected REData instance can answer, generated from its own provider
+                registries. A pinned radius means the provider answers at its own radius whatever
+                is requested; billable providers are excluded from REData's speculative fetches.
+            </p>
+            <div class="table-scroll">
+                <table class="api-limits-capabilities-table">
+                    <thead>
+                        <tr><th>Domain</th><th>Endpoint</th><th>Prewarmed</th><th>Providers</th></tr>
+                    </thead>
+                    <tbody>
+                        {% for domain in redata_capabilities.domains %}
+                        <tr>
+                            <td>{{ domain.label|default:domain.tag }}</td>
+                            <td><code>{{ domain.endpoint }}</code></td>
+                            <td>{{ domain.prewarmed|yesno:"yes,no" }}</td>
+                            <td>
+                                {% for provider in domain.providers %}
+                                <span class="api-limits-capability-provider">{{ provider.tag }}{% if provider.billable %} ($){% endif %}{% if provider.radius_pinned %} [pinned]{% endif %}</span>{% if not forloop.last %}, {% endif %}
+                                {% endfor %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                        {% for domain in redata_capabilities.text_domains %}
+                        <tr>
+                            <td>{{ domain.label|default:domain.tag }} (text search)</td>
+                            <td><code>{{ domain.endpoint }}</code></td>
+                            <td>-</td>
+                            <td>
+                                {% for provider in domain.providers %}
+                                <span class="api-limits-capability-provider">{{ provider.tag }}{% if provider.billable %} ($){% endif %}</span>{% if not forloop.last %}, {% endif %}
+                                {% endfor %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+    {% endif %}
 </div>
 {% endblock %}
 

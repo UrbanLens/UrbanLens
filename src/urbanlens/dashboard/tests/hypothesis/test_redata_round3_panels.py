@@ -15,7 +15,7 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.plugins.builtin.hazard_history import HazardHistoryPanelSource
 from urbanlens.dashboard.plugins.builtin.property_records import _assessment_history, _render_available
 from urbanlens.dashboard.plugins.builtin.redata_aerial_media import AerialMediaSource
-from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope
+from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextEnvelope, LocationContextUnavailableError
 
 
 class AssessmentHistoryTests(SimpleTestCase):
@@ -28,6 +28,11 @@ class AssessmentHistoryTests(SimpleTestCase):
         history = _assessment_history(rows, "1607-114-011-0000")
         self.assertEqual(len(history), 1)
         self.assertEqual(history[0]["total_value"], 45000)
+
+    def test_a_known_apn_with_no_rows_shows_nothing_not_a_neighbour(self) -> None:
+        """Falling back when OUR parcel is uncovered would display someone else's valuations."""
+        rows = [{"parcel_identifier": "neighbour-pin", "tax_year": 2024, "total_value": 999}]
+        self.assertEqual(_assessment_history(rows, "our-own-pin"), [])
 
     def test_without_an_apn_takes_the_identifier_with_the_most_rows(self) -> None:
         rows = [
@@ -85,6 +90,9 @@ class HazardHistoryPanelTests(TestCase):
         assert cached is not None
         providers = {event["provider"] for event in cached.data["events"]}
         self.assertEqual(providers, {"nifc_wildfires", "fema_disasters"})
+        # ?provider= restricts which sources RUN - the earthquake catalog must
+        # not be fetched just to be discarded.
+        self.assertEqual(gateway_cls.return_value.get_hazard_events.call_args.kwargs.get("providers"), ["nifc_wildfires", "fema_disasters"])
 
     def test_render_names_programs_and_sizes(self) -> None:
         data = {
@@ -135,6 +143,51 @@ class AerialMediaSourceTests(TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].caption, "Roof view")
         self.assertEqual(items[0].source, "Wikimedia Commons")
+
+
+class RedataCapabilitiesHelperTests(TestCase):
+    def tearDown(self) -> None:
+        from django.core.cache import cache
+
+        cache.clear()
+        super().tearDown()
+
+    def test_unconfigured_redata_yields_none_without_a_request(self) -> None:
+        from urbanlens.dashboard.controllers.site_admin import _redata_capabilities
+
+        with mock.patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=False):
+            self.assertIsNone(_redata_capabilities())
+
+    def test_the_index_is_cached_for_subsequent_loads(self) -> None:
+        from urbanlens.dashboard.controllers.site_admin import _redata_capabilities
+
+        body = {"domains": [{"tag": "weather", "endpoint": "/api/v1/weather/", "providers": []}], "text_domains": []}
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True),
+            mock.patch("urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway.RedataCapabilitiesGateway") as gateway_cls,
+        ):
+            gateway_cls.return_value.get_capabilities.return_value = body
+            first = _redata_capabilities()
+            second = _redata_capabilities()
+
+        self.assertEqual(first, body)
+        self.assertEqual(second, body)
+        gateway_cls.return_value.get_capabilities.assert_called_once()
+
+    def test_an_outage_yields_none_and_does_not_retry_every_load(self) -> None:
+        from urbanlens.dashboard.controllers.site_admin import _redata_capabilities
+
+        with (
+            mock.patch("urbanlens.dashboard.services.apis.locations.redata_context_gateway.redata_configured", return_value=True),
+            mock.patch("urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway.RedataCapabilitiesGateway") as gateway_cls,
+        ):
+            gateway_cls.return_value.get_capabilities.side_effect = LocationContextUnavailableError("source_error", "down")
+            first = _redata_capabilities()
+            second = _redata_capabilities()
+
+        self.assertIsNone(first)
+        self.assertIsNone(second)
+        gateway_cls.return_value.get_capabilities.assert_called_once()
 
 
 class ChroniclingAmericaProviderTests(SimpleTestCase):

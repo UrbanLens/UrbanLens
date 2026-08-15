@@ -146,8 +146,14 @@ def _assessment_history(rows: list[dict[str, Any]], apn: str) -> list[dict[str, 
     if not keyed:
         return []
 
-    ours = keyed.get(normalize(apn)) if apn else None
-    if ours is None:
+    if apn:
+        # A known APN that matches no row means *our* parcel has no coverage -
+        # falling back to another identifier would display a neighbour's
+        # valuations under this card.
+        ours = keyed.get(normalize(apn))
+        if ours is None:
+            return []
+    else:
         ours = max(keyed.values(), key=len)
 
     ours = [row for row in ours if row.get("total_value")]
