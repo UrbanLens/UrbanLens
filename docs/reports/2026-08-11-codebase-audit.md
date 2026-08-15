@@ -9293,7 +9293,9 @@ The last cheap candidate turned out to be the answer. `/app/.hypothesis/examples
 test container with entries from 2026-08-06 and 2026-08-15, and **Hypothesis replays
 previously-failing examples first on every run** - which is precisely the observed signature: a
 `@given`-driven failure that shows up in one large run and vanishes in isolation, with no code
-change in between. All three filed flakes involve `@given` or subtests.
+change in between. **See chunk 508: this covers one of the three flakes, not all three - the
+sentence originally here claimed all three involve `@given`, which I had not checked and which is
+false.**
 
 The aggravating half is the ownership: the directory is **root-owned, mode 755, while tests run as
 `appuser`** - so writes fail silently and the store is read-only in practice. Bad examples replay
@@ -9303,3 +9305,24 @@ forever; newly found ones are never saved. That is the same `docker exec`-runs-a
 Filed with three remedies (a determinism profile, a chown, or deleting the store) rather than
 applied: one changes test policy for everyone and two touch container state the owner manages -
 the same line this audit has held for the dev-stack entries throughout.
+
+## Chunk 508 - correcting chunk 507: the mechanism explains one flake, not three
+
+Verified my own previous chunk's claim instead of building on it, and it was **wrong**. Chunk 507
+asserted "all three filed flakes involve `@given` or subtests"; checking takes one grep, and:
+
+| flake | `@given`? | explained by the example DB? |
+|---|---|---|
+| `test_only_submitted_fields_ever_move` | **yes** (dicts of permission fields x levels) | yes - replay fits exactly |
+| `test_a_session_connection_is_unaffected` | no | **no** |
+| `test_owner_and_contact_exchange_messages` | no | **no** |
+
+The root-owned example database is still a real, filed defect and still explains the trip-settings
+flake precisely. But two flakes remain unexplained, and chunk 507's write-up would have let a
+future reader close the whole entry on a fix that addresses a third of it. Both documents
+corrected in place with the error named rather than quietly edited.
+
+**This is the session's 39th artifact and the first from *my own conclusion* rather than a scan** -
+the same failure mode in a new position: I reported a property of a set (all three) after
+examining one member (the one whose stack trace I had read). The habit that catches scans has to
+point at conclusions too.

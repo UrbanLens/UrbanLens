@@ -7674,6 +7674,14 @@ subsequent run, so a `@given` test that failed once keeps re-trying that input -
 exactly the observed signature: a failure that appears in one large run and vanishes in isolation
 (different worker, different container state) with no code change between.
 
+**Correction (chunk 508): this explains ONE of the three flakes, not all three.** Checked instead
+of assumed: `test_only_submitted_fields_ever_move` *is* `@given`-driven (dictionaries of
+permission fields x levels), so the replay mechanism fits it exactly. But
+`test_spotguessr_socket_scopes.py` and `test_safety_contact_revocation.py` contain **no `@given`
+and no `subTest`** - the example database cannot touch them, and their cause remains unknown.
+Chunk 507's write-up said "all three involve `@given` or subtests", which was asserted rather
+than verified and is false.
+
 Two aggravating details:
 
 - The directory is **owned by root and mode 755**, while tests run as `appuser` - writes fail
