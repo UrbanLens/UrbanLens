@@ -8749,3 +8749,19 @@ reverted edit had itself reverted; a partial one (fields skipped for conflicts) 
 conservative flag, since the earlier edit is only partially back. Two tests pin it (including
 that reverting an unrelated edit resurrects nothing); the existing 10-test wiki-edits suite and
 the signal guard pass unchanged. One fixture miss (Location has no `name`) cost a round.
+
+
+## Chunk 475 - article revisions: the discipline chunk 474 added was already here
+
+The ArticleRevision half of wiki history verifies clean. `restore_revision` has everything the
+field-edit side needed retrofitting: scope validation (a revision id cannot cross articles),
+append-only history (restore writes the old content *forward* as a new revision tagged
+`restored_from`, so lineage stays visible), no-op detection (restoring identical content records
+nothing), and - the question worth asking - restores go through `save_article`, which re-renders
+and re-sanitizes with nh3 on every write, so an old revision's source is never trusted; only its
+re-rendered output ships. No flags to desynchronize because the design never had a "dead" marker
+in the first place - lineage over flags, which is the better shape and now recorded as the model
+to follow.
+
+No change needed. The two halves of wiki history are now both audited: the diff-based half
+needed one integrity fix (chunk 474); the content-based half was right all along.
