@@ -8603,3 +8603,16 @@ Full suite running in background (task blnsvs5tv) over the session's 13 behavior
 The 22 external-API schema tests (including the E2EE schema suite) pass with the five new
 `extend_schema` annotations - the part the in-flight full run could not cover, since it snapshot
 the tree before those edits. The full-suite verdict lands next.
+
+
+## Chunk 466 (verdict) - full suite green: 10,849 passed, 0 failed
+
+The 1h30m run validates everything since chunk 455's run: the Nominatim gateway fallback, the
+SECRET_KEY startup guard, the decrypting reverses on migrations 0007/0039, the 58-index drop
+(0045), the schema auth extension and enum overrides, the sweep batching, and the undo-promise
+wording. Zero failures; the order-dependent trip-settings flake did not recur this run (its
+PROBLEMS entry stands - one clean run is not a refutation of order dependence). The chunk-465
+schema annotations were validated separately (22 schema tests) since this run pre-dated them.
+
+Read from the output file, not the pipe's exit code, per the standing rule - though this time
+both agreed.
