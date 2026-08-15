@@ -160,7 +160,7 @@ Expects (from controllers.albums._album_detail_context):
   ambiguous which grid was the album.
   {% endcomment %}
   {% if available_images %}
-  <dialog id="album-picker-dialog" class="ul-dialog album-picker-dialog">
+  <dialog id="album-picker-dialog" class="ul-dialog album-picker-dialog" aria-label="Add photos to album">
     <form method="dialog" class="album-picker-head">
       <h4>Add photos to &ldquo;{{ album.name }}&rdquo;</h4>
       <button type="submit" class="album-picker-close" aria-label="Close">

@@ -1,5 +1,5 @@
 {% load dashboard_tags %}
-<dialog id="{{ dialog_id|default:'invite-friend-dialog' }}" class="invite-dialog ul-dialog">
+<dialog id="{{ dialog_id|default:'invite-friend-dialog' }}" class="invite-dialog ul-dialog" aria-label="Invite a friend">
     <div class="dialog-header">
         <span><i class="material-symbols-outlined">mail</i> Invite a Friend</span>
         <button type="button" class="dialog-close" onclick="this.closest('dialog').close()" aria-label="Close dialog">

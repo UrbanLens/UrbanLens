@@ -46,7 +46,7 @@ Context:
                             request per photo.
 {% endcomment %}
 {% with lightbox_id=lightbox_id|default:"gallery-lightbox" %}
-<dialog id="{{ lightbox_id }}" class="gallery-lightbox ul-dialog">
+<dialog id="{{ lightbox_id }}" class="gallery-lightbox ul-dialog" aria-label="Photo viewer">
   <div class="lightbox-inner">
     <div class="lightbox-media-area">
       <button type="button" class="lightbox-close" onclick="document.getElementById('{{ lightbox_id }}').close()" aria-label="Close">

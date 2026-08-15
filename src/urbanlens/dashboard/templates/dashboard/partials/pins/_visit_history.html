@@ -204,7 +204,7 @@
     </dialog>
 
     {# -- Shared lightbox for photos attached to a visit ------------------ #}
-    <dialog id="visit-photo-lightbox-{{ pin.slug }}" class="gallery-lightbox visit-photo-lightbox ul-dialog">
+    <dialog id="visit-photo-lightbox-{{ pin.slug }}" class="gallery-lightbox visit-photo-lightbox ul-dialog" aria-label="Visit photo viewer">
         <div class="lightbox-inner">
             <button type="button" class="lightbox-close" onclick="this.closest('dialog').close()" aria-label="Close">
                 <i class="material-symbols-outlined">close</i>

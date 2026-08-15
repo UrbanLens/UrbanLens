@@ -9347,3 +9347,22 @@ All three flakes now have mechanisms: one the Hypothesis replay store (filed, ow
 this isolation gap (fixed here). Worth noting the sequence: chunk 505 guessed, 506 eliminated two
 guesses, 507 found a real mechanism but over-claimed its scope, 508 caught that, and 509 found the
 rest by reading the tests first. The guessing chunks cost the most and produced the least.
+
+## Chunk 510 - dialog names reach 58 of 82; the concurrency caveat saved to memory
+
+Twelve more dialogs named - label create/edit/merge/bulk-edit/add, the Flickr album picker, album
+photo picker, invite/add friend, DM pin share, and the two photo lightboxes. Direct `aria-label`
+rather than `aria-labelledby` here on purpose: these headers wrap a Material icon inside the
+title span, so pointing at the span would make a screen reader announce the ligature text
+("mail Invite a Friend"). Names were read from each dialog's own content, not guessed from its id.
+
+**58 of 82 named** (from zero at chunk 501). The remaining 24 are genuinely contentless shells -
+JS-populated dialogs with no static text to name them from, where an accurate name needs the
+feature author's intent rather than a reader's inference.
+
+Also persisted the chunk-509 finding to the project memory file: `UL_TEST_DB_NAME` isolates
+Postgres only, the fix derives the channel prefix from it, and everything else process-external
+(Valkey caches, the `.hypothesis` store) is still shared between concurrent runs - the kind of
+thing that costs an hour to rediscover and a line to record.
+
+Seventh consolidation running (task ba9qeg6py), covering the channel-prefix change suite-wide.
