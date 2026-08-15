@@ -5487,7 +5487,28 @@ password proof to mint a key is the smaller change and matches the existing E2EE
 is still a UX change to a settings flow. A middle option is to notify on both events, which this
 app already has the notification machinery for.
 
-## OPEN 2026-08-12: importing the same calendar event twice creates two trips
+## ~~OPEN 2026-08-12: importing the same calendar event twice creates two trips~~ RESOLVED 2026-08-15
+
+**RESOLVED**: `TripCalendarLink` now carries a partial
+`UniqueConstraint(("profile", "google_event_id"), condition=~Q(google_event_id=""))`
+(migration 0046). Partial is load-bearing: a *timed* import deliberately leaves the trip-level
+link's event id blank so the activity-level row owns the id (see the long comment in
+`_create_trip_from_event`), and a plain unique constraint would have broken the second such
+import outright - a test now pins that those blank-id rows still coexist.
+
+The service side no longer relies on the `already_linked()` read winning: the trip, membership,
+activity and both links are created inside one `transaction.atomic()`, and an `IntegrityError`
+rolls the whole half-built trip back and reports the same "already linked to a trip" skip the
+fast path produces. That required extracting `_create_trip_from_event()` so the unit could be
+rolled back as a whole.
+
+**Live-data decision** (the entry withheld this): the migration deletes only duplicate *link*
+rows, keeping the oldest per (profile, event), and deliberately leaves the duplicate Trips
+themselves intact but unlinked - a trip may already carry the user's own activities, members or
+comments, so destroying it to satisfy a constraint would lose real work. Keeping the oldest
+favours the trip the user has had longest. 4 targeted tests pass (72 in the file).
+**Pre-existing, untouched**: `test_calendar_sync.py:90` trips ruff PT027 (unittest-style
+`assertRaises`) - present in HEAD, unrelated to this change. Original entry below.
 
 `services/trips/calendar_sync.py` guards the import path with
 `TripCalendarLink.objects.already_linked(profile, event_id)`, whose docstring states the intent
