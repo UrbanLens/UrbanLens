@@ -1407,6 +1407,35 @@ class TripChildTripSearchView(LoginRequiredMixin, View):
         return JsonResponse({"results": results})
 
 
+def _forecast_gap_seconds(slot: ForecastSlot, target: datetime.datetime) -> float:
+    """Absolute gap in seconds between a forecast slot and a scheduled time.
+
+    A slot carrying an aware-UTC ``date_utc`` (see the ``ForecastSlot``
+    contract) is compared against an aware ``target`` directly, so the gap is
+    offset-correct even when the provider's ``date`` is a local wall clock
+    (Open-Meteo's is). Slots without one fall back to comparing wall clocks,
+    forced naive on both sides so an offset-carrying ``date`` can't raise
+    "can't subtract offset-naive and offset-aware datetimes" and 500 the
+    trip page.
+
+    Args:
+        slot: The forecast slot to measure.
+        target: The activity's scheduled time (aware UTC from the ORM, but a
+            naive value is tolerated and falls back to the wall-clock path).
+
+    Returns:
+        The absolute difference in seconds.
+    """
+    date_utc = slot.get("date_utc")
+    if date_utc is not None and target.tzinfo is not None:
+        return abs((date_utc - target).total_seconds())
+    slot_date = slot["date"]
+    if slot_date.tzinfo is not None:
+        slot_date = slot_date.replace(tzinfo=None)
+    target_naive = target.replace(tzinfo=None) if target.tzinfo is not None else target
+    return abs((slot_date - target_naive).total_seconds())
+
+
 def _build_activity_forecasts(activities: list[TripActivity]) -> list[dict]:
     """For each activity, find the closest forecast slot at its location/time.
 
@@ -1454,23 +1483,8 @@ def _build_activity_forecasts(activities: list[TripActivity]) -> list[dict]:
             continue
 
         target = act.scheduled_at
-        if target.tzinfo is not None:
-            target = target.replace(tzinfo=None)
-
-        # Both sides forced naive before subtracting. `ForecastSlot.date` is
-        # parsed with `datetime.fromisoformat`, which passes an offset straight
-        # through, so a provider that emits one (REData's format is whatever its
-        # API returns) would otherwise raise
-        # "can't subtract offset-naive and offset-aware datetimes" and 500 the
-        # trip page. This only removes the crash: the slots are still compared in
-        # whatever wall clock each provider used, which is a real and separate bug
-        # for the Open-Meteo path - see docs/PROBLEMS.md, it needs the location's
-        # timezone to fix properly.
-        def _naive(value: datetime.datetime) -> datetime.datetime:
-            return value.replace(tzinfo=None) if value.tzinfo is not None else value
-
-        closest = min(slots, key=lambda s: abs((_naive(s["date"]) - target).total_seconds()))
-        gap_hours = abs((_naive(closest["date"]) - target).total_seconds()) / 3600
+        closest, gap_seconds = min(((slot, _forecast_gap_seconds(slot, target)) for slot in slots), key=lambda pair: pair[1])
+        gap_hours = gap_seconds / 3600
 
         if gap_hours > 36:
             entry["out_of_range"] = True

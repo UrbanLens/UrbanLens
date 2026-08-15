@@ -281,7 +281,12 @@ def _weather_summary(activities: list[TripActivity], requester: Profile) -> tupl
     end = max(scheduled_at.date() for _activity, scheduled_at in dated)
     by_day: dict[datetime.date, list[ForecastSlot]] = {}
     for slot in slots:
-        slot_date = slot.get("date")
+        # `start`/`end` come from aware-UTC `scheduled_at` values, so bucket
+        # by the UTC calendar day when the slot is UTC-anchored (see the
+        # `ForecastSlot` contract) - grouping by the provider-local `date`
+        # would land near-midnight slots in the wrong day. Slots without
+        # `date_utc` keep the wall-clock grouping.
+        slot_date = slot.get("date_utc") or slot.get("date")
         if slot_date is None:
             continue
         day = slot_date.date()
