@@ -400,3 +400,103 @@ class LoginTwoFactorCodeViewTests(TestCase):
         response = self.client.post(reverse("login"), {"username": "totp_only", "password": "correct horse battery staple"})
         self.assertRedirects(response, reverse("login.2fa"))
         self.assertNotIn("_auth_user_id", self.client.session)
+
+
+class LoginIpThrottleTests(TestCase):
+    """The per-IP failed-login throttle that backs the per-identifier lockout.
+
+    The identifier lockout alone lets a single address spray attempts across
+    many identifiers (and doubles as a targeted DoS on any one of them), so
+    ``CustomLoginView`` also counts failures per client IP. Each test uses
+    distinct TEST-NET addresses so counters cannot cross-talk with other
+    tests' requests (the test client defaults to 127.0.0.1).
+    """
+
+    PASSWORD = "correct horse battery staple"  # noqa: S105  # nosec B105 - test credential, not a real secret
+    ATTACKER_IP = "203.0.113.7"
+    OTHER_IP = "198.51.100.9"
+
+    def setUp(self) -> None:
+        super().setUp()  # clears the cache (lockout counters live there)
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        self.user: User = baker.make(User, username="ip_throttle_victim", is_active=True)
+        self.user.set_password(self.PASSWORD)
+        self.user.save()
+        settings = SiteSettings.get_current()
+        settings.login_ip_max_attempts = 3
+        settings.save()
+
+    def tearDown(self) -> None:
+        # IP-keyed counters are not rolled back with the transaction; don't
+        # leak them into test classes that skip the cache-clearing setUp.
+        from django.core.cache import cache
+
+        cache.clear()
+        super().tearDown()
+
+    def _fail(self, ip: str, username: str):
+        """One failed login attempt for ``username`` from ``ip``."""
+        return self.client.post(reverse("login"), {"username": username, "password": "wrong-password"}, REMOTE_ADDR=ip)
+
+    def _login(self, ip: str):
+        """A correct-credential login attempt for the real account from ``ip``."""
+        return self.client.post(reverse("login"), {"username": self.user.username, "password": self.PASSWORD}, REMOTE_ADDR=ip)
+
+    def test_spraying_different_usernames_blocks_the_ip(self) -> None:
+        for i in range(3):
+            self._fail(self.ATTACKER_IP, f"sprayed_{i}")
+
+        response = self._login(self.ATTACKER_IP)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertTrue(response.context["form"].errors.get("__all__"))
+
+    def test_other_ip_is_unaffected(self) -> None:
+        for i in range(3):
+            self._fail(self.ATTACKER_IP, f"sprayed_{i}")
+
+        response = self._login(self.OTHER_IP)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    def test_zero_disables_the_ip_throttle(self) -> None:
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        settings = SiteSettings.get_current()
+        settings.login_ip_max_attempts = 0
+        settings.save()
+        for i in range(6):
+            self._fail(self.ATTACKER_IP, f"sprayed_{i}")
+
+        response = self._login(self.ATTACKER_IP)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    def test_ip_gate_error_text_is_identical_to_identifier_lockout(self) -> None:
+        """The two gates must be indistinguishable - compares live responses, not literals."""
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        settings = SiteSettings.get_current()
+        settings.login_max_attempts = 2
+        settings.save()
+
+        # Identifier lockout: two failures on one identifier (from an IP that
+        # stays under its own limit), then a rejected attempt from a clean IP.
+        self._fail("192.0.2.10", "locked_identifier")
+        self._fail("192.0.2.10", "locked_identifier")
+        identifier_response = self._fail("192.0.2.99", "locked_identifier")
+        identifier_errors = identifier_response.context["form"].errors["__all__"]
+
+        # IP throttle: three failures across different identifiers, then a
+        # rejected attempt with a fresh identifier from the same IP.
+        for i in range(3):
+            self._fail(self.ATTACKER_IP, f"sprayed_{i}")
+        ip_response = self._fail(self.ATTACKER_IP, "fresh_username")
+        ip_errors = ip_response.context["form"].errors["__all__"]
+
+        self.assertTrue(list(identifier_errors))
+        self.assertEqual(list(identifier_errors), list(ip_errors))

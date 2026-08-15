@@ -366,6 +366,13 @@ class SiteSettings(abstract.FrontendDashboardModel):
         validators=[MinValueValidator(0), MaxValueValidator(100)],
     )
 
+    login_ip_max_attempts = IntegerField(
+        default=30,
+        help_text=("Maximum number of failed login attempts from a single IP address (across any accounts) before further attempts from that address are temporarily blocked. Set to 0 to disable the per-IP throttle."),
+        verbose_name="Max failed login attempts per IP",
+        validators=[MinValueValidator(0), MaxValueValidator(1000)],
+    )
+
     login_lockout_minutes = IntegerField(
         default=15,
         help_text="How many minutes a locked account must wait before login attempts are accepted again.",
@@ -649,6 +656,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(max_trip_members__gte=1), name="max_trip_members_gte_1"),
             CheckConstraint(condition=Q(max_trip_members__lte=100), name="max_trip_members_lte_100"),
             CheckConstraint(condition=Q(login_max_attempts__gte=0), name="login_max_attempts_gte_0"),
+            CheckConstraint(condition=Q(login_ip_max_attempts__gte=0), name="login_ip_max_attempts_gte_0"),
             CheckConstraint(condition=Q(login_lockout_minutes__gte=1), name="login_lockout_minutes_gte_1"),
             CheckConstraint(condition=Q(backup_frequency_hours__gte=1), name="backup_frequency_hours_gte_1"),
             CheckConstraint(condition=Q(backup_retention__gte=1), name="backup_retention_gte_1"),

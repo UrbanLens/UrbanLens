@@ -176,6 +176,87 @@ def _clear_login_attempts(key: str) -> None:
     cache.delete(_lockout_key(key))
 
 
+def _lockout_error_message(minutes: int) -> str:
+    """The error shown when a login attempt is refused at the lockout gate.
+
+    A single source keeps the identifier-lockout and per-IP-throttle rejections
+    byte-identical, so a refused attempt reveals neither which dimension
+    (account or address) tripped nor whether the identifier exists.
+
+    Args:
+        minutes: The configured ``SiteSettings.login_lockout_minutes``.
+
+    Returns:
+        The user-facing error string.
+    """
+    return f"Too many failed login attempts. Please try again in {minutes} minute{'s' if minutes != 1 else ''}."
+
+
+# -- Per-IP login failure throttle -------------------------------------------
+
+
+def _login_ip_attempts_key(ip: str) -> str:
+    """Cache key for the failed-login counter for a client IP."""
+    return f"login_ip_attempts:{ip}"
+
+
+def _is_ip_locked_out(request: HttpRequest) -> bool:
+    """Return True if the requesting IP has exhausted its failed-login budget.
+
+    Complements the per-identifier lockout: that one stops repeated attempts on
+    a single account but lets one address spray attempts across many
+    identifiers (and doubles as a targeted DoS, since anyone can trip it for a
+    victim's identifier at no cost to themselves). This throttle counts
+    failures per client IP regardless of the identifier submitted.
+
+    Args:
+        request: The incoming login request.
+
+    Returns:
+        True when the IP's failure count has reached
+        ``SiteSettings.login_ip_max_attempts`` within the current window;
+        always False when that setting is 0 (disabled).
+    """
+    from urbanlens.dashboard.models.site_settings import SiteSettings
+
+    max_attempts = SiteSettings.get_current().login_ip_max_attempts
+    if max_attempts <= 0:
+        return False
+    attempts = int(cache.get(_login_ip_attempts_key(_client_ip(request))) or 0)
+    return attempts >= max_attempts
+
+
+def _record_login_ip_failure(request: HttpRequest) -> int:
+    """Increment the requesting IP's failed-login counter.
+
+    Failures only - a successful login never touches the counter, so the
+    throttle simply expires ``login_lockout_minutes`` after the last recorded
+    failure. Mirrors the ``_PASSPHRASE_RATE_LIMIT`` cache-counter pattern used
+    elsewhere in this module.
+
+    Args:
+        request: The login request that just failed.
+
+    Returns:
+        The updated failure count (0 when the throttle is disabled).
+    """
+    from urbanlens.dashboard.models.site_settings import SiteSettings
+
+    settings = SiteSettings.get_current()
+    max_attempts = settings.login_ip_max_attempts
+    if max_attempts <= 0:
+        return 0
+
+    key = _login_ip_attempts_key(_client_ip(request))
+    attempts: int = (cache.get(key) or 0) + 1
+    cache.set(key, attempts, timeout=settings.login_lockout_minutes * 60)
+
+    if attempts >= max_attempts:
+        logger.warning("Login throttled for IP %r after %d failed attempts", _client_ip(request), attempts)
+
+    return attempts
+
+
 # -- Two-factor code rate limiting ------------------------------------------
 
 
@@ -660,12 +741,20 @@ class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
 class CustomLoginView(LoginView):
     """LoginView extended with rate limiting and inactive-account detection.
 
-    Rate limiting is based on the username: after ``SiteSettings.login_max_attempts``
-    consecutive failures the account is locked for ``SiteSettings.login_lockout_minutes``
-    minutes.  The lockout state is stored in Django's cache (no extra DB table needed)
-    so it resets automatically when the cache is cleared or expires.
+    Rate limiting has two independent dimensions, both stored in Django's cache
+    (no extra DB table needed) so they reset automatically when the cache is
+    cleared or expires:
 
-    Setting ``login_max_attempts`` to 0 in site admin disables rate limiting entirely.
+    - Per identifier: after ``SiteSettings.login_max_attempts`` consecutive
+      failures the account is locked for ``SiteSettings.login_lockout_minutes``
+      minutes.
+    - Per client IP: after ``SiteSettings.login_ip_max_attempts`` failures
+      across *any* identifiers, further attempts from that address are refused
+      for the same window - the brake on spraying that the identifier lockout
+      cannot provide.
+
+    Both gates emit the same error text (see ``_lockout_error_message``).
+    Setting either threshold to 0 in site admin disables that dimension.
     """
 
     template_name = "registration/login.html"
@@ -698,14 +787,13 @@ class CustomLoginView(LoginView):
 
     def post(self, request, *args, **kwargs):
         username = request.POST.get("username", "").strip()
-        if username and _is_locked_out(_lockout_key_for_identifier(username)):
+        identifier_locked = bool(username) and _is_locked_out(_lockout_key_for_identifier(username))
+        if identifier_locked or _is_ip_locked_out(request):
             from urbanlens.dashboard.models.site_settings import SiteSettings
 
             minutes = SiteSettings.get_current().login_lockout_minutes
             form = self.get_form()
-            form.errors["__all__"] = form.error_class(
-                [f"Too many failed login attempts. Please try again in {minutes} minute{'s' if minutes != 1 else ''}."],
-            )
+            form.errors["__all__"] = form.error_class([_lockout_error_message(minutes)])
             return self.form_invalid(form)
         return super().post(request, *args, **kwargs)
 
@@ -730,6 +818,13 @@ class CustomLoginView(LoginView):
         return super().form_valid(form)
 
     def form_invalid(self, form: AuthenticationForm) -> HttpResponse:
+        # Count every failure against the requesting IP too, whatever the
+        # identifier (or lack of one). Skipped once the IP is already at its
+        # limit, mirroring the identifier counter below, so the window is
+        # fixed rather than sliding while an attacker keeps hammering.
+        if not _is_ip_locked_out(self.request):
+            _record_login_ip_failure(self.request)
+
         username = form.data.get("username", "").strip()
         if username:
             # Resolve once: used both to key the lockout counter by stable
@@ -1103,7 +1198,7 @@ def _process_pending_invitations(user: User, invite_token: str | None = None) ->
 
 
 def _client_ip(request: HttpRequest) -> str:
-    """Best-effort client IP for rate limiting passphrase suggestions.
+    """Best-effort client IP for per-IP rate limiting (login, passphrases, password checks).
 
     Args:
         request: The incoming HTTP request.
