@@ -9464,3 +9464,21 @@ The profile/settings/label/custom-field/consensus rendering batch passes with al
 `aria-label` attributes, including the profile name inputs whose adjacent `<label>` was never
 `for`-linked - markup that looked right in review and was invisible to a screen reader. The
 eighth consolidation (chunks 510-514) is still running.
+
+## Chunk 516 - trip permissions: 63 of 63 slug-taking views gated
+
+Swept every view taking a `trip_slug`. All 63 resolve through the viewer gate: most via
+`trip_or_not_found` (the HTMX adapter over `get_trip_for_viewer`), the API views via their own
+scoped resolvers. The rule itself is well-built - a missing trip and someone else's trip raise the
+*same* error and answer the same 404, and the docstring records that an earlier version returned
+404-vs-403 and so leaked existence through the status code alone.
+
+Three views survived the widened scan and all three are correct on reading: two delegate to a
+shared `_respond` that gates (and adds a `_viewer_has_joined` check on top), and the child-trip
+search never needs to authorize the slug at all - it filters `Trip.objects.filter(profiles=profile)`
+and uses the slug only to exclude the current trip from its own results.
+
+**The scan's first pass claimed 56 ungated trip endpoints** - a per-method window that missed the
+shared adapter's name and stopped before delegating bodies. That would have been the session's
+most alarming false report; it took two reads to dissolve. 39th-species artifact, same lesson,
+and the reason the number never left this file. Fifteenth verified-safe area.
