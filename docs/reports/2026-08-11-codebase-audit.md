@@ -8172,3 +8172,34 @@ would keep those two. Whether that matters depends on how contributions are cons
 
 Recording it as a characterisation rather than a finding, because "no sandboxing" reads as a
 vulnerability and is not one - it is the only workable model for in-process Python extensions.
+
+
+## Chunk 449 - the plugin partial-registration question, answered by splitting it
+
+Chunk 448 asked whether a plugin failing midway through registration leaves partial state. The
+question conflated **two different `register()` calls**, and they behave differently:
+
+- **`PluginRegistry.register()` - admission.** Clean. It instantiates inside a guard, then rejects a
+  plugin with no name or a duplicate name **before** adding it to `self._plugins`. A rejected plugin
+  leaves nothing behind.
+- **`info.plugin.register(hooks)` - contribution.** This is the one my question was about:
+
+```python
+for info in self.plugins():
+    try:
+        info.plugin.register(hooks)
+    except Exception:
+        logger.exception("Plugin '%s' register() failed", info.plugin.name)
+```
+
+A plugin that registers two panels and then raises **keeps those two panels**, because the exception
+is caught around the whole hook and nothing unwinds `hooks`. The plugin is left half-contributed.
+
+**Whether that is a defect is a design question I am not going to answer for the project.** Both
+readings are defensible: partial contribution means a broken plugin still provides what it managed to
+register (degrade gracefully), or it means the app runs with an inconsistent plugin surface no one
+declared (fail cleanly). The current behaviour is the first, undocumented.
+
+Worth recording because the *shape* is familiar - it is the same "partial application" concern as the
+`0042`/`0043` migration pair in chunk 364, where I was wrong about the risk. Here it is real: nothing
+wraps the hook in a transaction because there is nothing transactional about in-memory registration.
