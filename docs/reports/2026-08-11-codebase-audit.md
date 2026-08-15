@@ -9139,3 +9139,23 @@ pattern list. Reading them took a minute and confirmed both correct - the 37th a
 session, and again a zero-count that was wrong about the code rather than about the codebase.
 
 Eleventh verified-safe area. No change needed.
+
+## Chunk 498 - the malware-scan bypass: deferred, not skipped, and enforced on both sides
+
+Exactly one caller passes `skip_malware_scan=True` - comment image attachments - and it is a
+*deferral*, not a bypass: scanning moved off the request because a clamd hiccup used to fail the
+whole comment submission, and the file is scanned asynchronously instead. Verified the safety
+property that makes that acceptable, rather than trusting the docstring:
+
+- **All three** comment paths that validate (pin, wiki, trip) also start the scan - three
+  `comment_image_error` sites, three `start_comment_image_scan` sites, matched.
+- **Both** read surfaces hide a pending comment from everyone but its author: the thread listing
+  (`services.comments.comments`, gate 2 of its documented chain) and - the one that actually
+  matters for a malicious file - the authenticated media gate, which refuses the *file* itself
+  while `pending_scan` is set. A viewer cannot fetch the attachment by URL before it clears.
+- The task clears the flag only on a clean scan and rejects the upload otherwise.
+
+So the window a hostile file exists in is: uploaded, stored, visible to its uploader alone. That
+is the correct shape - the alternative (blocking the POST on antivirus) traded availability for
+nothing, since the file is unreachable either way until it clears. Twelfth verified-safe area, no
+change needed.
