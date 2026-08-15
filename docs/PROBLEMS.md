@@ -2068,7 +2068,32 @@ profile). Until fixed, verify backend changes on these dev machines via direct D
 tests (no Django test client, no `realtime.broadcast`) plus a manual browser walkthrough against
 the running `docker compose up` stack, rather than the full `pytest` suite.
 
-## SpotGuessr: down-voted photos permanently shrink a small pin pool's playable rounds, with no expiry (found 2026-07-25)
+## ~~SpotGuessr: down-voted photos permanently shrink a small pin pool's playable rounds, with no expiry~~ RESOLVED 2026-08-15 (the expiry half)
+
+**RESOLVED**: reports now age out. Each `REPORTED` row is weighted
+`0.5 ** (age_days / 180)` and, below `GAME_REPORT_MIN_WEIGHT = 0.01` (~6.6 half-lives, roughly
+3 years), drops out entirely.
+
+**The expiry floor is the part that actually fixes it, and it is easy to miss** - I initially
+shipped decay alone and a test caught that it does *not* break the ratchet: exponential decay is
+asymptotic, so an old report leaves a photo at about -0.0000009, which still fails
+`candidate_image_for_location`'s `effective_relevance(image) >= 0` gate. Excluded photos are never
+shown, so they can never earn the "shown, no reaction" impressions that would lift them back up -
+the score has to reach *exactly* zero for the loop to break.
+
+Only reports decay. Thumbs up/down and no-reaction are still counted in bulk with one grouped
+query: a report is a rare deliberate act (cheap to read row-by-row), while `NO_REACTION` accrues on
+every impression and would be thousands of rows per popular photo. A freshly re-reported photo
+stays excluded regardless of how old its other reports are - covered by a test, since "decay
+amnesties a photo people are actively reporting" would be the obvious way to get this wrong.
+
+The pre-existing `test_game_report_counts_at_full_negative_weight` moved from `assertEqual(-1.0)`
+to `assertAlmostEqual`, because decay now starts immediately. 26 tests pass.
+
+**Still open** (the second half of this entry): the empty state does not distinguish "no photos at
+all" from "photos exist but community feedback filtered them", so the exclusion remains
+undiscoverable in the UI. That needs a sentinel threaded from `candidate_image_for_location`
+through the controller into `_empty_state.html`. Original entry below.
 
 Reported symptom: after playing one full solo session against a ~10-pin pool, starting a new
 session sometimes shows the empty state ("Nothing to play yet") even though the profile clearly
