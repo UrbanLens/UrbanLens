@@ -8539,3 +8539,22 @@ Migration `0045_drop_duplicate_fk_indexes`: autodetected, exactly 58 `RemoveInde
 the committed 0044, `makemigrations --check` clean, fresh test DB builds through it, 65
 model-heavy tests pass. Write amplification on every insert/update/delete of 22 tables halves for
 those columns; no query plan can regress because the identical twin remains.
+
+
+## Chunk 463 - the OpenAPI schema gets auth and stable enum names (307 warnings -> 20)
+
+Read the warnings before believing the entry, and the entry's framing was wrong in a useful way:
+the "224 enum collisions" were mostly not enum warnings. ~200 were "could not resolve
+authenticator" - one per external-API view - which means the schema native clients generate from
+documented **no authentication at all**. A 20-line `OpenApiAuthenticationExtension` for
+`ApiKeyAuthentication` fixes that class wholesale: `apiKeyAuth` (HTTP bearer, `ulk_` keys) now
+appears on all 281 operations.
+
+The six genuinely hash-named enums got `ENUM_NAME_OVERRIDES` entries. Two truncation artifacts
+bit on the way (the session's 33rd and 34th): reading the friendship set through `grep -A 8` hid
+its eighth value (`Ignored`), and the first override list matched nothing; the fix - and the
+lesson, again - was referencing the model's own choices by import string rather than
+hand-transcribing values read through a window. Zero hashed enums remain; 22 schema tests pass.
+
+Residual 20 warnings and 13 W002 errors are pre-existing and filed (operationId numerals,
+serializer-inference gaps, three cosmetic multi-name sets).

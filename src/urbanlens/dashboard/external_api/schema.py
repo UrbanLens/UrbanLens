@@ -13,6 +13,7 @@ See :data:`E2EE_PREFIX`.
 
 from __future__ import annotations
 
+from drf_spectacular.extensions import OpenApiAuthenticationExtension
 from drf_spectacular.settings import spectacular_settings
 
 #: URL prefix of the external API mount.
@@ -127,3 +128,26 @@ def preprocess_external_api_only(endpoints: list, **_kwargs) -> list:
     """
     _pin_schema_path_prefix()
     return [(path, path_regex, method, callback) for path, path_regex, method, callback in endpoints if path.startswith(PUBLISHED_SCHEMA_PREFIXES)]
+
+
+class ApiKeyAuthenticationScheme(OpenApiAuthenticationExtension):
+    """Documents ``ApiKeyAuthentication`` in the generated OpenAPI schema.
+
+    Without this, drf-spectacular logged "could not resolve authenticator" for
+    every external-API view - some 200 warnings - and, far worse, emitted a
+    schema documenting **no authentication at all**, so a native client
+    generated from it had no idea an ``Authorization: Bearer ulk_...`` header
+    was required. Registration happens on import; this module is already
+    imported by the schema build via ``PREPROCESSING_HOOKS``.
+    """
+
+    target_class = "urbanlens.dashboard.external_api.authentication.ApiKeyAuthentication"
+    name = "apiKeyAuth"
+
+    def get_security_definition(self, auto_schema):
+        """The security scheme: HTTP bearer carrying a ``ulk_``-prefixed API key."""
+        return {
+            "type": "http",
+            "scheme": "bearer",
+            "description": "UrbanLens API key (`ulk_...`), created in Settings -> API Keys. OAuth2 access tokens share the Bearer scheme and are documented separately.",
+        }

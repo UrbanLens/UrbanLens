@@ -681,6 +681,20 @@ SPECTACULAR_SETTINGS = {
     "VERSION": "v1",
     "SERVE_INCLUDE_SCHEMA": False,
     "PREPROCESSING_HOOKS": ["urbanlens.dashboard.external_api.schema.preprocess_external_api_only"],
+    # Stable names for choice sets spectacular would otherwise hash
+    # (Status0ebEnum, ...). Hashed names are derived from the *colliding set*,
+    # so adding one more `status` field can renumber the rest and silently
+    # break a generated client's types. Subset lists (a write serializer
+    # restricting the settable states) are spelled out; full model choice
+    # sets are referenced by import string so they follow the model.
+    "ENUM_NAME_OVERRIDES": {
+        "SafetyCheckinStatusEnum": "urbanlens.dashboard.models.safety.model.SafetyCheckinStatus.choices",
+        "SafetyCheckinPartnerStatusEnum": "urbanlens.dashboard.models.safety.model.SafetyCheckinPartnerStatus.choices",
+        "FriendshipStatusEnum": "urbanlens.dashboard.models.friendship.meta.FriendshipStatus.choices",
+        "TripActivityStatusEnum": "urbanlens.dashboard.models.trips.model.TripActivity.STATUS_CHOICES",
+        "TripActivitySettableStatusEnum": ["proposed", "confirmed"],
+        "LabelKindEnum": "urbanlens.dashboard.models.labels.meta.KIND_CHOICES",
+    },
 }
 
 # OAuth2 provider (django-oauth-toolkit) - the auth path for native clients

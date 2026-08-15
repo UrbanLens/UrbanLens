@@ -5670,7 +5670,7 @@ Full list of the redundant (`idxdb_*`) indexes:
 - `idxdb_wiki_parent_wiki`
 - `idxdb_wlink_wiki`
 
-## LOW 2026-08-13: the generated OpenAPI schema has 224 enum-naming collisions
+## PARTLY RESOLVED 2026-08-13: the generated OpenAPI schema has 224 enum-naming collisions
 
 `manage.py check --deploy` reports 237 non-security issues, all from drf-spectacular: **224 W001**
 (enum naming) and **13 W002** (views it cannot infer a serializer for).
@@ -7611,3 +7611,14 @@ but the fix is mechanical: copy 0039's `_decrypt_column`/shared-columns-constant
 fail hard rather than soft, so the raising behavior on an undecryptable value is already right.
 
 **Resolved (chunk 460, same day): 0007 now carries `decrypt_existing_tokens`, the exact 0039 shape** (shared column constant, `gAAAA` discriminator, raising failure). Wiring pinned by `test_migration_0039_reverse.py`.
+
+**Partly resolved (chunk 463, 2026-08-15): 307 warnings -> 20, and the schema now documents
+authentication.** The bulk was not enums at all - it was one "could not resolve authenticator"
+per external-API view, meaning the published schema documented *no auth whatsoever*; an
+`OpenApiAuthenticationExtension` for `ApiKeyAuthentication` (external_api/schema.py) now stamps
+the bearer scheme on all 281 operations. All six hash-named enums
+(`Status0eb/770/9a4/A4d/Ea9`, `KindE9e`) have stable `ENUM_NAME_OVERRIDES` names; full model
+choice sets are referenced by import string so they follow the model. Remaining: 3 cosmetic
+"multiple names for one set" warnings (technically-correct schema), ~15 operationId collisions
+(list-vs-detail on one path prefix, resolved with numerals - stable but ugly), and the 13 W002
+serializer-inference errors, all pre-existing.
