@@ -227,16 +227,21 @@ def request_or_accept_friendship(from_profile: Profile, to_profile: Profile, mes
     if existing and existing.status == FriendshipStatus.REQUESTED and existing.from_profile_id == to_profile.pk:
         if not existing.accept():
             return None
-        NotificationLog.objects.create(
-            profile=to_profile,
-            status=Status.UNREAD,
-            importance=Importance.MEDIUM,
-            notification_type=NotificationType.FRIEND_ACCEPTED,
-            title="Friend request accepted",
-            message=f"{from_profile.username} accepted your friend request.",
-            url=reverse("profile.view_user", kwargs={"profile_slug": from_profile.slug or str(from_profile.uuid)}),
-            source_profile=from_profile,
-        )
+        try:
+            accepted_pref = to_profile.notification_preferences.friend_accepted
+        except AttributeError:
+            accepted_pref = DeliveryPreference.SITE
+        if accepted_pref != DeliveryPreference.NONE:
+            NotificationLog.objects.create(
+                profile=to_profile,
+                status=Status.UNREAD,
+                importance=Importance.MEDIUM,
+                notification_type=NotificationType.FRIEND_ACCEPTED,
+                title="Friend request accepted",
+                message=f"{from_profile.username} accepted your friend request.",
+                url=reverse("profile.view_user", kwargs={"profile_slug": from_profile.slug or str(from_profile.uuid)}),
+                source_profile=from_profile,
+            )
         # Mark from_profile's own pending friend_request notification (from to_profile) as read
         NotificationLog.objects.filter(
             profile=from_profile,
@@ -368,6 +373,23 @@ def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
         raise FriendshipActionError("Enable Community in Settings to accept friend requests.")
 
     requester = friendship.from_profile if friendship.to_profile == actor else friendship.to_profile
+    try:
+        accepted_pref = requester.notification_preferences.friend_accepted
+    except AttributeError:
+        accepted_pref = DeliveryPreference.SITE
+    if accepted_pref != DeliveryPreference.NONE:
+        _notify_friend_accepted(requester, actor)
+    _mark_friend_request_notifications_read(actor, target.pk)
+    return friendship
+
+
+def _notify_friend_accepted(requester: Profile, actor: Profile) -> None:
+    """Raise the FRIEND_ACCEPTED notification for *requester*.
+
+    Split out so the acceptance flow's post-notification steps (marking the
+    request notification read, returning the friendship) run whether or not
+    the recipient has silenced this type.
+    """
     NotificationLog.objects.create(
         profile=requester,
         status=Status.UNREAD,
@@ -383,8 +405,6 @@ def accept_friend_request(actor: Profile, target: Profile) -> Friendship:
         # raise FRIEND_ACCEPTED both set it.
         source_profile=actor,
     )
-    _mark_friend_request_notifications_read(actor, target.pk)
-    return friendship
 
 
 def reject_friend_request(actor: Profile, target: Profile) -> Friendship:

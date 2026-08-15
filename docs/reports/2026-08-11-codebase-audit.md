@@ -8833,3 +8833,25 @@ Swept the untrusted-file-input surface across its three attack classes:
 
 Size caps (`DocumentTooLargeError`, the archive limits) bound the parser DoS surface. The eighth
 audited area to verify safe-by-construction. No change needed.
+
+
+## Chunk 479 - the notifications matrix: one dead toggle of twelve, now wired
+
+The 20-of-32 coverage gap stays as designed (documented, and partly deliberate - the safety
+escalation chain should not be silenceable). The audit question was the other half: do the 12
+preference-covered types actually consult their toggle at creation? Eleven do, each at its own
+site (creation is scattered across 10+ files - there is no choke point, so each new site must
+remember; the recurring hazard shape). **`friend_accepted` did not**: both creation sites raised
+the notification unconditionally, so a user who silenced it kept receiving it - a stored
+preference doing nothing, the exact class the "wire them all" decision fixed for text channels.
+
+Both sites now consult it with the house pattern (AttributeError fallback to SITE - the
+preferences row is lazily created, and `RelatedObjectDoesNotExist` subclasses AttributeError).
+The second site needed restructuring rather than an early return, which would have skipped
+marking the request notification read and broken the function's return contract - the
+notification moved into a guarded helper instead. 2 new tests; the full 269-test friend suite
+passes with the restructure.
+
+The 36th scan artifact en route: my consultation-counting grep piped through `-v "= "`, which
+discards assignment-shaped reads - the exact shape consultations take (`pref = ...`). Four
+false zero-counts; reading the sites found three real consultations and the one true gap.
