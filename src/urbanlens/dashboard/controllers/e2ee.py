@@ -39,6 +39,7 @@ from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from urbanlens.dashboard.controllers import e2ee_schema
 from urbanlens.dashboard.external_api.errors import MALFORMED_JSON_BODY_MESSAGE
 from urbanlens.dashboard.external_api.mixins import DualAuthJsonView
 from urbanlens.dashboard.models.account.model import AccountKdf, ApiKeyScope
@@ -203,6 +204,8 @@ class E2EEEnrollView(DualAuthJsonView):
 
     @extend_schema(
         description=("Publishes the caller's key bundle. Requires `current_password` on accounts that have one, even when authenticating with an OAuth2 token - the token alone must never be sufficient to replace an account's key material."),
+        request=e2ee_schema.E2EEEnrollRequestSerializer,
+        responses={201: e2ee_schema.E2EEOkResponseSerializer, 400: None, 403: None, 409: None},
     )
     def post(self, request: Request) -> Response:
         """Create the caller's key bundle.
@@ -311,6 +314,7 @@ class E2EEOwnKeysView(DualAuthJsonView):
         "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
     }
 
+    @extend_schema(responses={200: e2ee_schema.E2EEOwnKeysResponseSerializer})
     def get(self, request: Request) -> Response:
         """Return the caller's bundle, or an "enrolled: false" body when not enrolled.
 
@@ -355,6 +359,7 @@ class E2EEPartnerKeyView(DualAuthJsonView):
         "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
     }
 
+    @extend_schema(responses={200: e2ee_schema.E2EEPartnerKeyResponseSerializer, 404: None})
     def get(self, request: Request, profile_slug: str) -> Response:
         """Return the partner's public key when a DM relationship is permitted.
 
@@ -386,6 +391,7 @@ class E2EEConversationKeyView(DualAuthJsonView):
         "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
     }
 
+    @extend_schema(responses={200: e2ee_schema.E2EEConversationKeysResponseSerializer, 404: None})
     def get(self, request: Request, profile_slug: str) -> Response:
         """Return the caller's wrapped copy of every key version for this pair.
 
@@ -415,6 +421,7 @@ class E2EEConversationKeyView(DualAuthJsonView):
         keys = [{"version": row.version, "wrapped_key": row.wrapped_for(profile.pk)} for row in rows]
         return Response({"keys": keys, "latest": rows[-1].version if rows else 0})
 
+    @extend_schema(request=e2ee_schema.E2EEConversationKeyCreateRequestSerializer, responses={200: e2ee_schema.E2EEWrappedKeySerializer, 201: e2ee_schema.E2EEWrappedKeySerializer, 400: None, 404: None})
     def post(self, request: Request, profile_slug: str) -> Response:
         """Store the next conversation-key version for this pair.
 
@@ -497,6 +504,7 @@ class E2EERewrapView(DualAuthJsonView):
             "endpoint for the rationale. Accounts with no usable password (OAuth-only) have no proof to give."
         ),
     )
+    @extend_schema(request=e2ee_schema.E2EERewrapRequestSerializer, responses={200: e2ee_schema.E2EEOkResponseSerializer, 400: None})
     def post(self, request: Request) -> Response:
         """Update wrapped copies on the caller's bundle.
 
@@ -609,6 +617,7 @@ class E2EEGroupKeyView(DualAuthJsonView):
             "server's recomputed token set and is rejected with 409; refetch this endpoint and retry."
         ),
     )
+    @extend_schema(responses={200: e2ee_schema.E2EEGroupKeysResponseSerializer, 404: None})
     def get(self, request: Request, group_uuid: UUID) -> Response:
         """Return the caller's envelopes and the group's rotation state.
 
@@ -660,6 +669,7 @@ class E2EEGroupKeyView(DualAuthJsonView):
             "Any other key set - notably profile slugs - is rejected with 409."
         ),
     )
+    @extend_schema(request=e2ee_schema.E2EEGroupKeyCreateRequestSerializer, responses={200: e2ee_schema.E2EEWrappedKeySerializer, 201: e2ee_schema.E2EEWrappedKeySerializer, 400: None, 404: None})
     def post(self, request: Request, group_uuid: UUID) -> Response:
         """Store the next group-key version.
 
@@ -835,6 +845,7 @@ class E2EERewrapAllView(DualAuthJsonView):
         "GET": frozenset({ApiKeyScope.MESSAGES_READ}),
     }
 
+    @extend_schema(responses={200: e2ee_schema.E2EERewrapAllResponseSerializer})
     def get(self, request: Request) -> Response:
         """List the caller's sealed conversation-key copies and group envelopes.
 
@@ -912,6 +923,7 @@ class E2EEResetView(DualAuthJsonView):
             "be able to re-key an account and lock its owner out of their own history."
         ),
     )
+    @extend_schema(request=e2ee_schema.E2EEResetRequestSerializer, responses={200: e2ee_schema.E2EEOkResponseSerializer, 400: None, 403: None})
     def post(self, request: Request) -> Response:
         """Replace the caller's key bundle with brand-new key material.
 

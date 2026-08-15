@@ -7657,3 +7657,10 @@ views (`E2EEEnrollView`, `E2EEOwnKeysView`, rewrap/reset, conversation/group/par
 whose request/response bodies are structured key bundles - annotating them honestly means
 writing real serializers for those shapes, not `OpenApiTypes.OBJECT`; a client generating types
 for E2EE payloads deserves better than `object`. Filed as its own piece of work.
+
+**Done (chunk 471, 2026-08-15): schema errors are now zero.** `controllers/e2ee_schema.py`
+defines documentation serializers mirroring each view's actual reads/writes (enroll bundle,
+wrapped-key envelopes, group member tokens, rewrap-all inventories, reset confirmation); all nine
+schema-visible methods are decorated. The views still parse JSON by hand on purpose - blobs are
+opaque size-bounded strings - so these serializers document, never validate. 94 E2EE tests pass
+unchanged.

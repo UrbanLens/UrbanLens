@@ -8683,3 +8683,18 @@ account (every exporter must tolerate nothing to export) and an account with a r
 chunk-469 addition. Both produce the archive with all expected files. 2/2 green on first run -
 which after chunk 469's three fixture misses is worth noting as evidence the exporters themselves
 were left in good shape.
+
+
+## Chunk 471 - the E2EE schema serializers: spectacular errors reach zero
+
+The last eight W002 views now publish real shapes: `controllers/e2ee_schema.py` holds
+documentation-only serializers mirroring each view's actual reads/writes - the enroll bundle
+(with the current_password proof), wrapped-key envelopes, the opaque group member tokens, the
+rewrap-all inventory, the reset confirmation. Nine methods decorated (enroll's existing
+description-only annotation extended rather than replaced). The views keep parsing JSON by hand
+deliberately - key blobs are opaque size-bounded strings and DRF coercion adds nothing - so the
+serializers document, never validate, and the module docstring says so.
+
+`manage.py spectacular`: **0 errors** (45 at the start of chunk 463), 20 warnings (the cosmetic
+tail). 94 E2EE tests pass unchanged. A native client can now generate correct types for every
+published operation, E2EE included.
