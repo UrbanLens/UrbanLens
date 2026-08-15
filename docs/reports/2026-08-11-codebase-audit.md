@@ -8776,3 +8776,40 @@ client. Each list endpoint now declares an explicit `operation_id` (`pins_list`,
 own-keys GET named `e2ee_own_keys_retrieve` against the partner-key detail). Spectacular:
 20 -> 14 warnings, errors still 0. The remaining 14 are the cosmetic multiple-names-for-one-set
 tail plus enum notes - stable schema, no client impact. 22 schema tests pass.
+
+
+## Chunk 477 - second-half summary (chunks 453-476)
+
+**The STATUS section written at the 2026-08-15 pause is fully discharged**: item 1 (Nominatim
+fallback) in chunk 453; items 2-4 (decision reconstruction + citation retrofit, SECRET_KEY guard,
+roadmap unstaling) in chunks 454-455. Everything below happened after the backlog closed.
+
+**Fixes shipped** (each TDD'd or test-pinned, all validated by two green full-suite runs -
+10,849 and 10,859 passing):
+- Nominatim fallbacks routed through the rate-limited gateway; blocked tutorial user agent gone.
+- `DJANGO_SECRET_KEY` unset outside local now fails boot instead of silently corrupting
+  `EncryptedTextField` data per process.
+- Migrations 0007 and 0039 gained real decrypting reverses (rollback was silent corruption).
+- Migration 0045 drops the 58 byte-identical duplicate FK indexes (write amplification halved on
+  22 tables; every drop twin-backed).
+- The nightly achievement sweep batched: ~30 queries/profile to ~19/run, agreement-tested.
+- The OpenAPI schema thread end-to-end: bearer auth documented on all 281 operations, six stable
+  enum names, zero W002 errors (E2EE key-bundle serializers included), six stable operationIds.
+  45 errors + 307 warnings at start; 0 errors + 14 cosmetic warnings now.
+- The export gap closed: profile round-trip import, three new export types (safety, map
+  annotations, saved searches), aliases/social-links/emails folded in, run_export's first
+  end-to-end coverage. ProfileNote/WikiEdit stay decision-gated.
+- Wiki history: revert-of-revert flag integrity fixed; article-revision restore verified already
+  clean.
+- The pin-delete dialog no longer promises an undo the handler cannot deliver.
+- The capabilities card can no longer 500 the admin page (caught by the full suite, not the
+  targeted runs - only the full environment has REData configured in tests).
+
+**Verification-only chunks**: Celery duplicate-delivery tolerance (seventh default-safe
+subsystem), panel external-API exposure review, frontend TS dirty-flag protocol, article
+restore path.
+
+**Meta**: scan artifacts 33-35 this half (grep windows truncating enum lists twice, a character
+class that cannot match "E2EE"); every one caught by a count disagreeing with an extraction.
+The trip-settings order-dependent flake remains the one open test issue, filed with reproduction
+guidance. User-decision items and the dev-environment remediation remain untouched, as directed.
