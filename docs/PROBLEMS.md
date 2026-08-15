@@ -5894,7 +5894,7 @@ Not a finding: `services/facts/evidence.py:95` looked identical (`Fact.objects.g
 against constraints on `('key','location')`, `('image','key')`, `('key','wiki')`) but supplies the
 second half via `**lookup`, which the static sweep cannot see. It is correct.
 
-## LOW 2026-08-13: two label lookups match on name alone, ignoring kind
+## RESOLVED 2026-08-15 (chunk 490): two label lookups match on name alone, ignoring kind
 
 `services/apis/locations/google/maps.py:1150` and `tasks.py:1416` both do:
 
@@ -5922,6 +5922,14 @@ Label.objects.get_or_create(profile=..., name__iexact=stem, kind="category", def
 Not changed here because both sites are on the Google Maps import path, which has its own
 category-creation semantics worth reading before altering (`create_category`/`stem` come from the
 imported list's title), and this audit had no test data exercising a cross-kind name collision.
+
+**Resolved (chunk 490, 2026-08-15).** `kind="category"` moved into the lookup at both sites,
+matching `pin_edit`/`media_labels`' existing pattern; the missing cross-kind test now exists
+(`test_import_category_label_kind.py`) and pins both directions: a same-named tag is never
+mistaken for the category, and an existing category is reused case-insensitively. 560
+label/google-maps tests pass with the change. Bonus finding recorded for future fixtures: new
+profiles are *seeded* with default labels (including a "Factory" category), which a test
+creating labels by hand can collide with.
 
 ## OPEN 2026-08-13: "detach location" on a pin fails with a 500, every time
 

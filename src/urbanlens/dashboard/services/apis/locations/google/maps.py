@@ -1150,7 +1150,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                     category_label, _ = Label.objects.get_or_create(
                         profile=user_profile,
                         name__iexact=stem,
-                        defaults={"name": stem, "kind": "category"},
+                        # kind belongs in the lookup, not defaults: with it only
+                        # in defaults, the get half matches any kind, so a
+                        # same-named *tag* was returned and used as the list's
+                        # category (see PROBLEMS.md, label lookups by name alone).
+                        kind="category",
+                        defaults={"name": stem},
                     )
 
                 list_deferred_pins: list[dict[str, Any]] = []

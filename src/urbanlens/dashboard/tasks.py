@@ -1416,7 +1416,12 @@ def _place_resolved_pins(result, deferred_lists: list[dict], *, profile, auto_ta
             category_label, _ = Label.objects.get_or_create(
                 profile=profile,
                 name__iexact=stem,
-                defaults={"name": stem, "kind": "category"},
+                # kind belongs in the lookup, not defaults: with it only in
+                # defaults, the get half matches any kind, so a same-named
+                # *tag* was returned and used as the list's category (see
+                # PROBLEMS.md, label lookups by name alone).
+                kind="category",
+                defaults={"name": stem},
             )
 
         for pin_dict in lst.get("pins", []):

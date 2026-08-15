@@ -9013,3 +9013,19 @@ chunks up to 487 lands next.
 
 With chunk 488's separate 282-test validation, everything through chunk 488 is verified.
 Session consolidations: 10,849 / 10,859 / 10,863 / 10,865(+2 resolved).
+
+
+## Chunk 490 - the cross-kind label lookup, fixed with the test it was waiting for
+
+Both Google-Maps import sites looked up the list's category with `kind` in `defaults` only - the
+get half matched any kind, so a user with a *tag* named like the imported list got their pins
+filed under that tag and no category created. `kind` is now in the lookup (the pattern
+`pin_edit`/`media_labels` already used); the deferred cross-kind test exists and pins both
+directions. 560 label/google-maps tests pass.
+
+The reuse test's first version collided with something unexpected: **new profiles are seeded
+with default labels** - including a "Factory" category - so a fixture hand-creating one hit the
+uniqueness constraint. Diagnosed by printing the rows rather than theorizing (three wrong
+hypotheses about baker/signals fell to one query); recorded in the PROBLEMS resolution for the
+next fixture author. The other LOW entry (two `get_or_create`s without backing constraints)
+stays filed on its own stated judgement - "neither is worth changing on its own evidence" holds.
