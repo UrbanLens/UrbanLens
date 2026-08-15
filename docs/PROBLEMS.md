@@ -5182,7 +5182,21 @@ Whichever is chosen, the invariant worth keeping is the one `test_gps_strip_by_f
 encodes: a format the app *accepts* must either be scrubbable or refused, never silently stored
 with the coordinates the uploader asked to have removed.
 
-## OPEN 2026-08-12: which setting owns dwell-detected visits?
+## ~~OPEN 2026-08-12: which setting owns dwell-detected visits?~~ RESOLVED 2026-08-15: both gate
+
+**RESOLVED - the codebase already answered the product question.** The sibling Takeout importers
+(`google/location_history.py`, `google/my_activity.py`) both check `visit_logging_allowed` before
+creating visits, so the GPX dwell path was the lone importer ignoring `track_pin_visits` - and
+that setting's own help text already promises the user it covers imports. So the answer is "both
+toggles gate": `track_routes` governs saving the Route (the user's own track), and
+`track_pin_visits` governs the PinVisit rows a dwell writes.
+
+`detect_dwells_and_create_visits` now returns 0 early when visit logging is off. The gate is
+inside that function rather than at its caller so any future caller inherits it. Route import
+itself is unchanged - a profile that tracks routes but not visits gets the track and no visits,
+which a new test asserts explicitly (route row still exists, zero PinVisits). 15/15 pass.
+`route_import_allowed`'s docstring no longer claims to cover the bundled visits. Original entry
+below.
 
 Three `Profile` toggles all plausibly describe the `PinVisit` rows that
 `gpx_tracks.detect_dwells_and_create_visits` creates from an imported track, and only one

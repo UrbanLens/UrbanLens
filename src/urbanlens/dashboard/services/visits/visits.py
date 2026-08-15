@@ -38,7 +38,12 @@ def visit_logging_allowed(profile: Profile) -> bool:
 
 
 def route_import_allowed(profile: Profile) -> bool:
-    """True if GPS route/track import (and its bundled dwell-detected visits) is allowed."""
+    """True if GPS route/track import is allowed.
+
+    Covers saving the Route itself only. The dwell-detected visits an import can
+    also produce are separately gated on :func:`visit_logging_allowed`, so a
+    profile that tracks routes but not visits gets the track and no PinVisit rows.
+    """
     return profile.track_routes
 
 

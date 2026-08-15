@@ -197,20 +197,32 @@ def detect_dwells_and_create_visits(route: Route, raw_points: list[RawTrackPoint
     checking whether any contiguous run stays within DWELL_RADIUS_M of a
     candidate pin for at least DWELL_MINIMUM_MINUTES.
 
+    Gated on the profile's visit-logging setting, not only on route import: the
+    route itself is the user's own track (``track_routes``), but a dwell writes a
+    PinVisit, which is what ``track_pin_visits`` governs - and its help text
+    already tells the user it covers imports. The gate lives here rather than in
+    the caller so any future caller inherits it. The sibling Takeout importers
+    (``google/location_history.py``, ``google/my_activity.py``) check the same
+    setting; this path was the lone exception.
+
     Args:
         route: The already-saved Route these points belong to.
         raw_points: The route's raw (pre-simplification) points, in order.
         profile: Owning profile - only this profile's own pins are candidates.
 
     Returns:
-        Number of PinVisit(source=HISTORY) rows created.
+        Number of PinVisit(source=HISTORY) rows created. Zero when visit logging
+        is turned off, even though the route itself still saves.
     """
     from django.contrib.gis.measure import D
     from geopy.distance import geodesic
 
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.visits.model import PinVisit, VisitSource
-    from urbanlens.dashboard.services.visits.visits import sync_last_visited
+    from urbanlens.dashboard.services.visits.visits import sync_last_visited, visit_logging_allowed
+
+    if not visit_logging_allowed(profile):
+        return 0
 
     if not any(p.time is not None for p in raw_points):
         # No per-point timestamps (e.g. some <rte> files) - dwell duration can't be measured.
