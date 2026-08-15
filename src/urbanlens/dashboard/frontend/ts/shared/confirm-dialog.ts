@@ -122,7 +122,7 @@ export function urbanlensConfirmExternalLink(event: Event, url: string): boolean
 export async function deletePinCascade(pinUuid: string, pinName: string, csrfToken: string): Promise<boolean | null> {
     const confirmed = await confirmDialog({
         title: "Delete Pin",
-        message: `Delete "${pinName || "this pin"}"?\n\nYou can restore it from Settings → Undo History.`,
+        message: `Delete "${pinName || "this pin"}"?\n\nThe pin and its photos can be restored from Settings → Undo History. Comments, albums and links are deleted permanently.`,
         confirmLabel: "Delete",
     });
     if (!confirmed) return false;
