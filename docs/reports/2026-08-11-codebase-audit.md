@@ -8996,3 +8996,20 @@ The targeted follow-up the fourth consolidation could not cover (it snapshot the
 chunk 488): every email-safety, userprofile and invite suite passes with the new EmailType member,
 the ledger wiring, and migration 0046 applied on a fresh database. The consolidation verdict for
 chunks up to 487 lands next.
+
+
+## Chunk 489 (verdict) - fourth consolidation: 10,865 passed, 2 failed, both resolved
+
+- **`test_beat_lock_intervals` was mine to break**: the lock-TTL-vs-period invariant guard
+  compared TTLs against raw schedule values, and chunk 483's crontab entries are not ints. The
+  invariant itself held (3300s locks against hourly crontabs) - only the test's period derivation
+  needed teaching (`crontab(minute=N)` over all hours = 3600s; hour-pinned = daily per listed
+  hour). 4/4 green. Worth noting: this guard test is exactly the kind of consumer chunk 483
+  should have searched for before changing schedule *types* - the full suite caught what the
+  in-container schedule-shape check could not.
+- **The SpotGuessr socket-scope failure is order-dependent**: passes in isolation and at module
+  scope (8/9 then 9/9 in the reproduction run). Same class as the trip-settings flake; its
+  pattern (full-suite ordering only) is already filed there.
+
+With chunk 488's separate 282-test validation, everything through chunk 488 is verified.
+Session consolidations: 10,849 / 10,859 / 10,863 / 10,865(+2 resolved).

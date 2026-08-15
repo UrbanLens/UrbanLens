@@ -73,11 +73,28 @@ _LOCKED_BEAT_TASKS: dict[str, int] = {
 }
 
 
+def _effective_period_seconds(schedule) -> int:
+    """The seconds between firings for an interval or crontab schedule.
+
+    The staggered schedule (audit chunk 483) moved hourly/daily entries to
+    ``crontab``: a single-minute crontab over all hours fires hourly; one
+    pinned to specific hour(s) fires daily per listed hour. Interval entries
+    stay plain seconds.
+    """
+    from celery.schedules import crontab
+
+    if isinstance(schedule, crontab):
+        if len(schedule.hour) == 24:
+            return 60 * 60
+        return (24 * 60 * 60) // max(len(schedule.hour), 1)
+    return int(schedule)
+
+
 class BeatLockIntervalTests(SimpleTestCase):
     def test_every_lock_expires_before_the_next_tick(self) -> None:
         too_long = {}
         for entry, ttl in _LOCKED_BEAT_TASKS.items():
-            interval = settings.CELERY_BEAT_SCHEDULE[entry]["schedule"]
+            interval = _effective_period_seconds(settings.CELERY_BEAT_SCHEDULE[entry]["schedule"])
             if ttl >= interval:
                 too_long[entry] = f"lock {ttl}s >= interval {interval}s - ticks will be silently skipped"
 
