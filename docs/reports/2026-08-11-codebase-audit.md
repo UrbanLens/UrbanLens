@@ -9177,3 +9177,19 @@ what actually happens - the same class of fix as chunk 461's pin dialog, in both
 under-promising is as wrong as over-promising when the user is deciding whether to click.
 
 257 undo/filter/gallery tests pass; tsc clean.
+
+## Chunk 500 - notification delivery channels: push is solid, Gotify was failing silently
+
+**Push (UnifiedPush)** verified sound: per-device timeout, race-free `F()` failure increment,
+automatic revocation after consecutive failures, and - the flaw worth checking in any fan-out -
+each device's failure is contained inside the per-device dispatcher, so one dead endpoint cannot
+abort delivery to a profile's other devices. Dispatch runs from a Celery task, not the request.
+
+**Gotify had the gap**: `_send_gotify` caught transport exceptions but ignored the response
+status. A rotated token (401) or a wrong URL (404) answers *cleanly*, so the failure produced no
+log line at all - and these are admin alerts, where nobody is watching for the notification that
+never arrives. Now logs an error naming the status and the two settings to check. Three tests
+(rejection logged, success silent, transport failure still swallowed rather than propagating into
+whatever raised the notification).
+
+Thirteenth area swept; sixth consolidation running in background (task b0zbsv2as).
