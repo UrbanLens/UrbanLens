@@ -60,9 +60,24 @@ class FriendInvitation(abstract.DashboardModel):
         """Return True if the invitation has been acted on."""
         return self.accepted_at is not None
 
-    def mark_accepted(self) -> None:
-        """Record acceptance time without triggering full-model save."""
-        FriendInvitation.objects.filter(pk=self.pk).update(accepted_at=timezone.now())
+    def mark_accepted(self) -> bool:
+        """Claim the invitation with a conditional write, without a full-model save.
+
+        The ``accepted_at__isnull=True`` condition makes this a write-time
+        claim: of any number of concurrent redemptions of the same invitation
+        (e.g. a double-clicked verification link), exactly one caller sees
+        ``True``. Callers must run this *before* the acceptance side effects
+        and skip them when it returns ``False``.
+
+        Returns:
+            True when this call transitioned the invitation to accepted;
+            False when it was already accepted (or no longer exists).
+        """
+        now = timezone.now()
+        claimed = FriendInvitation.objects.filter(pk=self.pk, accepted_at__isnull=True).update(accepted_at=now) == 1
+        if claimed:
+            self.accepted_at = now
+        return claimed
 
     def __str__(self) -> str:
         return f"FriendInvitation({self.inviter_id} → {self.email})"

@@ -997,14 +997,20 @@ def _coerce_invite_token(invite_token: object) -> UUID | None:
 def _collect_pending_invitations(user: User, invite_token: str | None) -> list:
     """Return open invitations matching the user's email and/or signup invite token.
 
-    Deliberately does NOT filter on ``expires_at``: an invitation only ever
-    reaches ``_apply_pending_invitation`` once (``accepted_at__isnull=True``
-    already guards against reprocessing), and any ``PendingSubscriptionGrant``
-    attached to an invite is a promise that shouldn't silently evaporate just
-    because the invited user took longer than the 14-day window to verify
-    their email. The friend-connection side of an expired invite may be a bit
-    stale, but ``Friendship.request`` is a harmless no-op-ish call for that -
-    losing an unredeemed grant is the worse outcome.
+    The ``accepted_at__isnull=True`` filter here only narrows the candidate
+    set at selection time - it does NOT guard against reprocessing, since two
+    concurrent verifications can both select the same open invitation. The
+    actual guard is the write-time conditional claim
+    (``FriendInvitation.mark_accepted``) that ``_apply_pending_invitation``
+    performs before any side effect.
+
+    Deliberately does NOT filter on ``expires_at``: any
+    ``PendingSubscriptionGrant`` attached to an invite is a promise that
+    shouldn't silently evaporate just because the invited user took longer
+    than the 14-day window to verify their email. The friend-connection side
+    of an expired invite may be a bit stale, but ``Friendship.request`` is a
+    harmless no-op-ish call for that - losing an unredeemed grant is the
+    worse outcome.
     """
     from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 
@@ -1034,6 +1040,22 @@ def _collect_pending_invitations(user: User, invite_token: str | None) -> list:
 def _apply_pending_invitation(invitation, profile) -> None:
     """Create a friend request and notification for one pending invitation.
 
+    The write-time claim (``invitation.mark_accepted()``) runs FIRST: it is a
+    conditional ``UPDATE ... WHERE accepted_at IS NULL``, so of two concurrent
+    redemptions of the same invitation exactly one proceeds to the side
+    effects below; the loser returns without doing anything.
+
+    The claim and side effects are deliberately NOT wrapped in a single
+    ``transaction.atomic()``: the ``Friendship`` save fires the achievements
+    ``post_save`` handler, whose synchronous portion
+    (``services.achievements.evaluate.active_metric_keys``) swallows database
+    errors by design, and a swallowed ``DatabaseError`` inside an atomic
+    block leaves the transaction broken - every later query raises
+    ``TransactionManagementError`` (see the ``transaction.atomic`` NOTE in
+    ``docs/PROBLEMS.md``). The accepted trade-off is that a crash after the
+    claim loses this invitation's friend request/grant rather than ever
+    re-running (and double-applying) the side effects.
+
     Any ``PendingSubscriptionGrant`` attached to the invitation is redeemed
     unconditionally, even for the self-invite edge case (``invitation.inviter
     == profile``) - only the friend-connection step (which would otherwise
@@ -1042,6 +1064,9 @@ def _apply_pending_invitation(invitation, profile) -> None:
     dropped just because the inviter and the invited signup happen to be the
     same account.
     """
+    if not invitation.mark_accepted():
+        return
+
     from urbanlens.dashboard.controllers.friendship import notify_friend_request
     from urbanlens.dashboard.models.friendship.model import Friendship
 
@@ -1055,7 +1080,6 @@ def _apply_pending_invitation(invitation, profile) -> None:
 
     for pending_grant in PendingSubscriptionGrant.objects.for_invitation(invitation):
         grant_subscription(profile.user, pending_grant.role, pending_grant.granted_by, pending_grant.duration_as_int())
-    invitation.mark_accepted()
 
 
 def _process_pending_invitations(user: User, invite_token: str | None = None) -> None:

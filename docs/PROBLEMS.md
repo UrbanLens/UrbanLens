@@ -415,7 +415,19 @@ exactly these and must not invent defaults for the types that are missing"), and
 the safety escalation chain in particular - are arguably *right* to be non-silenceable. Recorded
 only so the gap is visible when someone asks why a given notification has no setting.
 
-## LOW 2026-08-11: `FriendInvitation.mark_accepted` claims at selection time, not write time
+## ~~LOW 2026-08-11: `FriendInvitation.mark_accepted` claims at selection time, not write time~~ RESOLVED 2026-08-15
+
+**RESOLVED**: `mark_accepted()` is now a write-time conditional claim
+(`filter(pk=..., accepted_at__isnull=True).update(...) == 1`, returning bool, syncing the
+in-memory instance on a won claim), and `_apply_pending_invitation` claims FIRST -
+`if not invitation.mark_accepted(): return` - before `Friendship.request`/notify/grant.
+Deliberately NOT wrapped in `transaction.atomic()`: `Friendship.save()` fires the achievements
+post_save handler whose `active_metric_keys` catches bare `Exception` including `DatabaseError`,
+which inside an atomic block would poison the transaction exactly as this doc's own NOTE at
+line ~353 warns - so the accepted trade-off is a crash after the claim loses that invite's side
+effects rather than double-applying them (documented in the controller docstring). 3 new tests in
+`test_friend_invitation.py` (9/9 passing), including a stale-instance replay asserting zero side
+effects. Original entry below.
 
 `_collect_pending_invitations` (`controllers/account.py:995`) filters on
 `accepted_at__isnull=True` and its docstring says that "already guards against reprocessing".
