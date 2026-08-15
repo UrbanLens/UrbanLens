@@ -915,7 +915,7 @@ def _redata_capabilities() -> dict | None:
     from django.core.cache import cache
 
     from urbanlens.dashboard.services.apis.locations.redata_capabilities_gateway import RedataCapabilitiesGateway
-    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import LocationContextUnavailableError, redata_configured
+    from urbanlens.dashboard.services.apis.locations.redata_context_gateway import redata_configured
 
     if not redata_configured():
         return None
@@ -925,9 +925,13 @@ def _redata_capabilities() -> dict | None:
         return cached or None
     try:
         body = RedataCapabilitiesGateway().get_capabilities()
-    except LocationContextUnavailableError:
-        # Cache the miss briefly too, so an outage doesn't add a failing
-        # round-trip to every admin page load.
+    except Exception:
+        # Broad on purpose: this card is strictly optional, and the page must
+        # render whatever a gateway can throw (structured REData errors,
+        # transport errors, the test suite's network guard). The miss is
+        # cached briefly too, so an outage doesn't add a failing round-trip
+        # to every admin page load.
+        logger.warning("REData capabilities fetch failed; omitting the card", exc_info=True)
         cache.set(cache_key, {}, 300)
         return None
     cache.set(cache_key, body, 3600)

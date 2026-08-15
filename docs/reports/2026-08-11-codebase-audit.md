@@ -8450,3 +8450,23 @@ things that could make that wrong:
 
 No change needed - recorded because the default-on exposure means nobody *else* made this call
 either, and the next plugin author should know the review is expected, not automatic.
+
+
+## Chunk 458 - full suite: 10,838 passing, and the one real failure was mine
+
+The chunk-455 full run (1h31m, 10,838 passed / 1,484 subtests / 1 xfail) surfaced 3 failures:
+
+- **2 were a real defect in chunk 454's capabilities card**: `_redata_capabilities()` makes a
+  blocking outbound call during the admin page GET, and its `except` only caught REData's own
+  structured error. The test network guard's `RuntimeError` escaped and 500'd
+  `/site-admin/api-limits/` - which means any *unexpected* gateway exception would have 500'd the
+  production admin page for the sake of an optional card. The except is now deliberately broad
+  with a logged warning and the brief negative cache. The suite caught a bug the targeted module
+  runs could not, because only the full environment has REData configured during tests.
+- **1 is an order-dependent flake, filed**: the trip-settings presence test passes standalone and
+  at module scope; failed only under full-suite ordering with its traceback truncated. Entry
+  added to PROBLEMS.md with the reproduction guidance; not chased blind.
+
+Also a lesson repeated from chunk 316: the background task reported **exit code 0** because the
+suite was piped through `tail` - the notification's status line is the pipe's, never pytest's.
+Reading the output remains the only honest check.

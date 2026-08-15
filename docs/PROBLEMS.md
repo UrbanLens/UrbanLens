@@ -7569,3 +7569,16 @@ eight lines below) to require the variable outside local development. Consequenc
 `.env` handling is in place. The cheap hardening is a startup check: if `ENVIRONMENT_NAME` is not
 local/development and `DJANGO_SECRET_KEY` is unset, raise `ImproperlyConfigured` rather than
 generating one. That converts a silent, confusing failure into a loud one at boot.
+
+
+## OPEN 2026-08-15: `test_only_submitted_fields_ever_move` fails in the full suite, passes alone and at module scope
+
+`SetTripPermissionsPresenceTests::test_only_submitted_fields_ever_move`
+(`test_external_api_trip_settings.py`) failed in the chunk-455 full-suite run (10,838 others
+passed) and passes both standalone and with its whole module. Its traceback was not captured (the
+run's output was truncated to the short summary), so the failing example is unknown. A
+Hypothesis presence-test failing only under full-suite ordering fits the documented gotcha that
+the test client keeps state across generated examples; suspect order-dependent state from an
+earlier module rather than a product bug. Next full-suite run should capture full tracebacks for
+this module (`-q` plus an un-truncated tail, or `--tb=long -k` on rerun) before anyone chases the
+product code.
