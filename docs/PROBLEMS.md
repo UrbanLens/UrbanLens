@@ -8734,3 +8734,29 @@ claim-first fix used for `FriendInvitation.mark_accepted` is wrong for this task
 directions are not symmetric: a duplicate is a second warning email, while a lost one is *no* warning
 before a permanent account deletion. A lock loses nothing - the skipped run leaves the marker unset,
 so the next tick sends it - which the regression test asserts directly.
+
+### Verified safe: every overlap lock's TTL obeys its own rule (chunk 542)
+
+`acquire_lock`'s docstring states the constraint on the TTL callers pass it - "should sit just under
+the task's beat interval, so a tick is never skipped by a lock the previous run has already finished
+with". A convention that is stated is worth checking, because the failure is invisible either way:
+a TTL **above** the interval means a run killed mid-flight blocks the next tick (and for the safety
+sweeps, that is a missed escalation); a TTL far **below** the true runtime means the lock expires
+mid-run and the overlap it exists to prevent happens anyway.
+
+All eleven locked beat tasks obey it, at 90-92% of their interval:
+
+| task(s) | interval | TTL |
+| --- | --- | --- |
+| three stall sweeps (spotguessr / trivia / consensus) | 120s | 110s |
+| four safety sweeps (due reminders, final warnings, escalation, archival) | 300s | 270s |
+| enrichment, trivia generation, trivia wiki incorporation, account-deletion reminders | 3600s | 3300s |
+
+Nothing to change. Recorded because the numbers are spread across two files - the TTL constants in
+`tasks.py`, the intervals in `settings/base.py` - so the invariant is only checkable by putting them
+side by side, and nothing does that automatically. A task whose schedule is retuned without its lock
+constant would break this silently.
+
+That closes the beat-task thread: 24 scheduled tasks, 11 correctly locked, 13 idempotent by
+construction, one gap found and fixed (the account-deletion reminder). Twenty-second verified-safe
+area.

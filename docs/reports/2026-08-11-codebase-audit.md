@@ -10250,3 +10250,31 @@ checking whether the codebase already had a convention for this. It did, applied
 Reverted and used it.
 
 Verified: 46 account-deletion tests, ruff clean.
+
+## Chunk 542 - checking the convention's own stated rule
+
+Chunk 541 established which beat tasks need the overlap lock. This chunk asked the next question:
+of those that take it, does the TTL they pass actually satisfy the constraint `acquire_lock`'s
+docstring states - "just under the task's beat interval"?
+
+It matters in both directions, which is what makes it worth measuring rather than eyeballing. Too
+long, and a run killed mid-flight leaves a lock that skips the next tick - on the safety sweeps that
+is a missed escalation. Too short, and the lock expires while the run is still going, so the overlap
+happens anyway and the lock is decoration.
+
+All eleven obey it, at 90-92% of interval: 110/120s for the three stall sweeps, 270/300s for the
+four safety sweeps, 3300/3600s for the four hourly ones. Nothing to change.
+
+Worth recording anyway, for a reason the numbers themselves show: the TTLs live in `tasks.py` and
+the intervals in `settings/base.py`, so the invariant only exists when someone puts the two files
+side by side. Nothing checks it. Retuning a schedule without touching its lock constant would break
+it silently, and the symptom - an occasional skipped tick, or an occasional double run - is exactly
+the kind that gets written off as flakiness.
+
+That closes the thread: 24 beat tasks, 11 correctly locked, 13 idempotent by construction, one real
+gap fixed. Twenty-second verified-safe area.
+
+A note on my own parsing while doing it: the first pass could not resolve `5 * 60` / `2 * 60` in the
+schedule and reported seven tasks as "?? could not resolve". I read those seven schedules directly
+rather than treating the tool's silence as a finding either way - the same discipline the scans in
+chunks 532-537 needed, applied to arithmetic this time.
