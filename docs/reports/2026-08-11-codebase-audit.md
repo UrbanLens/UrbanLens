@@ -9870,3 +9870,30 @@ two chunks, and the same one each time - a scan produces candidates to read, nev
 are now written into PROBLEMS.md next to the results they nearly corrupted.
 
 Verified: tsc clean, 406 TS tests, both edited templates syntax-checked, ruff clean.
+
+## Chunk 530 - closing the write-per-item list: one lost counter, one verified-safe twin
+
+Four sites left from chunk 525. The interesting pair are near-identical code with opposite verdicts,
+which is the whole value of reading rather than pattern-matching.
+
+`consensus/tentative` does `existing.support_count += 1` and is **safe**: its only caller wraps both
+branches in `transaction.atomic()` holding `select_for_update()` on the parent wiki, and the
+docstring names this exact hazard ("the row-level `+=` loses an increment on top of that") and
+explains why a unique constraint cannot substitute for the lock. It even has a dedicated race-test
+module. Twentieth verified-safe area.
+
+`device_scan/clustering.record_absence_report` does the same thing and is **not** safe. The nearby
+guard is genuine but covers a different case: `process_device_scan_upload` claims each *upload*
+atomically so one physical report can't be applied twice - while the case that bites is two
+*different* users' uploads naming the same marker on different workers. That is the trap in this
+class: a real, documented, correct guard sitting next to the gap, which makes the gap read as
+already handled.
+
+It also wrote `status` unconditionally in `update_fields`, so ~9 of every 10 absence reports wrote
+back a status they had merely read - enough to revert a marker a concurrent detection had just set
+ACTIVE. Fixed with `F("absence_streak") + 1` and a status write only when it changes.
+
+The other two (`photos/redata_relevance`, the STALE sweep) are clean: per-row distinct values, no
+bulk form available, bounded batches, and `.update()` rather than `save()` so no receiver question.
+
+That closes the 62-site list chunk 525 opened. 45 device-scan and consensus tests pass, ruff clean.

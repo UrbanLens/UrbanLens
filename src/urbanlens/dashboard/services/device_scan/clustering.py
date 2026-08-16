@@ -328,16 +328,33 @@ def recompute_wiki_device_markers(device: ScannedDevice, wiki: Wiki) -> list[Wik
 def record_absence_report(marker: WikiDeviceMarker) -> WikiDeviceMarker:
     """Apply one "expected device not found here" report to *marker*.
 
+    The increment is an ``F`` expression rather than a read-modify-write.
+    ``process_device_scan_upload`` claims each *upload* atomically, so the same
+    report can never be applied twice - but two different users' uploads for
+    the same marker are processed by different workers, and both incrementing
+    from the same in-memory value loses one, delaying the escalation this
+    counter exists to trigger.
+
+    ``status`` is written only when it actually changes, for the same reason:
+    the old unconditional ``save(update_fields=[..., "status", ...])`` wrote
+    back whatever status was read, so an absence report landing alongside a
+    fresh detection could revert the marker that detection had just set ACTIVE.
+
     Args:
         marker: The marker a client reported not detecting.
 
     Returns:
-        The updated marker.
+        The marker, refreshed to the stored counter and status.
     """
-    from urbanlens.dashboard.models.device_scan.model import MarkerStatus
+    from django.db.models import F
 
-    marker.absence_streak += 1
-    if marker.absence_streak >= ABSENCE_STREAK_THRESHOLD:
+    from urbanlens.dashboard.models.device_scan.model import MarkerStatus, WikiDeviceMarker as MarkerModel
+
+    now = timezone.now()
+    MarkerModel.objects.filter(pk=marker.pk).update(absence_streak=F("absence_streak") + 1, updated=now)
+    marker.refresh_from_db(fields=["absence_streak", "status", "updated"])
+
+    if marker.absence_streak >= ABSENCE_STREAK_THRESHOLD and marker.status != MarkerStatus.PRESUMED_REMOVED:
+        MarkerModel.objects.filter(pk=marker.pk).update(status=MarkerStatus.PRESUMED_REMOVED, updated=now)
         marker.status = MarkerStatus.PRESUMED_REMOVED
-    marker.save(update_fields=["absence_streak", "status", "updated"])
     return marker

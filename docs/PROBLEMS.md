@@ -8207,3 +8207,54 @@ extracts a promise chain by walking to the first depth-0 `;` under-reports `.cat
 nested callback body raises depth in ways brace-counting alone gets wrong. Treat "no `.catch`
 found" as a candidate to read, never as a finding - which is how the settings false positive was
 caught before it reached this file.
+
+## RESOLVED 2026-08-16: a device-marker absence report could lose an increment, and revert a fresh detection
+
+Chunk 530, finishing chunk 525's write-per-item list. Four sites left; two are clean, one is a
+verified-safe area worth naming, and one was wrong.
+
+**`services/device_scan/clustering.record_absence_report` - fixed.** It did:
+
+```python
+marker.absence_streak += 1
+if marker.absence_streak >= ABSENCE_STREAK_THRESHOLD:
+    marker.status = MarkerStatus.PRESUMED_REMOVED
+marker.save(update_fields=["absence_streak", "status", "updated"])
+```
+
+Two defects in four lines:
+
+1. **Lost update.** `process_device_scan_upload` claims each *upload* atomically, and its docstring
+   explains that this stops a redelivered task "inflating a marker's absence streak a second time
+   for the same physical report". That is real and correct, and it covers a different case from the
+   one that bites: two *different* users' uploads naming the same marker, processed by different
+   workers. Both read the same streak and write the same value, so one report vanishes and the
+   PRESUMED_REMOVED escalation is delayed. Now `F("absence_streak") + 1`.
+2. **Status stomp.** `status` was in `update_fields` unconditionally, so every absence report wrote
+   back whatever status it had read - including on the ~9 of 10 calls that change nothing. An
+   absence report landing just after a fresh detection set the marker ACTIVE would revert it to the
+   stale value. `status` is now written only when it actually changes.
+
+Neither is catastrophic - this is a community "is that camera still there?" signal, and the next
+report self-heals it - but both are the exact shapes this audit has already fixed in
+`FriendInvitation.mark_accepted` and the safety check-in transitions, so leaving them would keep a
+wrong example in the codebase for the next person to copy.
+
+**`services/consensus/tentative` - verified safe, and worth recording why.** `_record_text` and
+`_record_coordinate` both do the same `existing.support_count += 1` read-modify-write. They are
+safe because `record_tentative_answers`, their only caller (confirmed - nothing else in the tree
+reaches the private functions), wraps both branches in `transaction.atomic()` holding
+`select_for_update()` on the parent `Wiki`. Its docstring names this hazard exactly - "the
+row-level `+=` loses an increment on top of that" - and explains why a unique constraint cannot
+substitute: the coordinate branch dedups by *proximity*, which no constraint can express, and the
+text branch's constraint is on `Lower(text_value)` while its lookup is on `normalized_text`. There
+is already a `test_consensus_tentative_races.py` covering it. Twentieth verified-safe area.
+
+**`services/photos/redata_relevance` and `clustering`'s STALE sweep - clean.** Both write one
+`.update()` per row with per-row distinct values (so no bulk form exists), both are bounded by one
+upstream batch or one wiki+device's markers, and neither goes through `save()`, so there is no
+receiver question.
+
+That closes the 62-site write-per-item list from chunk 525: the bulk pin endpoints (bounded, chunk
+525), `pin_merge`'s recoveries (savepoints, chunk 526), the E2EE rewrap loop (fine; its *caller*
+was the bug, chunk 527), and these four.
