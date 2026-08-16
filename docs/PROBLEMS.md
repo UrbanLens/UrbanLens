@@ -7990,3 +7990,69 @@ Covered by `test_pin_bulk_views.py::BulkSelectionSizeLimitTests` (including an a
 that exactly 500 still succeeds, and one asserting export stays unbounded) and 5 new cases in
 `fetch-json.test.ts`. The single-pin `bulk_delete` call in the "cancel pin creation" dialog was
 left alone: it sends one uuid, so the cap cannot reach it.
+
+## RESOLVED 2026-08-16: `merge_pins`' `IntegrityError` recoveries could not run, and one of them was hiding a data-loss path
+
+Found in chunk 526, continuing chunk 525's write-per-item list into `services/pins/pin_merge.py`.
+
+The whole merge runs inside one `transaction.atomic()` block, and eight of its per-relation
+reassignments were written as:
+
+```python
+try:
+    row.save(update_fields=["pin", "updated"])
+except IntegrityError:
+    row.delete()          # drop the duplicate, carry on
+```
+
+Postgres aborts the **entire** transaction on a failed statement, so the recovery query itself
+raises `TransactionManagementError: You can't execute queries until the end of the 'atomic'
+block`. Every one of those graceful "auto-dedup" paths - the module docstring's whole middle
+bucket, covering `PinAlias`, `PinOwner`, `PinAutoRemoval`, `PinShare`, `PinListItem` and `Review` -
+was dead code. Any merge hitting a uniqueness collision failed outright instead of deduping.
+
+**Reproduced against a real database, not inferred**: merging a pin into its own descendant, with
+another top-level pin already occupying the location a child had to be detached to, raised
+`TransactionManagementError`. (The transaction did roll back, so nothing was corrupted - the
+failure was a confusing 500, not data loss.)
+
+**Fixed** with `_save_within_savepoint()`, a nested `transaction.atomic()` (a savepoint) around
+each risky save, returning whether the row was written. Only the failed statement rolls back, so
+the caller's dedup rule can run - which is what the code always intended.
+
+### The fix exposed a genuine data-loss path the broken transaction had been masking
+
+`_reparent_children` detaches a child to top level when re-parenting it under the survivor would
+close a loop - which happens precisely when **the survivor sits beneath that child**. When the
+detach failed, the old code logged and continued, with a comment stating the child "remains
+parented to the pin about to be deleted". `Pin.parent_pin` is `on_delete=CASCADE`, so
+`loser.delete()` at the end of the merge would have destroyed that child *and the survivor
+underneath it* - the exact outcome the detach exists to prevent, as its own docstring says.
+
+That never happened only because the poisoned transaction raised first. Repairing the transaction
+without addressing this would have turned a confusing error into silent destruction of the pin the
+user was merging *into*. It now raises `PinMergeCollisionError`, which
+`controllers/pin_merge_suggestions.py` surfaces as its own toast ("another top-level pin already
+occupies its location") rather than the generic "Something went wrong" its `except ValueError`
+would have produced - the user can act on this one by moving the blocking pin first.
+
+### The rest of the class is clean
+
+An AST sweep for `except (IntegrityError|DatabaseError|DataError|OperationalError)` handlers
+lexically inside an `atomic()` scope (`with` blocks and `@transaction.atomic` decorators) found
+four others, all safe for the same reason: each `raise`s or `return`s immediately rather than
+issuing another query, so the block unwinds and Django rolls back normally.
+
+- `controllers/e2ee.py:292` - returns 409 "a key bundle already exists". Returning from inside the
+  block commits, but Postgres turns `COMMIT` on an aborted transaction into a rollback, which is
+  the intended outcome anyway. Correct, if accidentally so.
+- `services/consensus/session.py:307`, `services/spotguessr/session.py:646`,
+  `services/trivia/session.py:370` - each raises a domain error ("already answered this round")
+  out through the atomic block.
+
+`pin_merge` was the only site whose handler kept working inside the aborted transaction, which is
+what made it the only broken one.
+
+Covered by `test_pin_merge_savepoints.py`, including a control test asserting that the *old* shape
+really does poison the transaction - without it, the other tests would pass equally against a plain
+`try/except` and would prove nothing about why the savepoint is there.

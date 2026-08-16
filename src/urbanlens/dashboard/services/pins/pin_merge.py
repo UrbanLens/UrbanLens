@@ -67,6 +67,8 @@ from urbanlens.dashboard.models.trips.model import TripActivity
 from urbanlens.dashboard.models.visits.model import PinVisit
 
 if TYPE_CHECKING:
+    from django.db.models import Model
+
     from urbanlens.dashboard.models.article.model import Article
     from urbanlens.dashboard.models.pin.model import Pin
     from urbanlens.dashboard.models.profile.model import Profile
@@ -89,6 +91,29 @@ class UnresolvedMergeConflictError(ValueError):
         """
         self.keys = keys
         super().__init__(f"Unresolved merge conflicts: {', '.join(keys)}")
+
+
+class PinMergeCollisionError(ValueError):
+    """Raised when a merge cannot proceed without destroying data.
+
+    Only one situation produces this: a child pin that has to be detached to
+    top level (because re-parenting it under the survivor would close a loop)
+    cannot be, since another top-level pin already occupies its location.
+    Continuing would leave that child parented to the pin about to be deleted,
+    and ``Pin.parent_pin`` CASCADEs - taking the child, and the survivor
+    somewhere beneath it, with it.
+
+    ``safe_message`` is safe to surface directly to the caller.
+    """
+
+    def __init__(self, message: str) -> None:
+        """Store the caller-safe message.
+
+        Args:
+            message: Explanation of which pin blocked the merge.
+        """
+        self.safe_message = message
+        super().__init__(message)
 
 
 @dataclass(frozen=True, slots=True)
@@ -164,6 +189,33 @@ def plan_merge_conflicts(pin_a: Pin, pin_b: Pin) -> list[MergeFieldConflict]:
     return conflicts
 
 
+def _save_within_savepoint(instance: Model, update_fields: list[str]) -> bool:
+    """Save a row that may collide with a uniqueness constraint, recoverably.
+
+    Every reassignment in this module runs inside ``merge_pins``' single
+    ``transaction.atomic()`` block. Postgres aborts the *whole* transaction on
+    a failed statement, so catching ``IntegrityError`` there and carrying on
+    makes the next query raise ``TransactionManagementError`` instead - which
+    turned each of this module's "drop the duplicate and continue" recoveries
+    into a merge that failed outright. The nested ``atomic()`` is a savepoint,
+    so only the failed statement rolls back and the caller's recovery can run.
+
+    Args:
+        instance: The model instance being reassigned onto the survivor.
+        update_fields: Fields to write, passed straight to ``save()``.
+
+    Returns:
+        True when the row was written; False when it collided and the caller
+        should apply its own dedup rule.
+    """
+    try:
+        with transaction.atomic():
+            instance.save(update_fields=update_fields)
+    except IntegrityError:
+        return False
+    return True
+
+
 def _reparent_children(survivor: Pin, loser: Pin) -> None:
     """Re-parent loser's child pins onto survivor, skipping any that would create a cycle.
 
@@ -180,12 +232,14 @@ def _reparent_children(survivor: Pin, loser: Pin) -> None:
         if child.would_create_cycle(survivor):
             logger.warning("Pin merge: detaching child pin %s to root - re-parenting under the survivor would create a cycle.", child.pk)
             child.parent_pin = None
-            try:
-                child.save(update_fields=["parent_pin", "updated"])
-            except IntegrityError:
-                logger.exception(
-                    "Pin merge: could not detach child pin %s (a root pin already occupies its location) - it remains parented to the pin about to be deleted.",
-                    child.pk,
+            if not _save_within_savepoint(child, ["parent_pin", "updated"]):
+                # It stays parented to the pin about to be deleted, and
+                # Pin.parent_pin CASCADEs - so this child, and the survivor
+                # somewhere beneath it, would both be destroyed by the delete
+                # this detach exists to prevent. Refuse the merge instead.
+                raise PinMergeCollisionError(
+                    f"Cannot merge: child pin {child.pk} has to be detached to top level to avoid a loop, "
+                    "but another top-level pin already occupies its location.",
                 )
             continue
         child.parent_pin = survivor
@@ -200,12 +254,10 @@ def _merge_aliases(survivor: Pin, loser: Pin) -> None:
             alias.delete()
             continue
         alias.pin = survivor
-        try:
-            alias.save(update_fields=["pin", "updated"])
-        except IntegrityError:
-            alias.delete()
-        else:
+        if _save_within_savepoint(alias, ["pin", "updated"]):
             survivor_names.add(alias.name.casefold())
+        else:
+            alias.delete()
 
 
 def _merge_owners(survivor: Pin, loser: Pin) -> None:
@@ -216,12 +268,10 @@ def _merge_owners(survivor: Pin, loser: Pin) -> None:
             owner.delete()
             continue
         owner.pin = survivor
-        try:
-            owner.save(update_fields=["pin", "updated"])
-        except IntegrityError:
-            owner.delete()
-        else:
+        if _save_within_savepoint(owner, ["pin", "updated"]):
             survivor_names.add(owner.name.casefold())
+        else:
+            owner.delete()
 
 
 def _merge_reviews(survivor: Pin, loser: Pin) -> None:
@@ -235,9 +285,7 @@ def _merge_reviews(survivor: Pin, loser: Pin) -> None:
             review.delete()
             continue
         review.pin = survivor
-        try:
-            review.save(update_fields=["pin", "updated"])
-        except IntegrityError:
+        if not _save_within_savepoint(review, ["pin", "updated"]):
             review.delete()
 
 
@@ -249,12 +297,10 @@ def _merge_list_items(survivor: Pin, loser: Pin) -> None:
             item.delete()
             continue
         item.pin = survivor
-        try:
-            item.save(update_fields=["pin", "updated"])
-        except IntegrityError:
-            item.delete()
-        else:
+        if _save_within_savepoint(item, ["pin", "updated"]):
             survivor_list_ids.add(item.pin_list_id)
+        else:
+            item.delete()
 
 
 def _merge_auto_removals(survivor: Pin, loser: Pin) -> None:
@@ -266,12 +312,10 @@ def _merge_auto_removals(survivor: Pin, loser: Pin) -> None:
             removal.delete()
             continue
         removal.pin = survivor
-        try:
-            removal.save(update_fields=["pin", "updated"])
-        except IntegrityError:
-            removal.delete()
-        else:
+        if _save_within_savepoint(removal, ["pin", "updated"]):
             survivor_keys.add(key)
+        else:
+            removal.delete()
 
 
 def _merge_shares(survivor: Pin, loser: Pin) -> None:
@@ -284,9 +328,7 @@ def _merge_shares(survivor: Pin, loser: Pin) -> None:
             share.delete()
             continue
         share.pin = survivor
-        try:
-            share.save(update_fields=["pin", "updated"])
-        except IntegrityError:
+        if not _save_within_savepoint(share, ["pin", "updated"]):
             share.delete()
             continue
         if share.status == PinShareStatus.PENDING:

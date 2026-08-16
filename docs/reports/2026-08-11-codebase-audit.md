@@ -9717,3 +9717,39 @@ app; they were all reaching users as `HTTP 400`.
 
 Verified: 89 bulk-view tests, 399 TS tests, tsc clean, ruff clean, and the map page's inline JS
 syntax-checked after the edit (the lesson from the `trips/detail.html` splice).
+
+## Chunk 526 - the eight merge recoveries that could never run
+
+Continued chunk 525's write-per-item list into `pin_merge.py`. The per-relation loops there are
+per-item *by necessity* - each row needs a dedup decision (case-insensitive alias text, the same
+reviewer's newer rating, a duplicate list membership) that no bulk `UPDATE` can express - so the
+N+1 reading was a dead end. What the loops did contain was a much better bug.
+
+Eight of them catch `IntegrityError` and then issue another query to recover, all inside
+`merge_pins`' single `transaction.atomic()`. Postgres aborts the whole transaction on a failed
+statement, so the recovery raises `TransactionManagementError` instead of recovering. The module
+docstring's entire "auto-dedup" bucket - six models' worth of graceful duplicate handling - was
+dead code, and any merge hitting a collision failed outright.
+
+Reproduced rather than argued: built the exact tree (survivor beneath a child of the loser, with a
+top-level pin already at that child's location) and watched the merge raise
+`TransactionManagementError`. Fixed with a `_save_within_savepoint()` helper - a nested `atomic()`
+so only the failed statement rolls back.
+
+**Repairing it exposed a data-loss path the broken transaction had been hiding.** When
+`_reparent_children`'s detach fails, the old code logged and continued, leaving the child parented
+to the pin about to be deleted - and `Pin.parent_pin` CASCADEs, so `loser.delete()` would have
+taken that child *and the survivor nested beneath it*. The poisoned transaction was the only thing
+preventing it. A "just add savepoints" fix would have converted a confusing 500 into silent
+destruction of the pin the user was merging into. It now refuses with `PinMergeCollisionError`,
+surfaced as its own toast rather than the generic "Something went wrong".
+
+Then asked what class shares the shape: an AST sweep for DB-error handlers lexically inside an
+`atomic()` scope found four more (e2ee enrol, and the consensus/SpotGuessr/trivia "already
+answered" guards). All four are safe, and for a reason worth recording - each `raise`s or `return`s
+immediately instead of querying again, so the block unwinds and Django rolls back normally.
+`pin_merge` was the only handler that kept working inside an aborted transaction.
+
+The regression test includes a control asserting the *old* shape really does poison the
+transaction. Without it the other tests would pass just as well against a plain `try/except`, and
+would prove nothing about why the savepoint exists. Verified: 69 merge tests, ruff clean.

@@ -22,7 +22,7 @@ from django.views import View
 from urbanlens.dashboard.models.pin_merge_suggestions.model import PinMergeSuggestion
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.pagination import get_page
-from urbanlens.dashboard.services.pins.pin_merge import MergeFieldConflict, UnresolvedMergeConflictError, plan_merge_conflicts
+from urbanlens.dashboard.services.pins.pin_merge import MergeFieldConflict, PinMergeCollisionError, UnresolvedMergeConflictError, plan_merge_conflicts
 from urbanlens.dashboard.services.pins.pin_merge_suggestions import accept_pin_merge_suggestion, reject_pin_merge_suggestion
 
 if TYPE_CHECKING:
@@ -167,6 +167,12 @@ class PinMergeSuggestionActionView(LoginRequiredMixin, View):
                 {"suggestion": suggestion, "conflicts": conflicts},
             )
             response["HX-Trigger"] = json.dumps({"showToast": {"message": "Please resolve every highlighted difference before merging.", "level": "error"}})
+            return response
+        except PinMergeCollisionError as exc:
+            # Refused rather than "went wrong": the user can act on this one by
+            # moving the blocking top-level pin first.
+            response = render(request, _CARD_PARTIAL, {"suggestion": suggestion, "conflicts": conflicts})
+            response["HX-Trigger"] = json.dumps({"showToast": {"message": exc.safe_message, "level": "error"}})
             return response
         except ValueError:
             response = render(request, _CARD_PARTIAL, {"suggestion": suggestion, "conflicts": conflicts})
