@@ -10140,3 +10140,35 @@ may not reach the same answers. A sweep with a one-in-ten yield is still worth r
 whose false positives have to be re-adjudicated every time is not.
 
 Twenty-first verified-safe area, counting the six together: the controller/API divergence surface.
+
+## Chunk 538 - the instrument failed, and two of my own conclusions with it
+
+The thirteenth consolidation broke the session's twelve-run green streak, and did it in the worst
+way available: `1 failed, 9074 passed`, no test name, an `INTERNALERROR` where the report should be,
+and the run aborted ~1,800 tests early. Hypothesis' plugin builds an `@example` patch suggestion
+when a `@given` test fails; that codemod raises inside `pytest_runtest_makereport`, so it crashes
+*while building the failure report*. Fixed by making the optional patching module unimportable - the
+plugin's own documented degradation path - and verified that failures still report name, assertion
+and falsifying example.
+
+Then recovered the lost failure from the progress output rather than waiting for another 90-minute
+run. One character per outcome, `F` at position 9,076, mapped through the 7 tests added since that
+tree onto `test_export_formats.py::test_kml_round_trips_placemark_count_and_coordinates`. The
+premise got checked against two green runs first - progress characters equal `passed + xfailed`
+exactly, so the 1,481 subtests emit nothing - which is what stopped the mapping being wrong by 832.
+
+12,000 generated examples later, all four properties in that file pass. The failure is not
+input-dependent; it needs full-run state, and those writers never touch the database. Unresolved,
+and recorded as unresolved.
+
+**Two corrections, both to conclusions I recorded earlier in this audit.** Looking for a saved
+failing example showed that `docker exec` without `-u` runs as **root** - which is how every
+consolidation here has been invoked. So the chunk-507 mechanism for the earlier flake, "the store is
+root-owned while tests run as appuser, so it is read-only in practice", is wrong for the way this
+suite is actually run. The chunk-529 change built on it is still defensible on its own terms, but it
+fixed nothing live, and the flake it was credited with explaining is open again.
+
+That is two chunks in seven where the thing needing correction was my own earlier reasoning rather
+than the codebase - chunk 532's reconciliation arithmetic, and now this. Both were recorded as
+settled. Worth noticing that the audit's own conclusions need the same treatment as its findings:
+a mechanism asserted once and cited thereafter is exactly as unverified as a count nobody read.

@@ -8596,3 +8596,47 @@ machinery and something a full run loads (`zope.interface`, via Twisted/Daphne, 
 suspect from the attribute name - but importing those two alongside the codemod does *not* reproduce
 it, so the real trigger is narrower and unidentified). Chasing a third-party interaction is not worth
 it when the feature involved is optional and the fix is one line at the boundary.
+
+### Recovering the failure the crash destroyed (chunk 538, same day)
+
+The lost failure was located without waiting for another run, from the progress output alone.
+
+**Method.** pytest's `-q` progress emits exactly one character per test outcome. In the thirteenth's
+output the `F` sits at character 9,076, so the failing test is the 9,076th collected. That premise
+was *checked, not assumed*: two known-good runs (eleventh, twelfth) have progress-character counts
+of 10,889 and 10,898 against `passed + xfailed` of 10,889 and 10,898 - exact, which also establishes
+that the 1,481 passing subtests emit no characters. Had subtests counted, every mapping below would
+have been off by ~832.
+
+Mapping 9,076 onto the current collection (10,917 tests, of which 7 were added after that run's
+tree, both groups sorting before that point) gives ordinal 9,083:
+`test_export_formats.py::test_kml_round_trips_placemark_count_and_coordinates`. Its neighbours
+9,082-9,086 are all in the same file, so even a small mapping error stays inside it - and that file
+is four `@given` round-trip properties, which fits: the crash only occurs for `@given` failures.
+
+**It is not input-dependent.** All four properties were re-run at 3,000 examples each - 12,000 in
+total against the default ~100 - and all pass, as does the module in isolation. So the failing input
+is not rare; the failure needs something a full run accumulates. These writers are pure and never
+touch the database (their own docstring says so), which points at leaked cross-module state -
+locale, a monkeypatch, or an `override_settings` - the same class as the flakes recorded above.
+
+Unresolved, and left that way rather than guessed at. The fourteenth consolidation is running and
+will now be able to name it directly if it recurs.
+
+### Correction: these runs execute as root, so the "read-only example store" mechanism does not apply
+
+Checked while looking for a saved failing example: `docker exec` without `-u` runs as **root**, and
+that is how every consolidation in this session has been invoked. The store is writable by those
+runs and always was.
+
+That undercuts the chunk-507 explanation recorded above - "the directory is owned by root and mode
+755, while tests run as `appuser`, so writes fail silently" - which was the mechanism offered for
+`test_only_submitted_fields_ever_move`. It is wrong for the way this audit actually runs the suite.
+The `appuser` detail is true of the *application* process (per CLAUDE.local.md's `logs/` footgun);
+it is not true of `docker exec`-invoked pytest.
+
+The chunk-529 change built on that reasoning still stands on its own merits - an explicitly
+registered profile and a store whose writability is proved rather than assumed is better than an
+implicit default - but it did not fix a live problem, and the flake it was credited with explaining
+is unexplained again. Corrected here rather than quietly, because that flake is recorded as
+*resolved* on the strength of this mechanism.
