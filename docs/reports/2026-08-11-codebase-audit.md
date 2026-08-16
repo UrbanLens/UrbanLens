@@ -10848,3 +10848,43 @@ it existed to catch, by arithmetic coincidence. Fixed by giving the generated re
 prefix so the count means one thing, then re-verified: with the collision restored it now fails.
 That is twice in two chunks that a guard of mine passed without exercising anything, both caught
 only by deliberately breaking the code first.
+
+## Chunk 562 - four documented conventions, checked; one asymmetry in the newest feature
+
+Chunk 561's method worked, so this chunk applied it to the rest of the invariants `CLAUDE.md` and
+`docs/NOTES.md` state. All four hold:
+
+- **No `save()` inside a `post_save` handler or `__str__`.** 51 signal handlers (both `@receiver`
+  and `.connect()` styles) and 148 `__str__` methods examined: zero violations.
+- **Share provenance.** Every share path calls `resolve_origin_share` + `record_share_exposure`, and
+  the two places that deliberately do *not* each carry a written explanation of why the chain is
+  already complete without them. Better documented than the rule itself.
+- **`Label` lookups feeding a create use `name__iexact`.** The one site that looked like a violation
+  - `media_labels` doing an exact `get_or_create` - does a case-insensitive lookup first and only
+  reaches the exact create when nothing matches. Correct; the grep pattern was not.
+- **Index creation last in a migration chain.** Only `0001`, `0007` and `0008` violate it, all
+  squashed historical migrations that predate the rule and cannot be reordered now that they have
+  run. Every migration since obeys it.
+
+Four conventions, zero live violations. Worth stating plainly rather than manufacturing a finding:
+the stated invariants of this codebase are, so far, actually held.
+
+So the chunk moved to where defects are likeliest instead - the newest code on the branch, the "you
+are here" marker (`2bddcbd0`, two files, unreviewed). Two hypotheses died on inspection and one
+survived, smaller than it first looked:
+
+- The "My Location" jump appeared to use a possibly-stale cached fix behind a UI promising *current*
+  position. It does not: the cached fix is used for an instant jump and a live read always follows
+  and re-selects. That is progressive enhancement, and the cache is age-bounded besides.
+- The search engine calls `onGeolocationVisit` unconditionally while the map's own GPS path gates
+  the same call behind `_GEOLOCATION_TRACKING_ALLOWED`, which looked like a user's tracking
+  preference being bypassed on one of two paths. **It is not a data leak**:
+  `record_geolocation_pin_visits` checks the preference server-side and returns `[]`, and that
+  guarantee is already tested. Claiming otherwise would have been wrong, and checking cost one file
+  read.
+
+What survives is narrower: with tracking turned off, the search path still *transmits* the user's
+coordinates to a server that then discards them. Nothing is stored, but a user who opted out would
+not expect the coordinates to be sent at all, and the sibling path three thousand lines up already
+declines to send them. The wiring is now gated the same way. No test added - the guarantee that
+matters is the server's, and `test_memories_toggles` already covers it.

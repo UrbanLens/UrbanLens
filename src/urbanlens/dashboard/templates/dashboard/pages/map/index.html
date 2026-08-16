@@ -4787,7 +4787,7 @@
         enableMyLocation: true,
         getUserLocationCache: _getCachedUserLocation,
         setUserLocationCache: _cacheUserLocation,
-        onGeolocationVisit: _recordGeolocationVisit,
+        onGeolocationVisit: _GEOLOCATION_TRACKING_ALLOWED ? _recordGeolocationVisit : null,
         defaultZoom: _defaultZoom,
         onSelect: _onLocationSelect,
         onMultiResult: _onLocationMultiResult,
