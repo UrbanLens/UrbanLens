@@ -1157,7 +1157,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.services.apis.locations.google.maps import _filename_stem
-        from urbanlens.dashboard.services.import_export.archive_extractor import extract_archive, is_archive
+        from urbanlens.dashboard.services.import_export.archive_extractor import ExtractionBudget, extract_archive, is_archive
 
         if not isinstance(request.user, User):
             return JsonResponse({"error": "Authentication required."}, status=401)
@@ -1176,6 +1176,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         all_files: list[tuple[str, bytes]] = []
         document_files: list[tuple[str, bytes]] = []
+        # One allowance for the whole upload. The extractor's limits are
+        # per-archive, and this loop calls it again for every nested archive it
+        # finds - so without sharing a budget an outer ZIP holding N nested
+        # bombs bought N x the cap, entirely inside one request.
+        extraction_budget = ExtractionBudget()
         for uploaded_file in uploaded_files:
             try:
                 data = uploaded_file.read()
@@ -1190,7 +1195,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                 document_files.append((uploaded_file.name, data))
             elif is_archive(data):
                 try:
-                    extracted = extract_archive(data)
+                    extracted = extract_archive(data, extraction_budget)
                 except ValueError as exc:
                     logger.warning("Could not extract archive: %s", exc)
                     return JsonResponse({"error": "Invalid archive."}, status=400)
@@ -1212,7 +1217,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
                     for entry in extracted:
                         if is_archive(entry.data):
                             try:
-                                inner = extract_archive(entry.data)
+                                inner = extract_archive(entry.data, extraction_budget)
                                 all_files.extend((x.name, x.data) for x in inner)
                             except ValueError:
                                 logger.warning("Could not extract nested archive during preview")

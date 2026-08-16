@@ -13,6 +13,7 @@ from __future__ import annotations
 import gzip
 import io
 import json
+import struct
 import tarfile
 import zipfile
 
@@ -20,6 +21,7 @@ from hypothesis import given, settings as hyp_settings, strategies as st
 
 from urbanlens.core.tests.testcase import SimpleTestCase
 from urbanlens.dashboard.services.import_export.archive_extractor import (
+    ExtractionBudget,
     _extension,
     _safe_basename,
     extract_archive,
@@ -475,3 +477,100 @@ class ExtractArchiveDispatchTests(SimpleTestCase):
         data = _make_tgz({"x.csv": b"URL,Title\nhttps://x.com,X"})
         result = extract_archive(data)
         self.assertGreater(len(result), 0)
+
+
+class SharedExtractionBudgetTests(SimpleTestCase):
+    """One upload gets one allowance, however many archives it nests.
+
+    `_MAX_UNCOMPRESSED_BYTES` / `_MAX_FILE_COUNT` are per *archive*, and the
+    upload-preview controller calls `extract_archive` again for every nested
+    archive it finds. Each call therefore started a fresh allowance, so an
+    outer ZIP holding N nested bombs bought N times the cap - the limit bound
+    each call and nothing bound the total, all inside one request.
+
+    These use tiny explicit budgets rather than the 2 GB default: the property
+    under test is that the allowance is *shared and consumed*, which a small
+    budget demonstrates exactly as well and in milliseconds.
+    """
+
+    def _zip(self, entries: dict[str, bytes]) -> bytes:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for name, payload in entries.items():
+                zf.writestr(name, payload)
+        return buf.getvalue()
+
+    def test_a_budget_is_consumed_across_separate_calls(self) -> None:
+        budget = ExtractionBudget(max_bytes=1000, max_files=100)
+        archive = self._zip({"a.csv": b"x" * 600})
+
+        extract_archive(archive, budget)
+        with self.assertRaises(ValueError):
+            extract_archive(archive, budget)
+
+    def test_each_call_gets_its_own_allowance_when_none_is_shared(self) -> None:
+        """Anti-vacuity: without a shared budget the second call succeeds.
+
+        This is the behaviour the fix removes from the nesting path - asserted
+        so the test above cannot pass for the wrong reason.
+        """
+        archive = self._zip({"a.csv": b"x" * 600})
+
+        self.assertEqual(len(extract_archive(archive)), 1)
+        self.assertEqual(len(extract_archive(archive)), 1)
+
+    def test_the_file_count_is_shared_too(self) -> None:
+        budget = ExtractionBudget(max_bytes=10_000_000, max_files=3)
+        archive = self._zip({"a.csv": b"x", "b.csv": b"x"})
+
+        extract_archive(archive, budget)
+        with self.assertRaises(ValueError):
+            extract_archive(archive, budget)
+
+    def test_a_budget_that_still_has_room_keeps_extracting(self) -> None:
+        budget = ExtractionBudget(max_bytes=10_000, max_files=10)
+        archive = self._zip({"a.csv": b"x" * 100})
+
+        for _ in range(3):
+            self.assertEqual(len(extract_archive(archive, budget)), 1)
+
+    def test_the_message_names_the_limit_that_was_hit(self) -> None:
+        budget = ExtractionBudget(max_bytes=10, max_files=100)
+        with self.assertRaises(ValueError) as caught:
+            extract_archive(self._zip({"a.csv": b"x" * 50}), budget)
+        self.assertIn("uncompressed", str(caught.exception))
+
+        budget = ExtractionBudget(max_bytes=10_000_000, max_files=0)
+        with self.assertRaises(ValueError) as caught:
+            extract_archive(self._zip({"a.csv": b"x"}), budget)
+        self.assertIn("supported files", str(caught.exception))
+
+
+class DeclaredSizeIsNotAnAttackVectorTests(SimpleTestCase):
+    """Checked, and false: an understated `file_size` truncates, it does not overrun.
+
+    Charging the cumulative budget against the *declared* size looks like it
+    should be forgeable - the declaration is attacker-supplied. It is not:
+    CPython's `zipfile` bounds a read by `file_size` and then verifies the
+    CRC, so a lying header yields a short read and a `BadZipFile`, never more
+    bytes than declared. This is recorded as a test rather than a note because
+    the reasoning depends on CPython internals that could change.
+    """
+
+    def test_understating_the_declared_size_cannot_smuggle_bytes_past_the_cap(self) -> None:
+        payload = b"A" * (5 * 1024 * 1024)
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr("big.csv", payload)
+        raw = bytearray(buf.getvalue())
+
+        # Rewrite the declared uncompressed size to 1 in both the local file
+        # header and the central directory.
+        struct.pack_into("<I", raw, raw.find(b"PK\x03\x04") + 22, 1)
+        struct.pack_into("<I", raw, raw.find(b"PK\x01\x02") + 24, 1)
+
+        with zipfile.ZipFile(io.BytesIO(bytes(raw))) as zf:
+            info = zf.infolist()[0]
+            self.assertEqual(info.file_size, 1, "precondition: the declaration must actually be understated")
+            with self.assertRaises(zipfile.BadZipFile), zf.open(info) as handle:
+                handle.read(len(payload))

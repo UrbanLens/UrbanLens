@@ -8258,3 +8258,52 @@ receiver question.
 That closes the 62-site write-per-item list from chunk 525: the bulk pin endpoints (bounded, chunk
 525), `pin_merge`'s recoveries (savepoints, chunk 526), the E2EE rewrap loop (fine; its *caller*
 was the bug, chunk 527), and these four.
+
+## RESOLVED 2026-08-16: nested archives each bought a fresh zip-bomb allowance
+
+Chunk 531 opened a new thread - upload parsers and resource exhaustion. Most of it is genuinely
+well built and worth recording as such, because the one gap is easy to miss among it: every
+user-supplied XML path uses `defusedxml` (`gpx.py`, `gpx_tracks.py`, `osm_xml.py`, and `maps.py`
+for KML, the last two pre-parsing with defusedxml purely to harden libraries that don't accept a
+safe parser); `archive_extractor` verifies type by magic bytes, skips symlinks and path-traversal
+entries, allowlists extensions, caps per-file and cumulative size and file count, and reads
+`_MAX_SINGLE_FILE_BYTES + 1` rather than trusting a declared size; shapefiles go through that same
+extractor rather than unzipping their own bundle.
+
+**The gap is that those caps are per *archive*, and the upload path calls the extractor once per
+nested archive.** `controllers/pin.py`'s import-preview endpoint expands an outer archive, then
+loops over its entries and calls `extract_archive` again for each one that is itself an archive
+(KMZ inside a ZIP is the legitimate case this exists for). Each of those calls started a **fresh**
+2 GB / 1000-file allowance. An outer ZIP containing N nested bombs therefore cost N x 2 GB, and N
+is itself bounded only by the outer archive's own 1000-file cap - so roughly 2 TB of decompression
+and up to a million accumulated in-memory files, from one upload, inside one request. Nesting depth
+is bounded at two (entries of the inner archive are taken as-is), which is the only reason this is
+merely very bad rather than unbounded.
+
+Fixed by making the allowance an object - `ExtractionBudget` - that `extract_archive` accepts and
+threads into both extractors. The preview controller creates one per upload and passes it to every
+call, outer and nested, so the whole upload shares one limit. Omitting it still gives a single
+archive its own budget, which is correct for the callers that never nest.
+
+### Checked and false: the declared-size "hole"
+
+While fixing the above I believed a second bug: the cumulative counter accumulated
+`info.file_size`, which is attacker-supplied, so a crafted entry declaring one byte while holding a
+gigabyte would understate the total to nothing. **That is wrong, and I verified it rather than
+shipping the claim.** CPython's `zipfile` bounds a read by the declared `file_size` and then
+verifies the CRC: patching a 5 MB entry's declaration down to 1 yields `BadZipFile: Bad CRC-32`,
+not 5 MB of data. The declared value was always a valid upper bound.
+
+The change to charge actual bytes stands anyway - it is exact rather than conservative - but the
+comments claiming it closes an attack were rewritten before commit.
+`DeclaredSizeIsNotAnAttackVectorTests` now pins the real behaviour as a test rather than a note,
+because the reasoning depends on CPython internals that could change.
+
+### Noted, not changed: one corrupt member fails the whole archive
+
+That experiment surfaced a robustness question. `_extract_zip` wraps its entire loop in
+`except zipfile.BadZipFile`, and a CRC failure is raised by `f.read()` *per entry* - so a single
+corrupt member inside an otherwise-fine 900-file Google Takeout archive aborts the whole extraction
+with "Invalid ZIP archive" rather than skipping that member. Fail-closed is a defensible stance for
+an importer and changing it is a product call about how much of a damaged archive to salvage, so it
+is recorded rather than changed.

@@ -59,6 +59,61 @@ class ExtractedFile(NamedTuple):
     data: bytes
 
 
+class ExtractionBudget:
+    """One allowance for everything extracted from a single upload.
+
+    The limits above are per *archive*, which is not the same as per upload:
+    an upload can contain several archives, and an archive can contain nested
+    archives that callers expand with a second `extract_archive` call. Each of
+    those calls used to start a fresh 2 GB / 1000-file allowance, so an outer
+    ZIP holding N nested bombs cost N x 2 GB - the cap bound each call and
+    nothing bound the total. Callers that expand nested archives must create
+    one of these and pass it to every call.
+
+    Charging is against bytes actually read rather than the size the archive
+    declares. That is exactness, not a hole being closed: CPython's ``zipfile``
+    bounds a read by the declared ``file_size`` and then fails the CRC check,
+    so a understated declaration truncates rather than overruns (verified
+    against 3.12 - patching a 5 MB entry's declared size to 1 raises
+    ``BadZipFile: Bad CRC-32``, it does not hand back 5 MB). The declared value
+    was therefore always a valid upper bound; the actual length is simply the
+    right thing to bill.
+    """
+
+    def __init__(self, max_bytes: int = _MAX_UNCOMPRESSED_BYTES, max_files: int = _MAX_FILE_COUNT) -> None:
+        """Start an allowance.
+
+        Args:
+            max_bytes: Total uncompressed bytes permitted across the upload.
+            max_files: Total supported entries permitted across the upload.
+        """
+        self.remaining_bytes = max_bytes
+        self.remaining_files = max_files
+
+    def claim_file(self) -> None:
+        """Account for one extracted entry.
+
+        Raises:
+            ValueError: The upload holds more supported files than permitted.
+        """
+        self.remaining_files -= 1
+        if self.remaining_files < 0:
+            raise ValueError(f"Archive contains more than {_MAX_FILE_COUNT} supported files.")
+
+    def claim_bytes(self, size: int) -> None:
+        """Account for *size* uncompressed bytes.
+
+        Args:
+            size: Bytes to deduct from the remaining allowance.
+
+        Raises:
+            ValueError: The upload expands past the permitted total.
+        """
+        self.remaining_bytes -= size
+        if self.remaining_bytes < 0:
+            raise ValueError(f"Archive exceeds {_MAX_UNCOMPRESSED_BYTES // (1024 * 1024)} MB uncompressed.")
+
+
 def is_archive(data: bytes) -> bool:
     """Returns True if *data* starts with ZIP or GZIP magic bytes.
 
@@ -71,18 +126,23 @@ def is_archive(data: bytes) -> bool:
     return data[:4] == _ZIP_MAGIC or data[:2] == _GZIP_MAGIC
 
 
-def extract_archive(data: bytes) -> list[ExtractedFile]:
+def extract_archive(data: bytes, budget: ExtractionBudget | None = None) -> list[ExtractedFile]:
     """Safely extract supported files from a ZIP or TGZ archive.
 
     Security measures applied:
     - Type verified by magic bytes, not filename extension.
     - Path-traversal entries (``../`` or absolute paths) are silently skipped.
     - Symlinks and non-regular-file entries are skipped.
-    - Per-file and cumulative uncompressed-size limits enforced.
+    - Per-file and cumulative uncompressed-size limits enforced, the cumulative
+      ones shared across every call that passes the same ``budget``.
     - Only entries whose extension is in ``_ARCHIVE_ALLOWED_EXTENSIONS`` are extracted.
 
     Args:
         data: Raw bytes of the archive.
+        budget: Allowance to draw on. Callers expanding *nested* archives must
+            create one :class:`ExtractionBudget` and pass it to every call, so
+            the whole upload shares one limit; omitting it gives this archive
+            its own, which is only correct when nothing else will be extracted.
 
     Returns:
         List of :class:`ExtractedFile` for every supported entry found.
@@ -90,10 +150,12 @@ def extract_archive(data: bytes) -> list[ExtractedFile]:
     Raises:
         ValueError: If the archive is malformed or exceeds safety limits.
     """
+    if budget is None:
+        budget = ExtractionBudget()
     if data[:4] == _ZIP_MAGIC:
-        return _extract_zip(data)
+        return _extract_zip(data, budget)
     if data[:2] == _GZIP_MAGIC:
-        return _extract_tgz(data)
+        return _extract_tgz(data, budget)
     raise ValueError("Not a recognized archive format (expected ZIP or GZIP/TGZ).")
 
 
@@ -254,11 +316,9 @@ def _extension(filename: str) -> str:
     return filename.rsplit(".", 1)[-1].lower() if "." in filename else ""
 
 
-def _extract_zip(data: bytes) -> list[ExtractedFile]:
-    """Extract supported files from a ZIP archive."""
+def _extract_zip(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
+    """Extract supported files from a ZIP archive, drawing on *budget*."""
     results: list[ExtractedFile] = []
-    total_size = 0
-    file_count = 0
 
     try:
         with zipfile.ZipFile(io.BytesIO(data)) as zf:
@@ -287,22 +347,14 @@ def _extract_zip(data: bytes) -> list[ExtractedFile]:
                     )
                     continue
 
-                total_size += info.file_size
-                if total_size > _MAX_UNCOMPRESSED_BYTES:
-                    raise ValueError(
-                        f"Archive exceeds {_MAX_UNCOMPRESSED_BYTES // (1024 * 1024)} MB uncompressed.",
-                    )
-
-                file_count += 1
-                if file_count > _MAX_FILE_COUNT:
-                    raise ValueError(
-                        f"Archive contains more than {_MAX_FILE_COUNT} supported files.",
-                    )
+                budget.claim_file()
 
                 with zf.open(info) as f:
                     # Read one extra byte so we can detect if the actual size
                     # exceeds the declared file_size (compression-ratio attack).
                     content = f.read(_MAX_SINGLE_FILE_BYTES + 1)
+
+                budget.claim_bytes(len(content))
 
                 if len(content) > _MAX_SINGLE_FILE_BYTES:
                     logger.warning(
@@ -319,11 +371,9 @@ def _extract_zip(data: bytes) -> list[ExtractedFile]:
     return results
 
 
-def _extract_tgz(data: bytes) -> list[ExtractedFile]:
-    """Extract supported files from a GZIP-compressed TAR archive."""
+def _extract_tgz(data: bytes, budget: ExtractionBudget) -> list[ExtractedFile]:
+    """Extract supported files from a GZIP-compressed TAR archive, drawing on *budget*."""
     results: list[ExtractedFile] = []
-    total_size = 0
-    file_count = 0
 
     try:
         with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tf:
@@ -348,23 +398,14 @@ def _extract_tgz(data: bytes) -> list[ExtractedFile]:
                     )
                     continue
 
-                total_size += member.size
-                if total_size > _MAX_UNCOMPRESSED_BYTES:
-                    raise ValueError(
-                        f"Archive exceeds {_MAX_UNCOMPRESSED_BYTES // (1024 * 1024)} MB uncompressed.",
-                    )
-
-                file_count += 1
-                if file_count > _MAX_FILE_COUNT:
-                    raise ValueError(
-                        f"Archive contains more than {_MAX_FILE_COUNT} supported files.",
-                    )
+                budget.claim_file()
 
                 fobj = tf.extractfile(member)
                 if fobj is None:
                     continue
 
                 content = fobj.read(_MAX_SINGLE_FILE_BYTES + 1)
+                budget.claim_bytes(len(content))
                 if len(content) > _MAX_SINGLE_FILE_BYTES:
                     logger.warning(
                         "Actual size of TGZ member exceeded declared size, skipping: %s",

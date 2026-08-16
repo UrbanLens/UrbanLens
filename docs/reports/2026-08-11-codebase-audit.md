@@ -9897,3 +9897,34 @@ The other two (`photos/redata_relevance`, the STALE sweep) are clean: per-row di
 bulk form available, bounded batches, and `.update()` rather than `save()` so no receiver question.
 
 That closes the 62-site list chunk 525 opened. 45 device-scan and consensus tests pass, ruff clean.
+
+## Chunk 531 - a new thread: upload parsers, and a cap that bound each call but not the work
+
+Opened the resource-exhaustion thread on the import pipeline. Nearly all of it is well built -
+defusedxml on every user-XML path (including pre-parsing to harden libraries that won't take a safe
+parser), and an archive extractor doing magic-byte typing, symlink and traversal rejection, an
+extension allowlist, per-file and cumulative caps, and a deliberate read-one-extra-byte instead of
+trusting declared sizes. Recording that positively matters here, because the single gap hides among
+it.
+
+The caps are per *archive*. The import-preview controller expands an outer archive, then calls the
+extractor **again** for every nested archive it finds - the legitimate KMZ-inside-ZIP case. Each of
+those calls started a fresh 2 GB / 1000-file allowance, so an outer ZIP of N nested bombs bought N
+times the cap, with N bounded only by the outer archive's own 1000-file limit: ~2 TB of
+decompression from one upload, in one request. The limit was real, the code enforcing it was
+careful, and nothing tied it to the total work. Fixed with a shared `ExtractionBudget`.
+
+**The part worth keeping is the bug I did not ship.** While fixing that I concluded the cumulative
+counter was also forgeable, since it accumulated the attacker-supplied `info.file_size`. It reads
+like a textbook hole. I tested it before writing it down: CPython's `zipfile` bounds reads by
+`file_size` and CRC-checks, so understating the declaration truncates and raises `BadZipFile` - it
+cannot smuggle bytes. The declared value was always an upper bound. Two comments asserting the
+"hole" had already been written into the source and were rewritten before commit, and the real
+behaviour is now a test rather than a note, since it depends on CPython internals.
+
+That experiment also surfaced something to record but not change: a CRC failure is raised per
+entry, and `_extract_zip` catches `BadZipFile` around the whole loop - so one corrupt member aborts
+an otherwise-fine 900-file Takeout archive. Fail-closed is defensible for an importer; how much of
+a damaged archive to salvage is a product call.
+
+Verified: 103 archive/import tests, ruff clean.
