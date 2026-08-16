@@ -11,14 +11,14 @@ Context: components, operating_costs, breakdown (CostBreakdown), total_recorded_
 <div id="cost_admin_body">
 
     {% if component_form_errors %}
-    <div class="ul-alert ul-alert--error" role="alert">
+    <div class="ul-notice ul-notice--danger" role="alert">
         {% for field, errors in component_form_errors.items %}
         <p><strong>{{ field }}:</strong> {{ errors|join:" " }}</p>
         {% endfor %}
     </div>
     {% endif %}
     {% if operating_form_errors %}
-    <div class="ul-alert ul-alert--error" role="alert">
+    <div class="ul-notice ul-notice--danger" role="alert">
         {% for field, errors in operating_form_errors.items %}
         <p><strong>{{ field }}:</strong> {{ errors|join:" " }}</p>
         {% endfor %}

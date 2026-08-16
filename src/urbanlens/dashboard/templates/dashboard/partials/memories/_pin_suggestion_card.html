@@ -30,7 +30,7 @@ Context:
 
     <div class="pin-suggestion-card-body">
         <div class="pin-suggestion-card-meta">
-            <span class="badge badge--muted">{{ suggestion.get_origin_display }}</span>
+            <span class="ul-badge ul-badge--neutral">{{ suggestion.get_origin_display }}</span>
             <span class="pin-suggestion-card-count">{{ suggestion.hit_count }} photo{{ suggestion.hit_count|pluralize }}</span>
         </div>
 
@@ -95,7 +95,7 @@ Context:
         {% if suggestion.suggested_description or suggestion.suggested_pin_type or suggestion.suggested_aliases or suggestion.suggested_links %}
         <div class="pin-suggestion-card-details">
             {% if suggestion.suggested_pin_type %}
-            <span class="badge badge--muted">{{ suggestion.get_suggested_pin_type_display }}</span>
+            <span class="ul-badge ul-badge--neutral">{{ suggestion.get_suggested_pin_type_display }}</span>
             {% endif %}
             {% if suggestion.suggested_description %}
             <p class="pin-suggestion-card-description">{{ suggestion.suggested_description|truncatewords:40 }}</p>

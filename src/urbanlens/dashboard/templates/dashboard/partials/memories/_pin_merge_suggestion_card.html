@@ -29,7 +29,7 @@ Context:
                         · {{ suggestion.pin_a.images.count }} photo{{ suggestion.pin_a.images.count|pluralize }}
                     </span>
                     {% if suggestion.suggested_survivor_id == suggestion.pin_a_id %}
-                    <span class="badge badge--muted">Recommended</span>
+                    <span class="ul-badge ul-badge--neutral">Recommended</span>
                     {% endif %}
                 </span>
             </label>
@@ -44,7 +44,7 @@ Context:
                         · {{ suggestion.pin_b.images.count }} photo{{ suggestion.pin_b.images.count|pluralize }}
                     </span>
                     {% if suggestion.suggested_survivor_id == suggestion.pin_b_id %}
-                    <span class="badge badge--muted">Recommended</span>
+                    <span class="ul-badge ul-badge--neutral">Recommended</span>
                     {% endif %}
                 </span>
             </label>

@@ -945,7 +945,39 @@ Found 2026-08-04 during the Place refactor; deliberately not fixed there, since 
 command's behaviour should not change as a side effect of an unrelated refactor. The fix looks
 like uncommenting the line, but someone should confirm it wasn't disabled on purpose first.
 
-## `.badge--muted` is used everywhere but never defined (and it is not the only one)
+## RESOLVED 2026-08-16: `.badge--muted` is used everywhere but never defined (and it is not the only one)
+
+**Fixed 2026-08-16 by deleting the undefined classes rather than defining them.** The "picking a
+colour is a design call" objection dissolves once you notice the design system already has both
+components, with a gallery page (`pages/site_admin_ui_components.html`) demonstrating them:
+
+- `badge badge--muted` → `ul-badge ul-badge--neutral` (7 usages across 5 templates - two more than
+  this entry listed: `partials/assistant/_messages.html` and `pages/site_admin.html`).
+- `ul-alert ul-alert--error` → `ul-notice ul-notice--danger` (2 usages), matching what
+  `partials/admin/_achievement_rows.html` already does for the same `role="alert"` shape.
+
+No new CSS was written, so there was no colour to choose.
+
+Worth knowing: `.badge--muted` was not merely *unstyled*. The only `.badge` rule in the codebase
+(`_reset.scss`, `span.badge`) is a **count** badge - `float: right`, `min-width: 3rem`,
+`margin-left: 14px` - so those inline text pills were being right-floated out of their cards at
+three rems wide. That is a layout bug, not a missing tint, and it is why this was worth doing
+rather than leaving as cosmetic.
+
+**`.dm-bubble-menu__item` was a false positive.** It *is* defined, as a nested `&__item` (with its
+`&--danger`) inside `.dm-bubble-menu` in `_messages.scss:1648`. A selector scan that reads SCSS
+source textually cannot see nested BEM; the re-enumeration recipe below should compile the SCSS
+first and scan the *output*, which resolves nesting for free.
+
+Re-run that way 2026-08-16 (compiled CSS + inline `<style>` + TypeScript vs every `class="..."`
+token containing `--`/`__`): 622 modifier/element classes used, 77 with no rule anywhere. Spot-
+checking confirms the entry's own characterisation of the remainder as noise - `users-list__col`
+and `subscription-list__col` are grid *items* positioned entirely by the parent's
+`grid-template-columns`, `form-row--title`/`detail-item--built` are semantic hooks, and several
+(`cal-cell--today'`, `cal-event--'`) are scan artifacts from classes assembled in JS expressions.
+None of the 77 is a second instance of the real bug.
+
+**Original entry.**
 
 **Update 2026-08-11**: this is a small class of issue, not a one-off. Two more components are
 referenced only by templates and defined in *no* stylesheet - not the SCSS, not any inline
