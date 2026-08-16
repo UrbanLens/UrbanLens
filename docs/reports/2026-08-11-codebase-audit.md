@@ -10643,3 +10643,28 @@ That ratio is worth keeping in view as this instrument gets reused: seven crashe
 A generic sweep manufactures states the application cannot, so its output is a list of *candidates*
 in exactly the sense every scan in this session has been - and the check is always the same, whether
 the state is reachable by a user.
+
+## Chunk 557 - closing a class instead of finding a fourth instance of it
+
+Three chunks had each turned up the same shape - one view, two routes, a handler signature fitting
+only one - so rather than wait for a fourth, this chunk asked the question of every view at once: for
+each class wired to two or more routes, does each handler accept the union of the parameters those
+routes supply?
+
+753 view classes, 48 multi-route, **zero mismatches**. The class is closed; the three found were all
+of them.
+
+A zero result from a scan I wrote is exactly what this session has repeatedly shown to be worth
+distrusting, so it was validated before being believed: reinstating `PinRelinkView.get`'s pre-fix
+signature makes the scan name that method and that parameter. It binds.
+
+Made permanent as a guard, because this is precisely the property that decays silently - adding a
+route to an existing view reopens it, Django only complains at request time, and both real instances
+lived on routes no UI path exercises. It carries the two lessons this codebase has already paid for:
+parameters accumulate down the resolver tree (leaf-only reading is what blinded an earlier sweep
+here), and `**kwargs` handlers are skipped as legitimately universal.
+
+The progression across these chunks is the useful part. Chunk 551 built an instrument that requested
+routes nobody requests, and it found instances of this class one at a time. Chunk 557 replaces the
+instrument with the property: instead of discovering the bug by making a request, assert the
+condition that makes the request safe. The sweep found them; the guard means they cannot come back.

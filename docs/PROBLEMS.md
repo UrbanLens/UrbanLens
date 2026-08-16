@@ -9163,3 +9163,31 @@ Recorded rather than quietly fixed, because the distinction is the whole discipl
 generic instrument produces states the application cannot, and every crash it reports has to be
 checked against whether a user could reach it. The fixture now attaches a real file, which is what
 every upload path leaves behind.
+
+## Enforced 2026-08-16 (chunk 557): a view's handlers must accept every parameter its routes supply
+
+Three chunks in a row produced the same shape, and the third made it a class worth sweeping rather
+than a coincidence worth noting:
+
+| route | handler | missing | found in |
+| --- | --- | --- | --- |
+| `saved_filters.new` | `SavedFilterEditView.post` | `filter_uuid` was *required*, only `edit/` supplies it | chunk 552 |
+| `pin.link.to` | `PinRelinkView.get` | `location_slug` absent entirely | chunk 556 |
+| `pin.link` | `PinRelinkView.post` | (the filed detach product decision, not a signature fault) | chunk 551 |
+
+Django resolves handler arguments at **request** time, so the failure is a `TypeError` that only
+appears when somebody requests the mismatched route - and both real instances were on routes no UI
+path exercises, which is exactly why they survived.
+
+Swept directly: for every view class wired to two or more routes, does each handler accept the union
+of the parameters those routes can pass? **753 view classes, 48 of them multi-route, zero
+mismatches.** The class is closed.
+
+`test_view_signature_route_guard.py` keeps it closed, because adding a route to an existing view
+re-opens it silently - nothing at import time or in review notices. **Verified to bind**: restoring
+`PinRelinkView.get`'s pre-fix signature makes it report exactly that method and parameter.
+
+Two details it inherits from earlier mistakes here: parameters accumulate down the resolver tree
+(reading only leaf patterns is what made `test_route_query_scaling`'s second version blind to most
+parameterised routes, per its own docstring), and a handler taking `**kwargs` is skipped because it
+accepts anything by construction.
