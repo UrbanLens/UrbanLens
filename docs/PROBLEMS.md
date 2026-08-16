@@ -8466,3 +8466,51 @@ each file into a list before iterating it, so a single enormous file is held in 
 its own import. Bounding that means changing the format parsers to be generators - a much larger
 change than this one, with no in-request exposure (the import runs as a streaming response), so it
 is recorded rather than attempted.
+
+## RESOLVED 2026-08-16: posting to an archived safety check-in 500'd on the no-JS fallback
+
+Chunk 536 stopped waiting to stumble into the session's recurring pattern - an idea applied to one
+of two sibling paths, five instances by then - and hunted it directly. The sweep: for every function
+defined in this codebase, compare the exception types each of its **callers** catches; report where
+one caller catches strictly more than another. 83 functions diverge that way.
+
+**Most of that is legitimate** and reading it says so: a service-internal call that lets a domain
+error propagate to its own caller genuinely should not catch it, and a view that renders an error
+page genuinely should. The interesting subset is where two *equivalent* surfaces - the website
+controller and the external API - handle the same service call differently.
+
+**The real one: `post_chat_message`.** Its two failures are **siblings, not parent and child** -
+`SafetyValidationError` and `CheckinArchivedError` both derive from `ValueError` directly, so no
+single `except` covers both. `external_api/views_safety_chat.py` catches each deliberately, with a
+comment on why they differ (409 vs 400: the body was fine, the check-in's plaintext is already
+sealed into its encrypted archive, so a client should retire the conversation rather than ask the
+user to retype). `controllers/safety.py` caught only `SafetyValidationError`, so the archived case
+escaped as a 500.
+
+Where it lands is what makes it worth fixing rather than filing: that view is the **no-JS /
+socket-down fallback** on a *safety* feature - its own comment says it exists so a message isn't
+invisible when the WebSocket is down. It is the path that runs when something is already degraded.
+The same controller file catches `CheckinArchivedError` correctly one method away, at line 813.
+
+Fixed to answer 409 with the safe message, matching the API. `_chat_panel.html` surfaced only 400
+bodies as sender-safe text, so it now treats 409 the same way - otherwise the user would have got
+the generic "you may no longer have access to this chat" for a check-in that is merely closed.
+
+### Verified safe by the same sweep: the pin sub-resource endpoints
+
+The sweep's four highest-signal hits were `create_pin_alias`, `delete_pin_alias`, `create_pin_link`
+and `create_pin_note` - each caught by the HTML controller and apparently by nothing on the API
+side. All four dissolved on reading, and the API design is the better of the two: `PinSubResourceView.post`
+and `PinSubResourceDetailView.delete` catch the shared `PinSubResourceError` base **once**, in the
+base class, and map it to a status through `_subresource_error_status`, so every present and future
+subclass is handled. The HTML controllers catch each concrete type individually.
+
+`create_pin_note` looked like a genuine gap inside that - it raises a bare `ValueError`, not a
+`PinSubResourceError`, so the base class would not catch it. It is unreachable from the API:
+`PinNoteSerializer.text` declares `trim_whitespace=True, allow_blank=False`, so DRF answers 400
+before the service function runs. Worth recording rather than "fixing" - the odd-one-out exception
+type is real, and only the serializer is stopping it from mattering.
+
+**Method note, third in a row.** The scan is intra-function, so it cannot see a handler in a base
+class one frame up - which is exactly what produced its four loudest false positives. The pattern
+holds: the scan points at the neighbourhood, and reading decides.

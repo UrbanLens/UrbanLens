@@ -1639,6 +1639,18 @@ class SafetyCheckinMessageView(View):
                 # every other participant with an open socket (they'd only see it
                 # on their next manual reload).
                 post_chat_message(checkin, user=request.user, contact=contact, body=body)
+            except CheckinArchivedError as exc:
+                # A sibling of SafetyValidationError, not a subclass - both
+                # derive from ValueError - so the handler below never covered
+                # it, and posting to an archived check-in through this fallback
+                # was a 500. The external API distinguishes the two
+                # deliberately (409 vs 400: the body was fine, the check-in's
+                # plaintext is already sealed into its encrypted archive), and
+                # this surface should say the same thing. It matters most here:
+                # this is the no-JS/socket-down path, which runs precisely when
+                # something is already degraded.
+                logger.info("Safety chat HTTP fallback refused message on archived checkin %s", checkin.uuid)
+                return HttpResponse(exc.safe_message, status=409)
             except SafetyValidationError as exc:
                 logger.info("Safety chat HTTP fallback rejected message on checkin %s: %s", checkin.uuid, exc)
                 return HttpResponseBadRequest(exc.safe_message)

@@ -10082,3 +10082,39 @@ it, so one enormous file is held once during its own import. Making that increme
 the format parsers into generators - a much larger change with no in-request exposure.
 
 Verified: 33 preview and import tests, ruff clean.
+
+## Chunk 536 - hunting the pattern instead of waiting for it
+
+Five chunks had each found the same shape by accident: one of two sibling paths got the treatment.
+Rather than wait for a sixth, this chunk built a sweep for it - for every function defined here,
+compare the exception sets its *callers* catch, and report where one catches strictly more than
+another. 83 functions diverge.
+
+Most of that divergence is correct, and reading says so quickly: a service-internal caller that lets
+a domain error propagate should not catch it. The subset worth attention is two *equivalent*
+surfaces - website controller and external API - handling one service call differently.
+
+`post_chat_message` was the find. `SafetyValidationError` and `CheckinArchivedError` are **siblings**
+- both direct `ValueError` subclasses - so one `except` cannot cover both, and the API catches each
+deliberately with a comment on why their statuses differ. The controller caught only the first, so
+posting to an archived check-in was a 500 on the **no-JS / socket-down fallback** of a safety
+feature: the path that exists for when things are already going wrong. The same file handles that
+exception correctly one method away.
+
+The sweep's four *loudest* hits were false, and instructively so. The pin sub-resource endpoints
+appeared to catch nothing on the API side; in fact the shared base class catches the common
+`PinSubResourceError` once and maps it to a status, which is a better design than the controllers'
+per-type catching. My scan is intra-function and cannot see a handler one frame up - the third
+chunk running where the scan located the neighbourhood and reading did the finding.
+
+One thing recorded rather than fixed: `create_pin_note` raises a bare `ValueError` where every
+sibling in its module raises a `PinSubResourceError`, so the base class would not catch it. It is
+unreachable only because `PinNoteSerializer` declares `allow_blank=False`. The odd type is real;
+the serializer is the only thing making it harmless.
+
+A fixture error of my own, caught before it became a finding: the first version of the regression
+test built a key bundle with a placeholder public key, which NaCl rejects - so nothing was archived
+and the test failed against correct code. The fix now asserts the precondition (`hasattr(checkin,
+"archive")`) rather than trusting the setup.
+
+Verified: 56 safety and API-chat tests, ruff clean.
