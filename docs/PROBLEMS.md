@@ -9310,3 +9310,27 @@ Options:
 
 Worth deciding rather than leaving implicit, because the app currently promises "Message deleted" in
 one surface while quoting the message in another.
+
+## An export whose cleanup fails to enqueue is never swept
+
+`run_export` schedules `cleanup_export_artifacts_task` in a `finally`, so every path - success, a
+failed user load, an exception mid-export - asks for cleanup. Worker loss is covered too: the Celery
+settings deliberately reconcile `visibility_timeout` against the longest countdown this app
+schedules, which is this one at 3600s, so an unacked cleanup is redelivered.
+
+The uncovered path is the enqueue itself. `schedule_export_cleanup` uses `safely_enqueue_task`, and
+when that returns None (broker unreachable, which the settings above are tuned to fail *fast* on) it
+logs `"Unable to schedule cleanup for export directory %s"` and returns. Nothing else ever looks at
+that directory, so a ZIP containing the user's entire account - pins, photos, messages, profile -
+stays on disk indefinitely, and the only record is one warning line.
+
+Low frequency, but the retention story is "it is deleted an hour later" and in this case it is not.
+This codebase already uses periodic backstops for exactly this kind of single-mechanism dependency:
+`sync_stripe_subscriptions` is described as a "safety net for missed Stripe webhook deliveries", and
+`SafetyCheckinChatConsumer` revalidates every 60 seconds "as a backstop for a dropped
+partner_access_revoked broadcast".
+
+The matching fix would be a periodic sweep of export/import working directories older than their
+TTL, which needs no per-job bookkeeping - the directory's own mtime is enough. Filed rather than
+added because it means introducing a beat task, and how aggressively to reap those directories is
+an operational choice.
