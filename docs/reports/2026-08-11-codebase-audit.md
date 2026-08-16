@@ -11223,3 +11223,41 @@ Not matched to safety's belt-and-braces: game sessions get the broadcast close b
 revalidation loop. Safety streams live location, which is worth the standing query; a game session
 is not, and adding a per-minute database check to every connected player is a cost I would not pay
 without being asked.
+
+## Chunk 572 - an unsend that only reached the app
+
+Notifications turned out to be well covered (10 modules, including a preference-field completeness
+guard), so the chunk applied the framing that has been paying off - *a permission or state checked
+once, then acted on later* - to a layer that had not been traced: **deferred Celery work**. A task
+enqueued now runs minutes later, carrying whatever was true at enqueue time.
+
+`send_direct_message_email_if_unread` is delayed by `EMAIL_DELAY_SECONDS` (120) precisely so a
+recipient who opens the message in the app is never emailed about it. The task re-reads the row and
+returns when `read_at` is set. But **"still unread" and "still exists" are two different
+properties**, and only the first was checked.
+
+`delete_message_for_everyone` is a *soft* delete - it stamps `deleted_by_sender_at`, switches the
+recipient's view to a tombstone, revokes any attached share, and keeps the row. So a message unsent
+inside that two-minute window, which is exactly the window an unsend exists for, still had its first
+200 characters emailed to the recipient: out of band, permanent, and arriving after the app had
+already told them the message was withdrawn. The delayed WhatsApp/SMS alert did the same.
+
+Both now ask `tombstone_text_for` - the same helper the UI asks - rather than re-deriving the
+condition. That keeps the two from drifting and picks up the recipient's own delete and expired
+disappearing messages for free. Reproduced with failing tests first; a third test covers the case the
+guard must not break, an ordinary unread message still being emailed.
+
+Then the sibling check, which is where the honest scope of this sits. The same class has four sites,
+not two: the on-site `NotificationLog` raised for a message also stores its preview - 120 characters
+for a DM, `"{sender}: {preview}"` for a group message - and no delete touches it. So the thread says
+"Message deleted" while the notification list still quotes what was said.
+
+**Not fixed**, and deliberately: `NotificationLog` has no reference to the message it was raised for,
+and its `url` points at the thread rather than the message, so there is nothing to match on. Matching
+heuristically on profile, type, url and timestamp would eventually delete the wrong notification.
+That needs a schema decision - filed in `docs/PROBLEMS.md` with three options. Group messages have no
+deferred email at all, so the fix here has no group-side counterpart to miss.
+
+The precedent is in the codebase already: `test_direct_message_hard_delete`'s docstring opens by
+describing a privacy gap where a feature "only ever gated *display*" while the data lived on. This is
+the same gap, one layer out.
