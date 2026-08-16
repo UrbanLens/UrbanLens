@@ -8514,3 +8514,40 @@ type is real, and only the serializer is stopping it from mattering.
 **Method note, third in a row.** The scan is intra-function, so it cannot see a handler in a base
 class one frame up - which is exactly what produced its four loudest false positives. The pattern
 holds: the scan points at the neighbourhood, and reading decides.
+
+## Reference 2026-08-16: why two callers of one function legitimately catch different exceptions
+
+Chunk 537 worked the rest of chunk 536's divergence list - the sweep that found the archived
+safety-chat 500 by comparing what each caller of a function catches. Six more candidates read, **six
+false positives**, and the reasons are different enough that the list is worth keeping: it is what
+makes that sweep re-runnable without re-deriving the same judgements.
+
+Divergence is *expected*, not suspicious. A caller catches less than its sibling when:
+
+1. **It guards before the call instead of after it.** `controllers/visits.py` checks
+   `visit_logging_allowed(...)` and answers 403 before ever calling `create_manual_visit`, so
+   `VisitLoggingDisabledError` is unreachable - and its comment says exactly why the redundant
+   service-side check stays ("403 rather than a confusing 400"). `controllers/userprofile.py` bounds
+   the trust rating to the valid range before calling `set_trust`, routing anything else to
+   `clear_trust` - out-of-range is that widget's "clear" signal, not an error.
+2. **It constructs the payload itself, so the raising branch cannot be reached.** The HTML pin
+   editor builds `edits` from a fixed key set, all within `EDITABLE_PIN_FIELDS`, and never passes
+   `visited`, so neither of `apply_pin_edits`' two `PinEditError` branches can fire. The API accepts
+   a client-supplied field set and must catch.
+3. **The arguments make the branch impossible.** `views_messaging.py`'s self-leave endpoint calls
+   `remove_group_member(group, profile, profile)`; the `GroupChatPermissionError` branch is about
+   removing *other* members, so only the validation branch is reachable - and it catches the shared
+   `ValueError` base anyway, which is broader than its sibling's two named types, not narrower.
+4. **The catch is doing a different job.** `controllers/pin_suggestions.py` wraps
+   `accept_pin_suggestion` in a bare `except Exception` *inside a loop*, to stop one bad suggestion
+   aborting a bulk action. The API endpoint handles a single suggestion, where there is nothing to
+   isolate it from. `accept_pin_suggestion` declares no `Raises:` at all.
+5. **The scan crossed a function boundary.** `join_trip` raises nothing; the `Raises:` attributed to
+   it belonged to `leave_trip`, the next function in the file, inside a `grep -A 40` window. The
+   same artifact class recorded earlier in this audit.
+
+Add the one from chunk 536 - a handler in a **base class**, one frame above the call, which an
+intra-function scan cannot see - and that is six ways to be correct while looking divergent.
+
+The sweep is still worth re-running; it found a real 500 on a safety path. But its yield is roughly
+one in ten, and every one of the nine needs reading rather than triage by shape.

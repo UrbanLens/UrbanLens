@@ -10118,3 +10118,25 @@ and the test failed against correct code. The fix now asserts the precondition (
 "archive")`) rather than trusting the setup.
 
 Verified: 56 safety and API-chat tests, ruff clean.
+
+## Chunk 537 - working the vein dry, and what that is worth recording
+
+Read six more of chunk 536's divergence candidates - `create_manual_visit`, `set_trust`,
+`join_trip`, `apply_pin_edits`, `remove_group_member`, `accept_pin_suggestion`. **All six are
+false positives**, and no two for the same reason: a precondition check before the call, a caller
+that builds its own payload so the raising branch is unreachable, arguments that make a branch
+impossible, a catch doing partial-failure isolation inside a loop rather than error typing, and one
+case where my grep window ran past a function boundary and attributed `leave_trip`'s `Raises:` to
+`join_trip`.
+
+No changes warranted this chunk. That is the honest outcome and worth stating plainly: chunk 536's
+sweep found a real 500 on a safety path, and the same sweep's remaining candidates are a long tail
+of code that is correct for reasons a scan cannot represent.
+
+What is worth keeping is the taxonomy, now in PROBLEMS.md - six distinct ways a caller legitimately
+catches less than its sibling. The point of writing it down is that the next person to run this
+sweep (or me, in fifty chunks) will otherwise re-derive the same six judgements from scratch and
+may not reach the same answers. A sweep with a one-in-ten yield is still worth running; a sweep
+whose false positives have to be re-adjudicated every time is not.
+
+Twenty-first verified-safe area, counting the six together: the controller/API divergence surface.
