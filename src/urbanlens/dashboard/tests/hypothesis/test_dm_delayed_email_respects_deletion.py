@@ -30,6 +30,7 @@ from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.messaging.direct_messages import delete_message_for_everyone, delete_message_for_self
+from urbanlens.dashboard.services.social.friendship import block_profile
 from urbanlens.dashboard.tasks import send_direct_message_email_if_unread
 
 
@@ -60,6 +61,20 @@ class DelayedDirectMessageEmailTests(TestCase):
         send_direct_message_email_if_unread(self.message.pk)
 
         self.assertEqual(mail.outbox, [], "the delayed email delivered a message the recipient had deleted")
+
+    def test_a_message_from_a_since_blocked_sender_is_not_emailed(self) -> None:
+        """Blocking is enforced when sending; the delayed email outlives the send.
+
+        A block placed inside the 120-second window - which is exactly when
+        someone reaches for it, right after the message that prompted it -
+        otherwise still delivers that message's text to the blocker's inbox,
+        out of band and permanent, after the app has stopped showing it.
+        """
+        block_profile(self.recipient, self.sender)
+
+        send_direct_message_email_if_unread(self.message.pk)
+
+        self.assertEqual(mail.outbox, [], "the delayed email delivered a message from a sender the recipient had blocked")
 
     def test_an_ordinary_unread_message_is_still_emailed(self) -> None:
         """The guard must not break the feature it is guarding."""

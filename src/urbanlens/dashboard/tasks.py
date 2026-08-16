@@ -2450,7 +2450,7 @@ def send_direct_message_email_if_unread(message_id: int) -> None:
         message_id: PK of the message to check and possibly email about.
     """
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
-    from urbanlens.dashboard.services.messaging.direct_messages import is_email_debounced, send_message_email_now
+    from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message, is_email_debounced, send_message_email_now
 
     try:
         message = DirectMessage.objects.select_related("sender", "recipient__user").get(pk=message_id)
@@ -2465,6 +2465,13 @@ def send_direct_message_email_if_unread(message_id: int) -> None:
     # same helper the UI asks keeps the two from drifting, and picks up expired
     # disappearing messages for free.
     if message.tombstone_text_for(message.recipient_id) is not None:
+        return
+    # Re-asked, not remembered: sending was permitted 120 seconds ago, and a
+    # block is most often placed in exactly that window - right after the message
+    # that prompted it. Asking the same helper create_direct_message asks keeps
+    # the two from drifting, and covers a recipient who has since tightened their
+    # direct-message visibility for the same reason.
+    if not can_direct_message(message.sender, message.recipient):
         return
     if is_email_debounced(message.sender_id, message.recipient_id):
         return
@@ -2485,7 +2492,7 @@ def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
         message_id: PK of the message to check and possibly alert about.
     """
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
-    from urbanlens.dashboard.services.messaging.direct_messages import is_text_alert_debounced, send_message_text_alerts_now
+    from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message, is_text_alert_debounced, send_message_text_alerts_now
 
     try:
         message = DirectMessage.objects.select_related("sender", "recipient__user").get(pk=message_id)
@@ -2500,6 +2507,13 @@ def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
     # same helper the UI asks keeps the two from drifting, and picks up expired
     # disappearing messages for free.
     if message.tombstone_text_for(message.recipient_id) is not None:
+        return
+    # Re-asked, not remembered: sending was permitted 120 seconds ago, and a
+    # block is most often placed in exactly that window - right after the message
+    # that prompted it. Asking the same helper create_direct_message asks keeps
+    # the two from drifting, and covers a recipient who has since tightened their
+    # direct-message visibility for the same reason.
+    if not can_direct_message(message.sender, message.recipient):
         return
     if is_text_alert_debounced(message.sender_id, message.recipient_id):
         return

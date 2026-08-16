@@ -11296,3 +11296,37 @@ Worth saying plainly: the ratio across this session is roughly one real defect p
 hypotheses, and the hypotheses that die tend to die because someone had already thought about the
 problem and left the reasoning behind. That is a property of this codebase worth knowing when
 deciding how hard to push on any given suspicion.
+
+## Chunk 574 - the sibling I missed one chunk ago
+
+Surveyed the plugin system first and left it alone: 23 test modules, and the one whose name matched
+the property I was going to test - `test_panel_gate_isolation` - opens by describing exactly it
+("One plugin's broken gate must not empty the whole panel list"), including why the external API's
+list endpoint needed the guard the internal HTMX-per-panel page did not. It even records that the
+suppression matches `run_panel_fetch`'s existing stance. Nothing to add.
+
+The chunk's finding came from re-reading my own previous one. Chunk 572 fixed the delayed direct-
+message email and text alert to skip a *deleted* message, on the grounds that "still unread" and
+"still exists" are different properties. **Deletion is not the only thing that can change inside a
+120-second window.** Blocking is the other one - and it is placed, most often, in exactly that
+window: right after the message that prompted it.
+
+`create_direct_message` enforces blocks (`test_friendship_block_enforcement` exists precisely
+because it once did not). The deferred email did not: it re-read `read_at`, and after chunk 572 the
+tombstone, but never re-asked whether the sender is still allowed to reach this recipient. So a
+recipient who blocked someone still received that person's message text by email two minutes later,
+out of band and permanent, after the app had stopped showing it to them.
+
+Both tasks now call `can_direct_message` - the same helper `create_direct_message` calls, so the two
+cannot drift - which also covers a recipient who has since tightened their direct-message
+visibility, for the same reason. Reproduced with a failing test first. 111 tests pass.
+
+One process note. The edit that added the import matched a *third* import line by prefix - the
+unrelated `notifications.notification_text_alerts` module, which does not export
+`can_direct_message` - and would have been an ImportError at task run time. Caught immediately by
+compiling, and it is the same prefix-matching mistake that split an import line in chunk 560. A
+blanket string replace across a 3,000-line module needs its match count asserted, not assumed.
+
+The lesson worth generalising: when a fix lands, the next question is not only "where else does this
+shape appear" (which chunk 572 asked, and answered with the notification previews) but "what else
+can change during the same window". The first asks about code shape; the second asks about time.
