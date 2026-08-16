@@ -11138,3 +11138,42 @@ rather than through this handler, so its safety-net behaviour is unchanged. 49 b
 
 Deliberately left alone: the refund/chargeback reversal already filed as an owner decision. This
 change is about event ordering, not about what a reversal should do.
+
+## Twenty-first consolidation
+
+`10955 passed, 1 xfailed, 43 warnings, 1483 subtests passed in 5812.62s (1:36:52)`, no `FAILED` or
+`INTERNALERROR` lines. Nineteenth green run of twenty-one. Reconciles exactly against the twentieth:
+`git diff e9ab7f1b~1..bce95022` over the test tree adds 17 test functions, and 10,955 - 10,938 = 17.
+
+## Chunk 570 - the untested half of a security property
+
+Traced encrypted group chat, picked for concurrency, crypto and cross-user visibility. The opening
+hypothesis was that removing a member does not rotate the group key while adding one does - the
+`add_group_members` docstring mentions rotation and `remove_group_member` says nothing about it.
+
+**Wrong, and cheaply so.** `needs_rotation` compares the current key's envelope holders against
+current members with `!=`, which trips on a removal exactly as it does on an addition. The
+implementation is symmetric; only the prose is lopsided. Fourth time this session that reading first
+killed a hypothesis that would have been embarrassing to publish.
+
+The real gap was next to it. Three rotation cases were tested - no key yet, member added, steady
+state - and the fourth, member removed, was not. That is the direction that matters most: it is what
+stops a removed member's key from continuing to decrypt the group's future traffic. Nothing pinned
+it, so narrowing that `!=` to a subset check - the obvious way to silence a rotation that looks
+spurious - would have quietly disabled rotation-on-removal with every test still green. Now pinned,
+and verified to bind by making exactly that change: only the new test fails.
+
+Worth being clear about what the existing coverage does and does not do.
+`test_group_removal_stops_delivery` already covers removal, on the *delivery* side - the server stops
+sending to them. That is server-side and structurally cannot speak to whether the removed member
+retains the ability to decrypt, which is a property of the key, not of the transport. Same shape as
+chunk 569's ordering-versus-idempotency: two properties that look like one until they separate.
+
+One genuine gap remains and is filed rather than fixed: the send path validates `key_version >= 1`
+but never against the group's current version, so a client that has not yet refreshed keeps
+encrypting under a version the removed member holds. In-app the removed member cannot fetch those
+messages (`visible_window` bounds them to their membership stint), so the exposure needs ciphertext
+obtained out of band. The server-side fix is available - any member may rotate, and the race is
+handled - but rotation 409s unless every member is enrolled, so rejecting stale-version sends would
+let one un-enrolled member block the group from sending at all. Confidentiality against availability
+is the owner's trade to make, not mine; `docs/PROBLEMS.md` records it with three options.

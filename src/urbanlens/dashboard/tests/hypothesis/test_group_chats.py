@@ -583,6 +583,32 @@ class GroupKeyEndpointTests(TestCase):
         wrapped = {self._token(self.creator): _blob(), self._token(self.member): _blob()}
         self.assertEqual(self._post({"version": 5, "wrapped": wrapped}).status_code, 409)
 
+    def test_removing_a_member_flags_rotation(self) -> None:
+        """The direction that protects *future* messages from a removed member.
+
+        Removal is already covered on the delivery side - the server stops
+        sending to them (see test_group_removal_stops_delivery). That is a
+        different property from this one: delivery is server-side, and the
+        removed member still holds the envelope for the current key version, so
+        until the group rotates, any message encrypted under it stays readable
+        to whoever holds that key.
+
+        ``needs_rotation`` compares the envelope holders against the current
+        members with ``!=``, which catches removals and additions alike. Only
+        the addition direction was pinned, so narrowing that comparison to a
+        subset check - the obvious way to silence a rotation that looks spurious
+        - would quietly stop rotating on removal and nothing would fail.
+        """
+        _enroll(self.creator)
+        _enroll(self.member)
+        wrapped = {self._token(self.creator): _blob(), self._token(self.member): _blob()}
+        self._post({"version": 1, "wrapped": wrapped})
+        self.assertFalse(json.loads(self.client.get(self.url).content)["needs_rotation"])
+
+        remove_group_member(self.group, self.creator, self.member)
+
+        self.assertTrue(json.loads(self.client.get(self.url).content)["needs_rotation"], "a removed member's key version is still current - the group never rotates them out")
+
     def test_membership_change_flags_rotation_and_hides_prior_envelopes(self) -> None:
         _enroll(self.creator)
         _enroll(self.member)

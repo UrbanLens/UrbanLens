@@ -9249,3 +9249,31 @@ point at paths which never existed.
 Not actioned here because recreating 416 lines of someone else's planning document, or editing
 four documents' cross-references, is a decision about the project's own record rather than a defect
 in its code.
+
+## A group message can still be sent under a key version a removed member holds
+
+Removing a member from an encrypted group correctly flags `needs_rotation` (the group-key GET
+compares envelope holders against current members with `!=`, so removals and additions both trip
+it), and that is now pinned by a test. But rotation is client-driven, and the send path only
+validates `key_version >= 1` - it never compares against the group's current version.
+
+So a sender whose client has not yet refreshed - an open tab, a client that missed the rotation
+prompt - keeps encrypting under the version the removed member still holds an envelope for. The
+group's own members are unaffected; the question is only whether the removed member can read
+messages sent after their removal.
+
+In-app they cannot: `GroupMessageQuerySet.visible_window` bounds each member to their membership
+stint, so the ciphertext is not fetchable once `left_at` is set. The exposure needs the ciphertext
+obtained some other way - captured traffic, a database copy, a compromised host - which is precisely
+the threat model end-to-end encryption exists for, so it is not nothing.
+
+**Why this is filed rather than fixed.** The obvious server-side fix is to reject a send whose
+`key_version` is behind the current one while `needs_rotation` is set. Any member may rotate (not
+just the creator) and the concurrent-rotation race is already handled, so that much is safe. What is
+not safe is the failure mode: rotation requires *every* member to be enrolled, and returns 409 when
+one is not. A single un-enrolled member would then block the whole group from sending, turning a
+confidentiality gap into an availability outage. Trading one for the other is a product decision.
+
+Options, roughly in increasing cost: have the send path warn/log when it accepts a stale version;
+have clients re-check rotation state before send rather than on poll; or reject stale-version sends
+only when the group is fully enrolled (so the 409 case cannot arise).
