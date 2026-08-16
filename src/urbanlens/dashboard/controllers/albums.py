@@ -24,7 +24,7 @@ from urbanlens.dashboard.models.album.model import ALBUM_KIND_SPECS, Album, Albu
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.celery import safely_enqueue_task
-from urbanlens.dashboard.services.core.text_limits import MAX_ALBUM_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.text_limits import MAX_ALBUM_DESCRIPTION_LENGTH, column_max_length, text_length_error
 from urbanlens.dashboard.services.media.media_relevance import MATERIALIZE_ERROR_MESSAGE
 from urbanlens.dashboard.services.photos.albums import (
     add_images_to_album,
@@ -48,7 +48,10 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_MAX_ALBUM_NAME_LENGTH = 100
+#: Read from the column rather than repeated as a literal: the name is
+#: truncated to fit, so a widened column would otherwise keep being clipped at
+#: the old width with nothing to show why.
+_MAX_ALBUM_NAME_LENGTH = column_max_length(Album, "name")
 
 
 def _resolve_album_owner(request: HttpRequest, pin_slug: str | None, location_slug: str | None) -> tuple[Pin | Wiki, QuerySet[Album]]:

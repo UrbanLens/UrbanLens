@@ -11070,3 +11070,36 @@ assuming a gap, and part of the material that survey is supposed to consult has 
 whole time. Filed in `docs/PROBLEMS.md` with the recovery command rather than actioned - restoring
 someone else's 416-line planning document, or rewriting four documents' cross-references, is a
 decision about the project's own record, not a defect in its code.
+
+## Chunk 568 - tracing one feature end-to-end instead of one property across everything
+
+Global-property scans are heavily mined by now, so this chunk changed shape: pick a feature and
+follow it through model, service, controller and template. Albums, chosen because they have the
+thinnest test coverage of the candidates (4 modules, against 27 for trips) *and* were the most
+heavily modified area of the last feature commit - thin coverage plus recent churn is where defects
+should be.
+
+They are not there. Every point I expected to find one was already handled, mostly with the
+reasoning written down:
+
+- **Stale cover after its photo leaves the album.** Cleared on removal, *and* independently
+  re-checked at read time - the cover is only honoured when it is still a member.
+- **Foreign image pinned as a cover.** The assignment re-scopes through the album's own contents,
+  with a comment saying exactly that. `album_images` gates on viewer visibility, so the same call
+  protects both the display and the check.
+- **An album with neither a pin nor a wiki parent.** No database constraint, but `album_owner`
+  raises `ValueError` for it and says in its docstring that the create paths never produce one -
+  and there is exactly one create site, which sets the parent through a helper.
+- **N+1 across albums.** `albums_with_images` documents a fixed three-query cost, and
+  `AlbumBatchingTests` already tests it - asserting *constancy* rather than a magic number, which is
+  the right way to state that invariant.
+- **Name overflow.** Bounded, though by truncation rather than a 400.
+
+The one change worth making is that last constant. `_MAX_ALBUM_NAME_LENGTH = 100` was a literal
+matching `Album.name`'s width; since the controller silently truncates to it, widening the column
+would have left names clipped at 100 with nothing to indicate why. It now reads
+`column_max_length(Album, "name")`, the helper chunk 559 added for exactly this. 69 album tests pass.
+
+Reporting a clean trace as the result. Four test modules looked thin next to trips' 27, but coverage
+counted in files is a poor proxy: what albums have is tests on the things that actually decay -
+batching, races, visibility - which is worth more than breadth.
