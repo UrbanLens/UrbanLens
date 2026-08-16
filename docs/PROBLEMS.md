@@ -8936,3 +8936,32 @@ anti-vacuity test that an ordinary friend is still named.
 flagged the 16 interpolating a name-shaped attribute; the candidate stood out only because a sibling
 call two files away did the same thing correctly. Reading the 16 was necessary - the other 15 are
 fine, several because the actor is someone the recipient has just interacted with directly.
+
+### Verified safe 2026-08-16 (chunk 548): the off-app surfaces inherit the masking rather than bypassing it
+
+Chunk 547 fixed a raw username in a `NotificationLog` message. The obvious next question is whether
+the other channels that carry text off the device - email, native push, SMS - name people
+independently, since fixing the notification would not help if they did.
+
+They do not, and the reason is the design decision the earlier fix's comment states: masking happens
+at **write** time, into the stored text, not at render time. Everything downstream inherits it.
+
+- **Push**: `enqueue_native_push` forwards only the notification's **pk**; `dispatch_native_push`
+  reloads the row and calls `as_push_payload(notification)`. The payload is the stored title and
+  message, so a masked write is a masked push. `push.py` interpolates no profile fields of its own.
+- **SMS**: `notification_text_alerts` builds its body from `notification.title` - same inheritance.
+- **Email templates**: of sixteen, only three render a name at all, and each is correct.
+  `new_direct_message.html` and `account_deletion_reminder.html` greet the **recipient** by their own
+  username; `friend_invite.html` names the **inviter** to someone they are personally inviting to the
+  app, who is not yet a user and has no visibility relationship to apply.
+
+**One deliberate exception, confirmed rather than assumed.** `safety_checkin_wiki.html` renders
+`{{ checkin.profile.username }}` to every profile with a pin at the destination - strangers. That is
+`post_checkin_to_community_wiki`, which its docstring says runs "only when the owner opted in
+(``checkin.notify_community_wiki``)". It is a rescue request: "someone near you has not checked in"
+is useless anonymised, and the owner chose this disclosure explicitly. Named on purpose, not leaked.
+
+The transferable point is that write-time masking is what makes this checkable at all. Had the
+earlier fix masked at render time, each of the three channels would need its own correct
+implementation and its own test, and this sweep would have had three chances to find a gap instead
+of one place to confirm.

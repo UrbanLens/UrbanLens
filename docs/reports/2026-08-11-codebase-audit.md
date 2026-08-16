@@ -10422,3 +10422,30 @@ because its correct sibling sat two files away. The other 15 are fine, mostly be
 person is someone the recipient just interacted with directly.
 
 Verified: 73 calendar-sync tests, ruff clean.
+
+## Chunk 548 - sixteenth consolidation green, and the off-app surfaces confirmed
+
+**Sixteenth consolidation: 10,925 passed, 1 xfailed, 0 failed, full 1,481 subtests.** Reconciled
+exactly - 10,929 collected now minus the 3 tests chunk 547 added gives 10,926, matching
+passed + xfailed. Fourteen green consolidations.
+
+Then carried chunk 547's identity-masking property into the channels that take text off the device.
+The result is a confirmation rather than a find, and the reason is worth recording: masking happens
+at *write* time into the stored notification text, so push and SMS inherit it structurally. Push
+forwards only the row's pk and rebuilds the payload from the stored title and message; the SMS
+builder reads `notification.title`. Neither interpolates a profile field of its own. Of sixteen email
+templates only three render a name, and all three name either the recipient themselves or an inviter
+addressing someone they personally invited.
+
+One case reads like a leak and is not: the community-wiki safety email names the check-in owner to
+strangers who pinned that location. Its function's docstring says it runs only when the owner opted
+in, and a rescue request is useless anonymised. Confirmed by reading the gate rather than inferring
+it from the feature's name.
+
+What this chunk really validates is the earlier fix's *choice*, not just its correctness. Masking at
+write time meant one place to check; masking at render time would have meant three implementations,
+three tests, and three chances for exactly the divergence this session keeps finding. That is the
+argument for fixing at the chokepoint, made concrete.
+
+No changes warranted - the third such chunk in this stretch, and the sweep is stronger for the
+design it confirmed than it would have been for a fourth instance of the same bug.
