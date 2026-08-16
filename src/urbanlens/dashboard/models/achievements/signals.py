@@ -302,7 +302,7 @@ def connect() -> None:
     """Connect every achievement signal. Called from ``DashboardConfig.ready``."""
     from urbanlens.dashboard.models.achievements.model import Achievement
 
-    for subscription in _SUBSCRIPTIONS:
+    for index, subscription in enumerate(_SUBSCRIPTIONS):
         try:
             model = _resolve(subscription.model_path)
         except (ImportError, AttributeError):
@@ -311,7 +311,14 @@ def connect() -> None:
         post_save.connect(
             _make_handler(subscription),
             sender=model,
-            dispatch_uid=f"achievements_{model._meta.label_lower}",  # noqa: SLF001
+            # Keyed on the subscription, not just its model. Django dedupes by
+            # (dispatch_uid, sender), so a model-only uid means a second
+            # subscription for a model already listed silently replaces the
+            # first instead of adding to it - one of the two sets of triggers
+            # would just stop firing, with nothing to notice it. The index still
+            # gives each subscription one stable uid, so reconnecting stays
+            # idempotent.
+            dispatch_uid=f"achievement_subscription_{index}_{model._meta.label_lower}",  # noqa: SLF001
             weak=False,
         )
 

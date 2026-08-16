@@ -10805,3 +10805,46 @@ helper, since both existed for the same reason and had independently written the
 suppression. Doing so split an import line whose prefix my edit matched, which broke every test in
 the run until it was repaired - the failure was loud and immediate, which is the only reason it cost
 minutes rather than a consolidation.
+
+## Twentieth consolidation
+
+`10938 passed, 1 xfailed, 43 warnings, 1481 subtests passed in 5618.44s (1:33:38)`, no `FAILED` or
+`INTERNALERROR` lines. Eighteenth green run of twenty. Reconciles exactly against the nineteenth:
+10,936 then, plus the 3 tests chunks 555-557 added, is 10,939 - which is 10,938 passed plus 1
+xfailed. It predates chunks 558-561, whose 16 tests a twenty-first will have to cover.
+
+## Chunk 561 - auditing my own guard, and a signal key that could quietly drop a handler
+
+Chunk 557 declared the route-signature class closed. Chunk 560 then showed that a scan of mine had a
+blind spot it was not advertising, so the first job here was to ask the same question of that guard.
+
+Its weakness was not the one I expected. It reads signatures directly rather than tracing calls, so
+the call-boundary blindness does not apply - but it examined only views wired to **two or more**
+routes, purely because all three known instances were multi-route, and it understood class-based
+views only. Neither restriction follows from the property: a handler that omits its own single
+route's parameter is the same `TypeError`.
+
+Re-run without either restriction: **810 handler checks across 596 parameterised routes, plus 86
+function callbacks - zero problems.** The narrow scope was hiding nothing. The guard has been widened
+anyway, since the restriction was an artifact of how the instances were found, and re-verified to
+bind by restoring `PinRelinkView.get`'s pre-fix signature.
+
+The new thread went looking for a *documented* convention to check globally, and
+`dispatch_uid` on every signal connection is one. All seven connections have it. But the achievement
+system's is built from the sender model alone - `f"achievements_{model._meta.label_lower}"` - while
+Django dedupes receivers by `(dispatch_uid, sender)`. Two subscriptions naming the same model would
+therefore collapse into one: the second `connect()` silently replaces the first, one set of triggers
+and its streak bucket stop firing, and nothing raises or logs. No two subscriptions share a model
+today, so this is latent - and it stays latent only until someone adds a second trigger for a model
+already listed, which `Pin` (one subscription, several plausible achievements) invites. The uid now
+includes the subscription's index, which keeps reconnection idempotent while making collisions
+impossible.
+
+The guard for it failed to bind on the first attempt, and the reason is worth recording. It counted
+receivers whose uid starts with `achievements_`, which also matches the two standalone achievement
+receivers. With a deliberate collision introduced, the subscription receivers dropped from 14 to 13
+while the standalone one made the total 14 again - so the assertion passed against precisely the bug
+it existed to catch, by arithmetic coincidence. Fixed by giving the generated receivers their own
+prefix so the count means one thing, then re-verified: with the collision restored it now fails.
+That is twice in two chunks that a guard of mine passed without exercising anything, both caught
+only by deliberately breaking the code first.
