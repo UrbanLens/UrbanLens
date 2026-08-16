@@ -9829,13 +9829,22 @@ Tenth consolidation (task `br3758dtn`, chunks 522-525): **10,871 passed, 1 xfail
 the filed product decision open.
 
 The count is *lower* than the ninth's 10,885, which is the wrong direction - every chunk since has
-added tests, never removed any - so it was worth resolving rather than filing as noise. Collecting
-against the current tree gives **10,889**, and chunks 526/527/528 added exactly 18 tests
-(8 `test_pin_merge_savepoints.py` + 4 `test_e2ee.py` + 6 `test_pin_lists.py`) after this run began.
-10,889 - 18 = 10,871, matching the run precisely, and `--collect-only` reports no collection errors.
-So nothing is missing now and the tenth run is internally consistent; the ninth's higher figure is
-unexplained and, since it ran against a container whose state can no longer be inspected, is left
-that way rather than guessed at.
+added tests, never removed any - so it was worth resolving rather than filing as noise. It
+reconciles exactly, and `--collect-only` reports no collection errors, so nothing is missing. The
+ninth's higher figure is unexplained and, since it ran against a container whose state can no
+longer be inspected, is left that way rather than guessed at.
+
+**Corrected 2026-08-16 (chunk 532).** The arithmetic originally written here was wrong twice, in
+ways that cancelled: it compared against `passed` alone rather than `passed + xfailed`, and counted
+18 added tests where `git diff 1cd13d08..bb7abe7e` shows 17. Both errors are worth naming because
+this paragraph was recorded as the *method* for future reconciliations, and an off-by-one baked
+into a method propagates. The correct form:
+
+    collected(run) == passed(run) + xfailed(run)
+    collected(run) == collected(now) - tests added since that run's tree
+
+For the tenth: 10,898 collected now, minus 9 added by chunks 529-531, minus 17 added by chunks
+526-528, gives 10,872 - and the run reported 10,871 passed + 1 xfailed = 10,872. Exact.
 
 Recording the method, because a silently *shrinking* suite is the failure mode a green run hides
 best: a passing consolidation only proves the tests that ran, so the count has to be reconciled
@@ -9928,3 +9937,25 @@ an otherwise-fine 900-file Takeout archive. Fail-closed is defensible for an imp
 a damaged archive to salvage is a product call.
 
 Verified: 103 archive/import tests, ruff clean.
+
+## Chunk 532 - eleventh consolidation: 10,888 passed, 0 failed, and the reconciliation method fixed
+
+Eleventh consolidation (task `beigmr653`, chunks 526-529): **10,888 passed, 1 xfailed, 0 failed,
+1,481 subtests** in 1:31:34. This is the first run to cover the `pin_merge` savepoints (526), the
+E2EE reset fixes (527) and the two `createListAndAddPins` copies (528).
+
+Reconciled by the method from chunk 529: 10,898 collected now, minus the 9 tests chunks 529-531
+added after this run's tree, gives 10,889 - and 10,888 passed + 1 xfailed = 10,889. Exact.
+
+**Applying that method is what exposed an error in the method itself.** As first written in chunk
+529 it compared the expected figure against `passed` alone, ignoring the xfail, and used 18 added
+tests where the diff shows 17. The two mistakes cancelled, so the tenth consolidation appeared to
+reconcile "precisely" and the conclusion drawn from it (nothing missing) happened to be correct.
+That is the worst kind of wrong arithmetic: it produces the right answer, so nothing prompts a
+recheck. The chunk 529 entry above is now corrected in place with the error named, since it was
+recorded as a reusable procedure rather than a one-off calculation - and a procedure that is off by
+one will keep being off by one.
+
+Eleven consolidations: 10,849 / 10,859 / 10,863 / 10,865 (2 resolved) / 10,873 / 10,875 / 10,878 /
+10,883 / 10,885 / 10,871 / 10,888. A twelfth is due over chunks 530-531 (the device-marker
+`F()` fix and the shared extraction budget), neither of which any run has covered.
