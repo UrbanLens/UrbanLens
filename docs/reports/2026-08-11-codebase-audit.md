@@ -9593,3 +9593,21 @@ the fix so the owner can take it in one deliberate change.
 605 label/achievement tests pass. The pattern worth keeping: when a defect is found in one place,
 the next question is which *class* of code shares its shape - which is how one comment-image bug
 became a seven-field inventory with three fixes and a scoped hand-off.
+
+## Chunk 522 - the hourly rmtree sweep: safe, and its TTLs cannot drift
+
+Audited `cleanup_vestigial_assets` because an hourly task calling `shutil.rmtree` deserves the
+scrutiny any destructive scheduled job does. It holds: each managed root is `resolve()`d and
+checked with `_is_within(root, media_root)` before anything is touched, only *directories*
+directly under a validated root are candidates, only ones older than their TTL are removed, and
+each failure is caught per-artifact so one undeletable directory cannot abort the sweep. A
+symlink planted in a managed root is refused by `rmtree` itself and lands in that same per-item
+handler.
+
+The detail worth recording: the TTLs are **imported from the job modules** (`EXPORT_TTL_SECONDS`,
+`IMPORT_TTL_SECONDS`) rather than re-declared here, so the sweep cannot start deleting artifacts
+the download endpoint still considers live - the drift bug this shape usually has is structurally
+impossible. An in-progress job also keeps refreshing its directory mtime as it writes, so a slow
+export cannot be swept out from under itself.
+
+Seventeenth verified-safe area. Ninth consolidation running (task bg6hkg64z) over chunks 515-521.
