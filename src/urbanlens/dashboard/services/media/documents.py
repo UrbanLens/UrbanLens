@@ -25,6 +25,29 @@ logger = logging.getLogger(__name__)
 _SOFFICE_TIMEOUT_SECONDS = 120
 _OCR_MAX_PAGES = 25
 
+#: Longest edge, in pixels, any page may be rasterised to for OCR.
+#:
+#: A page's dimensions come from its own MediaBox, and the PDF spec allows up
+#: to 14400pt (200 inches) a side - so without this, `pdf2image`'s default of
+#: 200 DPI and no size limit renders a 426-byte PDF to 40,000 x 40,000 px,
+#: about 4.8 GB as RGB, per page, 25 pages deep. Verified against poppler:
+#: `pdfinfo` reports the declared 14400 x 14400 pts for exactly such a file.
+#:
+#: 2200 is chosen to be a no-op for real documents rather than a compromise:
+#: a US-Letter page is 11 inches tall, which at the current default of 200 DPI
+#: is 2200 px, so ordinary uploads rasterise exactly as they do today and only
+#: pathological geometry is scaled down. Passed as a bare int, which pdf2image
+#: turns into poppler's `-scale-to` - longest side, aspect preserved - so one
+#: number bounds both axes whatever the page shape.
+_OCR_MAX_PIXELS = 2200
+
+#: Ceiling on stored OCR text. 25 pages of dense text is roughly 125 KB, so
+#: this is generous for anything real; it exists because both extraction paths
+#: append per page into a `TextField` with no bound of its own, and the input
+#: is an untrusted upload. Truncated rather than discarded - partial text still
+#: serves the search it was extracted for.
+_OCR_MAX_CHARS = 200_000
+
 # Extensions LibreOffice can convert to PDF. Anything else that isn't already
 # a PDF is stored as-is (no conversion attempted).
 CONVERTIBLE_DOCUMENT_EXTENSIONS = frozenset({".doc", ".docx", ".odt", ".rtf", ".txt", ".xls", ".xlsx", ".ods", ".csv", ".ppt", ".pptx", ".odp"})
@@ -138,11 +161,17 @@ def extract_pdf_text(image: Image) -> str | None:
 
             with image.image.open("rb") as stored_file:
                 pdf_bytes = stored_file.read()
-            pages = convert_from_bytes(pdf_bytes, last_page=_OCR_MAX_PAGES)
+            pages = convert_from_bytes(pdf_bytes, last_page=_OCR_MAX_PAGES, size=_OCR_MAX_PIXELS)
             for page_image in pages:
                 if text := pytesseract.image_to_string(page_image).strip():
                     chunks.append(text)
         except Exception:
             logger.warning("OCR fallback failed for image %s", image.pk, exc_info=True)
 
-    return "\n\n".join(chunks) if chunks else None
+    if not chunks:
+        return None
+    combined = "\n\n".join(chunks)
+    if len(combined) > _OCR_MAX_CHARS:
+        logger.warning("OCR text for image %s truncated from %d to %d characters", image.pk, len(combined), _OCR_MAX_CHARS)
+        combined = combined[:_OCR_MAX_CHARS]
+    return combined

@@ -10012,3 +10012,31 @@ Left for a later pass, recorded rather than assumed away: `services/media/docume
 PDF text page by page, and PDFs carry compressed streams too.
 
 Verified: 40 document-import tests, ruff clean.
+
+## Chunk 534 - the deferred PDF question, answered differently than expected
+
+Chunk 533 deferred "PDFs carry compressed streams too, so the same question applies" rather than
+waving it away. Taking it up produced a bug - but not that one, and the difference is the point.
+
+Compressed streams are fine here: `pypdf`'s extraction is bounded by `_OCR_MAX_PAGES` before any
+stream is decoded, and the OCR path treats the file as opaque bytes. The analogy that motivated the
+look was wrong. What it walked into instead was page **geometry**: `pdf2image` defaults to 200 DPI
+with no size limit, and a page's dimensions come from its own MediaBox, which the spec permits up to
+200 inches a side. That is 40,000 x 40,000 px - about 4.8 GB as RGB - per page, 25 pages deep.
+
+Verified without rendering it, which would have spent the memory the fix prevents: a hand-built
+426-byte PDF declaring that MediaBox makes the container's own poppler report `14400 x 14400 pts`.
+Both `tesseract` and `pdftoppm` are installed in the app image, so the path is live.
+
+Fixed with `size=2200`, chosen so it changes nothing for real documents - a US-Letter page at the
+existing 200 DPI default is exactly 2200 px tall - and passed as a bare int so poppler's
+`-scale-to` bounds the longest side with aspect preserved. A `(w, h)` tuple would have set the axes
+independently and left a 99:1 page unbounded on its long side, which is the kind of detail that
+makes a limit look present while not binding. Also capped `Image.ocr_text`, which both paths append
+into an unbounded `TextField` from an untrusted upload.
+
+The transferable part: a deferred question is worth taking up even when the hypothesis behind it is
+wrong. The hypothesis got the *neighbourhood* right and the mechanism wrong - the same shape as the
+last two chunks, where the scan pointed and something else did the finding.
+
+Verified: 17 document-processing tests, ruff clean.

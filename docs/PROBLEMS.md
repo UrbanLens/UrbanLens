@@ -8383,3 +8383,48 @@ lets this be a cheap directory read rather than a streaming decompress-and-count
 **Noted for a later pass:** `services/media/documents.py` extracts text from PDFs page by page.
 PDFs carry compressed streams too, so the same question applies there, and it was not examined in
 this chunk.
+
+## RESOLVED 2026-08-16: a 426-byte PDF could render to ~4.8 GB per page during OCR
+
+Chunk 534, taking up the PDF question chunk 533 deferred rather than assumed away. The answer is
+worse than the `.docx` case, and for a different reason: the compressed-stream question I went in
+with turns out not to be the problem, and the page *geometry* is.
+
+`services/media/documents.extract_pdf_text` OCRs a PDF that has no native text layer via
+`pdf2image.convert_from_bytes(pdf_bytes, last_page=_OCR_MAX_PAGES)`. That call had a page-count
+bound and no size bound, and `pdf2image` defaults to **200 DPI with `size=None`**. A page's
+dimensions come from its own MediaBox, and the PDF spec allows up to 14400pt - 200 inches - a side.
+200 inches at 200 DPI is 40,000 x 40,000 px: **1.6 gigapixels, ~4.8 GB as RGB, per page**, up to 25
+pages.
+
+Verified rather than argued, and without rendering it (which would have spent the memory the fix
+prevents): a hand-built **426-byte** PDF declaring `/MediaBox [0 0 14400 14400]` makes the
+container's own poppler report `Page size: 14400 x 14400 pts`. Nothing upstream normalises it.
+`tesseract` and `pdftoppm` are both present in the app image, so the path is live, and it runs in
+`process_image_upload` - a Celery task, so the blast radius is a worker rather than the web tier.
+
+**Fixed** by passing `size=_OCR_MAX_PIXELS` (2200). Two details worth keeping:
+
+- 2200 is a **no-op for real documents**, not a compromise. A US-Letter page is 11 inches tall,
+  which at the existing 200 DPI default is exactly 2200 px - so ordinary uploads rasterise exactly
+  as before and only pathological geometry is scaled.
+- It is passed as a bare `int`, which `pdf2image` turns into poppler's `-scale-to` (longest side,
+  aspect preserved), so one number bounds both axes whatever the page shape. A `(w, h)` tuple maps
+  to `-scale-to-x`/`-scale-to-y`, which set the axes independently - that would distort, and a
+  99:1 page would still blow past the intended bound on its long side.
+
+**Also bounded: the text itself.** Both extraction paths append per page into `Image.ocr_text`, a
+`TextField` with no length of its own, from an untrusted upload. Now capped at 200,000 characters
+(25 dense pages is ~125 KB, so it is generous) and truncated rather than discarded, since partial
+text still serves the search it was extracted for.
+
+Tests assert against the *call* rather than the render, deliberately - what matters is that a bound
+reaches poppler at all, and exercising the pathological case would spend exactly the memory in
+question.
+
+### What this did not find
+
+The reason for looking here was compressed streams, by analogy with the `.docx` fix. That analogy
+was wrong: `pypdf`'s text extraction is bounded by `_OCR_MAX_PAGES` before any stream is touched,
+and the OCR path reads the PDF as opaque bytes. The compression question was a real question with a
+"no" answer, and the actual defect was one the analogy would never have suggested.
