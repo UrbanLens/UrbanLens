@@ -10553,3 +10553,28 @@ Worth noting what made the extension possible: the first run's result (one crash
 known one) established the instrument was sound, so a second run finding three new hits was
 immediately credible rather than suspect. Validating an instrument on a known bug before widening it
 is cheaper than debugging a widened one.
+
+## Chunk 553 - widening the sweep, and a bug that let you create what you could never delete
+
+Measured which parameters gated the 258 unreachable routes rather than guessing: `session_id` (26),
+`profile_slug` (19), `group_uuid` (12), `profile_id` (12), `label_kind` (11). Four of those cost
+almost nothing to supply, and adding them - with multi-parameter support where every parameter is
+known - widened the sweep by about sixty routes.
+
+It found one thing, and it is a good one. `stash_for_undo` writes `describe(instances)` into
+`UndoAction.object_repr`, a `CharField(255)`, with no truncation - while `Label.name` and `Pin.name`
+are themselves 255. A name at its own legal maximum therefore produced a description too long for
+the column that records the deletion, so the object could be created without complaint and then
+never deleted. The 500 lands on delete, which is the least likely place anyone would look for a
+length problem.
+
+Fixed in `stash_for_undo` rather than in each handler: every model's delete funnels through it, so
+one truncation covers all of them and any handler added later. The width is read off the field, not
+written as a literal.
+
+The instrument taught me something too. Widening it first produced a wall of
+`TransactionManagementError`s that named the wrong route entirely: a `TestCase` is one transaction,
+so the first database error poisons it and everything after cascades. The fix was per-request
+savepoints - precisely what chunk 526 did for `pin_merge`'s recovery paths, encountered this time in
+my own harness. A sweep that cascades does not just lose information, it actively misdirects, and
+the misdirection looks exactly like a finding.

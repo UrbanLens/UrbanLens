@@ -9072,3 +9072,38 @@ Two lessons for the next pass with this lens: divergence between two surfaces is
 defect, and this codebase marks the intentional ones in the docstring; and a field can be *more*
 constrained than the property being swept, so absence of the thing you are scanning for is not
 absence of validation.
+
+## RESOLVED 2026-08-16: an object with a legal-length name could be created but never deleted
+
+Found by widening the write-route smoke sweep (chunk 553). Measuring first, the parameters blocking
+the most routes were `session_id` (26), `profile_slug` (19), `group_uuid` (12), `profile_id` (12) and
+`label_kind` (11); the last four are nearly free to supply, and adding them - plus support for
+multi-parameter routes where *every* parameter is known - widened the sweep by ~60 routes.
+
+It immediately found `label.delete` raising `DataError: value too long for type character
+varying(255)`.
+
+**The chain.** `stash_for_undo` writes `handler.describe(instances)` into `UndoAction.object_repr`,
+a `CharField(255)`, untruncated. `LabelUndoHandler.describe` embeds the label's name in fixed
+surrounding text - and `Label.name` is **itself** `max_length=255`. So a label named at its own legal
+maximum produces a description longer than the column that stores it, and the insert fails.
+
+The user-visible behaviour is the worst part: the object is created without complaint, and *delete*
+is what 500s. You can make it and then never remove it. `Pin.name` is also 255, so every model whose
+deletion funnels through this call shares the exposure, and the bulk paths (which describe several
+names at once) overflow far sooner.
+
+**Fixed at the chokepoint** - `stash_for_undo` truncates to the column's own `max_length`, read off
+the field rather than written as a literal so the two cannot drift. Every handler inherits it,
+including ones added later.
+
+Covered by `UndoDescriptionFitsItsColumnTests`, including an anti-vacuity test asserting the
+un-truncated description really does exceed the column (otherwise the fix would be untested) and one
+for the bulk path.
+
+**A note on the instrument.** Widening the sweep first produced a cascade of
+`TransactionManagementError`s that hid the real cause: a `TestCase` runs in one transaction, so the
+first route to raise a database error poisons it and every subsequent request fails. Fixed by giving
+each request its own savepoint - the same fix chunk 526 applied to `pin_merge`'s recovery paths, met
+this time in the test harness rather than the product. Without it the sweep reported the cascade and
+named the wrong route.

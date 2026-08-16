@@ -27,10 +27,12 @@ finding.
 from __future__ import annotations
 
 from django.contrib.auth.models import User
+from django.db import transaction
 from django.urls import NoReverseMatch, get_resolver, reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.markup.model import MarkupMap
@@ -101,7 +103,26 @@ class WriteRouteSmokeTests(TestCase):
             "map_uuid": str(baker.make(MarkupMap, profile=profile).uuid),
             "filter_uuid": str(baker.make(SavedFilter, profile=profile).uuid),
             "label_id": baker.make(Label, profile=profile, kind="tag").pk,
+            # Cheap to supply and each unlocks a whole family: label_kind is an
+            # enum string, profile_slug/profile_id are the requester's own, and
+            # checkin_uuid/group_uuid are one object each. Measured first -
+            # these five parameter names alone gate 59 of the 133 routes that
+            # were out of reach with a single unknown parameter.
+            "label_kind": KIND_TAG,
+            "profile_slug": profile.slug,
+            "profile_id": profile.pk,
+            "checkin_uuid": str(baker.make(SafetyCheckin, profile=profile, title="Smoke Checkin 2").uuid),
+            "group_uuid": str(self._group_chat(profile).uuid),
         }
+
+    @staticmethod
+    def _group_chat(profile):
+        """A group chat the requester belongs to, so group routes reach their logic."""
+        from urbanlens.dashboard.models.group_chats.model import GroupChat, GroupChatMembership
+
+        group = baker.make(GroupChat, creator=profile, name="Smoke Group")
+        GroupChatMembership.objects.create(group=group, profile=profile)
+        return group
 
     def _write_routes(self) -> list[tuple[str, str]]:
         """``(route name, url)`` for every route this sweep can build a URL for.
@@ -122,11 +143,10 @@ class WriteRouteSmokeTests(TestCase):
             if not isinstance(name, str) or name in _SKIP_ROUTES:
                 continue
             params = entries[0][0][0][1]
+            if params and not all(param in self.identifiers for param in params):
+                continue
             try:
-                if not params:
-                    urls.append((name, reverse(name)))
-                elif len(params) == 1 and params[0] in self.identifiers:
-                    urls.append((name, reverse(name, kwargs={params[0]: self.identifiers[params[0]]})))
+                urls.append((name, reverse(name, kwargs={param: self.identifiers[param] for param in params})))
             except NoReverseMatch:
                 continue
         return sorted(urls)
@@ -136,13 +156,20 @@ class WriteRouteSmokeTests(TestCase):
         crashes: dict[str, str] = {}
         for name, url in self._write_routes():
             for method in _WRITE_METHODS:
-                # Re-authenticated per request: a route that rotates or drops the
-                # session (a password change, a device revoke) would otherwise
-                # leave every later route answering a login redirect, and a sweep
-                # measuring redirects finds nothing while looking green.
-                self.client.force_login(self.user)
                 try:
-                    response = getattr(self.client, method)(url, data={})
+                    # Each request in its own savepoint. A route that raises a
+                    # database error leaves this TestCase's single transaction
+                    # aborted, so without this the *next* request - and every one
+                    # after it - fails with TransactionManagementError and the
+                    # sweep reports a cascade instead of the one real cause.
+                    # Same shape as the pin_merge recoveries fixed in chunk 526,
+                    # met here in the instrument rather than the product.
+                    #
+                    # force_login is inside it deliberately: it writes a session
+                    # row, so on a poisoned transaction it is itself what raises.
+                    with transaction.atomic():
+                        self.client.force_login(self.user)
+                        response = getattr(self.client, method)(url, data={})
                 except Exception as exc:  # noqa: BLE001 - classifying, then re-reporting
                     if _NETWORK_GUARD_MARKER in str(exc):
                         continue

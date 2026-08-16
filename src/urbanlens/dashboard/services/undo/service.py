@@ -55,10 +55,22 @@ def stash_for_undo(model_label: str, instances: Sequence[Model], profile: Profil
         The created UndoAction row.
     """
     handler = get_handler(model_label)
+    # Truncated to the column's own width rather than a literal, so the two
+    # cannot drift. `describe()` wraps a user-supplied name in fixed text, and
+    # several of those names are themselves 255 characters (Label.name,
+    # Pin.name) - the same width as this column. So a perfectly legal name
+    # overflowed `object_repr` and the DataError surfaced as a 500 on *delete*:
+    # the user could create the object but never remove it. Found by the
+    # write-route smoke sweep on `label.delete` (PROBLEMS.md, 2026-08-16).
+    #
+    # Fixed here rather than in each handler because every model's delete path
+    # funnels through this one call, so one truncation covers all of them - and
+    # a handler added later inherits it.
+    repr_limit = UndoAction._meta.get_field("object_repr").max_length  # noqa: SLF001 - _meta is public API
     return UndoAction.objects.create(
         profile=profile,
         model_label=model_label,
-        object_repr=handler.describe(instances),
+        object_repr=handler.describe(instances)[:repr_limit],
         payload=handler.serialize(instances),
     )
 
