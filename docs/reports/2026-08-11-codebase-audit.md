@@ -10668,3 +10668,49 @@ The progression across these chunks is the useful part. Chunk 551 built an instr
 routes nobody requests, and it found instances of this class one at a time. Chunk 557 replaces the
 instrument with the property: instead of discovering the bug by making a request, assert the
 condition that makes the request safe. The sweep found them; the guard means they cannot come back.
+
+## Nineteenth consolidation
+
+`10935 passed, 1 xfailed, 43 warnings, 1481 subtests passed in 5660.46s (1:34:20)`, no `FAILED` or
+`INTERNALERROR` lines. Seventeenth green run of nineteen. It reconciles exactly: 10,939 collected
+minus the 3 tests chunks 555-557 added (all in `test_view_signature_route_guard.py`) is 10,936,
+which is 10,935 passed plus 1 xfailed.
+
+## Chunk 558 - a title that could not fit the column it was stored in
+
+Chunk 553 fixed one undo row whose `object_repr` could exceed its column. This chunk asked whether
+that was an instance of something, and it is: **text assembled from a user-controlled name and
+written to a column no wider than that name's own**. The wrapper text is then pure overflow.
+
+`NotificationLog.title` is `CharField(255)`, and most titles interpolate a name:
+
+    title=f"Safety check-in posted to {wiki.name}"     # 26 + Wiki.name(255)   = 281
+    title=f"Achievement unlocked: {achievement.name}"  # 22 + Achievement(255) = 277
+
+The other eight f-string titles are fed by columns small enough to fit (`GroupChat.name` 100,
+usernames 150), which is why this never showed up as a general problem - it depends entirely on the
+arithmetic of two unrelated columns.
+
+The safety one is the reason this is filed as a defect rather than a tidy-up.
+`post_checkin_to_community_wiki` runs at the *top* of `escalate_checkin`, above the loop that
+notifies emergency contacts. Verified directly by reverting the fix: the write raises
+`DataError: value too long for type character varying(255)` and the exception leaves
+`escalate_checkin` entirely, so **an overdue check-in at a long-named wiki notified nobody at all** -
+not the community, not the emergency contacts. The escalation's own retry logic (`notified_at__isnull`)
+cannot help, because the failure happens before any contact is marked.
+
+Reachable, not theoretical: child wiki names come straight from a request body in `detail_pins`
+child-wiki creation with no length validation, so a user can store the full 255.
+
+Fixed at the model rather than the call site. `title` is written from twenty-odd places, none of
+which know how long the name they interpolated may be, and a title is display text - a clipped
+string beats a failed write. `NotificationLog.save()` now clips to the field's own `max_length`
+(read from the field, not a literal). No path bypasses it: nothing bulk-creates notifications or
+updates `title` through a queryset.
+
+Two process notes, both mine. The reproduction's first failure was my own fixture - the contact
+model is `SafetyCheckinContact`, not `SafetyContact` - which meant the escalation test failed for
+the wrong reason in the first run and briefly looked like confirmation. The severity claim was only
+established once the fix was reverted and the test failed with the `DataError` itself. And the fix
+landing did not make that test pass; a second run was needed after correcting the fixture, which is
+the honest order these two things happened in.

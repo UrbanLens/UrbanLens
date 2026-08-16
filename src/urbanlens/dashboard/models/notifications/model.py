@@ -58,6 +58,25 @@ class NotificationLog(abstract.FrontendDashboardModel):
 
     objects = NotificationManager()
 
+    def save(self, *args, **kwargs):
+        """Clip ``title`` to its column width before writing.
+
+        Titles are assembled from user-controlled names - a wiki, an
+        achievement, a group - several of whose own columns are as wide as this
+        one, leaving the surrounding text as pure overflow. The write then
+        fails with ``DataError`` inside whatever operation raised the
+        notification, which is rarely that operation's own concern: an overlong
+        destination-wiki name used to abort a safety escalation before it
+        reached the emergency contacts.
+
+        A title is display text, so clipping is preferable to failing the
+        write, and doing it here covers the call sites that do not know how long
+        the name they interpolated can be.
+        """
+        if self.title:
+            self.title = self.title[: self._meta.get_field("title").max_length]
+        return super().save(*args, **kwargs)
+
     @property
     def is_unread(self) -> bool:
         """True when this notification has not been read yet."""
