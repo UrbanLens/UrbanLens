@@ -47,6 +47,29 @@ class MessagingKeyBundleManager(abstract.DashboardManager.from_queryset(Messagin
     """Custom query manager for MessagingKeyBundle models."""
 
 
+class E2EEPasskeyWrapQuerySet(abstract.DashboardQuerySet):
+    """Custom queryset for E2EEPasskeyWrap models."""
+
+    def usable_for_bundle(self, bundle) -> E2EEPasskeyWrapQuerySet:
+        """Wraps that can still unwrap this bundle's current keypair.
+
+        A wrap whose ``bundle_version`` lags the bundle encrypts a superseded
+        private key (a reset happened without the cleanup running) - serving it
+        would produce an unlock that silently yields the wrong identity.
+
+        Args:
+            bundle: The MessagingKeyBundle being unlocked.
+
+        Returns:
+            Wraps for this bundle at its current version.
+        """
+        return self.filter(bundle=bundle, bundle_version=bundle.version)
+
+
+class E2EEPasskeyWrapManager(abstract.DashboardManager.from_queryset(E2EEPasskeyWrapQuerySet)):
+    """Custom query manager for E2EEPasskeyWrap models."""
+
+
 class ConversationKeyQuerySet(abstract.DashboardQuerySet):
     """Custom queryset for ConversationKey models."""
 

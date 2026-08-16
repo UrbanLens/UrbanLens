@@ -9,6 +9,24 @@ x-app-build: &app-build
     UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
     UL_CONTAINER_NAME: ${UL_CONTAINER_NAME:-${UL_ENVIRONMENT:-production}}
 
+# Every UL_* value in the host .env, injected at container start rather than
+# baked into the image. This block is load-bearing, not a convenience: the
+# `environment:` allowlist below covers only some settings, and the rest
+# (UL_EMAIL_PASSWORD, UL_STRIPE_SECRET_KEY, UL_REDATA_API_KEY, UL_TWILIO_*,
+# UL_CLOUDFLARE_*, UL_HUGGINGFACE_*, ...) used to reach containers only because
+# `COPY . /app` baked the .env into an image layer. .dockerignore now excludes
+# it - see the note there for why a baked secret survives its own rotation.
+# `environment:` still wins over these on key collisions, so the explicit
+# in-compose defaults (DB host, valkey URL) keep overriding any host value
+# meant for running outside Docker.
+#
+# The `required: false` long form needs Compose v2.24+ (Jan 2024). It is worth
+# the floor: the short `env_file: .env` aborts outright when the file is absent,
+# which would break any checkout that runs compose before writing one.
+x-app-env-file: &app-env-file
+  - path: .env
+    required: false
+
 # Full environment for the app server and celery workers (need all API keys).
 # UL_PG_DUMP_BIN bypasses the pg_wrapper dispatcher and calls the versioned
 # binary directly, which avoids the "install postgresql-client-<ver>" error
@@ -45,6 +63,13 @@ x-app-env: &app-env
   UL_SMITHSONIAN_API_KEY: ${UL_SMITHSONIAN_API_KEY}
   UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+  # Independent of DJANGO_SECRET_KEY on purpose: without it, EncryptedTextField
+  # falls back to deriving its Fernet key from SECRET_KEY, which couples routine
+  # signing-key rotation to at-rest data decryptability. Listed explicitly (not
+  # only via env_file) so it is visible as a first-class deployment secret.
+  # Rotating it requires the procedure in docs/DATA_ENCRYPTION.md.
+  UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
+  UL_FIELD_ENCRYPTION_KEY_FALLBACKS: ${UL_FIELD_ENCRYPTION_KEY_FALLBACKS}
   UL_PG_DUMP_BIN: /usr/lib/postgresql/17/bin/pg_dump
 
 # Minimal environment for celery-beat - only needs DB + broker to schedule tasks.
@@ -57,6 +82,11 @@ x-beat-env: &beat-env
   UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}
   UL_VALKEY_URL: ${UL_VALKEY_URL:-redis://urbanlens_valkey:6379/0}
   DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY}
+  # beat only schedules tasks, but it imports the same settings/models, so the
+  # encryption key must resolve the same way here or an import-time read of an
+  # encrypted field would decrypt under the wrong key.
+  UL_FIELD_ENCRYPTION_KEY: ${UL_FIELD_ENCRYPTION_KEY}
+  UL_FIELD_ENCRYPTION_KEY_FALLBACKS: ${UL_FIELD_ENCRYPTION_KEY_FALLBACKS}
 
 # Project name is derived from the environment so each of prod/dev/test/staging
 # gets its own Compose namespace - this prefixes default (unnamed) networks and
@@ -88,6 +118,7 @@ services:
         aliases:
           - urbanlens_app
 
+    env_file: *app-env-file
     environment:
       <<: *app-env
 
@@ -147,6 +178,7 @@ services:
         aliases:
           - urbanlens_app_ws
 
+    env_file: *app-env-file
     environment:
       <<: *app-env
 
@@ -254,6 +286,7 @@ services:
       - backups:/app/src/backups
     networks:
       - app_network
+    env_file: *app-env-file
     environment:
       <<: *app-env
     logging:
@@ -313,6 +346,7 @@ services:
       - logs:/var/log/urbanlens
     networks:
       - app_network
+    env_file: *app-env-file
     environment:
       <<: *app-env
     logging:
@@ -474,6 +508,7 @@ services:
     # a DB that pytest hasn't created yet. The runner just stays alive for
     # `docker compose exec ... pytest` calls.
     entrypoint: ["sleep", "infinity"]
+    env_file: *app-env-file
     environment:
       <<: *app-env
       UL_DB_HOST: localhost

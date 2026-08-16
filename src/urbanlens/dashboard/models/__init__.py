@@ -55,7 +55,7 @@ from urbanlens.dashboard.models.direct_messages import (
     LocationMentionKind,
     MessageRetentionChoice,
 )
-from urbanlens.dashboard.models.e2ee import ConversationKey, GroupKey, GroupKeyEnvelope, MessagingKeyBundle
+from urbanlens.dashboard.models.e2ee import ConversationKey, E2EEPasskeyWrap, GroupKey, GroupKeyEnvelope, MessagingKeyBundle
 from urbanlens.dashboard.models.email_log import EmailSendLog, EmailType
 from urbanlens.dashboard.models.epa_facility import EpaFacility
 from urbanlens.dashboard.models.facts import Fact, FactDataType, FactEvidence, FactSourceKind, FactStatus, FactSubjectType

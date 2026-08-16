@@ -41,8 +41,8 @@ from rest_framework.views import APIView
 
 from urbanlens.dashboard.external_api.errors import MALFORMED_JSON_BODY_MESSAGE
 from urbanlens.dashboard.external_api.mixins import DualAuthJsonView
-from urbanlens.dashboard.models.account.model import AccountKdf, ApiKeyScope
-from urbanlens.dashboard.models.e2ee import ConversationKey, MessagingKeyBundle
+from urbanlens.dashboard.models.account.model import AccountKdf, ApiKeyScope, WebAuthnCredential
+from urbanlens.dashboard.models.e2ee import ConversationKey, E2EEPasskeyWrap, MessagingKeyBundle
 from urbanlens.dashboard.models.e2ee.key_bundle import DEFAULT_KDF_MEMLIMIT, DEFAULT_KDF_OPSLIMIT
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.messaging.direct_messages import can_direct_message
@@ -328,10 +328,31 @@ class E2EEOwnKeysView(DualAuthJsonView):
             JSON with every bundle field the client needs to unlock, or
             ``{"enrolled": false}`` when the account has no bundle yet.
         """
+        from webauthn.helpers import bytes_to_base64url
+
         profile = _get_profile(request)
         bundle = MessagingKeyBundle.objects.for_profile(profile).first()
         if bundle is None:
             return Response({"enrolled": False})
+        # Wraps sealed to a superseded keypair are withheld (usable_for_bundle),
+        # not surfaced-and-flagged: a client that unwrapped one would silently
+        # adopt a dead identity. passkey_credentials lists every credential so
+        # the enrollment UI can offer "use an existing passkey" vs "create one"
+        # without a second endpoint - credential ids are public handles.
+        wraps = [
+            {"credential_id": bytes_to_base64url(bytes(wrap.credential.credential_id)), "prf_input": wrap.prf_input, "wrapped_secret": wrap.wrapped_secret}
+            for wrap in E2EEPasskeyWrap.objects.usable_for_bundle(bundle).select_related("credential")
+        ]
+        wrapped_ids = {entry["credential_id"] for entry in wraps}
+        credentials = [
+            {
+                "credential_id": bytes_to_base64url(bytes(cred.credential_id)),
+                "name": cred.name,
+                "is_login_factor": cred.is_login_factor,
+                "has_wrap": bytes_to_base64url(bytes(cred.credential_id)) in wrapped_ids,
+            }
+            for cred in WebAuthnCredential.objects.filter(user=profile.user)
+        ]
         return Response(
             {
                 "enrolled": True,
@@ -344,6 +365,8 @@ class E2EEOwnKeysView(DualAuthJsonView):
                 "kdf_memlimit": bundle.kdf_memlimit,
                 "version": bundle.version,
                 "profile_slug": profile.ensure_slug(),
+                "passkey_wraps": wraps,
+                "passkey_credentials": credentials,
             },
         )
 
@@ -556,6 +579,131 @@ class E2EERewrapView(DualAuthJsonView):
             bundle.recovery_wrapped_secret = recovery_wrapped
             update_fields.append("recovery_wrapped_secret")
         bundle.save(update_fields=update_fields)
+        return Response({"ok": True})
+
+
+class E2EEPasskeyWrapView(DualAuthJsonView):
+    """POST/DELETE a passkey-wrapped copy of the caller's private key.
+
+    The blob was wrapped client-side under an HKDF of the WebAuthn ``prf``
+    output for one of the caller's own passkeys; the server stores what it
+    cannot open, exactly like the password and recovery wraps. POST upserts
+    (re-enrolling a credential replaces its wrap); DELETE removes one wrap
+    without touching the passkey itself (deleting the passkey cascades).
+
+    Both methods demand the account-password proof on password-backed
+    accounts, same rationale as ``E2EERewrapView``: adding an unlock path -
+    or destroying one, which for an account whose recovery key was never
+    saved is a data-loss lever - must cost more than a bearer token.
+    """
+
+    required_scopes_by_method: ClassVar[dict[str, frozenset[ApiKeyScope]]] = {
+        "POST": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+        "DELETE": frozenset({ApiKeyScope.MESSAGES_WRITE}),
+    }
+
+    def _resolve_credential(self, request: Request, credential_id_b64: str) -> WebAuthnCredential | None:
+        """Resolve a base64url credential id to one of the caller's passkeys.
+
+        Args:
+            request: The authenticated request.
+            credential_id_b64: The credential's rawId, base64url-encoded.
+
+        Returns:
+            The credential, or None when malformed or not the caller's own -
+            indistinguishable on purpose, so this cannot probe which
+            credential ids exist.
+        """
+        from webauthn.helpers import base64url_to_bytes
+
+        try:
+            raw_id = base64url_to_bytes(credential_id_b64)
+        except (ValueError, TypeError):
+            return None
+        return WebAuthnCredential.objects.filter(user=request.user, credential_id=raw_id).first()
+
+    @extend_schema(
+        description=(
+            "Stores (or replaces) a passkey-wrapped copy of the caller's E2EE private key. The wrap was "
+            "computed client-side from the WebAuthn prf extension's output; the server never sees the PRF "
+            "secret. Requires `current_password` on password-backed accounts, even for OAuth2 callers - "
+            "see the enroll endpoint for the rationale."
+        ),
+    )
+    def post(self, request: Request) -> Response:
+        """Create or replace the wrap for one of the caller's passkeys.
+
+        Args:
+            request: JSON body with ``credential_id`` (base64url), ``prf_input``
+                (base64 32-byte PRF evaluation input), ``wrapped_secret``, and
+                ``current_password`` on password-backed accounts.
+
+        Returns:
+            201 JSON ``{ok: true}`` on create, 200 on replace; 400 on malformed
+            input or an unknown credential; 403 on bad proof; 404 when not
+            enrolled.
+        """
+        profile = _get_profile(request)
+        bundle = MessagingKeyBundle.objects.for_profile(profile).first()
+        if bundle is None:
+            return Response({"error": "Not enrolled."}, status=404)
+        data = _json_body(request)
+        if data is None:
+            return Response({"error": MALFORMED_JSON_BODY_MESSAGE}, status=400)
+
+        prf_input = data.get("prf_input", "")
+        wrapped_secret = data.get("wrapped_secret", "")
+        if not valid_blob(prf_input, MAX_SALT_LENGTH):
+            return Response({"error": "Invalid prf_input"}, status=400)
+        if not valid_blob(wrapped_secret, MAX_WRAPPED_SECRET_LENGTH):
+            return Response({"error": "Invalid wrapped_secret"}, status=400)
+
+        credential_id = data.get("credential_id", "")
+        credential = self._resolve_credential(request, credential_id) if isinstance(credential_id, str) else None
+        if credential is None:
+            return Response({"error": "Unknown credential"}, status=400)
+
+        proof_error = _require_current_password_proof(profile.user, data)
+        if proof_error is not None:
+            return proof_error
+
+        _, created = E2EEPasskeyWrap.objects.update_or_create(
+            credential=credential,
+            defaults={"bundle": bundle, "prf_input": prf_input, "wrapped_secret": wrapped_secret, "bundle_version": bundle.version},
+        )
+        logger.info("E2EE passkey wrap %s for profile %s (credential %s)", "created" if created else "replaced", profile.pk, credential.pk)
+        return Response({"ok": True}, status=201 if created else 200)
+
+    @extend_schema(
+        description=(
+            "Removes the wrap for one passkey (the passkey itself is untouched). Requires `current_password` "
+            "on password-backed accounts: for an account whose recovery key was never saved, destroying an "
+            "unlock path is a data-loss lever, and a bearer token alone must not reach it."
+        ),
+    )
+    def delete(self, request: Request, credential_id: str) -> Response:
+        """Delete the wrap for one of the caller's passkeys.
+
+        Args:
+            request: The authenticated request; JSON body may carry
+                ``current_password``.
+            credential_id: The credential's rawId, base64url-encoded.
+
+        Returns:
+            JSON ``{ok: true}``; 403 on bad proof; 404 for an unknown
+            credential or one with no wrap.
+        """
+        profile = _get_profile(request)
+        credential = self._resolve_credential(request, credential_id)
+        if credential is None:
+            return Response({"error": "Not found."}, status=404)
+        data = _json_body(request) or {}
+        proof_error = _require_current_password_proof(profile.user, data)
+        if proof_error is not None:
+            return proof_error
+        deleted, _ = E2EEPasskeyWrap.objects.filter(credential=credential, bundle__profile=profile).delete()
+        if not deleted:
+            return Response({"error": "Not found."}, status=404)
         return Response({"ok": True})
 
 
@@ -1004,6 +1152,13 @@ class E2EEResetView(DualAuthJsonView):
             for envelope in envelope_rows:
                 envelope.wrapped_key = rewrapped_envelopes[envelope.pk]
                 envelope.save(update_fields=["wrapped_key", "updated"])
+
+            # Passkey wraps encrypt the OLD private key - useless and
+            # misleading once the keypair rotates, so they die in the same
+            # transaction. The bundle_version stamp on each wrap is the
+            # backstop if one ever survives; clients re-enroll wraps from any
+            # device that unlocks under the new key.
+            E2EEPasskeyWrap.objects.filter(bundle=bundle).delete()
 
             bundle.public_key = public_key
             bundle.recovery_wrapped_secret = recovery_wrapped

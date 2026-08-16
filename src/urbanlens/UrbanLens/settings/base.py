@@ -15,13 +15,37 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # repo-root .env is found regardless of working directory.
 load_dotenv(find_dotenv())
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or get_random_secret_key()
-
 # Detect the current environment early - other settings branch on it.
 ENVIRONMENT_NAME = os.getenv("UL_ENVIRONMENT", "local").lower()
 _is_local = ENVIRONMENT_NAME == "local"
 _is_dev = ENVIRONMENT_NAME in {"local", "development"}
+
+# SECURITY WARNING: keep the secret key used in production secret!
+#
+# The random fallback is a data-loss hazard wherever encrypted data can exist,
+# not just a session-stability one: SECRET_KEY is also the fallback source for
+# EncryptedTextField's key (dashboard/models/fields.py), gunicorn runs without
+# preload_app, and celery/manage.py are separate processes - so an unset value
+# gives every process a different key, and anything written to an encrypted
+# field is unreadable by every other process and after the next restart. Fail
+# loudly instead of degrading, anywhere a real database is in play.
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or ""
+if not SECRET_KEY:
+    # Ephemeral keys are only safe where no durable encrypted data exists:
+    # developer machines and test runs. staging/production must fail.
+    _key_optional = _is_dev or ENVIRONMENT_NAME == "testing" or any(arg.endswith("pytest") or "pytest" in arg for arg in sys.argv)
+    if not _key_optional:
+        from django.core.exceptions import ImproperlyConfigured
+
+        raise ImproperlyConfigured(
+            f"DJANGO_SECRET_KEY must be set when UL_ENVIRONMENT is '{ENVIRONMENT_NAME}'. "
+            "Without it every process derives its own random key, which breaks sessions "
+            "across workers and permanently orphans anything already written to an "
+            "encrypted field. Generate one with: "
+            'python -c "import secrets; print(secrets.token_urlsafe(64))" '
+            "- see .env-sample and docs/DATA_ENCRYPTION.md.",
+        )
+    SECRET_KEY = get_random_secret_key()
 
 
 def _env_bool(name: str, default: bool) -> bool:

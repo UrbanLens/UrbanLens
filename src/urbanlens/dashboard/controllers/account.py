@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import json
 import logging
 import smtplib
@@ -25,6 +26,7 @@ from django.middleware.csrf import get_token
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View, generic
@@ -997,19 +999,44 @@ class LoginTwoFactorCancelView(View):
         return redirect("login")
 
 
-#: Session flag set when the user declines the set-password prompt; cleared
-#: naturally when the session ends, so the prompt returns on their next login.
-SESSION_PASSWORD_PROMPT_SKIPPED = "password_prompt_skipped"  # noqa: S105  # nosec B105 - session key name, not a credential
+#: How long "Not now" on the credential prompt stays quiet. Profile-persisted:
+#: the old per-session flag re-nagged SSO users on every signin, which trained
+#: them to dismiss security prompts (see docs/designs/e2ee-passkey-unlock.md).
+CREDENTIAL_PROMPT_SNOOZE = timedelta(days=30)
+
+
+def _needs_credential_prompt(profile) -> bool:
+    """True when this account should see the add-a-passkey-or-password prompt.
+
+    The prompt exists to give a passwordless (SSO) account *some* durable way
+    back into its encrypted messages on a cold device. It stays quiet once the
+    account has a password, any passkey (a login factor is PRF-wrappable, an
+    unlock-only key is the goal itself), or an active snooze.
+
+    Args:
+        profile: The signed-in user's profile.
+
+    Returns:
+        Whether to redirect through the prompt after login.
+    """
+    from urbanlens.dashboard.models.account import WebAuthnCredential
+
+    user = profile.user
+    if user.has_usable_password():
+        return False
+    if profile.credential_prompt_snoozed_until and profile.credential_prompt_snoozed_until > timezone.now():
+        return False
+    return not WebAuthnCredential.objects.filter(user=user).exists()
 
 
 class SetPasswordPromptView(LoginRequiredMixin, View):
-    """GET /accounts/set-password/ - prompt a passwordless (OAuth) account to set one.
+    """GET /accounts/set-password/ - offer a passwordless account a passkey or a password.
 
-    Reached from ``PostLoginRedirectView`` right after any login of an account
-    with no usable password - which covers both brand-new social signups and
-    existing social accounts on their next login. The form itself submits via
-    JS to ``E2EEChangePasswordView`` (the password never reaches the server in
-    readable form); "Not now" skips for the rest of this session.
+    Reached from ``PostLoginRedirectView`` after a login of an account with no
+    usable password and no passkey. The passkey path is primary (one tap, and
+    the PRF wrap makes encrypted messages unlock on any device); the password
+    form is the fallback for browsers without WebAuthn. "Not now" snoozes for
+    ``CREDENTIAL_PROMPT_SNOOZE`` rather than one session.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -1029,10 +1056,15 @@ class SetPasswordPromptView(LoginRequiredMixin, View):
 
 
 class SetPasswordSkipView(View):
-    """GET /accounts/set-password/skip/ - decline the prompt for this session."""
+    """GET /accounts/set-password/skip/ - snooze the prompt for a month."""
 
     def get(self, request: HttpRequest) -> HttpResponse:
-        request.session[SESSION_PASSWORD_PROMPT_SKIPPED] = True
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        if request.user.is_authenticated:
+            profile, _ = Profile.objects.get_or_create(user=request.user)
+            profile.credential_prompt_snoozed_until = timezone.now() + CREDENTIAL_PROMPT_SNOOZE
+            profile.save(update_fields=["credential_prompt_snoozed_until", "updated"])
         return redirect("post_login")
 
 
@@ -1054,18 +1086,18 @@ class PostLoginRedirectView(View):
         if should_redirect_to_site_admin(request.user):
             return redirect("setup")
 
-        # Social-auth accounts have no usable password. Prompt them to set one
-        # (once per session) - it becomes a login credential and the password
-        # unlock path for their end-to-end encrypted messages on new devices.
-        if not request.user.has_usable_password() and not request.session.get(SESSION_PASSWORD_PROMPT_SKIPPED):
-            return redirect("account.set_password")
-
         from urbanlens.dashboard.models.profile.model import Profile
 
         try:
             profile = request.user.profile
         except Profile.DoesNotExist:
             profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        # Social-auth accounts have no usable password. Offer a passkey (or a
+        # password) so their encrypted messages can unlock on a new device -
+        # once, with a month-long snooze, not per session.
+        if _needs_credential_prompt(profile):
+            return redirect("account.set_password")
 
         if not profile.welcome_onboarding_complete:
             return redirect("onboarding.welcome")

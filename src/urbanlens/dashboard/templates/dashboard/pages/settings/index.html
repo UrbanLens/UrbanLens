@@ -763,6 +763,7 @@
                 <p class="settings-e2ee-status" id="e2ee-status">Checking status…</p>
 
                 <div class="settings-e2ee-actions">
+                    <button type="button" class="btn btn--secondary settings-secondary-btn" id="e2ee-add-passkey" hidden>Add a passkey unlock</button>
                     <button type="button" class="btn btn--secondary settings-secondary-btn" id="e2ee-view-recovery" hidden>View recovery key</button>
                     <button type="button" class="btn btn--secondary settings-secondary-btn" id="e2ee-unlock" hidden>Unlock this device</button>
                     <button type="button" class="btn btn--secondary settings-danger-btn" id="e2ee-reset" hidden>Reset encryption keys</button>
@@ -1758,6 +1759,9 @@
             changePassword: "{% url 'e2ee.change_password' %}",
             login: "{% url 'login' %}",
             faqUrl: "{% url 'faq' %}#faq-e2ee",
+            passkeyWrap: "{% url 'e2ee.passkey_wrap' %}",
+            passkeyRegisterOptions: "{% url 'settings.security.passkeys.options' %}",
+            passkeyRegister: "{% url 'settings.security.passkeys.register' %}",
         },
     });
 
@@ -1803,6 +1807,7 @@
     var viewBtn = document.getElementById('e2ee-view-recovery');
     var unlockBtn = document.getElementById('e2ee-unlock');
     var resetBtn = document.getElementById('e2ee-reset');
+    var addPasskeyBtn = document.getElementById('e2ee-add-passkey');
     var hasPassword = card.dataset.hasPassword === '1';
 
     function setStatus(text) { status.textContent = text; }
@@ -1816,12 +1821,32 @@
             setStatus('Encryption is active and this device can read your messages.');
             viewBtn.hidden = false;
             resetBtn.hidden = false;
+            // Passkey enrollment needs the decrypted key in hand, so it is
+            // only offered while unlocked.
+            if (window.PublicKeyCredential && addPasskeyBtn) addPasskeyBtn.hidden = false;
         } else {
-            setStatus("This device can't read your encrypted messages yet. Unlock it with your password or recovery key.");
+            setStatus("This device can't read your encrypted messages yet. Unlock it with your passkey, password, or recovery key.");
             unlockBtn.hidden = false;
             resetBtn.hidden = false;
         }
     });
+
+    if (addPasskeyBtn) {
+        addPasskeyBtn.addEventListener('click', function () {
+            addPasskeyBtn.disabled = true;
+            UrbanLensE2EE.showPasskeyEnrollDialog(hasPassword).then(function (result) {
+                addPasskeyBtn.disabled = false;
+                if (result.ok) {
+                    if (window.toastr) toastr.success(result.created ? 'Passkey created. Your messages now unlock with it on any device.' : 'Your existing passkey can now unlock your messages on any device.');
+                } else if (result.error && window.toastr) {
+                    toastr.error(result.error);
+                }
+            }).catch(function () {
+                addPasskeyBtn.disabled = false;
+                if (window.toastr) toastr.error('Could not add that passkey. Please try again.');
+            });
+        });
+    }
 
     viewBtn.addEventListener('click', function () {
         UrbanLensE2EE.regenerateRecoveryKey().then(function (display) {

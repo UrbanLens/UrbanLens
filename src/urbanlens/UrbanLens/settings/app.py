@@ -27,6 +27,17 @@ _ENV_FILE_PATHS = [
     Path(DEFAULT_ROOT.parent, ".env"),
 ]
 
+#: Floors enforced on ``field_encryption_key`` (see ``_reject_weak_encryption_keys``).
+#: 32 characters is well below the 64 the documented generator produces, so it
+#: rejects hand-typed keys without failing a legitimately generated one. The
+#: alphabet floor is set against the distribution of random output rather than
+#: against any particular bad key: a random 32-character urlsafe-base64 string
+#: has ~26 distinct characters on average and falls below 16 only very rarely,
+#: while degenerate input (repeated characters, a short string concatenated with
+#: itself) lands under it immediately.
+MIN_FIELD_ENCRYPTION_KEY_LENGTH = 32
+MIN_FIELD_ENCRYPTION_KEY_ALPHABET = 16
+
 
 def _default_allowed_hosts() -> list[str]:
     """Return the default ``ALLOWED_HOSTS`` list for the current environment.
@@ -278,6 +289,54 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         """Allow list-valued settings to be provided as comma-separated strings via env vars."""
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("field_encryption_key", "field_encryption_key_fallbacks", mode="after")
+    @classmethod
+    def _reject_weak_encryption_keys(cls, value: str | list[str] | None) -> str | list[str] | None:
+        """Refuse field-encryption keys weak enough to brute-force offline.
+
+        The derivation is a single unsalted SHA256 (``models.fields._derive_fernet``),
+        so key strength *is* input strength - there is no stretching to hide behind.
+        Fernet tokens carry their own HMAC, so one stolen ciphertext row lets an
+        attacker verify guesses offline at hashing speed. Rejecting at configuration
+        time is the only point where this is still cheap to fix, and the operator
+        setting this variable is by definition trying to harden the install.
+
+        This is a floor, not an entropy oracle: it reliably catches short and
+        degenerate keys, but a sufficiently long hand-written passphrase will pass
+        while still being far weaker than generated output. Use the documented
+        ``secrets.token_urlsafe(64)`` command rather than treating acceptance here
+        as an endorsement.
+
+        Args:
+            value: The configured key, or the list of retired fallback keys.
+
+        Returns:
+            The value unchanged when every key present is acceptable.
+
+        Raises:
+            ValueError: When a key is too short or too repetitive to be a
+                machine-generated secret.
+        """
+        keys = [value] if isinstance(value, str) else list(value or [])
+        for key in keys:
+            if len(key) < MIN_FIELD_ENCRYPTION_KEY_LENGTH:
+                msg = (
+                    f"field_encryption_key must be at least {MIN_FIELD_ENCRYPTION_KEY_LENGTH} characters "
+                    f"(got {len(key)}). Generate one with: "
+                    'python -c "import secrets; print(secrets.token_urlsafe(64))"'
+                )
+                raise ValueError(msg)
+            # A crude stand-in for entropy, calibrated against random output
+            # rather than against any specific bad key - see the constant.
+            if len(set(key)) < MIN_FIELD_ENCRYPTION_KEY_ALPHABET:
+                msg = (
+                    f"field_encryption_key uses only {len(set(key))} distinct characters, which is too "
+                    "predictable to resist an offline attack against a stolen database. Use a random "
+                    'value: python -c "import secrets; print(secrets.token_urlsafe(64))"'
+                )
+                raise ValueError(msg)
         return value
 
     @model_validator(mode="after")

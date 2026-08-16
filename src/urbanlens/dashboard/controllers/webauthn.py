@@ -41,18 +41,25 @@ class PasskeyRegisterOptionsView(LoginRequiredMixin, View):
 
 
 class PasskeyRegisterView(LoginRequiredMixin, View):
-    """POST: verify a completed registration ceremony and save the new passkey."""
+    """POST: verify a completed registration ceremony and save the new passkey.
+
+    ``purpose=unlock`` saves the credential with ``is_login_factor=False``:
+    it can wrap the account's E2EE key (see ``E2EEPasskeyWrapView``) but never
+    routes the account through a 2FA challenge at sign-in. Anything else (the
+    default) is a normal second-factor passkey.
+    """
 
     def post(self, request: HttpRequest) -> HttpResponse:
         if not isinstance(request.user, User):
             return JsonResponse({"error": "Authentication required."}, status=401)
         credential_json = request.POST.get("credential", "")
         name = request.POST.get("name", "")
+        login_factor = request.POST.get("purpose", "") != "unlock"
         if not credential_json:
             return JsonResponse({"error": "Missing credential."}, status=400)
 
         try:
-            credential = verify_and_save_registration(request, request.user, credential_json, name)
+            credential = verify_and_save_registration(request, request.user, credential_json, name, login_factor=login_factor)
         except WebAuthnError as exc:
             return JsonResponse({"error": exc.safe_message}, status=400)
         return JsonResponse({"ok": True, "name": credential.name}, status=201)

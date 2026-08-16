@@ -1810,6 +1810,9 @@ urlpatterns = [
                 path("group-key/<uuid:group_uuid>/", e2ee.E2EEGroupKeyView.as_view(), name="e2ee.group_key"),
                 path("change-password/", e2ee.E2EEChangePasswordView.as_view(), name="e2ee.change_password"),
                 path("rewrap/", e2ee.E2EERewrapView.as_view(), name="e2ee.rewrap"),
+                path("passkey-wrap/", e2ee.E2EEPasskeyWrapView.as_view(), name="e2ee.passkey_wrap"),
+                # base64url is URL-safe by construction, so the raw credential id can ride the path.
+                path("passkey-wrap/<str:credential_id>/", e2ee.E2EEPasskeyWrapView.as_view(), name="e2ee.passkey_wrap_delete"),
                 path("rewrap-all/", e2ee.E2EERewrapAllView.as_view(), name="e2ee.rewrap_all"),
                 path("reset/", e2ee.E2EEResetView.as_view(), name="e2ee.reset"),
             ],

@@ -11,6 +11,7 @@ from django.db.models import CASCADE, DateTimeField, EmailField, ForeignKey, Tex
 from django.utils import timezone
 
 from urbanlens.dashboard.models import abstract
+from urbanlens.dashboard.models.fields import EncryptedTextField
 from urbanlens.dashboard.models.friendship.invitation.queryset import FriendInvitationManager
 from urbanlens.dashboard.services.core.text_limits import MAX_FRIEND_REQUEST_MESSAGE_LENGTH
 
@@ -32,9 +33,13 @@ class FriendInvitation(abstract.DashboardModel):
     expires_at = DateTimeField()
     accepted_at = DateTimeField(null=True, blank=True)
     # Optional note the inviter attached, shown in the join-invite email.
-    message = TextField(
+    # Encrypted: user-authored text about a person who does not yet have an
+    # account, only ever read as an attribute. `email` above cannot follow -
+    # it is indexed and exact-matched at signup to find open invitations.
+    message = EncryptedTextField(
         null=True,
         blank=True,
+        fail_soft=True,
         max_length=MAX_FRIEND_REQUEST_MESSAGE_LENGTH,
         validators=[MaxLengthValidator(MAX_FRIEND_REQUEST_MESSAGE_LENGTH)],
     )

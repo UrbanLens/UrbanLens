@@ -150,6 +150,12 @@ class Profile(abstract.PublicDashboardModel):
     # never agreed - existing accounts are backfilled to their profile creation
     # date (accepting terms is implied by having used the site already).
     tos_accepted_at = DateTimeField(null=True, blank=True)
+    # "Not now" on the post-login add-a-passkey-or-password prompt snoozes it
+    # until this moment (see PostLoginRedirectView). Profile-persisted rather
+    # than session-persisted deliberately: the old per-session flag re-nagged
+    # SSO users on every signin, which trained them to dismiss security
+    # prompts. Null = never snoozed.
+    credential_prompt_snoozed_until = DateTimeField(null=True, blank=True)
     bio = EncryptedTextField(null=True, blank=True, fail_soft=True, max_length=MAX_PROFILE_BIO_LENGTH, validators=[MaxLengthValidator(MAX_PROFILE_BIO_LENGTH)])
     area = EncryptedTextField(null=True, blank=True, fail_soft=True)
     birth_date = DateField(null=True, blank=True)
@@ -162,6 +168,12 @@ class Profile(abstract.PublicDashboardModel):
     # for the display-only surface this backs). Left blank rather than
     # defaulted, so an unanswered preference is distinguishable from an
     # explicit "yes" and the profile page can omit it entirely.
+    #
+    # The free-text halves are encrypted despite being displayed publicly, for
+    # the same reason bio/area are: encryption at rest defends the DB dump, not
+    # the rendered page. The fixed-choice halves stay plaintext - one of a
+    # handful of enum values reveals almost nothing to a dump, and they still
+    # need to work with get_<field>_display() and any future filtering.
     photo_taking_preference = CharField(
         max_length=20,
         choices=PhotoTakingPreference.choices,
@@ -169,7 +181,13 @@ class Profile(abstract.PublicDashboardModel):
         default="",
         help_text="Whether you're OK with people taking your photo, on or off this site.",
     )
-    photo_taking_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
+    photo_taking_preference_other = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_PREFERENCE_OTHER_LENGTH,
+        validators=[MaxLengthValidator(MAX_PREFERENCE_OTHER_LENGTH)],
+        fail_soft=True,
+    )
 
     photo_sharing_preference = CharField(
         max_length=20,
@@ -178,7 +196,13 @@ class Profile(abstract.PublicDashboardModel):
         default="",
         help_text="Whether you're OK with people sharing or posting your photo, on or off this site.",
     )
-    photo_sharing_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
+    photo_sharing_preference_other = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_PREFERENCE_OTHER_LENGTH,
+        validators=[MaxLengthValidator(MAX_PREFERENCE_OTHER_LENGTH)],
+        fail_soft=True,
+    )
 
     photo_tagging_preference = CharField(
         max_length=20,
@@ -187,7 +211,13 @@ class Profile(abstract.PublicDashboardModel):
         default="",
         help_text="Whether you're OK with being tagged or identified in photos, on or off this site.",
     )
-    photo_tagging_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
+    photo_tagging_preference_other = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_PREFERENCE_OTHER_LENGTH,
+        validators=[MaxLengthValidator(MAX_PREFERENCE_OTHER_LENGTH)],
+        fail_soft=True,
+    )
 
     photo_usage_preference = CharField(
         max_length=20,
@@ -196,7 +226,13 @@ class Profile(abstract.PublicDashboardModel):
         default="",
         help_text="Whether you're OK with people using your photos, on or off this site.",
     )
-    photo_usage_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
+    photo_usage_preference_other = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_PREFERENCE_OTHER_LENGTH,
+        validators=[MaxLengthValidator(MAX_PREFERENCE_OTHER_LENGTH)],
+        fail_soft=True,
+    )
 
     # Distinct from friend_request_visibility (below): that setting is a
     # technical gate on who *can* send a request, this is a social statement
@@ -208,7 +244,13 @@ class Profile(abstract.PublicDashboardModel):
         default="",
         help_text="When you're open to receiving friend requests.",
     )
-    friend_request_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
+    friend_request_preference_other = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_PREFERENCE_OTHER_LENGTH,
+        validators=[MaxLengthValidator(MAX_PREFERENCE_OTHER_LENGTH)],
+        fail_soft=True,
+    )
 
     meetup_preference = CharField(
         max_length=20,
@@ -217,7 +259,13 @@ class Profile(abstract.PublicDashboardModel):
         default="",
         help_text="Whether you're interested in meetups with other users.",
     )
-    meetup_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
+    meetup_preference_other = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_PREFERENCE_OTHER_LENGTH,
+        validators=[MaxLengthValidator(MAX_PREFERENCE_OTHER_LENGTH)],
+        fail_soft=True,
+    )
 
     exploring_with_others_preference = CharField(
         max_length=20,
@@ -226,13 +274,20 @@ class Profile(abstract.PublicDashboardModel):
         default="",
         help_text="Whether you prefer to explore locations solo or with others.",
     )
-    exploring_with_others_preference_other = CharField(max_length=MAX_PREFERENCE_OTHER_LENGTH, blank=True, default="")
+    exploring_with_others_preference_other = EncryptedTextField(
+        blank=True,
+        default="",
+        max_length=MAX_PREFERENCE_OTHER_LENGTH,
+        validators=[MaxLengthValidator(MAX_PREFERENCE_OTHER_LENGTH)],
+        fail_soft=True,
+    )
 
-    additional_preferences = TextField(
+    additional_preferences = EncryptedTextField(
         blank=True,
         default="",
         max_length=MAX_ADDITIONAL_PREFERENCES_LENGTH,
         validators=[MaxLengthValidator(MAX_ADDITIONAL_PREFERENCES_LENGTH)],
+        fail_soft=True,
         help_text="Anything else you'd like other users to know about interacting with you.",
     )
 
