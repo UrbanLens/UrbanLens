@@ -8551,3 +8551,48 @@ intra-function scan cannot see - and that is six ways to be correct while lookin
 
 The sweep is still worth re-running; it found a real 500 on a safety path. But its yield is roughly
 one in ten, and every one of the nine needs reading rather than triage by shape.
+
+## RESOLVED 2026-08-16: a failing property test crashed the reporter and destroyed its own identity
+
+The thirteenth consolidation (task `bl9bhhohp`, chunks 532-534) is the first non-green run in twelve.
+It ended:
+
+```
+1 failed, 9074 passed, 1 xfailed, 4 warnings, 832 subtests passed in 1:34:17
+```
+
+...with **no test name anywhere in the output**, and an `INTERNALERROR` traceback instead. The run
+also stopped ~1,800 tests short of the full suite.
+
+**What happened.** When a `@given` test fails, Hypothesis' pytest plugin offers a patch adding an
+`@example(...)` for the falsifying input - a convenience. Building it runs a `libcst` codemod, which
+here raised `AttributeError: __provides__` inside
+`libcst.matchers._visitors._gather_constructed_visit_funcs`. That runs inside
+`pytest_runtest_makereport`, so it did not merely lose the suggestion: it raised while *building the
+failure report*, which pytest treats as an internal error - aborting the run and taking the identity
+of the failing test with it.
+
+So the verification instrument this audit relies on was blind in precisely the situation it exists
+for: it can tell you everything passed, and cannot tell you what failed.
+
+**Not reproducible in isolation**, which is why twelve green consolidations never surfaced it: a
+deliberately-failing `@given` test in a single module reports perfectly, falsifying example and all.
+It needs state a long run accumulates - so the failure mode only appears in the runs whose output
+matters most, and only when something has already gone wrong.
+
+**Fixed** in `conftest.py` by making `hypothesis.extra._patching` unimportable. The plugin already
+guards that import with `except ImportError: return`, so this is its own supported degradation path
+rather than a monkeypatch of its internals. Verified after the change: a failing `@given` test still
+reports its name, its assertion and its falsifying example; only the auto-suggested `@example`
+decorator is gone. That is the whole trade, and it is worth making - a suggestion you cannot see
+because the reporter crashed is worth nothing.
+
+**The underlying failure is still unknown**, which is the point: the crash destroyed it. A fourteenth
+consolidation is running to recover it, and will now be able to name it. Recorded here rather than
+waiting, because "one test failed and the suite cannot say which" is itself the finding.
+
+**Not root-caused, deliberately:** the `__provides__` collision is between `libcst`'s matcher
+machinery and something a full run loads (`zope.interface`, via Twisted/Daphne, is the obvious
+suspect from the attribute name - but importing those two alongside the codemod does *not* reproduce
+it, so the real trigger is narrower and unidentified). Chasing a third-party interaction is not worth
+it when the feature involved is optional and the fix is one line at the boundary.
