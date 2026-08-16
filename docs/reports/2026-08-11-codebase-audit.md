@@ -10040,3 +10040,18 @@ wrong. The hypothesis got the *neighbourhood* right and the mechanism wrong - th
 last two chunks, where the scan pointed and something else did the finding.
 
 Verified: 17 document-processing tests, ruff clean.
+
+## Chunk 535 - twelfth consolidation: 10,897 passed, 0 failed; the corrected method holds
+
+Twelfth consolidation (task `baexejocs`, chunks 530-531): **10,897 passed, 1 xfailed, 0 failed,
+1,481 subtests** in 1:32:40. First run covering the device-marker `F()` fix and the shared
+extraction budget.
+
+Reconciled with the method as corrected in chunk 532: 10,910 collected now, minus the 12 tests
+`git diff 65bd64af..HEAD` shows were added since this run's tree, gives 10,898 - and 10,897 passed
++ 1 xfailed = 10,898. Exact, and this time by construction rather than by two errors cancelling.
+
+Twelve consolidations: 10,849 / 10,859 / 10,863 / 10,865 (2 resolved) / 10,873 / 10,875 / 10,878 /
+10,883 / 10,885 / 10,871 / 10,888 / 10,897. A thirteenth (task `bl9bhhohp`) is running over chunks
+532-534 - the enrichment decompression-bomb handler, the `.docx` uncompressed ceiling, and the OCR
+raster bound - none of which any run has covered.
