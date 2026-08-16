@@ -1967,7 +1967,7 @@ function init(): void {
             // bare thumbnail tile with no button treatment to inherit.
             li.innerHTML = `
                 <div class="photo-panel-thumb-wrap">
-                    <img src="${img.url}" class="photo-panel-thumb" alt="" draggable="false">
+                    <img src="${escHtml(img.url)}" class="photo-panel-thumb" alt="" draggable="false">
                     <button type="button" class="photo-panel-place-btn" draggable="false" aria-pressed="false"
                             title="${hasCoords ? "Move on map" : "Place on map"}" aria-label="${hasCoords ? "Move on map" : "Place on map"}"
                             style="position:absolute;top:3px;right:3px;display:flex;align-items:center;justify-content:center;width:28px;height:28px;padding:0;border:0;border-radius:4px;background:rgba(0,0,0,.52);color:#fff;cursor:pointer">

@@ -10996,3 +10996,37 @@ proves search matches a lowercased label whatever the query's case, the next pro
 label the template had not lowercased. `bun run typecheck` initially rejected `m[1]` as possibly
 undefined; fixed with `?? ""` rather than a non-null assertion, since an empty attribute is a value
 the assertion handles anyway. Full suite: 411 pass, 0 fail, typecheck clean.
+
+## Chunk 566 - "usually escaped" is not a property
+
+Read `webauthn-client.ts` first, since auth is where a bug costs most. It is clean: the base64url
+helpers are textbook-correct in both directions, `credentialToJSON` handles the empty-`userHandle`
+case correctly, and `isCancellation` matching only `NotAllowedError` is complete here because
+nothing uses conditional mediation or an `AbortController` - checked rather than assumed.
+
+Then switched from reading modules one at a time to a property over the whole frontend: **every
+value interpolated into an `innerHTML` template literal must be escaped.** 110 `innerHTML`
+assignments, 38 distinct interpolated expressions.
+
+Most are escaped, and the modules that build markup as strings each define their own `escHtml`.
+Two had skipped it, and both are the same shape - a URL interpolated straight into an `src="..."`
+attribute, where a quote closes the attribute rather than sitting inside it:
+
+- `organize-tab-manager.ts:454`, a custom label icon read back out of a `data-` attribute (so the
+  DOM has already decoded whatever Django encoded), in a file that calls `escHtml` 250 lines later.
+- `map-annotations.ts:1970`, a photo URL, in a file that calls `escHtml` in six other places.
+
+**Neither is demonstrably exploitable.** Both values are Django-generated media paths and filename
+sanitisation strips quotes, so I am not claiming an XSS - and that is precisely why they survived:
+nothing forces the question until some value finally contains a quote. They are now escaped like
+every neighbour.
+
+The remaining 36 expressions were checked individually and are genuinely safe: static toolbar and
+onboarding definitions, literal ternary branches, integers, markup this same scan already covers,
+one value escaped inline, and a FileReader `data:` URL whose base64 payload cannot contain a quote.
+
+That audit is now a guard rather than a paragraph. Each interpolation must be escaped or listed with
+its reason, the allowlist is keyed on expression text so renaming a variable forces a fresh look, and
+a third test fails on stale entries - an exemption that outlives its code becomes unexamined cover
+for whatever replaces it. Verified to bind by un-escaping `img.url`, which the guard names exactly.
+Full TS suite 414 pass, typecheck clean.

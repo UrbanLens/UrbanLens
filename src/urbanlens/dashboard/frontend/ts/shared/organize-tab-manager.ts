@@ -451,7 +451,11 @@ export class OrgTabManager {
         if (sharedCustomIcon) {
             iconNochange.checked = true;
             if (iconValue) iconValue.value = "";
-            if (iconCurrent) iconCurrent.innerHTML = `<img src="${sharedCustomIcon}" alt="" class="tag-icon-img"> <span class="icon-picker-none-label">Custom icon (kept unless you pick a new one)</span>`;
+            // escHtml, not raw: this value is read back out of a data attribute,
+            // where the DOM has already decoded any entity Django wrote, so a
+            // quote in it would close the src attribute rather than sit inside
+            // it. Every other interpolation in this file already escapes.
+            if (iconCurrent) iconCurrent.innerHTML = `<img src="${escHtml(sharedCustomIcon)}" alt="" class="tag-icon-img"> <span class="icon-picker-none-label">Custom icon (kept unless you pick a new one)</span>`;
         } else if (sharedIcon !== null) {
             iconNochange.checked = false;
             if (iconValue) iconValue.value = sharedIcon;
