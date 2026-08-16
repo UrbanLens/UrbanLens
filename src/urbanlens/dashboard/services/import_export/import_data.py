@@ -1688,7 +1688,10 @@ def _import_safety(
     if not rows:
         return
 
-    terminal = set(SafetyCheckinStatus.terminal_statuses()) if hasattr(SafetyCheckinStatus, "terminal_statuses") else {SafetyCheckinStatus.CHECKED_IN, SafetyCheckinStatus.FOUND_SAFE, SafetyCheckinStatus.CANCELLED}
+    # Named `resolved_statuses`, not `terminal_statuses` - the `hasattr` guard
+    # this replaces tested for a method that never existed, so it always fell
+    # through to a hand-copied duplicate of the same three values.
+    terminal = set(SafetyCheckinStatus.resolved_statuses())
     for row in rows:
         status = row.get("status") or ""
         if status not in terminal:

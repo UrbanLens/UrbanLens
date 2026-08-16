@@ -24,7 +24,7 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinStatus
-from urbanlens.dashboard.services.visits.safety import check_in, escalate_checkin, send_checkin_reminder
+from urbanlens.dashboard.services.visits.safety import _resolve_as_found_safe, cancel_checkin, check_in, escalate_checkin, send_checkin_reminder
 
 
 class CheckinResolvedMidSweepTests(TestCase):
@@ -104,3 +104,70 @@ class CheckinResolvedMidSweepTests(TestCase):
         self.assertIsNotNone(contact.notified_at)
         send_email.assert_called_once()
         self.assertEqual(checkin.status, SafetyCheckinStatus.OVERDUE)
+
+
+class OwnerResolutionIsAlsoCompareAndSetTests(TestCase):
+    """The owner's own two transitions claim the row instead of overwriting it.
+
+    ``check_in`` and ``cancel_checkin`` used to write ``status`` straight from
+    a possibly-stale instance, unlike the three transitions above. Both only
+    ever move a check-in *into* a terminal state, so the visible damage was
+    limited to a wrong ``resolved_by_label`` - but having three of five
+    lifecycle writes use compare-and-set and two not is the inconsistency that
+    invites the next transition to copy the wrong one.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.profile = baker.make(User).profile
+        self.checkin = baker.make(
+            SafetyCheckin,
+            profile=self.profile,
+            status=SafetyCheckinStatus.AWAITING_CHECKIN,
+            title="night shoot",
+            checkin_by=timezone.now() - timedelta(minutes=5),
+            grace_period=timedelta(hours=1),
+            notify_community_wiki=False,
+        )
+
+    def test_checking_in_does_not_overwrite_a_contact_who_already_reported_you_safe(self) -> None:
+        stale = SafetyCheckin.objects.get(pk=self.checkin.pk)
+        _resolve_as_found_safe(SafetyCheckin.objects.get(pk=self.checkin.pk), resolved_by_label="Dana")
+
+        self.assertFalse(check_in(stale, self.profile))
+
+        self.checkin.refresh_from_db()
+        self.assertEqual(self.checkin.status, SafetyCheckinStatus.FOUND_SAFE)
+        self.assertEqual(self.checkin.resolved_by_label, "Dana")
+
+    def test_cancelling_does_not_overwrite_an_existing_resolution(self) -> None:
+        stale = SafetyCheckin.objects.get(pk=self.checkin.pk)
+        _resolve_as_found_safe(SafetyCheckin.objects.get(pk=self.checkin.pk), resolved_by_label="Dana")
+
+        self.assertFalse(cancel_checkin(stale))
+
+        self.checkin.refresh_from_db()
+        self.assertEqual(self.checkin.status, SafetyCheckinStatus.FOUND_SAFE)
+
+    def test_a_losing_check_in_leaves_the_instance_describing_the_stored_row(self) -> None:
+        """The loser's in-memory copy must not claim a resolution it did not make."""
+        stale = SafetyCheckin.objects.get(pk=self.checkin.pk)
+        _resolve_as_found_safe(SafetyCheckin.objects.get(pk=self.checkin.pk), resolved_by_label="Dana")
+
+        check_in(stale, self.profile)
+
+        self.assertNotEqual(stale.status, SafetyCheckinStatus.CHECKED_IN)
+
+    def test_an_uncontested_check_in_still_resolves_normally(self) -> None:
+        self.assertTrue(check_in(self.checkin, self.profile))
+        self.checkin.refresh_from_db()
+        self.assertEqual(self.checkin.status, SafetyCheckinStatus.CHECKED_IN)
+        self.assertEqual(self.checkin.resolved_by_label, "you")
+        self.assertIsNotNone(self.checkin.resolved_at)
+
+    def test_an_uncontested_cancel_still_resolves_normally(self) -> None:
+        self.assertTrue(cancel_checkin(self.checkin))
+        self.checkin.refresh_from_db()
+        self.assertEqual(self.checkin.status, SafetyCheckinStatus.CANCELLED)
+        self.assertEqual(self.checkin.resolved_by_label, "cancelled by owner")

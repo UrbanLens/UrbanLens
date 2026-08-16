@@ -18,6 +18,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.wiki.model import Wiki
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.numbers import safe_int
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
@@ -169,7 +170,7 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             description=body.get("description") or None,
             pin_type=pin_type,
             pin_type_is_user_provided=pin_type_chosen,
-            icon=body.get("icon") or None,
+            icon=clean_icon(body.get("icon")),
             color=clean_color(body.get("color")),
             detail_bg_color=clean_color(body.get("bg_color"), allow_none_keyword=True),
             detail_bg_opacity=safe_int(body.get("bg_opacity"), 80),
@@ -215,7 +216,7 @@ class DetailPinEditView(LoginRequiredMixin, View):
         for field, value in {
             "name": body.get("name") or None,
             "description": body.get("description") or None,
-            "icon": body.get("icon") or None,
+            "icon": clean_icon(body.get("icon")),
             "color": clean_color(body.get("color")),
             "detail_bg_color": clean_color(body.get("bg_color"), allow_none_keyword=True),
             "detail_border_color": clean_color(body.get("border_color"), allow_none_keyword=True),
@@ -371,7 +372,7 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             description=body.get("description") or None,
             pin_type=pin_type,
             pin_type_is_user_provided=pin_type_chosen,
-            icon=body.get("icon") or None,
+            icon=clean_icon(body.get("icon")),
             color=clean_color(body.get("color")),
             detail_bg_color=clean_color(body.get("bg_color"), allow_none_keyword=True),
             detail_bg_opacity=safe_int(body.get("bg_opacity"), 80),
@@ -430,7 +431,7 @@ class LocationWikiDetailPinEditView(LoginRequiredMixin, View):
         for field, value in {
             "name": body.get("name") or child_wiki.name,
             "description": body.get("description") or None,
-            "icon": body.get("icon") or None,
+            "icon": clean_icon(body.get("icon")),
             "color": clean_color(body.get("color")),
             "detail_bg_color": clean_color(body.get("bg_color"), allow_none_keyword=True),
             "detail_border_color": clean_color(body.get("border_color"), allow_none_keyword=True),

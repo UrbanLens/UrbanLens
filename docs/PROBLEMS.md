@@ -430,6 +430,24 @@ transaction, but the count is inflated by dispatchers: the top hit
 (`controllers/settings.py:159`, "18 writes") is a 15-branch `if/elif` on `section` where exactly
 one branch runs. Only paths whose writes share an invariant are worth looking at.
 
+## NEUTRALISED 2026-08-16 (the trap is closed; the rename is now an API break) - one notification preference is named after the enum *member*, not its *value*
+
+**Re-checked 2026-08-16 and deliberately not renamed.** The hazard this entry is about - the
+WhatsApp/SMS path building its field name from the *type value* and silently `getattr`-missing to
+`False` - no longer exists. `notification_text_alerts._enabled_channels` now resolves the column
+from the enum **member name**, which is what every other consumer already used, and
+`TEXT_ALERTABLE_TYPES` includes the type, so the "add it to that set and the toggle is permanently
+off" outcome cannot occur. Both halves are pinned by `test_text_alert_preference_stems.py`.
+
+What remains is the cosmetic inconsistency, and renaming it is no longer a migration plus one read
+site: `preference_field_names()` feeds the **external API's** notification-preference field names,
+so renaming the three columns renames three public API fields. `test_external_api_notifications.py::
+test_one_preference_stem_does_not_match_its_notification_type` asserts the mismatch on purpose, so
+that a rename fails there and becomes a deliberate decision rather than a silent API change. That
+decision is the owner's; this is not a defect to fix unattended.
+
+The original entry follows.
+
 ## LOW 2026-08-11: one notification preference is named after the enum *member*, not its *value*
 
 `NotificationType.SAFETY_CHECKIN_PARTNER_INVITE` has the **value**
@@ -469,6 +487,23 @@ This is deliberate and documented in `preference_field_names()`'s docstring ("Ca
 exactly these and must not invent defaults for the types that are missing"), and some of them -
 the safety escalation chain in particular - are arguably *right* to be non-silenceable. Recorded
 only so the gap is visible when someone asks why a given notification has no setting.
+
+## RESOLVED 2026-08-16: `FriendInvitation.mark_accepted` claims at selection time, not write time
+
+**Fixed 2026-08-16.** `mark_accepted()` is now a conditional claim
+(`filter(pk=..., accepted_at__isnull=True).update(...)`, returning whether it matched) and
+`_apply_pending_invitation` calls it *first*, returning early when it loses - the shape this entry
+prescribed, including its trade: a crash between the claim and the grant now loses that grant
+rather than replaying it, which is the safer direction for side effects a user would notice twice.
+`_collect_pending_invitations`' docstring no longer claims its filter prevents reprocessing; it now
+says which write actually does.
+
+Covered by `test_friend_invitation.py::InvitationClaimIsSingleUseTests`, which asserts against the
+side effects being *attempted* (`Friendship.request`/`grant_subscription` call counts) rather than
+their result - the individual idempotence recorded below means row counts would pass either way,
+so counting rows would have been a vacuous test of this fix.
+
+The original entry follows.
 
 ## LOW 2026-08-11: `FriendInvitation.mark_accepted` claims at selection time, not write time
 
@@ -552,6 +587,18 @@ population and hit Postgres parameter/planning limits. Batching the id list (e.g
 thousand per run, remainder picked up next hour, as `upgrade_placeholder_pin_names` already does
 with `batch_size`) removes both this and the unbounded-runtime concern, independently of whether
 the index is ever added.
+
+**The materialisation half is fixed (2026-08-16).** `hard_delete_expired_direct_messages` now
+takes `batch_size=2000` slices in a loop with a `max_per_run=50000` ceiling, so the `IN (...)` list
+is bounded regardless of backlog size and one invocation cannot run unboundedly long; any remainder
+is picked up by the next hourly run. One detail worth knowing before changing the batch size: a
+stored file shared by `Image` rows in *different* batches survives the earlier batch (the later
+batch's row still references it) and is removed by the later one, because the earlier batch's rows
+are gone by then - so batching does not leak files, it just defers some of them by one iteration.
+Covered by `test_direct_message_hard_delete.py::HardDeleteBatchingTests`.
+
+**The index question below is untouched and is still the substance of this entry** - it needs
+production table size, which this environment cannot measure.
 
 ## RESOLVED 2026-08-11: `--reuse-db` permanently poisons the test DB, breaking every OAuth test
 
@@ -702,6 +749,22 @@ own. Next avenues, in rough order of cost: bisect by *adding* files one at a tim
 threshold (pairs and halves both come back clean, so it is not a simple poisoner); try a newer
 happy-dom than 20.11.2; or run this one file in its own bun process so it stops sharing a
 `GlobalWindow` at all, which sidesteps rather than diagnoses.
+
+## RESOLVED 2026-08-16: `check_in`/`cancel_checkin` still write `status` from a possibly-stale instance
+
+**Fixed 2026-08-16**, on the "worth converting if this code is touched anyway" grounds below.
+Both now go through `_claim_resolution`, a conditional UPDATE excluding the resolved statuses -
+the same shape as `_resolve_as_found_safe` - and return whether they won. All five lifecycle
+transitions now use compare-and-set, so there is no longer a wrong one to copy. The in-memory copy
+is mutated only on a successful claim, so a loser's instance keeps describing the stored row.
+
+The two API callers (`SafetyCheckinCheckInApiView`, `SafetyCheckinCancelApiView`) `refresh_from_db()`
+when the claim is lost, so their 200 payload reports the resolution that actually happened rather
+than the one they attempted. The HTML callers redirect to a page that re-reads anyway.
+
+Covered by `test_safety_resolution_races.py::OwnerResolutionIsAlsoCompareAndSetTests`.
+
+The original entry follows.
 
 ## LOW 2026-08-11: `check_in`/`cancel_checkin` still write `status` from a possibly-stale instance
 
@@ -6305,6 +6368,33 @@ custom field type, would make it structural rather than conventional.
 
 ---
 
+## RESOLVED 2026-08-16: `Pin.icon` is unvalidated free text rendered into a `src` attribute
+
+**Fixed 2026-08-16**, following the `services/core/colors.py` model this entry named: one helper,
+`services/core/icons.clean_icon`, applied at every write path. It accepts exactly the three shapes
+the field is meant to hold - a Material Icons name (`^[a-z0-9_]+$`), an uploaded icon's URL
+(`^(https?://|/)` with no whitespace, quotes, angle brackets or backticks), or a short emoji token
+(≤12 code points, every one a non-ASCII symbol/mark/joiner) - and coerces anything else to the
+caller's default rather than raising, matching `clean_color`'s reasoning about pickers.
+
+Applied at four sites, chosen so each covers several callers rather than one:
+`services/pins/pin_creation.create_pin_for_profile` (the map's add-pin dialog, the external API's
+pin create, and the import paths), `services/pins/pin_edit.apply_pin_edits` (the website's edit
+dialog and the API's PATCH), `controllers/pin_bulk` (bulk style edit, one branch over from where
+colours were already cleaned), and `controllers/detail_pins` (detail pin/child wiki create+update).
+`controllers/maps` quick-edit cleans directly.
+
+Covered by `test_icon_safety.py`, including a Hypothesis property that whatever survives `clean_icon`
+fits the column and is classifiable by the renderers' own `is_icon_url`/`is_material_icon` filters -
+so nothing can reach the `<img src>` branch without having passed the URL test.
+
+Not changed: `Label.icon` and the other icon columns. They render through the same filters and are
+the same class of value, but their write paths have their own defaults and protected-label rules;
+converting them is a follow-up, not part of this fix. The ~60 further attribute interpolations
+below are also untouched, and for the same reason as before - their values are not user-controlled.
+
+The original entry follows.
+
 ## `Pin.icon` is unvalidated free text rendered into a `src` attribute
 
 `Pin.icon` is `CharField(max_length=255, null=True, blank=True)` - no validator, no choices - and
@@ -7042,6 +7132,17 @@ was code that should not change.
 
 ---
 
+## RESOLVED (already fixed in `0401aa2a`; entry was stale as of 2026-08-16): `LabelReorderView.post` issues one UPDATE per label
+
+`controllers/labels.py:848` already does what the entry recommends, and went further than it asked:
+it takes `bulk_update` (the option argued for below), writes **only** the rows whose order actually
+moved, and calls `refresh_map_pin_cache_for_label_ids` because `bulk_update` fires no `post_save` -
+which is the receiver trap the entry flagged, resolved rather than merely noted. Covered by
+`test_label_reorder_query_count.py` and `test_label_reorder_refreshes_map_cache.py`; the "ids not
+belonging to the profile are silently ignored" behaviour is preserved by the scoped fetch.
+
+The original entry follows.
+
 ## `LabelReorderView.post` issues one UPDATE per label
 
 `controllers/labels.py`, in the never-executed set from the coverage run:
@@ -7729,6 +7830,23 @@ determinism, (b) chown the directory to `appuser` so the store works as designed
 and let it regenerate under the right owner. Recorded rather than applied because (a) changes
 test-determinism policy for everyone and (b)/(c) touch a container whose state the owner manages -
 the same reasoning as the dev-stack entries.
+
+**Fixed in-repo 2026-08-16, without taking any of those three.** `src/urbanlens/conftest.py` now
+registers an explicit `urbanlens` Hypothesis profile whose example database lives in a directory the
+test user can actually write (`$TMPDIR/urbanlens-hypothesis-examples`, overridable with
+`UL_HYPOTHESIS_EXAMPLE_DIR`; set it empty for an in-memory store). Writability is *proved* with a
+probe file rather than assumed, since an unwritable inherited directory is the exact failure this
+exists to avoid - if the probe fails it falls back to an in-memory database and logs a warning.
+
+This takes (b)'s benefit without touching container state, and leaves determinism policy alone -
+the store works as designed, so an example that stops failing is now removed instead of replayed
+forever. The directory is deliberately stable across runs rather than keyed to `UL_TEST_DB_NAME`:
+a per-run store learns nothing, and `DirectoryBasedExampleDatabase` is file-per-entry and safe for
+concurrent readers/writers. The root-owned `/app/.hypothesis` is now simply unused; deleting it is
+still worth doing but no longer fixes anything.
+
+Nothing has reproduced `test_only_submitted_fields_ever_move` since - including the ninth
+full-suite consolidation (2026-08-16, 10,885 passed / 1 xfailed / 0 failed).
 
 `SetTripPermissionsPresenceTests::test_only_submitted_fields_ever_move`
 (`test_external_api_trip_settings.py`) failed in the chunk-455 full-suite run (10,838 others

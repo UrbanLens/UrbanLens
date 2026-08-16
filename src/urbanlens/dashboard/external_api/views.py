@@ -3176,7 +3176,9 @@ class SafetyCheckinMarkSafeView(SafetyCheckinScopedView):
             return self._not_found()
         if checkin.is_resolved:
             return Response({"error": "This check-in has already been resolved."}, status=409)
-        check_in(checkin, request.user.profile)
+        if not check_in(checkin, request.user.profile):
+            # Someone else concluded it between the guard above and the claim.
+            checkin.refresh_from_db()
         return self._detail_response(checkin)
 
 
@@ -3195,7 +3197,9 @@ class SafetyCheckinCancelApiView(SafetyCheckinScopedView):
             return self._not_found()
         if checkin.is_resolved:
             return Response({"error": "This check-in has already been resolved."}, status=409)
-        cancel_checkin(checkin)
+        if not cancel_checkin(checkin):
+            # Someone else concluded it between the guard above and the claim.
+            checkin.refresh_from_db()
         return self._detail_response(checkin)
 
 

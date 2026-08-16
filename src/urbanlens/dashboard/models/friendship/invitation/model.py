@@ -60,9 +60,21 @@ class FriendInvitation(abstract.DashboardModel):
         """Return True if the invitation has been acted on."""
         return self.accepted_at is not None
 
-    def mark_accepted(self) -> None:
-        """Record acceptance time without triggering full-model save."""
-        FriendInvitation.objects.filter(pk=self.pk).update(accepted_at=timezone.now())
+    def mark_accepted(self) -> bool:
+        """Claim this invitation, once, without triggering a full-model save.
+
+        The write is conditional on the invitation still being open, so two
+        concurrent verifications of the same invite (a double-clicked
+        verification link) have exactly one winner. Callers must claim
+        *before* applying an invitation's side effects and skip them when this
+        returns False - selecting on ``accepted_at__isnull=True`` guards only
+        at selection time, which leaves both racers past the filter.
+
+        Returns:
+            True when this call was the one that claimed it.
+        """
+        claimed = FriendInvitation.objects.filter(pk=self.pk, accepted_at__isnull=True).update(accepted_at=timezone.now())
+        return bool(claimed)
 
     def __str__(self) -> str:
         return f"FriendInvitation({self.inviter_id} → {self.email})"

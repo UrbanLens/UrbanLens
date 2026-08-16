@@ -1758,18 +1758,53 @@ def create_checkin(
     return checkin
 
 
-def cancel_checkin(checkin: SafetyCheckin) -> None:
+def _claim_resolution(checkin: SafetyCheckin, *, status: str, resolved_by_label: str) -> bool:
+    """Move an unresolved check-in to a terminal status, once.
+
+    A conditional UPDATE rather than a read-then-write, matching
+    ``_resolve_as_found_safe``: the row is only touched while it is still
+    unresolved, so a contact marking the owner safe at the same moment the
+    owner checks in produces one resolution rather than two overwriting each
+    other's ``resolved_by_label``. The in-memory copy is only updated once the
+    claim succeeds, so a loser's instance keeps describing the row as it
+    actually is.
+
+    Args:
+        checkin: The check-in being resolved.
+        status: The terminal status to write.
+        resolved_by_label: Display label for whoever concluded it.
+
+    Returns:
+        True when this call performed the resolution.
+    """
+    resolved_at = timezone.now()
+    claimed = (
+        SafetyCheckin.objects.filter(pk=checkin.pk)
+        .exclude(status__in=SafetyCheckinStatus.resolved_statuses())
+        .update(status=status, resolved_at=resolved_at, resolved_by_label=resolved_by_label, updated=resolved_at)
+    )
+    if not claimed:
+        return False
+    checkin.status = status
+    checkin.resolved_at = resolved_at
+    checkin.resolved_by_label = resolved_by_label
+    return True
+
+
+def cancel_checkin(checkin: SafetyCheckin) -> bool:
     """Cancel a check-in so it will never fire a reminder or escalation.
 
     Args:
         checkin: The check-in to cancel.
+
+    Returns:
+        True if this call cancelled it, False if it had already concluded.
     """
-    checkin.status = SafetyCheckinStatus.CANCELLED
-    checkin.resolved_at = timezone.now()
-    checkin.resolved_by_label = "cancelled by owner"
-    checkin.save(update_fields=["status", "resolved_at", "resolved_by_label", "updated"])
+    if not _claim_resolution(checkin, status=SafetyCheckinStatus.CANCELLED, resolved_by_label="cancelled by owner"):
+        return False
     _broadcast_status_update(checkin)
     schedule_checkin_archival(checkin)
+    return True
 
 
 def _is_resolved_in_db(checkin: SafetyCheckin) -> bool:
@@ -1863,20 +1898,23 @@ def send_final_warning(checkin: SafetyCheckin) -> None:
     checkin.save(update_fields=["final_warning_sent_at", "updated"])
 
 
-def check_in(checkin: SafetyCheckin, profile: Profile) -> None:
+def check_in(checkin: SafetyCheckin, profile: Profile) -> bool:
     """Record that the profile checked in on time (or late, before escalation).
 
     Args:
         checkin: The check-in being resolved.
         profile: The profile checking in (must be checkin.profile).
+
+    Returns:
+        True if this call resolved it, False if it had already concluded -
+        e.g. a contact marked the owner safe in the same moment.
     """
-    checkin.status = SafetyCheckinStatus.CHECKED_IN
-    checkin.resolved_at = timezone.now()
-    checkin.resolved_by_label = "you"
-    checkin.save(update_fields=["status", "resolved_at", "resolved_by_label", "updated"])
+    if not _claim_resolution(checkin, status=SafetyCheckinStatus.CHECKED_IN, resolved_by_label="you"):
+        return False
     _broadcast_status_update(checkin)
     _conclude_checkin(checkin)
     schedule_checkin_archival(checkin)
+    return True
 
 
 def escalate_checkin(checkin: SafetyCheckin) -> None:

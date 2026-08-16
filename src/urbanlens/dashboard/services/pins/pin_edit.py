@@ -28,6 +28,7 @@ from django.db import transaction
 from urbanlens.dashboard.models.abstract.security import SECURITY_FIELDS
 from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_STATUS, KIND_TAG
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 
@@ -234,6 +235,12 @@ def apply_pin_edits(
     with transaction.atomic():
         for field, submitted in fields.items():
             value = _normalize_text(submitted) if field in _TEXT_EDIT_FIELDS else submitted
+            if field == "icon":
+                # Validated here rather than per-caller, since this is the one
+                # function behind both the website's edit dialog and the API's
+                # PATCH. `color` is cleaned by its callers instead because they
+                # each have their own default to fall back to.
+                value = clean_icon(value)
             setattr(pin, field, value)
             update_fields.append(field)
             if field == "name":

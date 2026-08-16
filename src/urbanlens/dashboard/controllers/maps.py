@@ -30,6 +30,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
 from urbanlens.dashboard.services.core.pagination import get_page
 from urbanlens.dashboard.services.map_pins import MapPinCache, MapPinPayloadService
@@ -792,7 +793,7 @@ class MapController(LoginRequiredMixin, GenericViewSet):
             with contextlib.suppress(ValueError, TypeError):
                 pin.location, _ = Location.objects.get_nearby_or_create(float(latitude), float(longitude))
         if icon is not None:
-            pin.icon = icon or None
+            pin.icon = clean_icon(icon)
         if color is not None:
             pin.color = color or None
         if custom_icon:

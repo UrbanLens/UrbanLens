@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.reviews.model import Review
 from urbanlens.dashboard.models.undo import UndoAction
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.text_limits import MAX_PIN_DESCRIPTION_LENGTH, text_length_error
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
 from urbanlens.dashboard.services.undo.service import UndoExpiredError, restore_undo_action, stash_for_undo
@@ -210,6 +211,11 @@ class PinBulkEditView(LoginRequiredMixin, View):
                 # by the map and organize renderers, and `x" onmouse` is ten characters.
                 # Border colours keep the "none" sentinel, which means "no border".
                 value = clean_color(value, default="", allow_none_keyword=model_field != "color") or ""
+            elif model_field == "icon":
+                # Same reasoning one branch over: an icon becomes glyph text, an
+                # <img src="...">, or an emoji depending on its shape, so a value
+                # that is none of the three has no business being stored.
+                value = clean_icon(value, default="")
             style_updates[model_field] = value or None
 
         for request_field, model_field in (

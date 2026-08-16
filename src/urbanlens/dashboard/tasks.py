@@ -2291,7 +2291,7 @@ def detect_dm_address_mentions(message_id: int) -> int:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def hard_delete_expired_direct_messages() -> int:
+def hard_delete_expired_direct_messages(batch_size: int = 2000, max_per_run: int = 50000) -> int:
     """Permanently delete every direct message past its sender's disappearing-message window.
 
     Unlike delete_message_for_everyone (a tombstone - the row and its content
@@ -2301,29 +2301,56 @@ def hard_delete_expired_direct_messages() -> int:
     what actually removes it. Image.direct_message is SET_NULL (not CASCADE),
     so attached images are explicitly deleted here too - otherwise they'd
     survive as orphaned, still-unencrypted files after the message is gone.
+
+    Work is taken in batches rather than as one set. In steady state a single
+    hourly run has one hour of expiries to clear and takes one batch, but a
+    backlog becoming due at once - the first run after a retention-policy
+    change, or after the beat worker was down - would otherwise pull every due
+    id into memory and send it back as a single ``IN (...)`` list, against
+    Postgres' parameter and planning limits.
+
+    A file shared by rows in different batches survives the earlier batch (its
+    other row still references it) and is removed by the later one, since the
+    earlier batch's rows are gone by then.
+
+    Args:
+        batch_size: Rows to claim per iteration.
+        max_per_run: Ceiling on one invocation, so a large backlog drains over
+            several scheduled runs instead of running unboundedly long. Any
+            remainder is picked up by the next run.
+
+    Returns:
+        Number of messages deleted.
     """
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.services.media.images import delete_stored_file
 
-    due_ids = list(DirectMessage.objects.due_for_hard_delete().values_list("id", flat=True))
-    if not due_ids:
-        return 0
+    deleted = 0
+    while deleted < max_per_run:
+        take = min(batch_size, max_per_run - deleted)
+        due_ids = list(DirectMessage.objects.due_for_hard_delete().values_list("id", flat=True)[:take])
+        if not due_ids:
+            break
 
-    expiring = list(Image.objects.filter(direct_message_id__in=due_ids))
-    expiring_pks = [image.pk for image in expiring]
-    for image in expiring:
-        if image.image:
-            try:
-                delete_stored_file(image, also_deleting=expiring_pks)
-            except OSError:
-                logger.exception("Failed to delete image file %s for expiring direct message %s", image.pk, image.direct_message_id)
-    Image.objects.filter(direct_message_id__in=due_ids).delete()
+        expiring = list(Image.objects.filter(direct_message_id__in=due_ids))
+        expiring_pks = [image.pk for image in expiring]
+        for image in expiring:
+            if image.image:
+                try:
+                    delete_stored_file(image, also_deleting=expiring_pks)
+                except OSError:
+                    logger.exception("Failed to delete image file %s for expiring direct message %s", image.pk, image.direct_message_id)
+        Image.objects.filter(direct_message_id__in=due_ids).delete()
 
-    count = len(due_ids)
-    DirectMessage.objects.filter(id__in=due_ids).delete()
-    logger.info("Hard-deleted %s expired direct message(s)", count)
-    return count
+        DirectMessage.objects.filter(id__in=due_ids).delete()
+        deleted += len(due_ids)
+        if len(due_ids) < take:
+            break
+
+    if deleted:
+        logger.info("Hard-deleted %s expired direct message(s)", deleted)
+    return deleted
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})

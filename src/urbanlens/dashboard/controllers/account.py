@@ -997,9 +997,11 @@ def _coerce_invite_token(invite_token: object) -> UUID | None:
 def _collect_pending_invitations(user: User, invite_token: str | None) -> list:
     """Return open invitations matching the user's email and/or signup invite token.
 
-    Deliberately does NOT filter on ``expires_at``: an invitation only ever
-    reaches ``_apply_pending_invitation`` once (``accepted_at__isnull=True``
-    already guards against reprocessing), and any ``PendingSubscriptionGrant``
+    Deliberately does NOT filter on ``expires_at``: an invitation is applied
+    only once (the ``accepted_at__isnull=True`` filter here narrows the set,
+    but the guarantee comes from ``mark_accepted``'s conditional claim in
+    ``_apply_pending_invitation`` - this filter is a selection-time read and
+    two concurrent verifications both pass it), and any ``PendingSubscriptionGrant``
     attached to an invite is a promise that shouldn't silently evaporate just
     because the invited user took longer than the 14-day window to verify
     their email. The friend-connection side of an expired invite may be a bit
@@ -1041,9 +1043,20 @@ def _apply_pending_invitation(invitation, profile) -> None:
     grant regardless keeps a promised subscription grant from being silently
     dropped just because the inviter and the invited signup happen to be the
     same account.
+
+    The invitation is claimed before any of that runs, and a caller that loses
+    the claim does nothing: ``_collect_pending_invitations`` filters on
+    ``accepted_at__isnull=True`` at *selection* time only, so two concurrent
+    verifications both reach here. Claiming first means a crash between the
+    claim and the grant loses that grant rather than replaying it - the safer
+    direction, since the side effects here (a friend request, a notification,
+    a subscription grant) are ones a user would notice twice.
     """
     from urbanlens.dashboard.controllers.friendship import notify_friend_request
     from urbanlens.dashboard.models.friendship.model import Friendship
+
+    if not invitation.mark_accepted():
+        return
 
     is_self_invite = invitation.inviter == profile
     if not is_self_invite:
@@ -1055,7 +1068,6 @@ def _apply_pending_invitation(invitation, profile) -> None:
 
     for pending_grant in PendingSubscriptionGrant.objects.for_invitation(invitation):
         grant_subscription(profile.user, pending_grant.role, pending_grant.granted_by, pending_grant.duration_as_int())
-    invitation.mark_accepted()
 
 
 def _process_pending_invitations(user: User, invite_token: str | None = None) -> None:

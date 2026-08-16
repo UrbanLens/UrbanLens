@@ -21,6 +21,7 @@ from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
+from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.locations.geocoding import get_pin_by_address
 
 if TYPE_CHECKING:
@@ -284,7 +285,10 @@ def create_pin_for_profile(
         # Link to the place's community wiki when one already exists; wikis
         # are only ever created explicitly from the pin page.
         "wiki": Wiki.objects.get_for_location(location),
-        "icon": icon,
+        # Cleaned here rather than per-caller: the map's add-pin dialog, the
+        # external API's pin create and the import paths all arrive through
+        # this one function.
+        "icon": clean_icon(icon),
         "custom_icon": custom_icon,
         "color": color,
         "profile": profile,
