@@ -10172,3 +10172,29 @@ That is two chunks in seven where the thing needing correction was my own earlie
 than the codebase - chunk 532's reconciliation arithmetic, and now this. Both were recorded as
 settled. Worth noticing that the audit's own conclusions need the same treatment as its findings:
 a mechanism asserted once and cited thereafter is exactly as unverified as a count nobody read.
+
+## Chunk 539 - corroborating an identification instead of building on it
+
+Chunk 538 identified the lost failure from a single measurement - one progress character per
+outcome, `F` at 9,076. That is the kind of conclusion this audit has twice had to correct, so this
+chunk looked for a second, unrelated measurement before anything was built on it.
+
+The subtest count supplies one. The thirteenth reported 832 subtests where a green run reports
+1,481; if the abort was at 9,076, the missing ~649 must belong to subtest-producing modules sitting
+after that point. Exactly nine do, and the big early producer (`test_external_api_pin_patch_fields`,
+position 2,357 - the source of the run's 40 subTest+`@given` warnings) sits before it and ran. Two
+independent quantities, same abort point.
+
+That check also caught something that would have broken a naive version of the mapping: collection
+is deterministic but **not alphabetical**. `test_export_formats.py` sits at 9,084 while
+`test_export_formats_delivery.py` sits at 1,681 - bare `def test_` functions are grouped apart from
+`TestCase` classes. Assuming alphabetical order would have put the answer thousands of tests away,
+and nothing in the output would have said so.
+
+Two candidate causes eliminated: not input-dependent (12,000 generated examples pass), and not
+produced by the only other fastkml/lxml modules running first. What is left is the assertion itself -
+`geometry.x == pin.effective_longitude`, exact float equality across a text round-trip - which is
+the fragile shape, but no mechanism has been demonstrated and none is claimed.
+
+No fix this chunk, and no invented explanation. The fourteenth consolidation is still running; if it
+recurs it will now name itself.

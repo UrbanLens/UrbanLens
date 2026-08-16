@@ -8640,3 +8640,37 @@ registered profile and a store whose writability is proved rather than assumed i
 implicit default - but it did not fix a live problem, and the flake it was credited with explaining
 is unexplained again. Corrected here rather than quietly, because that flake is recorded as
 *resolved* on the strength of this mechanism.
+
+### The identification corroborated, and two causes ruled out (chunk 539)
+
+The ordinal mapping above rested on one measurement, so it got a second one from an unrelated
+quantity before anyone acts on it.
+
+**Cross-check.** The thirteenth reported **832** subtests passed; a full green run reports **1,481**.
+If the abort really happened at ordinal 9,076, the missing ~649 must belong to subtest-producing
+modules positioned *after* that point. There are exactly nine such modules after it
+(`test_external_api_scopes`, `test_external_api_url_resolution`, `test_game_bounds_antimeridian`,
+`test_html_description`, `test_longitude_wrap`, `test_map_infrastructure`, `test_place_name_meaning`,
+`test_settings_env_bool`, `test_social_links`), while the large early producers - notably
+`test_external_api_pin_patch_fields` at position 2,357, which is also what generates the run's 40
+subTest-with-`@given` warnings - sit before it and did run. Two independent quantities now agree on
+the same abort point.
+
+Worth recording about the ordering itself: collection is deterministic but **not** plain
+alphabetical. `test_export_formats.py` (module-level `def test_` functions) collects at 9,084 while
+`test_export_formats_delivery.py` (a `TestCase` class) collects at 1,681 - bare functions are
+grouped separately from class-based tests. A mapping that assumed alphabetical order would have
+landed thousands of tests away.
+
+**Two causes ruled out.**
+
+- *Not input-dependent.* 3,000 examples per property, 12,000 total against the default ~100, all
+  pass.
+- *Not caused by the other KML/lxml modules running first.* `test_google_maps_kml_import` and
+  `test_kml_import_malformed` are the only other tests touching fastkml or lxml; running both
+  immediately before `test_export_formats` reproduces nothing.
+
+What remains is the assertion the test actually makes: `geometry.x == pin.effective_longitude`,
+**exact float equality** after a round-trip through KML text. That is the fragile shape worth
+suspecting - it holds only while nothing in the process changes how floats are formatted or parsed -
+but no mechanism has been demonstrated, and none is asserted here.
