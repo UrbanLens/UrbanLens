@@ -8343,3 +8343,43 @@ handler was not enough, and would fail loudly if Pillow ever changed the hierarc
 candidate: 5 candidates, 4 dissolved on reading, and the one that mattered was not among them at
 all - it was found by following the *function* to its callers rather than the `open()` to its
 handler. Consistent with the two scan lessons recorded above it.
+
+## RESOLVED 2026-08-16: the AI document import's size cap measured the wrong thing for .docx
+
+Chunk 533, continuing the parser thread. `services/ai/document_import` is carefully bounded on
+paper - 2 MB per upload, 20,000 characters of extracted text, 200 extracted pins, 500 KB of AI
+response - and each of those limits is real. The gap is that two of them measure *different things*
+and nothing measures the middle:
+
+```python
+if len(data) > MAX_DOCUMENT_BYTES:      # bounds the bytes uploaded
+    raise DocumentTooLargeError(...)
+text = extract_text(filename, data)     # <- the whole document is materialised here
+if len(text) > max_chars:               # bounds the text, after the memory is spent
+    raise DocumentTooLargeError(...)
+```
+
+For `.txt` those two are the same quantity, which is presumably why it read as sufficient. For
+`.docx` - the only other supported format, and a ZIP - they are not. A 2 MB `.docx` whose
+`word/document.xml` decompresses to gigabytes passes the first check, and `python-docx` builds the
+entire part before there is any `text` to measure. The character limit is checked after the damage.
+
+Reachability is ordinary rather than exotic: XML is repetitive and repetition compresses, so a
+valid Word file with millions of repeated elements reaches four-figure compression ratios without
+any special crafting. The endpoint is authenticated but the feature is available to any AI-enabled
+profile.
+
+**Fixed** with `_reject_oversized_docx`, which sums the sizes the ZIP directory *declares* and
+refuses above 20 MB - generous by design, since a document with a 20,000-character text limit is
+three orders of magnitude below it and only a bomb approaches it. Nothing is decompressed to
+perform the check.
+
+Checking declared sizes is sound here specifically because of what chunk 531 verified: CPython's
+`zipfile` bounds a read by the declared size and then fails the CRC, so an understated declaration
+cannot smuggle bytes past the check - it makes `python-docx` read a truncated part and raise, which
+the existing `except Exception` already turns into "could not parse". That verified fact is what
+lets this be a cheap directory read rather than a streaming decompress-and-count.
+
+**Noted for a later pass:** `services/media/documents.py` extracts text from PDFs page by page.
+PDFs carry compressed streams too, so the same question applies there, and it was not examined in
+this chunk.

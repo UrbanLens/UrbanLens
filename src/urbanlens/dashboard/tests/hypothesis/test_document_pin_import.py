@@ -75,6 +75,59 @@ class ExtractTextTests(TestCase):
         self.assertIn("123 Mill Rd", text)
 
 
+class DocxDecompressionCeilingTests(TestCase):
+    """The byte cap bounds what was uploaded; a .docx is the one compressed format.
+
+    `MAX_DOCUMENT_BYTES` and the 20,000-character text limit are both real, but
+    they measure different things and neither measures the middle: a 2 MB .docx
+    is a ZIP whose `document.xml` can decompress to gigabytes, and python-docx
+    materialises the whole part before there is any text to measure. The
+    character check therefore ran after the memory had already been spent.
+
+    Checked against the sizes the ZIP directory declares, which chunk 531
+    established is a sound upper bound - CPython's zipfile truncates a read at
+    the declared size and then fails the CRC, so understating it cannot smuggle
+    bytes past this.
+    """
+
+    def _docx_with_payload(self, payload: bytes) -> bytes:
+        """A structurally valid .docx carrying an oversized extra part."""
+        import io
+        import zipfile
+
+        docx = pytest.importorskip("docx")
+        buf = io.BytesIO()
+        doc = docx.Document()
+        doc.add_paragraph("Ordinary looking notes.")
+        doc.save(buf)
+
+        rebuilt = io.BytesIO()
+        with zipfile.ZipFile(io.BytesIO(buf.getvalue())) as source, zipfile.ZipFile(rebuilt, "w", zipfile.ZIP_DEFLATED) as target:
+            for info in source.infolist():
+                target.writestr(info.filename, source.read(info.filename))
+            target.writestr("word/bomb.xml", payload)
+        return rebuilt.getvalue()
+
+    def test_a_docx_that_expands_past_the_ceiling_is_refused(self) -> None:
+        # Highly compressible, so the upload stays small while the declared
+        # uncompressed total does not - which is the whole shape of the attack.
+        oversized = self._docx_with_payload(b"<a/>" * (document_import.MAX_DOCUMENT_UNCOMPRESSED_BYTES // 2))
+
+        self.assertLess(len(oversized), document_import.MAX_DOCUMENT_BYTES, "precondition: it must pass the upload-byte cap")
+        with self.assertRaises(document_import.DocumentTooLargeError):
+            document_import.extract_text("bomb.docx", oversized)
+
+    def test_an_ordinary_docx_is_unaffected(self) -> None:
+        """Anti-vacuity: the ceiling must not reject a real document."""
+        modest = self._docx_with_payload(b"<a/>")
+
+        self.assertIsNotNone(document_import.extract_text("notes.docx", modest))
+
+    def test_a_file_that_is_not_a_zip_is_left_to_the_parser(self) -> None:
+        """A size complaint about a non-.docx would be a confusing error."""
+        self.assertIsNone(document_import.extract_text("notes.docx", b"not a zip at all"))
+
+
 class ParseCsvRowsTests(SimpleTestCase):
     def test_parses_well_formed_csv(self):
         answer = "name,description,address\nOld Mill,Abandoned mill,123 Mill Rd"

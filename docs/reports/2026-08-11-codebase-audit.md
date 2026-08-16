@@ -9984,3 +9984,31 @@ findings - and the one that mattered was not in the output at all. It came from 
 been the thing that pointed at the neighbourhood rather than the thing that found the bug.
 
 Verified: 12 bomb-handling tests, ruff clean.
+
+## Chunk 533 - two real limits, and the unmeasured gap between them
+
+`services/ai/document_import` looks thoroughly bounded: 2 MB per upload, 20,000 characters of
+extracted text, 200 pins, 500 KB of AI response. Every one of those limits is real and enforced.
+The bug is that the first two measure different quantities, and nothing measures what happens
+between them - the upload cap bounds compressed bytes, the character cap bounds the result, and the
+whole document is materialised in the line between them.
+
+For `.txt` those two quantities are identical, which is almost certainly why this looked complete.
+For `.docx`, the only other supported format and a ZIP, a 2 MB upload can decompress to gigabytes,
+and `python-docx` builds the entire part before there is any text to measure.
+
+Fixed by summing the sizes the ZIP directory declares and refusing above a deliberately generous
+20 MB, without decompressing anything.
+
+What makes this chunk worth recording is that it *spent* an earlier chunk's finding. Checking
+declared sizes would normally be unsound - the declaration is attacker-controlled - and chunk 531
+went and verified exactly that question for a different reason, establishing that CPython's
+`zipfile` truncates at the declared size and fails the CRC. Because that was tested rather than
+assumed, this chunk could take a cheap directory read instead of a streaming decompress-and-count,
+and say why in a comment that points at the evidence. The near-miss in 531, where I almost shipped
+the opposite claim, is what made the fact worth having.
+
+Left for a later pass, recorded rather than assumed away: `services/media/documents.py` extracts
+PDF text page by page, and PDFs carry compressed streams too.
+
+Verified: 40 document-import tests, ruff clean.
