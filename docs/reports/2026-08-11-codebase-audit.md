@@ -11030,3 +11030,43 @@ its reason, the allowlist is keyed on expression text so renaming a variable for
 a third test fails on stale entries - an exemption that outlives its code becomes unexamined cover
 for whatever replaces it. Verified to bind by un-escaping `img.url`, which the guard names exactly.
 Full TS suite 414 pass, typecheck clean.
+
+## Chunk 567 - four properties held, and a documentation gap that cost this session real time
+
+Diminishing returns are worth reporting as a result rather than working around, so: **four checks,
+no defects.**
+
+- **localStorage payloads.** Every cached key is both profile-scoped and versioned
+  (`ul_recent_pins_v1_<profile>`, `ul_addr_history_v1_<profile>`). The concern was the pin-cache
+  failure mode - an unversioned payload going silently stale - and it does not apply anywhere else.
+- **HTMX listener accumulation.** Every `htmx:afterSwap`/`afterSettle` hook that re-runs an
+  initialiser is idempotent, by three different mechanisms: a `dataset` flag
+  (`label-rel-picker`, `collapsible-sections`), an identity check against the previous node
+  (`album-items`), and `destroy()` before re-create (`organize-priority`). Double-firing would mean
+  double submissions in an app this HTMX-heavy; it cannot happen here.
+- **`map-layers` restore path.** A stale or corrupt stored base-layer id degrades to "street"
+  through `normalizeBase`, and a non-object payload takes the same path. Robust by construction.
+- **DRF `@action` scoping.** Ten actions, against nineteen existing privacy/scope test modules
+  including three `*_scope_coverage` completeness guards. Already covered.
+
+I did not add tests to the `map-layers` restore path despite it being uncovered: its existing test's
+docstring records the author's deliberate reason - `normalizeBase` is tested directly *because*
+Leaflet is unavailable in `bun test`, and nothing stubs it. Building that harness would be fragile
+for modest value.
+
+What the sweep did turn up is a documentation defect, found by checking whether every file path the
+docs reference actually exists (785 references, 38 unresolvable - most legitimately illustrative,
+squashed-away migration names, or files this very report describes as deleted, so no guard was
+added; the noise would exceed the signal).
+
+**Three different paths are cited for "what is planned" and "what previous agents did", and none
+exists.** `TODO.md` was 416 lines and was deleted in the v0.5.0b0 release commit, yet
+`docs/FEATURES.md`, `docs/NOTES.md`, `docs/ROADMAP.md` and `CLAUDE.local.md` all still treat it as
+live - `NOTES.md` cites ticket ids inside it, `ROADMAP.md` says it was generated from it and tells
+readers to keep it updated. `docs/prompts/` and `docs/notes/ai/` were never tracked at all.
+
+This has a cost I have paid personally: every chunk in this session opens by surveying before
+assuming a gap, and part of the material that survey is supposed to consult has been missing the
+whole time. Filed in `docs/PROBLEMS.md` with the recovery command rather than actioned - restoring
+someone else's 416-line planning document, or rewriting four documents' cross-references, is a
+decision about the project's own record, not a defect in its code.
