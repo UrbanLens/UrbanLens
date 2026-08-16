@@ -35,6 +35,29 @@ logger = logging.getLogger(__name__)
 
 _ORGANIZE_KINDS = frozenset({KIND_TAG, KIND_CATEGORY, KIND_STATUS})
 
+#: Most pins one bulk request may name. Not a new policy - every external-API
+#: equivalent already declares `max_length=500` on its uuid list
+#: (`serializers_pin_bulk.py`); this is the same number on the surface the map's
+#: select tool drives, which had no bound at all.
+#:
+#: It matters because these edits cannot be one `UPDATE`. `Pin` carries eight
+#: live `post_save` receivers (map-pin cache, smart-list membership, wiki stat
+#: sync, draft-wiki creation, boundary refit, map-center invalidation,
+#: detail-pin resync, achievements), so every selected pin needs a real
+#: `save()`. Measured cost is ~2 queries per pin for a style or description
+#: edit and ~7 for a rating (`Review.update_or_create` plus its own receivers),
+#: so an unbounded selection turns one click into tens of thousands of queries
+#: inside a single request/response cycle.
+_MAX_BULK_PINS = 500
+
+#: Shared wording so every bulk endpoint refuses identically.
+_TOO_MANY_PINS = f"Select at most {_MAX_BULK_PINS} pins at a time."
+
+
+def _too_many(uuids: list[str]) -> bool:
+    """Report whether a request named more pins than one call may carry."""
+    return len(uuids) > _MAX_BULK_PINS
+
 
 def _request_profile(request: HttpRequest) -> Profile:
     """Return the authenticated user's Profile; raises if user is anonymous."""
@@ -52,6 +75,8 @@ def _parse_uuids_json(request: HttpRequest, key: str = "uuids") -> tuple[list[st
         return None, JsonResponse({"error": "Invalid data"}, status=400)
     if not uuids:
         return None, HttpResponse("No pins specified.", status=400)
+    if _too_many(uuids):
+        return None, HttpResponse(_TOO_MANY_PINS, status=400)
     return uuids, None
 
 
@@ -187,6 +212,8 @@ class PinBulkEditView(LoginRequiredMixin, View):
         uuids = [str(x) for x in data.get("uuids", [])]
         if not uuids:
             return HttpResponse("No pins specified.", status=400)
+        if _too_many(uuids):
+            return HttpResponse(_TOO_MANY_PINS, status=400)
 
         profile = _request_profile(request)
         pins = list(_owned_pins(profile, uuids))

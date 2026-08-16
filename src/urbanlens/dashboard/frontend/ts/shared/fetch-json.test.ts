@@ -98,6 +98,35 @@ describe("a rejected request", () => {
         stub({ status: 400, json: { unexpected: true } });
         await expect(fetchJson("/x/")).rejects.toThrow("HTTP 400");
     });
+
+    // Many of this project's views answer a refused write with a bare
+    // HttpResponse("...", status=400) rather than JSON. Discarding those as
+    // "not JSON" turned the one sentence explaining the refusal into "HTTP 400"
+    // - so a user selecting 600 pins was told "Update failed." with no reason.
+    test("a plain-text refusal is the message", async () => {
+        stub({ status: 400, body: "Select at most 500 pins at a time." });
+        await expect(fetchJson("/x/")).rejects.toThrow("Select at most 500 pins at a time.");
+    });
+
+    test("surrounding whitespace is trimmed off a plain-text refusal", async () => {
+        stub({ status: 400, body: "  No pins specified.\t" });
+        await expect(fetchJson("/x/")).rejects.toThrow("No pins specified.");
+    });
+
+    test("a multi-line plain-text body falls back to the status", async () => {
+        stub({ status: 400, body: "Traceback (most recent call last):\n  File ..." });
+        await expect(fetchJson("/x/")).rejects.toThrow("HTTP 400");
+    });
+
+    test("an over-long plain-text body falls back to the status", async () => {
+        stub({ status: 400, body: "x".repeat(400) });
+        await expect(fetchJson("/x/")).rejects.toThrow("HTTP 400");
+    });
+
+    test("a bare-fragment HTML body still falls back, even when short", async () => {
+        stub({ status: 500, body: "<h1>Server Error (500)</h1>" });
+        await expect(fetchJson("/x/")).rejects.toThrow("HTTP 500");
+    });
 });
 
 describe("a request that never completes", () => {

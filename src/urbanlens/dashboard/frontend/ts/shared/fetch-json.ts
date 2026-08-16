@@ -28,11 +28,26 @@ export class HttpError extends Error {
     }
 }
 
+/** Longest plain-text body still worth putting in a toast rather than discarding. */
+const MAX_PLAIN_TEXT_MESSAGE = 200;
+
+/**
+ * A body that is a short line of prose, not a document.
+ *
+ * Many of this project's views answer a refused write with a bare
+ * ``HttpResponse("Select at most 500 pins at a time.", status=400)`` rather than
+ * JSON - which is exactly the sentence the user needs. Only markup and
+ * paragraphs are worth discarding.
+ */
+function isReadableText(text: string): boolean {
+    return text.length <= MAX_PLAIN_TEXT_MESSAGE && !text.includes("<") && !text.includes("\n");
+}
+
 /** Pull a human-readable message out of an error response, if there is one. */
 async function errorMessage(response: Response): Promise<string> {
     const fallback = `HTTP ${response.status}`;
     try {
-        const text = await response.text();
+        const text = (await response.text()).trim();
         if (!text) return fallback;
         try {
             const data: unknown = JSON.parse(text);
@@ -47,8 +62,9 @@ async function errorMessage(response: Response): Promise<string> {
             }
             return fallback;
         } catch {
-            // An HTML error page - its markup is no use in a toast.
-            return fallback;
+            // Not JSON. A plain-text refusal is the message; an HTML error page
+            // is markup that would be nonsense in a toast.
+            return isReadableText(text) ? text : fallback;
         }
     } catch {
         return fallback;

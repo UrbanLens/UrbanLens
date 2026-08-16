@@ -9655,3 +9655,65 @@ It cannot: both entry points (`controllers.group_chats._get_group` and the API's
 Nineteenth verified-safe area. The residual risk stays exactly as filed - a removed member who
 kept a decryption envelope is bounded by the server's query, not by the key - which is a
 documented property of the design rather than a defect in it.
+
+## Chunk 525 - ninth consolidation: 10,885 passed, 0 failed, and the last flake did not return
+
+Ninth consolidation (task `bg6hkg64z`, chunks 515-521): **10,885 passed, 1 xfailed, 0 failed,
+1,484 subtests passed** in 1:30:46. The single xfail is the strict `test_pin_detach_location.py`
+marker, which is the filed detach-location product decision doing its job.
+
+Nine consolidations this session: 10,849 / 10,859 / 10,863 / 10,865 (2 resolved) / 10,873 /
+10,875 / 10,878 / 10,883 / 10,885.
+
+Worth naming specifically: `test_only_submitted_fields_ever_move` did not reappear. That was the
+one flake still without a *fix* rather than an explanation - chunk 507 identified the mechanism
+(a root-owned, read-only Hypothesis example store replaying a once-failing example forever) and
+chunk 508 corrected the overreach that had claimed it explained all three. A green run is not
+proof for a replay-driven flake, since the store only replays what it holds; the fix that closes
+it is below.
+
+Between this consolidation and this chunk, a separate pass worked through the outstanding
+`PROBLEMS.md` backlog (commits `2d107ace`, `b956e809`) - six entries closed, one found already
+fixed, one declined with reasons, one false positive disproved. The Hypothesis store is among the
+fixed: `conftest.py` now registers a profile whose example database lives somewhere the test user
+can actually write, with writability *proved* by a probe rather than assumed, since an unwritable
+inherited directory is the precise failure it exists to avoid.
+
+## Chunk 525 - write-side N+1: the class the earlier sweeps never looked for
+
+The `LabelReorderView` entry named this gap explicitly - "an N+1 on the **write** side, which the
+audit's earlier sweeps did not look for - they targeted reads" - so this chunk swept for it.
+
+An AST pass over every non-test `for` loop containing a write-shaped call found 267 loops; grep
+would have been useless here, since `.update(`/`.add(`/`.set(` are dict and set methods too.
+Narrowing to loops that write once *per item* (a `save()` on the loop variable, or a
+`filter(...).update()/delete()` inside the body) left 62. Reading them, most are per-item on
+purpose - the safety escalation's per-contact `notified_at` stamp (verified in chunk 523),
+`BackupCode`'s conditional claim, the undo handlers bounded by their own entry.
+
+The bulk pin endpoints are the real finding, and the interesting part is *why* they cannot be
+fixed the way `LabelReorderView` was. Asked Django's live signal registry rather than grepping for
+`@receiver`: **`Pin` has eight `post_save` receivers** (the earlier bulk-write entry says six -
+it has grown). `bulk_update` fires none of them, so per-pin `save()` is load-bearing, not lazy.
+
+So the question became whether the loop is bounded, and it was not. Measured with
+`CaptureQueriesContext` rather than reasoned about: ~2 queries per pin for a style or description
+edit, ~7 for a rating. Meanwhile every *external API* bulk endpoint already caps its uuid list at
+500 and not one internal endpoint had any bound - and the internal ones are what the map's select
+tool drives. "Select all, set a colour" on a 5,000-pin account was ~10,000 queries in one request.
+
+Fixed by propagating the API's existing 500 to the three internal write paths. Deliberately not
+applied to the read paths: export's own docstring says it uses a form POST *specifically* so the
+pin count is unlimited, and it costs one query either way. Copying a number to somewhere its
+justification doesn't reach is how a cap becomes cargo cult.
+
+Following the fix to its user-visible end found a second, wider bug. The map's three bulk handlers
+threw an empty `Error` on a non-2xx and caught with a fixed string, so the new refusal would have
+surfaced as an unexplained "Update failed." Routing them through the existing `window.ulSendJson`
+exposed that `fetch-json.ts` discarded *any* non-JSON body as "an HTML error page" - while this
+project answers refused writes with bare plain-text `HttpResponse`s all over. It now keeps a short
+single-line text body and still drops markup, which quietly repairs every plain-text refusal in the
+app; they were all reaching users as `HTTP 400`.
+
+Verified: 89 bulk-view tests, 399 TS tests, tsc clean, ruff clean, and the map page's inline JS
+syntax-checked after the edit (the lesson from the `trips/detail.html` splice).

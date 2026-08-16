@@ -7930,3 +7930,63 @@ wrapped-key envelopes, group member tokens, rewrap-all inventories, reset confir
 schema-visible methods are decorated. The views still parse JSON by hand on purpose - blobs are
 opaque size-bounded strings - so these serializers document, never validate. 94 E2EE tests pass
 unchanged.
+
+## RESOLVED 2026-08-16: the website's bulk pin endpoints were unbounded while every API equivalent capped at 500
+
+Found in chunk 525's sweep for **write-side** N+1 - the class the `LabelReorderView` entry named
+as unexplored ("an N+1 on the write side, which the audit's earlier sweeps did not look for - they
+targeted reads"). An AST pass over every non-test `for` loop containing a write-shaped call
+returned 267 loops, narrowed to 62 that write once *per item*. Most are legitimately per-item
+(the safety escalation's per-contact stamp, `BackupCode`'s conditional claim, undo handlers bounded
+by their entry). The bulk pin endpoints are the ones that matter, and the reason is not laziness:
+
+**`Pin` carries eight live `post_save` receivers** - map-pin cache, smart-list membership, wiki
+stat sync, draft-wiki creation, boundary refit, map-center invalidation, detail-pin resync, and the
+achievements handler (read from Django's live signal registry, not by grepping for `@receiver`;
+the entry above about the bulk-write guard says six, so it has grown by two). So these loops
+*cannot* become one `bulk_update` without wiring all eight, and per-pin `save()` is load-bearing.
+
+Which makes the bound the thing that matters. Measured rather than estimated, with
+`CaptureQueriesContext` against a real database:
+
+| bulk edit | queries |
+| --- | --- |
+| style (colour/icon/opacity), n=1 / 5 / 10 | 5 / 13 / 23 → **~2 per pin** |
+| description, n=1 / 5 / 10 | 5 / 13 / 23 → **~2 per pin** |
+| rating, n=1 / 5 / 10 | 10 / 38 / 73 → **~7 per pin** (`Review.update_or_create` plus its own receivers) |
+
+Every external-API bulk endpoint already declares `max_length=500` on its uuid list
+(`serializers_pin_bulk.py`: delete, merge, edit). **Not one of the internal endpoints had any
+bound**, and the internal ones are what the map's select tool drives - so "select all, set a
+colour" on a 5,000-pin account was ~10,000 queries in one request/response cycle, and a rating
+edit ~35,000.
+
+**Fixed** by giving `controllers/pin_bulk.py` a `_MAX_BULK_PINS = 500` applied to the three write
+paths (delete and merge via the shared `_parse_uuids_json`, edit at its inline parse). The number
+is not a new policy - it is the one the API already shipped.
+
+**Read paths deliberately left unbounded**, because the cost model that justifies the cap does not
+apply to them: `PinBulkExportView`'s own docstring says it uses a plain form POST specifically so
+there is "no URL-length limit on the pin count", and it is one query plus serialization regardless
+of selection size. `PinBulkEditLabelOptionsView` is likewise a single `pins__in` query. Capping
+those would be copying the number to somewhere its reasoning doesn't reach.
+
+### The refusal was invisible, which is half the bug
+
+The map page's three bulk handlers each did `.then(r => { if (!r.ok) throw new Error(); ... })` and
+caught with a fixed string - so a user selecting 600 pins would have been told "Update failed." with
+no reason. They now go through `window.ulSendJson`, already used elsewhere in the same file, which
+carries the server's message into the `catch`.
+
+That exposed a real gap in the shared helper. `fetch-json.ts`'s `errorMessage` discarded **any**
+non-JSON body as "an HTML error page… no use in a toast" - but this project answers refused writes
+with bare `HttpResponse("...", status=400)` in many places, and that string is exactly the sentence
+the user needs. It now keeps a short single-line plain-text body and still discards markup and
+multi-line/over-long bodies. That silently improves every existing plain-text refusal in the app
+("No pins specified.", "No matching pins.", "Description is too long."), each of which previously
+reached the user as `HTTP 400`.
+
+Covered by `test_pin_bulk_views.py::BulkSelectionSizeLimitTests` (including an anti-vacuity test
+that exactly 500 still succeeds, and one asserting export stays unbounded) and 5 new cases in
+`fetch-json.test.ts`. The single-pin `bulk_delete` call in the "cancel pin creation" dialog was
+left alone: it sends one uuid, so the cap cannot reach it.

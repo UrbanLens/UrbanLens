@@ -530,3 +530,67 @@ class PinBulkExportViewTests(TestCase):
         response = self._export("csv", [str(child.uuid)])
         self.assertEqual(response.status_code, 200)
         self.assertIn("Child", response.content.decode())
+
+
+@override_settings(CACHES=_LOCMEM_CACHES)
+class BulkSelectionSizeLimitTests(TestCase):
+    """The website's bulk write endpoints bound the selection, like the API's do.
+
+    Every external-API bulk endpoint already declares `max_length=500` on its
+    uuid list. The endpoints the map's select tool drives had no bound at all,
+    and these edits cannot collapse to one UPDATE: `Pin` carries eight live
+    `post_save` receivers, so each selected pin needs a real `save()` -
+    measured at ~2 queries per pin for a style edit and ~7 for a rating. An
+    unbounded selection therefore turns one click into tens of thousands of
+    queries in a single request.
+
+    Read paths are deliberately left unbounded - export's own docstring says it
+    uses a form POST specifically so the pin count is not limited, and it costs
+    one query regardless of selection size.
+    """
+
+    def setUp(self) -> None:
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+        self.pin = baker.make(Pin, profile=self.profile)
+
+    def _uuids(self, count: int) -> list[str]:
+        """`count` syntactically valid uuids - the limit is checked before ownership."""
+        return [f"00000000-0000-4000-8000-{index:012d}" for index in range(count)]
+
+    def _post(self, url_name: str, payload: dict):
+        return self.client.post(reverse(url_name), data=json.dumps(payload), content_type="application/json")
+
+    def test_bulk_edit_refuses_an_over_large_selection(self) -> None:
+        response = self._post("pin.bulk_edit", {"uuids": self._uuids(501), "color": "#ff0000"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"500", response.content)
+
+    def test_bulk_delete_refuses_an_over_large_selection(self) -> None:
+        response = self._post("pin.bulk_delete", {"uuids": self._uuids(501)})
+        self.assertEqual(response.status_code, 400)
+
+    def test_bulk_merge_refuses_an_over_large_selection(self) -> None:
+        response = self._post("pin.bulk_merge", {"target_uuid": str(self.pin.uuid), "source_uuids": self._uuids(501)})
+        self.assertEqual(response.status_code, 400)
+
+    def test_the_limit_itself_is_accepted(self) -> None:
+        """Anti-vacuity: 500 must still work, or the tests above prove nothing."""
+        uuids = [*self._uuids(499), str(self.pin.uuid)]
+        response = self._post("pin.bulk_edit", {"uuids": uuids, "color": "#ff0000"})
+        self.assertEqual(response.status_code, 200)
+        self.pin.refresh_from_db()
+        self.assertEqual(self.pin.color, "#ff0000")
+
+    def test_the_refusal_explains_itself(self) -> None:
+        """The message is the response body, which is what the toast now shows."""
+        response = self._post("pin.bulk_edit", {"uuids": self._uuids(501)})
+        self.assertIn("Select at most 500 pins at a time.", response.content.decode())
+
+    def test_export_is_deliberately_not_limited(self) -> None:
+        response = self.client.post(
+            reverse("pin.bulk_export"),
+            data={"format": "csv", "uuids": [*self._uuids(600), str(self.pin.uuid)]},
+        )
+        self.assertEqual(response.status_code, 200)

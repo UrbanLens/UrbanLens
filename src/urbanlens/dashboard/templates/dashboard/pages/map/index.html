@@ -3288,12 +3288,11 @@
     function _submitBulkDelete(uuids) {
         const confirmBtn = document.getElementById('bulk-delete-confirm-btn');
         confirmBtn.disabled = true;
-        fetch('{% url "pin.bulk_delete" %}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-            body: JSON.stringify({ uuids: uuids }),
-        })
-        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        // ulSendJson carries the server's own refusal text into the catch below;
+        // the bare fetch this replaces threw an empty Error, so a refusal the
+        // server had explained (too many pins selected, say) reached the user as
+        // an unexplained "Failed to delete pins."
+        window.ulSendJson('{% url "pin.bulk_delete" %}', 'POST', { uuids: uuids })
         .then(function (data) {
             document.getElementById('bulk-delete-dialog').close();
             uuids.forEach(function (uuid) {
@@ -3306,7 +3305,7 @@
             exitSelectMode();
             _showUndoDeleteToast(data.count, data.descendant_count, data.undo_token);
         })
-        .catch(function () { toastr.error('Failed to delete pins.'); confirmBtn.disabled = false; });
+        .catch(function (err) { toastr.error((err && err.message) || 'Failed to delete pins.'); confirmBtn.disabled = false; });
     }
 
     function _showUndoDeleteToast(count, descendantCount, token) {
@@ -3496,12 +3495,7 @@
         const saved = btn.innerHTML;
         btn.disabled = true;
         btn.innerHTML = '<span class="cat-merge-spinner"></span> Merging...';
-        fetch('{% url "pin.bulk_merge" %}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-            body: JSON.stringify({ target_uuid: _bulkMergeTargetUuid, source_uuids: sources }),
-        })
-        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        window.ulSendJson('{% url "pin.bulk_merge" %}', 'POST', { target_uuid: _bulkMergeTargetUuid, source_uuids: sources })
         .then(function () {
             document.getElementById('bulk-merge-dialog').close();
             exitSelectMode();
@@ -3518,7 +3512,7 @@
                 toastr.success('Pins merged. They\'re now shown as child pins on the map (Layers → Child Pins).');
             }
         })
-        .catch(function () { toastr.error('Merge failed.'); btn.disabled = false; btn.innerHTML = saved; });
+        .catch(function (err) { toastr.error((err && err.message) || 'Merge failed.'); btn.disabled = false; btn.innerHTML = saved; });
     });
 
     // -- Bulk edit: description replace + label add/remove --------------------
@@ -3639,12 +3633,7 @@
         payload.remove_label_ids = _bulkEditRemovePicker.getSelectedIds();
         const parentUuid = _bulkEditParentPicker.getSelectedUuid();
         if (parentUuid) payload.parent_uuid = parentUuid;
-        fetch('{% url "pin.bulk_edit" %}', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': '{{ csrf_token }}' },
-            body: JSON.stringify(payload),
-        })
-        .then(function (r) { if (!r.ok) throw new Error(); return r.json(); })
+        window.ulSendJson('{% url "pin.bulk_edit" %}', 'POST', payload)
         .then(function (data) {
             document.getElementById('bulk-edit-dialog').close();
             toastr.success('Pins updated.');
@@ -3658,7 +3647,7 @@
                 else _mapLayers.toggleCustom('childpins');
             }
         })
-        .catch(function () { toastr.error('Update failed.'); })
+        .catch(function (err) { toastr.error((err && err.message) || 'Update failed.'); })
         .finally(function () { btn.disabled = false; btn.innerHTML = saved; });
     });
 
