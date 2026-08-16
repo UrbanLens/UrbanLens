@@ -9215,3 +9215,37 @@ discriminator (`event.detail === 0` for keyboard-invoked menus) is a behaviour I
 rather than observing. Worth ten minutes with DevTools on the Organize page label picker: press the
 Menu key on a label chip, then try to activate any chip with Enter, and see whether the first
 Enter is swallowed.
+
+## The planning and handoff documents referenced across the docs do not exist
+
+Three different paths are cited for "what is planned" and "what previous agents did", and none of
+them is in the tree:
+
+| Path | Cited by | Status |
+| --- | --- | --- |
+| `TODO.md` (repo root) | `docs/FEATURES.md:4`, `docs/NOTES.md:344,402`, `docs/ROADMAP.md:4,13,124`, `CLAUDE.local.md` | Existed - 416 lines - deleted in `3f12e875` ("Release v0.5.0b0") |
+| `docs/prompts/completed.md`, `docs/prompts/todo.md` | `CLAUDE.local.md` | Never tracked in git |
+| `docs/notes/ai/completed.md`, `docs/notes/ai/todo.md` | `docs/ROADMAP.md`, `docs/designs/place-consolidation.md` | Never tracked in git |
+
+This is not cosmetic. `CLAUDE.md` and `CLAUDE.local.md` both instruct contributors (including agents)
+to consult these before assuming something is unbuilt or unplanned, and `docs/NOTES.md` cites
+specific ticket ids in them - "see `TODO.md` UL-294" - which are now unresolvable. `docs/ROADMAP.md`
+says it was itself "generated 2026-07-18 from a full review of `TODO.md`" and tells readers to keep
+that file updated alongside it. Anyone following those instructions finds nothing and cannot tell
+whether the answer is "not planned" or "the document is missing".
+
+`TODO.md`'s content is recoverable:
+
+```bash
+git show 3f12e875~1:TODO.md > TODO.md
+```
+
+Whether it *should* come back is the owner's call - it was removed in a release commit, which may
+have been deliberate. But the current state is the worst of both: the file is gone and five separate
+documents still treat it as live. Either restore it or update those references; the same choice
+applies to the two agent-note directories, where the fix may simply be deleting instructions that
+point at paths which never existed.
+
+Not actioned here because recreating 416 lines of someone else's planning document, or editing
+four documents' cross-references, is a decision about the project's own record rather than a defect
+in its code.
