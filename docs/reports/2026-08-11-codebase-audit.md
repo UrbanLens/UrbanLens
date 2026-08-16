@@ -10599,3 +10599,23 @@ the same discipline resolves it - read the model rather than believe the traceba
 Three chunks of widening have produced three real defects (a dead route, a guaranteed-500 POST, and
 an object that could be created but never deleted) plus one instrument bug. The pattern holds:
 each increment of reach buys roughly one finding, and the cost per increment is one fixture.
+
+## Chunk 555 - eighteenth consolidation green, and the first widening that found nothing
+
+**Eighteenth consolidation: 10,932 passed, 1 xfailed, 0 failed.** Sixteen green, reconciled exactly
+(10,936 collected now minus the 3 chunk 553 added = 10,933 = passed + xfailed). A nineteenth is
+running over chunks 553-554, which changed product code.
+
+Widened the write-route sweep again: six fixtures - album, contact token, image, trip activity,
+alias, comment - taking reach from 486 to **532 of 647 (82%)**. Clean.
+
+That is the first increment to find nothing, and it is the useful signal of the chunk. The first
+three bought a defect each; this one bought none, while the remaining gates (`round_id`, `task_id`,
+`action`, `message_id`, `overlay_uuid`, `layer_uuid`) are individually smaller and need more setup
+per route. Yield falling as cost rises is the ordinary shape of a sweep approaching its useful limit,
+and saying so now is better than discovering it after three more chunks of diminishing returns.
+
+The honest read: the sweep has done most of what this design can do. Pushing to 90% would mean
+building game rounds, async task ids and markup overlays - and would test the fixtures as much as the
+routes. Recorded in PROBLEMS.md so 82% reads as a considered stopping point rather than where someone
+happened to stop.

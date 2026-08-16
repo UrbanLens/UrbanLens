@@ -93,13 +93,14 @@ class WriteRouteSmokeTests(TestCase):
         pin = baker.make(Pin, profile=profile, location=location, name="Smoke Pin")
         trip = baker.make(Trip, creator=profile, name="Smoke Trip")
         trip.profiles.add(profile)
+        checkin = baker.make(SafetyCheckin, profile=profile, title="Smoke Checkin")
 
         self.identifiers = {
             "pin_slug": pin.slug,
             "location_slug": location.slug,
             "trip_slug": trip.slug,
             "list_slug": baker.make(PinList, profile=profile, name="Smoke List").slug,
-            "checkin_slug": baker.make(SafetyCheckin, profile=profile, title="Smoke Checkin").slug,
+            "checkin_slug": checkin.slug,
             "map_uuid": str(baker.make(MarkupMap, profile=profile).uuid),
             "filter_uuid": str(baker.make(SavedFilter, profile=profile).uuid),
             "label_id": baker.make(Label, profile=profile, kind="tag").pk,
@@ -118,6 +119,15 @@ class WriteRouteSmokeTests(TestCase):
             # means each family is exercised for real by one of them and merely
             # 404s for the others - and a 404 passes this sweep, which only ever
             # objects to a crash.
+            # The next tier of gates, measured after session_id landed: each is
+            # one object and unlocks 5-14 routes. Album is the largest single
+            # gate left at 14.
+            "album_slug": baker.make("dashboard.Album", profile=profile, name="Smoke Album").slug,
+            "activity_id": baker.make("dashboard.TripActivity", trip=trip).pk,
+            "alias_id": baker.make("dashboard.PinAlias", pin=pin, name="smoke-alias").pk,
+            "comment_id": baker.make("dashboard.Comment", profile=profile, pin=pin, text="smoke").pk,
+            "image_id": baker.make("dashboard.Image", profile=profile, pin=pin, location=location).pk,
+            "token": str(baker.make("dashboard.SafetyCheckinContact", checkin=checkin, email="smoke@example.com", contact_profile=None).token),
             "session_id": [
                 baker.make("dashboard.GameSession", host_profile=profile).pk,
                 baker.make("dashboard.TriviaSession", host_profile=profile).pk,

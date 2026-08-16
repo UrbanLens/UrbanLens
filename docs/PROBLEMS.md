@@ -6122,6 +6122,17 @@ of each, keeping the URL count linear.
 Those 36 routes came back clean. The remaining 161 need `token`, `activity_id`, `album_slug`,
 `round_id`, `image_id` and similar - each a fixture, each a further increment.
 
+**Chunk 555: 532 of 647 (82%), and clean.** Six more fixtures - `album_slug` (14 routes), `token`
+(9), `image_id` (8), `activity_id` (8), `alias_id` (6), `comment_id` (5) - each one object. No new
+crashes.
+
+That is the first widening increment to find nothing, which is worth noting rather than glossing:
+the first three increments each bought a defect, this one bought none. The remaining gates
+(`round_id`, `task_id`, `action`, `message_id`, `overlay_uuid`, `layer_uuid`) are smaller and need
+more setup per route, so the cost per increment is rising while the yield has fallen. The sweep is
+approaching the point where further widening is not the best use of effort - recorded so the next
+person does not read 82% as an arbitrary stopping place.
+
 **Extended 2026-08-16 (chunk 552), and it found two more.** The first version only reached routes
 taking a single owned-object parameter - 160 of the resolver's 648 named routes. The larger
 population was the **230 zero-parameter routes**, easy to overlook precisely because they need no
