@@ -9,8 +9,8 @@ interface Harness {
     errors: string[];
     /** Deliver a position to the watcher, as the browser would. */
     emit(lat?: number, lng?: number): void;
-    /** Trigger the watcher's error callback. */
-    emitError(): void;
+    /** Trigger the watcher's error callback with a GeolocationPositionError code. */
+    emitError(code?: number): void;
     watching(): boolean;
     /** Advance the clock past the throttle window. */
     advance(ms?: number): void;
@@ -33,19 +33,19 @@ function stubNetworkFailure(): void {
     globalThis.fetch = (() => Promise.reject(new Error("offline"))) as unknown as typeof fetch;
 }
 
-function setup(checked = false): Harness {
+function setup(checked = false, hasGeolocation = true): Harness {
     let clock = 1_000_000;
     document.body.innerHTML = `<input type="checkbox" id="t" ${checked ? "checked" : ""}>`;
     const toggle = document.getElementById("t") as HTMLInputElement;
     const errors: string[] = [];
 
     let onPosition: ((p: GeolocationPosition) => void) | null = null;
-    let onError: (() => void) | null = null;
+    let onError: ((e: GeolocationPositionError) => void) | null = null;
     let nextId = 1;
     let activeId: number | null = null;
 
     const geolocation = {
-        watchPosition: (success: (p: GeolocationPosition) => void, error: () => void) => {
+        watchPosition: (success: (p: GeolocationPosition) => void, error: (e: GeolocationPositionError) => void) => {
             onPosition = success;
             onError = error;
             activeId = nextId++;
@@ -62,7 +62,7 @@ function setup(checked = false): Harness {
         toggleUrl: "/toggle/",
         updateUrl: "/update/",
         csrfToken: "tok",
-        geolocation: geolocation as unknown as Geolocation,
+        geolocation: hasGeolocation ? (geolocation as unknown as Geolocation) : null,
         notify: (_kind, message) => errors.push(message),
         now: () => clock,
     });
@@ -71,7 +71,7 @@ function setup(checked = false): Harness {
         toggle,
         errors,
         emit: (lat = 40, lng = -73) => onPosition?.({ coords: { latitude: lat, longitude: lng, accuracy: 5 } } as GeolocationPosition),
-        emitError: () => onError?.(),
+        emitError: (code = 2) => onError?.({ code } as GeolocationPositionError),
         watching: () => activeId !== null,
         advance: (ms = 31_000) => {
             clock += ms;
@@ -296,5 +296,89 @@ describe("when the browser cannot provide a location", () => {
         const h = setup(true);
         h.emitError();
         expect(h.errors[0]).toContain("Could not get your location");
+    });
+
+    test("a transient failure keeps sharing on - it usually recovers", () => {
+        const h = setup(true);
+        h.emitError(3); // TIMEOUT
+
+        expect(h.watching()).toBe(true);
+        expect(h.toggle.checked).toBe(true);
+    });
+
+    test("a repeating transient failure is only said once", () => {
+        const h = setup(true);
+        for (let i = 0; i < 5; i += 1) h.emitError(2); // POSITION_UNAVAILABLE
+
+        expect(h.errors).toHaveLength(1);
+    });
+});
+
+describe("when location permission is denied", () => {
+    // Denial is permanent until the user changes a browser setting, so leaving
+    // the switch on left the server - and the partner watching the check-in -
+    // expecting positions that would never be sent.
+    test("sharing is switched off rather than left looking healthy", async () => {
+        const h = setup(true);
+        h.emitError(1); // PERMISSION_DENIED
+        await settle();
+
+        expect(h.watching()).toBe(false);
+        expect(h.toggle.checked).toBe(false);
+    });
+
+    test("the server is told sharing has stopped", async () => {
+        const h = setup(true);
+        posted = [];
+        h.emitError(1);
+        await settle();
+
+        expect(posted.filter((p) => p.url === "/toggle/").at(-1)?.body.get("enabled")).toBe("0");
+    });
+
+    test("the owner is told why, and how to fix it", async () => {
+        const h = setup(true);
+        h.emitError(1);
+        await settle();
+
+        expect(h.errors).toHaveLength(1);
+        expect(h.errors[0]).toContain("permission");
+    });
+
+    test("no positions are reported afterwards", async () => {
+        const h = setup(true);
+        h.emitError(1);
+        await settle();
+        posted = [];
+        h.emit();
+        await settle();
+
+        expect(posted.filter((p) => p.url === "/update/")).toHaveLength(0);
+    });
+});
+
+describe("when the browser has no geolocation at all", () => {
+    test("turning sharing on reverts instead of pretending to work", async () => {
+        const h = setup(false, false);
+        await flip(h, true);
+
+        expect(h.toggle.checked).toBe(false);
+        expect(h.errors).toHaveLength(1);
+    });
+
+    test("the server is never told sharing is on", async () => {
+        const h = setup(false, false);
+        await flip(h, true);
+
+        expect(posted.some((p) => p.body.get("enabled") === "1")).toBe(false);
+        expect(posted.filter((p) => p.url === "/toggle/").at(-1)?.body.get("enabled")).toBe("0");
+    });
+
+    test("already-on at page load is corrected", async () => {
+        const h = setup(true, false);
+        await settle();
+
+        expect(h.toggle.checked).toBe(false);
+        expect(posted.filter((p) => p.url === "/toggle/").at(-1)?.body.get("enabled")).toBe("0");
     });
 });

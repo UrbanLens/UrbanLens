@@ -13,6 +13,11 @@
  * sharing has been turned off or the check-in has concluded, and 204 both for a
  * recorded position and for one dropped by its own rate limit - a 204 is a
  * success either way, since the client cannot tell and does not need to.
+ *
+ * The same reasoning covers the browser end of the pipe: if permission is
+ * denied, or there is no geolocation at all, no position will ever be sent, so
+ * sharing is switched off here and on the server rather than left on to look
+ * like it is working.
  */
 
 export interface LiveLocationOptions {
@@ -21,8 +26,8 @@ export interface LiveLocationOptions {
     toggleUrl: string;
     updateUrl: string;
     csrfToken: string;
-    /** Injectable for tests. */
-    geolocation?: Pick<Geolocation, "watchPosition" | "clearWatch">;
+    /** Injectable for tests. Explicit null means "this browser has none". */
+    geolocation?: Pick<Geolocation, "watchPosition" | "clearWatch"> | null;
     notify?: (kind: "error", message: string) => void;
     /** Clock source. Injectable so tests can cross the throttle window. */
     now?: () => number;
@@ -44,15 +49,23 @@ const MIN_INTERVAL_MS = 30000;
  */
 const FAILURES_BEFORE_WARNING = 2;
 
+/**
+ * ``GeolocationPositionError.PERMISSION_DENIED``. Spelled out because the
+ * global that carries the constant is not defined in every test environment.
+ */
+const PERMISSION_DENIED = 1;
+
 export interface LiveLocationController {
     /** Test seam: the number of consecutive failed reports. */
     consecutiveFailures(): number;
+    /** Test seam: whether positions are currently being watched. */
+    isWatching(): boolean;
     stop(): void;
 }
 
 export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLocationController {
     const { toggle, toggleUrl, updateUrl, csrfToken } = options;
-    const geolocation = options.geolocation ?? (typeof navigator === "undefined" ? undefined : navigator.geolocation);
+    const geolocation = options.geolocation !== undefined ? options.geolocation : typeof navigator === "undefined" ? undefined : navigator.geolocation;
     const notify = options.notify ?? ((_kind, message) => window.toastr?.error(message));
     const now = options.now ?? (() => Date.now());
 
@@ -62,8 +75,50 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
     let sendTimer: ReturnType<typeof setTimeout> | null = null;
     let failures = 0;
     let warned = false;
+    let geoWarned = false;
+    /** The most recent sharing-flag POST, so a forced "off" can queue behind it. */
+    let toggleRequest: Promise<void> = Promise.resolve();
 
     const post = (url: string, body: FormData): Promise<Response> => fetch(url, { method: "POST", headers: { "X-CSRFToken": csrfToken }, body });
+
+    function postToggle(enabled: boolean): Promise<Response> {
+        const body = new FormData();
+        body.append("enabled", enabled ? "1" : "0");
+        const request = post(toggleUrl, body);
+        toggleRequest = request.then(
+            () => undefined,
+            () => undefined,
+        );
+        return request;
+    }
+
+    /**
+     * Switch sharing off here and on the server, and say why.
+     *
+     * Called when the browser will not produce positions at all. Leaving the
+     * toggle on would leave the owner - and the partner watching the check-in -
+     * believing a position is on its way when none will ever be sent.
+     */
+    function disableSharing(message: string): void {
+        stopWatching();
+        toggle.checked = false;
+        notify("error", message);
+        // Queued behind any in-flight sharing POST so this "off" cannot overtake
+        // the "on" it is undoing.
+        void toggleRequest.then(() => postToggle(false)).catch(() => undefined);
+    }
+
+    function onWatchError(error: GeolocationPositionError): void {
+        if (error?.code === PERMISSION_DENIED) {
+            disableSharing("Location permission is off, so your live location isn't being shared. Allow location for this site, then turn sharing back on.");
+            return;
+        }
+        // A timeout or a momentarily unavailable fix usually recovers by itself,
+        // so say it once rather than on every retry.
+        if (geoWarned) return;
+        geoWarned = true;
+        notify("error", "Could not get your location - live location sharing may not work.");
+    }
 
     function reportOutcome(ok: boolean): void {
         if (ok) {
@@ -109,13 +164,15 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
         }, MIN_INTERVAL_MS - elapsed);
     }
 
-    function startWatching(): void {
-        if (watchId !== null || !geolocation) return;
-        watchId = geolocation.watchPosition(
-            onPosition,
-            () => notify("error", "Could not get your location - live location sharing may not work."),
-            { enableHighAccuracy: true },
-        );
+    /** @returns Whether positions are being watched; false means they never will be. */
+    function startWatching(): boolean {
+        if (watchId !== null) return true;
+        if (!geolocation) {
+            disableSharing("This browser won't share your location, so live location sharing is off.");
+            return false;
+        }
+        watchId = geolocation.watchPosition(onPosition, onWatchError, { enableHighAccuracy: true });
+        return true;
     }
 
     function stopWatching(): void {
@@ -128,18 +185,22 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
         pendingPosition = null;
         failures = 0;
         warned = false;
+        geoWarned = false;
     }
 
     toggle.addEventListener("change", () => {
         const enabled = toggle.checked;
-        const body = new FormData();
-        body.append("enabled", enabled ? "1" : "0");
 
         // Started optimistically so the switch feels immediate, then undone if the
         // server refuses - otherwise the page claims to be sharing a location that
         // is going nowhere.
-        if (enabled) startWatching();
-        else stopWatching();
+        if (enabled) {
+            // When the watch cannot run at all, disableSharing has already reset
+            // the toggle and told the server, so there is nothing left to send.
+            if (!startWatching()) return;
+        } else {
+            stopWatching();
+        }
 
         const refuse = (): void => {
             toggle.checked = !enabled;
@@ -147,7 +208,7 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
             notify("error", "Could not update live location sharing.");
         };
 
-        void post(toggleUrl, body)
+        void postToggle(enabled)
             .then((response) => {
                 if (!response.ok) refuse();
             })
@@ -158,6 +219,7 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
 
     return {
         consecutiveFailures: () => failures,
+        isWatching: () => watchId !== null,
         stop: stopWatching,
     };
 }
