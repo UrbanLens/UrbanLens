@@ -260,9 +260,7 @@ class EncryptedTextField(TextField):
                 # nothing here - the frames are always inside this method - and the
                 # message already names the field and the setting to check.
                 logger.error(  # noqa: TRY400
-                    "Could not decrypt %s.%s - no configured key matches. Reading as empty; the row is left "
-                    "intact so it is still recoverable if the original key is restored. Check "
-                    "field_encryption_key/field_encryption_key_fallbacks.",
+                    "Could not decrypt %s.%s - no configured key matches. Reading as empty; the row is left intact so it is still recoverable if the original key is restored. Check field_encryption_key/field_encryption_key_fallbacks.",
                     model_name,
                     self.name,
                 )

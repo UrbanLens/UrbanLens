@@ -381,11 +381,7 @@ def _trips_attended(profile: Profile) -> int:
 
     # A trip counts as attended once it is over and the member had joined
     # without declining.
-    return (
-        TripMembership.objects.filter(_finished_trip_q(timezone.localdate()), profile=profile, status=TripMembership.STATUS_JOINED)
-        .exclude(rsvp=TripMembership.RSVP_NO)
-        .count()
-    )
+    return TripMembership.objects.filter(_finished_trip_q(timezone.localdate()), profile=profile, status=TripMembership.STATUS_JOINED).exclude(rsvp=TripMembership.RSVP_NO).count()
 
 
 def _trips_attended_bulk(profile_ids: Sequence[int]) -> dict[int, int]:

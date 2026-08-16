@@ -340,8 +340,7 @@ class E2EEOwnKeysView(DualAuthJsonView):
         # the enrollment UI can offer "use an existing passkey" vs "create one"
         # without a second endpoint - credential ids are public handles.
         wraps = [
-            {"credential_id": bytes_to_base64url(bytes(wrap.credential.credential_id)), "prf_input": wrap.prf_input, "wrapped_secret": wrap.wrapped_secret}
-            for wrap in E2EEPasskeyWrap.objects.usable_for_bundle(bundle).select_related("credential")
+            {"credential_id": bytes_to_base64url(bytes(wrap.credential.credential_id)), "prf_input": wrap.prf_input, "wrapped_secret": wrap.wrapped_secret} for wrap in E2EEPasskeyWrap.objects.usable_for_bundle(bundle).select_related("credential")
         ]
         wrapped_ids = {entry["credential_id"] for entry in wraps}
         credentials = [

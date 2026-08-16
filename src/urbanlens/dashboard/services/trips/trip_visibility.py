@@ -120,14 +120,7 @@ def viewer_hidden_activity_ids(activities: list[TripActivity], viewer: Profile) 
     # deleted (the FK is SET_NULL) - their setting is gone and the filter treats
     # it as most restrictive. Excluding them here, as this previously did, made
     # that branch unreachable and left their locations visible to everyone.
-    sensitive = [
-        act
-        for act in activities
-        if not act.location_hidden
-        and act.location_id
-        and act.added_by_id != viewer.id
-        and (act.added_by is None or act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE)
-    ]
+    sensitive = [act for act in activities if not act.location_hidden and act.location_id and act.added_by_id != viewer.id and (act.added_by is None or act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE)]
     if sensitive:
         apply_trip_visibility_filter(sensitive, viewer, hidden)
     return hidden

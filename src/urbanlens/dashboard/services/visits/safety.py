@@ -1853,10 +1853,7 @@ def send_checkin_reminder(checkin: SafetyCheckin) -> None:
     # working too - an unresolved row that failed mid-send stays SCHEDULED and is
     # re-selected next tick.
     now = timezone.now()
-    updated = (
-        SafetyCheckin.objects.filter(pk=checkin.pk, status=SafetyCheckinStatus.SCHEDULED)
-        .update(status=SafetyCheckinStatus.AWAITING_CHECKIN, reminder_sent_at=now, updated=now)
-    )
+    updated = SafetyCheckin.objects.filter(pk=checkin.pk, status=SafetyCheckinStatus.SCHEDULED).update(status=SafetyCheckinStatus.AWAITING_CHECKIN, reminder_sent_at=now, updated=now)
     if updated:
         checkin.status = SafetyCheckinStatus.AWAITING_CHECKIN
         checkin.reminder_sent_at = now
@@ -1990,10 +1987,7 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
     # Conditional for the same reason as the reminder's: a resolution landing during
     # the contact loop above must win, not be overwritten by OVERDUE.
     now = timezone.now()
-    updated = (
-        SafetyCheckin.objects.filter(pk=checkin.pk, status__in=(SafetyCheckinStatus.SCHEDULED, SafetyCheckinStatus.AWAITING_CHECKIN))
-        .update(status=SafetyCheckinStatus.OVERDUE, escalated_at=now, updated=now)
-    )
+    updated = SafetyCheckin.objects.filter(pk=checkin.pk, status__in=(SafetyCheckinStatus.SCHEDULED, SafetyCheckinStatus.AWAITING_CHECKIN)).update(status=SafetyCheckinStatus.OVERDUE, escalated_at=now, updated=now)
     if updated:
         checkin.status = SafetyCheckinStatus.OVERDUE
         checkin.escalated_at = now

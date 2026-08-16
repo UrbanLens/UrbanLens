@@ -74,10 +74,7 @@ class GdeltPanelSource(InfoPanelSource):
         # GDELT has no real snippet, so REData puts the source domain there
         # instead (see RedataSearchGateway.search_news) - used here as the
         # title fallback, same as the old local gateway's "domain" field.
-        meta = [
-            {"label": _format_gdelt_date(article.get("date")), "value": article.get("title") or article.get("snippet") or "", "href": article.get("link") or "", "ai_extract": True}
-            for article in articles[:8]
-        ]
+        meta = [{"label": _format_gdelt_date(article.get("date")), "value": article.get("title") or article.get("snippet") or "", "href": article.get("link") or "", "ai_extract": True} for article in articles[:8]]
         return {"meta": meta}
 
     def debug_count(self, data: dict) -> int:

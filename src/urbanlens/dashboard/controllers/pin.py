@@ -614,12 +614,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         # renders its cached local copy via
         # services.media.media_relevance.local_images_for_gallery_items -
         # including it here too would show the same photo twice.
-        images = (
-            Image.objects.filter(pin=pin, profile=profile)
-            .filter(Q(media_source_key="") | Q(media_source_key__isnull=True))
-            .exclude(image="")
-            .order_by(F("redata_confidence").desc(nulls_last=True), "-created")[:_MEDIA_PHOTOS_PREVIEW_LIMIT]
-        )
+        images = Image.objects.filter(pin=pin, profile=profile).filter(Q(media_source_key="") | Q(media_source_key__isnull=True)).exclude(image="").order_by(F("redata_confidence").desc(nulls_last=True), "-created")[:_MEDIA_PHOTOS_PREVIEW_LIMIT]
 
         rendered_items = [
             {

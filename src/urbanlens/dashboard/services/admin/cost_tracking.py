@@ -172,10 +172,7 @@ def active_user_count(as_of: datetime.datetime | None = None) -> int:
     as_of = as_of or timezone.now()
     window_start = as_of - timedelta(days=_ACTIVE_USER_WINDOW_DAYS)
     return (
-        User.objects.filter(is_active=True, last_login__gte=window_start)
-        .annotate(root_pin_count=Count("profile__pins", filter=Q(profile__pins__parent_pin__isnull=True), distinct=True))
-        .filter(root_pin_count__gte=_ACTIVE_USER_MIN_ROOT_PINS)
-        .count()
+        User.objects.filter(is_active=True, last_login__gte=window_start).annotate(root_pin_count=Count("profile__pins", filter=Q(profile__pins__parent_pin__isnull=True), distinct=True)).filter(root_pin_count__gte=_ACTIVE_USER_MIN_ROOT_PINS).count()
     )
 
 
@@ -268,10 +265,7 @@ def monthly_cost_series(months: int = 12, as_of: datetime.datetime | None = None
     components = list(CostComponent.objects.all())
     operating_costs = list(OperatingCost.objects.all())
 
-    api_rows = {
-        row["_month"]: row["total"]
-        for row in (ApiCallLog.objects.filter(created__gte=start).annotate(_month=TruncMonth("created")).values("_month").annotate(total=Sum("cost_estimate")))
-    }
+    api_rows = {row["_month"]: row["total"] for row in (ApiCallLog.objects.filter(created__gte=start).annotate(_month=TruncMonth("created")).values("_month").annotate(total=Sum("cost_estimate")))}
 
     labels: list[str] = []
     hardware: list[float] = []
