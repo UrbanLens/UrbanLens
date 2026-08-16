@@ -22,12 +22,17 @@ applied then.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.services.billing import pricing
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 if TYPE_CHECKING:
     import datetime
@@ -76,6 +81,33 @@ def advance_usage_ledger(role_subscription: RoleSubscription, as_of: datetime.da
     role_subscription.save(update_fields=["amount_used_cents", "usage_covered_until", "updated"])
 
 
+@contextmanager
+def _locked(role_subscription: RoleSubscription) -> Iterator[RoleSubscription]:
+    """Hold a row lock on this subscription for the body of the block.
+
+    Every ledger mutation is a read-modify-write of running totals, and Stripe
+    delivers concurrently: two partial refunds on one charge, or a payment
+    landing beside a refund, otherwise read the same ``total_paid_cents``,
+    subtract independently, and the second write erases the first. The
+    webhook's ``StripeProcessedRefund`` row still commits, so the lost debit is
+    never retried - access stays funded by refunded money.
+
+    Yields the locked instance; the caller's original object is refreshed from
+    it on the way out so it does not go on holding pre-lock values.
+
+    Args:
+        role_subscription: The subscription to lock.
+
+    Yields:
+        The freshly-read, locked subscription.
+    """
+    with transaction.atomic():
+        locked = type(role_subscription).objects.select_for_update().get(pk=role_subscription.pk)
+        yield locked
+    for field in ("total_paid_cents", "amount_used_cents", "usage_covered_until"):
+        setattr(role_subscription, field, getattr(locked, field))
+
+
 def apply_payment(role_subscription: RoleSubscription, amount_paid_cents: int, as_of: datetime.datetime | None = None) -> None:
     """Record a successful pay-what-you-want charge and advance its usage ledger.
 
@@ -89,9 +121,13 @@ def apply_payment(role_subscription: RoleSubscription, amount_paid_cents: int, a
     """
     if not role_subscription.role.pay_what_you_want or amount_paid_cents <= 0:
         return
-    role_subscription.total_paid_cents += amount_paid_cents
-    role_subscription.save(update_fields=["total_paid_cents", "updated"])
-    advance_usage_ledger(role_subscription, as_of)
+    with _locked(role_subscription) as locked:
+        locked.total_paid_cents += amount_paid_cents
+        locked.save(update_fields=["total_paid_cents", "updated"])
+        # Inside the lock: advancing the ledger is itself a read-modify-write
+        # of the same running totals.
+        locked.role = role_subscription.role
+        advance_usage_ledger(locked, as_of)
 
 
 def apply_refund(role_subscription: RoleSubscription, amount_refunded_cents: int) -> None:
@@ -111,5 +147,6 @@ def apply_refund(role_subscription: RoleSubscription, amount_refunded_cents: int
     """
     if not role_subscription.role.pay_what_you_want or amount_refunded_cents <= 0:
         return
-    role_subscription.total_paid_cents = max(0, role_subscription.total_paid_cents - amount_refunded_cents)
-    role_subscription.save(update_fields=["total_paid_cents", "updated"])
+    with _locked(role_subscription) as locked:
+        locked.total_paid_cents = max(0, locked.total_paid_cents - amount_refunded_cents)
+        locked.save(update_fields=["total_paid_cents", "updated"])

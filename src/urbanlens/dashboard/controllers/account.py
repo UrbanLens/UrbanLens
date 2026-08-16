@@ -68,6 +68,37 @@ def _is_locked_out(key: str) -> bool:
     return bool(cache.get(_lockout_key(key)))
 
 
+def _bump_counter(key: str, timeout: int) -> int:
+    """Increment a failure counter atomically and return its new value.
+
+    Read-then-write loses increments exactly when it matters: parallel failed
+    logins all read the same value and write the same successor, so a spray
+    run wide enough never reaches the limit it is being counted against.
+    ``incr`` is a single operation on every backend we run (Valkey's INCR,
+    LocMemCache under its lock).
+
+    ``touch`` afterwards keeps the window sliding from the most recent
+    failure, which is what ``incr`` alone would give up - it leaves the
+    original expiry in place.
+
+    Args:
+        key: The counter's cache key.
+        timeout: Seconds the counter should survive its last increment.
+
+    Returns:
+        The failure count including this one.
+    """
+    cache.add(key, 0, timeout=timeout)
+    try:
+        attempts = int(cache.incr(key))
+    except ValueError:
+        # Expired between the add and the incr; this failure starts the window.
+        cache.set(key, 1, timeout=timeout)
+        return 1
+    cache.touch(key, timeout=timeout)
+    return attempts
+
+
 def _resolve_login_user(identifier: str) -> User | None:
     """Resolve a submitted login identifier to the account it would authenticate against.
 
@@ -159,8 +190,7 @@ def _record_failed_attempt(key: str) -> int:
         return 0
 
     attempts_key = _attempts_key(key)
-    attempts: int = (cache.get(attempts_key) or 0) + 1
-    cache.set(attempts_key, attempts, timeout=lockout_seconds)
+    attempts = _bump_counter(attempts_key, lockout_seconds)
 
     if attempts >= max_attempts:
         cache.set(_lockout_key(key), 1, timeout=lockout_seconds)
@@ -253,8 +283,7 @@ def _record_login_ip_failure(request: HttpRequest) -> int:
         return 0
 
     key = _login_ip_attempts_key(_client_ip(request))
-    attempts: int = (cache.get(key) or 0) + 1
-    cache.set(key, attempts, timeout=settings.login_lockout_minutes * 60)
+    attempts = _bump_counter(key, settings.login_lockout_minutes * 60)
 
     if attempts >= max_attempts:
         logger.warning("Login throttled for IP %r after %d failed attempts", _client_ip(request), attempts)

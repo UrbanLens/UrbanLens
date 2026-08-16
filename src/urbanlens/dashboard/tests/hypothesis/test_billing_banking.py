@@ -130,6 +130,17 @@ class ApplyPaymentTests(TestCase):
         self.sub.refresh_from_db()
         self.assertTrue(self.sub.has_banked_access)
 
+    def test_two_payments_from_stale_instances_both_land(self) -> None:
+        """Same lost-update shape as concurrent refunds, in the direction that credits."""
+        first = RoleSubscription.objects.select_related("role").get(pk=self.sub.pk)
+        second = RoleSubscription.objects.select_related("role").get(pk=self.sub.pk)
+
+        banking.apply_payment(first, 1000)
+        banking.apply_payment(second, 1000)
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
     def test_non_pwyw_role_is_a_no_op(self) -> None:
         role = baker.make(SubscriptionRole, pay_what_you_want=False, monthly_price_cents=500)
         sub = baker.make(RoleSubscription, user=self.user, role=role)
@@ -192,6 +203,35 @@ class ApplyRefundTests(TestCase):
         self.assertEqual(self.sub.total_paid_cents, 0)
         self.assertEqual(self.sub.amount_used_cents, used_before)
         self.assertEqual(self.sub.usage_covered_until, covered_before)
+
+    def test_two_refunds_from_stale_instances_both_land(self) -> None:
+        """Stripe delivers concurrently, and both handlers hold their own instance.
+
+        Two partial refunds on one charge arrive at once, each handler having
+        read ``total_paid_cents`` before the other wrote. Subtracting from that
+        in-memory value made the second write erase the first - while the
+        webhook's StripeProcessedRefund row still committed, so the lost debit
+        was never retried and access stayed funded by refunded money. Both
+        instances here are deliberately stale, which is what that looks like
+        without needing real threads.
+        """
+        first = RoleSubscription.objects.select_related("role").get(pk=self.sub.pk)
+        second = RoleSubscription.objects.select_related("role").get(pk=self.sub.pk)
+
+        banking.apply_refund(first, 300)
+        banking.apply_refund(second, 300)
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 1400)
+
+    def test_a_refund_against_a_stale_instance_leaves_it_current(self) -> None:
+        """The caller's object must not keep pre-lock values after the debit."""
+        stale = RoleSubscription.objects.select_related("role").get(pk=self.sub.pk)
+        banking.apply_refund(self.sub, 500)
+
+        banking.apply_refund(stale, 500)
+
+        self.assertEqual(stale.total_paid_cents, 1000)
 
     def test_non_pwyw_role_is_a_no_op(self) -> None:
         role = baker.make(SubscriptionRole, pay_what_you_want=False, monthly_price_cents=500)

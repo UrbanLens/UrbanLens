@@ -29,6 +29,7 @@ import {
 } from "./e2ee-crypto";
 import type { CachedIdentity } from "./e2ee-store";
 import { clearProfileKeys, getConversationKey, getGroupKey, getIdentity, putConversationKey, putGroupKey, putIdentity } from "./e2ee-store";
+import type { PrfAssertionResult } from "./webauthn-client";
 import { assertForPrf, credentialIdOf, getPrfResult, registerPasskey } from "./webauthn-client";
 import { toast } from "./dialogs";
 
@@ -730,7 +731,7 @@ export async function unlockWithPasskey(): Promise<boolean> {
         return false;
     }
     const result = await assertForPrf(Object.fromEntries(wraps.map((wrap) => [wrap.credential_id, wrap.prf_input])));
-    if (result === null) {
+    if (result.status !== "ok") {
         return false;
     }
     const wrap = wraps.find((entry) => entry.credential_id === result.credentialId);
@@ -849,17 +850,29 @@ export async function enrollPasskeyUnlock(password?: string): Promise<PasskeyEnr
     let prfInput: string;
     let created = false;
 
+    // Offer the account's existing unwrapped passkeys first - wrapping one the
+    // user already signs in with means the login tap unlocks messages too.
     const candidates = (bundle.passkey_credentials ?? []).filter((cred) => !cred.has_wrap);
+    let inputs: Record<string, string> = {};
+    let assertion: PrfAssertionResult = { status: "no-prf" };
     if (candidates.length) {
-        const inputs = Object.fromEntries(candidates.map((cred) => [cred.credential_id, randomPrfInput()]));
-        const assertion = await assertForPrf(inputs);
-        if (assertion === null) {
-            return { ok: false, error: "That passkey didn't respond with unlock support. It may not support the PRF extension - try creating a new passkey instead." };
+        inputs = Object.fromEntries(candidates.map((cred) => [cred.credential_id, randomPrfInput()]));
+        assertion = await assertForPrf(inputs);
+        if (assertion.status === "unavailable") {
+            return { ok: false };
         }
+    }
+
+    if (assertion.status === "ok") {
         credentialId = assertion.credentialId;
         prf = assertion.prf;
         prfInput = inputs[credentialId]!;
     } else {
+        // Either the account has no unwrapped passkey, or the one it has cannot
+        // do PRF and so can never unlock anything. Both land on registering a
+        // key that can - telling the user to "create a new passkey" while
+        // returning them to the same dead end would not be an option they could
+        // reach without first deleting the passkey they sign in with.
         prfInput = randomPrfInput();
         const registration = await registerPasskey({
             optionsUrl: urls.passkeyRegisterOptions,
@@ -874,7 +887,12 @@ export async function enrollPasskeyUnlock(password?: string): Promise<PasskeyEnr
         credentialId = registration.credentialId;
         // Some browsers evaluate PRF at creation; others only enable it and
         // need one follow-up assertion scoped to the new credential.
-        prf = registration.prf ?? (await assertForPrf({ [credentialId]: prfInput }))?.prf ?? null;
+        if (registration.prf) {
+            prf = registration.prf;
+        } else {
+            const followUp = await assertForPrf({ [credentialId]: prfInput });
+            prf = followUp.status === "ok" ? followUp.prf : null;
+        }
         if (prf === null) {
             // Registered for unlock, so it is not a login factor, and without
             // PRF it will never hold a wrap either - a credential that does

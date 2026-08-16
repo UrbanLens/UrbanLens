@@ -188,6 +188,10 @@ export function prfEnabled(credential: PublicKeyCredential): boolean {
     return Boolean((credential.getClientExtensionResults() as { prf?: PrfExtensionResults }).prf?.enabled);
 }
 
+/** What a PRF assertion produced: a usable output, an authenticator that
+ * cannot do PRF at all, or nothing (cancelled, errored, or unsupported). */
+export type PrfAssertionResult = { status: "ok"; credentialId: string; prf: Uint8Array } | { status: "no-prf" } | { status: "unavailable" };
+
 /**
  * Run a client-challenged assertion purely to evaluate the PRF extension.
  *
@@ -197,13 +201,17 @@ export function prfEnabled(credential: PublicKeyCredential): boolean {
  * password_wrapped_secret). The challenge is random-local because nobody
  * verifies it.
  *
+ * The two failure cases are kept apart because callers act on them
+ * differently: an authenticator that answered but has no PRF means "this key
+ * can never unlock, offer another route", while a cancel or error means "the
+ * user did not choose anything, leave them where they were".
+ *
  * @param evalByCredential - base64url credential id -> base64url PRF input.
- * @returns The credential id used and its PRF output, or null on cancel or a
- *   non-PRF authenticator.
+ * @returns The credential id used and its PRF output, or why it produced none.
  */
-export async function assertForPrf(evalByCredential: Record<string, string>): Promise<{ credentialId: string; prf: Uint8Array } | null> {
+export async function assertForPrf(evalByCredential: Record<string, string>): Promise<PrfAssertionResult> {
     if (!window.PublicKeyCredential) {
-        return null;
+        return { status: "unavailable" };
     }
     const challenge = new Uint8Array(32);
     crypto.getRandomValues(challenge);
@@ -217,15 +225,15 @@ export async function assertForPrf(evalByCredential: Record<string, string>): Pr
             },
         })) as PublicKeyCredential | null;
         if (!credential) {
-            return null;
+            return { status: "unavailable" };
         }
         const prf = getPrfResult(credential);
         if (!prf) {
-            return null;
+            return { status: "no-prf" };
         }
-        return { credentialId: bufferToBase64url(credential.rawId), prf };
+        return { status: "ok", credentialId: bufferToBase64url(credential.rawId), prf };
     } catch {
-        return null;
+        return { status: "unavailable" };
     }
 }
 
