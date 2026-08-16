@@ -9821,3 +9821,27 @@ show. 56 pin-list tests pass; all three edited templates syntax-checked.
 One scan-tooling note: the Django-tag stub used for that syntax check has to strip
 `{% comment %}...{% endcomment %}` blocks first, or the prose inside them parses as JavaScript and
 reports a syntax error in a file that is fine. Verified against `git show HEAD:` before believing it.
+
+## Chunk 529 - tenth consolidation: 10,871 passed, 0 failed, and a count worth checking
+
+Tenth consolidation (task `br3758dtn`, chunks 522-525): **10,871 passed, 1 xfailed, 0 failed,
+1,481 subtests** in 1:31:00. The xfail is the strict `test_pin_detach_location.py` marker holding
+the filed product decision open.
+
+The count is *lower* than the ninth's 10,885, which is the wrong direction - every chunk since has
+added tests, never removed any - so it was worth resolving rather than filing as noise. Collecting
+against the current tree gives **10,889**, and chunks 526/527/528 added exactly 18 tests
+(8 `test_pin_merge_savepoints.py` + 4 `test_e2ee.py` + 6 `test_pin_lists.py`) after this run began.
+10,889 - 18 = 10,871, matching the run precisely, and `--collect-only` reports no collection errors.
+So nothing is missing now and the tenth run is internally consistent; the ninth's higher figure is
+unexplained and, since it ran against a container whose state can no longer be inspected, is left
+that way rather than guessed at.
+
+Recording the method, because a silently *shrinking* suite is the failure mode a green run hides
+best: a passing consolidation only proves the tests that ran, so the count has to be reconciled
+against a fresh collection, not compared with the previous run and waved through.
+
+Ten consolidations: 10,849 / 10,859 / 10,863 / 10,865 (2 resolved) / 10,873 / 10,875 / 10,878 /
+10,883 / 10,885 / 10,871. An eleventh (task `beigmr653`) is running over chunks 526-528, whose
+fixes - the pin_merge savepoints, the E2EE reset, and the two `createListAndAddPins` copies - none
+of the previous runs covered.
