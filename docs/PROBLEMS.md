@@ -9133,3 +9133,33 @@ first route to raise a database error poisons it and every subsequent request fa
 each request its own savepoint - the same fix chunk 526 applied to `pin_merge`'s recovery paths, met
 this time in the test harness rather than the product. Without it the sweep reported the cascade and
 named the wrong route.
+
+## RESOLVED 2026-08-16: GET on `pin.link.to` was a guaranteed 500 (and six crashes that were my fixture)
+
+Chunk 556 added **GET** to the route smoke sweep. Its own comment had claimed GET was "already
+covered by the cross-user sweep" - which is false in exactly the way that justified building this
+file: that sweep flags only `200`, so a GET answering 500 passes it silently. The same over-claim,
+written by me, in the file arguing against it.
+
+**The real finding: `PinRelinkView.get` did not accept `location_slug`.** The view backs two routes
+(`pin.link` and `pin.link/<location_slug>/`), and `post()` correctly declares
+`location_slug=None` - but `get()` omitted the parameter entirely, so any GET to `pin.link.to`
+raised `TypeError` before a line of application code ran. Reachable by anyone who edits a URL.
+
+This is the third instance of one shape: **one view, two routes, a signature that fits only one of
+them** - after `saved_filters.new` (chunk 552) and, on the POST side of this very view, the filed
+detach-location decision. GET on `pin.link.to` has nothing to choose (the location is already named),
+so it now answers 405 rather than rendering a picker for a decision already made.
+
+### Six crashes that were the fixture, not the code
+
+The same run reported `ValueError: The 'image' attribute has no file associated with it` from six
+views (`home.view`, `memories.photos`, `pin.gallery`, `comments.image_picker`, ...). That was
+**mine**: `baker.make("dashboard.Image", ...)` creates a row with no file, and `Image.image` is
+`null=False, blank=False` - a state the model forbids and no upload path produces. Hardening six
+views against it would have been defending against the test.
+
+Recorded rather than quietly fixed, because the distinction is the whole discipline of this sweep: a
+generic instrument produces states the application cannot, and every crash it reports has to be
+checked against whether a user could reach it. The fixture now attaches a real file, which is what
+every upload path leaves behind.

@@ -6,7 +6,7 @@ import json
 import logging
 
 from django.contrib.auth.mixins import LoginRequiredMixin
-from django.http import Http404, HttpResponse, JsonResponse
+from django.http import Http404, HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.urls import reverse
@@ -524,16 +524,28 @@ class PinRelinkView(LoginRequiredMixin, View):
     POST /map/pin/<uuid>/link/<loc_uuid>/    → Relink: switches the pin to the given Location
     """
 
-    def get(self, request, pin_slug):
+    def get(self, request, pin_slug, location_slug=None):
         """Return an HTMX partial listing every Location that covers this pin's point.
+
+        This view backs two routes, and only ``pin.link`` has a meaningful GET:
+        it renders the picker. ``pin.link.to`` already names the location, so a
+        GET there has nothing to choose and is refused. The parameter was absent
+        from this signature entirely, which made that request a ``TypeError``
+        before any code ran - a guaranteed 500 on a route reachable by anyone
+        who edits the URL. Same shape as ``saved_filters.new`` (audit chunk 552):
+        one view, two routes, a signature that fits only one of them.
 
         Args:
             request: The HTTP request.
             pin_slug: UUID of the pin.
+            location_slug: Present only on ``pin.link.to``, where GET is refused.
 
         Returns:
-            Rendered HTML partial with location choices.
+            Rendered HTML partial with location choices, or 405 when a location
+            is already named.
         """
+        if location_slug is not None:
+            return HttpResponseNotAllowed(["POST"])
         result = _pin_for_user(pin_slug, request)
         if isinstance(result, HttpResponse):
             return result

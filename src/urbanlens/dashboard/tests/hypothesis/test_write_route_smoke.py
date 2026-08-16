@@ -46,8 +46,13 @@ from urbanlens.dashboard.models.trips.model import Trip
 #: reaching for a real integration; that is the environment, not a bug.
 _NETWORK_GUARD_MARKER = "External network access is disabled during tests"
 
-#: Methods worth sweeping. GET is already covered by the cross-user sweep.
-_WRITE_METHODS = ("post", "delete")
+#: Methods swept. GET is included despite `test_cross_user_route_access.py`
+#: already requesting every route, because that sweep asserts a *different*
+#: property: it flags only `200` to a stranger, so a GET that crashes answers
+#: 500 and passes it silently - the identical blind spot that justified building
+#: this file for writes. An earlier version of this comment claimed GET was
+#: already covered, which was the same over-claim in miniature.
+_WRITE_METHODS = ("get", "post", "delete")
 
 #: Routes known to crash, with the reason. Exactly one, and it is the route that
 #: motivated this whole sweep: ``pin.link`` (detach a pin from its shared
@@ -126,7 +131,14 @@ class WriteRouteSmokeTests(TestCase):
             "activity_id": baker.make("dashboard.TripActivity", trip=trip).pk,
             "alias_id": baker.make("dashboard.PinAlias", pin=pin, name="smoke-alias").pk,
             "comment_id": baker.make("dashboard.Comment", profile=profile, pin=pin, text="smoke").pk,
-            "image_id": baker.make("dashboard.Image", profile=profile, pin=pin, location=location).pk,
+            # With a real file attached, deliberately. `Image.image` is
+            # null=False blank=False, so a row without one is a state the model
+            # forbids - but baker will happily create it, and six views then
+            # raise "The 'image' attribute has no file associated with it".
+            # Those crashes were this fixture's doing, not a defect: hardening
+            # views against a state the model already prohibits would be
+            # defending against the test.
+            "image_id": self._image_with_file(profile, pin, location).pk,
             "token": str(baker.make("dashboard.SafetyCheckinContact", checkin=checkin, email="smoke@example.com", contact_profile=None).token),
             "session_id": [
                 baker.make("dashboard.GameSession", host_profile=profile).pk,
@@ -134,6 +146,15 @@ class WriteRouteSmokeTests(TestCase):
                 baker.make("dashboard.ConsensusSession", host_profile=profile).pk,
             ],
         }
+
+    @staticmethod
+    def _image_with_file(profile, pin, location):
+        """An Image row whose file actually exists, as every real upload path leaves it."""
+        from django.core.files.base import ContentFile
+
+        image = baker.make("dashboard.Image", profile=profile, pin=pin, location=location)
+        image.image.save("smoke.jpg", ContentFile(b"not-a-real-jpeg"), save=True)
+        return image
 
     @staticmethod
     def _group_chat(profile):

@@ -10619,3 +10619,27 @@ The honest read: the sweep has done most of what this design can do. Pushing to 
 building game rounds, async task ids and markup overlays - and would test the fixtures as much as the
 routes. Recorded in PROBLEMS.md so 82% reads as a considered stopping point rather than where someone
 happened to stop.
+
+## Chunk 556 - sweeping GET, and correcting my own claim that it was covered
+
+Added GET to the route sweep. The comment I had written said GET was already covered by the
+cross-user sweep - false, and false in precisely the way that justified writing this file: that
+sweep asserts a stranger gets no `200`, so a route answering 500 sails through it. Sixth instance in
+this stretch of a claim of mine that reads as establishing more than it does, and the first one
+where the contradiction was sitting eight lines above the code it contradicted.
+
+It found `PinRelinkView.get` missing the `location_slug` parameter its own `post` declares, making
+GET on `pin.link.to` a `TypeError` before any application code ran. Third instance of one shape -
+one view, two routes, a signature fitting only one - after `saved_filters.new` and the POST half of
+this same view. It now answers 405: the picker has nothing to offer when the location is already
+named.
+
+Six other crashes in the same run were my fixture. `baker.make(Image)` produces a row with no file,
+which `Image.image` (null=False, blank=False) forbids and no upload path creates, so six views
+raising on it are raising on an impossible state. I fixed the fixture and wrote the reasoning down
+rather than hardening six views against the test.
+
+That ratio is worth keeping in view as this instrument gets reused: seven crashes reported, one real.
+A generic sweep manufactures states the application cannot, so its output is a list of *candidates*
+in exactly the sense every scan in this session has been - and the check is always the same, whether
+the state is reachable by a user.
