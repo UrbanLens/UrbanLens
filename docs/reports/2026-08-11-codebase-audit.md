@@ -9632,3 +9632,26 @@ missing an escalation risks someone's safety, and repeating one pages their cont
 
 The design also declines to be clever: no batching, no bulk mail, one email per contact with its
 own stamp. Eighteenth verified-safe area, and the one I would have most wanted to find wrong.
+
+## Chunk 524 - group-chat visibility: the stint window is enforced end to end
+
+Traced the "added users cannot read prior messages" guarantee from queryset to caller, because
+`PROBLEMS.md` records that the boundary is enforced by `visible_window` rather than by
+cryptography - which makes the query-side chain the whole protection.
+
+It holds. `visible_window` filters `created__gte=membership.created`, and the absence window is
+covered by stint semantics rather than an upper bound: leaving ends a stint and re-joining creates
+a *new* row with a later `created`, so a returning member's window starts at their return. That
+design is backed by the partial unique constraint noted earlier in this audit -
+`(group, profile) WHERE left_at IS NULL` - which permits unlimited historical stints while
+guaranteeing one active row.
+
+The part worth verifying was whether a *stale* membership could ever reach the window function.
+It cannot: both entry points (`controllers.group_chats._get_group` and the API's
+`_resolve_membership`) obtain it through `GroupChat.membership_for`, which is
+`active_memberships().filter(profile=...)`. A departed member has no active row, so they get
+`None` and never reach a query at all.
+
+Nineteenth verified-safe area. The residual risk stays exactly as filed - a removed member who
+kept a decryption envelope is bounded by the server's query, not by the key - which is a
+documented property of the design rather than a defect in it.
