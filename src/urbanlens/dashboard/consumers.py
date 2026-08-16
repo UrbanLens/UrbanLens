@@ -1045,6 +1045,18 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """Save and broadcast one chat message from this connection's profile."""
         raise NotImplementedError
 
+    @database_sync_to_async
+    def _connection_profile_id(self, user) -> int:
+        """This connection's profile pk, resolved once at connect.
+
+        Held so ``participant_left`` can tell whether a removal is about *this*
+        socket without a query per broadcast.
+        """
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        profile, _ = Profile.objects.get_or_create(user=user)
+        return profile.pk
+
     async def connect(self):
         """Verify the connecting profile is a scoped participant (any status) of this session, then join its group."""
         from urbanlens.dashboard.models.account.model import ApiKeyScope
@@ -1077,6 +1089,7 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
 
         self.session_id = session_id
         self.group_name = self._group_name(session_id)
+        self.profile_id = await self._connection_profile_id(user)
         try:
             await self.channel_layer.group_add(self.group_name, self.channel_name)
             await self.accept()
@@ -1153,6 +1166,16 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
     #: game-specific.
     async def participant_left(self, event):
         await self._relay(event)
+        # Participation is checked in connect() and never again, so without this
+        # a removed player's socket stays in the session's channel group and keeps
+        # receiving every later broadcast - other players' answers, the chat - and
+        # keeps being allowed to send, since receive() re-checks only the API
+        # credential's scope. Relaying first means they still learn why.
+        #
+        # Same hazard, same remedy as safety check-ins, where
+        # ``_broadcast_partner_access_revoked`` exists for exactly this reason.
+        if event.get("profile_id") == getattr(self, "profile_id", None):
+            await self.close(code=4404)
 
     async def session_started(self, event):
         await self._relay(event)

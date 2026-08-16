@@ -11177,3 +11177,49 @@ obtained out of band. The server-side fix is available - any member may rotate, 
 handled - but rotation 409s unless every member is enrolled, so rejecting stale-version sends would
 let one un-enrolled member block the group from sending at all. Confidentiality against availability
 is the owner's trade to make, not mine; `docs/PROBLEMS.md` records it with three options.
+
+## Chunk 571 - a socket that outlived its permission
+
+Traced the WebSocket layer, untouched until now: concurrency, auth and cross-user visibility in one
+place. The framing that worked in the last two chunks - *what property can the existing tests
+structurally not catch?* - points straight at it. Auth and credential scopes are tested, but those
+test the state at `connect()`. A socket that was authorised then, and shouldn't be now, is a
+different property.
+
+Three of the four consumer families turned out to be already safe, each for its own reason:
+
+- **Safety check-in chat.** Already solved, and by exactly this reasoning:
+  `_broadcast_partner_access_revoked` exists because "an accepted partner may already have a live
+  WebSocket connection whose permission was only checked once, at connect() time". There is a
+  matching `contact.access_revoked`, *and* a 60-second periodic revalidation as a backstop for a
+  dropped broadcast. Thorough.
+- **Group chat.** Structurally immune - `_broadcast_group_event` recomputes recipients from
+  `active_memberships()` at broadcast time and sends to per-profile channels, so there is no
+  per-group subscription to go stale. There is no `GroupChatConsumer` at all.
+- **Direct messages.** Same per-profile channel shape.
+
+**Game sessions are the exception, and they are the one family with a per-session channel group** -
+"one channel-layer group per session, every participant [joins]". Trivia has `kick_participant`, and
+`_remove_participant` broadcasts `participant.left` to the session group, which the consumer only
+*relays*. Nothing closed the removed player's socket and nothing discarded their channel, so a kicked
+player kept receiving every later broadcast - other players' answers, the round data, the chat. They
+could also keep sending: `receive()` re-checks the API credential's scope but never participation
+again, and the shared `SessionChat.send` deliberately delegates that check to "each game's
+controller and consumer", which here meant connect() and never after.
+
+Fixed on the shared base so all three games get it: the connection's profile id is resolved once at
+connect, and `participant_left` relays the event first - so the player learns why - then closes if it
+was about them. Reproduced with a failing test first.
+
+Two harness details cost a cycle each and are worth recording. Broadcasts are enqueued as Celery
+tasks rather than performed inline, so a test that triggers one must wrap it in
+`broadcasts_delivered_inline()` or it silently observes nothing - my first version timed out waiting
+for a broadcast that was sitting in a queue. And `receive_nothing()` counts a pending close frame as
+output, so "assert nothing more arrives" is the wrong assertion for a socket that is *supposed* to
+close; asserting the `websocket.close` frame directly states the property better anyway. Verified to
+bind by disabling the close - only the new test fails. 44 socket tests pass.
+
+Not matched to safety's belt-and-braces: game sessions get the broadcast close but no periodic
+revalidation loop. Safety streams live location, which is worth the standing query; a game session
+is not, and adding a per-minute database check to every connected player is a cost I would not pay
+without being asked.
