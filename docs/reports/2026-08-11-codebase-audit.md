@@ -10497,3 +10497,30 @@ thing you are scanning for is not absence of validation. That last one is the sa
 chunk 536's four loudest false positives, arriving from a different direction.
 
 Fifth chunk in this stretch with no changes warranted.
+
+## Chunk 551 - building instead of verifying, and the instrument validating itself
+
+Five consecutive no-change chunks said the well-trodden verification properties were exhausted, so
+this chunk built something from the audit's own backlog: the ~187 untested write routes.
+
+That entry argues closing the gap one route at a time is not a strategy. Agreed - so the sweep
+asserts one *property* across all of them: as the **owner**, post a minimal body to every
+single-parameter owner-scoped write route and require the answer not to be a 5xx. Deliberately weak
+(400/403/404/405/409 all pass, because refusing an empty payload is correct), which is what lets it
+apply to routes whose behaviour it cannot know.
+
+Checked first that it was not a duplicate: `test_cross_user_route_access.py` sweeps the same routes
+but flags only `200`, so a crash passes it silently. Complementary, not overlapping.
+
+**On its first run it found exactly one crash - `pin.link`, the detach-location 500 that motivated
+the backlog entry in the first place - and nothing else.** That is the best outcome available: the
+instrument reproduced a known bug from a standing start, with no noise beside it. A sweep that finds
+nothing on its first run tells you very little about whether it works.
+
+The exemption for it is self-checking: `test_the_known_crash_is_still_crashing` fails when the
+product decision is finally made and the route fixed, so the entry cannot outlive the bug. That is
+chunk 546's lesson about rotting allowlists applied at the moment of writing one, rather than
+discovered later.
+
+The backlog entry is updated, not closed: 186 routes still have no test asserting what they *do* -
+they now have one asserting they do not crash.

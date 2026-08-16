@@ -6107,6 +6107,32 @@ with it - that single request is enough to catch this class permanently.
 
 ## OPEN 2026-08-13: ~187 write routes have no test that names them
 
+**Partly addressed 2026-08-16 (chunk 551) - one property across all of them, rather than one test
+each.** This entry says closing the gap route by route "is not a strategy". It is not; but a single
+*property* asserted across every write route is, and
+`test_write_route_smoke.py` now does that: logged in as the **owner**, it posts a minimal body to
+every single-parameter owner-scoped route and asserts the answer is not a 5xx.
+
+The property is deliberately weak - 400, 403, 404, 405 and 409 all pass, because refusing an empty
+payload is correct and a generic sweep cannot know what any route is meant to *do*. Only "this
+request made the server throw" fails. That is precisely the class this entry was opened for.
+
+It complements rather than duplicates `test_cross_user_route_access.py`, which asks whether a
+*stranger* gets in and flags only `200` - a crashing route answers 500 and passes it silently.
+
+**What it found on its first run: exactly one crash, and it is the route that motivated this entry.**
+`pin.link` raises `IntegrityError` on every request, which is the open detach-location product
+decision. Nothing else in the sweep crashes. That is the instrument validating itself - it reproduced
+the known bug from a standing start and produced no noise alongside it.
+
+`pin.link` is exempted by name with its reason, and the exemption is kept honest by
+`test_the_known_crash_is_still_crashing`: when the product decision is made and the route fixed, that
+test fails and says to delete the entry. An exemption nobody re-checks is how an allowlist rots into
+a blindfold (chunk 546).
+
+This does not close the entry. The 186 routes still have no test asserting what they *do*; they now
+have one asserting they do not crash.
+
 Prompted by the detach 500 above, which survived because its route had no test while its
 *sibling* route did.
 
