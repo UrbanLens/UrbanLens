@@ -847,8 +847,11 @@ $('iw-btn-upload').addEventListener('click', async function () {
         $('closeImportDialog').disabled = false;
         renderPreview(parsedData);
         showStep('preview', 1);
+        // Neutral title: this channel carries per-file parse failures *and*
+        // notices about the preview itself (the pin cap), and "Could not import
+        // a file" misdescribes the second kind.
         (parsedData.warnings || []).forEach(function (w) {
-            toastr.warning(w, 'Could not import a file');
+            toastr.warning(w, 'Import warning');
         });
     } catch (err) {
         $('closeImportDialog').disabled = false;

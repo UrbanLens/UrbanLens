@@ -932,6 +932,20 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         if parsed_routes:
             yield from import_routes_streaming(parsed_routes, user_profile)
 
+    #: Most pins one preview may materialise, across every file in the upload.
+    #:
+    #: The import itself is a generator that streams SSE events per pin, so it
+    #: never holds the whole set; the *preview* that runs first builds every pin
+    #: dict at once and serialises them into a single JSON response, in-request.
+    #: Nothing bounded that, so a large upload could exhaust the web worker
+    #: before any response existed - and after the archive extractor's own limit
+    #: was raised to a shared 2 GB budget, "large" is a lot of pins.
+    #:
+    #: 20,000 is far above any hand-curated import; it is a backstop against
+    #: machine-scale files (a county parcel export, say), not a product limit on
+    #: what someone can bring in.
+    MAX_PREVIEW_PINS = 20_000
+
     def parse_for_preview(
         self,
         files: list[tuple[str, bytes]],
@@ -956,6 +970,7 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
         from urbanlens.dashboard.services.import_formats.wkt_wkb import wkb_to_dict, wkt_to_dict
 
         result: list[dict[str, Any]] = []
+        previewed = 0
 
         # Shapefiles ship as a set of same-stem sidecar files rather than one file,
         # so they must be grouped before the per-file loop below.
@@ -967,9 +982,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 logger.warning("Failed to parse shapefile bundle '%s' for preview: %s", bundle.stem, exc)
                 _notify_pin_import_parse_failure("shapefile")
                 continue
-            pins = self._preview_pins(raw_pins, user_profile)
+            pins = self._preview_pins(raw_pins, user_profile)[: self.MAX_PREVIEW_PINS - previewed]
             if pins:
+                previewed += len(pins)
                 result.append({"stem": bundle.stem, "pins": pins})
+            if previewed >= self.MAX_PREVIEW_PINS:
+                return result
 
         for filename, raw_bytes in files:
             fmt = validate_content_type(filename, raw_bytes)
@@ -1000,9 +1018,12 @@ class GoogleMapsGateway(SatelliteViewProvider, StreetViewProvider):
                 _notify_pin_import_parse_failure(fmt)
                 continue
 
-            pins = self._preview_pins(raw_pins, user_profile)
+            pins = self._preview_pins(raw_pins, user_profile)[: self.MAX_PREVIEW_PINS - previewed]
             if pins:
+                previewed += len(pins)
                 result.append({"stem": stem, "pins": pins})
+            if previewed >= self.MAX_PREVIEW_PINS:
+                break
 
         return result
 

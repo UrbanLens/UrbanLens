@@ -8428,3 +8428,41 @@ The reason for looking here was compressed streams, by analogy with the `.docx` 
 was wrong: `pypdf`'s text extraction is bounded by `_OCR_MAX_PAGES` before any stream is touched,
 and the OCR path reads the PDF as opaque bytes. The compression question was a real question with a
 "no" answer, and the actual defect was one the analogy would never have suggested.
+
+## RESOLVED 2026-08-16: the import *preview* built every pin at once; the import itself does not
+
+Chunk 535, the last item on the parser thread. The asymmetry is the finding:
+
+- `GoogleMapsGateway.import_pins_streaming` - the actual import - is a **generator** yielding one
+  SSE event per pin. It never holds the whole set, and its docstring is explicit about the
+  streaming design.
+- `GoogleMapsGateway.parse_for_preview` - which runs **first**, on the same files - builds every
+  pin dict for every file into one list and serialises them into a single `JsonResponse`,
+  in-request, with no bound anywhere in the chain.
+
+So the path that was carefully made incremental is preceded by one that was not, on identical
+input. This matters more since chunk 531 gave the archive extractor a shared 2 GB budget: "how much
+can reach the parser" is now a known quantity, and "how many pin dicts that becomes" was unbounded.
+Per-pin size is bounded (name 255 chars, description capped), so it is purely a count problem.
+
+**Fixed** with `MAX_PREVIEW_PINS = 20_000`, applied across the whole upload rather than per file,
+covering both the shapefile-bundle loop and the per-file loop. That is far above any hand-curated
+import - it is a backstop against machine-scale files (a county parcel export) rather than a
+product limit on what someone may bring in.
+
+Reaching the cap is **reported**, not silently applied: a truncated preview otherwise looks exactly
+like a smaller file. It rides the existing `warnings` array, which the preview UI already toasts.
+An upload landing exactly on the boundary gets the message without having been truncated, which is
+why it reads "at the preview limit" rather than "some were dropped" - a harmless over-warning
+instead of a claim that might be false.
+
+One adjacent fix that the new warning made necessary: the preview UI toasted every warning under
+the hardcoded title **"Could not import a file"**, which is right for the per-file parse failures
+that used to be the only occupants of that array and wrong for a notice about the preview itself.
+Retitled to "Import warning", which fits both.
+
+**Note on what remains unbounded, deliberately.** The *import* path streams per pin but still parses
+each file into a list before iterating it, so a single enormous file is held in memory once during
+its own import. Bounding that means changing the format parsers to be generators - a much larger
+change than this one, with no in-request exposure (the import runs as a streaming response), so it
+is recorded rather than attempted.

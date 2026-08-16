@@ -10055,3 +10055,30 @@ Twelve consolidations: 10,849 / 10,859 / 10,863 / 10,865 (2 resolved) / 10,873 /
 10,883 / 10,885 / 10,871 / 10,888 / 10,897. A thirteenth (task `bl9bhhohp`) is running over chunks
 532-534 - the enrichment decompression-bomb handler, the `.docx` uncompressed ceiling, and the OCR
 raster bound - none of which any run has covered.
+
+### Chunk 535 (continued) - the streaming import preceded by a non-streaming preview
+
+Closed the parser thread on the shape it had been circling. `import_pins_streaming` is a generator
+yielding an SSE event per pin, deliberately incremental and documented as such. `parse_for_preview`
+runs first, on the same files, and materialised every pin from every file into one in-request JSON
+response with no bound.
+
+That is the session's recurring pattern in its purest form: not a missing idea, but an idea applied
+to one of two paths. The careful design and the gap sit in the same class, one method apart - and
+the unbounded one runs first.
+
+Capped at 20,000 across the upload, high enough to be a backstop against machine-scale files rather
+than a limit on real imports, and *reported* through the `warnings` array the preview UI already
+toasts - because a truncated preview is indistinguishable from a smaller file otherwise. The
+boundary case warns without having truncated, which is why the wording is "at the preview limit"
+rather than a claim about dropped pins.
+
+Adding that warning exposed a small dishonesty in the channel: every warning was toasted under the
+hardcoded title "Could not import a file", correct for the per-file parse failures that had been
+its only occupants and wrong for a notice about the preview itself. Retitled.
+
+Recorded rather than attempted: the import path still parses each file into a list before iterating
+it, so one enormous file is held once during its own import. Making that incremental means turning
+the format parsers into generators - a much larger change with no in-request exposure.
+
+Verified: 33 preview and import tests, ruff clean.

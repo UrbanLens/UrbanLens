@@ -11,6 +11,7 @@ of what the user actually named the .kmz.
 from __future__ import annotations
 
 import io
+import json
 from unittest import mock
 import zipfile
 
@@ -20,6 +21,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.services.apis.locations.google.maps import GoogleMapsGateway
 
 _KML_TEMPLATE = """<?xml version="1.0" encoding="UTF-8"?>
 <kml xmlns="http://www.opengis.net/kml/2.2">
@@ -102,3 +104,60 @@ class ParseForPreviewStemTests(TestCase):
             lists = self._post("Urbex Sites.kml", _KML_TEMPLATE.encode())
         self.assertEqual(len(lists), 1)
         self.assertEqual(lists[0]["stem"], "Urbex Sites")
+
+
+class PreviewPinCapTests(TestCase):
+    """The preview materialises every pin at once; the import does not.
+
+    `import_pins_streaming` is a generator yielding one SSE event per pin, so
+    it never holds the whole set. The preview that runs *first* builds every
+    pin dict and serialises them into a single in-request JSON response, and
+    nothing bounded that - which matters more since the archive extractor's
+    budget became a shared 2 GB across an upload's nested archives.
+
+    Uses a lowered cap rather than a 20,000-pin fixture: the property is that
+    the bound is applied and reported, which a small cap demonstrates exactly
+    as well and in a fraction of the time.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+
+    def _geojson(self, count: int) -> bytes:
+        features = [
+            {
+                "type": "Feature",
+                "properties": {"name": f"Spot {index}"},
+                "geometry": {"type": "Point", "coordinates": [-73.9 - index * 0.001, 41.7 + index * 0.001]},
+            }
+            for index in range(count)
+        ]
+        return json.dumps({"type": "FeatureCollection", "features": features}).encode()
+
+    def _preview(self, data: bytes, cap: int) -> dict:
+        upload = SimpleUploadedFile("spots.geojson", data, content_type="application/octet-stream")
+        with mock.patch.object(GoogleMapsGateway, "MAX_PREVIEW_PINS", cap):
+            response = self.client.post(reverse("pin.import.preview"), {"upload_files": [upload]})
+        self.assertEqual(response.status_code, 200)
+        return response.json()
+
+    def test_the_preview_stops_at_the_cap(self) -> None:
+        payload = self._preview(self._geojson(12), cap=5)
+
+        self.assertEqual(payload["total"], 5)
+        self.assertEqual(sum(len(lst["pins"]) for lst in payload["lists"]), 5)
+
+    def test_hitting_the_cap_is_reported_rather_than_shown_silently(self) -> None:
+        """A truncated preview otherwise looks exactly like a smaller file."""
+        payload = self._preview(self._geojson(12), cap=5)
+
+        self.assertTrue(any("preview limit" in warning for warning in payload["warnings"]), payload["warnings"])
+
+    def test_an_upload_under_the_cap_is_untouched_and_unwarned(self) -> None:
+        """Anti-vacuity: the bound must not alter or annotate an ordinary import."""
+        payload = self._preview(self._geojson(3), cap=5)
+
+        self.assertEqual(payload["total"], 3)
+        self.assertFalse([w for w in payload["warnings"] if "preview limit" in w], payload["warnings"])

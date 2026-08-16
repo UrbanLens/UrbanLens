@@ -1251,10 +1251,20 @@ class PinController(LoginRequiredMixin, GenericViewSet):
 
         labels = Label.objects.visible_to(profile).location_labels().ordered()
 
+        previewed = sum(len(lst["pins"]) for lst in lists)
+        if previewed >= gateway.MAX_PREVIEW_PINS:
+            # Said out loud rather than silently shown: a preview that stops at
+            # the cap looks exactly like a file that only had that many pins.
+            # An upload landing on the boundary exactly gets this message
+            # without having been truncated, which is a harmless over-warning
+            # and the reason it says "at the limit" rather than "some were
+            # dropped".
+            document_warnings.append(f"This upload is at the preview limit of {gateway.MAX_PREVIEW_PINS:,} pins - anything beyond that is not shown.")
+
         return JsonResponse(
             {
                 "lists": lists,
-                "total": sum(len(lst["pins"]) for lst in lists),
+                "total": previewed,
                 "labels": [
                     {
                         "id": b.id,
