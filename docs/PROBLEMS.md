@@ -8867,3 +8867,37 @@ watching the new assertion name it.
 That makes four corrections in this stretch where the defect was in reasoning rather than in
 product code - three of them mine, this one inherited - and all four share the shape: an assertion
 or claim that reads as if it establishes something it does not.
+
+### Verified safe 2026-08-16 (chunk 546): the guards' allowlists and thresholds are not stale
+
+Following chunk 545's one defective guard, this pass checked the other failure mode: an allowlist
+that has quietly grown to swallow the population it was meant to constrain, or a threshold no longer
+binding.
+
+Five files matched a grep for allowlist-shaped names; **two were false positives** -
+`test_map_controller.py`'s `_GEOLOCATION_TRACKING_ALLOWED` is a template variable, and
+`test_route_query_scaling.py`'s `_ALLOWED_GROWTH = 2` is a per-route query-growth threshold rather
+than a list of exempted routes. The three genuine allowlists are all small and justified:
+
+- `test_cross_user_route_access.py::_ALLOWED_200` - **one** entry (`trips.child_trip_search`), with
+  a paragraph explaining why a stranger legitimately gets 200 from it. The sweep asserts it still
+  finds >100 routes and >10 nested routes, so it cannot pass vacuously.
+- `test_bulk_write_signal_guard.py::REVIEWED` - each entry carries its reasoning; the guard only
+  ever catches *new* bulk writes, which is its stated design.
+- `test_migration_noop_reverse_guard.py::REVIEWED` - added in chunk 544, with a per-file reason.
+
+No changes warranted.
+
+**A correction to chunk 545's framing.** That entry proposed as a new standard: "an assertion is a
+claim exactly as much as a count is; break it on purpose and watch it fail, or it is decoration."
+This codebase had already written that down and practised it. `test_route_query_scaling.py`'s
+docstring records that **two earlier versions of that sweep reported "all routes flat" while being
+structurally incapable of seeing the one N+1 known to exist**, and that the current version was
+trusted only after reverting a fix and watching `label.rows` light up at +80 queries - concluding
+"a scaling sweep that has never been shown to catch anything is indistinguishable from one that
+cannot". The rule is the codebase's, not mine; I restated it as though introducing it.
+
+That makes a fifth instance of the same shape as the four corrections above - a claim that reads as
+establishing more than it does. It is worth counting because the pattern is consistent: the errors
+in this audit have clustered almost entirely in what I have asserted *about* the work, not in the
+work.

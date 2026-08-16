@@ -10370,3 +10370,30 @@ that reads as establishing something it does not. The product code found in this
 what has needed fixing is the reasoning layered on top of it, mine included. An assertion is a claim
 about the code exactly as much as a count is a claim about a search, and it earns the same treatment:
 break it on purpose and watch it fail, or it is decoration.
+
+## Chunk 546 - the allowlists hold, and the standard I proposed was already the codebase's
+
+Second half of auditing the auditors: not "does the guard bind" (chunk 545) but "has its allowlist
+grown to swallow what it guards".
+
+It has not. Of five files matching an allowlist-shaped grep, two are false positives - a template
+variable and a numeric threshold - and the three real ones are one entry, a handful of reasoned
+entries, and the one I added in chunk 544. The security sweep's single exemption carries a
+paragraph of justification and sits behind two assertions that it still finds >100 routes. No
+changes warranted, which is the honest outcome and the second such chunk in this stretch.
+
+The finding is about me rather than the code. Chunk 545 closed by proposing a standard - "an
+assertion is a claim exactly as much as a count is; break it on purpose and watch it fail, or it is
+decoration". `test_route_query_scaling.py` had already written that down, and more sharply: its
+docstring records that two earlier versions of the sweep reported every route flat while being
+structurally incapable of seeing the one N+1 then known to exist, and that the current version
+earned trust only by reverting a real fix and watching `label.rows` light up at +80 queries. Its
+conclusion - "a scaling sweep that has never been shown to catch anything is indistinguishable from
+one that cannot" - is the same rule, arrived at first, from a worse experience than mine.
+
+Fifth instance in this stretch of the same shape: a claim of mine that reads as establishing more
+than it does. Four were corrections to reasoning; this one is a misattribution. The consistency is
+the point - the product findings in this session have held up under re-examination, and what has
+repeatedly needed correcting is the commentary layered on them. Reading the codebase's existing
+tests before proposing a standard would have caught this one exactly as `ls` would have caught
+chunk 544's duplicate guard.
