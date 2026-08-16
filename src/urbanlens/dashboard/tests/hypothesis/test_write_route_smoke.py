@@ -61,6 +61,21 @@ _WRITE_METHODS = ("post", "delete")
 #: entry. An exemption nobody re-checks is how an allowlist rots into a blindfold.
 _KNOWN_CRASHES = {"pin.link"}
 
+#: Routes skipped because exercising them would sabotage the sweep itself rather
+#: than test anything - not because they are excused. Deliberately tiny: every
+#: other side effect (creating rows, deleting objects, starting jobs) is fine in
+#: a test database and is exactly what we want executed.
+_SKIP_ROUTES = {
+    # Ends the session; every subsequent request in the sweep would then be
+    # measuring the login redirect instead of the route.
+    "logout",
+    # Answers 503 when UL_STRIPE_WEBHOOK_SECRET is unset, which it is in tests.
+    # That is the endpoint working: it fails closed rather than processing an
+    # unverifiable payload. A fact about the environment, like the network guard
+    # below, not a route that crashes.
+    "billing.stripe_webhook",
+}
+
 
 class WriteRouteSmokeTests(TestCase):
     """Every owner-scoped write route refuses a minimal request rather than crashing."""
@@ -89,16 +104,29 @@ class WriteRouteSmokeTests(TestCase):
         }
 
     def _write_routes(self) -> list[tuple[str, str]]:
-        """``(route name, url)`` for every single-parameter owner-scoped route."""
+        """``(route name, url)`` for every route this sweep can build a URL for.
+
+        Two populations, measured against the 648 named routes in the resolver:
+        the 160 taking a single owned-object parameter, and the 230 taking none
+        at all. The zero-parameter ones are the larger group and were the easier
+        to overlook precisely because they need no fixture - there is nothing to
+        build, so nothing prompts you to build it.
+
+        The remaining 258 take multiple parameters or a parameter this fixture
+        set has no value for; they are out of reach here rather than exempt, and
+        that shortfall is stated in PROBLEMS.md rather than hidden behind a
+        green test.
+        """
         urls: list[tuple[str, str]] = []
         for name, entries in get_resolver().reverse_dict.lists():
-            if not isinstance(name, str):
+            if not isinstance(name, str) or name in _SKIP_ROUTES:
                 continue
             params = entries[0][0][0][1]
-            if len(params) != 1 or params[0] not in self.identifiers:
-                continue
             try:
-                urls.append((name, reverse(name, kwargs={params[0]: self.identifiers[params[0]]})))
+                if not params:
+                    urls.append((name, reverse(name)))
+                elif len(params) == 1 and params[0] in self.identifiers:
+                    urls.append((name, reverse(name, kwargs={params[0]: self.identifiers[params[0]]})))
             except NoReverseMatch:
                 continue
         return sorted(urls)
@@ -108,6 +136,11 @@ class WriteRouteSmokeTests(TestCase):
         crashes: dict[str, str] = {}
         for name, url in self._write_routes():
             for method in _WRITE_METHODS:
+                # Re-authenticated per request: a route that rotates or drops the
+                # session (a password change, a device revoke) would otherwise
+                # leave every later route answering a login redirect, and a sweep
+                # measuring redirects finds nothing while looking green.
+                self.client.force_login(self.user)
                 try:
                     response = getattr(self.client, method)(url, data={})
                 except Exception as exc:  # noqa: BLE001 - classifying, then re-reporting

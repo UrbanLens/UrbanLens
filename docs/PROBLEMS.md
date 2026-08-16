@@ -6107,6 +6107,30 @@ with it - that single request is enough to catch this class permanently.
 
 ## OPEN 2026-08-13: ~187 write routes have no test that names them
 
+**Extended 2026-08-16 (chunk 552), and it found two more.** The first version only reached routes
+taking a single owned-object parameter - 160 of the resolver's 648 named routes. The larger
+population was the **230 zero-parameter routes**, easy to overlook precisely because they need no
+fixture: there is nothing to build, so nothing prompts you to build it. Sweeping those too turned up:
+
+- **`test_ai` was a dead route.** `urls.py` wired `PinController.as_view({"get": "test_ai"})` to a
+  method `PinController` does not have, so every request raised `AttributeError` - a guaranteed 500.
+  Nothing in the codebase referenced it. This is the same class as the dead `google_images` route
+  that `test_cross_user_route_access.py`'s docstring records finding; a second one had survived since.
+  Removed.
+- **`saved_filters.new` answered every POST with a 500.** `SavedFilterEditView` backs two routes, and
+  its `post()` required `filter_uuid` while `new/` supplies none - so the TypeError fired before any
+  application code ran. Not a broken user flow (the form posts to `saved_filters.create`; `new/` is
+  only ever `hx-get`), which is exactly why it survived: no UI path exercised it. It now refuses with
+  405, since editing without naming what to edit is not a request that view can answer.
+
+`billing.stripe_webhook` also answers 503 in tests, and that is the endpoint **working** - it fails
+closed when `UL_STRIPE_WEBHOOK_SECRET` is unset rather than processing an unverifiable payload. Named
+in the skip set with that reason, alongside `logout`, which would otherwise end the session and leave
+the rest of the sweep measuring login redirects.
+
+Still out of reach: the 258 routes taking multiple parameters or a parameter this fixture set has no
+value for. Stated here rather than hidden behind a green test.
+
 **Partly addressed 2026-08-16 (chunk 551) - one property across all of them, rather than one test
 each.** This entry says closing the gap route by route "is not a strategy". It is not; but a single
 *property* asserted across every write route is, and

@@ -10524,3 +10524,32 @@ discovered later.
 
 The backlog entry is updated, not closed: 186 routes still have no test asserting what they *do* -
 they now have one asserting they do not crash.
+
+## Chunk 552 - seventeenth consolidation green, and the sweep's second run found two dead routes
+
+**Seventeenth consolidation: 10,928 passed, 1 xfailed, 0 failed.** Fifteen green.
+
+Then measured what chunk 551's new sweep actually reached rather than assuming it was done: 160 of
+the resolver's 648 named routes. The gap was not the external API (namespaced routes need a
+different traversal) but the **230 zero-parameter routes** - the largest population, and the easiest
+to miss for a reason worth naming: they need no fixture, so nothing prompts you to build one and
+notice they were never requested.
+
+Extending to them found two real defects on the first run:
+
+- `test_ai` was wired to a `PinController` method that does not exist. Every request raised
+  `AttributeError`. Nothing referenced it. It is the same class as the dead `google_images` route the
+  cross-user sweep's docstring records catching - a second one had been sitting there since.
+- `saved_filters.new` returned 500 to every POST, because the view backing it requires a `filter_uuid`
+  the route does not supply. No UI path posts there, which is precisely why it survived: the only
+  thing that would ever have found it is a sweep that does not care whether a route is reachable
+  from the UI.
+
+Both are the shape this instrument exists for - routes no one exercises, failing in ways no one sees.
+The 503 from the Stripe webhook is the third hit and is the endpoint working correctly; it fails
+closed without its secret, and is named in the skip set with that reasoning.
+
+Worth noting what made the extension possible: the first run's result (one crash, and it was the
+known one) established the instrument was sound, so a second run finding three new hits was
+immediately credible rather than suspect. Validating an instrument on a known bug before widening it
+is cheaper than debugging a widened one.

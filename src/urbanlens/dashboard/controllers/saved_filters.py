@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING
 
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.gis.geos import Polygon
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, HttpResponseNotAllowed, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.views import View
 
@@ -207,7 +207,16 @@ class SavedFilterEditView(LoginRequiredMixin, View):
         context = _build_filter_form_context(profile, filter_uuid)
         return render(request, _FORM_DIALOG_TEMPLATE, context)
 
-    def post(self, request, filter_uuid):
+    def post(self, request, filter_uuid=None):
+        # This view backs two routes: `saved_filters.edit` (with a uuid) and
+        # `saved_filters.new` (without), which exists only to hx-get a blank
+        # form - the form itself posts to `saved_filters.create`. The parameter
+        # was required, so POSTing to `new/` raised TypeError before reaching
+        # any of this: a guaranteed 500 on a route nothing was meant to post to.
+        # Editing without naming what to edit is not a request this view can
+        # answer, so it is refused rather than quietly redirected to a create.
+        if filter_uuid is None:
+            return HttpResponseNotAllowed(["GET"])
         profile, _ = Profile.objects.get_or_create(user=request.user)
         saved_filter = get_object_or_404(SavedFilter, uuid=filter_uuid, profile=profile)
 
