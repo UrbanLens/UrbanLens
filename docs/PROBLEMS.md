@@ -8830,3 +8830,40 @@ worth less than copying the paranoia that came with it" - and the paranoia I fai
 my own claim that no guard existed. Second, this is the third correction to my own recorded
 reasoning (after chunk 532's arithmetic and chunk 538's root/appuser premise), and all three share a
 shape: a claim stated once, then built on, without the check that would have cost a single grep.
+
+## RESOLVED 2026-08-16: a completeness guard whose completeness arm pointed the wrong way
+
+Chunk 545 audited the auditors: this codebase has thirteen guard/coverage tests, and chunk 544 had
+just shown one of them catching a real regression. The question was whether the rest still *bind*.
+
+Most do, and the survey is worth recording so it is not redone: `test_pin_cycle_guard` and
+`test_wiki_cycle_guard` are behavioural rather than scan-based (no vacuous-pass risk);
+`test_export_import_completeness` is 45 explicit per-field assertions rather than a derived
+population; the scan-based ones - bulk-write signals, external-API scopes, journal-source scopes,
+label-merge relations, plugin rate limits, settings round-trip, undo scopes - each carry a
+"the scan still finds something" assertion.
+
+**One is wrong.** `test_undo_photo_reattachment_coverage`'s completeness arm asserts
+
+```python
+set(_PHOTO_OWNERS).issubset(actual_SET_NULL_owners_of_Image)
+```
+
+which catches a *stale* entry - the list naming a relation `Image` no longer has - and permits
+exactly what the test's own docstring promises to prevent: "a fourth owner must not repeat this
+silently." A new `SET_NULL` photo owner arriving with an undo handler leaves `_PHOTO_OWNERS` a
+subset, so the guard passes while that owner's photos go unrestored on undo - the original bug,
+repeated silently, by the test written to stop it.
+
+**Not currently live.** `Image` has seven `SET_NULL` owners (`pin`, `wiki`, `safetycheckin`,
+`location`, `pinvisit`, `pinsuggestion`, `directmessage`) and only the first three have undo
+handlers, all three listed. The direction is latently wrong, not presently wrong.
+
+Fixed by asserting both directions: the existing subset (catches a stale entry) plus its converse
+restricted to owners that actually have a handler - owners without one are genuinely out of scope,
+since nothing restores what nothing undoes. Verified to bind by removing `wiki` from the map and
+watching the new assertion name it.
+
+That makes four corrections in this stretch where the defect was in reasoning rather than in
+product code - three of them mine, this one inherited - and all four share the shape: an assertion
+or claim that reads as if it establishes something it does not.

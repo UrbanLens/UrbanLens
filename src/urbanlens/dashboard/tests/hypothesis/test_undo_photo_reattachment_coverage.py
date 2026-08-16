@@ -96,7 +96,33 @@ class UndoPhotoReattachmentTests(TestCase):
                 uncovered.append(label)
 
         self.assertEqual(uncovered, [], "these undo handlers no longer restore photo attachments")
+
+        # Both directions, deliberately. The subset below catches a *stale*
+        # entry - _PHOTO_OWNERS naming a relation Image no longer has. On its
+        # own it does not do what this test's docstring promises: a fourth
+        # SET_NULL owner arriving with an undo handler keeps _PHOTO_OWNERS a
+        # subset, so the guard would pass while the new owner's photos went
+        # unrestored - the exact silent repeat it exists to prevent.
+        normalised = {name.replace("checkin", "_checkin") if name.endswith("checkin") else name for name in owners}
         self.assertTrue(
-            set(_PHOTO_OWNERS).issubset({name.replace("checkin", "_checkin") if name.endswith("checkin") else name for name in owners}),
+            set(_PHOTO_OWNERS).issubset(normalised),
             f"Image gained or lost a SET_NULL owner; reconcile _PHOTO_OWNERS with {sorted(owners)}",
+        )
+
+        # The direction that actually enforces completeness: every SET_NULL
+        # owner that has an undo handler must be listed. Owners without one
+        # (Location, PinVisit, PinSuggestion, DirectMessage today) are outside
+        # this test's scope - nothing restores them because nothing undoes them.
+        with_handlers = set()
+        for name in owners:
+            for candidate in {name, name.replace("checkin", "_checkin") if name.endswith("checkin") else name}:
+                try:
+                    if get_handler(candidate) is not None:
+                        with_handlers.add(candidate)
+                except Exception:  # noqa: BLE001 - no handler registered under that label
+                    continue
+        self.assertEqual(
+            sorted(with_handlers - set(_PHOTO_OWNERS)),
+            [],
+            "a SET_NULL photo owner gained an undo handler without being added to _PHOTO_OWNERS - its photos are not being restored",
         )

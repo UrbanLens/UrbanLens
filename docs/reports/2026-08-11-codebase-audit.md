@@ -10341,3 +10341,32 @@ concluded *about* them.
 Chunk 544's own work - a guard requiring any new migration's ``noop`` reverse to be justified, and
 an extension of the reversibility audit to migrations 0001-0020 that chunk 459 never reached - is
 kept, and this time I checked for an existing equivalent first. There is none.
+
+## Chunk 545 - auditing the auditors
+
+Chunk 544 ended with a guard catching a real regression and with me having duplicated a different
+guard I never checked for. Both point the same way: the guards themselves are worth auditing. There
+are thirteen.
+
+Most hold up, and the reasons are worth recording so the survey is not repeated: two are behavioural
+rather than scan-based and cannot pass vacuously; one is forty-five explicit per-field assertions
+rather than a derived population; the seven genuinely scan-based ones each assert that their scan
+still finds something - the failure mode the bulk-write guard documented and my own chunk-543 guard
+demonstrated within minutes of being written.
+
+One is wrong, and wrong in the most instructive way available: `test_undo_photo_reattachment_coverage`
+asserts `_PHOTO_OWNERS ⊆ actual SET_NULL owners`. That catches a stale entry and permits precisely
+what its docstring promises to prevent - a *new* photo owner with an undo handler keeps the subset
+relation true, so the guard passes while that owner's photos are never restored. The test written to
+stop the bug from repeating silently would have let it repeat silently.
+
+It is latent rather than live: seven SET_NULL owners exist, three have undo handlers, all three are
+listed. Fixed by asserting the converse as well, restricted to owners that actually have a handler,
+and verified to bind by removing one and watching it fail.
+
+The pattern across this stretch is now unmistakable. Four corrections - chunk 532's arithmetic, 538's
+root/appuser premise, 544's duplicated guard, and this inherited assertion - and every one is a claim
+that reads as establishing something it does not. The product code found in this session has held up;
+what has needed fixing is the reasoning layered on top of it, mine included. An assertion is a claim
+about the code exactly as much as a count is a claim about a search, and it earns the same treatment:
+break it on purpose and watch it fail, or it is decoration.
