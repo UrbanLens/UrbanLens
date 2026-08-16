@@ -42,7 +42,9 @@ from urbanlens.dashboard.models.pin.signals import refresh_map_pin_cache_for_lab
 from urbanlens.dashboard.models.pin_list.model import PinList
 from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.numbers import safe_int
+from urbanlens.dashboard.services.core.text_limits import column_length_error, column_max_length
 from urbanlens.dashboard.services.labels.customization import clear_label_customization, upsert_label_customization
 from urbanlens.dashboard.services.labels.hierarchy import would_create_cycle
 from urbanlens.dashboard.services.labels.merge import LabelMergeError, merge_labels
@@ -619,6 +621,9 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
         name = request.POST.get("name", "").strip()
         if not name:
             return HttpResponse("Name is required.", status=400)
+        name_error = column_length_error(Label, "name", name, cfg.singular_title)
+        if name_error:
+            return HttpResponse(name_error, status=400)
 
         parent_ids = request.POST.getlist("parent_ids")
         order = safe_int(request.POST.get("order"))
@@ -641,7 +646,7 @@ class LabelCreateView(_LabelKindMixin, LoginRequiredMixin, View):
             profile=profile,
             name=name,
             description=request.POST.get("description", "").strip() or None,
-            icon=request.POST.get("icon") or None,
+            icon=clean_icon(request.POST.get("icon"), max_length=column_max_length(Label, "icon")) or None,
             color=clean_color(request.POST.get("color"), default=DEFAULT_LABEL_COLOR),
             custom_icon=custom_icon,
             order=order,

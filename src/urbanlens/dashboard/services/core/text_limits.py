@@ -35,6 +35,47 @@ MAX_PREFERENCE_OTHER_LENGTH = 255
 MAX_ADDITIONAL_PREFERENCES_LENGTH = 1_000
 
 
+def column_max_length(model: type, field_name: str) -> int:
+    """The declared width of `model.field_name`'s column.
+
+    Django's Model ``_meta`` API is the documented way to ask this; the
+    suppression is here, once, so callers needing a column's own width do not
+    each repeat it.
+
+    Args:
+        model: The model class owning the field.
+        field_name: Name of a field with a ``max_length``.
+
+    Returns:
+        The field's ``max_length``.
+    """
+    return model._meta.get_field(field_name).max_length  # noqa: SLF001 - Model._meta is Django's documented metadata API
+
+
+def column_length_error(model: type, field_name: str, value: str | None, field_label: str) -> str | None:
+    """Return an error if `value` will not fit `model.field_name`'s column.
+
+    The constants above cover `TextField`s, whose limit exists only as a Django
+    validator. This covers the other case: a `CharField` whose limit is the
+    database column itself, where an over-long value is a `DataError` rather
+    than a validation failure. Controllers that assign request data straight to
+    such a field - names, mostly - have no validator in the way, so the check
+    has to be explicit.
+
+    The bound is read from the field so it cannot drift from the column.
+
+    Args:
+        model: The model class owning the field.
+        field_name: Name of the bounded field on that model.
+        value: The text to check (may be `None` or empty).
+        field_label: Human-readable field name to use in the error message.
+
+    Returns:
+        An error string if `value` is too long, otherwise `None`.
+    """
+    return text_length_error(value, column_max_length(model, field_name), field_label)
+
+
 def text_length_error(value: str | None, max_length: int, field_label: str) -> str | None:
     """Return a human-readable error if `value` exceeds `max_length`.
 

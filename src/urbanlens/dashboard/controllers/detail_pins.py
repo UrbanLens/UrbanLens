@@ -20,6 +20,7 @@ from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.colors import clean_color
 from urbanlens.dashboard.services.core.icons import clean_icon
 from urbanlens.dashboard.services.core.numbers import safe_int
+from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.locations.site_scope import is_site_scope
 from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
 from urbanlens.dashboard.services.undo.handlers.pin import MODEL_LABEL as PIN_MODEL_LABEL
@@ -161,6 +162,9 @@ class DetailPinPanelView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
 
         detail_name = body.get("name") or None
+        name_error = column_length_error(Pin, "name", detail_name, "Name")
+        if name_error:
+            return JsonResponse({"ok": False, "error": name_error}, status=400)
         pin_type, pin_type_chosen = _requested_pin_type(body)
         detail_pin = Pin.objects.create(
             name=detail_name,
@@ -366,6 +370,9 @@ class LocationWikiDetailPinView(LoginRequiredMixin, View):
             return JsonResponse({"ok": False, "error": exc.safe_message}, status=400)
 
         child_name = body.get("name") or wiki.name
+        name_error = column_length_error(Wiki, "name", child_name, "Name")
+        if name_error:
+            return JsonResponse({"ok": False, "error": name_error}, status=400)
         pin_type, pin_type_chosen = _requested_pin_type(body)
         child_wiki = Wiki.objects.create(
             name=child_name,

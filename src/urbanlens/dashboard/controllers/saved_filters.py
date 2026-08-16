@@ -17,6 +17,8 @@ from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.services.core.colors import clean_color
+from urbanlens.dashboard.services.core.icons import clean_icon
+from urbanlens.dashboard.services.core.text_limits import column_length_error, column_max_length
 from urbanlens.dashboard.services.geo.geo import dissolve_polygons
 from urbanlens.dashboard.services.pins.pin_list_membership import resync_lists_for_saved_filter
 from urbanlens.dashboard.services.search.filter_criteria import deserialize_criteria, serialize_form_criteria
@@ -100,6 +102,9 @@ class SavedFilterCreateView(LoginRequiredMixin, View):
         name = (request.POST.get("filter_name") or "").strip()
         if not name:
             return HttpResponse("A name is required to save a filter.", status=400)
+        name_error = column_length_error(SavedFilter, "name", name, "Filter name")
+        if name_error:
+            return HttpResponse(name_error, status=400)
         if SavedFilter.objects.name_taken_for(profile, name):
             return HttpResponse("You already have a saved filter with that name.", status=409)
 
@@ -115,7 +120,7 @@ class SavedFilterCreateView(LoginRequiredMixin, View):
         if not criteria:
             return HttpResponse("No active filters to save.", status=400)
 
-        icon = (request.POST.get("icon") or "bookmark").strip()
+        icon = clean_icon(request.POST.get("icon"), default="bookmark", max_length=column_max_length(SavedFilter, "icon"))
         color = clean_color(request.POST.get("color"), default="")
         SavedFilter.objects.create(
             profile=profile,

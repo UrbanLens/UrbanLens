@@ -23,7 +23,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.site_settings.model import SiteSettings
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
-from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH, text_length_error
+from urbanlens.dashboard.services.core.text_limits import MAX_PIN_LIST_DESCRIPTION_LENGTH, column_length_error, text_length_error
 from urbanlens.dashboard.services.map.map_snapshot import materialize_markup_map
 from urbanlens.dashboard.services.pins.pin_list_markup import build_list_markup_snapshot
 from urbanlens.dashboard.services.pins.pin_list_membership import add_pins_to_list, reorder_list_items, resync_smart_list
@@ -211,6 +211,9 @@ class PinListCreateView(LoginRequiredMixin, View):
         name = (body.get("name") or "").strip()
         if not name:
             return HttpResponse("List name is required.", status=400)
+        name_error = column_length_error(PinList, "name", name, "List name")
+        if name_error:
+            return HttpResponse(name_error, status=400)
         if PinList.objects.filter(profile=profile, name=name).exists():
             return HttpResponse("You already have a list with that name.", status=409)
 
@@ -491,6 +494,9 @@ class PinListCreateTripView(LoginRequiredMixin, View):
         body = _parse_body(request)
 
         trip_name = (body.get("name") or "").strip() or _default_trip_name_for_list(pin_list)
+        name_error = column_length_error(Trip, "name", trip_name, "Trip name")
+        if name_error:
+            return HttpResponse(name_error, status=400)
         trip = Trip.objects.create(name=trip_name, creator=profile)
         TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": "yes", "status": TripMembership.STATUS_JOINED})
         copy_list_pins_to_trip(pin_list, trip, profile)

@@ -22,6 +22,7 @@ from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias, WikiAl
 from urbanlens.dashboard.models.auto_removals.model import AutoRemovalKind, WikiAutoRemoval
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki_edit import WikiEdit
+from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.locations.naming import (
     normalize_name_for_comparison,
     persist_official_aliases_for_location,
@@ -155,6 +156,9 @@ class PinAliasView(LoginRequiredMixin, View):
         name = (request.POST.get("name") or "").strip()
         if not name:
             return HttpResponse("Name is required.", status=400)
+        name_error = column_length_error(PinAlias, "name", name, "Alias")
+        if name_error:
+            return HttpResponse(name_error, status=400)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
             create_pin_alias(pin, name=name, kind=kind)
@@ -218,6 +222,9 @@ class LocationAliasView(LoginRequiredMixin, View):
         name = sanitize_name((request.POST.get("name") or "").strip()) or ""
         if not name:
             return JsonResponse({"ok": False, "error": "Name is required."}, status=400)
+        name_error = column_length_error(WikiAlias, "name", name, "Alias")
+        if name_error:
+            return JsonResponse({"ok": False, "error": name_error}, status=400)
         kind = AliasType.NICKNAME if request.POST.get("is_nickname") else AliasType.ALTERNATE
         try:
             # See PinAliasView.post's atomic() comment - same reasoning here.

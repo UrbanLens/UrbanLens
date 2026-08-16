@@ -10714,3 +10714,53 @@ the wrong reason in the first run and briefly looked like confirmation. The seve
 established once the fix was reverted and the test failed with the `DataError` itself. And the fix
 landing did not make that test pass; a second run was needed after correcting the fixture, which is
 the honest order these two things happened in.
+
+## Chunk 559 - the class behind chunk 558, and a different class underneath it
+
+Chunk 558 fixed `NotificationLog.title`. This chunk asked whether *assembled text into a bounded
+column* was a class worth closing, and scanned for it: every f-string written to a `CharField` or
+`SlugField`, sized against the model the call actually constructs.
+
+The answer is no, and cleanly so. **All 43 such writes in the codebase target `NotificationLog`** -
+`title` (11, fixed last chunk), `url` (3, 491 characters spare), `message` (29, 49,757 spare).
+Widening the scan past f-strings - `.format()`, `%`, `+`, attribute assignment, and a value
+assembled into a local first - added 11 more sites and no new overflow. The class is closed.
+
+The first version of that scan resolved columns by field name alone and reported everything as
+catastrophic, because `NotificationPreference.message` is a 10-char choices column while
+`NotificationLog.message` is 50,000. Sizing against the wrong column is worse than not sizing.
+
+**What the widened scan surfaced instead is a live class.** Asking the neighbouring question - request
+data reaching a bounded column with nothing enforcing the bound - turns up the shape
+`test_profile_name_length` found once in `EditProfileView` and never generalised. 37 candidates,
+most false: `clean_color` and `clean_icon` bound their outputs, `CustomLayer` checks its name and
+allowlists its icon, `WikiLinkCreateSerializer` declares `max_length=255` - the pattern that should
+be everywhere. What remained, each verified by driving the real endpoint:
+
+| Column | Width | Path |
+| --- | --- | --- |
+| `PinList.name` | 100 | checked its *description's* length in the same function, not its name's |
+| `SavedFilter.name` | 100 | emptiness and uniqueness only |
+| `SavedFilter.icon` | 64 | straight off `request.POST` |
+| `Label.name` | 255 | emptiness and uniqueness only |
+| `Label.icon` | 50 | straight off `request.POST`, no sanitiser at all |
+| `PinAlias.name` / `WikiAlias.name` | 255 | `sanitize_name` drops characters but does not bound length |
+| `Pin.name` / `Wiki.name` | 255 | taken from the JSON body (the same `Wiki.name` chunk 558 overflowed *through*) |
+| `Trip.name` | 255 | taken from the JSON body |
+
+All are a `DataError` 500 on an ordinary POST. Fixed with the codebase's own convention -
+`text_length_error` turned into a 400 - via a new `column_length_error(model, field, ...)` that reads
+the bound from the field so it cannot drift from the column. Truncating would be wrong here, unlike
+a notification title: these are names the user chose and will look for again.
+
+The icon finding is the more interesting one. `clean_icon` exists and is used widely, but its single
+`MAX_ICON_LENGTH = 255` fits `Pin.icon` and `Wiki.icon` while `Label.icon` and `CustomLayer.icon`
+are 50 and `SavedFilter.icon` is 64 - so a value the sanitiser **accepts** is a `DataError` on those
+columns. A sanitiser whose bound is narrower than some of its callers' is not a sanitiser for them.
+It now takes the column width, and the narrow callers pass their own.
+
+Still unverified, carried to the next chunk: `MessagingKeyBundle.public_key`/`password_wrap_salt`
+(e2ee), `Image.caption` (safety), and `SiteSettings.default_name_source_priority`, where a regex
+bounds each token of a comma-joined list but neither the token count nor any single token's length.
+`MediaRelevance.item_key` is safe but by coincidence worth noting - it stores a sha1 hexdigest in a
+40-wide column, which fits exactly and would not survive a change of hash.

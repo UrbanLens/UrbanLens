@@ -66,14 +66,14 @@ def _is_emoji_token(text: str) -> bool:
 
 
 @overload
-def clean_icon(value: object, *, default: str) -> str: ...
+def clean_icon(value: object, *, default: str, max_length: int = ...) -> str: ...
 
 
 @overload
-def clean_icon(value: object, *, default: None = ...) -> str | None: ...
+def clean_icon(value: object, *, default: None = ..., max_length: int = ...) -> str | None: ...
 
 
-def clean_icon(value: object, *, default: str | None = None) -> str | None:
+def clean_icon(value: object, *, default: str | None = None, max_length: int = MAX_ICON_LENGTH) -> str | None:
     """Return ``value`` when it is an icon this application stores, else ``default``.
 
     Args:
@@ -81,6 +81,11 @@ def clean_icon(value: object, *, default: str | None = None) -> str | None:
             or a JSON body.
         default: What to return when ``value`` is missing, blank, over-long, or
             not one of the three recognised shapes.
+        max_length: Longest accepted icon. ``MAX_ICON_LENGTH`` suits the 255-wide
+            columns (``Pin.icon``, ``Wiki.icon``), but several are narrower -
+            ``Label.icon`` and ``CustomLayer.icon`` are 50, ``SavedFilter.icon``
+            is 64 - and a value this function accepted would then be a
+            ``DataError`` on write. Those callers pass their own column's width.
 
     Returns:
         A validated icon string, or ``default``.
@@ -88,7 +93,7 @@ def clean_icon(value: object, *, default: str | None = None) -> str | None:
     if value is None:
         return default
     text = str(value).strip()
-    if not text or len(text) > MAX_ICON_LENGTH:
+    if not text or len(text) > max_length:
         return default
     if MATERIAL_ICON_RE.match(text):
         return text
