@@ -99,12 +99,34 @@ def _handle_checkout_session_completed(session: dict) -> None:
 
 
 def _handle_subscription_updated(stripe_subscription: dict) -> None:
-    from urbanlens.dashboard.models.billing import RoleSubscription
+    from urbanlens.dashboard.models.billing import BillingSubscriptionStatus, RoleSubscription
 
     role_subscription = RoleSubscription.objects.for_stripe_subscription(stripe_subscription["id"])
     if role_subscription is None:
         logger.info("customer.subscription.updated for unknown subscription %s", stripe_subscription.get("id"))
         return
+
+    # Stripe guarantees neither ordering nor single delivery, and emits `updated`
+    # alongside `deleted` at cancellation - so a retried `updated` carrying the
+    # pre-cancellation status can arrive after the `deleted` that closed this
+    # subscription. Applying it verbatim would hand back whatever access the role
+    # grants until the nightly reconciliation sweep undid it.
+    #
+    # Cancellation is terminal at Stripe: a canceled subscription is never
+    # reactivated, a new one is created instead. So a later payload that claims
+    # otherwise is always the stale one, and dropping it loses nothing.
+    #
+    # Not to be confused with a subscription set to cancel at period end, which
+    # *is* reversible - but that one's status stays `active` until the period
+    # closes, so it never reaches this branch.
+    if role_subscription.status == BillingSubscriptionStatus.CANCELED and stripe_subscription.get("status") != BillingSubscriptionStatus.CANCELED:
+        logger.info(
+            "Ignoring out-of-order customer.subscription.updated (status=%s) for already-canceled subscription %s",
+            stripe_subscription.get("status"),
+            stripe_subscription.get("id"),
+        )
+        return
+
     sync_from_stripe_subscription(role_subscription, stripe_subscription)
 
 

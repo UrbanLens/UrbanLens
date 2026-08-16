@@ -160,6 +160,37 @@ class HandleSubscriptionUpdatedTests(TestCase):
         event = {"type": "customer.subscription.updated", "data": {"object": _subscription_payload(sub_id="sub_unknown")}}
         webhooks.handle_event(event)  # must not raise
 
+    def test_a_late_update_cannot_resurrect_a_canceled_subscription(self) -> None:
+        """Stripe guarantees neither ordering nor single delivery.
+
+        ``customer.subscription.updated`` and ``.deleted`` are emitted together
+        at cancellation, and Stripe retries a failed delivery with backoff for
+        days - so the ``updated`` carrying the pre-cancellation status can land
+        after the ``deleted``. Applying it verbatim hands the subscription back
+        its old status, and with it whatever access the role grants. The daily
+        reconciliation sweep would undo that, but not for up to 24 hours.
+
+        Cancellation is terminal at Stripe - a canceled subscription is never
+        reactivated, a new one is created instead - so a later payload claiming
+        otherwise is always the stale one.
+        """
+        subscription = baker.make(RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.CANCELED)
+
+        webhooks.handle_event({"type": "customer.subscription.updated", "data": {"object": _subscription_payload(status="active")}})
+
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.status, BillingSubscriptionStatus.CANCELED)
+
+    def test_a_canceled_payload_still_applies_to_a_canceled_subscription(self) -> None:
+        """The guard must not block ordinary re-delivery of the cancellation itself."""
+        subscription = baker.make(RoleSubscription, stripe_subscription_id="sub_123", status=BillingSubscriptionStatus.CANCELED, pledged_amount_cents=100)
+
+        webhooks.handle_event({"type": "customer.subscription.updated", "data": {"object": _subscription_payload(status="canceled", unit_amount=500)}})
+
+        subscription.refresh_from_db()
+        self.assertEqual(subscription.status, BillingSubscriptionStatus.CANCELED)
+        self.assertEqual(subscription.pledged_amount_cents, 500)
+
 
 class HandleSubscriptionDeletedTests(TestCase):
     def test_marks_the_subscription_canceled(self) -> None:

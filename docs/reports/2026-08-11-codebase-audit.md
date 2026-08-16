@@ -11103,3 +11103,38 @@ would have left names clipped at 100 with nothing to indicate why. It now reads
 Reporting a clean trace as the result. Four test modules looked thin next to trips' 27, but coverage
 counted in files is a poor proxy: what albums have is tests on the things that actually decay -
 batching, races, visibility - which is worth more than breadth.
+
+## Chunk 569 - the Stripe hazard idempotency tests do not catch
+
+Traced billing end-to-end, chosen by risk this time rather than coverage: money, external state, and
+a system that retries. Twelve test modules already, including one for webhook idempotency.
+
+The webhook view is the strongest code I have read in this session. Signature verification, the raw
+event stored in its own transaction *before* handling so a failing handler still leaves something to
+debug from, then a `select_for_update` re-read of that row inside the handling transaction - with
+the reasoning written out, including why handling and marking-as-handled must commit together
+(`invoice.payment_succeeded` *increments* a paid total, so a redelivery that credited but did not
+record would credit twice).
+
+But idempotency is per event id, and that is a different property from ordering. Stripe guarantees
+neither, and emits `customer.subscription.updated` alongside `.deleted` at cancellation while
+retrying failed deliveries with backoff for days. So the `updated` carrying the pre-cancellation
+status can land *after* the `deleted` - and `_handle_subscription_updated` applied it verbatim,
+writing `status` back to `active` and `canceled_at` back to `None`. A cancelled subscriber keeps
+whatever access the role grants.
+
+Not unbounded, and worth stating precisely: `sync_stripe_subscriptions` re-fetches from Stripe
+nightly at 04:10 and selects `not_canceled()`, so a resurrected row is picked up and corrected -
+the architecture already anticipated unreliable webhooks. The exposure is up to ~24 hours, not
+permanent. Reproduced with a failing test first, then closed.
+
+The guard is that cancellation is terminal at Stripe: a canceled subscription is never reactivated,
+a new one is created instead, so a later payload claiming otherwise is always the stale one. The
+obvious objection - a subscription set to cancel at period end *is* reversible - does not apply,
+because that one's status stays `active` until the period closes and so never reaches the branch.
+A second test covers the case the guard must not break: re-delivery of the cancellation itself still
+updates the row's other fields. The nightly sweep calls `sync_from_stripe_subscription` directly
+rather than through this handler, so its safety-net behaviour is unchanged. 49 billing tests pass.
+
+Deliberately left alone: the refund/chargeback reversal already filed as an owner decision. This
+change is about event ordering, not about what a reversal should do.
