@@ -81,7 +81,10 @@ jobs:
         run: ruff format --check src
 
       - name: Static type check
-        run: mypy src
+        # --show-traceback: the django-stubs plugin runs django.setup() while it
+        # constructs, and mypy reports any failure there as a bare "Error
+        # constructing plugin instance" with nothing to act on.
+        run: mypy src --show-traceback
 
       # ----------------------------------------------------------------------------
       # Three issues to address here (TODO):

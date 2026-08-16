@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 import json
 import logging
 import smtplib
@@ -11,6 +12,9 @@ from urllib.parse import quote
 from uuid import UUID
 
 from django import forms
+
+# Aliased: several functions here bind a local `settings` to SiteSettings.
+from django.conf import settings as django_settings
 from django.contrib.auth import REDIRECT_FIELD_NAME, get_user_model, login as auth_login, views as auth_views
 from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, UserCreationForm
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -25,6 +29,7 @@ from django.middleware.csrf import get_token
 from django.shortcuts import redirect, render
 from django.template.loader import render_to_string
 from django.urls import reverse, reverse_lazy
+from django.utils import timezone
 from django.utils.html import format_html
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.views import View, generic
@@ -61,6 +66,37 @@ def _lockout_key(key: str) -> str:
 def _is_locked_out(key: str) -> bool:
     """Return True if ``key`` is currently locked out."""
     return bool(cache.get(_lockout_key(key)))
+
+
+def _bump_counter(key: str, timeout: int) -> int:
+    """Increment a failure counter atomically and return its new value.
+
+    Read-then-write loses increments exactly when it matters: parallel failed
+    logins all read the same value and write the same successor, so a spray
+    run wide enough never reaches the limit it is being counted against.
+    ``incr`` is a single operation on every backend we run (Valkey's INCR,
+    LocMemCache under its lock).
+
+    ``touch`` afterwards keeps the window sliding from the most recent
+    failure, which is what ``incr`` alone would give up - it leaves the
+    original expiry in place.
+
+    Args:
+        key: The counter's cache key.
+        timeout: Seconds the counter should survive its last increment.
+
+    Returns:
+        The failure count including this one.
+    """
+    cache.add(key, 0, timeout=timeout)
+    try:
+        attempts = int(cache.incr(key))
+    except ValueError:
+        # Expired between the add and the incr; this failure starts the window.
+        cache.set(key, 1, timeout=timeout)
+        return 1
+    cache.touch(key, timeout=timeout)
+    return attempts
 
 
 def _resolve_login_user(identifier: str) -> User | None:
@@ -154,8 +190,7 @@ def _record_failed_attempt(key: str) -> int:
         return 0
 
     attempts_key = _attempts_key(key)
-    attempts: int = (cache.get(attempts_key) or 0) + 1
-    cache.set(attempts_key, attempts, timeout=lockout_seconds)
+    attempts = _bump_counter(attempts_key, lockout_seconds)
 
     if attempts >= max_attempts:
         cache.set(_lockout_key(key), 1, timeout=lockout_seconds)
@@ -174,6 +209,86 @@ def _clear_login_attempts(key: str) -> None:
     """
     cache.delete(_attempts_key(key))
     cache.delete(_lockout_key(key))
+
+
+def _lockout_error_message(minutes: int) -> str:
+    """The error shown when a login attempt is refused at the lockout gate.
+
+    A single source keeps the identifier-lockout and per-IP-throttle rejections
+    byte-identical, so a refused attempt reveals neither which dimension
+    (account or address) tripped nor whether the identifier exists.
+
+    Args:
+        minutes: The configured ``SiteSettings.login_lockout_minutes``.
+
+    Returns:
+        The user-facing error string.
+    """
+    return f"Too many failed login attempts. Please try again in {minutes} minute{'s' if minutes != 1 else ''}."
+
+
+# -- Per-IP login failure throttle -------------------------------------------
+
+
+def _login_ip_attempts_key(ip: str) -> str:
+    """Cache key for the failed-login counter for a client IP."""
+    return f"login_ip_attempts:{ip}"
+
+
+def _is_ip_locked_out(request: HttpRequest) -> bool:
+    """Return True if the requesting IP has exhausted its failed-login budget.
+
+    Complements the per-identifier lockout: that one stops repeated attempts on
+    a single account but lets one address spray attempts across many
+    identifiers (and doubles as a targeted DoS, since anyone can trip it for a
+    victim's identifier at no cost to themselves). This throttle counts
+    failures per client IP regardless of the identifier submitted.
+
+    Args:
+        request: The incoming login request.
+
+    Returns:
+        True when the IP's failure count has reached
+        ``SiteSettings.login_ip_max_attempts`` within the current window;
+        always False when that setting is 0 (disabled).
+    """
+    from urbanlens.dashboard.models.site_settings import SiteSettings
+
+    max_attempts = SiteSettings.get_current().login_ip_max_attempts
+    if max_attempts <= 0:
+        return False
+    attempts = int(cache.get(_login_ip_attempts_key(_client_ip(request))) or 0)
+    return attempts >= max_attempts
+
+
+def _record_login_ip_failure(request: HttpRequest) -> int:
+    """Increment the requesting IP's failed-login counter.
+
+    Failures only - a successful login never touches the counter, so the
+    throttle simply expires ``login_lockout_minutes`` after the last recorded
+    failure. Mirrors the ``_PASSPHRASE_RATE_LIMIT`` cache-counter pattern used
+    elsewhere in this module.
+
+    Args:
+        request: The login request that just failed.
+
+    Returns:
+        The updated failure count (0 when the throttle is disabled).
+    """
+    from urbanlens.dashboard.models.site_settings import SiteSettings
+
+    settings = SiteSettings.get_current()
+    max_attempts = settings.login_ip_max_attempts
+    if max_attempts <= 0:
+        return 0
+
+    key = _login_ip_attempts_key(_client_ip(request))
+    attempts = _bump_counter(key, settings.login_lockout_minutes * 60)
+
+    if attempts >= max_attempts:
+        logger.warning("Login throttled for IP %r after %d failed attempts", _client_ip(request), attempts)
+
+    return attempts
 
 
 # -- Two-factor code rate limiting ------------------------------------------
@@ -660,12 +775,20 @@ class E2EEPasswordResetConfirmView(auth_views.PasswordResetConfirmView):
 class CustomLoginView(LoginView):
     """LoginView extended with rate limiting and inactive-account detection.
 
-    Rate limiting is based on the username: after ``SiteSettings.login_max_attempts``
-    consecutive failures the account is locked for ``SiteSettings.login_lockout_minutes``
-    minutes.  The lockout state is stored in Django's cache (no extra DB table needed)
-    so it resets automatically when the cache is cleared or expires.
+    Rate limiting has two independent dimensions, both stored in Django's cache
+    (no extra DB table needed) so they reset automatically when the cache is
+    cleared or expires:
 
-    Setting ``login_max_attempts`` to 0 in site admin disables rate limiting entirely.
+    - Per identifier: after ``SiteSettings.login_max_attempts`` consecutive
+      failures the account is locked for ``SiteSettings.login_lockout_minutes``
+      minutes.
+    - Per client IP: after ``SiteSettings.login_ip_max_attempts`` failures
+      across *any* identifiers, further attempts from that address are refused
+      for the same window - the brake on spraying that the identifier lockout
+      cannot provide.
+
+    Both gates emit the same error text (see ``_lockout_error_message``).
+    Setting either threshold to 0 in site admin disables that dimension.
     """
 
     template_name = "registration/login.html"
@@ -698,15 +821,20 @@ class CustomLoginView(LoginView):
 
     def post(self, request, *args, **kwargs):
         username = request.POST.get("username", "").strip()
-        if username and _is_locked_out(_lockout_key_for_identifier(username)):
+        identifier_locked = bool(username) and _is_locked_out(_lockout_key_for_identifier(username))
+        if identifier_locked or _is_ip_locked_out(request):
             from urbanlens.dashboard.models.site_settings import SiteSettings
 
             minutes = SiteSettings.get_current().login_lockout_minutes
             form = self.get_form()
-            form.errors["__all__"] = form.error_class(
-                [f"Too many failed login attempts. Please try again in {minutes} minute{'s' if minutes != 1 else ''}."],
-            )
-            return self.form_invalid(form)
+            form.errors["__all__"] = form.error_class([_lockout_error_message(minutes)])
+            # Deliberately not self.form_invalid: that override is the failure
+            # accounting path, and no credential was checked here. Counting a
+            # gate response fed each throttle from the other - retries against
+            # an already-locked identifier drained the shared IP budget, and
+            # once an IP was throttled, submitting a victim's username locked
+            # *their* account too, correct password or not.
+            return super().form_invalid(form)
         return super().post(request, *args, **kwargs)
 
     def get_success_url(self) -> str:
@@ -730,6 +858,13 @@ class CustomLoginView(LoginView):
         return super().form_valid(form)
 
     def form_invalid(self, form: AuthenticationForm) -> HttpResponse:
+        # Count every failure against the requesting IP too, whatever the
+        # identifier (or lack of one). Skipped once the IP is already at its
+        # limit, mirroring the identifier counter below, so the window is
+        # fixed rather than sliding while an attacker keeps hammering.
+        if not _is_ip_locked_out(self.request):
+            _record_login_ip_failure(self.request)
+
         username = form.data.get("username", "").strip()
         if username:
             # Resolve once: used both to key the lockout counter by stable
@@ -902,19 +1037,56 @@ class LoginTwoFactorCancelView(View):
         return redirect("login")
 
 
-#: Session flag set when the user declines the set-password prompt; cleared
-#: naturally when the session ends, so the prompt returns on their next login.
-SESSION_PASSWORD_PROMPT_SKIPPED = "password_prompt_skipped"  # noqa: S105  # nosec B105 - session key name, not a credential
+#: How long "Not now" on the credential prompt stays quiet. Profile-persisted:
+#: the old per-session flag re-nagged SSO users on every signin, which trained
+#: them to dismiss security prompts (see docs/designs/e2ee-passkey-unlock.md).
+CREDENTIAL_PROMPT_SNOOZE = timedelta(days=30)
+
+
+def _needs_credential_prompt(profile) -> bool:
+    """True when this account should see the add-a-passkey-or-password prompt.
+
+    The prompt exists to give a passwordless (SSO) account *some* durable way
+    back into its encrypted messages on a cold device, so what silences it is
+    an unlock path, not a credential row. Owning a passkey is not the same
+    thing: an authenticator without ``prf`` support, or one enrolled before
+    this feature existed, carries no ``E2EEPasskeyWrap`` and unwraps nothing.
+    Treating those as "handled" left exactly the accounts this prompt is for
+    permanently unprompted.
+
+    Accounts with no key bundle have nothing to unlock, so for them any
+    passkey is credential enough.
+
+    Args:
+        profile: The signed-in user's profile.
+
+    Returns:
+        Whether to redirect through the prompt after login.
+    """
+    from urbanlens.dashboard.models.account import WebAuthnCredential
+    from urbanlens.dashboard.models.e2ee import E2EEPasskeyWrap, MessagingKeyBundle
+
+    user = profile.user
+    if user.has_usable_password():
+        return False
+    if profile.credential_prompt_snoozed_until and profile.credential_prompt_snoozed_until > timezone.now():
+        return False
+    if not WebAuthnCredential.objects.filter(user=user).exists():
+        return True
+    bundle = MessagingKeyBundle.objects.filter(profile=profile).first()
+    if bundle is None:
+        return False
+    return not E2EEPasskeyWrap.objects.usable_for_bundle(bundle).exists()
 
 
 class SetPasswordPromptView(LoginRequiredMixin, View):
-    """GET /accounts/set-password/ - prompt a passwordless (OAuth) account to set one.
+    """GET /accounts/set-password/ - offer a passwordless account a passkey or a password.
 
-    Reached from ``PostLoginRedirectView`` right after any login of an account
-    with no usable password - which covers both brand-new social signups and
-    existing social accounts on their next login. The form itself submits via
-    JS to ``E2EEChangePasswordView`` (the password never reaches the server in
-    readable form); "Not now" skips for the rest of this session.
+    Reached from ``PostLoginRedirectView`` after a login of an account with no
+    usable password and no passkey. The passkey path is primary (one tap, and
+    the PRF wrap makes encrypted messages unlock on any device); the password
+    form is the fallback for browsers without WebAuthn. "Not now" snoozes for
+    ``CREDENTIAL_PROMPT_SNOOZE`` rather than one session.
     """
 
     def get(self, request: HttpRequest) -> HttpResponse:
@@ -934,10 +1106,21 @@ class SetPasswordPromptView(LoginRequiredMixin, View):
 
 
 class SetPasswordSkipView(View):
-    """GET /accounts/set-password/skip/ - decline the prompt for this session."""
+    """POST /accounts/set-password/skip/ - snooze the prompt for a month.
 
-    def get(self, request: HttpRequest) -> HttpResponse:
-        request.session[SESSION_PASSWORD_PROMPT_SKIPPED] = True
+    POST rather than GET because the snooze outlives the session: as a GET it
+    was reachable by cross-site top-level navigation, which carries a
+    SameSite=Lax session cookie, so any page could silence a security prompt
+    for a month on the visitor's behalf.
+    """
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        if request.user.is_authenticated:
+            profile, _ = Profile.objects.get_or_create(user=request.user)
+            profile.credential_prompt_snoozed_until = timezone.now() + CREDENTIAL_PROMPT_SNOOZE
+            profile.save(update_fields=["credential_prompt_snoozed_until", "updated"])
         return redirect("post_login")
 
 
@@ -959,18 +1142,18 @@ class PostLoginRedirectView(View):
         if should_redirect_to_site_admin(request.user):
             return redirect("setup")
 
-        # Social-auth accounts have no usable password. Prompt them to set one
-        # (once per session) - it becomes a login credential and the password
-        # unlock path for their end-to-end encrypted messages on new devices.
-        if not request.user.has_usable_password() and not request.session.get(SESSION_PASSWORD_PROMPT_SKIPPED):
-            return redirect("account.set_password")
-
         from urbanlens.dashboard.models.profile.model import Profile
 
         try:
             profile = request.user.profile
         except Profile.DoesNotExist:
             profile, _ = Profile.objects.get_or_create(user=request.user)
+
+        # Social-auth accounts have no usable password. Offer a passkey (or a
+        # password) so their encrypted messages can unlock on a new device -
+        # once, with a month-long snooze, not per session.
+        if _needs_credential_prompt(profile):
+            return redirect("account.set_password")
 
         if not profile.welcome_onboarding_complete:
             return redirect("onboarding.welcome")
@@ -997,14 +1180,20 @@ def _coerce_invite_token(invite_token: object) -> UUID | None:
 def _collect_pending_invitations(user: User, invite_token: str | None) -> list:
     """Return open invitations matching the user's email and/or signup invite token.
 
-    Deliberately does NOT filter on ``expires_at``: an invitation only ever
-    reaches ``_apply_pending_invitation`` once (``accepted_at__isnull=True``
-    already guards against reprocessing), and any ``PendingSubscriptionGrant``
-    attached to an invite is a promise that shouldn't silently evaporate just
-    because the invited user took longer than the 14-day window to verify
-    their email. The friend-connection side of an expired invite may be a bit
-    stale, but ``Friendship.request`` is a harmless no-op-ish call for that -
-    losing an unredeemed grant is the worse outcome.
+    The ``accepted_at__isnull=True`` filter here only narrows the candidate
+    set at selection time - it does NOT guard against reprocessing, since two
+    concurrent verifications can both select the same open invitation. The
+    actual guard is the write-time conditional claim
+    (``FriendInvitation.mark_accepted``) that ``_apply_pending_invitation``
+    performs before any side effect.
+
+    Deliberately does NOT filter on ``expires_at``: any
+    ``PendingSubscriptionGrant`` attached to an invite is a promise that
+    shouldn't silently evaporate just because the invited user took longer
+    than the 14-day window to verify their email. The friend-connection side
+    of an expired invite may be a bit stale, but ``Friendship.request`` is a
+    harmless no-op-ish call for that - losing an unredeemed grant is the
+    worse outcome.
     """
     from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 
@@ -1034,6 +1223,22 @@ def _collect_pending_invitations(user: User, invite_token: str | None) -> list:
 def _apply_pending_invitation(invitation, profile) -> None:
     """Create a friend request and notification for one pending invitation.
 
+    The write-time claim (``invitation.mark_accepted()``) runs FIRST: it is a
+    conditional ``UPDATE ... WHERE accepted_at IS NULL``, so of two concurrent
+    redemptions of the same invitation exactly one proceeds to the side
+    effects below; the loser returns without doing anything.
+
+    The claim and side effects are deliberately NOT wrapped in a single
+    ``transaction.atomic()``: the ``Friendship`` save fires the achievements
+    ``post_save`` handler, whose synchronous portion
+    (``services.achievements.evaluate.active_metric_keys``) swallows database
+    errors by design, and a swallowed ``DatabaseError`` inside an atomic
+    block leaves the transaction broken - every later query raises
+    ``TransactionManagementError`` (see the ``transaction.atomic`` NOTE in
+    ``docs/PROBLEMS.md``). The accepted trade-off is that a crash after the
+    claim loses this invitation's friend request/grant rather than ever
+    re-running (and double-applying) the side effects.
+
     Any ``PendingSubscriptionGrant`` attached to the invitation is redeemed
     unconditionally, even for the self-invite edge case (``invitation.inviter
     == profile``) - only the friend-connection step (which would otherwise
@@ -1042,6 +1247,9 @@ def _apply_pending_invitation(invitation, profile) -> None:
     dropped just because the inviter and the invited signup happen to be the
     same account.
     """
+    if not invitation.mark_accepted():
+        return
+
     from urbanlens.dashboard.controllers.friendship import notify_friend_request
     from urbanlens.dashboard.models.friendship.model import Friendship
 
@@ -1055,7 +1263,6 @@ def _apply_pending_invitation(invitation, profile) -> None:
 
     for pending_grant in PendingSubscriptionGrant.objects.for_invitation(invitation):
         grant_subscription(profile.user, pending_grant.role, pending_grant.granted_by, pending_grant.duration_as_int())
-    invitation.mark_accepted()
 
 
 def _process_pending_invitations(user: User, invite_token: str | None = None) -> None:
@@ -1079,7 +1286,15 @@ def _process_pending_invitations(user: User, invite_token: str | None = None) ->
 
 
 def _client_ip(request: HttpRequest) -> str:
-    """Best-effort client IP for rate limiting passphrase suggestions.
+    """Client IP for per-IP rate limiting (login, passphrases, password checks).
+
+    Counted from the right of ``X-Forwarded-For``, one place per proxy in
+    ``TRUSTED_PROXY_COUNT``. The leftmost entries arrive from the
+    client and are forgeable, so keying on them let an attacker mint a fresh
+    counter per request and spray passwords through the throttle untouched;
+    only the entries our own proxies appended mean anything. A chain shorter
+    than the configured hop count means the request did not come through them,
+    so it falls back to the socket address.
 
     Args:
         request: The incoming HTTP request.
@@ -1087,10 +1302,14 @@ def _client_ip(request: HttpRequest) -> str:
     Returns:
         A string suitable for use as a cache-key fragment.
     """
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip() or "unknown"
-    return request.META.get("REMOTE_ADDR") or "unknown"
+    remote_addr = request.META.get("REMOTE_ADDR") or "unknown"
+    hops = django_settings.TRUSTED_PROXY_COUNT
+    if hops <= 0:
+        return remote_addr
+    chain = [entry.strip() for entry in request.META.get("HTTP_X_FORWARDED_FOR", "").split(",") if entry.strip()]
+    if len(chain) < hops:
+        return remote_addr
+    return chain[-hops]
 
 
 @require_GET

@@ -24,7 +24,7 @@ from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
 from django.core.files.base import ContentFile
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 import requests
 
 from urbanlens.dashboard.models.aliases.model import AliasType, PinAlias
@@ -780,7 +780,13 @@ def _apply_suggested_enrichment(pin: Pin, suggestion: PinSuggestion) -> None:
                 continue
             if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.LINK, value=url):
                 continue
-            PinLink.objects.create(pin=pin, name=link.get("name", ""), url=url)
+            try:
+                # existing_urls covers duplicates within this call; the unique
+                # constraint covers a concurrent accept adding the same url.
+                with transaction.atomic():
+                    PinLink.objects.create(pin=pin, name=link.get("name", ""), url=url)
+            except IntegrityError:
+                pass
             existing_urls.add(url)
 
 
@@ -813,6 +819,7 @@ def accept_pin_suggestion(
     asset_ids: list[str] | None = None,
     name: str | None = None,
     label_ids: list[int] | None = None,
+    fetch_if_missing: bool = True,
 ) -> AcceptResult:
     """Accept a pending PinSuggestion: reuse/create its pin and log any missing dated visits.
 
@@ -851,6 +858,13 @@ def accept_pin_suggestion(
             overwritten by accepting a suggestion.
         label_ids: Label pks to apply to a brand-new pin, filtered to labels
             visible to ``profile``. Also ignored for an existing pin.
+        fetch_if_missing: When False, a brand-new Location is created without
+            a live geocoding call for its canonical name (``official_name``
+            stays None) - the caller must backfill it via
+            ``tasks.resolve_location_place_name``. Bulk accepts pass False so
+            a batch never blocks on one outbound call per suggestion; the
+            pin's own name is unaffected either way (it comes from
+            ``name``/``suggestion.suggested_name``).
 
     Returns:
         An :class:`AcceptResult` describing the pin, any newly-created visits,
@@ -862,7 +876,7 @@ def accept_pin_suggestion(
             raise ValueError(f"PinSuggestion {suggestion.pk} has pin_id set but no matching Pin")
         pin = matched_pin
     else:
-        location = resolve_location_for_point(suggestion.latitude, suggestion.longitude)
+        location = resolve_location_for_point(suggestion.latitude, suggestion.longitude, fetch_if_missing=fetch_if_missing)
         pin = Pin.objects.filter(profile=profile, location=location, parent_pin__isnull=True).select_related("location").first()
         if pin is None:
             pin = Pin.objects.create(profile=profile, location=location)

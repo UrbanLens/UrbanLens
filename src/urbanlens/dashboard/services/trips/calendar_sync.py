@@ -13,6 +13,7 @@ import datetime
 import logging
 from typing import TYPE_CHECKING, Any
 
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
@@ -599,50 +600,105 @@ def import_events_as_trips(account: GoogleCalendarAccount, selections: list[str 
             skipped.append(f'"{event.get("summary") or "Untitled"}" could not be converted to a trip.')
             continue
 
-        trip = Trip.objects.create(creator=profile, **kwargs)
-        TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": TripMembership.RSVP_YES})
+        # The already_linked() check above is a read; two concurrent imports of
+        # the same event (a double-submit, or two workers) can both pass it. The
+        # partial unique on (profile, google_event_id) is what actually decides,
+        # so build the whole trip inside one atomic block: a loser rolls the trip
+        # back rather than leaving a second, half-linked copy behind, and reports
+        # the same "already linked" outcome the fast path would have.
+        try:
+            with transaction.atomic():
+                trip = _create_trip_from_event(
+                    profile=profile,
+                    account=account,
+                    event=event,
+                    event_id=event_id,
+                    kwargs=kwargs,
+                    create_activity=bool(selection.get("create_activity", True)),
+                    auto_sync=bool(selection.get("auto_sync")),
+                )
+        except IntegrityError:
+            skipped.append("An event was skipped because it is already linked to a trip.")
+            continue
 
-        activity = _create_activity_from_event(trip, event, profile) if selection.get("create_activity", True) else None
-
-        # A *timed* imported event whose location became an activity keeps its
-        # own event-shaped link (see _sync_activity_events/activity_to_event_body),
-        # rather than the trip-level link reusing the same google_event_id.
-        # The trip-level link always maps to an *all-day* body
-        # (export_trip_to_calendar/trip_to_event_body), so if it kept this
-        # event's id, the next manual export or auto-sync push would both
-        # convert the original timed appointment into an all-day event *and*
-        # create a brand-new duplicate timed event for the activity (which
-        # would otherwise have no link of its own) - the opposite of this
-        # module's dedup guarantee. Leaving the trip-level link's
-        # google_event_id blank means the first export/push creates a fresh
-        # all-day "trip" event instead of clobbering the original one (see
-        # _upsert_event_link, which only attempts to update an existing event
-        # when the link already carries an id); already_linked() still finds
-        # this event via the activity-level link created below.
-        timed_import = activity is not None and activity.scheduled_at is not None
-        TripCalendarLink.objects.create(
-            trip=trip,
-            profile=profile,
-            google_calendar_id=account.calendar_id,
-            google_event_id="" if timed_import else event_id,
-            direction=CalendarSyncDirection.IMPORTED,
-            last_synced=timezone.now(),
-            auto_sync=bool(selection.get("auto_sync")),
-        )
-        if timed_import:
-            TripCalendarLink.objects.create(
-                trip=trip,
-                activity=activity,
-                profile=profile,
-                google_calendar_id=account.calendar_id,
-                google_event_id=event_id,
-                direction=CalendarSyncDirection.IMPORTED,
-                last_synced=timezone.now(),
-            )
         invited_total += _invite_participants(trip, profile, list(selection.get("invite_profile_ids") or []), skipped)
         created.append(trip)
 
     return created, skipped, invited_total
+
+
+def _create_trip_from_event(
+    *,
+    profile: Profile,
+    account: GoogleCalendarAccount,
+    event: dict[str, Any],
+    event_id: str,
+    kwargs: dict[str, Any],
+    create_activity: bool,
+    auto_sync: bool,
+) -> Trip:
+    """Create the trip, its membership, optional activity and calendar link(s).
+
+    Split out of :func:`import_events_to_trips` so the whole unit can run in one
+    transaction and be rolled back as a whole when the event turns out to have
+    been imported concurrently.
+
+    Args:
+        profile: The importing profile, who becomes the trip's creator.
+        account: The connected calendar account the event came from.
+        event: The raw Google Calendar event body.
+        event_id: The event's Google id.
+        kwargs: Trip field values derived from the event.
+        create_activity: Whether to also build an activity from the event.
+        auto_sync: Whether the trip-level link should push future changes back.
+
+    Returns:
+        The created trip.
+
+    Raises:
+        IntegrityError: If this profile already has a link for ``event_id``.
+    """
+    trip = Trip.objects.create(creator=profile, **kwargs)
+    TripMembership.objects.get_or_create(trip=trip, profile=profile, defaults={"rsvp": TripMembership.RSVP_YES})
+
+    activity = _create_activity_from_event(trip, event, profile) if create_activity else None
+
+    # A *timed* imported event whose location became an activity keeps its
+    # own event-shaped link (see _sync_activity_events/activity_to_event_body),
+    # rather than the trip-level link reusing the same google_event_id.
+    # The trip-level link always maps to an *all-day* body
+    # (export_trip_to_calendar/trip_to_event_body), so if it kept this
+    # event's id, the next manual export or auto-sync push would both
+    # convert the original timed appointment into an all-day event *and*
+    # create a brand-new duplicate timed event for the activity (which
+    # would otherwise have no link of its own) - the opposite of this
+    # module's dedup guarantee. Leaving the trip-level link's
+    # google_event_id blank means the first export/push creates a fresh
+    # all-day "trip" event instead of clobbering the original one (see
+    # _upsert_event_link, which only attempts to update an existing event
+    # when the link already carries an id); already_linked() still finds
+    # this event via the activity-level link created below.
+    timed_import = activity is not None and activity.scheduled_at is not None
+    TripCalendarLink.objects.create(
+        trip=trip,
+        profile=profile,
+        google_calendar_id=account.calendar_id,
+        google_event_id="" if timed_import else event_id,
+        direction=CalendarSyncDirection.IMPORTED,
+        last_synced=timezone.now(),
+        auto_sync=auto_sync,
+    )
+    if timed_import:
+        TripCalendarLink.objects.create(
+            trip=trip,
+            activity=activity,
+            profile=profile,
+            google_calendar_id=account.calendar_id,
+            google_event_id=event_id,
+            direction=CalendarSyncDirection.IMPORTED,
+            last_synced=timezone.now(),
+        )
+    return trip
 
 
 def _upsert_event_link(

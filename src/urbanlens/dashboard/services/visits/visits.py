@@ -38,7 +38,12 @@ def visit_logging_allowed(profile: Profile) -> bool:
 
 
 def route_import_allowed(profile: Profile) -> bool:
-    """True if GPS route/track import (and its bundled dwell-detected visits) is allowed."""
+    """True if GPS route/track import is allowed.
+
+    Covers saving the Route itself only. The dwell-detected visits an import can
+    also produce are separately gated on :func:`visit_logging_allowed`, so a
+    profile that tracks routes but not visits gets the track and no PinVisit rows.
+    """
     return profile.track_routes
 
 
@@ -143,12 +148,7 @@ def find_nearest_pin(latitude: float, longitude: float, profile: Profile, radius
     # pin inside the radius. Measured: a pin 75m away was picked over one 11m
     # away, which attributes an imported visit to the wrong place whenever a
     # profile has two pins inside VISIT_MATCH_RADIUS_M.
-    return (
-        Pin.objects.filter(location__point__distance_lte=(point, D(m=radius_m)), profile=profile)
-        .annotate(_match_distance=Distance("location__point", point))
-        .order_by("_match_distance")
-        .first()
-    )
+    return Pin.objects.filter(location__point__distance_lte=(point, D(m=radius_m)), profile=profile).annotate(_match_distance=Distance("location__point", point)).order_by("_match_distance").first()
 
 
 def pin_exists_at(profile: Profile, *, location_id: int | None = None, latitude: float | Decimal | None = None, longitude: float | Decimal | None = None) -> bool:
@@ -186,12 +186,16 @@ def find_existing_visit_on_date(profile: Profile, *, location: Location | None, 
     return pin.visit_history.filter(visited_at__date=visited_at.date()).order_by("-visited_at").first()
 
 
-def resolve_location_for_point(latitude: float | Decimal, longitude: float | Decimal) -> Location:
+def resolve_location_for_point(latitude: float | Decimal, longitude: float | Decimal, *, fetch_if_missing: bool = True) -> Location:
     """Return the shared Location for a point, creating one with a canonical name if none exists yet.
 
     Args:
         latitude: Point latitude.
         longitude: Point longitude.
+        fetch_if_missing: When False, a newly created Location is not named via
+            a live geocoding call - it is created with ``official_name=None``
+            and the caller must backfill it via
+            ``tasks.resolve_location_place_name``. Pass False from bulk paths.
 
     Returns:
         The existing or newly created Location.
@@ -202,7 +206,7 @@ def resolve_location_for_point(latitude: float | Decimal, longitude: float | Dec
     if location is None:
         from urbanlens.dashboard.controllers.maps import _create_location_with_canonical_name
 
-        location = _create_location_with_canonical_name(float(latitude), float(longitude))
+        location = _create_location_with_canonical_name(float(latitude), float(longitude), fetch_if_missing=fetch_if_missing)
     return location
 
 

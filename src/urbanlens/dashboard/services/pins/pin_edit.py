@@ -391,9 +391,10 @@ def delete_pin(pin: Pin, *, children_mode: str = "") -> PinDeletion:
     """Delete *pin*, asking the caller what to do with its child pins first.
 
     A pin with descendants requires an explicit ``children_mode``:
-    ``"delete"`` removes the whole subtree (all of it restorable from Undo
-    History); ``"keep"`` promotes the direct children to the deleted pin's
-    own parent (or to top-level pins) and deletes only the pin itself. Either
+    ``"delete"`` removes the whole subtree (the pins themselves are restorable
+    from Undo History; their comments, albums, and links are not); ``"keep"``
+    promotes the direct children to the deleted pin's own parent (or to
+    top-level pins) and deletes only the pin itself. Either
     way, every pin actually deleted is staged for undo and (via
     ``models.pin.signals``) gets a durable tombstone for sync clients.
 

@@ -1543,7 +1543,9 @@ def resolve_deferred_pin_locations(
     if result.auth_failed:
         logger.error("resolve_deferred_pin_locations: REData rejected the API key resolving %d cid(s) for profile %s - not retrying.", len(all_cids), profile_id)
         for cid in all_cids:
-            record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_ERROR)
+            record_pin_import_failure(
+                profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_ERROR
+            )
         NotificationLog.objects.create(
             profile=profile,
             status=Status.UNREAD,
@@ -1568,7 +1570,9 @@ def resolve_deferred_pin_locations(
             profile_id,
         )
         for cid in all_cids:
-            record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_ERROR)
+            record_pin_import_failure(
+                profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_ERROR
+            )
         NotificationLog.objects.create(
             profile=profile,
             status=Status.UNREAD,
@@ -1601,7 +1605,9 @@ def resolve_deferred_pin_locations(
                 consecutive_no_progress,
             )
             for cid in all_cids:
-                record_pin_import_failure(profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_STALLED)
+                record_pin_import_failure(
+                    profile, cid, name=pin_dict_by_cid[cid].get("name", ""), description=pin_dict_by_cid[cid].get("description", ""), maps_url=pin_dict_by_cid[cid].get("maps_url", "") or "", reason=PinImportFailureReason.LOOKUP_STALLED
+                )
             NotificationLog.objects.create(
                 profile=profile,
                 status=Status.UNREAD,
@@ -1639,11 +1645,7 @@ def resolve_deferred_pin_locations(
             countdown, message = 65, "Waiting on Google's rate limit - resuming shortly..."
         else:
             countdown = _deferred_retry_countdown(max(consecutive_no_progress, consecutive_request_failures))
-            message = (
-                "Still waiting on the location lookup service - checking back periodically..."
-                if countdown > 600
-                else "Having trouble reaching the location lookup service - retrying shortly..."
-            )
+            message = "Still waiting on the location lookup service - checking back periodically..." if countdown > 600 else "Having trouble reaching the location lookup service - retrying shortly..."
 
         update_task_progress(self, current=total - len(result.pending), total=total, message=message)
         logger.info(
@@ -1677,11 +1679,7 @@ def resolve_deferred_pin_locations(
         importance=Importance.MEDIUM,
         notification_type=NotificationType.PIN_IMPORT_COMPLETE,
         title=f"Finished placing {created_count + exists_count} pin(s)",
-        message=(
-            f"{created_count} created · {exists_count} existed · {skipped_count} skipped"
-            + (f" (Google has no location data for {unresolved} of them - review them on the Locations page)" if unresolved else "")
-            + "."
-        ),
+        message=(f"{created_count} created · {exists_count} existed · {skipped_count} skipped" + (f" (Google has no location data for {unresolved} of them - review them on the Locations page)" if unresolved else "") + "."),
         url=reverse("memories.locations") if unresolved else reverse("map.view"),
     )
     update_task_progress(self, current=total, total=total, message="Done.")
@@ -2288,8 +2286,8 @@ def detect_dm_address_mentions(message_id: int) -> int:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def hard_delete_expired_direct_messages() -> int:
-    """Permanently delete every direct message past its sender's disappearing-message window.
+def hard_delete_expired_direct_messages(batch_size: int = 5000) -> int:
+    """Permanently delete direct messages past their sender's disappearing-message window.
 
     Unlike delete_message_for_everyone (a tombstone - the row and its content
     stay in the DB, just hidden from both parties' rendered view),
@@ -2298,12 +2296,20 @@ def hard_delete_expired_direct_messages() -> int:
     what actually removes it. Image.direct_message is SET_NULL (not CASCADE),
     so attached images are explicitly deleted here too - otherwise they'd
     survive as orphaned, still-unencrypted files after the message is gone.
+
+    Args:
+        batch_size: Maximum number of messages to delete in one run, bounding
+            the materialised id list and the ``IN`` clauses sent to Postgres;
+            any backlog remainder is picked up by the next scheduled run.
+
+    Returns:
+        Number of direct messages hard-deleted this run.
     """
     from urbanlens.dashboard.models.direct_messages.model import DirectMessage
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.services.media.images import delete_stored_file
 
-    due_ids = list(DirectMessage.objects.due_for_hard_delete().values_list("id", flat=True))
+    due_ids = list(DirectMessage.objects.due_for_hard_delete().values_list("id", flat=True)[:batch_size])
     if not due_ids:
         return 0
 
@@ -2319,7 +2325,10 @@ def hard_delete_expired_direct_messages() -> int:
 
     count = len(due_ids)
     DirectMessage.objects.filter(id__in=due_ids).delete()
-    logger.info("Hard-deleted %s expired direct message(s)", count)
+    if count == batch_size:
+        logger.info("Hard-deleted a full batch of %s expired direct message(s); any backlog remainder will drain on subsequent runs", count)
+    else:
+        logger.info("Hard-deleted %s expired direct message(s)", count)
     return count
 
 
@@ -3131,19 +3140,65 @@ def backfill_achievement(achievement_id: int) -> int:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
-def sweep_achievements() -> int:
-    """Re-evaluate every achievement for every profile.
+def sweep_achievements(chunk_size: int = 1000) -> int:
+    """Fan the nightly achievement sweep out as bounded profile-range subtasks.
 
     The nightly safety net. Some thresholds are crossed with no write to react
     to - "trips attended" ticks up simply because a trip's end date passed - and
     an enqueue is lost whenever the broker is briefly unreachable.
 
-    Returns:
-        Total awards granted across all profiles.
-    """
-    from urbanlens.dashboard.services.achievements.evaluate import evaluate_all_profiles
+    This task only dispatches: profile pks are sliced, in pk order, into
+    ranges of at most ``chunk_size`` and each range is evaluated by its own
+    :func:`sweep_achievements_range` task. Evaluating everything in one task
+    used to hit the hard ``CELERY_TASK_TIME_LIMIT`` at scale and die
+    mid-iteration; a bounded chunk cannot approach the limit, and a chunk that
+    crashes anyway costs only its own range until the next nightly dispatch.
+    Profiles created after dispatch are simply picked up the following night.
 
-    return evaluate_all_profiles()
+    Args:
+        chunk_size: Maximum profiles per subtask.
+
+    Returns:
+        How many range subtasks were enqueued.
+    """
+    from urbanlens.dashboard.models.achievements.model import Achievement
+    from urbanlens.dashboard.models.profile import Profile
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+
+    # Same gate the contribution signals apply: with no active award defined
+    # there is provably nothing to evaluate, so don't fan out empty subtasks.
+    if not Achievement.objects.active().exists():
+        return 0
+
+    chunk_size = max(1, chunk_size)
+    pks = list(Profile.objects.order_by("pk").values_list("pk", flat=True))
+
+    dispatched = 0
+    for start in range(0, len(pks), chunk_size):
+        chunk = pks[start : start + chunk_size]
+        if safely_enqueue_task(sweep_achievements_range, chunk[0], chunk[-1]) is not None:
+            dispatched += 1
+    return dispatched
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def sweep_achievements_range(start_pk: int, end_pk: int) -> int:
+    """Evaluate every achievement for profiles with ``start_pk <= pk <= end_pk``.
+
+    One chunk of the sweep dispatched by :func:`sweep_achievements`. The range
+    is evaluated with one bulk metric pass for the whole chunk, so it costs on
+    the order of the metric count in queries rather than ~30 per profile.
+
+    Args:
+        start_pk: Lowest profile pk in the chunk, inclusive.
+        end_pk: Highest profile pk in the chunk, inclusive.
+
+    Returns:
+        Total awards granted across the chunk.
+    """
+    from urbanlens.dashboard.services.achievements.evaluate import evaluate_profiles_in_range
+
+    return evaluate_profiles_in_range(start_pk, end_pk)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})

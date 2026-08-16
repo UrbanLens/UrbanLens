@@ -225,10 +225,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
     )
     community_photo_quota_bonus_votes = IntegerField(
         default=5,
-        help_text=(
-            "How many other users must mark one of a user's wiki-shared photos as relevant before that photo stops counting against their storage quota. "
-            "The uploader's own vote never counts. Set to 0 to turn the reward off."
-        ),
+        help_text=("How many other users must mark one of a user's wiki-shared photos as relevant before that photo stops counting against their storage quota. The uploader's own vote never counts. Set to 0 to turn the reward off."),
         verbose_name="Relevant votes earning a quota bonus",
         validators=[MinValueValidator(0), MaxValueValidator(10_000)],
     )
@@ -279,7 +276,6 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text="Also downscale video uploads from users with an active subscription. When off, subscribers keep their original video resolution (unless they opt into downscaling themselves).",
         verbose_name="Downscale subscriber videos",
     )
-
 
     external_data_cache_days = IntegerField(
         default=7,
@@ -364,6 +360,13 @@ class SiteSettings(abstract.FrontendDashboardModel):
         help_text=("Maximum number of consecutive failed login attempts before an account is temporarily locked. Set to 0 to disable rate limiting."),
         verbose_name="Max failed login attempts",
         validators=[MinValueValidator(0), MaxValueValidator(100)],
+    )
+
+    login_ip_max_attempts = IntegerField(
+        default=30,
+        help_text=("Maximum number of failed login attempts from a single IP address (across any accounts) before further attempts from that address are temporarily blocked. Set to 0 to disable the per-IP throttle."),
+        verbose_name="Max failed login attempts per IP",
+        validators=[MinValueValidator(0), MaxValueValidator(1000)],
     )
 
     login_lockout_minutes = IntegerField(
@@ -649,6 +652,7 @@ class SiteSettings(abstract.FrontendDashboardModel):
             CheckConstraint(condition=Q(max_trip_members__gte=1), name="max_trip_members_gte_1"),
             CheckConstraint(condition=Q(max_trip_members__lte=100), name="max_trip_members_lte_100"),
             CheckConstraint(condition=Q(login_max_attempts__gte=0), name="login_max_attempts_gte_0"),
+            CheckConstraint(condition=Q(login_ip_max_attempts__gte=0), name="login_ip_max_attempts_gte_0"),
             CheckConstraint(condition=Q(login_lockout_minutes__gte=1), name="login_lockout_minutes_gte_1"),
             CheckConstraint(condition=Q(backup_frequency_hours__gte=1), name="backup_frequency_hours_gte_1"),
             CheckConstraint(condition=Q(backup_retention__gte=1), name="backup_retention_gte_1"),

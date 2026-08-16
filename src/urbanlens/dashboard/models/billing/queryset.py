@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
     from django.contrib.auth.models import User
 
-    from urbanlens.dashboard.models.billing.model import BillingCustomer, RoleSubscription, StripeWebhookEvent
+    from urbanlens.dashboard.models.billing.model import BillingCustomer, RoleSubscription, StripeProcessedRefund, StripeWebhookEvent
 
 
 class BillingCustomerQuerySet(abstract.DashboardQuerySet["BillingCustomer"]):
@@ -61,9 +61,7 @@ class RoleSubscriptionQuerySet(abstract.DashboardQuerySet["RoleSubscription"]):
         from urbanlens.dashboard.models.billing.model import BillingSubscriptionStatus
 
         as_of = as_of or timezone.now()
-        return self.filter(
-            Q(status__in=(BillingSubscriptionStatus.ACTIVE, BillingSubscriptionStatus.TRIALING), threshold_met=True) | Q(usage_covered_until__gt=as_of)
-        )
+        return self.filter(Q(status__in=(BillingSubscriptionStatus.ACTIVE, BillingSubscriptionStatus.TRIALING), threshold_met=True) | Q(usage_covered_until__gt=as_of))
 
     def visible_for(self, user: User) -> Self:
         """Rows worth surfacing in Settings > Billing: anything not canceled, plus a
@@ -113,4 +111,12 @@ class StripeWebhookEventQuerySet(abstract.DashboardQuerySet["StripeWebhookEvent"
 
 
 class StripeWebhookEventManager(abstract.DashboardManager.from_queryset(StripeWebhookEventQuerySet)):
+    pass
+
+
+class StripeProcessedRefundQuerySet(abstract.DashboardQuerySet["StripeProcessedRefund"]):
+    """Filters for the per-refund-object idempotency ledger."""
+
+
+class StripeProcessedRefundManager(abstract.DashboardManager.from_queryset(StripeProcessedRefundQuerySet)):
     pass

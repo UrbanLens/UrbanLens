@@ -20,7 +20,7 @@ from django.views import View
 if TYPE_CHECKING:
     from django.http import HttpRequest, HttpResponse
 
-from urbanlens.dashboard.controllers.games import GAMES
+from urbanlens.dashboard.controllers.games import GAMES, AlphaFeatureRequiredMixin
 from urbanlens.dashboard.models.consensus.model import (
     ConsensusAnswer,
     ConsensusFieldKind,
@@ -61,7 +61,7 @@ def _joined_participant(profile: Profile, session: ConsensusSession) -> Consensu
     return participant
 
 
-class ConsensusHomeView(LoginRequiredMixin, View):
+class ConsensusHomeView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The Consensus overview page: own points/level, friends, start-game form.
 
     GET /games/consensus/
@@ -107,7 +107,7 @@ class ConsensusHomeView(LoginRequiredMixin, View):
         )
 
 
-class ConsensusFriendsView(LoginRequiredMixin, View):
+class ConsensusFriendsView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The profile's friends, for the multiplayer invite picker.
 
     GET /games/consensus/friends/
@@ -119,7 +119,7 @@ class ConsensusFriendsView(LoginRequiredMixin, View):
         return JsonResponse({"friends": [{"profile_id": friend.pk, "username": friend.username} for friend in friends]})
 
 
-class ConsensusStartView(LoginRequiredMixin, View):
+class ConsensusStartView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Start a new session - solo (immediately active) or competitive (a lobby to invite friends into).
 
     POST /games/consensus/start/   body: ``total_rounds``, optional ``invite_profile_ids`` (repeated).
@@ -163,7 +163,7 @@ class ConsensusStartView(LoginRequiredMixin, View):
         return JsonResponse({"session_id": game_session.pk, "finished": False, "round": serializers.serialize_round(round_)})
 
 
-class ConsensusLobbyView(LoginRequiredMixin, View):
+class ConsensusLobbyView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The lobby's current state: status, and every participant (invited or joined).
 
     GET /games/consensus/session/<session_id>/lobby/
@@ -175,7 +175,7 @@ class ConsensusLobbyView(LoginRequiredMixin, View):
         return JsonResponse(serializers.serialize_session(game_session))
 
 
-class ConsensusInviteView(LoginRequiredMixin, View):
+class ConsensusInviteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Invite one more friend to a still-open lobby. Host-only.
 
     POST /games/consensus/session/<session_id>/invite/   body: ``profile_id``
@@ -197,7 +197,7 @@ class ConsensusInviteView(LoginRequiredMixin, View):
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
-class ConsensusJoinView(LoginRequiredMixin, View):
+class ConsensusJoinView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Accept an invitation to a lobby.
 
     POST /games/consensus/session/<session_id>/join/
@@ -214,7 +214,7 @@ class ConsensusJoinView(LoginRequiredMixin, View):
         return JsonResponse({"participant": serializers.serialize_participant(participant)})
 
 
-class ConsensusBeginView(LoginRequiredMixin, View):
+class ConsensusBeginView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Host starts the game: locks the roster and creates round 1.
 
     POST /games/consensus/session/<session_id>/begin/
@@ -237,7 +237,7 @@ class ConsensusBeginView(LoginRequiredMixin, View):
         return JsonResponse({"finished": False, "round": serializers.serialize_round(round_)})
 
 
-class ConsensusEndSessionView(LoginRequiredMixin, View):
+class ConsensusEndSessionView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Host ends the game immediately - the manual escape hatch for a stalled or AFK competitive session.
 
     POST /games/consensus/session/<session_id>/end/
@@ -254,7 +254,7 @@ class ConsensusEndSessionView(LoginRequiredMixin, View):
         return JsonResponse({"finished": True, "summary": consensus_session.session_summary(game_session)})
 
 
-class ConsensusRoundView(LoginRequiredMixin, View):
+class ConsensusRoundView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The session's current round (for reloads/reconnects).
 
     GET /games/consensus/session/<session_id>/round/
@@ -296,7 +296,7 @@ def _parse_answer_value(request: HttpRequest, round_: ConsensusRound) -> tuple[s
     return value, None
 
 
-class ConsensusAnswerView(LoginRequiredMixin, View):
+class ConsensusAnswerView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Submit an answer for the session's current round.
 
     POST /games/consensus/session/<session_id>/round/<round_id>/answer/
@@ -324,7 +324,7 @@ class ConsensusAnswerView(LoginRequiredMixin, View):
         return JsonResponse({"answer_id": answer.pk, "round": serializers.serialize_round(round_)})
 
 
-class ConsensusSkipView(LoginRequiredMixin, View):
+class ConsensusSkipView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Skip the session's current round - "I don't know."
 
     POST /games/consensus/session/<session_id>/round/<round_id>/skip/
@@ -347,7 +347,7 @@ class ConsensusSkipView(LoginRequiredMixin, View):
         return JsonResponse({"round": serializers.serialize_round(round_)})
 
 
-class ConsensusVoteView(LoginRequiredMixin, View):
+class ConsensusVoteView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Cast a vote during a competitive round's disagreement sub-phase.
 
     POST /games/consensus/session/<session_id>/round/<round_id>/vote/   body: ``answer_id``
@@ -374,7 +374,7 @@ class ConsensusVoteView(LoginRequiredMixin, View):
         return JsonResponse({"round": serializers.serialize_round(round_)})
 
 
-class ConsensusPhotoUploadView(LoginRequiredMixin, View):
+class ConsensusPhotoUploadView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Upload a photo of the spot during a round - reuses the Memories upload pipeline.
 
     POST /games/consensus/session/<session_id>/round/<round_id>/photo/   body: an ``image`` file
@@ -431,7 +431,7 @@ class ConsensusPhotoUploadView(LoginRequiredMixin, View):
         return JsonResponse({"image_id": image.pk}, status=201)
 
 
-class ConsensusChatHistoryView(LoginRequiredMixin, View):
+class ConsensusChatHistoryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """Recent chat messages, for reconnects/late page-opens - live messages arrive over the WebSocket.
 
     GET /games/consensus/session/<session_id>/chat/
@@ -444,7 +444,7 @@ class ConsensusChatHistoryView(LoginRequiredMixin, View):
         return JsonResponse({"messages": [serializers.serialize_chat_message(message) for message in messages]})
 
 
-class ConsensusSummaryView(LoginRequiredMixin, View):
+class ConsensusSummaryView(LoginRequiredMixin, AlphaFeatureRequiredMixin, View):
     """The session's final scoreboard.
 
     GET /games/consensus/session/<session_id>/summary/

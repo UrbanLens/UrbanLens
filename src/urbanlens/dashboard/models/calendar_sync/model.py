@@ -162,6 +162,16 @@ class TripCalendarLink(abstract.DashboardModel):
                 fields=("trip", "profile", "activity"),
                 name="db_trip_calendar_link_activity_unique",
             ),
+            # One Google event maps to at most one link per profile, so a
+            # re-import of the same event cannot silently build a second trip.
+            # Partial: trip-level links for a *timed* import deliberately carry
+            # an empty google_event_id (the activity-level row owns that id), and
+            # those must still coexist.
+            UniqueConstraint(
+                fields=("profile", "google_event_id"),
+                condition=~Q(google_event_id=""),
+                name="db_tcl_profile_event_unique",
+            ),
         ]
         indexes = [
             Index(fields=["profile", "google_event_id"], name="idxdb_tcl_profile_event"),

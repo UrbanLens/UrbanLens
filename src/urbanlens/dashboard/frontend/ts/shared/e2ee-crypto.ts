@@ -40,6 +40,38 @@ function fromB64(value: string): Uint8Array {
     return sodium.from_base64(value, sodium.base64_variants.ORIGINAL);
 }
 
+/** Domain-separation info string for passkey-PRF wrap keys. Changing it would
+ * orphan every stored E2EEPasskeyWrap, exactly like changing a salt. */
+export const PRF_WRAP_HKDF_INFO = "urbanlens-e2ee-passkey-wrap-v1";
+
+/**
+ * Derive the 32-byte passkey wrap key from a WebAuthn prf extension output.
+ *
+ * HKDF-SHA256 via WebCrypto rather than a libsodium KDF: the PRF output is
+ * already full-entropy authenticator-held key material (no stretching needed,
+ * only domain separation), and SubtleCrypto's HKDF is native, standard, and
+ * spares the bundle another primitive. Salt is empty per RFC 5869 (extract
+ * with an all-zero key) - the per-wrap uniqueness lives in the PRF *input*,
+ * which produces an unrelated PRF output per wrap.
+ *
+ * @param prfOutput - The 32-byte `prf.results.first` from the authenticator.
+ * @returns The wrap key for `wrapSecretKey`/`unwrapSecretKey`.
+ */
+export async function deriveKeyFromPrf(prfOutput: Uint8Array): Promise<Uint8Array> {
+    const material = await crypto.subtle.importKey("raw", prfOutput as BufferSource, "HKDF", false, ["deriveBits"]);
+    const bits = await crypto.subtle.deriveBits(
+        { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info: new TextEncoder().encode(PRF_WRAP_HKDF_INFO) },
+        material,
+        KEY_BYTES * 8,
+    );
+    return new Uint8Array(bits);
+}
+
+/** Generate a random 32-byte PRF evaluation input, base64-encoded. */
+export function randomPrfInput(): string {
+    return toB64(sodium.randombytes_buf(KEY_BYTES));
+}
+
 /** Generate a random Argon2id salt, base64-encoded. */
 export function randomSalt(): string {
     return toB64(sodium.randombytes_buf(sodium.crypto_pwhash_SALTBYTES));

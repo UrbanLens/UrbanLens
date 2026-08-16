@@ -186,9 +186,7 @@ class RedataImageryPlugin(UrbanLensPlugin):
 
     name: ClassVar[str] = "redata_imagery"
     verbose_name: ClassVar[str] = "REData Imagery"
-    description: ClassVar[str] = (
-        "Additional satellite/aerial/topographic imagery providers (NASA GIBS, Mapbox, Bing Maps, OpenAerialMap, OpenTopoMap) in the pin detail satellite carousel, via REData. Requires REData to be configured."
-    )
+    description: ClassVar[str] = "Additional satellite/aerial/topographic imagery providers (NASA GIBS, Mapbox, Bing Maps, OpenAerialMap, OpenTopoMap) in the pin detail satellite carousel, via REData. Requires REData to be configured."
     author: ClassVar[str] = "UrbanLens"
     order: ClassVar[int] = 70
 

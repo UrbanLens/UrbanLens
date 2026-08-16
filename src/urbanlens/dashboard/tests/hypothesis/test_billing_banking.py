@@ -8,6 +8,7 @@ from unittest import mock
 
 from django.contrib.auth.models import User
 from django.utils import timezone
+from hypothesis import given, settings, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -129,6 +130,17 @@ class ApplyPaymentTests(TestCase):
         self.sub.refresh_from_db()
         self.assertTrue(self.sub.has_banked_access)
 
+    def test_two_payments_from_stale_instances_both_land(self) -> None:
+        """Same lost-update shape as concurrent refunds, in the direction that credits."""
+        first = RoleSubscription.objects.select_related("role").get(pk=self.sub.pk)
+        second = RoleSubscription.objects.select_related("role").get(pk=self.sub.pk)
+
+        banking.apply_payment(first, 1000)
+        banking.apply_payment(second, 1000)
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
     def test_non_pwyw_role_is_a_no_op(self) -> None:
         role = baker.make(SubscriptionRole, pay_what_you_want=False, monthly_price_cents=500)
         sub = baker.make(RoleSubscription, user=self.user, role=role)
@@ -155,3 +167,118 @@ class ApplyPaymentTests(TestCase):
         sub.refresh_from_db()
         self.assertTrue(sub.has_banked_access)
         self.assertEqual(sub.amount_used_cents, 0)
+
+
+class ApplyRefundTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.sub = baker.make(RoleSubscription, user=self.user, role=self.role, total_paid_cents=2000)
+        _set_created(self.sub, timezone.now() - timedelta(days=1))
+
+    def test_subtracts_from_total_paid_and_persists(self) -> None:
+        banking.apply_refund(self.sub, 500)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 1500)
+
+    def test_clamps_at_zero_when_refund_exceeds_balance(self) -> None:
+        banking.apply_refund(self.sub, 5000)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 0)
+
+    def test_consumed_periods_are_forgiven_not_reversed(self) -> None:
+        """A refund stops future periods from being affordable but never claws back
+        access the ledger already granted - amount_used_cents and usage_covered_until
+        stay exactly where the last tick left them."""
+        _set_created(self.sub, timezone.now() - timedelta(days=31))
+        banking.advance_usage_ledger(self.sub)
+        self.sub.refresh_from_db()
+        used_before = self.sub.amount_used_cents
+        covered_before = self.sub.usage_covered_until
+        self.assertGreater(used_before, 0)
+
+        banking.apply_refund(self.sub, 5000)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 0)
+        self.assertEqual(self.sub.amount_used_cents, used_before)
+        self.assertEqual(self.sub.usage_covered_until, covered_before)
+
+    def test_two_refunds_from_stale_instances_both_land(self) -> None:
+        """Stripe delivers concurrently, and both handlers hold their own instance.
+
+        Two partial refunds on one charge arrive at once, each handler having
+        read ``total_paid_cents`` before the other wrote. Subtracting from that
+        in-memory value made the second write erase the first - while the
+        webhook's StripeProcessedRefund row still committed, so the lost debit
+        was never retried and access stayed funded by refunded money. Both
+        instances here are deliberately stale, which is what that looks like
+        without needing real threads.
+        """
+        first = RoleSubscription.objects.select_related("role").get(pk=self.sub.pk)
+        second = RoleSubscription.objects.select_related("role").get(pk=self.sub.pk)
+
+        banking.apply_refund(first, 300)
+        banking.apply_refund(second, 300)
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 1400)
+
+    def test_a_refund_against_a_stale_instance_leaves_it_current(self) -> None:
+        """The caller's object must not keep pre-lock values after the debit."""
+        stale = RoleSubscription.objects.select_related("role").get(pk=self.sub.pk)
+        banking.apply_refund(self.sub, 500)
+
+        banking.apply_refund(stale, 500)
+
+        self.assertEqual(stale.total_paid_cents, 1000)
+
+    def test_non_pwyw_role_is_a_no_op(self) -> None:
+        role = baker.make(SubscriptionRole, pay_what_you_want=False, monthly_price_cents=500)
+        sub = baker.make(RoleSubscription, user=self.user, role=role, total_paid_cents=2000)
+        banking.apply_refund(sub, 500)
+        sub.refresh_from_db()
+        self.assertEqual(sub.total_paid_cents, 2000)
+
+    def test_zero_amount_is_a_no_op(self) -> None:
+        banking.apply_refund(self.sub, 0)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
+    def test_negative_amount_is_a_no_op(self) -> None:
+        banking.apply_refund(self.sub, -500)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
+
+class RefundRoundTripPropertyTests(TestCase):
+    """apply_payment then apply_refund of the same amount is a no-op on the banked
+    balance, and never rewinds what the ledger already consumed."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.user = baker.make(User)
+        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_dynamic_threshold=False, pwyw_minimum_cents=500)
+        self.sub = baker.make(RoleSubscription, user=self.user, role=self.role)
+        _set_created(self.sub, timezone.now() - timedelta(days=45))
+
+    @settings(max_examples=25, deadline=None)
+    @given(initial_paid=st.integers(min_value=0, max_value=5000), amount=st.integers(min_value=1, max_value=10_000))
+    def test_full_refund_restores_the_prior_banked_balance(self, initial_paid: int, amount: int) -> None:
+        RoleSubscription.objects.filter(pk=self.sub.pk).update(total_paid_cents=initial_paid)
+        self.sub.refresh_from_db()
+        banking.advance_usage_ledger(self.sub)
+        self.sub.refresh_from_db()
+        balance_before = self.sub.total_paid_cents
+
+        banking.apply_payment(self.sub, amount)
+        self.sub.refresh_from_db()
+        used_after_payment = self.sub.amount_used_cents
+        covered_after_payment = self.sub.usage_covered_until
+
+        banking.apply_refund(self.sub, amount)
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, balance_before)
+        # Consumed periods stay consumed - the refund forgives access already granted.
+        self.assertEqual(self.sub.amount_used_cents, used_after_payment)
+        self.assertEqual(self.sub.usage_covered_until, covered_after_payment)

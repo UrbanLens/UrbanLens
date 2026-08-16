@@ -219,34 +219,36 @@ def create_pin_from_share(share: PinShare, parent_pin: Pin | None = None) -> Pin
     )
     new_pin.labels.set(source.labels.all())
     shared_images = list(share.images.all())
-    copied_images = Image.objects.bulk_create([
-        Image(
-            image=image.image.name,
-            pin=new_pin,
-            location=new_pin.location,
-            profile=share.to_profile,
-            # Both of these carry a default that quietly misdescribes the copy when
-            # omitted: source would file a shared Wikimedia photo under the
-            # recipient's own uploads (and into the wrong Media tab), and media_type
-            # would turn a shared video into a photo, which renders as a broken image.
-            source=image.source,
-            media_type=image.media_type,
-            media_source_key=image.media_source_key,
-            media_item_key=image.media_item_key,
-            caption=image.caption,
-            author=image.author,
-            source_url=image.source_url,
-            copyright=image.copyright,
-            latitude=image.latitude,
-            longitude=image.longitude,
-            direction=image.direction,
-            checksum=image.checksum,
-            taken_at=image.taken_at,
-            file_size=image.file_size,
-            exif_data=image.exif_data,
-        )
-        for image in shared_images
-    ])
+    copied_images = Image.objects.bulk_create(
+        [
+            Image(
+                image=image.image.name,
+                pin=new_pin,
+                location=new_pin.location,
+                profile=share.to_profile,
+                # Both of these carry a default that quietly misdescribes the copy when
+                # omitted: source would file a shared Wikimedia photo under the
+                # recipient's own uploads (and into the wrong Media tab), and media_type
+                # would turn a shared video into a photo, which renders as a broken image.
+                source=image.source,
+                media_type=image.media_type,
+                media_source_key=image.media_source_key,
+                media_item_key=image.media_item_key,
+                caption=image.caption,
+                author=image.author,
+                source_url=image.source_url,
+                copyright=image.copyright,
+                latitude=image.latitude,
+                longitude=image.longitude,
+                direction=image.direction,
+                checksum=image.checksum,
+                taken_at=image.taken_at,
+                file_size=image.file_size,
+                exif_data=image.exif_data,
+            )
+            for image in shared_images
+        ]
+    )
     _carry_cover_photo(source, new_pin, shared_images, copied_images)
     return new_pin
 

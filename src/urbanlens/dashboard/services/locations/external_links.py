@@ -12,6 +12,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from django.db import IntegrityError, transaction
+
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.pin.model import Pin
@@ -34,16 +36,19 @@ def add_pin_link(pin: Pin, url: str, name: str) -> bool:
 
     if PinAutoRemoval.objects.was_removed(pin=pin, kind=AutoRemovalKind.LINK, value=url):
         return False
-    # filter().first() rather than get_or_create: there is no unique constraint on
-    # (pin, url), and this runs from a LocationCache signal - panel fetches run
-    # concurrently (their own queue, concurrency 20), so two panels contributing the
-    # same URL for one pin can both miss and both insert. get_or_create would then
-    # raise MultipleObjectsReturned on *every* later call for that URL, turning a
-    # harmless duplicate row into a permanent failure inside the signal. The race
-    # itself needs a unique constraint to close - see docs/PROBLEMS.md.
+    # The exists() check is only a fast path that avoids opening a savepoint for
+    # the common "already there" case. The unique constraint on (pin, md5(url))
+    # is what actually decides: this runs from a LocationCache signal whose panel
+    # fetches are concurrent (their own queue, concurrency 20), so two panels
+    # contributing the same URL can both pass the check. The loser's insert is
+    # absorbed here rather than escaping as a 500 from inside the signal.
     if PinLink.objects.filter(pin=pin, url=url).exists():
         return False
-    PinLink.objects.create(pin=pin, url=url, name=name)
+    try:
+        with transaction.atomic():
+            PinLink.objects.create(pin=pin, url=url, name=name)
+    except IntegrityError:
+        return False
     return True
 
 
@@ -63,16 +68,14 @@ def add_wiki_link(wiki: Wiki, url: str, name: str) -> bool:
 
     if WikiAutoRemoval.objects.was_removed(wiki=wiki, kind=AutoRemovalKind.LINK, value=url):
         return False
-    # filter().first() rather than get_or_create: there is no unique constraint on
-    # (wiki, url), and this runs from a LocationCache signal - panel fetches run
-    # concurrently (their own queue, concurrency 20), so two panels contributing the
-    # same URL for one wiki can both miss and both insert. get_or_create would then
-    # raise MultipleObjectsReturned on *every* later call for that URL, turning a
-    # harmless duplicate row into a permanent failure inside the signal. The race
-    # itself needs a unique constraint to close - see docs/PROBLEMS.md.
+    # Fast path only; the (wiki, md5(url)) constraint decides - see add_pin_link.
     if WikiLink.objects.filter(wiki=wiki, url=url).exists():
         return False
-    WikiLink.objects.create(wiki=wiki, url=url, name=name)
+    try:
+        with transaction.atomic():
+            WikiLink.objects.create(wiki=wiki, url=url, name=name)
+    except IntegrityError:
+        return False
     return True
 
 

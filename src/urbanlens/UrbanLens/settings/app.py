@@ -27,6 +27,43 @@ _ENV_FILE_PATHS = [
     Path(DEFAULT_ROOT.parent, ".env"),
 ]
 
+#: Floors enforced on ``field_encryption_key`` (see ``_reject_weak_encryption_keys``).
+#: 32 characters is well below the 64 the documented generator produces, so it
+#: rejects hand-typed keys without failing a legitimately generated one. The
+#: alphabet floor is set against the distribution of random output rather than
+#: against any particular bad key: a random 32-character urlsafe-base64 string
+#: has ~26 distinct characters on average and falls below 16 only very rarely,
+#: while degenerate input (repeated characters, a short string concatenated with
+#: itself) lands under it immediately.
+MIN_FIELD_ENCRYPTION_KEY_LENGTH = 32
+MIN_FIELD_ENCRYPTION_KEY_ALPHABET = 16
+
+
+def _encryption_key_weakness(key: str) -> str | None:
+    """Describe why a field-encryption key is too weak to encrypt under, if it is.
+
+    Args:
+        key: The candidate key.
+
+    Returns:
+        An operator-facing explanation, or None when the key clears both floors.
+    """
+    if len(key) < MIN_FIELD_ENCRYPTION_KEY_LENGTH:
+        return (
+            f"field_encryption_key must be at least {MIN_FIELD_ENCRYPTION_KEY_LENGTH} characters "
+            f"(got {len(key)}). Generate one with: "
+            'python -c "import secrets; print(secrets.token_urlsafe(64))"'
+        )
+    # A crude stand-in for entropy, calibrated against random output rather
+    # than against any specific bad key - see the constant.
+    if len(set(key)) < MIN_FIELD_ENCRYPTION_KEY_ALPHABET:
+        return (
+            f"field_encryption_key uses only {len(set(key))} distinct characters, which is too "
+            "predictable to resist an offline attack against a stolen database. Use a random "
+            'value: python -c "import secrets; print(secrets.token_urlsafe(64))"'
+        )
+    return None
+
 
 def _default_allowed_hosts() -> list[str]:
     """Return the default ``ALLOWED_HOSTS`` list for the current environment.
@@ -130,6 +167,27 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         description=(
             "Allow authenticated users without site-admin permission to see the developer toolbar. "
             "Only takes effect in development, local, or testing environments - ignored in staging/production."
+        ),
+    )
+    csp_enforce: bool = Field(
+        default=False,
+        description=(
+            "Send the Content-Security-Policy as an enforcing header instead of "
+            "Content-Security-Policy-Report-Only. Defaults to report-only so a deployment collects "
+            "violation reports for a release before anything is actually blocked. Set UL_CSP_ENFORCE=true "
+            "per environment once the reports for that environment are clean - see docs/NOTES.md."
+        ),
+    )
+    trusted_proxy_count: int = Field(
+        default=1,
+        description=(
+            "How many reverse proxies sit between the app and the internet, each appending to "
+            "X-Forwarded-For. Per-IP rate limiting reads the entry that many places from the right, "
+            "since anything further left was supplied by the client and can be forged. The default of 1 "
+            "matches the shipped topology (config/nginx appends its real_ip-resolved client address). "
+            "Set 0 when nothing fronts the app, so REMOTE_ADDR is used and X-Forwarded-For ignored - "
+            "but never leave it at 0 behind a proxy, or every request keys to the proxy's own address "
+            "and one attacker throttles the whole site."
         ),
     )
 
@@ -269,6 +327,68 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         """Allow list-valued settings to be provided as comma-separated strings via env vars."""
         if isinstance(value, str):
             return [item.strip() for item in value.split(",") if item.strip()]
+        return value
+
+    @field_validator("field_encryption_key", mode="after")
+    @classmethod
+    def _reject_weak_encryption_keys(cls, value: str | None) -> str | None:
+        """Refuse an active field-encryption key weak enough to brute-force offline.
+
+        The derivation is a single unsalted SHA256 (``models.fields._derive_fernet``),
+        so key strength *is* input strength - there is no stretching to hide behind.
+        Fernet tokens carry their own HMAC, so one stolen ciphertext row lets an
+        attacker verify guesses offline at hashing speed. Rejecting at configuration
+        time is the only point where this is still cheap to fix, and the operator
+        setting this variable is by definition trying to harden the install.
+
+        This is a floor, not an entropy oracle: it reliably catches short and
+        degenerate keys, but a sufficiently long hand-written passphrase will pass
+        while still being far weaker than generated output. Use the documented
+        ``secrets.token_urlsafe(64)`` command rather than treating acceptance here
+        as an endorsement.
+
+        Args:
+            value: The configured active key, if any.
+
+        Returns:
+            The value unchanged when it is acceptable.
+
+        Raises:
+            ValueError: When the key is too short or too repetitive to be a
+                machine-generated secret.
+        """
+        weakness = _encryption_key_weakness(value) if value else None
+        if weakness:
+            raise ValueError(weakness)
+        return value
+
+    @field_validator("field_encryption_key_fallbacks", mode="after")
+    @classmethod
+    def _warn_about_weak_fallback_keys(cls, value: list[str]) -> list[str]:
+        """Accept retired keys that would be refused as the active key, and say so.
+
+        Applying the floor here too would strand exactly the installs that need
+        to move off a weak key: the documented rotation is to list the old key
+        as a fallback, run ``manage.py rotate_field_encryption``, then drop it -
+        and a validator that refuses the old key stops the settings module from
+        loading at all, so the command that fixes it cannot start either. A
+        fallback only ever decrypts, and only until the rotation finishes, so
+        the useful action is a loud warning rather than a locked door.
+
+        Args:
+            value: The configured retired keys.
+
+        Returns:
+            The value unchanged.
+        """
+        for key in value:
+            weakness = _encryption_key_weakness(key)
+            if weakness:
+                logger.warning(
+                    "A retired field-encryption key is too weak to be accepted as the active key. "
+                    "It still decrypts existing rows, but finish the rotation and drop it: %s",
+                    weakness,
+                )
         return value
 
     @model_validator(mode="after")

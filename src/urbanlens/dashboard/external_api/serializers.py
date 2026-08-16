@@ -791,12 +791,18 @@ class PushDeviceResponseSerializer(serializers.Serializer):
 
     Deliberately excludes ``address``: a UnifiedPush endpoint URL is a
     send-capability secret, and the caller already knows what it submitted.
+
+    ``dispatch_enabled`` reports whether the server will actually push to this
+    device. An FCM registration is accepted and stored but never dispatched to
+    yet, so it comes back False - a client that assumed a 201 meant working
+    delivery would otherwise show a silently dead notification setting.
     """
 
     uuid = serializers.UUIDField(read_only=True)
     transport = serializers.CharField(read_only=True)
     name = serializers.CharField(read_only=True)
     created = serializers.DateTimeField(read_only=True)
+    dispatch_enabled = serializers.BooleanField(read_only=True)
 
 
 class SettingsFeaturesSerializer(serializers.Serializer):

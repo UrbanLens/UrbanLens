@@ -264,6 +264,16 @@ body.page-auth {
     text-decoration: underline;
 }
 
+// For a control that has to be a form button - it changes durable state, so it
+// cannot be a GET link - while reading as one of the links beside it.
+button.auth-inline-link {
+    background: none;
+    border: 0;
+    padding: 0;
+    font: inherit;
+    cursor: pointer;
+}
+
 // -- Info page (check email, verify complete, etc.) ------------------------
 .auth-info-icon {
     text-align: center;

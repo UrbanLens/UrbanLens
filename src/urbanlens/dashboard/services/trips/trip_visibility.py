@@ -6,6 +6,13 @@ unless the viewer qualifies (friend, shares the pin, shares the trip - see
 below). Shared by the trip controllers (activities panel, map data) and
 anything else - like AI trip suggestions - that must never show a viewer a
 location their trip-mate chose not to reveal to them specifically.
+
+Deliberately stricter than ``Profile.visibility_permits`` in two ways: pending
+friend requests do not qualify, and COMMON_PIN means a pin at *this activity's
+location*, not any shared pin. Both differences fail closed and are pinned by
+``tests/hypothesis/test_trip_visibility_is_stricter.py``; loosening either is a
+product decision about other users' privacy, to be made in the same commit that
+updates those tests.
 """
 
 from __future__ import annotations
@@ -113,14 +120,7 @@ def viewer_hidden_activity_ids(activities: list[TripActivity], viewer: Profile) 
     # deleted (the FK is SET_NULL) - their setting is gone and the filter treats
     # it as most restrictive. Excluding them here, as this previously did, made
     # that branch unreachable and left their locations visible to everyone.
-    sensitive = [
-        act
-        for act in activities
-        if not act.location_hidden
-        and act.location_id
-        and act.added_by_id != viewer.id
-        and (act.added_by is None or act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE)
-    ]
+    sensitive = [act for act in activities if not act.location_hidden and act.location_id and act.added_by_id != viewer.id and (act.added_by is None or act.added_by.trip_pin_location_visibility != VisibilityChoice.ANYONE)]
     if sensitive:
         apply_trip_visibility_filter(sensitive, viewer, hidden)
     return hidden

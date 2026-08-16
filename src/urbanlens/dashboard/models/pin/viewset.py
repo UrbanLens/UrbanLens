@@ -132,9 +132,10 @@ class PinViewSet(mixins.DestroyModelMixin, viewsets.GenericViewSet):
         A pin with descendants requires an explicit ``children`` query param:
         without one the request is refused with 409 and a payload describing
         how many child pins exist, so the UI can ask the user. ``children=delete``
-        removes the whole subtree (all of it restorable from Undo History);
-        ``children=keep`` promotes the direct children to the deleted pin's own
-        parent (or to top-level pins) and deletes only the pin itself.
+        removes the whole subtree (the pins themselves are restorable from Undo
+        History; their comments, albums, and links are not); ``children=keep``
+        promotes the direct children to the deleted pin's own parent (or to
+        top-level pins) and deletes only the pin itself.
         """
         logger.info("Delete request initiated by user %s", request.user.id)
         instance = self.get_object()

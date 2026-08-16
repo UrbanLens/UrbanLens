@@ -1045,13 +1045,33 @@ class _ParticipantSessionConsumer(CredentialScopeMixin, AsyncWebsocketConsumer):
         """Save and broadcast one chat message from this connection's profile."""
         raise NotImplementedError
 
+    @staticmethod
+    @database_sync_to_async
+    def _has_alpha_features(user) -> bool:
+        """Whether ``user`` holds the entitlement the games are gated behind."""
+        from urbanlens.dashboard.models.subscriptions import SiteFeature, user_has_feature
+
+        return user_has_feature(user, SiteFeature.ALPHA_FEATURES)
+
     async def connect(self):
-        """Verify the connecting profile is a scoped participant (any status) of this session, then join its group."""
+        """Verify the connecting profile is an entitled, scoped participant (any status) of this session, then join its group."""
         from urbanlens.dashboard.models.account.model import ApiKeyScope
 
         session_id = self.scope["url_route"]["kwargs"].get("session_id")
         user = self.scope.get("user")
         if user is None or not user.is_authenticated:
+            await self.close(code=4404)
+            return
+
+        # The same ALPHA_FEATURES entitlement every game HTTP route enforces
+        # (controllers.games.AlphaFeatureRequiredMixin). Gating only the HTTP
+        # side left this socket as the way around it: someone already invited
+        # to a session could still connect, watch live rounds and scoreboards,
+        # and post chat, while every HTTP route answered 403. Credential scopes
+        # do not cover it either - session-authenticated connections are exempt
+        # from those by design.
+        if not await self._has_alpha_features(user):
+            logger.info("%s socket rejected: user %s lacks ALPHA_FEATURES", self.game_label, getattr(user, "pk", None))
             await self.close(code=4404)
             return
 

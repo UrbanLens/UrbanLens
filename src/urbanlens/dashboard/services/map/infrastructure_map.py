@@ -21,10 +21,7 @@ _MAX_FEATURES = 4_000
 _MAX_BBOX_SPAN = 1.5
 _MAX_BBOX_AREA = 1.0
 
-_RAILWAY_VALUES = (
-    "rail|light_rail|subway|tram|narrow_gauge|monorail|preserved|"
-    "disused|abandoned|razed|dismantled|historic"
-)
+_RAILWAY_VALUES = "rail|light_rail|subway|tram|narrow_gauge|monorail|preserved|disused|abandoned|razed|dismantled|historic"
 _WATERWAY_VALUES = "river|stream|canal|tidal_channel|derelict_canal"
 _HISTORIC_RAIL_VALUES = {"abandoned", "disused", "dismantled", "razed", "historic"}
 
@@ -94,14 +91,7 @@ out tags geom qt;"""
 
 
 def _is_rail(tags: dict[str, Any]) -> bool:
-    return bool(
-        tags.get("railway")
-        or tags.get("disused:railway")
-        or tags.get("abandoned:railway")
-        or tags.get("demolished:railway")
-        or tags.get("railtrail") == "yes"
-        or tags.get("historic") == "railway"
-    )
+    return bool(tags.get("railway") or tags.get("disused:railway") or tags.get("abandoned:railway") or tags.get("demolished:railway") or tags.get("railtrail") == "yes" or tags.get("historic") == "railway")
 
 
 def _is_historic(tags: dict[str, Any], kind: str) -> bool:
@@ -117,36 +107,18 @@ def _is_historic(tags: dict[str, Any], kind: str) -> bool:
             or tags.get("abandoned") == "yes"
         )
     return bool(
-        tags.get("waterway") == "derelict_canal"
-        or tags.get("historic") == "canal"
-        or tags.get("disused:waterway")
-        or tags.get("abandoned:waterway")
-        or tags.get("demolished:waterway")
-        or tags.get("disused") == "yes"
-        or tags.get("abandoned") == "yes"
+        tags.get("waterway") == "derelict_canal" or tags.get("historic") == "canal" or tags.get("disused:waterway") or tags.get("abandoned:waterway") or tags.get("demolished:waterway") or tags.get("disused") == "yes" or tags.get("abandoned") == "yes"
     )
 
 
 def _feature_label(tags: dict[str, Any], kind: str, historic: bool) -> tuple[str, str]:
     name = str(tags.get("name") or tags.get("official_name") or "").strip()
     if kind == "rail":
-        raw_type = str(
-            tags.get("railway")
-            or tags.get("disused:railway")
-            or tags.get("abandoned:railway")
-            or tags.get("demolished:railway")
-            or ("rail trail" if tags.get("railtrail") == "yes" else "railway")
-        )
+        raw_type = str(tags.get("railway") or tags.get("disused:railway") or tags.get("abandoned:railway") or tags.get("demolished:railway") or ("rail trail" if tags.get("railtrail") == "yes" else "railway"))
         type_label = raw_type.replace("_", " ").title()
         fallback = f"{'Historic ' if historic else ''}{type_label}"
     else:
-        raw_type = str(
-            tags.get("waterway")
-            or tags.get("disused:waterway")
-            or tags.get("abandoned:waterway")
-            or tags.get("demolished:waterway")
-            or "waterway"
-        )
+        raw_type = str(tags.get("waterway") or tags.get("disused:waterway") or tags.get("abandoned:waterway") or tags.get("demolished:waterway") or "waterway")
         type_label = raw_type.replace("_", " ").title()
         fallback = f"{'Historic ' if historic else ''}{type_label}"
     return name or fallback, type_label

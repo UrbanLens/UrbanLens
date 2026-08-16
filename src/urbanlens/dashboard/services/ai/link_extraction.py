@@ -43,6 +43,8 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any
 
+from django.utils import timezone
+
 from urbanlens.dashboard.models.link_extraction.model import MAX_EXTRACTION_URL_LENGTH, LinkExtraction, LinkExtractionStatus
 
 if TYPE_CHECKING:
@@ -112,7 +114,7 @@ def _parse_date(raw: Any) -> date:
             parsed = date.fromisoformat(text)
         except ValueError as exc:
             raise ValueError(f"{text!r} is not a date.") from exc
-    if not (_MIN_YEAR <= parsed.year <= date.today().year + 1):
+    if not (_MIN_YEAR <= parsed.year <= timezone.localdate().year + 1):
         raise ValueError(f"{parsed.isoformat()} is outside the plausible range.")
     return parsed
 

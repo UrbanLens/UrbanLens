@@ -16,6 +16,7 @@ import logging
 from typing import TYPE_CHECKING, NamedTuple
 
 from django.db.models import Count
+from django.utils import timezone
 
 from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_item_key
 from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind
@@ -24,6 +25,7 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from datetime import datetime
 
     from urbanlens.dashboard.models.images.model import Image
     from urbanlens.dashboard.models.location.model import Location
@@ -38,6 +40,25 @@ GAME_THUMBS_UP_WEIGHT = 0.5
 #: a direct, deliberate "this doesn't belong here" claim, the same claim an
 #: explicit wiki downvote makes.
 GAME_REPORT_WEIGHT = 1.0
+
+#: Half-life for a report's weight, in days. A report is the only signal that
+#: can single-handedly push a photo below the eligibility floor, and an
+#: excluded photo stops being shown - so it can never earn the "shown, no
+#: reaction" impressions that would otherwise rehabilitate it. Without decay
+#: that is a one-way ratchet: one report in one session removes a photo from a
+#: small pin's playable pool permanently. Decaying it means a genuinely bad
+#: photo stays suppressed as long as anyone keeps reporting it, while a photo
+#: reported once years ago quietly returns to the pool to be re-judged.
+#: Matches the recency-weighting approach in ``services/geo/boundary_voting.py``.
+GAME_REPORT_HALF_LIFE_DAYS = 180.0
+
+#: Weight below which a decayed report is dropped entirely rather than kept as a
+#: vanishing negative. Decay alone is asymptotic - it never reaches zero - and
+#: the eligibility gate is ``>= 0``, so an old report would otherwise leave a
+#: photo at -0.0000009 and keep it excluded forever, which is the exact ratchet
+#: the decay exists to break. This makes a report genuinely expire (~6.6
+#: half-lives, about 3 years at the current setting).
+GAME_REPORT_MIN_WEIGHT = 0.01
 
 #: Being shown with no reaction at all counts very weakly toward "relevant" -
 #: most impressions are silent, so this only adds up to anything meaningful
@@ -54,12 +75,42 @@ GAME_NO_REACTION_WEIGHT = 0.01
 #: ranking can use it to break ties among photos that are all positive.
 GAME_THUMBS_DOWN_WEIGHT = 0.001
 
+#: Weights for the signals counted in bulk. Reports are handled separately (see
+#: :func:`_decayed_report_penalty`) because they decay with age and so cannot be
+#: reduced to a count.
 _GAME_WEIGHTS = {
     GamePhotoFeedbackKind.THUMBS_UP: GAME_THUMBS_UP_WEIGHT,
     GamePhotoFeedbackKind.THUMBS_DOWN: -GAME_THUMBS_DOWN_WEIGHT,
-    GamePhotoFeedbackKind.REPORTED: -GAME_REPORT_WEIGHT,
     GamePhotoFeedbackKind.NO_REACTION: GAME_NO_REACTION_WEIGHT,
 }
+
+
+def _decayed_report_penalty(image: Image, *, now: datetime | None = None) -> float:
+    """Total weight of this photo's reports, each decayed by its own age.
+
+    Reports are read row-by-row rather than counted, because each contributes
+    ``GAME_REPORT_WEIGHT * 0.5 ** (age_days / GAME_REPORT_HALF_LIFE_DAYS)``.
+    That is affordable where counting the other kinds in bulk is not: a report
+    is a rare, deliberate act, while ``NO_REACTION`` accrues on every single
+    impression and would be thousands of rows for a popular photo.
+
+    Args:
+        image: The materialized image whose reports to weigh.
+        now: Reference time, for tests. Defaults to the current time.
+
+    Returns:
+        A non-negative total to be subtracted from the photo's score.
+    """
+    reference = now or timezone.now()
+    timestamps = GamePhotoFeedback.objects.filter(round__image=image, kind=GamePhotoFeedbackKind.REPORTED).values_list("created", flat=True)
+
+    penalty = 0.0
+    for created in timestamps:
+        age_days = max((reference - created).total_seconds() / 86_400.0, 0.0)
+        weight = GAME_REPORT_WEIGHT * (0.5 ** (age_days / GAME_REPORT_HALF_LIFE_DAYS))
+        if weight >= GAME_REPORT_MIN_WEIGHT:
+            penalty += weight
+    return penalty
 
 
 def effective_relevance(image: Image) -> float:
@@ -77,18 +128,19 @@ def effective_relevance(image: Image) -> float:
 
     Returns:
         wiki net vote score (each mark counts as +1/-1) plus the weighted
-        SpotGuessr gameplay signal (thumbs up/down/report/no-reaction - see
-        ``_GAME_WEIGHTS``).
+        SpotGuessr gameplay signal (thumbs up/down/no-reaction - see
+        ``_GAME_WEIGHTS``) minus the age-decayed report penalty (see
+        :data:`GAME_REPORT_HALF_LIFE_DAYS`).
     """
     if not image.media_source_key or not image.media_item_key or image.location_id is None:
         return 0.0
 
     wiki_score = float(MediaRelevance.objects.vote_scores(image.location, image.media_source_key).get(image.media_item_key, 0))
 
-    game_counts = GamePhotoFeedback.objects.filter(round__image=image).values("kind").annotate(n=Count("pk"))
+    game_counts = GamePhotoFeedback.objects.filter(round__image=image).exclude(kind=GamePhotoFeedbackKind.REPORTED).values("kind").annotate(n=Count("pk"))
     game_score = sum(_GAME_WEIGHTS.get(row["kind"], 0.0) * row["n"] for row in game_counts)
 
-    return wiki_score + game_score
+    return wiki_score + game_score - _decayed_report_penalty(image)
 
 
 def toggle_media_vote(image: Image, profile: Profile, *, value: int) -> int:

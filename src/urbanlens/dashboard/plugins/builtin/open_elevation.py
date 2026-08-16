@@ -77,9 +77,7 @@ class ElevationPanelSource(CoordinateGatedInfoPanelSource):
 
         other_readings = [r for r in (data or {}).get("readings", [])[1:] if isinstance(r.get("elevation_meters"), (int, float))]
         if other_readings:
-            context["meta"] = [
-                {"label": (reading.get("dataset") or reading.get("provider") or "Other model"), "value": f"{reading['elevation_meters']:,.0f} m"} for reading in other_readings
-            ]
+            context["meta"] = [{"label": (reading.get("dataset") or reading.get("provider") or "Other model"), "value": f"{reading['elevation_meters']:,.0f} m"} for reading in other_readings]
         return context
 
 

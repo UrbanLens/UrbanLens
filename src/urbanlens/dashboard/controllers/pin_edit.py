@@ -10,6 +10,7 @@ from django.http import Http404, HttpResponse, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.template.loader import render_to_string
 from django.urls import reverse
+from django.utils import timezone
 from django.views import View
 
 from urbanlens.dashboard.models.abstract.choices import SecurityLevel
@@ -294,7 +295,7 @@ class PinEditView(LoginRequiredMixin, View):
                 except ValueError:
                     continue
             if last_visited:
-                today = date.today()
+                today = timezone.localdate()
                 min_date = date(today.year - 100, today.month, today.day)
                 lv_date = last_visited.date()
                 if lv_date > today:
@@ -592,11 +593,7 @@ class PinRelinkView(LoginRequiredMixin, View):
             # pin sits inside is one they discovered by pinning it, so allowing it
             # discloses nothing they could not already derive. Both are checked against
             # the pin's own point, never against an arbitrary slug from the URL.
-            if not (
-                location.pk == pin.location_id
-                or location_visible_to(location, pin.profile)
-                or Location.objects.get_all_for_point(pin.effective_latitude, pin.effective_longitude).filter(pk=location.pk).exists()
-            ):
+            if not (location.pk == pin.location_id or location_visible_to(location, pin.profile) or Location.objects.get_all_for_point(pin.effective_latitude, pin.effective_longitude).filter(pk=location.pk).exists()):
                 raise Http404
             # A profile can only ever have one root pin per location
             # (db_pin_unique_location_per_profile) - if one already exists at the

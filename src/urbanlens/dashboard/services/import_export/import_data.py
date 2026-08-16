@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from dataclasses import dataclass, field
 import json
 import logging
 import os
 import shutil
-from typing import Any
+from typing import Any, ClassVar
 import zipfile
 
 from django.core.cache import cache
@@ -688,6 +689,9 @@ def _import_pins(
             if label_uuid in label_uuid_map:
                 pin.labels.add(label_uuid_map[label_uuid])
 
+        for alias_row in row.get("aliases") or []:
+            _restore_pin_alias(pin, alias_row)
+
         rating = row.get("rating")
         if isinstance(rating, int) and 0 <= rating <= 5:
             from urbanlens.dashboard.models.reviews.model import Review
@@ -700,6 +704,44 @@ def _import_pins(
             from urbanlens.dashboard.services.wiki.articles import save_article
 
             save_article(editor=profile, content=content, edit_summary="Imported", pin=pin)
+
+
+def _restore_pin_alias(pin: Any, alias_row: Any) -> None:
+    """Re-create one user-authored alias on a freshly imported pin.
+
+    Only ``source == "user"`` aliases are restored. An ``official`` alias is
+    written by an external name provider and re-synced by that provider against
+    whatever *this* instance resolves the pin to, so importing one would freeze
+    a stale third-party name in place. Matching is case-insensitive because the
+    ``(lower(name), pin)`` uniqueness constraint is - an exact-match check would
+    miss a case variant and turn a duplicate into a constraint error.
+
+    Args:
+        pin: The newly created Pin the alias belongs to.
+        alias_row: One entry from the exported pin's ``aliases`` list.
+    """
+    from django.db import IntegrityError
+
+    from urbanlens.dashboard.models.aliases.model import AliasSource, AliasType, PinAlias
+
+    if not isinstance(alias_row, dict):
+        return
+    if (alias_row.get("source") or AliasSource.USER) != AliasSource.USER:
+        return
+    name = str(alias_row.get("name") or "").strip()[:255]
+    if not name:
+        return
+    kind = alias_row.get("kind")
+    if kind not in AliasType.values:
+        kind = AliasType.ALTERNATE
+    if PinAlias.objects.filter(pin=pin, name__iexact=name).exists():
+        return
+    try:
+        PinAlias.objects.create(pin=pin, name=name, kind=kind, source=AliasSource.USER)
+    except IntegrityError:
+        # PinAlias.save() sanitizes the name, so a name that looked distinct in
+        # the archive can collide with an existing alias once normalized.
+        logger.debug("Skipped duplicate pin alias %r on pin %s", name, pin.pk)
 
 
 def _import_visit_history(
@@ -1657,9 +1699,1095 @@ def _import_direct_messages(
         )
 
 
+# -- Declarative import types ----------------------------------------------------
+
+
+@dataclass
+class ImportContext:
+    """Everything one import step needs, so adding a step never widens a signature.
+
+    Attributes:
+        profile: The profile being imported into.
+        data_dir: Directory holding the extracted archive's data files.
+        result: The shared created/skipped/warning tally.
+        pin_uuid_map: Archive pin uuid -> local pk, built by the pins step.
+        label_uuid_map: Archive label uuid -> local pk, built by the labels step.
+        report_progress: Optional throttled (done, count) progress callback.
+        scratch: Per-run storage for a step that needs to carry a count or a
+            cached lookup from its rows into :meth:`RowImportType.finish`.
+            Registered import types are module-level singletons, so a step must
+            never keep that state on ``self``.
+    """
+
+    profile: Any
+    data_dir: str
+    result: ImportResult
+    pin_uuid_map: dict[str, int]
+    label_uuid_map: dict[str, int]
+    report_progress: ProgressReporter | None = None
+    scratch: dict[str, Any] = field(default_factory=dict)
+
+    def bump(self, key: str, amount: int = 1) -> None:
+        """Increment a named counter in :attr:`scratch`.
+
+        Args:
+            key: Counter name.
+            amount: How much to add.
+        """
+        self.scratch[key] = self.scratch.get(key, 0) + amount
+
+
+class ImportType(ABC):
+    """One import step, reading a single file from the archive.
+
+    The original steps are plain ``_import_*`` functions listed in
+    :data:`_IMPORTERS`. Steps added since subclass this instead: declare a
+    key/filename/message, implement :meth:`run`, and append an instance to
+    :data:`_REGISTERED_IMPORT_TYPES` plus its key to :data:`_IMPORT_ORDER` (the
+    order is a real dependency graph - map annotations need pins, safety
+    check-ins need maps - so it stays hand-written).
+
+    Instances are callable with the same signature the legacy importers use, so
+    :func:`run_import` dispatches to both identically.
+
+    Attributes:
+        key: Manifest/export-type key this step handles.
+        filename: File in the archive's data directory, relative to it.
+        message: Progress message shown while this step runs.
+    """
+
+    key: ClassVar[str]
+    filename: ClassVar[str]
+    message: ClassVar[str]
+
+    def load(self, data_dir: str) -> Any:
+        """Read this step's file from the archive.
+
+        Args:
+            data_dir: Directory holding the extracted archive's data files.
+
+        Returns:
+            The parsed JSON, or None when the file is absent.
+        """
+        return _read_json(data_dir, self.filename)
+
+    @abstractmethod
+    def run(self, data: Any, ctx: ImportContext) -> None:
+        """Apply the loaded archive data to the importing profile.
+
+        Args:
+            data: Whatever :meth:`load` returned (never empty/None).
+            ctx: The shared import context.
+        """
+
+    def __call__(
+        self,
+        profile: Any,
+        data_dir: str,
+        result: ImportResult,
+        *,
+        pin_uuid_map: dict[str, int],
+        label_uuid_map: dict[str, int],
+        report_progress: ProgressReporter | None = None,
+    ) -> None:
+        """Run this import step.
+
+        Args:
+            profile: The profile being imported into.
+            data_dir: Directory holding the extracted archive's data files.
+            result: The shared created/skipped/warning tally.
+            pin_uuid_map: Archive pin uuid -> local pk.
+            label_uuid_map: Archive label uuid -> local pk.
+            report_progress: Optional throttled progress callback.
+        """
+        data = self.load(data_dir)
+        if not data:
+            return
+        self.run(
+            data,
+            ImportContext(
+                profile=profile,
+                data_dir=data_dir,
+                result=result,
+                pin_uuid_map=pin_uuid_map,
+                label_uuid_map=label_uuid_map,
+                report_progress=report_progress,
+            ),
+        )
+
+
+class RowImportType(ImportType):
+    """An :class:`ImportType` over a JSON list, handling one row at a time.
+
+    Takes care of the bookkeeping every row-shaped importer repeats: progress
+    reporting, the created/skipped tally, discarding non-dict rows from a
+    hand-edited archive, and an optional whole-step permission gate.
+    """
+
+    def allowed(self, ctx: ImportContext) -> bool:
+        """Whether this step may run at all for the importing profile.
+
+        Overridden by steps behind a privacy setting (the same gate
+        ``_import_visit_history`` applies before creating any visit).
+
+        Args:
+            ctx: The shared import context.
+
+        Returns:
+            True to process rows; False to skip the whole step.
+        """
+        return True
+
+    @abstractmethod
+    def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
+        """Apply one archive row.
+
+        Args:
+            row: The exported row.
+            ctx: The shared import context.
+
+        Returns:
+            True when a record was created, False when the row was skipped.
+        """
+
+    def finish(self, ctx: ImportContext) -> None:
+        """Hook for a summary warning once every row has been handled.
+
+        Args:
+            ctx: The shared import context.
+        """
+
+    def run(self, data: Any, ctx: ImportContext) -> None:
+        """Iterate the archive's rows, tallying and reporting as it goes.
+
+        Args:
+            data: The parsed JSON list.
+            ctx: The shared import context.
+        """
+        rows = [row for row in data if isinstance(row, dict)] if isinstance(data, list) else []
+        total = len(rows)
+        if not total:
+            return
+        if not self.allowed(ctx):
+            ctx.result.inc_skipped(self.key, total)
+            return
+
+        for idx, row in enumerate(rows, start=1):
+            if ctx.report_progress:
+                ctx.report_progress(idx, total)
+            if self.import_row(row, ctx):
+                ctx.result.inc_created(self.key)
+            else:
+                ctx.result.inc_skipped(self.key)
+        self.finish(ctx)
+
+
+def _decimal_or_none(value: Any) -> Any:
+    """Parse an exported decimal string, returning None when it isn't one.
+
+    Args:
+        value: The raw exported value.
+
+    Returns:
+        A ``Decimal``, or None when absent/unparseable.
+    """
+    from decimal import Decimal, InvalidOperation
+
+    if value in (None, ""):
+        return None
+    try:
+        return Decimal(str(value))
+    except InvalidOperation:
+        return None
+
+
+def _connection_uuids(ctx: ImportContext) -> set[str]:
+    """Return (and cache) the uuids of the importing profile's connections.
+
+    Args:
+        ctx: The shared import context.
+
+    Returns:
+        Set of connected profile uuids as strings.
+    """
+    cached = ctx.scratch.get("connection_uuids")
+    if cached is None:
+        from urbanlens.dashboard.services.social.connections import get_connections
+
+        cached = {str(connection.uuid) for connection in get_connections(ctx.profile)}
+        ctx.scratch["connection_uuids"] = cached
+    return cached
+
+
+class ProfileImport(ImportType):
+    """Restore the profile's own free-text content and contact handles.
+
+    Identity is deliberately NOT restored. ``username``, ``email``,
+    ``first_name``, ``last_name`` and ``date_joined`` all live on ``auth.User``
+    and identify the *account*, not its content: an archive is routinely
+    imported into a different account (that is the whole point of a portable
+    export), and letting one overwrite the destination account's login identity
+    would be an account-takeover primitive rather than a restore. The fields
+    below are the ones the user typed into their own profile page and can
+    already see sitting in ``profile.json``.
+
+    ``social_links`` and ``secondary_emails`` ride along in the same file
+    (``_export_profile`` writes them there) and are restored here too - deduped
+    against what the profile already has, and always unverified: verification is
+    a claim on an address that only this instance's confirmation flow can grant,
+    so honoring an exported ``is_verified`` would let a hand-edited archive
+    claim someone else's address.
+    """
+
+    key = "profile"
+    filename = "profile.json"
+    message = "Importing profile..."
+
+    #: Free-text Profile columns copied across verbatim.
+    text_fields: ClassVar[tuple[str, ...]] = ("bio", "area")
+
+    #: Profile date columns, applied only when they parse.
+    date_fields: ClassVar[tuple[str, ...]] = ("birth_date", "started_exploring")
+
+    #: The contact block - encrypted at rest, plain strings in the archive.
+    contact_fields: ClassVar[tuple[str, ...]] = (
+        "phone_number",
+        "signal_username",
+        "discord_username",
+        "whatsapp_number",
+        "telegram_username",
+        "matrix_handle",
+    )
+
+    def run(self, data: Any, ctx: ImportContext) -> None:
+        """Apply the exported profile content to the importing profile.
+
+        Args:
+            data: The parsed ``profile.json`` object.
+            ctx: The shared import context.
+        """
+        from django.utils.dateparse import parse_date
+
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.services.core.text_limits import MAX_PROFILE_BIO_LENGTH
+
+        if not isinstance(data, dict):
+            return
+
+        update_fields: dict[str, Any] = {}
+        for name in self.text_fields:
+            value = data.get(name)
+            if isinstance(value, str) and value.strip():
+                # .update() bypasses field validators, so the bio ceiling is
+                # enforced here rather than relying on full_clean().
+                update_fields[name] = value[:MAX_PROFILE_BIO_LENGTH] if name == "bio" else value
+
+        for name in self.date_fields:
+            raw = data.get(name)
+            parsed = parse_date(str(raw)) if raw else None
+            if parsed is not None:
+                update_fields[name] = parsed
+
+        contact = data.get("contact")
+        if isinstance(contact, dict):
+            for name in self.contact_fields:
+                value = contact.get(name)
+                if isinstance(value, str) and value.strip():
+                    update_fields[name] = value
+
+        if update_fields:
+            Profile.objects.filter(pk=ctx.profile.pk).update(**update_fields)
+            ctx.result.inc_created(self.key)
+        else:
+            ctx.result.inc_skipped(self.key)
+
+        self._import_social_links(data.get("social_links"), ctx)
+        self._import_secondary_emails(data.get("secondary_emails"), ctx)
+
+    def _import_social_links(self, rows: Any, ctx: ImportContext) -> None:
+        """Restore one link per platform, never overwriting one already set.
+
+        Args:
+            rows: The exported ``social_links`` list.
+            ctx: The shared import context.
+        """
+        from urbanlens.dashboard.models.social_link.model import SocialLink
+
+        if not isinstance(rows, list):
+            return
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            platform = str(row.get("platform") or "").strip()[:30]
+            handle = str(row.get("handle") or "").strip()[:500]
+            if not platform or not handle:
+                ctx.result.inc_skipped("social_links")
+                continue
+            # get_or_create on the model's own (profile, platform) uniqueness:
+            # a link the user already set here wins over the archive's copy.
+            _link, created = SocialLink.objects.get_or_create(profile=ctx.profile, platform=platform, defaults={"handle": handle})
+            if created:
+                ctx.result.inc_created("social_links")
+            else:
+                ctx.result.inc_skipped("social_links")
+
+    def _import_secondary_emails(self, rows: Any, ctx: ImportContext) -> None:
+        """Restore additional addresses as unverified rows.
+
+        Args:
+            rows: The exported ``secondary_emails`` list.
+            ctx: The shared import context.
+        """
+        from django.core.exceptions import ValidationError
+        from django.core.validators import validate_email
+
+        from urbanlens.dashboard.models.profile.email import ProfileEmail
+        from urbanlens.dashboard.services.auth.email_normalization import normalize_email
+
+        if not isinstance(rows, list):
+            return
+        needs_reverification = 0
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            email = str(row.get("email") or "").strip()
+            try:
+                validate_email(email)
+            except ValidationError:
+                ctx.result.inc_skipped("secondary_emails")
+                continue
+
+            normalized = normalize_email(email)
+            if ProfileEmail.objects.filter(profile=ctx.profile, normalized_email=normalized).exists():
+                ctx.result.inc_skipped("secondary_emails")
+                continue
+
+            ProfileEmail.objects.create(profile=ctx.profile, email=email, is_verified=False)
+            ctx.result.inc_created("secondary_emails")
+            if row.get("is_verified"):
+                needs_reverification += 1
+
+        if needs_reverification:
+            ctx.result.warnings.append(
+                f"{needs_reverification} secondary email address(es) were restored unverified - confirm them again from your profile to use them.",
+            )
+
+
+class SafetyCheckinsImport(RowImportType):
+    """Restore safety check-ins as historical records, never as live plans.
+
+    A restored check-in is always given a *terminal* status. An exported
+    ``scheduled``/``awaiting_checkin``/``overdue`` row still has a future
+    ``checkin_by``, so importing it as-is would re-arm a plan the user is not
+    actually on and eventually email their emergency contacts about a trip that
+    never happened - an import must not be able to send mail on the user's
+    behalf. Non-terminal rows therefore land as ``cancelled``, with a warning
+    saying so; a check-in that had already concluded keeps the status it had.
+
+    ``notify_community_wiki`` is likewise forced off, so a restore can never
+    post to a community wiki. Contact rows are re-created from the snapshot the
+    user typed, but never their ``token`` (a fresh unguessable one is generated,
+    and the old one was never exported), and a contact is only re-linked to a
+    real account when that account is one of the importer's own connections -
+    the "requests, not facts" rule ``_import_trips`` applies to trip members.
+    Only messages the owner themselves wrote are restored: re-creating a
+    contact's reply would fabricate words attributed to that person.
+    """
+
+    key = "safety_checkins"
+    filename = "safety_checkins.json"
+    message = "Importing safety check-ins..."
+
+    def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
+        """Restore one check-in with its contacts and the owner's own messages.
+
+        Args:
+            row: The exported check-in row.
+            ctx: The shared import context.
+
+        Returns:
+            True when a check-in was created.
+        """
+        from datetime import timedelta
+
+        from django.utils.dateparse import parse_datetime
+
+        from urbanlens.dashboard.models.safety.model import DEFAULT_GRACE_PERIOD, SafetyCheckin, SafetyCheckinStatus
+
+        uuid_str = _safe_uuid(row.get("uuid"))
+        if uuid_str and SafetyCheckin.objects.filter(uuid=uuid_str, profile=ctx.profile).exists():
+            return False
+
+        title = str(row.get("title") or "").strip()[:200]
+        checkin_by = parse_datetime(str(row.get("checkin_by") or ""))
+        if not title or checkin_by is None:
+            return False
+
+        # Content-level backstop, same shape as _import_comments': when the
+        # archive's uuid is already taken by another row the uuid check above
+        # can never fire, so an identical (title, checkin_by) pair is the same
+        # check-in.
+        if SafetyCheckin.objects.filter(profile=ctx.profile, title=title, checkin_by=checkin_by).exists():
+            return False
+
+        status = row.get("status")
+        if status not in SafetyCheckinStatus.resolved_statuses():
+            status = SafetyCheckinStatus.CANCELLED
+            ctx.bump("disarmed")
+
+        grace_seconds = row.get("grace_period_seconds")
+        grace_period = timedelta(seconds=float(grace_seconds)) if isinstance(grace_seconds, int | float) else DEFAULT_GRACE_PERIOD
+
+        exported_created = parse_datetime(str(row.get("created") or ""))
+        resolved_at = parse_datetime(str(row.get("resolved_at") or "")) or exported_created or checkin_by
+
+        checkin = SafetyCheckin(
+            profile=ctx.profile,
+            title=title,
+            plan_details=str(row.get("plan_details") or ""),
+            contact_message=str(row.get("contact_message") or ""),
+            checkin_by=checkin_by,
+            grace_period=grace_period,
+            status=status,
+            destination_latitude=_decimal_or_none(row.get("destination_latitude")),
+            destination_longitude=_decimal_or_none(row.get("destination_longitude")),
+            # Never re-post to a community wiki from a restore.
+            notify_community_wiki=False,
+            escalated_at=parse_datetime(str(row.get("escalated_at") or "")),
+            resolved_at=resolved_at,
+            resolved_by_label=str(row.get("resolved_by_label") or "")[:150],
+            trip=self._resolve_trip(row.get("trip_uuid"), ctx),
+            markup_map=self._resolve_map(row.get("markup_map_uuid"), ctx),
+        )
+        if uuid_str and not SafetyCheckin.objects.filter(uuid=uuid_str).exists():
+            checkin.uuid = uuid_str
+        checkin.save()
+
+        attached = [self._resolve_map(value, ctx) for value in (row.get("attached_markup_map_uuids") or [])]
+        resolved_attachments = [markup_map for markup_map in attached if markup_map is not None]
+        if resolved_attachments:
+            checkin.markup_maps.add(*resolved_attachments)
+
+        self._import_contacts(checkin, row.get("contacts"), ctx)
+        self._import_messages(checkin, row.get("messages"), ctx)
+        _apply_exported_created(checkin, row.get("created"))
+        return True
+
+    def _resolve_trip(self, trip_uuid: Any, ctx: ImportContext) -> Any:
+        """Resolve an exported trip uuid to one of the importer's own trips.
+
+        Args:
+            trip_uuid: The exported uuid, if any.
+            ctx: The shared import context.
+
+        Returns:
+            The Trip, or None when it isn't the importer's.
+        """
+        from urbanlens.dashboard.models.trips.model import Trip
+
+        parsed = _safe_uuid(trip_uuid)
+        if parsed is None:
+            return None
+        return Trip.objects.filter(uuid=parsed, profiles=ctx.profile).first()
+
+    def _resolve_map(self, map_uuid: Any, ctx: ImportContext) -> Any:
+        """Resolve an exported markup-map uuid to one of the importer's own maps.
+
+        The map annotations step runs first and preserves archive uuids where
+        they were free, so a same-archive restore re-links; a uuid pointing at
+        someone else's map resolves to nothing rather than borrowing it.
+
+        Args:
+            map_uuid: The exported uuid, if any.
+            ctx: The shared import context.
+
+        Returns:
+            The MarkupMap, or None.
+        """
+        from urbanlens.dashboard.models.markup.model import MarkupMap
+
+        parsed = _safe_uuid(map_uuid)
+        if parsed is None:
+            return None
+        return MarkupMap.objects.filter(uuid=parsed, profile=ctx.profile).first()
+
+    def _import_contacts(self, checkin: Any, rows: Any, ctx: ImportContext) -> None:
+        """Re-create the check-in's emergency contact snapshots.
+
+        Args:
+            checkin: The freshly created check-in.
+            rows: The exported ``contacts`` list.
+            ctx: The shared import context.
+        """
+        from django.utils.dateparse import parse_datetime
+
+        from urbanlens.dashboard.models.profile.model import Profile
+        from urbanlens.dashboard.models.safety.model import SafetyCheckinContact
+
+        if not isinstance(rows, list):
+            return
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            contact_uuid = _safe_uuid(row.get("contact_profile_uuid"))
+            contact_profile = None
+            if contact_uuid and contact_uuid in _connection_uuids(ctx):
+                contact_profile = Profile.objects.filter(uuid=contact_uuid).first()
+
+            email = str(row.get("email") or "").strip() or None
+            if contact_profile is None and not email:
+                ctx.result.inc_skipped("safety_contacts")
+                continue
+
+            SafetyCheckinContact.objects.create(
+                checkin=checkin,
+                name=str(row.get("name") or "")[:150],
+                # The model's CheckConstraint is an XOR: a row identifies its
+                # contact by account or by address, never both.
+                email=None if contact_profile is not None else email,
+                contact_profile=contact_profile,
+                notified_at=parse_datetime(str(row.get("notified_at") or "")),
+                found_safe_at=parse_datetime(str(row.get("found_safe_at") or "")),
+            )
+            ctx.result.inc_created("safety_contacts")
+
+    def _import_messages(self, checkin: Any, rows: Any, ctx: ImportContext) -> None:
+        """Restore only the messages the check-in's owner wrote themselves.
+
+        Args:
+            checkin: The freshly created check-in.
+            rows: The exported ``messages`` list.
+            ctx: The shared import context.
+        """
+        from urbanlens.dashboard.models.safety.model import SafetyCheckinMessage
+
+        if not isinstance(rows, list):
+            return
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            body = str(row.get("body") or "").strip()
+            if not body:
+                continue
+            if row.get("sender") != "owner":
+                ctx.bump("foreign_messages")
+                ctx.result.inc_skipped("safety_messages")
+                continue
+            message = SafetyCheckinMessage.objects.create(checkin=checkin, sender_profile=ctx.profile, body=body)
+            _apply_exported_created(message, row.get("created"))
+            ctx.result.inc_created("safety_messages")
+
+    def finish(self, ctx: ImportContext) -> None:
+        """Explain the two ways a restored check-in differs from the exported one.
+
+        Args:
+            ctx: The shared import context.
+        """
+        disarmed = ctx.scratch.get("disarmed", 0)
+        if disarmed:
+            ctx.result.warnings.append(
+                f"{disarmed} safety check-in(s) were still active when exported and were restored as cancelled - importing them live would have re-armed alerts to your emergency contacts.",
+            )
+        foreign = ctx.scratch.get("foreign_messages", 0)
+        if foreign:
+            ctx.result.warnings.append(
+                f"{foreign} safety check-in message(s) written by your contacts were not restored. They remain readable in the export file itself.",
+            )
+
+
+class MapAnnotationsImport(ImportType):
+    """Restore markup maps, their annotations, and georeferenced image overlays.
+
+    Only annotations the importer can own outright come back: standalone maps
+    and everything drawn on them, plus markup and overlays attached to the
+    importer's OWN pins (resolved through ``_resolve_import_target``, the same
+    uuid-only matching comments and photos use). Wiki-scoped annotations are
+    shared community data on someone else's page - exported so the user keeps a
+    copy of what they drew, but skipped here rather than written back into a
+    community map from a user-supplied file.
+
+    An overlay's image re-enters storage through the same quota and file-size
+    checks a fresh upload gets, exactly as ``_import_photos`` does; one that
+    doesn't fit falls back to its external ``image_url`` when it had one, and is
+    otherwise skipped rather than restored as an overlay with nothing to draw.
+    """
+
+    key = "map_annotations"
+    filename = "map_annotations.json"
+    message = "Importing map annotations..."
+
+    def run(self, data: Any, ctx: ImportContext) -> None:
+        """Restore the three annotation sections in dependency order.
+
+        Args:
+            data: The parsed ``map_annotations.json`` object.
+            ctx: The shared import context.
+        """
+        if not isinstance(data, dict):
+            return
+
+        maps = [row for row in (data.get("maps") or []) if isinstance(row, dict)]
+        markup = [row for row in (data.get("markup") or []) if isinstance(row, dict)]
+        overlays = [row for row in (data.get("overlays") or []) if isinstance(row, dict)]
+        total = len(maps) + len(markup) + len(overlays)
+        done = 0
+
+        for row in maps:
+            done += 1
+            if ctx.report_progress:
+                ctx.report_progress(done, total)
+            self._import_map(row, ctx)
+
+        for row in markup:
+            done += 1
+            if ctx.report_progress:
+                ctx.report_progress(done, total)
+            self._import_standalone_markup(row, ctx)
+
+        for row in overlays:
+            done += 1
+            if ctx.report_progress:
+                ctx.report_progress(done, total)
+            self._import_overlay(row, ctx)
+
+        unattachable = ctx.scratch.get("unattachable", 0)
+        if unattachable:
+            ctx.result.warnings.append(
+                f"Skipped {unattachable} map annotation(s) drawn on a community wiki or on a pin that could not be matched on this instance.",
+            )
+
+    def _import_map(self, row: dict[str, Any], ctx: ImportContext) -> None:
+        """Restore one standalone markup map and the items drawn on it.
+
+        Args:
+            row: The exported map row.
+            ctx: The shared import context.
+        """
+        from urbanlens.dashboard.models.markup.model import MarkupMap
+
+        uuid_str = _safe_uuid(row.get("uuid"))
+        if uuid_str and MarkupMap.objects.filter(uuid=uuid_str, profile=ctx.profile).exists():
+            ctx.result.inc_skipped("map_annotations")
+            return
+
+        markup_map = MarkupMap(
+            profile=ctx.profile,
+            title=str(row.get("title") or "")[:200],
+            center_latitude=_float_or_none(row.get("center_latitude")),
+            center_longitude=_float_or_none(row.get("center_longitude")),
+            zoom=_float_or_none(row.get("zoom")),
+            show_borders=bool(row.get("show_borders")),
+            pin_id=ctx.pin_uuid_map.get(_safe_uuid(row.get("pin_uuid")) or ""),
+        )
+        markup_map.layer_mode = _valid_layer_mode(row.get("layer_mode"))
+        if uuid_str and not MarkupMap.objects.filter(uuid=uuid_str).exists():
+            markup_map.uuid = uuid_str
+        markup_map.save()
+        _apply_exported_created(markup_map, row.get("created"))
+        ctx.result.inc_created("map_annotations")
+
+        for item_row in row.get("items") or []:
+            if isinstance(item_row, dict) and _build_markup_item(item_row, ctx.profile, parent_map=markup_map) is not None:
+                ctx.result.inc_created("map_annotation_items")
+
+    def _import_standalone_markup(self, row: dict[str, Any], ctx: ImportContext) -> None:
+        """Restore one annotation drawn directly on the importer's own pin.
+
+        Args:
+            row: The exported markup row.
+            ctx: The shared import context.
+        """
+        from urbanlens.dashboard.models.markup.model import PinMarkup
+
+        uuid_str = _safe_uuid(row.get("uuid"))
+        if uuid_str and PinMarkup.objects.filter(uuid=uuid_str, profile=ctx.profile).exists():
+            ctx.result.inc_skipped("map_annotation_items")
+            return
+
+        pin_pk, _wiki, _resolved = _resolve_import_target(ctx.profile, row, ctx.pin_uuid_map)
+        if pin_pk is None:
+            ctx.bump("unattachable")
+            ctx.result.inc_skipped("map_annotation_items")
+            return
+
+        if _build_markup_item(row, ctx.profile, parent_pin_id=pin_pk) is None:
+            ctx.result.inc_skipped("map_annotation_items")
+        else:
+            ctx.result.inc_created("map_annotation_items")
+
+    def _import_overlay(self, row: dict[str, Any], ctx: ImportContext) -> None:
+        """Restore one georeferenced image overlay onto the importer's own pin.
+
+        Args:
+            row: The exported overlay row.
+            ctx: The shared import context.
+        """
+        from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
+
+        uuid_str = _safe_uuid(row.get("uuid"))
+        if uuid_str and MapImageOverlay.objects.filter(uuid=uuid_str, profile=ctx.profile).exists():
+            ctx.result.inc_skipped("map_overlays")
+            return
+
+        pin_pk, _wiki, _resolved = _resolve_import_target(ctx.profile, row, ctx.pin_uuid_map)
+        if pin_pk is None:
+            ctx.bump("unattachable")
+            ctx.result.inc_skipped("map_overlays")
+            return
+
+        overlay = MapImageOverlay(
+            profile=ctx.profile,
+            parent_pin_id=pin_pk,
+            name=str(row.get("name") or "")[:100],
+            image_url=str(row.get("image_url") or "")[:1000],
+            opacity=_bounded_int(row.get("opacity"), default=70),
+            order=_bounded_int(row.get("order"), default=0, low=0, high=10_000),
+            default_visible=bool(row.get("default_visible", True)),
+            locked=bool(row.get("locked")),
+        )
+        try:
+            overlay.set_corners([[float(lat), float(lng)] for lat, lng in (row.get("corners") or [])])
+        except (TypeError, ValueError):
+            ctx.result.inc_skipped("map_overlays")
+            return
+
+        overlay.image = self._restore_overlay_image(row, ctx)
+        if overlay.image is None and not overlay.image_url:
+            ctx.bump("imageless_overlays")
+            ctx.result.inc_skipped("map_overlays")
+            return
+
+        if uuid_str and not MapImageOverlay.objects.filter(uuid=uuid_str).exists():
+            overlay.uuid = uuid_str
+        overlay.save()
+        _apply_exported_created(overlay, row.get("created"))
+        ctx.result.inc_created("map_overlays")
+
+    def _restore_overlay_image(self, row: dict[str, Any], ctx: ImportContext) -> Any:
+        """Re-upload an overlay's archived image file, honoring the storage quota.
+
+        Args:
+            row: The exported overlay row.
+            ctx: The shared import context.
+
+        Returns:
+            The created Image, or None when the archive had no usable file.
+        """
+        from django.core.files import File
+
+        from urbanlens.dashboard.models.images.model import Image, MediaKind
+        from urbanlens.dashboard.services.media.storage import file_size_error_for_upload, quota_error_for_upload
+
+        # basename(): the archive is user-supplied, so its filenames are
+        # untrusted input (same guard _import_photos applies).
+        filename = os.path.basename(str(row.get("filename") or ""))
+        if not filename:
+            return None
+        src_path = os.path.join(ctx.data_dir, MapAnnotationsExportDirName, filename)
+        if not os.path.isfile(src_path):
+            return None
+
+        size = os.path.getsize(src_path)
+        if file_size_error_for_upload(size) or quota_error_for_upload(ctx.profile, size):
+            ctx.result.warnings.append("A map overlay image was skipped because it would exceed your storage quota or the maximum upload size.")
+            return None
+
+        image = Image(profile=ctx.profile, media_type=MediaKind.PHOTO, file_size=size)
+        with open(src_path, "rb") as fh:
+            image.image.save(filename, File(fh), save=True)
+        return image
+
+
+#: Name of the archive subdirectory holding overlay image files. Mirrors
+#: ``export.MapAnnotationsExport.files_dir_name``; kept as a literal here so the
+#: importer never imports the export module just to read one constant.
+MapAnnotationsExportDirName = "map_annotations"
+
+
+def _float_or_none(value: Any) -> float | None:
+    """Return ``value`` as a float, or None when it isn't numeric.
+
+    Args:
+        value: The raw exported value.
+
+    Returns:
+        A float, or None.
+    """
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _bounded_int(value: Any, *, default: int, low: int = 0, high: int = 100) -> int:
+    """Clamp an exported integer into a valid range, falling back to a default.
+
+    Args:
+        value: The raw exported value.
+        default: Value used when ``value`` isn't an integer.
+        low: Inclusive lower bound.
+        high: Inclusive upper bound.
+
+    Returns:
+        An integer within ``[low, high]``.
+    """
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(low, min(high, parsed))
+
+
+def _valid_layer_mode(value: Any) -> str:
+    """Return an exported base-layer choice, or the model default.
+
+    Args:
+        value: The raw exported ``layer_mode``.
+
+    Returns:
+        A valid ``MapLayerMode`` value.
+    """
+    from urbanlens.dashboard.models.markup.meta import normalize_layer_mode
+
+    return normalize_layer_mode(value)
+
+
+def _build_markup_item(row: dict[str, Any], profile: Any, *, parent_map: Any = None, parent_pin_id: int | None = None) -> Any:
+    """Create one PinMarkup from an exported annotation row.
+
+    ``geometry`` is stored as JSON and rendered client-side, so it is only
+    accepted as an object; colours are re-sanitized by ``PinMarkup.save()``
+    itself, which is why they are passed through here rather than re-validated.
+
+    Args:
+        row: The exported annotation row.
+        profile: The importing profile (always the author of the new item).
+        parent_map: The MarkupMap this item belongs to, if map-scoped.
+        parent_pin_id: The Pin pk this item belongs to, if pin-scoped.
+
+    Returns:
+        The created PinMarkup, or None when the row was unusable.
+    """
+    from urbanlens.dashboard.models.markup.meta import MarkupType, SecurityIndicatorType
+    from urbanlens.dashboard.models.markup.model import PinMarkup
+
+    markup_type = row.get("markup_type")
+    geometry = row.get("geometry")
+    if markup_type not in MarkupType.values or not isinstance(geometry, dict):
+        return None
+
+    security_indicator = row.get("security_indicator")
+    item = PinMarkup(
+        profile=profile,
+        parent_map=parent_map,
+        parent_pin_id=parent_pin_id,
+        markup_type=markup_type,
+        geometry=geometry,
+        label=str(row.get("label") or ""),
+        color=str(row.get("color") or "#e53e3e"),
+        stroke_width=_bounded_int(row.get("stroke_width"), default=3, low=1, high=200),
+        border_color=str(row.get("border_color") or ""),
+        fill_opacity=_bounded_int(row.get("fill_opacity"), default=87),
+        border_opacity=_bounded_int(row.get("border_opacity"), default=100),
+        security_indicator=security_indicator if security_indicator in SecurityIndicatorType.values else "",
+    )
+    uuid_str = _safe_uuid(row.get("uuid"))
+    if uuid_str and not PinMarkup.objects.filter(uuid=uuid_str).exists():
+        item.uuid = uuid_str
+    item.save()
+    _apply_exported_created(item, row.get("created"))
+    return item
+
+
+class SavedFiltersImport(RowImportType):
+    """Restore the user's saved main-map filters.
+
+    ``criteria`` is copied back verbatim, the way ``_import_pin_lists`` copies a
+    smart list's ``smart_filter``: it is the search layer's own normalized
+    payload, and a criterion naming a label that doesn't exist here simply
+    matches nothing when the filter is next replayed. Deduped by uuid and then
+    by the model's own ``(profile, name)`` uniqueness.
+    """
+
+    key = "saved_filters"
+    filename = "saved_filters.json"
+    message = "Importing saved filters..."
+
+    def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
+        """Restore one saved filter.
+
+        Args:
+            row: The exported filter row.
+            ctx: The shared import context.
+
+        Returns:
+            True when a filter was created.
+        """
+        from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+
+        uuid_str = _safe_uuid(row.get("uuid"))
+        if uuid_str and SavedFilter.objects.filter(uuid=uuid_str, profile=ctx.profile).exists():
+            return False
+
+        name = str(row.get("name") or "").strip()[:100]
+        if not name or SavedFilter.objects.filter(profile=ctx.profile, name=name).exists():
+            return False
+
+        criteria = row.get("criteria")
+        saved_filter = SavedFilter(
+            profile=ctx.profile,
+            name=name,
+            icon=str(row.get("icon") or "bookmark")[:64],
+            color=str(row.get("color") or "")[:20],
+            opacity=_bounded_int(row.get("opacity"), default=100),
+            criteria=criteria if isinstance(criteria, dict) else {},
+            order=_bounded_int(row.get("order"), default=0, low=0, high=10_000),
+        )
+        if uuid_str and not SavedFilter.objects.filter(uuid=uuid_str).exists():
+            saved_filter.uuid = uuid_str
+        saved_filter.save()
+        _apply_exported_created(saved_filter, row.get("created"))
+        return True
+
+
+class RoutesImport(RowImportType):
+    """Restore recorded GPS tracks and planned routes.
+
+    Gated on the same ``track_routes`` preference the GPX/Takeout importers
+    check (``services.visits.visits.route_import_allowed``) - a user who turned
+    route tracking off should not get routes back by way of an archive, exactly
+    as ``_import_visit_history`` refuses to create visits when visit logging is
+    off. Deduped by uuid, then by the exported creation timestamp, which
+    ``_apply_exported_created`` preserves so a re-import recognises its own work.
+    """
+
+    key = "routes"
+    filename = "routes.json"
+    message = "Importing routes..."
+
+    def allowed(self, ctx: ImportContext) -> bool:
+        """Whether route data may be created for the importing profile.
+
+        Args:
+            ctx: The shared import context.
+
+        Returns:
+            True when the profile has route tracking enabled.
+        """
+        from urbanlens.dashboard.services.visits.visits import route_import_allowed
+
+        return route_import_allowed(ctx.profile)
+
+    def import_row(self, row: dict[str, Any], ctx: ImportContext) -> bool:
+        """Restore one route.
+
+        Args:
+            row: The exported route row.
+            ctx: The shared import context.
+
+        Returns:
+            True when a route was created.
+        """
+        from django.utils.dateparse import parse_datetime
+
+        from urbanlens.dashboard.models.routes.model import Route, RouteSource
+
+        uuid_str = _safe_uuid(row.get("uuid"))
+        if uuid_str and Route.objects.filter(uuid=uuid_str, profile=ctx.profile).exists():
+            return False
+
+        path = _linestring_from_geojson(row.get("path"))
+        if path is None:
+            return False
+
+        exported_created = parse_datetime(str(row.get("created") or ""))
+        if exported_created is not None and Route.objects.filter(profile=ctx.profile, created=exported_created).exists():
+            return False
+
+        source = row.get("source")
+        route = Route(
+            profile=ctx.profile,
+            name=str(row.get("name") or "")[:255],
+            source=source if source in RouteSource.values else RouteSource.GPX_TRACK,
+            source_filename=str(row.get("source_filename") or "")[:255],
+            path=path,
+            raw_point_count=_bounded_int(row.get("raw_point_count"), default=0, low=0, high=10_000_000),
+            simplified_point_count=_bounded_int(row.get("simplified_point_count"), default=0, low=0, high=10_000_000),
+            distance_meters=_float_or_none(row.get("distance_meters")) or 0.0,
+            elevation_gain_meters=_float_or_none(row.get("elevation_gain_meters")),
+            elevation_loss_meters=_float_or_none(row.get("elevation_loss_meters")),
+            started_at=parse_datetime(str(row.get("started_at") or "")),
+            ended_at=parse_datetime(str(row.get("ended_at") or "")),
+        )
+        if uuid_str and not Route.objects.filter(uuid=uuid_str).exists():
+            route.uuid = uuid_str
+        route.save()
+        _apply_exported_created(route, row.get("created"))
+        return True
+
+
+def _linestring_from_geojson(value: Any) -> Any:
+    """Parse an exported GeoJSON path into a WGS-84 LineString.
+
+    Args:
+        value: The exported ``path`` object.
+
+    Returns:
+        A ``LineString`` in SRID 4326, or None when the payload isn't one.
+    """
+    from django.contrib.gis.geos import GEOSGeometry
+    from django.contrib.gis.geos.error import GEOSException
+
+    if not isinstance(value, dict):
+        return None
+    try:
+        geometry = GEOSGeometry(json.dumps(value), srid=4326)
+    except (GEOSException, ValueError, TypeError):
+        return None
+    if geometry.geom_type != "LineString" or geometry.num_coords < 2:
+        return None
+    return geometry
+
+
 # -- Dispatch table -------------------------------------------------------------
 
-_IMPORT_ORDER = ["labels", "pins", "custom_fields", "pin_lists", "visit_history", "comments", "photos", "trips", "direct_messages", "connections", "settings"]
+#: Every registry-backed import step. Adding one is: write an
+#: :class:`ImportType` subclass, append an instance here, and place its key in
+#: :data:`_IMPORT_ORDER`.
+_REGISTERED_IMPORT_TYPES: tuple[ImportType, ...] = (
+    ProfileImport(),
+    MapAnnotationsImport(),
+    SafetyCheckinsImport(),
+    SavedFiltersImport(),
+    RoutesImport(),
+)
+
+_REGISTERED_IMPORTERS: dict[str, ImportType] = {import_type.key: import_type for import_type in _REGISTERED_IMPORT_TYPES}
+
+#: Run order. Hand-written because it encodes real dependencies: labels before
+#: pins, pins before anything that attaches to one, markup maps before the
+#: safety check-ins that reference them, and settings last so an imported
+#: preference can't gate an earlier step.
+_IMPORT_ORDER = [
+    "profile",
+    "labels",
+    "pins",
+    "custom_fields",
+    "pin_lists",
+    "visit_history",
+    "comments",
+    "photos",
+    "map_annotations",
+    "trips",
+    "safety_checkins",
+    "saved_filters",
+    "routes",
+    "direct_messages",
+    "connections",
+    "settings",
+]
 
 _IMPORTERS: dict[str, Any] = {
     "labels": _import_labels,
@@ -1673,6 +2801,7 @@ _IMPORTERS: dict[str, Any] = {
     "direct_messages": _import_direct_messages,
     "connections": _import_connections,
     "settings": _import_settings,
+    **_REGISTERED_IMPORTERS,
 }
 
 _STEP_MESSAGES = {
@@ -1687,4 +2816,5 @@ _STEP_MESSAGES = {
     "direct_messages": "Restoring messages...",
     "connections": "Importing connections...",
     "settings": "Applying settings...",
+    **{key: import_type.message for key, import_type in _REGISTERED_IMPORTERS.items()},
 }

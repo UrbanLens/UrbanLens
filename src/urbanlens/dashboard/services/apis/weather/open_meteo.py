@@ -10,9 +10,10 @@ gateway also produces (see ``ForecastSlot``).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
 import logging
 from typing import Any, ClassVar
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from urbanlens.dashboard.services.apis.weather.forecast import ForecastSlot, SunTimes
 from urbanlens.dashboard.services.core.gateway import Gateway
@@ -78,7 +79,11 @@ class OpenMeteoGateway(Gateway):
 
         Returns:
             Normalized ``ForecastSlot`` entries (09:00 and 18:00 local time
-            for each of the next 5 days), or None on failure.
+            for each of the next 5 days), or None on failure. ``date`` stays
+            the naive local wall clock ``timezone=auto`` returns (the pin
+            weather panels display local time); ``date_utc`` anchors each
+            slot in UTC using the response's ``utc_offset_seconds``, and is
+            omitted if that field is missing or malformed.
         """
         params: dict[str, Any] = {
             "latitude": latitude,
@@ -92,10 +97,32 @@ class OpenMeteoGateway(Gateway):
         try:
             response = self.session.get(_FORECAST_URL, params=params, timeout=15)
             response.raise_for_status()
-            hourly = response.json().get("hourly") or {}
+            payload = response.json() or {}
+            hourly = payload.get("hourly") or {}
         except Exception:
             logger.warning("Open-Meteo forecast unavailable for %s, %s", redact_coordinate(latitude), redact_coordinate(longitude), exc_info=True)
             return None
+
+        # `timezone=auto` makes the timestamps local to the coordinates, and
+        # names the zone they are local to. Prefer that name over the
+        # accompanying utc_offset_seconds: one fixed offset cannot anchor a
+        # five-day window that crosses a daylight-saving transition, and slots
+        # on the far side of one would land an hour out - enough to pick the
+        # wrong morning or evening slot for an activity.
+        local_tz: tzinfo | None = None
+        zone_name = payload.get("timezone")
+        if isinstance(zone_name, str) and zone_name:
+            try:
+                local_tz = ZoneInfo(zone_name)
+            except (ZoneInfoNotFoundError, ValueError):
+                logger.warning("Open-Meteo returned an unrecognized timezone: %r", zone_name)
+        if local_tz is None:
+            offset_seconds = payload.get("utc_offset_seconds")
+            if isinstance(offset_seconds, (int, float)) and not isinstance(offset_seconds, bool):
+                try:
+                    local_tz = timezone(timedelta(seconds=offset_seconds))
+                except ValueError:
+                    logger.warning("Open-Meteo returned an unusable utc_offset_seconds: %r", offset_seconds)
 
         times = hourly.get("time") or []
         temps = hourly.get("temperature_2m") or []
@@ -112,16 +139,17 @@ class OpenMeteoGateway(Gateway):
             except ValueError:
                 continue
             icon, label = wmo_code_to_icon_and_label(int(codes[index])) if index < len(codes) else _DEFAULT_WMO
-            slots.append(
-                ForecastSlot(
-                    date=date,
-                    temp=float(temps[index]) if index < len(temps) else 0.0,
-                    condition=label,
-                    icon=icon,
-                    humidity=int(humidity[index]) if index < len(humidity) else None,
-                    wind_speed=float(wind[index]) if index < len(wind) else None,
-                ),
+            slot = ForecastSlot(
+                date=date,
+                temp=float(temps[index]) if index < len(temps) else 0.0,
+                condition=label,
+                icon=icon,
+                humidity=int(humidity[index]) if index < len(humidity) else None,
+                wind_speed=float(wind[index]) if index < len(wind) else None,
             )
+            if local_tz is not None:
+                slot["date_utc"] = date.replace(tzinfo=local_tz).astimezone(UTC)
+            slots.append(slot)
         return slots
 
     def get_sun_times(self, latitude: float, longitude: float) -> SunTimes | None:

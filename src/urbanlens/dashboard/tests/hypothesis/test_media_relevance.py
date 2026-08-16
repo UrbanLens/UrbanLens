@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import datetime
 from itertools import count
 
+from django.utils import timezone
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
@@ -12,7 +14,7 @@ from urbanlens.dashboard.models.images.relevance import MediaRelevance, media_it
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.spotguessr.model import GamePhotoFeedback, GamePhotoFeedbackKind, GameRound, GameSession, SpotGuessrMode
-from urbanlens.dashboard.services.media.media_relevance import effective_relevance, local_images_for_gallery_items
+from urbanlens.dashboard.services.media.media_relevance import GAME_REPORT_HALF_LIFE_DAYS, effective_relevance, local_images_for_gallery_items
 
 _coordinate_counter = count()
 
@@ -28,6 +30,11 @@ def _make_profile() -> Profile:
 
 def _make_external_image(location: Location, item_key: str) -> Image:
     return baker.make(Image, location=location, media_type=MediaKind.PHOTO, media_source_key="wikimedia", media_item_key=item_key)
+
+
+def _backdate(feedback: GamePhotoFeedback, *, days: float) -> None:
+    """Age a feedback row. `created` is auto_now_add, so it needs a direct UPDATE."""
+    GamePhotoFeedback.objects.filter(pk=feedback.pk).update(created=timezone.now() - datetime.timedelta(days=days))
 
 
 def _feedback(image: Image, profile: Profile, kind: str) -> GamePhotoFeedback:
@@ -71,9 +78,47 @@ class EffectiveRelevanceTests(TestCase):
         self.assertGreater(effective_relevance(image), 0.0)
 
     def test_game_report_counts_at_full_negative_weight(self) -> None:
+        """A fresh report weighs ~1.0 - not exactly, since decay starts immediately."""
         image = _make_external_image(_make_location(), "d" * 40)
         _feedback(image, _make_profile(), GamePhotoFeedbackKind.REPORTED)
-        self.assertEqual(effective_relevance(image), -1.0)
+        self.assertAlmostEqual(effective_relevance(image), -1.0, places=5)
+
+    def test_an_aged_report_counts_at_a_decayed_weight(self) -> None:
+        """A report loses half its weight per half-life."""
+        image = _make_external_image(_make_location(), "d2" + "0" * 38)
+        feedback = _feedback(image, _make_profile(), GamePhotoFeedbackKind.REPORTED)
+        _backdate(feedback, days=GAME_REPORT_HALF_LIFE_DAYS)
+
+        self.assertAlmostEqual(effective_relevance(image), -0.5, places=3)
+
+    def test_a_long_ago_report_stops_excluding_the_photo(self) -> None:
+        """The ratchet fix: an excluded photo must be able to return to the pool.
+
+        A reported photo scores below the >= 0 eligibility floor SpotGuessr
+        applies, so it stops being shown - and therefore can never earn the
+        "shown, no reaction" impressions that would otherwise rehabilitate it.
+        Decay is what breaks that loop; without it this is permanent.
+        """
+        image = _make_external_image(_make_location(), "d3" + "0" * 38)
+        feedback = _feedback(image, _make_profile(), GamePhotoFeedbackKind.REPORTED)
+
+        _backdate(feedback, days=GAME_REPORT_HALF_LIFE_DAYS)
+        self.assertLess(effective_relevance(image), 0.0)
+
+        # Decay alone is asymptotic and would leave a permanent sliver of
+        # negative, which still fails the >= 0 gate - so a sufficiently old
+        # report has to drop out entirely for the photo to become playable again.
+        _backdate(feedback, days=GAME_REPORT_HALF_LIFE_DAYS * 20)
+        self.assertEqual(effective_relevance(image), 0.0)
+
+    def test_a_freshly_re_reported_photo_stays_excluded(self) -> None:
+        """Decay must not amnesty a photo people are still reporting."""
+        image = _make_external_image(_make_location(), "d4" + "0" * 38)
+        old = _feedback(image, _make_profile(), GamePhotoFeedbackKind.REPORTED)
+        _backdate(old, days=GAME_REPORT_HALF_LIFE_DAYS * 20)
+        _feedback(image, _make_profile(), GamePhotoFeedbackKind.REPORTED)
+
+        self.assertLess(effective_relevance(image), 0.0)
 
     def test_no_reaction_counts_at_one_hundredth_weight(self) -> None:
         image = _make_external_image(_make_location(), "e" * 40)

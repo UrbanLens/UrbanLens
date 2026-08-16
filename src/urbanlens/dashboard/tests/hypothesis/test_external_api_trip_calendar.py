@@ -96,17 +96,35 @@ class _CalendarTestCase(TestCase):
     def _patch_gateway(self) -> mock.MagicMock:
         """Replace the gateway the sync service instantiates.
 
+        A fresh id per created event, the way Google actually answers: one
+        export of a trip that has activities writes a trip-level link and an
+        activity-level one, and the partial unique on (profile,
+        google_event_id) rejects them if the fixture hands back the same id
+        twice.
+
         Returns:
             The mock standing in for the gateway *instance*, with
-            ``create_event`` already returning a plausible event id.
+            ``create_event`` already returning plausible event ids.
         """
         patcher = mock.patch("urbanlens.dashboard.services.trips.calendar_sync.GoogleCalendarGateway")
         gateway_cls = patcher.start()
         self.addCleanup(patcher.stop)
         gateway = gateway_cls.return_value
-        gateway.create_event.return_value = {"id": "evt-new"}
+        gateway.create_event.side_effect = self._new_event
         gateway.update_event.return_value = {"id": "evt-new"}
         return gateway
+
+    def _new_event(self, _body: dict) -> dict[str, str]:
+        """Return a distinct created-event payload for each gateway call.
+
+        Args:
+            _body: The event body the service built (unused).
+
+        Returns:
+            An event dict with an id unique within this test.
+        """
+        self._created_events = getattr(self, "_created_events", 0) + 1
+        return {"id": f"evt-new-{self._created_events}"}
 
     def _shared_trip(self) -> Trip:
         """A dated trip the key owner and the trip-mate both belong to.
@@ -303,10 +321,10 @@ class TripCalendarExportEndpointTests(_CalendarTestCase):
         baseline = len(connection.savepoint_ids)
         depths: list[int] = []
 
-        def _record(_body):
+        def _record(body):
             """Record the savepoint depth in force when the gateway is called."""
             depths.append(len(connection.savepoint_ids))
-            return {"id": "evt-new"}
+            return self._new_event(body)
 
         gateway.create_event.side_effect = _record
 

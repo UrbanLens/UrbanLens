@@ -7,7 +7,7 @@ import logging
 from typing import TYPE_CHECKING
 from uuid import uuid4
 
-from django.core.validators import validate_email
+from django.core.validators import MaxLengthValidator, validate_email
 from django.db.models import (
     CASCADE,
     SET_NULL,
@@ -99,7 +99,11 @@ class EmergencyContactDefault(abstract.DashboardModel):
     # check-in creation time (see services.visits.safety.save_contact_defaults) and
     # never itself matched by value - only the copies are (against SafetyContactOptOut).
     email = EncryptedTextField(null=True, blank=True, validators=[validate_email], fail_soft=True)
-    label = CharField(max_length=150, blank=True, default="")
+    # Encrypted for the same reason as `email` above: it names a third party who
+    # never consented to being in this database, it persists indefinitely (a
+    # default is a template, not a resolved check-in), and it is only ever read
+    # as an attribute - never filtered, ordered, or matched by value.
+    label = EncryptedTextField(max_length=150, blank=True, default="", validators=[MaxLengthValidator(150)], fail_soft=True)
     order = IntegerField(default=0)
 
     if TYPE_CHECKING:

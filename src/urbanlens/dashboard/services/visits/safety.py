@@ -1758,18 +1758,42 @@ def create_checkin(
     return checkin
 
 
-def cancel_checkin(checkin: SafetyCheckin) -> None:
+def cancel_checkin(checkin: SafetyCheckin) -> bool:
     """Cancel a check-in so it will never fire a reminder or escalation.
+
+    Guards the transition with the same conditional UPDATE as
+    ``_resolve_as_found_safe``: a resolution that landed between the caller's
+    read and this write (a contact marking the owner safe, or the owner
+    checking in from another tab) must win, not be overwritten - and its
+    side effects must not run a second time.
 
     Args:
         checkin: The check-in to cancel.
+
+    Returns:
+        True if this call performed the cancellation, False if the check-in
+        was already resolved (a no-op - whoever resolved it first already ran
+        the broadcast/archival side effects).
     """
+    now = timezone.now()
+    updated = (
+        SafetyCheckin.objects.filter(pk=checkin.pk)
+        .exclude(status__in=SafetyCheckinStatus.resolved_statuses())
+        .update(
+            status=SafetyCheckinStatus.CANCELLED,
+            resolved_at=now,
+            resolved_by_label="cancelled by owner",
+            updated=now,
+        )
+    )
+    if not updated:
+        return False
     checkin.status = SafetyCheckinStatus.CANCELLED
-    checkin.resolved_at = timezone.now()
+    checkin.resolved_at = now
     checkin.resolved_by_label = "cancelled by owner"
-    checkin.save(update_fields=["status", "resolved_at", "resolved_by_label", "updated"])
     _broadcast_status_update(checkin)
     schedule_checkin_archival(checkin)
+    return True
 
 
 def _is_resolved_in_db(checkin: SafetyCheckin) -> bool:
@@ -1829,10 +1853,7 @@ def send_checkin_reminder(checkin: SafetyCheckin) -> None:
     # working too - an unresolved row that failed mid-send stays SCHEDULED and is
     # re-selected next tick.
     now = timezone.now()
-    updated = (
-        SafetyCheckin.objects.filter(pk=checkin.pk, status=SafetyCheckinStatus.SCHEDULED)
-        .update(status=SafetyCheckinStatus.AWAITING_CHECKIN, reminder_sent_at=now, updated=now)
-    )
+    updated = SafetyCheckin.objects.filter(pk=checkin.pk, status=SafetyCheckinStatus.SCHEDULED).update(status=SafetyCheckinStatus.AWAITING_CHECKIN, reminder_sent_at=now, updated=now)
     if updated:
         checkin.status = SafetyCheckinStatus.AWAITING_CHECKIN
         checkin.reminder_sent_at = now
@@ -1866,20 +1887,43 @@ def send_final_warning(checkin: SafetyCheckin) -> None:
     checkin.save(update_fields=["final_warning_sent_at", "updated"])
 
 
-def check_in(checkin: SafetyCheckin, profile: Profile) -> None:
+def check_in(checkin: SafetyCheckin, profile: Profile) -> bool:
     """Record that the profile checked in on time (or late, before escalation).
+
+    Guards the transition with the same conditional UPDATE as
+    ``_resolve_as_found_safe``: a contact marking the owner safe at the same
+    moment the owner checks in must not have their resolution overwritten, nor
+    the broadcast/conclusion/archival side effects run twice.
 
     Args:
         checkin: The check-in being resolved.
         profile: The profile checking in (must be checkin.profile).
+
+    Returns:
+        True if this call performed the resolution, False if the check-in was
+        already resolved (a no-op - whoever resolved it first already ran the
+        side effects).
     """
+    now = timezone.now()
+    updated = (
+        SafetyCheckin.objects.filter(pk=checkin.pk)
+        .exclude(status__in=SafetyCheckinStatus.resolved_statuses())
+        .update(
+            status=SafetyCheckinStatus.CHECKED_IN,
+            resolved_at=now,
+            resolved_by_label="you",
+            updated=now,
+        )
+    )
+    if not updated:
+        return False
     checkin.status = SafetyCheckinStatus.CHECKED_IN
-    checkin.resolved_at = timezone.now()
+    checkin.resolved_at = now
     checkin.resolved_by_label = "you"
-    checkin.save(update_fields=["status", "resolved_at", "resolved_by_label", "updated"])
     _broadcast_status_update(checkin)
     _conclude_checkin(checkin)
     schedule_checkin_archival(checkin)
+    return True
 
 
 def escalate_checkin(checkin: SafetyCheckin) -> None:
@@ -1943,10 +1987,7 @@ def escalate_checkin(checkin: SafetyCheckin) -> None:
     # Conditional for the same reason as the reminder's: a resolution landing during
     # the contact loop above must win, not be overwritten by OVERDUE.
     now = timezone.now()
-    updated = (
-        SafetyCheckin.objects.filter(pk=checkin.pk, status__in=(SafetyCheckinStatus.SCHEDULED, SafetyCheckinStatus.AWAITING_CHECKIN))
-        .update(status=SafetyCheckinStatus.OVERDUE, escalated_at=now, updated=now)
-    )
+    updated = SafetyCheckin.objects.filter(pk=checkin.pk, status__in=(SafetyCheckinStatus.SCHEDULED, SafetyCheckinStatus.AWAITING_CHECKIN)).update(status=SafetyCheckinStatus.OVERDUE, escalated_at=now, updated=now)
     if updated:
         checkin.status = SafetyCheckinStatus.OVERDUE
         checkin.escalated_at = now

@@ -150,9 +150,14 @@ class PinUndoHandler(UndoHandler):
             if label_ids and Label.objects.filter(pk__in=label_ids).count() != len(set(label_ids)):
                 raise UndoExpiredError("One of the labels on this pin no longer exists.")
             # Only root pins are covered by the constraint, so only they can be blocked.
-            if cls._resolved_parent_pk(entry, in_batch) is None and Pin.objects.filter(
-                location_id=entry["location_id"], profile_id=entry["profile_id"], parent_pin__isnull=True,
-            ).exists():
+            if (
+                cls._resolved_parent_pk(entry, in_batch) is None
+                and Pin.objects.filter(
+                    location_id=entry["location_id"],
+                    profile_id=entry["profile_id"],
+                    parent_pin__isnull=True,
+                ).exists()
+            ):
                 raise UndoExpiredError("You have pinned this place again since deleting it, so the original can't be restored alongside it.")
 
         old_to_new: dict[int, Pin] = {}

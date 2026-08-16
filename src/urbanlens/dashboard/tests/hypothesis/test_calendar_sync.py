@@ -242,6 +242,54 @@ class ImportEventsTests(_CalendarSyncDBTestCase):
         self.assertEqual(len(skipped), 1)
         gateway.get_event.assert_not_called()
 
+    def test_racing_import_of_one_event_still_creates_a_single_trip(self):
+        """The already_linked() read can be lost; the DB constraint decides.
+
+        Simulates the double-submit by neutering the pre-check, so the second
+        import reaches the create path exactly as a concurrent request would.
+        The partial unique on (profile, google_event_id) must then reject it,
+        and the whole half-built trip must roll back rather than survive as a
+        duplicate.
+        """
+        gateway = self._patch_gateway()
+        gateway.get_event.return_value = {
+            "id": "evt1",
+            "summary": "Abandoned asylum weekend",
+            "start": {"date": "2026-09-04"},
+            "end": {"date": "2026-09-07"},
+        }
+        created_first, _skipped, _invited = import_events_as_trips(self.account, ["evt1"])
+        self.assertEqual(len(created_first), 1)
+        trips_after_first = Trip.objects.count()
+
+        with mock.patch.object(TripCalendarLink.objects, "already_linked", return_value=False):
+            created_second, skipped, _invited = import_events_as_trips(self.account, ["evt1"])
+
+        self.assertEqual(created_second, [])
+        self.assertEqual(len(skipped), 1)
+        self.assertEqual(Trip.objects.count(), trips_after_first)
+        self.assertEqual(TripCalendarLink.objects.filter(profile=self.profile, google_event_id="evt1").count(), 1)
+
+    def test_two_timed_imports_keep_their_blank_trip_level_links(self):
+        """The constraint is partial, so blank-id trip-level rows still coexist.
+
+        A timed import deliberately leaves the trip-level link's event id empty
+        (the activity-level row owns the id). A plain unique constraint would
+        have made the second such import fail.
+        """
+        gateway = self._patch_gateway()
+        gateway.get_event.side_effect = [
+            {"id": "timed1", "summary": "One", "location": "Somewhere", "start": {"dateTime": "2026-06-01T10:00:00Z"}, "end": {"dateTime": "2026-06-01T12:00:00Z"}},
+            {"id": "timed2", "summary": "Two", "location": "Elsewhere", "start": {"dateTime": "2026-06-02T10:00:00Z"}, "end": {"dateTime": "2026-06-02T12:00:00Z"}},
+        ]
+
+        created_one, _skipped, _invited = import_events_as_trips(self.account, ["timed1"])
+        created_two, _skipped, _invited = import_events_as_trips(self.account, ["timed2"])
+
+        self.assertEqual(len(created_one), 1)
+        self.assertEqual(len(created_two), 1)
+        self.assertEqual(TripCalendarLink.objects.filter(profile=self.profile, google_event_id="").count(), 2)
+
     def test_import_skips_events_exported_from_urbanlens(self):
         gateway = self._patch_gateway()
         gateway.get_event.return_value = {

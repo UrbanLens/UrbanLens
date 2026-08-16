@@ -14,11 +14,13 @@ import {
     cryptoReady,
     decryptMessage,
     deriveKey,
+    deriveKeyFromPrf,
     encryptMessage,
     generateConversationKey,
     generateIdentity,
     generateRecoveryKey,
     parseRecoveryKey,
+    randomPrfInput,
     randomSalt,
     sealToPublicKey,
     unseal,
@@ -27,6 +29,8 @@ import {
 } from "./e2ee-crypto";
 import type { CachedIdentity } from "./e2ee-store";
 import { clearProfileKeys, getConversationKey, getGroupKey, getIdentity, putConversationKey, putGroupKey, putIdentity } from "./e2ee-store";
+import type { PrfAssertionResult } from "./webauthn-client";
+import { assertForPrf, credentialIdOf, getPrfResult, registerPasskey } from "./webauthn-client";
 import { toast } from "./dialogs";
 
 /** Endpoint URLs, provided by templates via {% url %} (see init()). */
@@ -56,6 +60,17 @@ export interface E2EEUrls {
     validatePassword?: string;
     /** The login form's POST target, for the fetch-based login flow. */
     login: string;
+    /** POST target storing a passkey-wrapped key copy (e2ee/passkey-wrap/).
+     * Optional; only pages offering passkey unlock enrollment wire it. */
+    passkeyWrap?: string;
+    /** Passkey-registration ceremony endpoints, for enrolling a new
+     * unlock-only passkey. Optional, same pages as passkeyWrap. */
+    passkeyRegisterOptions?: string;
+    passkeyRegister?: string;
+    /** Base of the passkey collection (same path the register POST goes to);
+     * the client appends "<id>/delete/" to discard a registration that turned
+     * out unusable. */
+    passkeyBase?: string;
     /** FAQ entry explaining encryption/recovery keys in plain language, shown
      * wherever we ask the user to save their recovery key. Optional so pages
      * that don't wire it up just omit the link. */
@@ -114,6 +129,23 @@ interface LoginParams {
     auth_salt: string;
 }
 
+/** One passkey-wrapped private-key copy, served only while it matches the
+ * bundle's current version (see E2EEPasskeyWrap.usable_for_bundle). */
+interface PasskeyWrapPayload {
+    credential_id: string;
+    prf_input: string;
+    wrapped_secret: string;
+}
+
+/** One of the account's passkeys, for the enrollment UI. Credential ids are
+ * public handles; nothing here is secret. */
+interface PasskeyCredentialPayload {
+    credential_id: string;
+    name: string;
+    is_login_factor: boolean;
+    has_wrap: boolean;
+}
+
 /** The "keys" endpoint always returns 200; `enrolled: false` (with no other
  * fields) means the account has no bundle yet - a common, expected state. */
 interface KeyBundlePayload {
@@ -127,6 +159,8 @@ interface KeyBundlePayload {
     kdf_memlimit: number;
     version: number;
     profile_slug: string;
+    passkey_wraps?: PasskeyWrapPayload[];
+    passkey_credentials?: PasskeyCredentialPayload[];
 }
 
 interface ConversationKeysPayload {
@@ -318,7 +352,18 @@ async function unlockAfterDerivedLogin(password: string, currentPasswordProof: s
     if (cached !== null && cached.version === bundle.version && cached.publicKey === bundle.public_key) {
         const wrapSalt = randomSalt();
         await postJson(cfg().urls.rewrap, {
-            password_wrapped_secret: wrapSecretKey(cached.privateKey, deriveKey(password, wrapSalt, bundle.kdf_opslimit, bundle.kdf_memlimit)),
+            // Locally pinned KDF constants, NOT bundle.kdf_* - this derives a key
+            // that is about to be *stored*, and the whole guarantee of
+            // password_wrapped_secret is that whoever holds it (this server
+            // included) cannot open it. Taking the cost parameters from the
+            // server's own response would let a compromised server answer with
+            // password_wrap_stale=true plus near-zero Argon2id parameters and
+            // have this branch hand back a wrapped private key cheap enough to
+            // brute-force offline. The read paths below legitimately use
+            // bundle.kdf_* because they must match whatever an existing blob was
+            // created with; a fresh wrap has no such constraint. The server
+            // enforces the same floor at enroll (controllers/e2ee.py).
+            password_wrapped_secret: wrapSecretKey(cached.privateKey, deriveKey(password, wrapSalt, KDF_OPSLIMIT, KDF_MEMLIMIT)),
             password_wrap_salt: wrapSalt,
             current_password: currentPasswordProof,
         });
@@ -596,19 +641,24 @@ export async function unlockWithRecovery(display: string): Promise<boolean> {
 /**
  * Report which unlock paths this account's bundle offers on a cold device.
  *
- * @returns Whether a password-wrapped copy exists (and is not stale), and
- *   whether the account is enrolled at all.
+ * @returns Whether the account is enrolled at all, whether a password-wrapped
+ *   copy exists (and is not stale), and whether passkey unlock is available
+ *   (a usable wrap exists and this browser can run WebAuthn).
  */
-export async function getUnlockOptions(): Promise<{ enrolled: boolean; password: boolean }> {
+export async function getUnlockOptions(): Promise<{ enrolled: boolean; password: boolean; passkey: boolean }> {
     const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
     if (!response.ok) {
-        return { enrolled: false, password: false };
+        return { enrolled: false, password: false, passkey: false };
     }
     const bundle = (await response.json()) as KeyBundlePayload;
     if (!bundle.enrolled) {
-        return { enrolled: false, password: false };
+        return { enrolled: false, password: false, passkey: false };
     }
-    return { enrolled: true, password: Boolean(bundle.password_wrapped_secret) && !bundle.password_wrap_stale };
+    return {
+        enrolled: true,
+        password: Boolean(bundle.password_wrapped_secret) && !bundle.password_wrap_stale,
+        passkey: Boolean(bundle.passkey_wraps?.length) && Boolean(window.PublicKeyCredential),
+    };
 }
 
 /**
@@ -642,8 +692,303 @@ export async function unlockWithPassword(password: string): Promise<boolean> {
 }
 
 /**
- * Show a dialog offering every available unlock path (password and/or
- * recovery key) and attempt the unlock the user chooses.
+ * Unwrap and cache the identity from one passkey wrap plus its PRF output.
+ *
+ * @param bundle - The current server-side bundle.
+ * @param wrap - The wrap matching the credential that produced ``prf``.
+ * @param prf - The authenticator's PRF output for ``wrap.prf_input``.
+ * @returns True on success (identity cached; device unlocked).
+ */
+async function unlockFromWrap(bundle: KeyBundlePayload, wrap: PasskeyWrapPayload, prf: Uint8Array): Promise<boolean> {
+    const wrapKey = await deriveKeyFromPrf(prf);
+    const privateKey = unwrapSecretKey(wrap.wrapped_secret, wrapKey);
+    if (privateKey === null) {
+        return false;
+    }
+    await putIdentity(bundle.profile_slug, { privateKey, publicKey: bundle.public_key, version: bundle.version });
+    return true;
+}
+
+/**
+ * Unlock this device with a passkey (one tap - no password, no recovery key).
+ *
+ * Runs a client-challenged assertion over every wrap-bearing credential; the
+ * authenticator's PRF output for whichever the user picks derives the wrap
+ * key. Nothing is sent to the server - the assertion authenticates nothing,
+ * the PRF output is the entire point.
+ *
+ * @returns True on success (identity cached; device unlocked).
+ */
+export async function unlockWithPasskey(): Promise<boolean> {
+    await cryptoReady();
+    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
+    if (!response.ok) {
+        return false;
+    }
+    const bundle = (await response.json()) as KeyBundlePayload;
+    const wraps = bundle.passkey_wraps ?? [];
+    if (!wraps.length) {
+        return false;
+    }
+    const result = await assertForPrf(Object.fromEntries(wraps.map((wrap) => [wrap.credential_id, wrap.prf_input])));
+    if (result.status !== "ok") {
+        return false;
+    }
+    const wrap = wraps.find((entry) => entry.credential_id === result.credentialId);
+    if (!wrap) {
+        return false;
+    }
+    return unlockFromWrap(bundle, wrap, result.prf);
+}
+
+/**
+ * After a 2FA passkey login, harvest the assertion's PRF output and unlock.
+ *
+ * The login options may carry PRF inputs for wrap-bearing credentials (see
+ * services/auth/webauthn.py), so the same tap that completed 2FA can also
+ * unlock the user's messages on a cold device - zero extra prompts. Called by
+ * the login page via runLogin's beforeRedirect hook, once the session exists.
+ *
+ * @param credential - The credential runLogin's assertion produced.
+ * @returns True when the device ended up unlocked (or already was).
+ */
+export async function unlockFromLoginAssertion(credential: PublicKeyCredential): Promise<boolean> {
+    const prf = getPrfResult(credential);
+    if (prf === null) {
+        return false;
+    }
+    await cryptoReady();
+    const response = await fetch(cfg().urls.keys, { credentials: "same-origin" });
+    if (!response.ok) {
+        return false;
+    }
+    const bundle = (await response.json()) as KeyBundlePayload;
+    const credentialId = credentialIdOf(credential);
+    // Warm device: don't overwrite a cached identity with an unwrap attempt.
+    const cached = await getIdentity(bundle.profile_slug);
+    if (cached !== null && cached.version === bundle.version && cached.publicKey === bundle.public_key) {
+        return true;
+    }
+    const wrap = (bundle.passkey_wraps ?? []).find((entry) => entry.credential_id === credentialId);
+    if (!wrap) {
+        return false;
+    }
+    return unlockFromWrap(bundle, wrap, prf);
+}
+
+/**
+ * Remove a just-registered passkey that turned out unusable.
+ *
+ * Best-effort: a failure here leaves a stray credential the user can delete in
+ * Settings, which is strictly better than failing the enrollment twice over.
+ *
+ * @param credentialPk - Database id from the registration response.
+ */
+async function discardPasskey(credentialPk: number | undefined): Promise<void> {
+    const base = cfg().urls.passkeyBase;
+    if (!base || credentialPk === undefined) {
+        return;
+    }
+    try {
+        await fetch(`${base}${credentialPk}/delete/`, {
+            method: "POST",
+            headers: { "X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest" },
+            credentials: "same-origin",
+        });
+    } catch {
+        // Network failure - the credential stays, listed in Settings.
+    }
+}
+
+/** The outcome of a passkey-unlock enrollment attempt. */
+export interface PasskeyEnrollResult {
+    ok: boolean;
+    /** True when a brand-new (unlock-only) passkey was registered, false when
+     * an existing passkey gained a wrap. */
+    created?: boolean;
+    error?: string;
+}
+
+/**
+ * Give this account a passkey unlock path (device must be unlocked).
+ *
+ * When the account already has passkeys without wraps, one assertion lets the
+ * user pick which gains the wrap - an existing 2FA passkey then unlocks
+ * messages during login itself. Otherwise a new unlock-only passkey is
+ * registered (is_login_factor=False server-side: it never conscripts the
+ * account into a 2FA prompt).
+ *
+ * @param password - The account password, required as proof on
+ *   password-backed accounts (the server refuses a bearer token alone for
+ *   adding an unlock path); omit for OAuth-only accounts.
+ * @returns The enrollment outcome.
+ */
+export async function enrollPasskeyUnlock(password?: string): Promise<PasskeyEnrollResult> {
+    const urls = cfg().urls;
+    if (!urls.passkeyWrap || !urls.passkeyRegisterOptions || !urls.passkeyRegister) {
+        return { ok: false, error: "Passkey enrollment isn't available on this page." };
+    }
+    if (!window.PublicKeyCredential) {
+        return { ok: false, error: "This browser doesn't support passkeys." };
+    }
+    await cryptoReady();
+    const identity = await requireIdentity();
+    if (identity === null) {
+        return { ok: false, error: "Unlock your messages on this device first." };
+    }
+    const keysResponse = await fetch(urls.keys, { credentials: "same-origin" });
+    if (!keysResponse.ok) {
+        return { ok: false, error: "Could not load your encryption keys. Please try again." };
+    }
+    const bundle = (await keysResponse.json()) as KeyBundlePayload;
+    if (!bundle.enrolled) {
+        return { ok: false, error: "Your account isn't enrolled in encrypted messaging yet." };
+    }
+
+    let credentialId: string;
+    let prf: Uint8Array | null = null;
+    let prfInput: string;
+    let created = false;
+
+    // Offer the account's existing unwrapped passkeys first - wrapping one the
+    // user already signs in with means the login tap unlocks messages too.
+    const candidates = (bundle.passkey_credentials ?? []).filter((cred) => !cred.has_wrap);
+    let inputs: Record<string, string> = {};
+    let assertion: PrfAssertionResult = { status: "no-prf" };
+    if (candidates.length) {
+        inputs = Object.fromEntries(candidates.map((cred) => [cred.credential_id, randomPrfInput()]));
+        assertion = await assertForPrf(inputs);
+        if (assertion.status === "unavailable") {
+            return { ok: false };
+        }
+    }
+
+    if (assertion.status === "ok") {
+        credentialId = assertion.credentialId;
+        prf = assertion.prf;
+        prfInput = inputs[credentialId]!;
+    } else {
+        // Either the account has no unwrapped passkey, or the one it has cannot
+        // do PRF and so can never unlock anything. Both land on registering a
+        // key that can - telling the user to "create a new passkey" while
+        // returning them to the same dead end would not be an option they could
+        // reach without first deleting the passkey they sign in with.
+        prfInput = randomPrfInput();
+        const registration = await registerPasskey({
+            optionsUrl: urls.passkeyRegisterOptions,
+            registerUrl: urls.passkeyRegister,
+            purpose: "unlock",
+            prfInput,
+        });
+        if (!registration.ok || !registration.credentialId) {
+            return { ok: false, error: registration.error ?? "Could not create that passkey." };
+        }
+        created = true;
+        credentialId = registration.credentialId;
+        // Some browsers evaluate PRF at creation; others only enable it and
+        // need one follow-up assertion scoped to the new credential.
+        if (registration.prf) {
+            prf = registration.prf;
+        } else {
+            const followUp = await assertForPrf({ [credentialId]: prfInput });
+            prf = followUp.status === "ok" ? followUp.prf : null;
+        }
+        if (prf === null) {
+            // Registered for unlock, so it is not a login factor, and without
+            // PRF it will never hold a wrap either - a credential that does
+            // nothing but make the account look provisioned. Take it back out.
+            await discardPasskey(registration.credentialPk);
+            return { ok: false, error: "That passkey doesn't support unlocking messages, so it wasn't kept. Try a different authenticator, or set an account password instead." };
+        }
+    }
+
+    const wrapKey = await deriveKeyFromPrf(prf);
+    const body: Record<string, unknown> = {
+        credential_id: credentialId,
+        prf_input: prfInput,
+        wrapped_secret: wrapSecretKey(identity.privateKey, wrapKey),
+    };
+    if (password) {
+        body.current_password = await currentPasswordProof(password);
+    }
+    const response = await postJson(urls.passkeyWrap, body);
+    if (response.status === 403) {
+        return { ok: false, error: "Your account password is incorrect." };
+    }
+    if (!response.ok) {
+        return { ok: false, error: "Could not save the passkey unlock key. Please try again." };
+    }
+    return { ok: true, created };
+}
+
+/**
+ * Show a dialog that enrolls a passkey unlock, collecting the account
+ * password first when one exists (the server demands it as proof - a bearer
+ * token or bare session must not be enough to add an unlock path).
+ *
+ * @param hasPassword - Whether to collect the account password.
+ * @returns The enrollment outcome; ``{ok: false}`` with no error when the
+ *   user cancelled.
+ */
+export function showPasskeyEnrollDialog(hasPassword: boolean): Promise<PasskeyEnrollResult> {
+    return new Promise((resolve) => {
+        if (!hasPassword) {
+            void enrollPasskeyUnlock().then(resolve);
+            return;
+        }
+        const overlay = document.createElement("div");
+        overlay.className = "e2ee-recovery-overlay";
+        overlay.innerHTML = `
+            <div class="e2ee-recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="e2ee-passkey-enroll-title">
+                <h2 id="e2ee-passkey-enroll-title">Add a passkey unlock</h2>
+                <p>Confirm your account password, then your browser will ask you to create or pick a passkey.</p>
+                <label class="e2ee-unlock-label">Account password
+                    <input type="password" class="e2ee-enroll-password" autocomplete="current-password" placeholder="Your password">
+                </label>
+                <p class="e2ee-unlock-error" hidden></p>
+                <div class="e2ee-recovery-actions">
+                    <button type="button" class="e2ee-enroll-submit">Continue</button>
+                    <button type="button" class="e2ee-enroll-cancel">Cancel</button>
+                </div>
+            </div>`;
+        const errorEl = overlay.querySelector(".e2ee-unlock-error") as HTMLElement;
+        const passwordInput = overlay.querySelector<HTMLInputElement>(".e2ee-enroll-password");
+        const close = (result: PasskeyEnrollResult) => {
+            overlay.remove();
+            resolve(result);
+        };
+        const attempt = async () => {
+            const password = passwordInput?.value ?? "";
+            if (!password) {
+                errorEl.textContent = "Enter your account password to continue.";
+                errorEl.hidden = false;
+                return;
+            }
+            errorEl.hidden = true;
+            const result = await enrollPasskeyUnlock(password);
+            if (result.ok) {
+                close(result);
+                return;
+            }
+            errorEl.textContent = result.error ?? "Could not add that passkey.";
+            errorEl.hidden = false;
+        };
+        overlay.querySelector(".e2ee-enroll-submit")?.addEventListener("click", () => void attempt());
+        overlay.querySelector(".e2ee-enroll-cancel")?.addEventListener("click", () => close({ ok: false }));
+        overlay.addEventListener("keydown", (event) => {
+            if ((event as KeyboardEvent).key === "Enter") {
+                event.preventDefault();
+                void attempt();
+            }
+        });
+        document.body.appendChild(overlay);
+        passwordInput?.focus();
+    });
+}
+
+/**
+ * Show a dialog offering every available unlock path (passkey, password,
+ * and/or recovery key) and attempt the unlock the user chooses.
  *
  * @returns True once the device is unlocked; false when the user cancelled.
  */
@@ -652,16 +997,26 @@ export function showUnlockDialog(): Promise<boolean> {
         void getUnlockOptions().then((options) => {
             const overlay = document.createElement("div");
             overlay.className = "e2ee-recovery-overlay";
+            // Ladder order (docs/designs/e2ee-passkey-unlock.md): passkey
+            // first (one tap), then password, then recovery key - which may
+            // appear in flows but must never be the only visible exit when a
+            // cheaper path exists.
+            const passkeyBlock = options.passkey
+                ? `<button type="button" class="btn btn--primary e2ee-unlock-passkey">Unlock with your passkey</button>
+                   <div class="e2ee-unlock-divider">or</div>`
+                : "";
             const passwordField = options.password
                 ? `<label class="e2ee-unlock-label">Account password
                        <input type="password" class="e2ee-unlock-password" autocomplete="current-password" placeholder="Your password">
                    </label>
                    <div class="e2ee-unlock-divider">or</div>`
                 : "";
+            const intro = options.passkey ? "Use your passkey, or another recovery option." : options.password ? "Enter your account password or your recovery key." : "Enter your recovery key.";
             overlay.innerHTML = `
                 <div class="e2ee-recovery-dialog" role="dialog" aria-modal="true" aria-labelledby="e2ee-unlock-title">
                     <h2 id="e2ee-unlock-title">Unlock your messages</h2>
-                    <p>This device doesn't hold your encryption key yet. ${options.password ? "Enter your account password or your recovery key." : "Enter your recovery key."}</p>
+                    <p>This device doesn't hold your encryption key yet. ${intro}</p>
+                    ${passkeyBlock}
                     ${passwordField}
                     <label class="e2ee-unlock-label">Recovery key
                         <input type="text" class="e2ee-unlock-recovery" autocomplete="off" spellcheck="false" placeholder="XXXX-XXXX-XXXX-…">
@@ -673,12 +1028,26 @@ export function showUnlockDialog(): Promise<boolean> {
                     </div>
                 </div>`;
             const errorEl = overlay.querySelector(".e2ee-unlock-error") as HTMLElement;
+            const passkeyButton = overlay.querySelector<HTMLButtonElement>(".e2ee-unlock-passkey");
             const passwordInput = overlay.querySelector<HTMLInputElement>(".e2ee-unlock-password");
             const recoveryInput = overlay.querySelector<HTMLInputElement>(".e2ee-unlock-recovery");
             const close = (unlocked: boolean) => {
                 overlay.remove();
                 resolve(unlocked);
             };
+            passkeyButton?.addEventListener("click", () => {
+                errorEl.hidden = true;
+                passkeyButton.disabled = true;
+                void unlockWithPasskey().then((unlocked) => {
+                    if (unlocked) {
+                        close(true);
+                        return;
+                    }
+                    passkeyButton.disabled = false;
+                    errorEl.textContent = "That passkey couldn't unlock this device. Try another option below.";
+                    errorEl.hidden = false;
+                });
+            });
             const attempt = async () => {
                 errorEl.hidden = true;
                 const password = passwordInput?.value ?? "";
@@ -713,7 +1082,7 @@ export function showUnlockDialog(): Promise<boolean> {
                 }
             });
             document.body.appendChild(overlay);
-            (passwordInput ?? recoveryInput)?.focus();
+            (passkeyButton ?? passwordInput ?? recoveryInput)?.focus();
         });
     });
 }
@@ -1086,29 +1455,52 @@ async function requireIdentity(): Promise<CachedIdentity | null> {
 // ---------------------------------------------------------------------------
 
 /**
+ * Why a conversation or group has no usable key.
+ *
+ * The two cases must stay distinguishable. ``unencryptable`` is an expected,
+ * correct state - nobody to encrypt to, or this device is locked - and a caller
+ * may legitimately answer it by sending plaintext. ``error`` means a key we
+ * should have been able to get did not arrive. Collapsing them (both were once
+ * a bare ``null``) turns one failed request into a plaintext message in a
+ * conversation both participants believe is encrypted.
+ */
+export type KeyUnavailable = { status: "unencryptable"; reason: string } | { status: "error"; reason: string };
+
+/** A usable key and its version, or the reason there isn't one. */
+export type KeyResult = { status: "ok"; version: number; key: Uint8Array } | KeyUnavailable;
+
+/** A short, user-facing description of a thrown request failure. */
+function describeError(error: unknown): string {
+    return error instanceof Error && error.message ? error.message : "The request failed.";
+}
+
+/**
  * Fetch, unseal, and cache the conversation key shared with one partner,
  * creating the first version when none exists and both parties are enrolled.
  *
+ * Network failures propagate as exceptions rather than a status, so a caller
+ * that must not fall back to plaintext has to handle them deliberately (see
+ * ``encryptForPartner``).
+ *
  * @param partnerSlug - The conversation partner's profile slug.
- * @returns The latest usable key and its version, or null when the
- *   conversation cannot be encrypted (either party unenrolled, or locked).
+ * @returns The latest usable key and its version, or why there is none.
  */
-export async function ensureConversationKey(partnerSlug: string): Promise<{ version: number; key: Uint8Array } | null> {
+export async function ensureConversationKey(partnerSlug: string): Promise<KeyResult> {
     await cryptoReady();
     const identity = await requireIdentity();
     const selfSlug = cfg().selfSlug;
     if (identity === null || !selfSlug) {
-        return null;
+        return { status: "unencryptable", reason: "This device is locked." };
     }
     const response = await fetch(`${cfg().urls.conversationKeyBase}${partnerSlug}/`, { credentials: "same-origin" });
     if (!response.ok) {
-        return null;
+        return { status: "error", reason: `Could not load the conversation's keys (HTTP ${response.status}).` };
     }
     const payload = (await response.json()) as ConversationKeysPayload;
     if (payload.latest > 0) {
         const key = await unsealAndCacheVersion(identity, selfSlug, partnerSlug, payload, payload.latest);
         if (key !== null) {
-            return { version: payload.latest, key };
+            return { status: "ok", version: payload.latest, key };
         }
         // Our copy of the latest version is sealed to a keypair we no longer
         // hold (post-reset). Roll the conversation forward with a new version.
@@ -1144,11 +1536,17 @@ async function createConversationKeyVersion(
     selfSlug: string,
     partnerSlug: string,
     version: number,
-): Promise<{ version: number; key: Uint8Array } | null> {
+): Promise<KeyResult> {
     const partnerResponse = await fetch(`${cfg().urls.partnerKeyBase}${partnerSlug}/`, { credentials: "same-origin" });
+    if (partnerResponse.status === 404) {
+        // The endpoint answers 404 both for "no key bundle" and "no DM
+        // relationship" - either way there is nobody to encrypt to, so the
+        // conversation stays plaintext. Any other failure status is a failure,
+        // not an answer, and must not be read as "they aren't enrolled".
+        return { status: "unencryptable", reason: "This person isn't set up for encrypted messages." };
+    }
     if (!partnerResponse.ok) {
-        // Partner not enrolled - the conversation stays plaintext for now.
-        return null;
+        return { status: "error", reason: `Could not load this person's encryption key (HTTP ${partnerResponse.status}).` };
     }
     const partner = (await partnerResponse.json()) as { public_key: string; version: number };
     const key = generateConversationKey();
@@ -1159,7 +1557,7 @@ async function createConversationKeyVersion(
     });
     if (response.status === 201) {
         await putConversationKey(selfSlug, partnerSlug, version, key);
-        return { version, key };
+        return { status: "ok", version, key };
     }
     if (response.status === 200) {
         // Lost a create race - unseal the winner's copy instead.
@@ -1167,10 +1565,11 @@ async function createConversationKeyVersion(
         const winner = unseal(payload.wrapped_key, identity.publicKey, identity.privateKey);
         if (winner !== null) {
             await putConversationKey(selfSlug, partnerSlug, payload.version, winner);
-            return { version: payload.version, key: winner };
+            return { status: "ok", version: payload.version, key: winner };
         }
+        return { status: "error", reason: "Could not open the conversation key that won the create race." };
     }
-    return null;
+    return { status: "error", reason: `Could not store a new conversation key (HTTP ${response.status}).` };
 }
 
 // ---------------------------------------------------------------------------
@@ -1207,26 +1606,25 @@ function groupKeyUrl(groupUuid: string): string {
  * and a removed member is excluded from every later version.
  *
  * @param groupUuid - The group chat's UUID.
- * @returns The latest usable key and its version, or null when the group
- *   cannot encrypt (a member unenrolled, or this device locked).
+ * @returns The latest usable key and its version, or why there is none.
  */
-export async function ensureGroupKey(groupUuid: string): Promise<{ version: number; key: Uint8Array } | null> {
+export async function ensureGroupKey(groupUuid: string): Promise<KeyResult> {
     await cryptoReady();
     const identity = await requireIdentity();
     const selfSlug = cfg().selfSlug;
     if (identity === null || !selfSlug) {
-        return null;
+        return { status: "unencryptable", reason: "This device is locked." };
     }
     const response = await fetch(groupKeyUrl(groupUuid), { credentials: "same-origin" });
     if (!response.ok) {
-        return null;
+        return { status: "error", reason: `Could not load the group's keys (HTTP ${response.status}).` };
     }
     const payload = (await response.json()) as GroupKeysPayload;
 
     if (!payload.needs_rotation && payload.latest > 0) {
         const key = await unsealAndCacheGroupVersion(identity, selfSlug, groupUuid, payload, payload.latest);
         if (key !== null) {
-            return { version: payload.latest, key };
+            return { status: "ok", version: payload.latest, key };
         }
         // Our envelope is sealed to a keypair we no longer hold (post-reset):
         // roll the group forward with a fresh version.
@@ -1261,10 +1659,10 @@ async function createGroupKeyVersion(
     selfSlug: string,
     groupUuid: string,
     payload: GroupKeysPayload,
-): Promise<{ version: number; key: Uint8Array } | null> {
+): Promise<KeyResult> {
     if (payload.members === null) {
         // At least one member isn't enrolled - the group stays plaintext.
-        return null;
+        return { status: "unencryptable", reason: "Someone in this group isn't set up for encrypted messages." };
     }
     const key = generateConversationKey();
     const wrapped: Record<string, string> = {};
@@ -1275,7 +1673,7 @@ async function createGroupKeyVersion(
     const response = await postJson(groupKeyUrl(groupUuid), { version, wrapped });
     if (response.status === 201) {
         await putGroupKey(selfSlug, groupUuid, version, key);
-        return { version, key };
+        return { status: "ok", version, key };
     }
     if (response.status === 200) {
         // Lost a create race - unseal the winner's copy instead.
@@ -1283,10 +1681,11 @@ async function createGroupKeyVersion(
         const winnerKey = unseal(winner.wrapped_key, identity.publicKey, identity.privateKey);
         if (winnerKey !== null) {
             await putGroupKey(selfSlug, groupUuid, winner.version, winnerKey);
-            return { version: winner.version, key: winnerKey };
+            return { status: "ok", version: winner.version, key: winnerKey };
         }
+        return { status: "error", reason: "Could not open the group key that won the create race." };
     }
-    return null;
+    return { status: "error", reason: `Could not store a new group key (HTTP ${response.status}).` };
 }
 
 /**
@@ -1294,16 +1693,22 @@ async function createGroupKeyVersion(
  *
  * @param groupUuid - The group chat's UUID.
  * @param text - The plaintext body.
- * @returns The encrypted fields, or null when the group must fall back to
- *   plaintext (a member unenrolled / this device locked).
+ * @returns ``encrypted`` with the fields to send; ``unencryptable`` when the
+ *   group legitimately has no encryption to do (a member unenrolled, this
+ *   device locked), which a caller may answer with plaintext; or ``error``,
+ *   which it may not - see KeyUnavailable.
  */
-export async function encryptForGroup(groupUuid: string, text: string): Promise<OutgoingEncryption | null> {
-    const group = await ensureGroupKey(groupUuid);
-    if (group === null) {
-        return null;
+export async function encryptForGroup(groupUuid: string, text: string): Promise<EncryptionOutcome> {
+    try {
+        const group = await ensureGroupKey(groupUuid);
+        if (group.status !== "ok") {
+            return group;
+        }
+        const encrypted = encryptMessage(text, group.key);
+        return { status: "encrypted", payload: { ciphertext: encrypted.ciphertext, nonce: encrypted.nonce, key_version: group.version } };
+    } catch (error) {
+        return { status: "error", reason: describeError(error) };
     }
-    const encrypted = encryptMessage(text, group.key);
-    return { ciphertext: encrypted.ciphertext, nonce: encrypted.nonce, key_version: group.version };
 }
 
 /**
@@ -1346,20 +1751,35 @@ export interface OutgoingEncryption {
 }
 
 /**
+ * The result of preparing one outgoing body: either ciphertext to send, or the
+ * reason there is none. Only ``unencryptable`` permits sending plaintext.
+ */
+export type EncryptionOutcome = { status: "encrypted"; payload: OutgoingEncryption } | KeyUnavailable;
+
+/**
  * Encrypt one outgoing message body for a partner.
  *
  * @param partnerSlug - The conversation partner's profile slug.
  * @param text - The plaintext body.
- * @returns The encrypted fields, or null when the conversation must fall back
- *   to plaintext (partner unenrolled / this device locked).
+ * @returns ``encrypted`` with the fields to send; ``unencryptable`` when the
+ *   conversation legitimately has no encryption to do (partner unenrolled,
+ *   this device locked), which a caller may answer with plaintext; or
+ *   ``error``, which it may not - see KeyUnavailable.
  */
-export async function encryptForPartner(partnerSlug: string, text: string): Promise<OutgoingEncryption | null> {
-    const conversation = await ensureConversationKey(partnerSlug);
-    if (conversation === null) {
-        return null;
+export async function encryptForPartner(partnerSlug: string, text: string): Promise<EncryptionOutcome> {
+    try {
+        const conversation = await ensureConversationKey(partnerSlug);
+        if (conversation.status !== "ok") {
+            return conversation;
+        }
+        const encrypted = encryptMessage(text, conversation.key);
+        return {
+            status: "encrypted",
+            payload: { ciphertext: encrypted.ciphertext, nonce: encrypted.nonce, key_version: conversation.version },
+        };
+    } catch (error) {
+        return { status: "error", reason: describeError(error) };
     }
-    const encrypted = encryptMessage(text, conversation.key);
-    return { ciphertext: encrypted.ciphertext, nonce: encrypted.nonce, key_version: conversation.version };
 }
 
 /**

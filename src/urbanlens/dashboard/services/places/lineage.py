@@ -174,10 +174,7 @@ def refresh_derived_flags(place_ids: Iterable[int | None]) -> None:
             Place.objects.filter(pk__in=ids).exclude(is_aggregate=flag).update(is_aggregate=flag)
 
     counts = dict(
-        Place.objects.filter(parent_id__in=unique_ids, parent_relation=PlaceRelation.PART_OF, kind=PlaceKind.BUILDING)
-        .values_list("parent_id")
-        .annotate(total=Count("pk"))
-        .values_list("parent_id", "total"),
+        Place.objects.filter(parent_id__in=unique_ids, parent_relation=PlaceRelation.PART_OF, kind=PlaceKind.BUILDING).values_list("parent_id").annotate(total=Count("pk")).values_list("parent_id", "total"),
     )
     by_count: dict[int, list[int]] = {}
     for pk in unique_ids:

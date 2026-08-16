@@ -24,10 +24,7 @@ def remember_child_boundary_parent(sender: type[Pin], instance: Pin, **kwargs) -
         return
     previous = Pin.objects.filter(pk=instance.pk).values("parent_pin_id", "location_id").first() if instance.pk else None
     instance.child_boundary_previous_parent_id = previous["parent_pin_id"] if previous else None
-    instance.child_boundary_position_changed = bool(
-        previous
-        and (previous["parent_pin_id"] != instance.parent_pin_id or previous["location_id"] != instance.location_id)
-    )
+    instance.child_boundary_position_changed = bool(previous and (previous["parent_pin_id"] != instance.parent_pin_id or previous["location_id"] != instance.location_id))
 
 
 @receiver(post_save, sender=Pin, dispatch_uid="pin_refit_child_boundaries_on_save")
@@ -37,11 +34,7 @@ def refit_child_boundaries_on_save(sender: type[Pin], instance: Pin, created: bo
         return
     from urbanlens.dashboard.services.geo.child_pin_boundaries import refit_child_pin_boundary
 
-    parent_ids = {
-        parent_id
-        for parent_id in (instance.parent_pin_id, instance.child_boundary_previous_parent_id)
-        if parent_id is not None
-    }
+    parent_ids = {parent_id for parent_id in (instance.parent_pin_id, instance.child_boundary_previous_parent_id) if parent_id is not None}
     for parent_id in sorted(parent_ids):
         refit_child_pin_boundary(parent_id)
 

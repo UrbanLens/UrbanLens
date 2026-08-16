@@ -1,7 +1,7 @@
 <div class="settings-section-body" id="security-settings-section-body">
     <p class="settings-e2ee-status">
-        {% if passkeys or has_totp %}
-        Two-factor sign-in is <strong>on</strong>{% if passkeys %} ({{ passkeys|length }} passkey{{ passkeys|length|pluralize }}){% endif %}{% if has_totp %} + authenticator app{% endif %}.
+        {% if has_login_passkey or has_totp %}
+        Two-factor sign-in is <strong>on</strong>{% if has_login_passkey %} (passkey){% endif %}{% if has_totp %} + authenticator app{% endif %}.
         {% else %}
         Two-factor sign-in is <strong>off</strong>. Add a passkey or authenticator app below to turn it on.
         {% endif %}
@@ -10,7 +10,9 @@
     <p class="settings-help">
         Passkeys work with Face ID, Windows Hello, security keys, and password managers
         like Bitwarden. Once you've added one, signing in requires your password
-        <em>and</em> a passkey. Remove your last passkey to turn this off.
+        <em>and</em> a passkey. Remove your last sign-in passkey to turn this off.
+        Keys marked <em>message unlock only</em> never affect how you sign in - they
+        only unlock your encrypted messages on new devices.
     </p>
 
     {% if passkeys %}
@@ -25,7 +27,7 @@
                         <input type="text" name="name" value="{{ cred.name }}" maxlength="100" class="passkey-name-input" aria-label="Passkey nickname">
                     </form>
                     <span class="settings-help">
-                        Added {{ cred.created|date:"M j, Y" }}{% if cred.last_used_at %} - last used {{ cred.last_used_at|date:"M j, Y" }}{% endif %}
+                        Added {{ cred.created|date:"M j, Y" }}{% if cred.last_used_at %} - last used {{ cred.last_used_at|date:"M j, Y" }}{% endif %}{% if not cred.is_login_factor %} - <em>message unlock only</em>{% endif %}
                     </span>
                 </div>
             </div>

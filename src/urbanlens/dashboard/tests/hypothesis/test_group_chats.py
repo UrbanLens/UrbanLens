@@ -713,7 +713,7 @@ class SetPasswordPromptTests(TestCase):
         self.user.save()
         ProfileModel.objects.filter(pk=self.profile.pk).update(welcome_onboarding_complete=True, profile_setup_complete=True)
         self.client.force_login(self.user)
-        self.client.get(reverse("account.set_password.skip"))
+        self.client.post(reverse("account.set_password.skip"))
         response = self.client.get(reverse("post_login"))
         self.assertNotEqual(response.headers.get("Location"), reverse("account.set_password"))
 

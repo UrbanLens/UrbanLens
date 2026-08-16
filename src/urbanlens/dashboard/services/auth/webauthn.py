@@ -88,13 +88,54 @@ def _to_transports(values: list[str]) -> list[AuthenticatorTransport] | None:
 
 
 def has_passkeys(user: User) -> bool:
-    """True when ``user`` has enrolled at least one passkey (2FA is opt-in per user)."""
-    return WebAuthnCredential.objects.for_user(user).exists()
+    """True when ``user`` has enrolled at least one *login-factor* passkey.
+
+    This is the single source of truth behind ``has_second_factor`` and every
+    2FA routing decision (``CustomLoginView``, the SSO pipeline's
+    ``enforce_two_factor_for_sso``). Unlock-only credentials
+    (``is_login_factor=False`` - enrolled to decrypt E2EE data, see
+    ``E2EEPasskeyWrap``) are deliberately excluded: adding one must never flip
+    the account into mandatory 2FA.
+    """
+    return WebAuthnCredential.objects.for_user(user).filter(is_login_factor=True).exists()
 
 
 def list_credentials(user: User):
-    """Return this user's registered passkeys, newest first."""
+    """Return this user's registered passkeys, newest first - both kinds.
+
+    Settings lists everything (with a badge distinguishing sign-in factors
+    from unlock-only keys); only the 2FA gates filter on ``is_login_factor``.
+    """
     return WebAuthnCredential.objects.for_user(user)
+
+
+def _with_prf_extension(options_json: str, *, eval_by_credential: dict[str, str] | None = None) -> str:
+    """Add the WebAuthn ``prf`` extension to ceremony-options JSON.
+
+    py_webauthn's ``options_to_json()`` emits no ``extensions`` member and its
+    option dataclasses have nowhere to carry one, so the extension is spliced
+    into the JSON after the fact. The client's option builders
+    (``webauthn-client.ts``) understand this shape and convert the base64url
+    inputs to the ``BufferSource``s the browser API wants - the same encoding
+    WebAuthn Level 3's ``parseRequestOptionsFromJSON`` uses.
+
+    Args:
+        options_json: The JSON produced by ``options_to_json()``.
+        eval_by_credential: Mapping of base64url credential id to base64
+            32-byte PRF input, for authentication ceremonies. When None or
+            empty, the extension is requested with no inputs (registration:
+            asks the authenticator to *enable* PRF so a later assertion can
+            evaluate it, and prompts capability detection client-side).
+
+    Returns:
+        The options JSON with the ``prf`` extension attached.
+    """
+    data = json.loads(options_json)
+    if eval_by_credential:
+        data.setdefault("extensions", {})["prf"] = {"evalByCredential": {cred_id: {"first": prf_input} for cred_id, prf_input in eval_by_credential.items()}}
+    else:
+        data.setdefault("extensions", {})["prf"] = {}
+    return json.dumps(data)
 
 
 def build_registration_options(request: HttpRequest, user: User) -> str:
@@ -128,10 +169,14 @@ def build_registration_options(request: HttpRequest, user: User) -> str:
         exclude_credentials=[PublicKeyCredentialDescriptor(id=bytes(cred.credential_id), transports=_to_transports(cred.transports)) for cred in existing],
     )
     request.session[SESSION_REGISTRATION_CHALLENGE] = bytes_to_base64url(options.challenge)
-    return options_to_json(options)
+    # PRF is requested on EVERY registration, not just unlock-only ones, so any
+    # passkey created from now on can later gain an E2EE wrap without
+    # re-registration. Authenticators that don't support it simply ignore the
+    # extension; nothing else about the ceremony changes.
+    return _with_prf_extension(options_to_json(options))
 
 
-def verify_and_save_registration(request: HttpRequest, user: User, credential_json: str, name: str = "") -> WebAuthnCredential:
+def verify_and_save_registration(request: HttpRequest, user: User, credential_json: str, name: str = "", *, login_factor: bool = True) -> WebAuthnCredential:
     """Verify a completed registration ceremony and persist the new credential.
 
     Args:
@@ -143,6 +188,9 @@ def verify_and_save_registration(request: HttpRequest, user: User, credential_js
             empty - in that case, an auto-generated "Passkey N" name is used instead, numbered
             after the user's current passkey count. The user can still rename it afterward via
             the existing inline rename field.
+        login_factor: False for keys enrolled only to unlock E2EE data - they
+            are excluded from every 2FA gate (see ``has_passkeys``), so
+            enrolling one never changes how the account signs in.
 
     Returns:
         The newly created WebAuthnCredential.
@@ -183,11 +231,20 @@ def verify_and_save_registration(request: HttpRequest, user: User, credential_js
         device_type=verified.credential_device_type.value,
         transports=transports,
         name=clean_name,
+        is_login_factor=login_factor,
     )
 
 
 def build_authentication_options(request: HttpRequest, user: User) -> str:
-    """Start a passkey-authentication ceremony scoped to ``user``'s registered credentials.
+    """Start a login-2FA passkey ceremony scoped to ``user``'s sign-in credentials.
+
+    Only ``is_login_factor`` credentials are offered - an unlock-only key is
+    not a second factor, by the owner's own choice. When any offered
+    credential carries an ``E2EEPasskeyWrap``, its PRF input rides along in the
+    assertion options, so the same biometric tap that completes 2FA also hands
+    the browser the secret that unlocks the user's encrypted messages - a
+    cold device gets both for zero extra prompts. The PRF output never
+    reaches this server; ``verify_authentication`` neither sees nor checks it.
 
     Args:
         request: The incoming request (used for RP ID and to stash the challenge).
@@ -197,9 +254,9 @@ def build_authentication_options(request: HttpRequest, user: User) -> str:
         JSON string suitable for ``navigator.credentials.get()`` on the client.
 
     Raises:
-        WebAuthnError: If the account has no registered passkeys.
+        WebAuthnError: If the account has no sign-in passkeys.
     """
-    credentials = list(WebAuthnCredential.objects.for_user(user))
+    credentials = list(WebAuthnCredential.objects.for_user(user).filter(is_login_factor=True).select_related("e2ee_wrap__bundle"))
     if not credentials:
         raise WebAuthnError("This account has no passkeys registered.")
 
@@ -209,7 +266,18 @@ def build_authentication_options(request: HttpRequest, user: User) -> str:
         user_verification=UserVerificationRequirement.PREFERRED,
     )
     request.session[SESSION_AUTHENTICATION_CHALLENGE] = bytes_to_base64url(options.challenge)
-    return options_to_json(options)
+
+    prf_inputs: dict[str, str] = {}
+    for cred in credentials:
+        # getattr, not try/except: Django's RelatedObjectDoesNotExist for a
+        # reverse OneToOne subclasses AttributeError precisely so this works.
+        wrap = getattr(cred, "e2ee_wrap", None)
+        if wrap is not None and wrap.bundle_version == wrap.bundle.version:
+            prf_inputs[bytes_to_base64url(bytes(cred.credential_id))] = wrap.prf_input
+    options_json = options_to_json(options)
+    if prf_inputs:
+        options_json = _with_prf_extension(options_json, eval_by_credential=prf_inputs)
+    return options_json
 
 
 def verify_authentication(request: HttpRequest, user: User, credential_json: str) -> WebAuthnCredential:
@@ -237,7 +305,10 @@ def verify_authentication(request: HttpRequest, user: User, credential_json: str
         raise WebAuthnError("Malformed passkey response.") from exc
 
     try:
-        stored = WebAuthnCredential.objects.get(user=user, credential_id=raw_id)
+        # is_login_factor filter: an unlock-only key was excluded from the
+        # options this ceremony started from, and its owner chose for it not to
+        # be a sign-in factor - an assertion from one must not complete login.
+        stored = WebAuthnCredential.objects.get(user=user, credential_id=raw_id, is_login_factor=True)
     except WebAuthnCredential.DoesNotExist as exc:
         raise WebAuthnError("That passkey is not registered to this account.") from exc
 

@@ -228,6 +228,7 @@ from urbanlens.dashboard.services.pins.pin_subresources import (
     AliasExistsError,
     AliasIsCurrentNameError,
     InvalidLinkError,
+    LinkExistsError,
     PinSubResourceError,
     create_pin_alias,
     create_pin_link,
@@ -2440,6 +2441,7 @@ _SUBRESOURCE_ERROR_STATUS: dict[type[PinSubResourceError], int] = {
     AliasExistsError: 409,
     AliasIsCurrentNameError: 400,
     InvalidLinkError: 400,
+    LinkExistsError: 409,
 }
 
 
@@ -3174,7 +3176,10 @@ class SafetyCheckinMarkSafeView(SafetyCheckinScopedView):
             return self._not_found()
         if checkin.is_resolved:
             return Response({"error": "This check-in has already been resolved."}, status=409)
-        check_in(checkin, request.user.profile)
+        if not check_in(checkin, request.user.profile):
+            # Lost a race with another resolution between the check above and
+            # the conditional UPDATE - same outcome as the fast path.
+            return Response({"error": "This check-in has already been resolved."}, status=409)
         return self._detail_response(checkin)
 
 
@@ -3193,7 +3198,10 @@ class SafetyCheckinCancelApiView(SafetyCheckinScopedView):
             return self._not_found()
         if checkin.is_resolved:
             return Response({"error": "This check-in has already been resolved."}, status=409)
-        cancel_checkin(checkin)
+        if not cancel_checkin(checkin):
+            # Lost a race with another resolution between the check above and
+            # the conditional UPDATE - same outcome as the fast path.
+            return Response({"error": "This check-in has already been resolved."}, status=409)
         return self._detail_response(checkin)
 
 

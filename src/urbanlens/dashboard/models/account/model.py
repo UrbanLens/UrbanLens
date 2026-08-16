@@ -79,6 +79,12 @@ class WebAuthnCredential(DashboardModel):
     name = models.CharField(max_length=100, blank=True)
     credential_id = models.BinaryField(unique=True, editable=False)
     public_key = models.BinaryField(editable=False)
+    # False for passkeys enrolled only to unlock E2EE data (see E2EEPasskeyWrap):
+    # those must never flip the account into mandatory 2FA, or "add a passkey so
+    # your messages unlock anywhere" would conscript the user into a login
+    # prompt on every signin. Every 2FA gate filters on this - the single
+    # source of truth is ``services.auth.webauthn.has_passkeys``.
+    is_login_factor = models.BooleanField(default=True)
     sign_count = models.PositiveBigIntegerField(default=0)
     aaguid = models.CharField(max_length=64, blank=True, editable=False)
     device_type = models.CharField(max_length=16, blank=True, editable=False)

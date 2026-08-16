@@ -153,6 +153,31 @@ class DetectDwellsAndCreateVisitsTests(TestCase):
         self.assertEqual(visit.visited_at, base)
         self.assertEqual(visit.route_id, route.pk)
 
+    def test_visit_logging_off_saves_the_route_but_logs_no_visit(self):
+        """track_routes and track_pin_visits are separate consents.
+
+        The route is the user's own track; a dwell writes a PinVisit, which is
+        what track_pin_visits governs - and its help text already promises it
+        covers imports. An otherwise-qualifying dwell must therefore produce
+        nothing while that setting is off.
+        """
+        self.profile.track_pin_visits = False
+        self.profile.save(update_fields=["track_pin_visits", "updated"])
+
+        base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
+        raw_points = [
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=5)),
+            RawTrackPoint(_PIN_LAT + 0.0001, _PIN_LNG + 0.0001, base + datetime.timedelta(minutes=12)),
+        ]
+        route = self._saved_route(raw_points)
+
+        created = detect_dwells_and_create_visits(route, raw_points, self.profile)
+
+        self.assertEqual(created, 0)
+        self.assertFalse(PinVisit.objects.filter(pin=self.pin).exists())
+        self.assertTrue(Route.objects.filter(pk=route.pk).exists())
+
     def test_no_visit_for_dwell_shorter_than_minimum(self):
         base = timezone.make_aware(datetime.datetime(2024, 6, 1, 12, 0, 0))
         raw_points = [
