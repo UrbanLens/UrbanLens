@@ -8760,3 +8760,30 @@ constant would break this silently.
 That closes the beat-task thread: 24 scheduled tasks, 11 correctly locked, 13 idempotent by
 construction, one gap found and fixed (the account-deletion reminder). Twenty-second verified-safe
 area.
+
+### Enforced 2026-08-16 (chunk 543): the beat-lock TTL invariant now fails the build
+
+The note above ends "nothing checks it, and retuning a schedule without its lock constant would
+break this silently". `test_beat_lock_ttl_guard.py` now does, following the
+`test_bulk_write_signal_guard.py` precedent.
+
+It asserts both directions - no TTL at or above its interval (a killed run would skip the next
+tick), and none below half of it (the lock would lapse mid-run and prevent nothing) - and reads both
+sides **live**: the TTL constants off the imported `tasks` module and the intervals off Django's own
+`CELERY_BEAT_SCHEDULE`, so it checks the values the workers actually run with. Only the
+task-to-lock-constant mapping comes from the AST, because that association exists nowhere else.
+
+Three details worth keeping:
+
+- **It was verified to fail.** Raising `_CHECKIN_LOCK_TIMEOUT_SECONDS` to 600s against its 300s
+  interval, and separately dropping it to 10s, each produce a named offender. A guard nobody has
+  seen fail is a guard nobody knows works.
+- **Its own guard-the-guard test caught a bug in it.** The first version derived crontab intervals
+  from `remaining_estimate`, which answers "how long until the next fire, *from now*" rather than
+  from its argument - so calling it twice compounded instead of stepping, and produced *negative*
+  intervals. The `all(seconds > 0)` assertion failed immediately. Without that check the guard would
+  have compared every TTL against a negative number, passed, and guarded nothing. This is the exact
+  failure the bulk-write guard's docstring warns about, arriving on schedule.
+- Intervals are now derived from the crontab's field cardinalities, which is exact for every regular
+  pattern and returns `None` otherwise - and an unsupported pattern surfaces, because the
+  guard-the-guard test requires at least 20 of the 24 to resolve.

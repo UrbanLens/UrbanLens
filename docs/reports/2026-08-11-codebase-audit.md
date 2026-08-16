@@ -10278,3 +10278,30 @@ A note on my own parsing while doing it: the first pass could not resolve `5 * 6
 schedule and reported seven tasks as "?? could not resolve". I read those seven schedules directly
 rather than treating the tool's silence as a finding either way - the same discipline the scans in
 chunks 532-537 needed, applied to arithmetic this time.
+
+## Chunk 543 - turning a verified invariant into an enforced one
+
+Chunk 542 verified that all eleven beat-lock TTLs sit under their intervals, and ended by noting
+nothing checks it: the TTLs live in `tasks.py`, the intervals in `settings/base.py`, and retuning a
+schedule without its lock constant would break the pairing silently. This chunk closed that, using
+the `test_bulk_write_signal_guard.py` precedent this codebase already established for
+"the property is of the *configuration*, not of any one call site".
+
+The guard asserts both failure directions and reads both sides live - constants off the imported
+module, intervals off Django's own `CELERY_BEAT_SCHEDULE` - so it checks what the workers run with
+rather than what the source says. And it was **verified to fail**: pushing the safety sweeps' TTL to
+600s against their 300s interval, then down to 10s, each produce a named offender. A guard nobody
+has watched fail is a guard nobody knows works.
+
+The part worth recording is that its own guard-the-guard test immediately caught a bug in it. The
+first version computed crontab intervals with celery's `remaining_estimate`, which answers "how long
+until the next fire, from *now*" rather than from the argument it is given - so calling it twice
+compounded instead of stepping, and returned **negative** intervals. Every TTL would have compared
+as "under interval" against a negative number; the guard would have passed and guarded nothing. The
+`all(seconds > 0)` assertion caught it on the first run.
+
+That is precisely the failure the bulk-write guard's own docstring warns about - its first version
+scanned zero files and passed vacuously - and it arrived within minutes of copying the pattern.
+Copying the guard was worth less than copying the paranoia that came with it.
+
+Twenty-second verified-safe area is now twenty-second *enforced* area.
