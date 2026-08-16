@@ -39,6 +39,32 @@ MIN_FIELD_ENCRYPTION_KEY_LENGTH = 32
 MIN_FIELD_ENCRYPTION_KEY_ALPHABET = 16
 
 
+def _encryption_key_weakness(key: str) -> str | None:
+    """Describe why a field-encryption key is too weak to encrypt under, if it is.
+
+    Args:
+        key: The candidate key.
+
+    Returns:
+        An operator-facing explanation, or None when the key clears both floors.
+    """
+    if len(key) < MIN_FIELD_ENCRYPTION_KEY_LENGTH:
+        return (
+            f"field_encryption_key must be at least {MIN_FIELD_ENCRYPTION_KEY_LENGTH} characters "
+            f"(got {len(key)}). Generate one with: "
+            'python -c "import secrets; print(secrets.token_urlsafe(64))"'
+        )
+    # A crude stand-in for entropy, calibrated against random output rather
+    # than against any specific bad key - see the constant.
+    if len(set(key)) < MIN_FIELD_ENCRYPTION_KEY_ALPHABET:
+        return (
+            f"field_encryption_key uses only {len(set(key))} distinct characters, which is too "
+            "predictable to resist an offline attack against a stolen database. Use a random "
+            'value: python -c "import secrets; print(secrets.token_urlsafe(64))"'
+        )
+    return None
+
+
 def _default_allowed_hosts() -> list[str]:
     """Return the default ``ALLOWED_HOSTS`` list for the current environment.
 
@@ -303,10 +329,10 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             return [item.strip() for item in value.split(",") if item.strip()]
         return value
 
-    @field_validator("field_encryption_key", "field_encryption_key_fallbacks", mode="after")
+    @field_validator("field_encryption_key", mode="after")
     @classmethod
-    def _reject_weak_encryption_keys(cls, value: str | list[str] | None) -> str | list[str] | None:
-        """Refuse field-encryption keys weak enough to brute-force offline.
+    def _reject_weak_encryption_keys(cls, value: str | None) -> str | None:
+        """Refuse an active field-encryption key weak enough to brute-force offline.
 
         The derivation is a single unsalted SHA256 (``models.fields._derive_fernet``),
         so key strength *is* input strength - there is no stretching to hide behind.
@@ -322,33 +348,47 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         as an endorsement.
 
         Args:
-            value: The configured key, or the list of retired fallback keys.
+            value: The configured active key, if any.
 
         Returns:
-            The value unchanged when every key present is acceptable.
+            The value unchanged when it is acceptable.
 
         Raises:
-            ValueError: When a key is too short or too repetitive to be a
+            ValueError: When the key is too short or too repetitive to be a
                 machine-generated secret.
         """
-        keys = [value] if isinstance(value, str) else list(value or [])
-        for key in keys:
-            if len(key) < MIN_FIELD_ENCRYPTION_KEY_LENGTH:
-                msg = (
-                    f"field_encryption_key must be at least {MIN_FIELD_ENCRYPTION_KEY_LENGTH} characters "
-                    f"(got {len(key)}). Generate one with: "
-                    'python -c "import secrets; print(secrets.token_urlsafe(64))"'
+        weakness = _encryption_key_weakness(value) if value else None
+        if weakness:
+            raise ValueError(weakness)
+        return value
+
+    @field_validator("field_encryption_key_fallbacks", mode="after")
+    @classmethod
+    def _warn_about_weak_fallback_keys(cls, value: list[str]) -> list[str]:
+        """Accept retired keys that would be refused as the active key, and say so.
+
+        Applying the floor here too would strand exactly the installs that need
+        to move off a weak key: the documented rotation is to list the old key
+        as a fallback, run ``manage.py rotate_field_encryption``, then drop it -
+        and a validator that refuses the old key stops the settings module from
+        loading at all, so the command that fixes it cannot start either. A
+        fallback only ever decrypts, and only until the rotation finishes, so
+        the useful action is a loud warning rather than a locked door.
+
+        Args:
+            value: The configured retired keys.
+
+        Returns:
+            The value unchanged.
+        """
+        for key in value:
+            weakness = _encryption_key_weakness(key)
+            if weakness:
+                logger.warning(
+                    "A retired field-encryption key is too weak to be accepted as the active key. "
+                    "It still decrypts existing rows, but finish the rotation and drop it: %s",
+                    weakness,
                 )
-                raise ValueError(msg)
-            # A crude stand-in for entropy, calibrated against random output
-            # rather than against any specific bad key - see the constant.
-            if len(set(key)) < MIN_FIELD_ENCRYPTION_KEY_ALPHABET:
-                msg = (
-                    f"field_encryption_key uses only {len(set(key))} distinct characters, which is too "
-                    "predictable to resist an offline attack against a stolen database. Use a random "
-                    'value: python -c "import secrets; print(secrets.token_urlsafe(64))"'
-                )
-                raise ValueError(msg)
         return value
 
     @model_validator(mode="after")

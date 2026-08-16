@@ -121,6 +121,10 @@ Never swap the key in one step — that is the data-loss path. Roll it:
    Nothing breaks: new writes use the new key, existing rows still read under the fallback.
    *When rotating `SECRET_KEY` itself, the **old** `SECRET_KEY` is what goes in the fallback
    list — only the current one is implicit.*
+   The strength floor (32 characters, 16 distinct) applies to the **active key only**. A retired
+   key that would be refused as the active one is accepted here and logs a warning — otherwise an
+   install running a weak key could not boot the settings module that `rotate_field_encryption`
+   needs, leaving it stuck between an unbootable app and abandoning its encrypted rows.
 2. **Re-encrypt everything.**
    ```bash
    python manage.py rotate_field_encryption --dry-run   # reports what would change

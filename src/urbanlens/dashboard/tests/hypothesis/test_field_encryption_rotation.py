@@ -274,14 +274,30 @@ class EncryptionKeyStrengthValidatorTests(SimpleTestCase):
         with pytest.raises(ValueError, match="distinct characters"):
             AppSettings._reject_weak_encryption_keys("urbanlens-prod-2026-urbanlens-prod")
 
-    def test_retired_fallback_keys_are_checked_too(self) -> None:
-        # A weak key is no safer for being retired: it still decrypts every row
-        # written under it, and those rows are exactly what a dump contains.
-        with pytest.raises(ValueError, match="distinct characters"):
-            AppSettings._reject_weak_encryption_keys(["b" * 40])
-
     def test_unset_is_allowed(self) -> None:
         self.assertIsNone(AppSettings._reject_weak_encryption_keys(None))
+
+    def test_a_weak_retired_key_is_allowed_so_the_rotation_can_finish(self) -> None:
+        """The floor cannot apply to fallbacks, or it strands the installs that need it.
+
+        An install already running a weak key follows the documented rotation by
+        listing that key as a fallback - and if the validator refuses it there,
+        the settings module never loads, so `rotate_field_encryption` cannot run
+        either. The install is then stuck between an unbootable app and
+        abandoning its encrypted rows. A fallback only decrypts, and only until
+        the rotation finishes, so this accepts and warns.
+        """
+        weak = ["b" * 40]
+        self.assertEqual(AppSettings._warn_about_weak_fallback_keys(weak), weak)
+
+    def test_a_weak_retired_key_is_warned_about(self) -> None:
+        with self.assertLogs("urbanlens.UrbanLens.settings.app", level="WARNING") as captured:
+            AppSettings._warn_about_weak_fallback_keys(["b" * 40])
+        self.assertIn("finish the rotation", "\n".join(captured.output))
+
+    def test_a_strong_retired_key_is_not_warned_about(self) -> None:
+        with self.assertNoLogs("urbanlens.UrbanLens.settings.app", level="WARNING"):
+            AppSettings._warn_about_weak_fallback_keys([secrets.token_urlsafe(64)])
 
 
 class RotateFieldEncryptionCommandTests(TestCase):
