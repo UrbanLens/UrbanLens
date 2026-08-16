@@ -923,7 +923,7 @@ class E2EEResetView(DualAuthJsonView):
             "be able to re-key an account and lock its owner out of their own history."
         ),
     )
-    @extend_schema(request=e2ee_schema.E2EEResetRequestSerializer, responses={200: e2ee_schema.E2EEOkResponseSerializer, 400: None, 403: None})
+    @extend_schema(request=e2ee_schema.E2EEResetRequestSerializer, responses={200: e2ee_schema.E2EEResetResponseSerializer, 400: None, 403: None})
     def post(self, request: Request) -> Response:
         """Replace the caller's key bundle with brand-new key material.
 
@@ -1036,5 +1036,22 @@ class E2EEResetView(DualAuthJsonView):
             )
 
         rewrapped_count = len(conversation_rows) + len(envelope_rows)
-        logger.info("E2EE key reset for profile %s (now v%s, %s key copies re-wrapped)", profile.pk, bundle.version, rewrapped_count)
-        return Response({"version": bundle.version, "rewrapped": rewrapped_count})
+        # Counted after the swap, so it describes the state the caller is now in.
+        # A submitted payload only has to name rows the caller owns - it does not
+        # have to name all of them, which is correct (a user who lost their key
+        # cannot re-seal anything and resets to get a working account back). But
+        # the rows it left out are now sealed to a key that no longer exists,
+        # i.e. permanently unreadable, and the caller is the only one who can
+        # tell the user that. Reporting it is the difference between "your
+        # history is gone" and finding out months later.
+        owned_conversations = ConversationKey.objects.filter(Q(profile_low=profile) | Q(profile_high=profile)).count()
+        owned_envelopes = GroupKeyEnvelope.objects.filter(profile=profile).count()
+        not_rewrapped = (owned_conversations + owned_envelopes) - rewrapped_count
+        logger.info(
+            "E2EE key reset for profile %s (now v%s, %s key copies re-wrapped, %s left sealed to the retired key)",
+            profile.pk,
+            bundle.version,
+            rewrapped_count,
+            not_rewrapped,
+        )
+        return Response({"version": bundle.version, "rewrapped": rewrapped_count, "not_rewrapped": not_rewrapped})

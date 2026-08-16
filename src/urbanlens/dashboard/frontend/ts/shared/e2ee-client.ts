@@ -836,11 +836,45 @@ export async function regenerateRecoveryKey(): Promise<string | null> {
 export interface ResetResult {
     recoveryDisplay: string;
     /** Number of conversation-key copies / group envelopes re-sealed to the
-     * new keypair - when > 0, the account's message history stays readable. */
+     * new keypair - these stay readable. */
     rewrapped: number;
+    /** The caller's own key copies left sealed to the retired key. These are
+     * permanently unreadable, so anything above zero has to be said out loud
+     * rather than folded into a success message. */
+    notRewrapped: number;
     /** True when the old private key was available (cached or unlocked with
      * the password), so history preservation was even attempted. */
     preserved: boolean;
+}
+
+/**
+ * What to tell the user after a key reset, given what survived it.
+ *
+ * Pure and exported so the wording is testable without sodium, IndexedDB or a
+ * live endpoint. The previous inline version told the truth in one of four
+ * cases: it claimed "everything stays readable" whenever *any* row had been
+ * re-encrypted, even when most had not, and said nothing at all when the old
+ * key was held but nothing came back re-encrypted.
+ *
+ * @param result - The outcome returned by {@link resetKeys}.
+ * @returns The toast level and message describing what is still readable.
+ */
+export function resetOutcomeMessage(result: Pick<ResetResult, "rewrapped" | "notRewrapped">): { level: "success" | "warning"; message: string } {
+    if (result.notRewrapped > 0 && result.rewrapped > 0) {
+        return {
+            level: "warning",
+            message: `Your keys were reset. ${result.rewrapped} conversation(s) stay readable; ${result.notRewrapped} could not be re-encrypted and are no longer readable.`,
+        };
+    }
+    if (result.notRewrapped > 0) {
+        return { level: "warning", message: "Your keys were reset. Previously encrypted messages are no longer readable on this account." };
+    }
+    if (result.rewrapped > 0) {
+        return { level: "success", message: "Your keys were reset and your message history was re-encrypted - everything stays readable." };
+    }
+    // Nothing to preserve in the first place - a reset on an account with no
+    // encrypted history is a plain success, not a silent one.
+    return { level: "success", message: "Your keys were reset." };
 }
 
 interface RewrapAllPayload {
@@ -915,36 +949,50 @@ export async function resetKeys(password?: string): Promise<ResetResult | null> 
     }
 
     // Re-encrypt history: unseal every wrapped key copy with the OLD key and
-    // re-seal it to the NEW public key, all client-side. Entries that fail to
-    // unseal (corrupt, or sealed to an even older keypair) are skipped - they
-    // were already unreadable, so leaving them behind loses nothing.
+    // re-seal it to the NEW public key, all client-side.
     if (oldPrivateKey !== null && cfg().urls.rewrapAll) {
         const rewrapResponse = await fetch(cfg().urls.rewrapAll as string, { credentials: "same-origin" });
-        if (rewrapResponse.ok) {
-            const payload = (await rewrapResponse.json()) as RewrapAllPayload;
-            const rewrapEntries = (items: { id: number; wrapped_key: string }[]) => {
-                const out: { id: number; wrapped_key: string }[] = [];
-                for (const item of items) {
-                    const key = unseal(item.wrapped_key, bundle.public_key, oldPrivateKey);
-                    if (key !== null) {
-                        out.push({ id: item.id, wrapped_key: sealToPublicKey(key, identity.publicKey) });
-                    }
-                }
-                return out;
-            };
-            body.rewrapped_conversation_keys = rewrapEntries(payload.conversation_keys);
-            body.rewrapped_group_envelopes = rewrapEntries(payload.group_envelopes);
+        if (!rewrapResponse.ok) {
+            // Holding the old private key means every thread *could* have been
+            // preserved. Resetting without the inventory would seal the account
+            // to a new key while leaving all of that history unopenable - the
+            // one outcome this branch exists to prevent, caused by a transient
+            // failure rather than by the user's choice. Abort; the caller
+            // surfaces it as "please try again", and a retry costs nothing.
+            return null;
         }
+        const payload = (await rewrapResponse.json()) as RewrapAllPayload;
+        const rewrapEntries = (items: { id: number; wrapped_key: string }[]) => {
+            const out: { id: number; wrapped_key: string }[] = [];
+            for (const item of items) {
+                const key = unseal(item.wrapped_key, bundle.public_key, oldPrivateKey);
+                if (key !== null) {
+                    out.push({ id: item.id, wrapped_key: sealToPublicKey(key, identity.publicKey) });
+                }
+            }
+            return out;
+        };
+        // Entries that fail to unseal (corrupt, or sealed to an even older
+        // keypair) are skipped - they were already unreadable, so leaving them
+        // behind loses nothing. That is per-entry reasoning, and deliberately
+        // does not extend to an inventory that never arrived.
+        body.rewrapped_conversation_keys = rewrapEntries(payload.conversation_keys);
+        body.rewrapped_group_envelopes = rewrapEntries(payload.group_envelopes);
     }
 
     const response = await postJson(cfg().urls.reset, body);
     if (!response.ok) {
         return null;
     }
-    const payload = (await response.json()) as { version: number; rewrapped?: number };
+    const payload = (await response.json()) as { version: number; rewrapped?: number; not_rewrapped?: number };
     await clearProfileKeys(selfSlug);
     await putIdentity(selfSlug, { privateKey: identity.privateKey, publicKey: identity.publicKey, version: payload.version });
-    return { recoveryDisplay: recovery.display, rewrapped: payload.rewrapped ?? 0, preserved: oldPrivateKey !== null };
+    return {
+        recoveryDisplay: recovery.display,
+        rewrapped: payload.rewrapped ?? 0,
+        notRewrapped: payload.not_rewrapped ?? 0,
+        preserved: oldPrivateKey !== null,
+    };
 }
 
 //: Accepted spellings of the reset confirmation word - case-insensitive,
@@ -1049,10 +1097,11 @@ async function buildResetDialog(hasPassword: boolean, resolve: (value: string | 
                 errorEl.hidden = false;
                 return;
             }
-            if (result.rewrapped > 0) {
-                toast.success("Your keys were reset and your message history was re-encrypted - everything stays readable.");
-            } else if (!result.preserved) {
-                toast.warning("Your keys were reset. Previously encrypted messages are no longer readable on this account.");
+            const outcome = resetOutcomeMessage(result);
+            if (outcome.level === "warning") {
+                toast.warning(outcome.message);
+            } else {
+                toast.success(outcome.message);
             }
             close(result.recoveryDisplay);
         } catch {

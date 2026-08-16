@@ -9753,3 +9753,35 @@ immediately instead of querying again, so the block unwinds and Django rolls bac
 The regression test includes a control asserting the *old* shape really does poison the
 transaction. Without it the other tests would pass just as well against a plain `try/except`, and
 would prove nothing about why the savepoint exists. Verified: 69 merge tests, ruff clean.
+
+## Chunk 527 - the key reset that could destroy history a network blip made unrecoverable
+
+Read the E2EE rewrap-all write loop from chunk 525's list. The loop is fine - bounded by the
+caller's own rows, each value distinct, and the bundle swap guarded by a `select_for_update`
+version check whose comment shows the author had already reasoned about sealing threads to a
+superseded key. So the loop was a dead end and the code *around* it was the finding.
+
+Three defects, one shape: a reset can preserve all, some or none of an account's encrypted history,
+and nothing in the system was honest about which.
+
+The bad one is client-side. Re-sealing needs the old private key, so the payload is legitimately
+optional - someone who lost their key resets to get a working account back. But the inventory fetch
+that *feeds* the payload had `if (response.ok) { ... }` with no `else`, and fell through to reset
+regardless. Holding the old key means every thread could have been preserved, so a 500 on that one
+GET permanently destroyed the entire history of a user doing a voluntary rotation. The per-entry
+skip beside it ("already unreadable, so leaving them behind loses nothing") is sound reasoning per
+entry and does not extend to an inventory that never arrived - which is exactly the kind of local
+correctness that reads as global correctness.
+
+Then the two that hid it: the server returned only `rewrapped`, so no client could compute what was
+left behind (and in the failure above it has no inventory to compute from); and the toast claimed
+"everything stays readable" whenever *any* row survived, while the "old key held, nothing
+re-encrypted" case - precisely the failure above - showed **no toast at all**.
+
+Fixed all three: abort rather than reset blind, report `not_rewrapped` from the server, and a pure
+`resetOutcomeMessage()` covering all four combinations. Extracting it earned its own tests without
+needing sodium or IndexedDB, and left the `resetKeys` end-to-end gap honestly recorded rather than
+papered over. Also corrected the endpoint's `@extend_schema`, which declared a `{"ok": true}` body
+this endpoint has never returned.
+
+Verified: 87 E2EE tests, 7 new TS tests, tsc clean, ruff clean.

@@ -8056,3 +8056,55 @@ what made it the only broken one.
 Covered by `test_pin_merge_savepoints.py`, including a control test asserting that the *old* shape
 really does poison the transaction - without it, the other tests would pass equally against a plain
 `try/except` and would prove nothing about why the savepoint is there.
+
+## RESOLVED 2026-08-16: the E2EE key reset could destroy preservable history, silently
+
+Found in chunk 527, reading the E2EE "rewrap all" write loop from chunk 525's write-per-item list.
+The loop itself is fine - it is bounded by the caller's own rows, each row's value differs, and the
+bundle swap is guarded by a `select_for_update` version check whose comment shows the author was
+already thinking about exactly this hazard class. What is around it was not fine.
+
+A reset generates a new keypair and re-seals the account's conversation keys and group envelopes to
+it. Re-sealing needs the **old** private key, so the payload is optional: someone who lost their key
+cannot re-seal anything and resets purely to get a working account back, accepting the loss. That is
+correct. Three things around it were not.
+
+**1. A transient failure destroyed history the reset could have kept (`e2ee-client.ts`).**
+
+```ts
+if (oldPrivateKey !== null && cfg().urls.rewrapAll) {
+    const rewrapResponse = await fetch(cfg().urls.rewrapAll, ...);
+    if (rewrapResponse.ok) { /* build the rewrap payload */ }
+}
+// ...falls through and resets anyway
+```
+
+There was no `else`. Holding `oldPrivateKey` means every thread *could* have been preserved - so a
+500 or a dropped connection on the inventory fetch reset the account to a new key and left the
+entire history sealed to the retired one. Permanent, and caused by a network blip rather than by
+the user's choice. It now aborts; the caller already renders "please try again", and a retry costs
+nothing. The neighbouring per-entry skip ("entries that fail to unseal were already unreadable, so
+leaving them behind loses nothing") is sound reasoning *per entry* and deliberately does not extend
+to an inventory that never arrived - the comment now says so.
+
+**2. The server never said what it left behind.** The response was `{version, rewrapped}`. A client
+cannot compute the remainder without its own inventory - and in failure case 1 it has none. The
+server knows exactly, so it now returns `not_rewrapped`: the caller's own conversation keys and
+group envelopes still sealed to the retired key, counted after the swap. It is also logged.
+
+**3. The toast lied in two of four cases.** `rewrapped > 0` produced "your message history was
+re-encrypted - everything stays readable" even when 3 of 50 rows made it; and `rewrapped === 0`
+with the old key held produced **no toast at all**, so a reset that had silently lost everything
+looked identical to one that worked. The branch is now a pure exported `resetOutcomeMessage()`
+covering all four combinations, tested without needing sodium or IndexedDB.
+
+Also corrected while here: the endpoint's `@extend_schema` declared `E2EEOkResponseSerializer`
+(`{"ok": true}`), which this endpoint has never returned. It now declares a real
+`E2EEResetResponseSerializer`, with `not_rewrapped` documented as the signal that some of the
+caller's threads are permanently unreadable.
+
+Covered by four new cases in `test_e2ee.py` (including an anti-vacuity one that a complete rewrap
+reports zero loss, and one that another profile's rows are never counted as the caller's) and
+`e2ee-reset-outcome.test.ts`. What is still not covered is `resetKeys` end to end - it needs
+sodium, IndexedDB and a live config, which is why the message logic was extracted to a pure
+function rather than tested through it.

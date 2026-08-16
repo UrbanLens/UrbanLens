@@ -563,6 +563,71 @@ class RewrapAllAndResetPreservationTests(TestCase):
         )
         self.assertEqual(response.status_code, 400)
 
+    # -- What the reset left behind -------------------------------------------
+    #
+    # A payload only has to name rows the caller *owns*; it does not have to
+    # name all of them, and that is correct - someone who lost their key cannot
+    # re-seal anything and resets to get a working account back. But the rows
+    # left out are now sealed to a key that no longer exists. The server is the
+    # only party that knows how many, so it has to say.
+
+    def test_reset_reports_the_copies_it_could_not_re_seal(self) -> None:
+        me, partner = _profile(), _profile()
+        _enroll(me)
+        self._pair_key(me, partner)
+        self._group_envelope(me)
+
+        response = _client_for(me).post(reverse("e2ee.reset"), data=self._reset_body(), content_type="application/json")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["rewrapped"], 0)
+        self.assertEqual(response.json()["not_rewrapped"], 2, "a reset that preserved nothing reported no loss")
+
+    def test_a_partial_rewrap_reports_only_the_remainder(self) -> None:
+        me, partner, third = _profile(), _profile(), _profile()
+        _enroll(me)
+        kept = self._pair_key(me, partner)
+        self._pair_key(me, third)  # deliberately left out of the payload
+        self._group_envelope(me)  # and this one
+
+        response = _client_for(me).post(
+            reverse("e2ee.reset"),
+            data=self._reset_body(rewrapped_conversation_keys=[{"id": kept.pk, "wrapped_key": _b64(os.urandom(48))}]),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.json()["rewrapped"], 1)
+        self.assertEqual(response.json()["not_rewrapped"], 2)
+
+    def test_a_complete_rewrap_reports_no_loss(self) -> None:
+        """Anti-vacuity: the counter must reach zero when nothing was left behind."""
+        me, partner = _profile(), _profile()
+        _enroll(me)
+        row = self._pair_key(me, partner)
+        envelope = self._group_envelope(me)
+
+        response = _client_for(me).post(
+            reverse("e2ee.reset"),
+            data=self._reset_body(
+                rewrapped_conversation_keys=[{"id": row.pk, "wrapped_key": _b64(os.urandom(48))}],
+                rewrapped_group_envelopes=[{"id": envelope.pk, "wrapped_key": _b64(os.urandom(48))}],
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.json()["rewrapped"], 2)
+        self.assertEqual(response.json()["not_rewrapped"], 0)
+
+    def test_another_profiles_rows_are_not_counted_as_the_callers_loss(self) -> None:
+        me, partner, other = _profile(), _profile(), _profile()
+        _enroll(me)
+        self._pair_key(partner, other)
+        self._group_envelope(other)
+
+        response = _client_for(me).post(reverse("e2ee.reset"), data=self._reset_body(), content_type="application/json")
+
+        self.assertEqual(response.json()["not_rewrapped"], 0)
+
 
 # -- create_direct_message with ciphertext ---------------------------------------
 

@@ -135,3 +135,22 @@ class E2EEResetRequestSerializer(serializers.Serializer):
     password_wrap_salt = serializers.CharField(required=False, allow_blank=True)
     kdf_opslimit = serializers.IntegerField(required=False)
     kdf_memlimit = serializers.IntegerField(required=False)
+
+
+class E2EEResetResponseSerializer(serializers.Serializer):
+    """POST reset response: the new bundle version and what happened to history.
+
+    Declared explicitly because the endpoint never returned the generic
+    ``{"ok": true}`` its schema previously claimed, and because
+    ``not_rewrapped`` is the only signal a client gets that some of the
+    caller's threads are now permanently unreadable.
+    """
+
+    version = serializers.IntegerField(help_text="The new key bundle version.")
+    rewrapped = serializers.IntegerField(help_text="Key copies re-sealed to the new keypair; these stay readable.")
+    not_rewrapped = serializers.IntegerField(
+        help_text=(
+            "The caller's own conversation keys and group envelopes that were NOT re-sealed. "
+            "They remain sealed to the retired key and are permanently unreadable - surface this to the user."
+        ),
+    )
