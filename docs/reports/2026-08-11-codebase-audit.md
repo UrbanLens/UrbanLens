@@ -10888,3 +10888,42 @@ coordinates to a server that then discards them. Nothing is stored, but a user w
 not expect the coordinates to be sent at all, and the sibling path three thousand lines up already
 declines to send them. The wiring is now gated the same way. No test added - the guarantee that
 matters is the server's, and `test_memories_toggles` already covers it.
+
+## Chunk 563 - a rotation that could never finish
+
+Mining the recent encryption commits (`7aa4e892`, `3959000f`). The command and its 15 tests are
+good: columns are discovered from the app registry rather than a list, the dry run deliberately
+opens no transaction, rotation is idempotent, undecryptable rows are reported per-pk.
+
+One hypothesis died cheaply. `_rotate_column` does `cursor.fetchall()` over a whole column and
+updates row-by-row inside one transaction, which would be a memory and lock-duration problem on a
+large table - but every encrypted column belongs to a per-user model (`Profile` and its 8 columns,
+`ProfileEmail`, `ProfileNote`, the OAuth account rows, `TOTPDevice`, `SiteSettings`). Nothing here
+scales with content volume, so the shape is fine as written.
+
+What survives is an operational dead end. Any row that no configured key can decrypt makes the
+command raise `CommandError`, and `docs/DATA_ENCRYPTION.md` gates the whole procedure on it: *"do
+not drop a key until this completes cleanly."* Such rows demonstrably exist in this codebase's
+history - the test file's own docstring cites five separate production `InvalidToken` incidents,
+each of which left rows written under a key that is now gone. One of those rows makes every future
+key rotation impossible to complete, forever, by hand-editing the database or not at all.
+
+Blocking protects nothing. A value no configured key can read is already lost; retiring a key takes
+nothing further from it. Meanwhile refusing to finish leaves every *other* value still dependent on
+the key being retired - the actual risk the procedure exists to remove.
+
+`--skip-undecryptable` now lists those rows and completes. The default is unchanged, and the error
+message points at the flag rather than leaving the operator to find it. `docs/DATA_ENCRYPTION.md`
+documents when it is legitimate to reach for, and when it is not.
+
+One precision worth recording, because it changes what the fix is: the `CommandError` is raised
+*after* the atomic block commits, so the rows were always rewritten regardless. The bug was never
+that rotation did not happen - it is that the command could not exit cleanly, and the documented
+procedure will not let an operator proceed without that. The fix is to the exit path and the
+guidance, not to the rewriting.
+
+The new test writes its healthy row under the key being *retired* and reads it back with that key
+no longer configured, so it can only pass if rotation actually rewrote the value rather than merely
+not raising. Verified to bind: disabling the skip fails that test and only that test. My first
+version of it was weaker - it wrote the healthy row under the new key, where the assertion would
+have held whether or not anything was rotated.

@@ -32,6 +32,8 @@ from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 OLD_KEY = "old-field-encryption-key-for-tests"
 NEW_KEY = "new-field-encryption-key-for-tests"
+#: Written under, then never configured again - the row it encrypted is unrecoverable.
+LOST_KEY = "lost-field-encryption-key-for-tests"
 
 
 @contextmanager
@@ -181,6 +183,47 @@ class RotateFieldEncryptionCommandTests(TestCase):
             Profile.objects.filter(pk=profile.pk).update(bio="orphaned")
 
         # Neither the active key nor any fallback can read this row.
+        with using_keys(NEW_KEY), pytest.raises(CommandError, match="could not be decrypted"):
+            call_command("rotate_field_encryption", stdout=StringIO(), stderr=StringIO())
+
+    def test_skip_undecryptable_finishes_the_rotation(self) -> None:
+        """One unreadable row must not be able to block a rotation forever.
+
+        A value no configured key can decrypt is already lost, so retiring a key
+        takes nothing further from it - while refusing to finish leaves every
+        other value still depending on the key being retired. The codebase has
+        five separate InvalidToken self-heals, so such rows demonstrably occur.
+
+        The healthy row is deliberately written under the key being *retired*,
+        and afterwards read back with that key no longer configured. It can only
+        pass if the rotation actually rewrote it, rather than merely not raising.
+        """
+        with using_keys(LOST_KEY):
+            orphan: Profile = baker.make(Profile)
+            Profile.objects.filter(pk=orphan.pk).update(bio="orphaned")
+        with using_keys(OLD_KEY):
+            healthy: Profile = baker.make(Profile)
+            # update() runs the field's get_prep_value, so plaintext in means encrypted at rest.
+            Profile.objects.filter(pk=healthy.pk).update(bio="readable")
+
+        # Rotating to NEW_KEY, retiring OLD_KEY. LOST_KEY is configured nowhere.
+        with using_keys(NEW_KEY, [OLD_KEY]):
+            out, err = StringIO(), StringIO()
+            call_command("rotate_field_encryption", "--skip-undecryptable", stdout=out, stderr=err)
+
+            self.assertIn("undecryptable", out.getvalue())
+            self.assertIn(f"pk={orphan.pk}", err.getvalue())
+
+        # OLD_KEY is now gone. The healthy value survives only because it was rewritten.
+        with using_keys(NEW_KEY):
+            self.assertEqual(Profile.objects.get(pk=healthy.pk).bio, "readable")
+
+    def test_the_flag_is_required_to_skip(self) -> None:
+        """Without it the command must still refuse - the safe default stands."""
+        with using_keys(OLD_KEY):
+            profile: Profile = baker.make(Profile)
+            Profile.objects.filter(pk=profile.pk).update(bio="orphaned")
+
         with using_keys(NEW_KEY), pytest.raises(CommandError, match="could not be decrypted"):
             call_command("rotate_field_encryption", stdout=StringIO(), stderr=StringIO())
 

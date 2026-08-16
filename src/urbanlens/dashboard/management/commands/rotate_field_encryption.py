@@ -71,6 +71,11 @@ class Command(BaseCommand):
             parser: The argument parser supplied by Django.
         """
         parser.add_argument("--dry-run", action="store_true", help="Report what would be re-encrypted without writing.")
+        parser.add_argument(
+            "--skip-undecryptable",
+            action="store_true",
+            help="Finish the rotation even if some values cannot be decrypted by any configured key, listing them instead of aborting.",
+        )
 
     def handle(self, *args: Any, **options: Any) -> None:
         """Re-encrypt every discovered column.
@@ -81,9 +86,10 @@ class Command(BaseCommand):
 
         Raises:
             CommandError: When one or more rows could not be decrypted with any
-                configured key.
+                configured key, unless ``--skip-undecryptable`` was passed.
         """
         dry_run: bool = options["dry_run"]
+        skip_undecryptable: bool = options["skip_undecryptable"]
 
         # Read straight from settings rather than trusting a key set cached
         # earlier in this process (e.g. by an import that touched a model).
@@ -118,11 +124,20 @@ class Command(BaseCommand):
                 self.stderr.write(self.style.ERROR(f"  {failure}"))
             if len(failures) > 20:
                 self.stderr.write(self.style.ERROR(f"  ... and {len(failures) - 20} more."))
-            raise CommandError(
-                f"{len(failures)} value(s) could not be decrypted with any configured key and were left untouched. "
-                "Add the key they were written under to UL_FIELD_ENCRYPTION_KEY_FALLBACKS and re-run; do not drop any "
-                "key until this command completes cleanly.",
-            )
+            if not skip_undecryptable:
+                raise CommandError(
+                    f"{len(failures)} value(s) could not be decrypted with any configured key and were left untouched. "
+                    "Add the key they were written under to UL_FIELD_ENCRYPTION_KEY_FALLBACKS and re-run; do not drop any "
+                    "key until this command completes cleanly. If the key is genuinely gone, re-run with "
+                    "--skip-undecryptable: those values are already unreadable, so leaving them behind costs nothing "
+                    "that dropping the retired key would not have cost anyway.",
+                )
+            # Aborting here would protect nothing. A value no configured key can
+            # read is already lost, so retiring a key takes nothing further from
+            # it - while refusing to finish leaves every *other* value still
+            # dependent on the key being retired, which is the actual risk. The
+            # rows are reported either way so they can be cleaned up separately.
+            self.stdout.write(self.style.WARNING(f"{len(failures)} undecryptable value(s) left as they were; they were already unreadable under every configured key."))
 
         summary = "Would re-encrypt" if dry_run else "Re-encrypted"
         self.stdout.write(self.style.SUCCESS(f"{summary} {rotated_total} value(s) under the active key."))

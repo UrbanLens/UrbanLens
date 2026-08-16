@@ -54,6 +54,18 @@ Never swap the key in one step — that is the data-loss path. Roll it:
    are covered automatically), rewrites each value under the active key, and **exits non-zero if
    any row could not be decrypted** — do not proceed past a failure, and do not drop a key until
    this completes cleanly.
+
+   If the failure is a row whose key is genuinely gone — a leftover from an earlier incident,
+   not the key you are retiring — that row can never decrypt again, and waiting will not change
+   that. Re-run with `--skip-undecryptable`, which lists those rows and completes anyway:
+
+   ```bash
+   python manage.py rotate_field_encryption --skip-undecryptable
+   ```
+
+   Use it only once you have confirmed the listed rows are unrecoverable rather than a missing
+   fallback you could still supply. Everything else is rotated exactly as normal, so the retired
+   key is safe to drop; the listed rows were already unreadable before you started.
 3. **Drop the retired key** from `UL_FIELD_ENCRYPTION_KEY_FALLBACKS`. Deploy.
 
 To verify step 2 really worked, remove the old key and confirm the app still reads the data —
