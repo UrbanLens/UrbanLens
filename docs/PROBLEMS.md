@@ -8994,3 +8994,31 @@ No changes warranted. Recorded mainly for the next person adding a cache: the ru
 follows is *the key must contain everything that changes the value* - which is why the provider
 flags are in the places key and why the profile is in the map-pins key, and why neither needed a
 user check at read time while the export status did.
+
+### Verified safe 2026-08-16 (chunk 550): no API serializer writes past its column
+
+Applied the divergence lens to a fresh pair - **serializer bounds versus the model column they
+write**. An unbounded serializer field feeding a bounded column is a 500 where a 400 belongs, since
+Postgres raises on `varchar` overflow and nothing calls `full_clean()` on these paths.
+
+19 writable `CharField`s across the external-API serializers declare no `max_length`. None is a
+defect:
+
+- Most write nothing - cursors, bboxes, `geo_bounds`, `sources` are query parameters.
+- The rest target unbounded `TextField`s (`Label.description`, `Label.keywords`,
+  `CustomFieldValue`'s value column, message ciphertext).
+- The two that *do* reach a bounded column are validated before the write:
+  `LabelBulkEditSerializer.color` goes through `clean_color`, which can only return a hex string or
+  the default, and `PinBulkEditSerializer.description` is length-checked against
+  `MAX_PIN_DESCRIPTION_LENGTH` by the same `text_length_error` call the website's bulk edit uses.
+
+**A refinement to the divergence lens.** `AvatarEmojiSerializer` documents an API/site divergence
+that is deliberate: the site's picker silently substitutes a default for an unrecognised colour,
+while the API refuses, because "an API client that sent `purpel` should be told, not handed a grey
+fox and left to wonder". Its colour is constrained to a closed set rather than a length - stronger
+than the bound this sweep was looking for, and invisible to a scan for `max_length`.
+
+Two lessons for the next pass with this lens: divergence between two surfaces is not automatically a
+defect, and this codebase marks the intentional ones in the docstring; and a field can be *more*
+constrained than the property being swept, so absence of the thing you are scanning for is not
+absence of validation.

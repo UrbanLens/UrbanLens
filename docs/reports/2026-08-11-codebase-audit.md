@@ -10472,3 +10472,28 @@ Fourth chunk in this stretch with no changes warranted. The pattern across the l
 consistent and worth naming: the areas this session has swept were largely already sound, and the
 defects have clustered in *divergence* - one of two paths, one of two callers, one of two guards -
 rather than in whole features being wrong.
+
+## Chunk 550 - serializer bounds versus column bounds, and where the lens over-reaches
+
+Divergence has been this session's most productive lens, so this chunk pointed it at a pair nobody
+had checked: does any external-API serializer accept a string longer than the column it writes?
+Postgres raises on varchar overflow and none of these paths call `full_clean()`, so the answer would
+have been a 500 where a 400 belongs.
+
+19 unbounded writable `CharField`s, none of them defects. Most are query parameters that write
+nothing; the rest target unbounded `TextField`s; and the two reaching a bounded column are validated
+first - `clean_color` for the label colour, and the same `text_length_error` check the website's own
+bulk edit makes for the pin description.
+
+The useful output is a correction to the lens rather than a fix. `AvatarEmojiSerializer` diverges
+from the site *on purpose* - the site substitutes a default for an unrecognised colour, the API
+refuses - and says why in its docstring: "an API client that sent `purpel` should be told, not handed
+a grey fox and left to wonder." Its colour field is constrained to a closed set, which is stricter
+than any `max_length` and completely invisible to a scan looking for one.
+
+So: divergence between two surfaces is not automatically a defect, this codebase annotates the
+deliberate ones, and a field can be more constrained than the property being swept - absence of the
+thing you are scanning for is not absence of validation. That last one is the same error shape as
+chunk 536's four loudest false positives, arriving from a different direction.
+
+Fifth chunk in this stretch with no changes warranted.
