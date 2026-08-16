@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from urbanlens.dashboard.models.images.model import Image, MediaKind
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.wiki.model import Wiki
+from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.media.images import compute_checksum, image_upload_error
 from urbanlens.dashboard.services.media.storage import per_profile_upload_lock, quota_error_for_upload
 
@@ -116,6 +117,9 @@ def upload_photo_for_owner(owner: Pin | Wiki, profile: Profile, image_file: Uplo
         if (quota_error := quota_error_for_upload(profile, image_file.size)) is not None:
             return UploadRejection(quota_error, 413)
 
+        caption_error = column_length_error(Image, "caption", caption, "Caption")
+        if caption_error:
+            return UploadRejection(caption_error, 400)
         return Image.objects.create(
             image=image_file,
             profile=profile,

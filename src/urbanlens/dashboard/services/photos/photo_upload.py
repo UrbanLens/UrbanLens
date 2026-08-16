@@ -22,6 +22,7 @@ import posixpath
 from typing import TYPE_CHECKING
 
 from urbanlens.dashboard.models.images.model import Image, MediaKind
+from urbanlens.dashboard.services.core.text_limits import column_length_error
 
 if TYPE_CHECKING:
     from django.core.files.uploadedfile import UploadedFile
@@ -134,6 +135,10 @@ def upload_photo(
     if upload_error:
         message, status = upload_error
         raise PhotoUploadError(message, status)
+
+    caption_error = column_length_error(Image, "caption", caption, "Caption")
+    if caption_error:
+        raise PhotoUploadError(caption_error, 400)
 
     checksum = compute_checksum(file_obj)
     if Image.objects.filter(profile=profile, checksum=checksum).exists():

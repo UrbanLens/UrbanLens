@@ -24,6 +24,7 @@ from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinPartner, SafetyCheckinPartnerStatus, SafetyCheckinStatus, SafetyContactOptOutScope
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
 from urbanlens.dashboard.services.core.pagination import get_page
+from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.dashboard.services.map.map_snapshot import default_markup_map_title
 from urbanlens.dashboard.services.media.images import delete_stored_file, image_to_gallery_json, parse_reposition_payload
 from urbanlens.dashboard.services.social.connections import get_connections
@@ -1418,6 +1419,11 @@ class SafetyGalleryView(LoginRequiredMixin, View):
             message, status = upload_error
             return JsonResponse({"error": message}, status=status)
 
+        caption = request.POST.get("caption", "").strip()
+        caption_error = column_length_error(Image, "caption", caption, "Caption")
+        if caption_error:
+            return JsonResponse({"error": caption_error}, status=400)
+
         checksum = compute_checksum(image_file)
         if Image.objects.filter(safety_checkin=checkin, checksum=checksum).exists():
             return JsonResponse({"error": "That photo is already on this check-in."}, status=409)
@@ -1432,7 +1438,7 @@ class SafetyGalleryView(LoginRequiredMixin, View):
                 safety_checkin=checkin,
                 location=checkin.destination_location,
                 profile=profile,
-                caption=request.POST.get("caption", "").strip() or None,
+                caption=caption or None,
                 checksum=checksum,
                 file_size=image_file.size,
             )

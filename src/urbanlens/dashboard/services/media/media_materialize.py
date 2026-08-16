@@ -26,6 +26,7 @@ import requests
 
 from urbanlens.dashboard.models.images.model import Image, ImageSource, QuotaExemption
 from urbanlens.dashboard.models.images.relevance import media_item_key
+from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.media.images import compute_checksum
 from urbanlens.dashboard.services.security.url_safety import UnsafeUrlError, ensure_public_http_url
 
@@ -62,7 +63,7 @@ _PANEL_KEY_TO_IMAGE_SOURCE = {
     "cris_building": ImageSource.CRIS,
 }
 
-_CAPTION_MAX_LENGTH = Image._meta.get_field("caption").max_length  # noqa: SLF001 - _meta is public API despite the underscore
+_CAPTION_MAX_LENGTH = column_max_length(Image, "caption")
 
 
 def _truncated_caption(caption: str) -> str | None:

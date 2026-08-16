@@ -10764,3 +10764,44 @@ Still unverified, carried to the next chunk: `MessagingKeyBundle.public_key`/`pa
 bounds each token of a comma-joined list but neither the token count nor any single token's length.
 `MediaRelevance.item_key` is safe but by coincidence worth noting - it stores a sha1 hexdigest in a
 40-wide column, which fits exactly and would not survive a change of hash.
+
+## Chunk 560 - finishing chunk 559's list, and one place the codebase had already got it right
+
+The three candidates chunk 559 found but had not driven, resolved:
+
+**`MessagingKeyBundle` - safe.** `MAX_PUBLIC_KEY_LENGTH` is 128 and `MAX_SALT_LENGTH` is 64, exactly
+matching `public_key` and `password_wrap_salt`. Deliberate, and worth leaving alone.
+
+**`SiteSettings.default_name_source_priority` - real, and in two ways.** The submitted list is
+filtered with `re.fullmatch(r"[a-z0-9_-]+", slug)`, which constrains each token's *characters* while
+saying nothing about its length or how many tokens arrive. Both a single 501-character token and 500
+copies of `osm` are a `DataError` 500 on the site-admin settings page; both are now checked against
+the column after the join, where the constraint actually applies.
+
+**`Image.caption` - real, but only on three of the six paths, and finding that out mattered.** The
+provider paths (pin media, wiki media, albums, the overlay media branch) all funnel into
+`media_materialize._truncated_caption`, which already exists and already reads the column width -
+someone hit this before, for Wikimedia captions that are whole page descriptions, and solved it
+properly for provider text. The gap is the paths where the *user* types the caption:
+`photo_upload.upload_photo`, `uploads.upload_photo_for_owner`, and the safety check-in gallery's
+direct `Image.objects.create`. Each now refuses with its own module's existing convention -
+`PhotoUploadError`, `UploadRejection`, and a 400 - so the caller's error handling is unchanged.
+
+Two process notes.
+
+The chunk-559 scan reported one of those six caption sites, not six. The others reach the column
+through a service call rather than a visible `Image.objects.create`, which its receiver-resolution
+step cannot see through. Worth stating plainly, because that scan's clean 43-site result was used
+last chunk to declare a class closed: it is sound for what it examines and blind past a function
+boundary.
+
+The first caption test I wrote drove the map-overlay endpoint and **passed - vacuously**. That path
+fetches a remote image before it ever reaches the column, which the test network guard refuses, so
+the assertion was never exercised. A passing test that cannot fail is worse than no test; it was
+re-pointed at the check-in gallery, which takes the file directly, and then failed as it should.
+
+Also folded `media_materialize`'s local `_CAPTION_MAX_LENGTH` onto the shared `column_max_length`
+helper, since both existed for the same reason and had independently written the same `_meta`
+suppression. Doing so split an import line whose prefix my edit matched, which broke every test in
+the run until it was repaired - the failure was loud and immediate, which is the only reason it cost
+minutes rather than a consolidation.

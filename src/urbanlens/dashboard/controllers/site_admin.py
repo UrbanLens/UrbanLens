@@ -37,6 +37,7 @@ from urbanlens.dashboard.models.site_settings import (
 from urbanlens.dashboard.services.admin.infrastructure_stats import _format_duration
 from urbanlens.dashboard.services.admin.site_admin import SITE_ADMIN_GROUP_NAME, complete_site_admin_onboarding
 from urbanlens.dashboard.services.core.json_safety import safe_json_for_script
+from urbanlens.dashboard.services.core.text_limits import column_length_error
 from urbanlens.UrbanLens.settings.app import settings as app_settings
 
 logger = logging.getLogger(__name__)
@@ -189,7 +190,14 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
             # Unknown slugs are tolerated: the name resolver ignores sources it
             # never sees, so a disabled plugin's slug can stay configured.
             slugs = [token.strip().lower() for token in request.POST.get("default_name_source_priority", "").split(",")]
-            settings.default_name_source_priority = ",".join(slug for slug in slugs if re.fullmatch(r"[a-z0-9_-]+", slug))
+            # The regex constrains each token's characters, not its length, and
+            # says nothing about how many tokens arrive - so the joined result
+            # has to be checked against the column it is going into.
+            joined = ",".join(slug for slug in slugs if re.fullmatch(r"[a-z0-9_-]+", slug))
+            priority_error = column_length_error(SiteSettings, "default_name_source_priority", joined, "Name source priority")
+            if priority_error:
+                return HttpResponse(priority_error, status=400)
+            settings.default_name_source_priority = joined
 
         if "enrichment_enabled" in request.POST:
             settings.enrichment_enabled = request.POST.get("enrichment_enabled") in {"1", "true", "on", "True"}
