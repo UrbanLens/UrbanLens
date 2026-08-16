@@ -10219,3 +10219,34 @@ What changed instead is what a recurrence will tell us: both assertions now prin
 The next occurrence yields data rather than `assert 1.0 == 1.0`.
 
 Thirteen green consolidations, one aborted, one open unexplained failure. That is the honest state.
+
+## Chunk 541 - beat-task idempotency, and picking the right fix rather than the familiar one
+
+New thread: Celery delivers at least once, and a sweep that outruns its interval overlaps itself, so
+which beat tasks tolerate a duplicate run? The codebase already answers it with
+`services/core/locks.acquire_lock`, whose docstring even prescribes the TTL. Ten of the twenty-four
+beat tasks take it; fourteen do not.
+
+Reading the fourteen dissolves almost all of them - deletes find nothing the second time,
+recomputes converge. The one that looked worst, `advance_pwyw_usage_ledgers`, moves billing state
+and is nonetheless idempotent by construction: it walks forward from a cursor, stops when the next
+period has not started, and returns before writing if nothing advanced.
+
+`send_account_deletion_reminders` is the exception, and it is the only unlocked task whose
+repetition a *user* sees: a selection-time filter, an email, and only then the marker - so two
+overlapping runs both send "your account will be deleted tomorrow". Its docstring claims it is
+idempotent via that marker, which is the same false-confidence shape this audit recorded for
+`FriendInvitation.mark_accepted`. Its three sibling reminder sweeps all hold the lock.
+
+The part worth keeping is that the obvious fix was the wrong one. This audit has a precedent for
+exactly this shape - claim before the side effect, as `mark_accepted` now does - and applying it
+here would have been a mistake: the failure directions are not symmetric. A duplicate is a second
+warning email; a lost one is no warning at all before a permanent deletion. A lock gives
+no-duplicate *and* no-loss, because a skipped run leaves the marker unset for the next tick. A
+precedent is a hypothesis about the fix, not the fix.
+
+I also caught myself inventing a parallel mechanism first - a `select_for_update` loop - before
+checking whether the codebase already had a convention for this. It did, applied to ten tasks.
+Reverted and used it.
+
+Verified: 46 account-deletion tests, ruff clean.

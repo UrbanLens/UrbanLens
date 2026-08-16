@@ -2353,19 +2353,42 @@ def hard_delete_expired_direct_messages(batch_size: int = 2000, max_per_run: int
     return deleted
 
 
+#: Overlap lock for the deletion-reminder sweep, matching the safety reminder
+#: tasks above. It is the only hourly beat task whose repetition is *visible to
+#: a user*: `due_for_deletion_reminder` filters on
+#: `deletion_reminder_sent_at__isnull=True`, which guards at selection time,
+#: while `send_deletion_reminder` emails first and marks afterwards - so two
+#: overlapping runs both select the same profile and both send.
+#:
+#: A lock rather than the claim-before-side-effect fix used elsewhere in this
+#: codebase, because the failure directions are not symmetric here: a duplicate
+#: is a second "your account will be deleted tomorrow" notice, while a lost one
+#: is *no* warning before a permanent deletion. A lock loses nothing - the
+#: skipped run leaves the marker unset, so the next tick sends it.
+_DELETION_REMINDER_LOCK_CACHE_KEY = "urbanlens:account:deletion-reminder-lock"
+_DELETION_REMINDER_LOCK_TIMEOUT_SECONDS = 3300  # just under the hourly beat interval
+
+
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def send_account_deletion_reminders() -> int:
     """Send the "1 day left" reminder for every account approaching its hard delete."""
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.services.profile.account_deletion import send_deletion_reminder
 
-    count = 0
-    for profile in Profile.objects.due_for_deletion_reminder():
-        send_deletion_reminder(profile)
-        count += 1
-    if count:
-        logger.info("Sent %s account deletion reminder(s)", count)
-    return count
+    _lock_token = acquire_lock(_DELETION_REMINDER_LOCK_CACHE_KEY, _DELETION_REMINDER_LOCK_TIMEOUT_SECONDS)
+    if _lock_token is None:
+        logger.info("send_account_deletion_reminders: a previous run is still in flight; skipping")
+        return 0
+    try:
+        count = 0
+        for profile in Profile.objects.due_for_deletion_reminder():
+            send_deletion_reminder(profile)
+            count += 1
+        if count:
+            logger.info("Sent %s account deletion reminder(s)", count)
+        return count
+    finally:
+        release_lock(_DELETION_REMINDER_LOCK_CACHE_KEY, _lock_token)
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})

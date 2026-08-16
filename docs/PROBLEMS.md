@@ -8698,3 +8698,39 @@ What did change is diagnosability. Both assertions now carry a message printing 
 **and** `float.hex()`, so a recurrence is actionable straight from the run output: a one-ulp
 difference is invisible in decimal repr and obvious in hex. If it returns, the next reader gets the
 actual values instead of `assert 1.0 == 1.0`.
+
+## RESOLVED 2026-08-16: the account-deletion reminder could email twice; every sibling sweep was already locked
+
+Chunk 541 opened a thread on beat-task idempotency, since Celery delivers at least once and a sweep
+that outruns its own interval overlaps itself.
+
+This codebase already has the answer: `services/core/locks.acquire_lock`, a cache-based overlap lock
+whose docstring even prescribes the TTL ("just under the task's beat interval, so a tick is never
+skipped"). An AST sweep of all **24** beat-scheduled tasks shows 10 take it and 14 do not.
+
+**The 14 are almost all correct.** Reading them rather than reporting them: `prune_*`,
+`hard_delete_expired_*`, `delete_expired_safety_checkins` and `cleanup_vestigial_assets_task` delete
+rows, so a second run finds nothing; `upgrade_placeholder_pin_names` and `sweep_achievements`
+recompute to the same result; `sync_stripe_subscriptions` reconciles from Stripe. The one that
+looked most dangerous - `advance_pwyw_usage_ledgers`, which moves billing state - is idempotent *by
+construction*: it walks forward from `usage_covered_until` and stops as soon as the next period has
+not started, so a repeat run advances nothing and returns before writing, and two concurrent runs
+starting from the same cursor compute the same target rather than stacking.
+
+**One is a real gap: `send_account_deletion_reminders`.** It is the only unlocked beat task whose
+repetition is *visible to a user*. `due_for_deletion_reminder` filters on
+`deletion_reminder_sent_at__isnull=True` - a selection-time guard - and `send_deletion_reminder`
+creates the notification, sends the email, and only then stamps the marker. Two overlapping runs both
+select the same profile and both send, so the user gets two "your account will be deleted tomorrow"
+notices. Its own docstring claims "Idempotent via `deletion_reminder_sent_at`", which is the same
+false-confidence shape recorded for `FriendInvitation.mark_accepted`.
+
+Its three sibling reminder sweeps - `send_due_checkin_reminders`, `send_final_checkin_warnings`,
+`escalate_overdue_checkins` - all take the lock. The convention was applied everywhere it was needed
+except here.
+
+**Fixed with the lock, not with a claim-before-send**, and the distinction is the point. The
+claim-first fix used for `FriendInvitation.mark_accepted` is wrong for this task because the failure
+directions are not symmetric: a duplicate is a second warning email, while a lost one is *no* warning
+before a permanent account deletion. A lock loses nothing - the skipped run leaves the marker unset,
+so the next tick sends it - which the regression test asserts directly.
