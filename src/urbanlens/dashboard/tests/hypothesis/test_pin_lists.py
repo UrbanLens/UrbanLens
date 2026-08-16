@@ -615,3 +615,77 @@ class PinListItemQuerySetTests(TestCase):
         PinListItem.objects.create(pin_list=self.other_list, pin=pin)
 
         self.assertIsNone(PinListItem.objects.membership(self.pin_list, pin))
+
+
+class PinListCreateRefusalContractTests(TestCase):
+    """What `lists.create` says when it refuses, which two pages now depend on.
+
+    The map and location pages' "create a list and add these pins" button used
+    to call `r.json()` on every response, in a chain with no `.catch`. This
+    endpoint answers a duplicate name with **409 and a plain-text sentence**,
+    not JSON - so `r.json()` threw into an unhandled rejection and the button
+    did nothing at all: no toast, no closed dialog, name still in the box. That
+    is the likeliest failure this feature has.
+
+    Both callers now go through `ulSendJson`, which surfaces a short plain-text
+    body as the error message (see `fetch-json.ts`). These tests pin the half
+    of that contract the server owns: the status, and a body worth showing.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.user = baker.make(User)
+        self.profile = self.user.profile
+        self.client.force_login(self.user)
+
+    def _create(self, **body):
+        return self.client.post(
+            reverse("lists.create"),
+            data=json.dumps(body),
+            content_type="application/json",
+            headers={"accept": "application/json"},
+        )
+
+    def test_a_duplicate_name_is_refused_with_409(self) -> None:
+        PinList.objects.create(profile=self.profile, name="Water towers")
+        response = self._create(name="Water towers")
+        self.assertEqual(response.status_code, 409)
+
+    def test_the_refusal_body_is_a_sentence_a_toast_can_show(self) -> None:
+        PinList.objects.create(profile=self.profile, name="Water towers")
+        body = self._create(name="Water towers").content.decode()
+
+        self.assertIn("already have a list with that name", body)
+        # `fetch-json.ts` only surfaces a short, single-line, markup-free body.
+        self.assertNotIn("<", body)
+        self.assertNotIn("\n", body.strip())
+        self.assertLessEqual(len(body), 200)
+
+    def test_a_duplicate_name_creates_nothing(self) -> None:
+        PinList.objects.create(profile=self.profile, name="Water towers")
+        self._create(name="Water towers")
+        self.assertEqual(PinList.objects.filter(profile=self.profile, name="Water towers").count(), 1)
+
+    def test_another_profiles_list_does_not_block_the_name(self) -> None:
+        other = baker.make(User).profile
+        PinList.objects.create(profile=other, name="Water towers")
+
+        response = self._create(name="Water towers")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(PinList.objects.filter(profile=self.profile, name="Water towers").exists())
+
+    def test_a_blank_name_is_refused_with_a_showable_sentence(self) -> None:
+        response = self._create(name="   ")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("required", response.content.decode())
+
+    def test_success_returns_the_uuid_the_caller_adds_pins_with(self) -> None:
+        """Anti-vacuity: the happy path the two callers chain onto must still work."""
+        response = self._create(name="Water towers")
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertEqual(str(PinList.objects.get(profile=self.profile, name="Water towers").uuid), payload["uuid"])

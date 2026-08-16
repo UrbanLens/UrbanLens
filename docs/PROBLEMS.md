@@ -8108,3 +8108,59 @@ reports zero loss, and one that another profile's rows are never counted as the 
 `e2ee-reset-outcome.test.ts`. What is still not covered is `resetKeys` end to end - it needs
 sodium, IndexedDB and a live config, which is why the message logic was extracted to a pure
 function rather than tested through it.
+
+## RESOLVED 2026-08-16: "create a list and add these pins" did nothing at all on a duplicate name
+
+Chunk 528 generalised chunk 527's E2EE bug into a sweep. That bug was *not* the already-swept
+"mutating `fetch` with no `.ok` check" class - it had a check, and the failure branch was simply
+empty. So this pass looked for the distinct shape: **a success guard whose failure path silently
+falls through**, plus fire-and-forget chains with no `.catch` at all.
+
+Two scans, both read rather than counted:
+
+- 21 positive `if (resp.ok) { ... }` guards, 7 without an `else`. Six are the early-return idiom
+  (the failure handling follows the block rather than sitting in an `else`) and are correct -
+  `messages/index.html` ×3, `confirm-dialog.ts`, `_chat_panel.html`, `e2ee-client.ts`. Worth
+  recording so the next sweep does not re-flag them: "no else" is not the signal, "no failure
+  path" is.
+- 144 promise-style fetch chains, 17 with no `.catch`, narrowed to 11 that are also fire-and-forget
+  (the rest `return` the promise, so their caller owns the failure - the false-positive class the
+  2026-08-07 sweep already recorded).
+
+**The real finding, in two copies.** `createListAndAddPins` exists in both `pages/map/index.html`
+and `pages/location/index.html`, and both did:
+
+```js
+}).then((r) => r.json()).then((data) => { if (data.ok) { ... } });
+```
+
+`lists.create` answers a duplicate name with **409 and the plain text** "You already have a list
+with that name." - not JSON. So `r.json()` threw, into a chain with **no `.catch`**: an unhandled
+rejection. The user clicked the button and *nothing happened* - no toast, no closed dialog, the
+name still in the box. That is the likeliest failure this feature has.
+
+The two copies had drifted, which made the second one worse than it looked: the location page has
+an `else` that toasts "Could not create that list", and it is **dead code** - reaching it requires
+the endpoint to return JSON with `ok: false`, which it never does. The map copy has no else at all.
+The drift is visible fifteen lines away in both files: `addPinsToList`, immediately above, checks
+`response.ok`, handles 409 explicitly, and toasts. Same file, same dialog, opposite care - the same
+shape recorded on 2026-08-07 ("the map page already had `_fetchJson` doing `if (!resp.ok) throw`
+while the two PATCH writes in the same file did not").
+
+**Fixed** by routing both through `window.ulSendJson`, which since chunk 525 surfaces a short
+plain-text refusal as the error message - so the user now sees the server's own sentence. Also
+added the missing `.catch` to the pin-list reorder save (`pin_lists/detail.html`), where the new
+order is already applied in the DOM, so a silent failure reads as a successful save until the next
+page load undoes it.
+
+Server-side, `lists.create` had **no tests at all**. `PinListCreateRefusalContractTests` now pins
+the half of the contract the client depends on: 409 for a duplicate, a body that is short,
+single-line and markup-free (the conditions `fetch-json.ts` requires to show it), that another
+profile's identical list name does not block it, and that the success path still returns the uuid
+the caller chains onto.
+
+**Still unread from the fire-and-forget list** (9 sites): `map-annotations.ts:1712`,
+`_photo_gallery.html:383`, `map/index.html:3928` (`addPinsToList` - checks `ok`, so only a network
+error is silent), `memories/photos.html:401`, `settings/index.html:2331`, `trips/detail.html:1593`,
+`location/index.html:979`, `pin_lists/detail.html:523`. Each needs judging on its own, exactly as
+the 2026-08-07 entry concluded for the ~30 it left - several are legitimately best-effort.

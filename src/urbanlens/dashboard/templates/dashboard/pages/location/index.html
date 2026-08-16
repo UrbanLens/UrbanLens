@@ -994,18 +994,19 @@
         const nameInput = document.getElementById('add-to-list-new-name');
         const name = (nameInput.value || '').trim();
         if (!name) { nameInput.focus(); return; }
-        fetch("{% url 'lists.create' %}", {
-            method: 'POST',
-            headers: { 'X-CSRFToken': "{{ csrf_token }}", 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({ name }),
-        }).then((r) => r.json()).then((data) => {
-            if (data.ok) {
+        // The `data.ok === false` branch this replaces was dead code: lists.create
+        // never answers with JSON on failure, it answers 409 plus the plain text
+        // "You already have a list with that name." r.json() threw on that body,
+        // inside a chain with no .catch - so the likeliest failure of this feature
+        // did nothing at all. ulSendJson surfaces the server's own sentence.
+        window.ulSendJson("{% url 'lists.create' %}", 'POST', { name }, { headers: { Accept: 'application/json' } })
+            .then((data) => {
                 nameInput.value = '';
                 addPinsToList(data.uuid);
-            } else if (typeof toastr !== 'undefined') {
-                toastr.error('Could not create that list.');
-            }
-        });
+            })
+            .catch((err) => {
+                if (typeof toastr !== 'undefined') toastr.error((err && err.message) || 'Could not create that list.');
+            });
     }
 
     // -- Pin edit dialog: submit only the fields the user actually changed ------

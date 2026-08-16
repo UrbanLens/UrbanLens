@@ -326,8 +326,11 @@
     }
     function savePinListOrder(list) {
         const items = Array.from(list.querySelectorAll('.pin-list-item[data-id]')).map((el) => ({ id: el.dataset.id }));
+        // The reorder is already applied in the DOM, so a failure that says
+        // nothing reads as a successful save until the next page load undoes it.
         fetch(list.dataset.saveUrl, { method: 'POST', headers: jsonHeaders(), body: JSON.stringify({ items }) })
-            .then((r) => { if (!r.ok) _toastError('Could not save the new order.'); });
+            .then((r) => { if (!r.ok) _toastError('Could not save the new order.'); })
+            .catch(() => _toastError('Could not save the new order.'));
     }
     initSortable();
     document.body.addEventListener('htmx:afterSwap', (e) => {

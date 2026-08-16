@@ -9785,3 +9785,39 @@ papered over. Also corrected the endpoint's `@extend_schema`, which declared a `
 this endpoint has never returned.
 
 Verified: 87 E2EE tests, 7 new TS tests, tsc clean, ruff clean.
+
+## Chunk 528 - the guard whose failure branch is empty, and the button that did nothing
+
+Chunk 527's bug was not the class the 2026-08-07 sweep already covered. That sweep looked for
+mutating `fetch` calls with *no* `.ok` check; this one had a check, and an empty failure branch.
+Different shape, so it deserved its own sweep.
+
+Two scans. 21 positive `if (resp.ok) {...}` guards, 7 with no `else` - six of which are the
+early-return idiom and correct. That is worth recording as a scan lesson: "no else" is not the
+signal, "no failure path" is. And 144 promise-style fetch chains, 17 without a `.catch`, narrowed
+to 11 that are also fire-and-forget rather than returning the promise to a caller that owns it.
+
+The finding is `createListAndAddPins`, which exists in two copies (map page and location page) and
+was broken in both: `.then(r => r.json())` on an endpoint that answers a duplicate list name with
+409 plus plain text, in a chain with no `.catch`. The likeliest failure of the feature produced an
+unhandled rejection and total silence - no toast, no closed dialog, the name still sitting in the
+box.
+
+The two copies had drifted in a way that made the worse one look safer. The location page has an
+`else` branch that toasts an error, and it is dead code - it can only fire if the server returns
+JSON with `ok: false`, which it never does. Fifteen lines above both copies sits `addPinsToList`,
+which checks `response.ok`, handles 409 explicitly and toasts. Same file, same dialog, opposite
+care. That is the third time this audit has found the careful and careless versions of one idea
+side by side in a single file.
+
+Fixed both through `ulSendJson` - which, because of chunk 525's `fetch-json.ts` change, now shows
+the server's own sentence rather than "HTTP 409". The two chunks compose: 525 made plain-text
+refusals surfaceable, 528 found the place that most needed it.
+
+`lists.create` had no server tests at all, so the contract the client now leans on is pinned:
+409 for a duplicate, and a body short, single-line and markup-free enough for `fetch-json.ts` to
+show. 56 pin-list tests pass; all three edited templates syntax-checked.
+
+One scan-tooling note: the Django-tag stub used for that syntax check has to strip
+`{% comment %}...{% endcomment %}` blocks first, or the prose inside them parses as JavaScript and
+reports a syntax error in a file that is fine. Verified against `git show HEAD:` before believing it.

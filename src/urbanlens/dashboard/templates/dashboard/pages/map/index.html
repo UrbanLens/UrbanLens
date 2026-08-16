@@ -3955,13 +3955,20 @@
         const nameInput = document.getElementById('add-to-list-new-name');
         const name = (nameInput.value || '').trim();
         if (!name) { nameInput.focus(); return; }
-        fetch("{% url 'lists.create' %}", {
-            method: 'POST',
-            headers: { 'X-CSRFToken': _csrfToken(), 'Content-Type': 'application/json', 'Accept': 'application/json' },
-            body: JSON.stringify({ name }),
-        }).then((r) => r.json()).then((data) => {
-            if (data.ok) { nameInput.value = ''; addPinsToList(data.uuid); }
-        });
+        // ulSendJson throws on a non-2xx carrying the server's own text, which is
+        // what this endpoint sends: a duplicate list name answers 409 with
+        // "You already have a list with that name." The previous version called
+        // r.json() unconditionally, so that plain-text body threw inside an
+        // unhandled promise - the most likely failure of this feature did
+        // nothing at all, with no message and no closed dialog.
+        window.ulSendJson("{% url 'lists.create' %}", 'POST', { name }, { headers: { Accept: 'application/json' } })
+            .then((data) => {
+                nameInput.value = '';
+                addPinsToList(data.uuid);
+            })
+            .catch((err) => {
+                if (typeof toastr !== 'undefined') toastr.error((err && err.message) || 'Could not create that list.');
+            });
     }
 
     document.getElementById('filter-form').addEventListener('change', () => { _refreshPinList(); sfToolbarRefreshCounts(); });
