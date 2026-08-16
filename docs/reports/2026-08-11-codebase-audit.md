@@ -11261,3 +11261,38 @@ deferred email at all, so the fix here has no group-side counterpart to miss.
 The precedent is in the codebase already: `test_direct_message_hard_delete`'s docstring opens by
 describing a privacy gap where a feature "only ever gated *display*" while the data lived on. This is
 the same gap, one layer out.
+
+## Chunk 573 - seven hypotheses, none of them bugs
+
+Carried the "deferred work carries stale state" framing from chunk 572 across the rest of the task
+layer and into imports/exports. Nothing survived contact, which after four productive chunks is the
+honest result and is recorded here so the next pass does not re-probe the same ground:
+
+- **`import_immich_photos`** re-reads pin, profile and Immich account and returns if any is gone. No
+  ownership re-check, but a pin cannot change owner in this data model and Postgres does not reuse
+  ids, so a surviving pin is still the same user's.
+- **`import_flickr_album_photos`** resolves a wiki by pk with no access check - but the enqueue site
+  is `resolve_visible_wiki(request, location_slug)`, which checks access *and* resolves the wiki from
+  the URL slug rather than a client-supplied id. No IDOR; the residual is a narrow window where a
+  user loses wiki access mid-import, which is a write they initiated while entitled.
+- **Export download** validates the job id as a UUID (so no traversal), checks the job's recorded
+  `user_id` against the requester, then readiness, then existence.
+- **Export cleanup** is scheduled in a `finally`, so success, a failed user load and a mid-export
+  exception all reach it.
+- **Countdown durability** is not accidental: the Celery settings carry a comment reconciling
+  `visibility_timeout` against "the longest countdown= this app schedules (import/export cleanup at
+  3600s)", and set it to twice that.
+
+One observation was worth filing rather than dismissing. `schedule_export_cleanup` calls
+`safely_enqueue_task`, and when that returns None it logs a warning and returns - so an export ZIP
+containing the user's entire account stays on disk with nothing to reap it. Worker loss is covered
+by redelivery; a failed *enqueue* is not. The remedy is a periodic sweep by directory mtime, which
+this codebase would find idiomatic - it already backstops single mechanisms this way in billing
+("safety net for missed Stripe webhook deliveries") and safety ("backstop for a dropped
+partner_access_revoked broadcast") - but adding a beat task and choosing how aggressively to reap is
+an operational decision, so it is filed with the reasoning instead.
+
+Worth saying plainly: the ratio across this session is roughly one real defect per two or three
+hypotheses, and the hypotheses that die tend to die because someone had already thought about the
+problem and left the reasoning behind. That is a property of this codebase worth knowing when
+deciding how hard to push on any given suspicion.
