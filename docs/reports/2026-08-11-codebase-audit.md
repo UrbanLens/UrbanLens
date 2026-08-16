@@ -10957,3 +10957,42 @@ precisely the swallowing the function's own docstring exists to avoid. **Not fix
 confirming it needs a real browser and the plausible discriminator (`event.detail === 0`) is
 something I would be asserting rather than observing. Filed in `docs/PROBLEMS.md` with the ten-minute
 DevTools check that would settle it.
+
+## Chunk 565 - the frontend's coverage gap, and one unwatched half of a contract
+
+Surveyed the frontend now that `bun` is known to work here: **65 TypeScript sources totalling 22,811
+lines against 29 test files totalling 3,836**. Thin next to the Python side. The largest wholly
+untested modules are `entries/map-annotations.ts` (2,981 lines), `entries/consensus.ts` (1,396),
+`entries/trivia.ts` (983) and `shared/markup-toolbar.ts` (896) - mostly entry points that wire DOM
+and Leaflet together, which is why they are untested and also why they are awkward to test. A DOM is
+preloaded for every test (`bunfig.toml` -> `testing/dom-setup.ts`), so the obstacle is scope, not
+tooling. Filed as a real gap rather than pretending one chunk closes it.
+
+Two security-shaped hypotheses died on reading, both worth recording as *not* bugs:
+
+- `e2ee-store.ts` caches decrypted identity and conversation keys in IndexedDB and nothing clears
+  them on logout. That is deliberate and documented in the module's own header - keys persist so
+  "day-to-day use never prompts", and "same-origin storage is the trust boundary either way - this
+  is bookkeeping, not isolation". Whether an explicit logout should wipe it is a product decision,
+  not a defect, so it is not mine to make.
+- `clearProfileKeys`' docstring offers "logout-everywhere / key reset" as its purpose while only key
+  reset calls it - but there is no logout-everywhere feature anywhere in the codebase. The docstring
+  names an aspiration, not a missing call.
+
+What was genuinely unguarded is a contract. `IconPicker.search` lowercases the query and then does
+`label.includes(q)` against `data-label` verbatim, so the search is case-insensitive *only* because
+`_icon_picker.html` writes `{{ label|lower }}`. Remove that filter and searching "cam" stops
+matching an icon labelled "Camera" - no error, no empty state, just a grid that hides whatever the
+user typed a capital into.
+
+This codebase has met that shape before: `frontend/CLAUDE.md` records the pin-cache reader and its
+template writer drifting apart, silently returning `[]` until a contract test was written. The
+Python half of *this* contract is already guarded (`test_icon_metadata` asserts every `ICON_KEYWORDS`
+value is lowercase); the template's `|lower` had nothing watching it. It does now, in the same style
+as the pin-cache guard, and verified to bind by deleting the filter.
+
+The test file also demonstrates the failure rather than only asserting the contract - one case
+proves search matches a lowercased label whatever the query's case, the next proves it misses a
+label the template had not lowercased. `bun run typecheck` initially rejected `m[1]` as possibly
+undefined; fixed with `?? ""` rather than a non-null assertion, since an empty attribute is a value
+the assertion handles anyway. Full suite: 411 pass, 0 fail, typecheck clean.
