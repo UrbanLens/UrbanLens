@@ -25,6 +25,7 @@ from django.test import Client
 from django.test.utils import CaptureQueriesContext
 from model_bakery import baker
 
+from urbanlens.core.tests.features import grant_alpha_features
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
@@ -47,6 +48,9 @@ class PageQueryScalingTests(TestCase):
 
     def _user_with_pins(self, count: int):
         user = baker.make("auth.User")
+        # The SpotGuessr pin list is behind SiteFeature.ALPHA_FEATURES; the
+        # grant is constant-cost, so it cannot disturb any growth assertion.
+        grant_alpha_features(user)
         profile = Profile.objects.get(user=user)
         for index in range(count):
             pin = baker.make(Pin, profile=profile, location=baker.make(Location))
