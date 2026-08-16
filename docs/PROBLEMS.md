@@ -8307,3 +8307,39 @@ corrupt member inside an otherwise-fine 900-file Google Takeout archive aborts t
 with "Invalid ZIP archive" rather than skipping that member. Fail-closed is a defensible stance for
 an importer and changing it is a product call about how much of a damaged archive to salvage, so it
 is recorded rather than changed.
+
+## RESOLVED 2026-08-16: the decompression-bomb fix reached one of two call sites
+
+Chunk 532, continuing the parser thread into the image pipeline. Pillow's own `MAX_IMAGE_PIXELS`
+ceiling is what prevents the memory exhaustion, and this codebase already knows the subtle part:
+`DecompressionBombError` inherits straight from `Exception`, **not** from `OSError` like
+`UnidentifiedImageError` does, so a `except (OSError, ValueError)` handler does not catch it. There
+are two dedicated test modules about it.
+
+An AST sweep of all 11 `PILImage.open` sites found 5 with no enclosing `try`. Reading them - rather
+than reporting them - showed 4 are private EXIF helpers whose six call sites all catch bare
+`Exception`, and the fifth (the photo-keywords plugin) is called inside a bare `except Exception`.
+All fine.
+
+**The real finding was the pair of call sites for `downscale_stored_image`:**
+
+- `tasks.py:663` catches `(OSError, ValueError, PILDecompressionBombError)` and carries an eight-line
+  comment explaining precisely why the third entry is required.
+- `services/photos/photo_enrichment.py:102` calls the *same function* and caught only
+  `(OSError, ValueError)` - exactly the handler that comment says is insufficient.
+
+So a photo over 89 MP materialised from an external source (Wikimedia, Flickr, Yelp) raised out of
+the enrichment run instead of degrading to the logged warning every other unprocessable image gets.
+The evidence that this is a defect rather than a judgement call is in the repository itself: the
+sibling call site documents the bug that the second one still had.
+
+Fixed, with the comment naming where the reasoning came from. Covered by
+`EnrichmentPathBombHandlingTests`, including an anti-vacuity test that `downscale_stored_image`
+really does raise `DecompressionBombError` under a lowered ceiling, and a structural one asserting
+that error is neither an `OSError` nor a `ValueError` - which is the whole reason a two-tuple
+handler was not enough, and would fail loudly if Pillow ever changed the hierarchy.
+
+**Method note.** The AST sweep was intra-function, so "no enclosing try" was never a finding, only a
+candidate: 5 candidates, 4 dissolved on reading, and the one that mattered was not among them at
+all - it was found by following the *function* to its callers rather than the `open()` to its
+handler. Consistent with the two scan lessons recorded above it.

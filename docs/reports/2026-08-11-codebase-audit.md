@@ -9959,3 +9959,28 @@ one will keep being off by one.
 Eleven consolidations: 10,849 / 10,859 / 10,863 / 10,865 (2 resolved) / 10,873 / 10,875 / 10,878 /
 10,883 / 10,885 / 10,871 / 10,888. A twelfth is due over chunks 530-531 (the device-marker
 `F()` fix and the shared extraction budget), neither of which any run has covered.
+
+### Chunk 532 (continued) - the fix that reached one of two call sites
+
+Continued the parser thread into the image pipeline. Decompression bombs are already well handled
+here, including the subtle part - `DecompressionBombError` inherits from `Exception`, not `OSError`,
+so the usual handler misses it - with two test modules devoted to it.
+
+An AST sweep of the 11 `PILImage.open` sites flagged 5 without an enclosing `try`. Four dissolved on
+reading (private EXIF helpers whose callers all catch bare `Exception`) and the fifth is called
+inside one. The actual bug was not in that list: `downscale_stored_image` has **two** callers, and
+only one of them received the fix. `tasks.py` catches
+`(OSError, ValueError, PILDecompressionBombError)` with an eight-line comment explaining why the
+third entry is necessary; `photo_enrichment.py` calls the same function and caught only
+`(OSError, ValueError)` - the exact handler that comment calls insufficient. An over-89MP photo from
+Wikimedia or Flickr therefore took the enrichment run down.
+
+The nicest property of this find is that the codebase proves it itself: one call site documents the
+bug the other still has. No judgement call required.
+
+It also sharpens the method. The sweep was intra-function, so its output was candidates, not
+findings - and the one that mattered was not in the output at all. It came from following the
+*function* to its callers instead of the `open()` to its handler. Two chunks running, the scan has
+been the thing that pointed at the neighbourhood rather than the thing that found the bug.
+
+Verified: 12 bomb-handling tests, ruff clean.

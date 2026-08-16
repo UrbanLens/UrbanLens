@@ -97,9 +97,18 @@ def _save_enriched_image(location: Location, content: bytes, *, source: str, sou
         checksum=checksum,
         file_size=len(content),
     )
+    from PIL.Image import DecompressionBombError as PILDecompressionBombError
+
     try:
         new_size = downscale_stored_image(image, max_dimension=max_dimension, convert_webp=True)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError, PILDecompressionBombError) as exc:
+        # DecompressionBombError inherits straight from Exception rather than
+        # from OSError/ValueError like the rest of Pillow's failures, so it
+        # escapes a two-tuple handler. `tasks.py`'s call to this same function
+        # already carries that fix and the comment explaining it; this second
+        # call site was left behind, and an over-89MP photo from an external
+        # source took the enrichment run down instead of degrading to the
+        # logged warning every other unprocessable image gets.
         logger.warning("Downscaling failed for enriched image %s: %s", image.pk, exc, exc_info=True)
         return image
     if new_size is not None:

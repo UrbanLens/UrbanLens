@@ -78,3 +78,63 @@ class DecompressionBombHandlingTests(TestCase):
         result = _process_photo_upload(self.image, self.image.pk, strip_location=False)
 
         self.assertIsNotNone(result)
+
+
+class EnrichmentPathBombHandlingTests(TestCase):
+    """The second caller of `downscale_stored_image` needed the same guard.
+
+    `tasks.py` carries the fix above *and the comment explaining it*. The
+    enrichment path calls the identical function and still caught only
+    `(OSError, ValueError)` - exactly the handler that comment says is
+    insufficient - so an over-89MP photo materialised from an external source
+    (Yelp, Wikimedia, Flickr) raised out of the enrichment run instead of
+    degrading to a logged warning.
+
+    Asserted against `downscale_stored_image` directly rather than through a
+    full enrichment run: the fetch/gateway machinery around it is irrelevant to
+    which exception types the handler names, and mocking it would test the mock.
+    """
+
+    def setUp(self) -> None:
+        self._media_root = tempfile.mkdtemp(prefix="ul_bomb_enrich_")
+        self.addCleanup(shutil.rmtree, self._media_root, ignore_errors=True)
+        (Path(self._media_root) / "pin_images").mkdir(parents=True, exist_ok=True)
+        overrides = override_settings(MEDIA_ROOT=self._media_root)
+        overrides.enable()
+        self.addCleanup(overrides.disable)
+
+        self.image = baker.make(Image, image=None, profile=baker.make("auth.User").profile)
+        self.image.image.save("bomb.jpg", ContentFile(_jpeg()), save=True)
+
+    def test_downscaling_a_bomb_raises_the_error_the_handler_must_name(self) -> None:
+        """Anti-vacuity: establishes which exception the enrichment path has to catch."""
+        from urbanlens.dashboard.services.media.images import downscale_stored_image
+
+        with patch.object(PILImage, "MAX_IMAGE_PIXELS", 16), self.assertRaises(PILImage.DecompressionBombError):
+            downscale_stored_image(self.image, max_dimension=800, convert_webp=True)
+
+    def test_that_error_is_not_an_oserror_or_valueerror(self) -> None:
+        """The whole reason a two-tuple handler was not enough."""
+        self.assertFalse(issubclass(PILImage.DecompressionBombError, OSError))
+        self.assertFalse(issubclass(PILImage.DecompressionBombError, ValueError))
+
+    def test_the_enrichment_path_degrades_instead_of_raising(self) -> None:
+        from urbanlens.dashboard.services.photos.photo_enrichment import _save_enriched_image
+
+        location = baker.make("dashboard.Location", latitude=44.5, longitude=-73.2)
+
+        with patch.object(PILImage, "MAX_IMAGE_PIXELS", 16), self.assertLogs("urbanlens.dashboard.services.photos.photo_enrichment", level="WARNING") as logs:
+            saved = _save_enriched_image(location, _jpeg(), source="wikimedia", max_dimension=800)
+
+        self.assertIsNotNone(saved, "the enrichment path should keep the stored image, not abort")
+        self.assertTrue(any("Downscaling failed" in line for line in logs.output), logs.output)
+
+    def test_an_ordinary_enriched_image_is_unaffected(self) -> None:
+        """The guard must not change the normal path."""
+        from urbanlens.dashboard.services.photos.photo_enrichment import _save_enriched_image
+
+        location = baker.make("dashboard.Location", latitude=44.6, longitude=-73.3)
+
+        saved = _save_enriched_image(location, _jpeg(), source="wikimedia", max_dimension=800)
+
+        self.assertIsNotNone(saved)
