@@ -10198,3 +10198,24 @@ the fragile shape, but no mechanism has been demonstrated and none is claimed.
 
 No fix this chunk, and no invented explanation. The fourteenth consolidation is still running; if it
 recurs it will now name itself.
+
+## Chunk 540 - green, and a decision not to make the test quieter
+
+The fourteenth consolidation is green - 10,916 passed, 1 xfailed, 0 failed, and the full 1,481
+subtests, confirming it ran to the end rather than aborting like the thirteenth. It reconciles
+exactly. It is also the first run with working failure reporting, so the reporter fix is validated
+by a run that had nothing to report.
+
+The failure has now happened once in fourteen runs and does not reproduce on demand. The tempting
+move is to loosen the exact float-equality assertion to a tolerance and be rid of it. That is
+declined, and the reasoning is worth stating because the pressure to do it will recur: the property
+holds across 12,000 generated examples and thirteen full suites, so it is true, and it is the only
+instrument that would catch whatever caused the single failure. Weakening an assertion to silence an
+*unexplained* failure trades a signal for a permanent blind spot. It is the same call as keeping
+`test_pin_detach_location` a strict xfail instead of asserting the 500 it currently produces.
+
+What changed instead is what a recurrence will tell us: both assertions now print each value's
+`repr` and `float.hex()`, because a one-ulp difference is invisible in decimal and obvious in hex.
+The next occurrence yields data rather than `assert 1.0 == 1.0`.
+
+Thirteen green consolidations, one aborted, one open unexplained failure. That is the honest state.

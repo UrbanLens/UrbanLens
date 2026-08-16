@@ -66,8 +66,16 @@ def test_kml_round_trips_placemark_count_and_coordinates(pins: list[_FakePin]) -
         assert (placemark.name or "").strip() == pin.effective_name.strip()
         geometry = placemark.geometry
         assert isinstance(geometry, Point)
-        assert geometry.x == pin.effective_longitude
-        assert geometry.y == pin.effective_latitude
+        # Exact equality on purpose, and deliberately kept after this test failed
+        # once in a full run (PROBLEMS.md, 2026-08-16). It holds across 12,000
+        # generated examples and 13 of 14 full suites, so it documents a property
+        # that is really true; loosening it to a tolerance because of one
+        # unexplained failure would delete the only signal that would catch
+        # whatever caused it. The messages exist so a recurrence is diagnosable
+        # from the run output alone - `float.hex` shows a one-ulp difference that
+        # decimal repr can hide.
+        assert geometry.x == pin.effective_longitude, f"longitude changed: {geometry.x!r} ({float(geometry.x).hex()}) != {pin.effective_longitude!r} ({pin.effective_longitude.hex()})"
+        assert geometry.y == pin.effective_latitude, f"latitude changed: {geometry.y!r} ({float(geometry.y).hex()}) != {pin.effective_latitude!r} ({pin.effective_latitude.hex()})"
 
 
 @given(st.lists(_pins, max_size=10))

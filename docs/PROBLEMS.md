@@ -8674,3 +8674,27 @@ What remains is the assertion the test actually makes: `geometry.x == pin.effect
 **exact float equality** after a round-trip through KML text. That is the fragile shape worth
 suspecting - it holds only while nothing in the process changes how floats are formatted or parsed -
 but no mechanism has been demonstrated, and none is asserted here.
+
+### It did not recur; the assertion stays strict (chunk 540)
+
+The fourteenth consolidation - the first run with working failure reporting - is **green**:
+10,916 passed, 1 xfailed, 0 failed, 1,481 subtests, 1:34:49. Reconciled by the corrected method:
+10,916 + 1 = 10,917 collected, and chunk 539 added no tests, so it matches the current collection
+exactly. The full 1,481 subtests also confirm the whole suite ran rather than aborting early as the
+thirteenth did.
+
+So the failure has occurred **once in fourteen full runs** and is not reproducible on demand. This
+entry stays **open**.
+
+**The exact float-equality assertion is deliberately kept.** Loosening
+`geometry.x == pin.effective_longitude` to a tolerance is the obvious way to make a flaky test stop
+flaking, and it would be wrong here: the property holds across 12,000 generated examples and 13 of
+14 full suites, so it documents something that is really true, and it is the only thing that would
+catch whatever caused the one failure. Weakening an assertion to silence an *unexplained* failure
+converts a signal into a permanent blind spot - the same reasoning that keeps
+`test_pin_detach_location` a strict xfail rather than an assertion of the current 500.
+
+What did change is diagnosability. Both assertions now carry a message printing each value's `repr`
+**and** `float.hex()`, so a recurrence is actionable straight from the run output: a one-ulp
+difference is invisible in decimal repr and obvious in hex. If it returns, the next reader gets the
+actual values instead of `assert 1.0 == 1.0`.
