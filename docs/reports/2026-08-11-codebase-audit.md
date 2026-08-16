@@ -10449,3 +10449,26 @@ argument for fixing at the chokepoint, made concrete.
 
 No changes warranted - the third such chunk in this stretch, and the sweep is stronger for the
 design it confirmed than it would have been for a fourth instance of the same bug.
+
+## Chunk 549 - cache-key scoping, and three ways to be right
+
+Surveyed the remaining candidate areas first: wiki has 9 service modules against 34 test modules,
+the panel layer 23 test modules including three invariant tests. Neither is under-covered, so the
+chunk took a *property* nobody had swept - whether any cache key holding per-user data omits the
+user, which is a cross-account leak when it happens.
+
+142 cache calls, 126 with no user in the key expression, and no findings. What makes it worth
+recording is that the 126 divide into three distinct correct patterns rather than one: the profile
+in the key for per-user data; the *inputs* in the key for shared data, including the provider flags
+that change what is cached; and, for the export job, an unguessable UUID plus an explicit
+`user_id` check at read time - the key is not the authorization, the check is.
+
+That third pattern is the one worth noting, because it is the only one where the key alone would be
+insufficient, and the code knows it: `ExportStatusView` validates the UUID shape, reads the status,
+and refuses when the stored `user_id` is not the caller's. Had that check been missing the sweep
+would have found a real leak; the sweep's value was in confirming it exists.
+
+Fourth chunk in this stretch with no changes warranted. The pattern across the last several is
+consistent and worth naming: the areas this session has swept were largely already sound, and the
+defects have clustered in *divergence* - one of two paths, one of two callers, one of two guards -
+rather than in whole features being wrong.

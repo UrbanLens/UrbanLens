@@ -8965,3 +8965,32 @@ The transferable point is that write-time masking is what makes this checkable a
 earlier fix masked at render time, each of the three channels would need its own correct
 implementation and its own test, and this sweep would have had three chances to find a gap instead
 of one place to confirm.
+
+### Verified safe 2026-08-16 (chunk 549): cache keys scope what they need to
+
+Swept a property with real leak potential and no prior pass: **does any cache key holding per-user
+data omit the user?** A missing profile id in a shared key serves one account's data to another.
+
+142 Django-cache calls; 126 have key expressions naming no user. Reading them - the count was never
+the finding - shows three correct patterns rather than a gap:
+
+- **Per-user data carries the profile in the key.** `MapPinCache` prefixes every key
+  `ul:map-pins:{VERSION}:profile:{profile_id}`, and the version means a payload-shape change cannot
+  serve stale entries either.
+- **Shared data is keyed by what produced it, including the settings that change it.** The
+  nearby-places cache (`controllers/maps.py`) keys on rounded coordinates, radius **and** a
+  `source_key` encoding which providers the requester has enabled - so a user with Google disabled
+  is never served a Google-sourced entry. The infrastructure-map cache keys on a rounded bbox, which
+  is right: Overpass data is public and identical for everyone.
+- **An unguessable id plus an ownership check in the value.** The export job status is keyed
+  `dashboard:export:{job_id}:status` and stores `user_id`; `ExportStatusView` validates the id is a
+  UUID, then refuses when `data.get("user_id") != request.user.pk`. The key alone is not the
+  authorization - the check is.
+
+The rest are genuinely global by nature: beat-task locks, sweep cursors, external-API session
+tokens, provider-down markers, infra stats.
+
+No changes warranted. Recorded mainly for the next person adding a cache: the rule this codebase
+follows is *the key must contain everything that changes the value* - which is why the provider
+flags are in the places key and why the profile is in the map-pins key, and why neither needed a
+user check at read time while the export status did.
