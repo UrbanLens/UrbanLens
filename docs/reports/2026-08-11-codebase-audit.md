@@ -9845,3 +9845,28 @@ Ten consolidations: 10,849 / 10,859 / 10,863 / 10,865 (2 resolved) / 10,873 / 10
 10,883 / 10,885 / 10,871. An eleventh (task `beigmr653`) is running over chunks 526-528, whose
 fixes - the pin_merge savepoints, the E2EE reset, and the two `createListAndAddPins` copies - none
 of the previous runs covered.
+
+### Chunk 529 (continued) - the nine unread fetch sites, and three deletes that failed in silence
+
+Finished chunk 528's fire-and-forget list. Nine sites, each judged individually - which the
+2026-08-07 sweep already established is the only honest way to handle this class, since several are
+deliberately best-effort. Three are real, and they share the worst possible context for the shape:
+a destructive action behind a "this cannot be undone" confirm whose failure path says nothing.
+
+Two photo deletes (`_photo_gallery.html`, `memories/photos.html`) simply returned on failure, so a
+refused delete and a successful one looked identical - the tile stayed put either way, with no
+message to distinguish them. The third (`map-annotations.ts`) is subtler and more interesting: it
+already toasts both "N deleted" and "N could not be deleted", so it handles a *refused* request
+well. But the per-request `.then(r => r.ok)` had no `.catch`, so a single **network** failure
+rejected the whole `Promise.all`, threw out of the async function, and produced no toast, no
+cleared selection and no refreshed list. Good handling of the failure the author thought about,
+none of the one they didn't - and the fix routes the second into the machinery already built for
+the first.
+
+Six judged fine, with the reasoning recorded so the next pass doesn't re-derive it. One of those
+six was **a false negative in my own scan**: the settings autosave does have a `.catch`, and the
+chain-extraction stopped early inside a nested callback. That is the second scan-tooling lesson in
+two chunks, and the same one each time - a scan produces candidates to read, never findings. Both
+are now written into PROBLEMS.md next to the results they nearly corrupted.
+
+Verified: tsc clean, 406 TS tests, both edited templates syntax-checked, ruff clean.

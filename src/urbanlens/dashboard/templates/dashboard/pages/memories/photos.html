@@ -400,12 +400,21 @@
         if (!confirm('Delete this photo? This cannot be undone.')) return;
         fetch(ACTION_BASE + id + '/delete/', { method: 'POST', headers: { 'X-CSRFToken': CSRF } })
             .then(function (r) {
-                if (!r.ok) return;
+                // The bare `return` this replaces left a confirmed, irreversible
+                // action with no outcome at all - the tile stayed put and nothing
+                // was said, so a failed delete and a successful one looked the same.
+                if (!r.ok) {
+                    if (window.toastr) toastr.error('Could not delete that photo.');
+                    return;
+                }
                 var el = document.getElementById('photo-tile-' + id);
                 if (el) { el.remove(); _updatePhotoCountLabel(-1); }
                 var card = document.getElementById('photo-card-' + id);
                 if (card) card.remove();
                 if (window.toastr) toastr.info('Photo deleted.');
+            })
+            .catch(function () {
+                if (window.toastr) toastr.error('Could not delete that photo.');
             });
     };
 

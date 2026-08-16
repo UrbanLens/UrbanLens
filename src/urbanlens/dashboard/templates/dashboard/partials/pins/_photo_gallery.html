@@ -384,14 +384,22 @@ Context:
       method: 'DELETE',
       headers: { 'X-CSRFToken': CSRF_TOKEN },
     }).then(function (r) {
-      if (r.status === 204) {
-        var el = document.getElementById('gallery-item-' + imgId);
-        if (el) el.remove();
-        _items = _items.filter(function (i) { return i.id !== imgId; });
-        if (window._galleryRemoveMarker) window._galleryRemoveMarker(imgId);
-        _updateGalleryCountLabel(-1);
-        if (window.toastr) toastr.success('Photo deleted.');
+      if (r.status !== 204) {
+        // Silence here is the worst possible answer: the user has just
+        // confirmed a "this cannot be undone" prompt, and a tile that stays
+        // put with no message reads as a delete that quietly failed *or* one
+        // that quietly worked - they cannot tell which.
+        if (window.toastr) toastr.error('Could not delete that photo.');
+        return;
       }
+      var el = document.getElementById('gallery-item-' + imgId);
+      if (el) el.remove();
+      _items = _items.filter(function (i) { return i.id !== imgId; });
+      if (window._galleryRemoveMarker) window._galleryRemoveMarker(imgId);
+      _updateGalleryCountLabel(-1);
+      if (window.toastr) toastr.success('Photo deleted.');
+    }).catch(function () {
+      if (window.toastr) toastr.error('Could not delete that photo.');
     });
   };
 

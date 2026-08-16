@@ -1709,7 +1709,18 @@ function init(): void {
         if (!uuids.length) return;
         const n = uuids.length;
         if (!(await confirmAction({ title: "Delete child pins?", message: `Delete ${n} child pin${n === 1 ? "" : "s"}? This also removes reviews, visit history, and notes.`, confirmLabel: "Delete" }))) return;
-        const results = await Promise.all(uuids.map((uuid) => fetch(`${dpEditBase}${uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } }).then((r) => r.ok)));
+        // `.catch(() => false)` matters as much as the `.ok`: without it a single
+        // network failure rejects the whole Promise.all, so this function throws
+        // and the user gets no toast, no cleared selection and no refreshed list
+        // after confirming a bulk delete. Counting it as "not deleted" instead
+        // routes it into the warning below, which already says the right thing.
+        const results = await Promise.all(
+            uuids.map((uuid) =>
+                fetch(`${dpEditBase}${uuid}/`, { method: "DELETE", headers: { "X-CSRFToken": getCsrfToken() } })
+                    .then((r) => r.ok)
+                    .catch(() => false),
+            ),
+        );
         const deleted = results.filter(Boolean).length;
         if (deleted) toast.success(`${deleted} pin${deleted === 1 ? "" : "s"} deleted.`);
         if (deleted < n) toast.warning(`${n - deleted} pin${n - deleted === 1 ? "" : "s"} could not be deleted.`);

@@ -8164,3 +8164,46 @@ the caller chains onto.
 error is silent), `memories/photos.html:401`, `settings/index.html:2331`, `trips/detail.html:1593`,
 `location/index.html:979`, `pin_lists/detail.html:523`. Each needs judging on its own, exactly as
 the 2026-08-07 entry concluded for the ~30 it left - several are legitimately best-effort.
+
+## RESOLVED 2026-08-16: three confirmed, irreversible deletes reported nothing when they failed
+
+Chunk 529, finishing the fire-and-forget list chunk 528 left unread. Nine sites, each judged on its
+own as the 2026-08-07 entry concluded they must be. Three are real and share one shape, and it is
+the worst place for it: **a destructive action behind a "this cannot be undone" confirm, whose
+failure path says nothing at all.** The user cannot distinguish a delete that failed from one that
+worked, because in both cases nothing on screen changes to explain it.
+
+- `partials/pins/_photo_gallery.html` (`galleryDelete`) - `if (r.status === 204) { ...remove tile,
+  toast success... }` with no else and no `.catch`. Anything but a 204 left the tile in place,
+  silently.
+- `pages/memories/photos.html` (`photosDelete`) - `if (!r.ok) return;`, an explicit early return
+  with no message. Same outcome, arrived at deliberately-looking code.
+- `frontend/ts/entries/map-annotations.ts` (`doDeleteSelectedDp`) - per-request `.then(r => r.ok)`
+  inside `Promise.all`, with no `.catch`. It already toasts both "N deleted" and "N could not be
+  deleted", so it handles a *refused* request well - but one **network** failure rejects the whole
+  `Promise.all`, the async function throws, and the user gets no toast, no cleared selection and no
+  refreshed list after confirming a bulk delete. `.catch(() => false)` per request routes it into
+  the warning that was already there.
+
+All three now report the failure. The gallery and memories fixes also gained the `.catch` they
+never had.
+
+**Judged fine, with reasons, so the next sweep need not re-derive them:**
+
+- `pages/settings/index.html` autosave - **a false negative in my own scan**: it does have
+  `.catch(function () {}).finally(...)`. The chain-extraction walked to the first `;` at what it
+  thought was depth 0 and stopped early inside a nested `.then`. Swallowing the error is fine here:
+  `schedule()` has already called `guard.markDirty()`, so an unsaved form stays dirty and the
+  leave-page warning covers it.
+- `pages/trips/detail.html` child-trip typeahead - a search suggestion read; a failure leaves the
+  previous suggestions up, which is the standard degradation for a typeahead.
+- `pages/pin_lists/detail.html:523` list-items refresh, `pages/map/index.html:3928` and
+  `pages/location/index.html:979` (`addPinsToList`) - all three check `response.ok` and toast on a
+  refusal; only a network error is silent, and the earlier fixed sites were the ones where silence
+  followed an irreversible action.
+
+**Scan-tooling lesson worth keeping** (the second this pair of chunks produced): a regex that
+extracts a promise chain by walking to the first depth-0 `;` under-reports `.catch`, because a
+nested callback body raises depth in ways brace-counting alone gets wrong. Treat "no `.catch`
+found" as a candidate to read, never as a finding - which is how the settings false positive was
+caught before it reached this file.
