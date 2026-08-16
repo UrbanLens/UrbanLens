@@ -549,6 +549,15 @@ _CSP_DIRECTIVES: dict[str, object] = {
         "'self'",
         "data:",
         "blob:",
+        # Any HTTPS image host, because map image overlays are a paste-any-URL
+        # feature (_map_overlays_list.html, map-image-overlays.ts) - a finite
+        # list would make every overlay outside it vanish the moment an
+        # operator sets UL_CSP_ENFORCE. Widening img-src is the cheap half of
+        # the trade: images do not execute, and the alternative is proxying
+        # arbitrary user-supplied URLs through the server, which buys an SSRF
+        # surface to avoid a directive that never blocked script. The named
+        # hosts below stay for the documentation value.
+        "https:",
         # Base map tiles and overlays (frontend/ts/shared/map-layers.ts).
         "https://*.tile.openstreetmap.org",
         "https://tile.openstreetmap.org",

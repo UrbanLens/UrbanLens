@@ -10,9 +10,10 @@ gateway also produces (see ``ForecastSlot``).
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
 import logging
 from typing import Any, ClassVar
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from urbanlens.dashboard.services.apis.weather.forecast import ForecastSlot, SunTimes
 from urbanlens.dashboard.services.core.gateway import Gateway
@@ -103,15 +104,25 @@ class OpenMeteoGateway(Gateway):
             return None
 
         # `timezone=auto` makes the timestamps local to the coordinates, and
-        # the response reports that zone's offset - enough to anchor each
-        # slot in UTC without a timezone-resolution library.
-        local_tz: timezone | None = None
-        offset_seconds = payload.get("utc_offset_seconds")
-        if isinstance(offset_seconds, (int, float)) and not isinstance(offset_seconds, bool):
+        # names the zone they are local to. Prefer that name over the
+        # accompanying utc_offset_seconds: one fixed offset cannot anchor a
+        # five-day window that crosses a daylight-saving transition, and slots
+        # on the far side of one would land an hour out - enough to pick the
+        # wrong morning or evening slot for an activity.
+        local_tz: tzinfo | None = None
+        zone_name = payload.get("timezone")
+        if isinstance(zone_name, str) and zone_name:
             try:
-                local_tz = timezone(timedelta(seconds=offset_seconds))
-            except ValueError:
-                logger.warning("Open-Meteo returned an unusable utc_offset_seconds: %r", offset_seconds)
+                local_tz = ZoneInfo(zone_name)
+            except (ZoneInfoNotFoundError, ValueError):
+                logger.warning("Open-Meteo returned an unrecognized timezone: %r", zone_name)
+        if local_tz is None:
+            offset_seconds = payload.get("utc_offset_seconds")
+            if isinstance(offset_seconds, (int, float)) and not isinstance(offset_seconds, bool):
+                try:
+                    local_tz = timezone(timedelta(seconds=offset_seconds))
+                except ValueError:
+                    logger.warning("Open-Meteo returned an unusable utc_offset_seconds: %r", offset_seconds)
 
         times = hourly.get("time") or []
         temps = hourly.get("temperature_2m") or []

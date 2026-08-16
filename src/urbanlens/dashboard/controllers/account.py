@@ -828,7 +828,13 @@ class CustomLoginView(LoginView):
             minutes = SiteSettings.get_current().login_lockout_minutes
             form = self.get_form()
             form.errors["__all__"] = form.error_class([_lockout_error_message(minutes)])
-            return self.form_invalid(form)
+            # Deliberately not self.form_invalid: that override is the failure
+            # accounting path, and no credential was checked here. Counting a
+            # gate response fed each throttle from the other - retries against
+            # an already-locked identifier drained the shared IP budget, and
+            # once an IP was throttled, submitting a victim's username locked
+            # *their* account too, correct password or not.
+            return super().form_invalid(form)
         return super().post(request, *args, **kwargs)
 
     def get_success_url(self) -> str:

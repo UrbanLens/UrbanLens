@@ -178,6 +178,33 @@ class OpenMeteoDateUtcTests(SimpleTestCase):
         assert slots is not None
         self.assertNotIn("date_utc", slots[0])
 
+    def test_each_slot_uses_its_own_dates_offset_across_a_dst_transition(self) -> None:
+        """One fixed offset cannot anchor a five-day window that crosses a transition.
+
+        US DST ends 2026-11-01, so 10-30 is UTC-4 and 11-02 is UTC-5. Applying
+        the single reported ``utc_offset_seconds`` to both put half the
+        forecast an hour out, which is enough for ``_build_activity_forecasts``
+        to pick the wrong morning or evening slot.
+        """
+        payload = self._payload(-14400)
+        payload["timezone"] = "America/New_York"
+        payload["hourly"]["time"] = ["2026-10-30T09:00", "2026-11-02T09:00"]
+
+        slots = self._slots_for(payload)
+
+        assert slots is not None
+        self.assertEqual(slots[0]["date_utc"], datetime(2026, 10, 30, 13, 0, tzinfo=UTC))
+        self.assertEqual(slots[1]["date_utc"], datetime(2026, 11, 2, 14, 0, tzinfo=UTC))
+
+    def test_an_unrecognized_zone_name_falls_back_to_the_reported_offset(self) -> None:
+        payload = self._payload(-14400)
+        payload["timezone"] = "Mars/Olympus_Mons"
+
+        slots = self._slots_for(payload)
+
+        assert slots is not None
+        self.assertEqual(slots[0]["date_utc"], datetime(2026, 6, 1, 13, 0, tzinfo=UTC))
+
     @given(st.integers(min_value=-14 * 3600, max_value=14 * 3600))
     def test_date_utc_round_trips_the_payload_offset(self, offset_seconds: int) -> None:
         """For any real-world offset, ``date_utc`` is the local wall clock

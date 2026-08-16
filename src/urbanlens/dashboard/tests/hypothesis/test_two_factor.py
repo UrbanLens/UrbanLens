@@ -545,6 +545,55 @@ class LoginIpThrottleTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertNotIn("_auth_user_id", self.client.session)
 
+    def test_hitting_a_locked_identifier_does_not_drain_the_ip_budget(self) -> None:
+        """A gate response is not a failed credential check, and must not count as one.
+
+        Retries against an already-locked identifier used to feed the IP
+        counter, so an attacker could lock one account and then burn any
+        address's budget on it.
+        """
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        site_settings = SiteSettings.get_current()
+        site_settings.login_max_attempts = 2
+        site_settings.save()
+
+        # Lock one identifier from an address that stays under its own limit.
+        self._fail("192.0.2.20", "locked_identifier")
+        self._fail("192.0.2.20", "locked_identifier")
+        for _ in range(5):
+            self._fail(self.ATTACKER_IP, "locked_identifier")
+
+        response = self._login(self.ATTACKER_IP)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    def test_a_throttled_ip_cannot_lock_someone_elses_account(self) -> None:
+        """The reverse direction, which is the targeted half.
+
+        Once an address is throttled, every further attempt short-circuits at
+        the gate - before any credential is checked. Counting those as the
+        submitted account's failures let an attacker trip their own IP limit
+        and then lock any account they could name, with no password at all.
+        """
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        site_settings = SiteSettings.get_current()
+        site_settings.login_max_attempts = 2
+        site_settings.save()
+
+        for i in range(3):
+            self._fail(self.ATTACKER_IP, f"sprayed_{i}")
+        for _ in range(4):
+            self._fail(self.ATTACKER_IP, self.user.username)
+
+        # A clean address, the victim's own correct password.
+        response = self._login(self.OTHER_IP)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("_auth_user_id", self.client.session)
+
     def test_ip_gate_error_text_is_identical_to_identifier_lockout(self) -> None:
         """The two gates must be indistinguishable - compares live responses, not literals."""
         from urbanlens.dashboard.models.site_settings import SiteSettings
