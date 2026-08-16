@@ -9277,3 +9277,36 @@ confidentiality gap into an availability outage. Trading one for the other is a 
 Options, roughly in increasing cost: have the send path warn/log when it accepts a stale version;
 have clients re-check rotation state before send rather than on poll; or reject stale-version sends
 only when the group is fully enrolled (so the 409 case cannot arise).
+
+## A deleted message's preview survives in the recipient's notification list
+
+Fixed in chunk 572: the *delayed email* and *delayed WhatsApp/SMS alert* for a direct message now
+skip a message the app would show as a tombstone, so unsending inside the 120-second delay window
+stops the out-of-band copy going out.
+
+Not fixed, because it needs a schema decision: the **on-site notification** raised for the same
+message keeps its preview text.
+
+- `services/messaging/direct_messages` stores `message=preview` - up to 120 characters of the body.
+- `services/messaging/group_chats` stores `message=f"{sender}: {preview}"`, likewise 120.
+
+Neither is touched by `delete_message_for_everyone` / `delete_group_message`, so after the sender
+unsends, the thread shows "Message deleted" while the notification row still quotes what was said.
+
+There is no way to clean it up precisely today: `NotificationLog` has no reference to the message it
+was raised for, and its `url` points at the *thread* (the conversation, or the group), not the
+message. Matching rows heuristically on profile + type + url + timestamp would be fragile and would
+sooner or later delete the wrong notification.
+
+Options:
+
+1. Add a nullable generic reference (or a `message_uuid`) to `NotificationLog`, and clear or redact
+   matching rows when a message is deleted. Cleanest, costs a migration.
+2. Render notification previews through the message at display time rather than storing them, so a
+   tombstone applies everywhere at once. Cleanest conceptually, largest change - and the stored text
+   currently doubles as the push/e-mail body.
+3. Accept it, and say so in the UI: the notification was already delivered when the message was
+   live, which is arguably the same as the recipient having read it.
+
+Worth deciding rather than leaving implicit, because the app currently promises "Message deleted" in
+one surface while quoting the message in another.

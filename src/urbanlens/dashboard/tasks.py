@@ -2458,6 +2458,14 @@ def send_direct_message_email_if_unread(message_id: int) -> None:
         return
     if message.read_at is not None:
         return
+    # "Still unread" is not "still there". Both delete-for-everyone and the
+    # recipient's own delete are soft - the row survives with a timestamp, and
+    # the app shows a tombstone - so without this the delayed alert delivers, out
+    # of band and permanently, the text the app has already withdrawn. Asking the
+    # same helper the UI asks keeps the two from drifting, and picks up expired
+    # disappearing messages for free.
+    if message.tombstone_text_for(message.recipient_id) is not None:
+        return
     if is_email_debounced(message.sender_id, message.recipient_id):
         return
     send_message_email_now(message)
@@ -2484,6 +2492,14 @@ def send_direct_message_text_alerts_if_unread(message_id: int) -> None:
     except DirectMessage.DoesNotExist:
         return
     if message.read_at is not None:
+        return
+    # "Still unread" is not "still there". Both delete-for-everyone and the
+    # recipient's own delete are soft - the row survives with a timestamp, and
+    # the app shows a tombstone - so without this the delayed alert delivers, out
+    # of band and permanently, the text the app has already withdrawn. Asking the
+    # same helper the UI asks keeps the two from drifting, and picks up expired
+    # disappearing messages for free.
+    if message.tombstone_text_for(message.recipient_id) is not None:
         return
     if is_text_alert_debounced(message.sender_id, message.recipient_id):
         return
