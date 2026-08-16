@@ -39,6 +39,7 @@ from urbanlens.dashboard.models.map_overlay.model import CORNERS, MapImageOverla
 from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.services.core.text_limits import column_max_length
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -48,7 +49,10 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.map_overlay.queryset import MapImageOverlayQuerySet
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-_MAX_NAME_LENGTH = 100
+#: Read from the column, not repeated: this truncates writes to
+#: MapImageOverlay.name, so a widened column would otherwise keep clipping at
+#: the old width with nothing to show why.
+_MAX_NAME_LENGTH = column_max_length(MapImageOverlay, "name")
 #: How many overlays one pin or wiki may hold. Each is a full-resolution image
 #: composited on every map frame, so a page with dozens would be unusable long
 #: before it hit any storage limit - this is a rendering budget, not a quota.

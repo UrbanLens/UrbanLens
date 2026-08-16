@@ -11330,3 +11330,41 @@ blanket string replace across a 3,000-line module needs its match count asserted
 The lesson worth generalising: when a fix lands, the next question is not only "where else does this
 shape appear" (which chunk 572 asked, and answered with the notification previews) but "what else
 can change during the same window". The first asks about code shape; the second asks about time.
+
+## Chunk 575 - closing threads rather than opening one
+
+Three of this chunk's four lines of enquiry ended in "already handled", and the fourth in "already
+planned". Recording them so they are not re-run.
+
+**The 120-second window is now exhausted.** Chunk 574 left a list of other things that could change
+between a message being sent and its delayed alert firing. Checked, all covered: a sender being
+banned cannot happen - there is no ban or suspend feature, the only `is_active = False` in the
+codebase is email verification at signup; `community_enabled` and blocks are both inside
+`can_direct_message`, which the tasks now call; and an account actually deleted takes the message row
+with it, so the task's existing `DoesNotExist` guard catches it. Deletion is scheduled with a grace
+period during which the account is live and mail is legitimate.
+
+**Safety archival and the plugin system are both well covered** - archival by tests spanning the
+seal/secretbox wire format, idempotency, no-bundle handling, FK integrity after a contact scrub and
+the immediate-vs-grace scheduling split; plugins by 23 modules including the gate-isolation guard
+described in chunk 574.
+
+**The absence of moderation is known, not overlooked.** No content reporting, no suspend, and the
+site admin's only user-level action is full account deletion behind three guards. That is a real gap
+for an app with community wikis, DMs and live chat - but `docs/ROADMAP.md` already carries
+"Rate/abuse limiting for users (not just external APIs): DDOS/spam (UL-70), share caps". Filing it
+would have been noise. Worth noting that UL-70, like the other ticket ids the docs cite, lives in the
+`TODO.md` that no longer exists - the same problem already filed in `docs/PROBLEMS.md`, showing up
+again from a different direction.
+
+**TypeScript consolidation**, which the pytest consolidations have never covered: `bun run typecheck`
+clean, `bun test` **414 pass / 0 fail across 31 files in 17.81s**. That closes a verification gap I
+had been deferring for ten chunks - the TS tests added in 565 and 566 had never been run as part of a
+full-suite check.
+
+The one change: two more constants duplicating a column width, found by scanning for literals equal
+to some field's `max_length` and then discarding the coincidences (page sizes that happen to equal an
+unrelated column). `_MAX_LAYER_NAME_LENGTH` bounds `CustomLayer.name`, `_MAX_NAME_LENGTH` truncates
+`MapImageOverlay.name`, and both repeated 100 rather than reading it. Same drift as chunk 568's
+album fix, same remedy. Constants defined *in* a model module and used as the field's own
+`max_length` were left alone - those are the single definition, not a copy of one. 37 tests pass.

@@ -24,7 +24,7 @@ from urbanlens.dashboard.models.markup.model import CustomLayer
 from urbanlens.dashboard.models.pin.model import Pin
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.services.core.colors import clean_color
-from urbanlens.dashboard.services.core.text_limits import text_length_error
+from urbanlens.dashboard.services.core.text_limits import column_max_length, text_length_error
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki
 
 if TYPE_CHECKING:
@@ -33,7 +33,9 @@ if TYPE_CHECKING:
 
     from urbanlens.dashboard.models.wiki.model import Wiki
 
-_MAX_LAYER_NAME_LENGTH = 100
+#: Read from the column, not repeated: this bounds writes to CustomLayer.name,
+#: so a widened column would otherwise keep being rejected at the old width.
+_MAX_LAYER_NAME_LENGTH = column_max_length(CustomLayer, "name")
 _ALLOWED_COLORS = {hex_value for hex_value, _label in COLOR_CHOICES}
 _ALLOWED_ICONS = {value for value, _label in CUSTOM_LAYER_ICON_CHOICES}
 
