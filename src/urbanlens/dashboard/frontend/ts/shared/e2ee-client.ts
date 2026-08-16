@@ -66,6 +66,10 @@ export interface E2EEUrls {
      * unlock-only passkey. Optional, same pages as passkeyWrap. */
     passkeyRegisterOptions?: string;
     passkeyRegister?: string;
+    /** Base of the passkey collection (same path the register POST goes to);
+     * the client appends "<id>/delete/" to discard a registration that turned
+     * out unusable. */
+    passkeyBase?: string;
     /** FAQ entry explaining encryption/recovery keys in plain language, shown
      * wherever we ask the user to save their recovery key. Optional so pages
      * that don't wire it up just omit the link. */
@@ -771,6 +775,30 @@ export async function unlockFromLoginAssertion(credential: PublicKeyCredential):
     return unlockFromWrap(bundle, wrap, prf);
 }
 
+/**
+ * Remove a just-registered passkey that turned out unusable.
+ *
+ * Best-effort: a failure here leaves a stray credential the user can delete in
+ * Settings, which is strictly better than failing the enrollment twice over.
+ *
+ * @param credentialPk - Database id from the registration response.
+ */
+async function discardPasskey(credentialPk: number | undefined): Promise<void> {
+    const base = cfg().urls.passkeyBase;
+    if (!base || credentialPk === undefined) {
+        return;
+    }
+    try {
+        await fetch(`${base}${credentialPk}/delete/`, {
+            method: "POST",
+            headers: { "X-CSRFToken": csrfToken(), "X-Requested-With": "XMLHttpRequest" },
+            credentials: "same-origin",
+        });
+    } catch {
+        // Network failure - the credential stays, listed in Settings.
+    }
+}
+
 /** The outcome of a passkey-unlock enrollment attempt. */
 export interface PasskeyEnrollResult {
     ok: boolean;
@@ -848,7 +876,11 @@ export async function enrollPasskeyUnlock(password?: string): Promise<PasskeyEnr
         // need one follow-up assertion scoped to the new credential.
         prf = registration.prf ?? (await assertForPrf({ [credentialId]: prfInput }))?.prf ?? null;
         if (prf === null) {
-            return { ok: false, error: "That passkey was created but doesn't support unlocking messages (no PRF). You can remove it in Settings, or keep it as a sign-in key." };
+            // Registered for unlock, so it is not a login factor, and without
+            // PRF it will never hold a wrap either - a credential that does
+            // nothing but make the account look provisioned. Take it back out.
+            await discardPasskey(registration.credentialPk);
+            return { ok: false, error: "That passkey doesn't support unlocking messages, so it wasn't kept. Try a different authenticator, or set an account password instead." };
         }
     }
 

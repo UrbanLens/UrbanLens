@@ -294,6 +294,9 @@ export interface WebAuthnResult {
     error?: string;
     /** base64url rawId of the new credential (registration only). */
     credentialId?: string;
+    /** Database id of the new credential, for undoing a registration that
+     * turns out to be unusable (registration only). */
+    credentialPk?: number;
     /** PRF output when the browser evaluated it at create time. */
     prf?: Uint8Array | null;
     /** Whether the authenticator reports PRF support for this credential. */
@@ -340,7 +343,13 @@ export async function registerPasskey(cfg: RegisterConfig): Promise<WebAuthnResu
         if (!completeResp.ok) {
             return { ok: false, error: completeBody.error ?? "That passkey could not be saved." };
         }
-        return { ok: true, credentialId: bufferToBase64url(credential.rawId), prf: getPrfResult(credential), prfEnabled: prfEnabled(credential) };
+        return {
+            ok: true,
+            credentialId: bufferToBase64url(credential.rawId),
+            credentialPk: typeof completeBody.id === "number" ? completeBody.id : undefined,
+            prf: getPrfResult(credential),
+            prfEnabled: prfEnabled(credential),
+        };
     } catch (err) {
         return { ok: false, error: isCancellation(err) ? "Passkey creation was cancelled." : "Something went wrong creating that passkey." };
     }

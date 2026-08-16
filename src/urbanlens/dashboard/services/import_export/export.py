@@ -338,7 +338,7 @@ def _write_json(temp_dir: str, filename: str, data: Any) -> None:
         json.dump(data, fh, indent=2, ensure_ascii=False)
 
 
-def _copy_into_archive(source_path: str, dest_dir: str, unique_suffix: Any) -> str | None:
+def _copy_into_archive(source_path: str | None, dest_dir: str, unique_suffix: Any) -> str | None:
     """Copy a stored media file into the archive, disambiguating name collisions.
 
     Mirrors the file handling in :func:`_export_photos`: two rows can hold files
@@ -1186,12 +1186,7 @@ class SafetyCheckinsExport(ModelExportType["SafetyCheckin"]):
         """
         from urbanlens.dashboard.models.safety.model import SafetyCheckin
 
-        return (
-            SafetyCheckin.objects.filter(profile=profile)
-            .select_related("trip", "markup_map")
-            .prefetch_related("contacts__contact_profile", "messages__sender_profile", "messages__sender_contact", "markup_maps")
-            .order_by("created")
-        )
+        return SafetyCheckin.objects.filter(profile=profile).select_related("trip", "markup_map").prefetch_related("contacts__contact_profile", "messages__sender_profile", "messages__sender_contact", "markup_maps").order_by("created")
 
     def row(self, obj: SafetyCheckin) -> dict[str, Any]:
         """Return the exported dict for one check-in.
@@ -1293,12 +1288,7 @@ class MapAnnotationsExport(ExportType):
         from urbanlens.dashboard.models.markup.model import MarkupMap, PinMarkup
 
         maps = MarkupMap.objects.for_profile(profile).select_related("pin").prefetch_related("items__layer").order_by("created")
-        standalone = (
-            PinMarkup.objects.for_profile(profile)
-            .filter(parent_map__isnull=True)
-            .select_related("parent_pin", "parent_wiki", "layer")
-            .order_by("created")
-        )
+        standalone = PinMarkup.objects.for_profile(profile).filter(parent_map__isnull=True).select_related("parent_pin", "parent_wiki", "layer").order_by("created")
         overlays = MapImageOverlay.objects.for_profile(profile).select_related("image", "parent_pin", "parent_wiki", "layer").order_by("created")
 
         return {

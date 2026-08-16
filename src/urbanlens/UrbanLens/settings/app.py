@@ -152,6 +152,18 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
             "per environment once the reports for that environment are clean - see docs/NOTES.md."
         ),
     )
+    trusted_proxy_count: int = Field(
+        default=1,
+        description=(
+            "How many reverse proxies sit between the app and the internet, each appending to "
+            "X-Forwarded-For. Per-IP rate limiting reads the entry that many places from the right, "
+            "since anything further left was supplied by the client and can be forged. The default of 1 "
+            "matches the shipped topology (config/nginx appends its real_ip-resolved client address). "
+            "Set 0 when nothing fronts the app, so REMOTE_ADDR is used and X-Forwarded-For ignored - "
+            "but never leave it at 0 behind a proxy, or every request keys to the proxy's own address "
+            "and one attacker throttles the whole site."
+        ),
+    )
 
     # Classes
     default_auto_field: str = Field(default="django.db.models.BigAutoField", description="The default auto field")

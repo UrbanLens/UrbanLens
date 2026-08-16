@@ -375,7 +375,7 @@ class ResetPurgesWrapsTests(TestCase):
 
 
 class CredentialPromptTests(TestCase):
-    """The post-login prompt: persistent, snoozeable, and satisfied by any credential."""
+    """The post-login prompt: persistent, snoozeable, and satisfied by a real unlock path."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -396,7 +396,7 @@ class CredentialPromptTests(TestCase):
     def test_snooze_is_persistent_not_per_session(self) -> None:
         profile = _profile()
         client = _client_for(profile)
-        client.get(reverse("account.set_password.skip"))
+        client.post(reverse("account.set_password.skip"))
 
         # A completely fresh session - the old per-session flag would re-prompt here.
         response = self._post_login(profile)
@@ -414,7 +414,7 @@ class CredentialPromptTests(TestCase):
 
         self.assertEqual(response.url, reverse("account.set_password"))
 
-    def test_any_passkey_satisfies_the_prompt(self) -> None:
+    def test_a_passkey_satisfies_the_prompt_when_there_is_nothing_to_unlock(self) -> None:
         profile = _profile()
         _credential(profile, login_factor=False)
 
@@ -422,9 +422,55 @@ class CredentialPromptTests(TestCase):
 
         self.assertNotEqual(response.url, reverse("account.set_password"))
 
+    def test_a_wrapped_passkey_satisfies_the_prompt(self) -> None:
+        profile = _profile()
+        bundle = _enroll(profile)
+        _wrap(bundle, _credential(profile, login_factor=False))
+
+        response = self._post_login(profile)
+
+        self.assertNotEqual(response.url, reverse("account.set_password"))
+
+    def test_a_passkey_that_unwraps_nothing_still_prompts(self) -> None:
+        """Owning a credential is not the same as owning a way back in.
+
+        An authenticator without PRF support - or one enrolled before unlock
+        wraps existed - leaves the account with encrypted messages it cannot
+        reach on a new device. Counting it as "handled" silenced the prompt for
+        exactly the accounts it exists to reach.
+        """
+        profile = _profile()
+        _enroll(profile)
+        _credential(profile, login_factor=True)
+
+        response = self._post_login(profile)
+
+        self.assertEqual(response.url, reverse("account.set_password"))
+
+    def test_a_wrap_left_behind_by_a_reset_does_not_satisfy_the_prompt(self) -> None:
+        profile = _profile()
+        bundle = _enroll(profile)
+        bundle.version = 2
+        bundle.save(update_fields=["version"])
+        _wrap(bundle, _credential(profile, login_factor=False), version=1)
+
+        response = self._post_login(profile)
+
+        self.assertEqual(response.url, reverse("account.set_password"))
+
     def test_a_password_satisfies_the_prompt(self) -> None:
         profile = _profile(password=PASSWORD)
 
         response = self._post_login(profile)
 
         self.assertNotEqual(response.url, reverse("account.set_password"))
+
+    def test_the_snooze_refuses_a_get(self) -> None:
+        """The snooze outlives the session, so a cross-site navigation must not set it."""
+        profile = _profile()
+
+        response = _client_for(profile).get(reverse("account.set_password.skip"))
+
+        self.assertEqual(response.status_code, 405)
+        profile.refresh_from_db()
+        self.assertIsNone(profile.credential_prompt_snoozed_until)

@@ -12,6 +12,9 @@ from urllib.parse import quote
 from uuid import UUID
 
 from django import forms
+
+# Aliased: several functions here bind a local `settings` to SiteSettings.
+from django.conf import settings as django_settings
 from django.contrib.auth import REDIRECT_FIELD_NAME, get_user_model, login as auth_login, views as auth_views
 from django.contrib.auth.forms import AuthenticationForm, PasswordResetForm, UserCreationForm
 from django.contrib.auth.mixins import LoginRequiredMixin
@@ -1009,9 +1012,15 @@ def _needs_credential_prompt(profile) -> bool:
     """True when this account should see the add-a-passkey-or-password prompt.
 
     The prompt exists to give a passwordless (SSO) account *some* durable way
-    back into its encrypted messages on a cold device. It stays quiet once the
-    account has a password, any passkey (a login factor is PRF-wrappable, an
-    unlock-only key is the goal itself), or an active snooze.
+    back into its encrypted messages on a cold device, so what silences it is
+    an unlock path, not a credential row. Owning a passkey is not the same
+    thing: an authenticator without ``prf`` support, or one enrolled before
+    this feature existed, carries no ``E2EEPasskeyWrap`` and unwraps nothing.
+    Treating those as "handled" left exactly the accounts this prompt is for
+    permanently unprompted.
+
+    Accounts with no key bundle have nothing to unlock, so for them any
+    passkey is credential enough.
 
     Args:
         profile: The signed-in user's profile.
@@ -1020,13 +1029,19 @@ def _needs_credential_prompt(profile) -> bool:
         Whether to redirect through the prompt after login.
     """
     from urbanlens.dashboard.models.account import WebAuthnCredential
+    from urbanlens.dashboard.models.e2ee import E2EEPasskeyWrap, MessagingKeyBundle
 
     user = profile.user
     if user.has_usable_password():
         return False
     if profile.credential_prompt_snoozed_until and profile.credential_prompt_snoozed_until > timezone.now():
         return False
-    return not WebAuthnCredential.objects.filter(user=user).exists()
+    if not WebAuthnCredential.objects.filter(user=user).exists():
+        return True
+    bundle = MessagingKeyBundle.objects.filter(profile=profile).first()
+    if bundle is None:
+        return False
+    return not E2EEPasskeyWrap.objects.usable_for_bundle(bundle).exists()
 
 
 class SetPasswordPromptView(LoginRequiredMixin, View):
@@ -1056,9 +1071,15 @@ class SetPasswordPromptView(LoginRequiredMixin, View):
 
 
 class SetPasswordSkipView(View):
-    """GET /accounts/set-password/skip/ - snooze the prompt for a month."""
+    """POST /accounts/set-password/skip/ - snooze the prompt for a month.
 
-    def get(self, request: HttpRequest) -> HttpResponse:
+    POST rather than GET because the snooze outlives the session: as a GET it
+    was reachable by cross-site top-level navigation, which carries a
+    SameSite=Lax session cookie, so any page could silence a security prompt
+    for a month on the visitor's behalf.
+    """
+
+    def post(self, request: HttpRequest) -> HttpResponse:
         from urbanlens.dashboard.models.profile.model import Profile
 
         if request.user.is_authenticated:
@@ -1230,7 +1251,15 @@ def _process_pending_invitations(user: User, invite_token: str | None = None) ->
 
 
 def _client_ip(request: HttpRequest) -> str:
-    """Best-effort client IP for per-IP rate limiting (login, passphrases, password checks).
+    """Client IP for per-IP rate limiting (login, passphrases, password checks).
+
+    Counted from the right of ``X-Forwarded-For``, one place per proxy in
+    ``TRUSTED_PROXY_COUNT``. The leftmost entries arrive from the
+    client and are forgeable, so keying on them let an attacker mint a fresh
+    counter per request and spray passwords through the throttle untouched;
+    only the entries our own proxies appended mean anything. A chain shorter
+    than the configured hop count means the request did not come through them,
+    so it falls back to the socket address.
 
     Args:
         request: The incoming HTTP request.
@@ -1238,10 +1267,14 @@ def _client_ip(request: HttpRequest) -> str:
     Returns:
         A string suitable for use as a cache-key fragment.
     """
-    forwarded = request.META.get("HTTP_X_FORWARDED_FOR", "")
-    if forwarded:
-        return forwarded.split(",")[0].strip() or "unknown"
-    return request.META.get("REMOTE_ADDR") or "unknown"
+    remote_addr = request.META.get("REMOTE_ADDR") or "unknown"
+    hops = django_settings.TRUSTED_PROXY_COUNT
+    if hops <= 0:
+        return remote_addr
+    chain = [entry.strip() for entry in request.META.get("HTTP_X_FORWARDED_FOR", "").split(",") if entry.strip()]
+    if len(chain) < hops:
+        return remote_addr
+    return chain[-hops]
 
 
 @require_GET

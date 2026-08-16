@@ -10,6 +10,7 @@ from __future__ import annotations
 import time
 
 from django.contrib.auth.models import User
+from django.test import override_settings
 from django.urls import reverse
 from model_bakery import baker
 import pyotp
@@ -475,6 +476,74 @@ class LoginIpThrottleTests(TestCase):
 
         self.assertEqual(response.status_code, 302)
         self.assertIn("_auth_user_id", self.client.session)
+
+    def test_a_forged_forwarded_for_prefix_cannot_mint_fresh_counters(self) -> None:
+        """The throttle must key on what our proxy appended, not what the client sent.
+
+        config/nginx appends its real_ip-resolved client address to whatever
+        X-Forwarded-For arrived, so a client that sends its own header ends up
+        leftmost in the chain. Reading from that end gave an attacker a new
+        cache key per request - unlimited spraying through a throttle that
+        looked like it was working.
+        """
+        for i in range(3):
+            self.client.post(
+                reverse("login"),
+                {"username": f"sprayed_{i}", "password": "wrong-password"},
+                REMOTE_ADDR="172.18.0.5",
+                HTTP_X_FORWARDED_FOR=f"10.0.0.{i}, {self.ATTACKER_IP}",
+            )
+
+        response = self.client.post(
+            reverse("login"),
+            {"username": self.user.username, "password": self.PASSWORD},
+            REMOTE_ADDR="172.18.0.5",
+            HTTP_X_FORWARDED_FOR=f"10.0.0.99, {self.ATTACKER_IP}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_a_different_real_client_behind_the_same_proxy_is_unaffected(self) -> None:
+        """The counter still has to distinguish visitors, not lump the proxy together."""
+        for i in range(3):
+            self.client.post(
+                reverse("login"),
+                {"username": f"sprayed_{i}", "password": "wrong-password"},
+                REMOTE_ADDR="172.18.0.5",
+                HTTP_X_FORWARDED_FOR=f"10.0.0.{i}, {self.ATTACKER_IP}",
+            )
+
+        response = self.client.post(
+            reverse("login"),
+            {"username": self.user.username, "password": self.PASSWORD},
+            REMOTE_ADDR="172.18.0.5",
+            HTTP_X_FORWARDED_FOR=self.OTHER_IP,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    @override_settings(TRUSTED_PROXY_COUNT=0)
+    def test_with_no_proxy_configured_the_header_is_ignored_entirely(self) -> None:
+        """Nothing in front of the app means X-Forwarded-For is purely client input."""
+        for i in range(3):
+            self.client.post(
+                reverse("login"),
+                {"username": f"sprayed_{i}", "password": "wrong-password"},
+                REMOTE_ADDR=self.ATTACKER_IP,
+                HTTP_X_FORWARDED_FOR=f"10.0.0.{i}",
+            )
+
+        response = self.client.post(
+            reverse("login"),
+            {"username": self.user.username, "password": self.PASSWORD},
+            REMOTE_ADDR=self.ATTACKER_IP,
+            HTTP_X_FORWARDED_FOR="10.0.0.99",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
 
     def test_ip_gate_error_text_is_identical_to_identifier_lockout(self) -> None:
         """The two gates must be indistinguishable - compares live responses, not literals."""

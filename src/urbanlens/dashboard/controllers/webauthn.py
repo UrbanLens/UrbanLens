@@ -62,7 +62,11 @@ class PasskeyRegisterView(LoginRequiredMixin, View):
             credential = verify_and_save_registration(request, request.user, credential_json, name, login_factor=login_factor)
         except WebAuthnError as exc:
             return JsonResponse({"error": exc.safe_message}, status=400)
-        return JsonResponse({"ok": True, "name": credential.name}, status=201)
+        # The id lets an unlock enrollment undo itself: whether the authenticator
+        # really supports PRF is only knowable client-side, after this call, and
+        # an unlock-only credential that cannot wrap anything is dead weight -
+        # it is not a login factor either.
+        return JsonResponse({"ok": True, "name": credential.name, "id": credential.pk}, status=201)
 
 
 class PasskeyRenameView(LoginRequiredMixin, View):
@@ -86,5 +90,7 @@ class PasskeyDeleteView(LoginRequiredMixin, View):
         credential = get_object_or_404(WebAuthnCredential, pk=credential_id, user=request.user)
         credential.delete()
         maybe_clear_backup_codes(credential.user)
+        if request.headers.get("X-Requested-With") == "XMLHttpRequest":
+            return JsonResponse({"ok": True})
         messages.success(request, "Passkey removed.")
         return redirect(f"{reverse('settings.view')}#security-settings-section")

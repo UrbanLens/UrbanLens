@@ -612,6 +612,10 @@ else:
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
 
+# Proxy hops whose X-Forwarded-For entries are ours rather than the client's.
+# Read by the per-IP rate limiters; see the field description in settings/app.py.
+TRUSTED_PROXY_COUNT = _app_settings.trusted_proxy_count
+
 protocols = ["https://"]
 if _is_local:
     # Local development: cover common ports used by docker-compose and direct runserver.

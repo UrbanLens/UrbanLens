@@ -193,7 +193,7 @@ class CspMatchesTheTemplatesTests(SimpleTestCase):
     def test_every_cdn_script_host_in_the_base_template_is_allowed(self) -> None:
         """A missing host here is a blank page once the policy is enforced."""
         html = BASE_TEMPLATE.read_text(encoding="utf-8")
-        hosts = set(re.findall(r"""<script[^>]+src=["'](https://[^/"']+)""", html))
+        hosts = set(re.findall(r"""<script[^>]+src=["'](https://[^/"']+)""", html, re.IGNORECASE))
         self.assertTrue(hosts, f"expected remote <script> tags in {BASE_TEMPLATE}")
 
         allowed = settings.CONTENT_SECURITY_POLICY_REPORT_ONLY["DIRECTIVES"]["script-src"]
@@ -211,7 +211,9 @@ class CspMatchesTheTemplatesTests(SimpleTestCase):
         stops requiring the concession instead of having to be deleted.
         """
         html = BASE_TEMPLATE.read_text(encoding="utf-8")
-        inline_blocks = re.findall(r"<script(?![^>]*\ssrc=)[^>]*>", html)
+        # Case-insensitive: HTML tag names are, so a <SCRIPT> block would
+        # otherwise slip past and read as "no inline scripts left".
+        inline_blocks = re.findall(r"<script(?![^>]*\ssrc=)[^>]*>", html, re.IGNORECASE)
 
         script_src = settings.CONTENT_SECURITY_POLICY_REPORT_ONLY["DIRECTIVES"]["script-src"]
 

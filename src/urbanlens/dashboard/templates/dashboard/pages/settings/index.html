@@ -1762,6 +1762,8 @@
             passkeyWrap: "{% url 'e2ee.passkey_wrap' %}",
             passkeyRegisterOptions: "{% url 'settings.security.passkeys.options' %}",
             passkeyRegister: "{% url 'settings.security.passkeys.register' %}",
+            {# Same path the register POST targets: the passkey collection, which per-credential actions hang off. #}
+            passkeyBase: "{% url 'settings.security.passkeys.register' %}",
         },
     });
 
