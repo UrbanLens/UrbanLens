@@ -105,7 +105,27 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
         notify("error", message);
         // Queued behind any in-flight sharing POST so this "off" cannot overtake
         // the "on" it is undoing.
-        void toggleRequest.then(() => postToggle(false)).catch(() => undefined);
+        void toggleRequest
+            .then(() => postToggle(false))
+            .then((response) => {
+                if (!response.ok) forcedOffRefused();
+            })
+            .catch(forcedOffRefused);
+    }
+
+    /**
+     * The server would not accept the forced "off".
+     *
+     * A non-ok status resolves like any other response, so without this the
+     * refusal read as success: switched off here, still enabled server-side,
+     * partner still looking at the last known position. Since this browser
+     * genuinely cannot send positions, the switch stays off and the owner is
+     * told how to reach a control that still works - after a reload the toggle
+     * renders from the server's state, so it comes back on and can be turned
+     * off for real.
+     */
+    function forcedOffRefused(): void {
+        notify("error", "Live location is still switched on for this check-in. Reload the page and turn it off, or your partner will keep seeing your last position.");
     }
 
     function onWatchError(error: GeolocationPositionError): void {

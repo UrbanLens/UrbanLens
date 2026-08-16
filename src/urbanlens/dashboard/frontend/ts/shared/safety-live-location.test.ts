@@ -355,6 +355,38 @@ describe("when location permission is denied", () => {
 
         expect(posted.filter((p) => p.url === "/update/")).toHaveLength(0);
     });
+
+    // A refused disable is the case this whole path exists to prevent: off
+    // locally, still enabled on the server, partner still watching a stale
+    // marker. A non-ok status resolves like any other response, so it has to
+    // be inspected rather than assumed.
+    test("a refused disable is reported rather than assumed to have worked", async () => {
+        const h = setup(true);
+        stubFetch(500);
+        h.emitError(1);
+        await settle();
+
+        expect(h.errors).toHaveLength(2);
+        expect(h.errors[1]).toContain("still switched on");
+    });
+
+    test("a disable lost to the network is reported too", async () => {
+        const h = setup(true);
+        stubNetworkFailure();
+        h.emitError(1);
+        await settle();
+
+        expect(h.errors).toHaveLength(2);
+        expect(h.errors[1]).toContain("still switched on");
+    });
+
+    test("an accepted disable says nothing further", async () => {
+        const h = setup(true);
+        h.emitError(1);
+        await settle();
+
+        expect(h.errors).toHaveLength(1);
+    });
 });
 
 describe("when the browser has no geolocation at all", () => {
