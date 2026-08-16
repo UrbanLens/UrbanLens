@@ -6107,6 +6107,21 @@ with it - that single request is enough to catch this class permanently.
 
 ## OPEN 2026-08-13: ~187 write routes have no test that names them
 
+**Widened again 2026-08-16 (chunks 553-554): the sweep now reaches 486 of 647 named routes (75%),
+up from 160.** Chunk 553's parameter measurement drove it - the cheap wins first (`label_kind`,
+`profile_slug`, `profile_id`, `checkin_uuid`, `group_uuid`), then multi-parameter routes where every
+parameter is known, then `session_id`, the single largest gate at 36 routes.
+
+`session_id` needed a wrinkle worth recording: it names a **different model in each game** (SpotGuessr
+`GameSession`, `TriviaSession`, `ConsensusSession`), so no single value satisfies all 36. The sweep
+now accepts a *list* of candidate values for a parameter and tries each on single-parameter routes,
+so every game family is exercised for real by one candidate and merely 404s for the others - and a
+404 passes a sweep that only ever objects to a crash. Multi-parameter routes take the first candidate
+of each, keeping the URL count linear.
+
+Those 36 routes came back clean. The remaining 161 need `token`, `activity_id`, `album_slug`,
+`round_id`, `image_id` and similar - each a fixture, each a further increment.
+
 **Extended 2026-08-16 (chunk 552), and it found two more.** The first version only reached routes
 taking a single owned-object parameter - 160 of the resolver's 648 named routes. The larger
 population was the **230 zero-parameter routes**, easy to overlook precisely because they need no

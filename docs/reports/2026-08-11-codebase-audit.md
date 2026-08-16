@@ -10578,3 +10578,24 @@ so the first database error poisons it and everything after cascades. The fix wa
 savepoints - precisely what chunk 526 did for `pin_merge`'s recovery paths, encountered this time in
 my own harness. A sweep that cascades does not just lose information, it actively misdirects, and
 the misdirection looks exactly like a finding.
+
+## Chunk 554 - the sweep reaches three quarters of the route table
+
+Added `session_id`, the largest remaining gate at 36 routes. It needed one design wrinkle: the
+parameter names a *different model* in each of the three games, so no single value satisfies it. The
+sweep now takes a list of candidates per parameter and tries each on single-parameter routes - every
+game family gets exercised for real by one of them and 404s for the others, and a 404 passes a sweep
+that only objects to crashes. Multi-parameter routes take the first candidate of each, so the URL
+count stays linear.
+
+Those 36 came back clean. Reach is now **486 of 647 named routes (75%)**, up from the 160 chunk 551
+started with.
+
+The fixture bit me once first: I assumed the session models had a `profile` field, and they have
+`host_profile`. Four tests failed on a `TypeError` that looked exactly like a finding for as long as
+it took to read the model. That is the same fixture-error class this audit has hit repeatedly, and
+the same discipline resolves it - read the model rather than believe the traceback's framing.
+
+Three chunks of widening have produced three real defects (a dead route, a guaranteed-500 POST, and
+an object that could be created but never deleted) plus one instrument bug. The pattern holds:
+each increment of reach buys roughly one finding, and the cost per increment is one fixture.

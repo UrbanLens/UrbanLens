@@ -113,6 +113,16 @@ class WriteRouteSmokeTests(TestCase):
             "profile_id": profile.pk,
             "checkin_uuid": str(baker.make(SafetyCheckin, profile=profile, title="Smoke Checkin 2").uuid),
             "group_uuid": str(self._group_chat(profile).uuid),
+            # `session_id` names a *different model* in each game, so one value
+            # cannot satisfy all 36 routes that take it. Supplying all three
+            # means each family is exercised for real by one of them and merely
+            # 404s for the others - and a 404 passes this sweep, which only ever
+            # objects to a crash.
+            "session_id": [
+                baker.make("dashboard.GameSession", host_profile=profile).pk,
+                baker.make("dashboard.TriviaSession", host_profile=profile).pk,
+                baker.make("dashboard.ConsensusSession", host_profile=profile).pk,
+            ],
         }
 
     @staticmethod
@@ -145,11 +155,25 @@ class WriteRouteSmokeTests(TestCase):
             params = entries[0][0][0][1]
             if params and not all(param in self.identifiers for param in params):
                 continue
-            try:
-                urls.append((name, reverse(name, kwargs={param: self.identifiers[param] for param in params})))
-            except NoReverseMatch:
-                continue
+            # A parameter may offer several candidate values (see `session_id`).
+            # Single-parameter routes try each; multi-parameter routes take the
+            # first of each, so the URL count stays linear rather than
+            # combinatorial for no extra coverage.
+            if len(params) == 1:
+                candidates = [{params[0]: value} for value in self._candidates(params[0])]
+            else:
+                candidates = [{param: self._candidates(param)[0] for param in params}]
+            for kwargs in candidates:
+                try:
+                    urls.append((name, reverse(name, kwargs=kwargs)))
+                except NoReverseMatch:
+                    continue
         return sorted(urls)
+
+    def _candidates(self, param: str) -> list:
+        """Every value worth trying for *param*, always as a list."""
+        value = self.identifiers[param]
+        return value if isinstance(value, list) else [value]
 
     def _crashing_routes(self) -> dict[str, str]:
         """Route name → how it crashed, for every swept write route that did."""
