@@ -9191,3 +9191,27 @@ Two details it inherits from earlier mistakes here: parameters accumulate down t
 (reading only leaf patterns is what made `test_route_query_scaling`'s second version blind to most
 parameterised routes, per its own docstring), and a handler taking `**kwargs` is skipped because it
 accepts anything by construction.
+
+## Keyboard-invoked context menu may swallow the next activation (unverified)
+
+`label-picker.ts`'s `isMouseContextMenu` decides whether to arm click-suppression after a
+`contextmenu` event:
+
+```ts
+const pointerType = (event as PointerEvent).pointerType;
+return pointerType ? pointerType === "mouse" : event.button === 2;
+```
+
+`contextmenu` is a `MouseEvent`, so `pointerType` is generally absent and the `button === 2`
+fallback decides. That correctly distinguishes a mouse right-click (button 2, no suppression) from
+a touch long-press (button 0, suppression armed). But a context menu invoked from the **keyboard**
+- the Menu key, or Shift+F10 - also reports `button === 0`, so it would arm the suppression with no
+follow-up click ever coming. The guard then stays set until some unrelated later click, which is
+exactly the failure the function's own docstring describes: "swallowing keyboard (Enter/Space)
+activations in the meantime".
+
+Not fixed here because it cannot be confirmed without a real browser, and the plausible
+discriminator (`event.detail === 0` for keyboard-invoked menus) is a behaviour I would be asserting
+rather than observing. Worth ten minutes with DevTools on the Organize page label picker: press the
+Menu key on a label chip, then try to activate any chip with Enter, and see whether the first
+Enter is swallowed.
