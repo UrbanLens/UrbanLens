@@ -218,6 +218,11 @@ def _apply_form(achievement: Achievement, request: HttpRequest) -> None:
             raise ValidationError({"custom_icon": upload_error[0]})
         achievement.custom_icon = uploaded
     elif request.POST.get("clear_custom_icon"):
+        # Clearing the field alone leaves the file on disk (Django never
+        # deletes FileField storage), where the media gate's icon branch keeps
+        # serving it - the same orphan class as deleted comment photos.
+        if achievement.custom_icon:
+            achievement.custom_icon.delete(save=False)
         achievement.custom_icon = None
 
     achievement.full_clean(exclude=["slug", "uuid"])

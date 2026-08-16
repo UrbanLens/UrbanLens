@@ -534,6 +534,10 @@ def _apply_custom_icon_from_post(label: Label, request: HttpRequest) -> str | No
             return upload_error[0]
         label.custom_icon = _resize_custom_icon(custom_icon)
     elif request.POST.get("clear_custom_icon"):
+        # See achievements' equivalent: clearing the field does not remove the
+        # stored file, so an explicitly-removed icon stayed fetchable.
+        if label.custom_icon:
+            label.custom_icon.delete(save=False)
         label.custom_icon = None
     return None
 

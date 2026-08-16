@@ -1898,6 +1898,16 @@ comments in `src/urbanlens/dashboard/controllers/media.py`:
   safe. Two tests. The residual risk is now bounded to *historical* orphans and crash windows
   rather than accumulating with normal use - a one-time sweep of `comment_images/` against
   surviving rows would close it entirely.
+
+  **Systematic sweep (chunk 521)**: seven file-bearing model fields exist. `Image.image` and both
+  comment images are now handled; explicit *clears* of `Achievement.custom_icon` and
+  `Label.custom_icon` now delete their files too (a user pressing "remove icon" is the same
+  expectation as deleting a photo). **Still stranding files, recorded not fixed**: replacing an
+  icon or avatar with a new upload leaves the previous file, and deleting a Pin/Label/Achievement
+  row leaves its icon. Those want a `post_delete`/`pre_save` receiver pair rather than per-caller
+  code - the right shape, but a signal touching five models deserves an owner's review rather
+  than an audit chunk, and the residual is small decorative icons under an already
+  authenticated-only branch.
 - **Unknown path families** (anything under MEDIA_ROOT outside the cataloged prefixes
   `pin_images/`, `comment_images/`, `avatars/`, `pin_custom_icons/`, `label_icons/`):
   authenticated-only, logged at INFO. Any future `upload_to` prefix must get an explicit branch

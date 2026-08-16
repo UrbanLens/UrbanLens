@@ -9572,3 +9572,24 @@ file exists before deletion so the assertion cannot pass vacuously.
 
 The entry is updated rather than closed: historical orphans and crash windows remain, but they no
 longer accumulate with ordinary use, and a one-time sweep would finish the job.
+
+## Chunk 521 - the orphan class, swept systematically across all seven file fields
+
+Generalised chunk 520 instead of moving on: the codebase has **seven** file-bearing model fields
+(two comment images, `Image.image`, three custom icons, the avatar). Status after this chunk:
+`Image.image` was already correct everywhere including bulk paths; both comment images fixed in
+520; avatar *clearing* already deletes its file; and explicit **clears** of achievement and label
+icons now do too - a user pressing "remove icon" expects the file gone exactly as much as a user
+deleting a photo does.
+
+**Deliberately not fixed, and filed**: replacing an icon/avatar with a new upload strands the
+previous file, and deleting a Pin/Label/Achievement row strands its icon. The right fix is a
+`pre_save`/`post_delete` receiver pair covering all five models rather than five more per-caller
+edits - but a signal touching five models is a design decision with real blast radius (this
+codebase's own gotchas file warns about signal handlers being edited unsafely), and the residual
+is small decorative icons behind an already authenticated-only branch. Recorded with the shape of
+the fix so the owner can take it in one deliberate change.
+
+605 label/achievement tests pass. The pattern worth keeping: when a defect is found in one place,
+the next question is which *class* of code shares its shape - which is how one comment-image bug
+became a seven-field inventory with three fixes and a scoped hand-off.
