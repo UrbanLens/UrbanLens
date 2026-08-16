@@ -10927,3 +10927,33 @@ no longer configured, so it can only pass if rotation actually rewrote the value
 not raising. Verified to bind: disabling the skip fails that test and only that test. My first
 version of it was weaker - it wrote the healthy row under the new key, where the assertion would
 have held whether or not anything was rotated.
+
+## Chunk 564 - a different instrument, and a class the whole suite is blind to
+
+Mined `4c2cb212` (achievements/map-layer JS). Changing instrument first: `bun run typecheck` is
+clean and `bun test` is 406 pass / 0 fail across 29 files, both directly on this host. Worth knowing
+that the frontend toolchain works here, since everything this session has leaned on pytest.
+
+Most of that commit is compiled bundler output, which turned out to be the interesting part. The
+bundler emits entry files plus content-hashed shared chunks and **all of it is committed**. The
+chunk prefix is derived from an entry point, so an ordinary rebuild renames every chunk - this tree
+has flipped between `photo-location-scan-*` and `achievements-*` and back at least once, which is
+what makes the commit's diff so large. Combine that with a `cleanup compiled js` commit already in
+this history and the hazard is obvious: commit an entry without its chunks, or prune one that is
+still referenced, and an entry file imports a 404.
+
+Checked both directions. All 8 chunk imports resolve and all 14 template-referenced bundles exist -
+the tree is consistent today. But nothing in this repository would have told anyone otherwise. The
+Python suite never loads the bundle, the TypeScript tests run against `ts/` sources rather than
+compiled output, and the failure appears only in a browser console as a whole page's JavaScript
+failing to load. That is now a guard, verified to bind by deleting a chunk and an entry file (both
+checks failed, then passed again once restored).
+
+The TS source changes in that commit - lazy pointer capture, `touch-action` management, mouse
+context-menu detection - are careful and well-commented. One edge case in `isMouseContextMenu`
+looks real: a keyboard-invoked context menu (Menu key, Shift+F10) reports `button === 0` just as a
+touch long-press does, so it would arm click-suppression with no follow-up click ever coming -
+precisely the swallowing the function's own docstring exists to avoid. **Not fixed**, because
+confirming it needs a real browser and the plausible discriminator (`event.detail === 0`) is
+something I would be asserting rather than observing. Filed in `docs/PROBLEMS.md` with the ten-minute
+DevTools check that would settle it.
