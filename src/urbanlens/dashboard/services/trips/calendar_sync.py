@@ -24,6 +24,7 @@ from urbanlens.dashboard.services.apis.calendar.google import (
     GoogleCalendarGateway,
 )
 from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
 if TYPE_CHECKING:
     from collections.abc import Collection
@@ -465,20 +466,33 @@ def _invite_participants(trip: Trip, importer: Profile, profile_ids: list[int], 
         if invitee is None or invitee.pk == importer.pk:
             continue
         if not ProfileModel.are_friends(importer, invitee):
-            skipped.append(f"{invitee.username} was not invited because you are not friends on UrbanLens.")
+            # Named toward the importer with the same masking: they picked this
+            # person from a list that may itself have shown a placeholder.
+            invitee_name = resolve_visible_identity(importer, invitee)["display_name"]
+            skipped.append(f"{invitee_name} was not invited because you are not friends on UrbanLens.")
             continue
         if trip.profiles.count() >= max_members:
             skipped.append(f'"{trip.name}" is full ({max_members} members maximum); some invitations were not sent.')
             break
         _membership, created = TripMembership.objects.get_or_create(trip=trip, profile=invitee, defaults={"status": TripMembership.STATUS_INVITED})
         if created:
+            # Masked toward this specific recipient before formatting, like
+            # trip_membership.invite_to_trip's identical notification. Being
+            # friends is not sufficient permission: VisibilityChoice's own
+            # docstring notes accepted friends qualify for every level *except*
+            # NO_ONE, so an importer who has hidden their identity would
+            # otherwise be named here. The message is stored as plain text and
+            # is picked up by push delivery and SMS, so masking has to happen at
+            # write time - it cannot be undone at render time.
+            importer_name = resolve_visible_identity(invitee, importer)["display_name"]
             NotificationLog.objects.create(
                 profile=invitee,
+                source_profile=importer,
                 status=Status.UNREAD,
                 importance=Importance.MEDIUM,
                 notification_type=NotificationType.ADDED_TO_TRIP,
                 title="Added to a trip",
-                message=f'{importer.username} added you to the trip "{trip.name}".',
+                message=f'{importer_name} added you to the trip "{trip.name}".',
                 url=reverse("trips.detail", kwargs={"trip_slug": trip.slug}),
             )
             invited += 1

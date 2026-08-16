@@ -22,9 +22,15 @@ from django.urls import reverse
 from django.utils import timezone
 from hypothesis import given, strategies as st
 import pytest
+from model_bakery import baker
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink
+from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
+from urbanlens.dashboard.models.friendship.model import Friendship
+from urbanlens.dashboard.models.notifications.meta import NotificationType
+from urbanlens.dashboard.models.notifications.model import NotificationLog
+from urbanlens.dashboard.models.profile.meta import VisibilityChoice
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trips.model import Trip, TripActivity, TripMembership
 from urbanlens.dashboard.services.apis.calendar.google import ACTIVITY_ID_EVENT_PROPERTY, TRIP_UUID_EVENT_PROPERTY, CalendarEventNotFoundError
@@ -1023,3 +1029,62 @@ class CalendarCallbackViewTests(TestCase):
         response = self.client.get(reverse("trips.calendar.callback"), {"error": "access_denied"})
         self.assertEqual(response.status_code, 302)
         self.assertFalse(GoogleCalendarAccount.objects.filter(profile=self.profile).exists())
+
+
+class CalendarInviteIdentityMaskingTests(TestCase):
+    """The calendar importer's trip invite must mask like the ordinary one does.
+
+    `trip_membership.invite_to_trip` resolves the inviter through
+    `resolve_visible_identity` before formatting, with a comment explaining that
+    a notification's message is stored as plain text and so must be masked at
+    write time. The Google Calendar importer creates the *same*
+    `ADDED_TO_TRIP` notification and named `importer.username` raw.
+
+    Being friends is not sufficient permission. `VisibilityChoice`'s own
+    docstring says accepted friends qualify for every level **except**
+    `NO_ONE` - so an importer who has hidden their identity was still named,
+    and a NotificationLog insert is picked up by push delivery and by
+    `notification_text_alerts`, which builds an SMS body from the stored text.
+    The name left the app.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.importer = baker.make(User, username="hidden_importer").profile
+        self.invitee = baker.make(User, username="invitee").profile
+        Friendship.objects.create(from_profile=self.importer, to_profile=self.invitee, status=FriendshipStatus.ACCEPTED)
+        Friendship.objects.create(from_profile=self.invitee, to_profile=self.importer, status=FriendshipStatus.ACCEPTED)
+        self.trip = baker.make(Trip, creator=self.importer, name="Quarry run")
+        self.trip.profiles.add(self.importer)
+
+    def _invite(self) -> None:
+        from urbanlens.dashboard.services.trips.calendar_sync import _invite_participants
+
+        _invite_participants(self.trip, self.importer, [self.invitee.pk], [])
+
+    def test_a_friend_who_hides_their_identity_is_not_named(self) -> None:
+        self.importer.profile_visibility = VisibilityChoice.NO_ONE
+        self.importer.save(update_fields=["profile_visibility"])
+
+        self._invite()
+
+        message = NotificationLog.objects.get(profile=self.invitee, notification_type=NotificationType.ADDED_TO_TRIP).message
+        self.assertNotIn("hidden_importer", message, "the calendar importer leaked a username the app masks everywhere else")
+
+    def test_an_ordinary_friend_is_still_named(self) -> None:
+        """Anti-vacuity: masking must not swallow the normal case."""
+        self.importer.profile_visibility = VisibilityChoice.FRIENDS
+        self.importer.save(update_fields=["profile_visibility"])
+
+        self._invite()
+
+        message = NotificationLog.objects.get(profile=self.invitee, notification_type=NotificationType.ADDED_TO_TRIP).message
+        self.assertIn("hidden_importer", message)
+
+    def test_the_notification_records_its_source_profile(self) -> None:
+        """The sibling path sets it; without it the notification cannot be re-resolved later."""
+        self._invite()
+
+        entry = NotificationLog.objects.get(profile=self.invitee, notification_type=NotificationType.ADDED_TO_TRIP)
+        self.assertEqual(entry.source_profile_id, self.importer.pk)

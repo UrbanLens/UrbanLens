@@ -10397,3 +10397,28 @@ the point - the product findings in this session have held up under re-examinati
 repeatedly needed correcting is the commentary layered on them. Reading the codebase's existing
 tests before proposing a standard would have caught this one exactly as `ls` would have caught
 chunk 544's duplicate guard.
+
+## Chunk 547 - the masking fix that reached one of two trip invites
+
+Surveyed the notification surface first (chunk 544's lesson): seven service modules, nine test
+modules, every module referenced by at least one test. No coverage gap, so the thread became a
+*property* instead - this audit has twice found notifications naming people the app masks, so did
+that fix reach every sibling?
+
+It did not. Two functions create the same `ADDED_TO_TRIP` notification. `trip_membership` resolves
+the actor through `resolve_visible_identity` and carries a comment explaining why masking must
+happen at write time. `calendar_sync._invite_participants` - the Google Calendar importer -
+interpolated `importer.username` raw.
+
+The interesting part is why it looks safe. That path invites only friends, which reads as making
+masking irrelevant. It is not: `VisibilityChoice`'s docstring states that accepted friends qualify
+for every level **except** `NO_ONE`. A user who has hidden their identity from everyone is masked in
+every list and page, and was named in this notification - which push delivery and the SMS builder
+then carry off the device. A guard that is real ("friends only") sitting next to the gap, making the
+gap read as covered, is the same trap as chunk 530's device-marker upload claim.
+
+39 `NotificationLog.objects.create` sites, 16 interpolating a name, 1 wrong - and it was legible only
+because its correct sibling sat two files away. The other 15 are fine, mostly because the named
+person is someone the recipient just interacted with directly.
+
+Verified: 73 calendar-sync tests, ruff clean.

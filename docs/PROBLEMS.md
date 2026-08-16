@@ -8901,3 +8901,38 @@ That makes a fifth instance of the same shape as the four corrections above - a 
 establishing more than it does. It is worth counting because the pattern is consistent: the errors
 in this audit have clustered almost entirely in what I have asserted *about* the work, not in the
 work.
+
+## RESOLVED 2026-08-16: the calendar importer's trip invite named a user the app masks
+
+Fourth instance of the identity-masking class, found by asking whether the fix from the third
+("Reply/reaction notifications named people the thread masks", 2026-08-07) had reached every
+sibling. It had not.
+
+Two functions create the identical `ADDED_TO_TRIP` notification:
+
+- `services/trips/trip_membership.invite_to_trip` resolves the actor first -
+  `resolve_visible_identity(invitee, inviter)["display_name"]` - with a comment explaining that the
+  message is stored as plain text and must therefore be masked at write time, not at render time.
+- `services/trips/calendar_sync._invite_participants`, which invites everyone matched from an
+  imported Google Calendar event, formatted `f'{importer.username} added you to the trip ...'`
+  straight from the raw username, and omitted `source_profile` as well.
+
+**Being friends is not the permission being checked.** That path only invites friends, which looks
+like it makes masking moot - and does not. `VisibilityChoice`'s own docstring says accepted friends
+qualify for every level **except `NO_ONE`**, so an importer who has set their profile to "No one"
+is masked everywhere in the app and was named here. The same function's "not friends" diagnostic
+(`f"{invitee.username} was not invited..."`) named the *invitee* back to the importer with the same
+problem, from a list that may itself have shown them a placeholder.
+
+Severity is the reason this class keeps being worth chasing: a `NotificationLog` insert is picked up
+by `enqueue_native_push` and by `notification_text_alerts`, which builds an SMS body from the stored
+text. The unmasked name leaves the app, to a device, and cannot be recalled by fixing a template.
+
+Both sites now resolve through `resolve_visible_identity`, and the notification records
+`source_profile` like its sibling. Covered by `CalendarInviteIdentityMaskingTests`, including an
+anti-vacuity test that an ordinary friend is still named.
+
+**Method note.** The scan that found it listed all 39 `NotificationLog.objects.create` sites and
+flagged the 16 interpolating a name-shaped attribute; the candidate stood out only because a sibling
+call two files away did the same thing correctly. Reading the 16 was necessary - the other 15 are
+fine, several because the actor is someone the recipient has just interacted with directly.
