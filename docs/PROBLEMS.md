@@ -8737,6 +8737,18 @@ so the next tick sends it - which the regression test asserts directly.
 
 ### Verified safe: every overlap lock's TTL obeys its own rule (chunk 542)
 
+**CORRECTED 2026-08-16 (chunk 544): a test already enforced this, and I did not look.** The claim
+below that "nothing checks it" is false. `test_beat_lock_intervals.py` - written earlier in this
+same session (`0d4f87ae`) - already asserts the TTL-versus-interval invariant, in both directions,
+*and* carries a completeness arm that fails when a lock-guarded beat task is missing from its map.
+It is strictly better than the guard chunk 543 then went and wrote on the strength of this false
+premise: it matches both lock idioms (`cache.add` and `acquire_lock`/`beat_lock`) where mine matched
+one, and it has the completeness check mine lacked entirely.
+
+That duplicate guard has been deleted. The measurements below stand - all eleven TTLs do sit at
+90-92% of their interval - but they were a re-derivation of something already enforced, not a new
+finding.
+
 `acquire_lock`'s docstring states the constraint on the TTL callers pass it - "should sit just under
 the task's beat interval, so a tick is never skipped by a lock the previous run has already finished
 with". A convention that is stated is worth checking, because the failure is invisible either way:
@@ -8787,3 +8799,34 @@ Three details worth keeping:
 - Intervals are now derived from the crontab's field cardinalities, which is exact for every regular
   pattern and returns `None` otherwise - and an unsupported pattern surfaces, because the
   guard-the-guard test requires at least 20 of the 24 to resolve.
+
+## RESOLVED 2026-08-16: chunk 541's new lock broke the guard that enumerates locked beat tasks
+
+The fifteenth consolidation is the first run to name its own failure since the reporter fix, and
+what it named was mine:
+
+```
+FAILED test_beat_lock_intervals.py::BeatLockIntervalTests::test_every_beat_scheduled_task_that_takes_a_lock_is_covered
+1 failed, 10915 passed, 1 xfailed, 1481 subtests passed
+```
+
+Chunk 541 gave `send_account_deletion_reminders` an overlap lock and did not add it to
+`_LOCKED_BEAT_TASKS`. That map is what `test_beat_lock_intervals.py`'s completeness arm checks, and
+its docstring states exactly why the arm exists: "a new lock-guarded beat task must be added to the
+map below or it fails here, rather than being silently skipped by a test that only knows about the
+tasks someone remembered."
+
+So the guard worked precisely as designed, on the first new lock added after it was written. Fixed
+by adding the entry.
+
+**The larger correction is that chunks 542 and 543 should never have happened as they did.** Chunk
+542 measured the TTL invariant by hand and concluded "nothing checks it"; chunk 543 built
+`test_beat_lock_ttl_guard.py` to enforce it. Both rested on a premise I never verified - that no
+such test existed - when one written earlier *in this same session* did, and did it better. The
+duplicate is deleted.
+
+Two things worth taking from it. First, chunk 543's own recorded lesson was "copying the guard was
+worth less than copying the paranoia that came with it" - and the paranoia I failed to apply was to
+my own claim that no guard existed. Second, this is the third correction to my own recorded
+reasoning (after chunk 532's arithmetic and chunk 538's root/appuser premise), and all three share a
+shape: a claim stated once, then built on, without the check that would have cost a single grep.

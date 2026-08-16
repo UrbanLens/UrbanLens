@@ -10305,3 +10305,39 @@ scanned zero files and passed vacuously - and it arrived within minutes of copyi
 Copying the guard was worth less than copying the paranoia that came with it.
 
 Twenty-second verified-safe area is now twenty-second *enforced* area.
+
+## Chunk 544 - the fifteenth consolidation named my own regression, and a guard I duplicated
+
+**Fifteenth consolidation: 1 failed, 10,915 passed, 1 xfailed, full 1,481 subtests.** It ran to the
+end and *named* the failure - the first non-green run since the chunk-538 reporter fix, which is
+exactly the scenario that fix existed for. The instrument worked.
+
+What it named was mine.
+`test_beat_lock_intervals.py::test_every_beat_scheduled_task_that_takes_a_lock_is_covered` fails
+because chunk 541 gave `send_account_deletion_reminders` an overlap lock without adding it to
+`_LOCKED_BEAT_TASKS`. That map's completeness arm exists for precisely this: its docstring says a new
+lock-guarded beat task "must be added to the map below or it fails here, rather than being silently
+skipped by a test that only knows about the tasks someone remembered." It caught the first new lock
+added after it was written. Fixed.
+
+**The bigger finding is that chunks 542 and 543 were built on a premise I never checked.** Chunk 542
+measured the TTL-versus-interval invariant by hand and concluded "nothing checks it". Chunk 543 then
+wrote `test_beat_lock_ttl_guard.py` to enforce it, complete with a note about how easily such a
+guard passes vacuously. A test enforcing that invariant already existed - written earlier in this
+same session - and is better than the one I wrote: it matches both lock idioms where mine matched
+one, and it has the completeness arm mine lacked, which is the arm that actually caught something.
+My duplicate is deleted.
+
+The irony is worth recording rather than smoothing over. Chunk 543's own lesson was "copying the
+guard was worth less than copying the paranoia that came with it" - and the paranoia I did not apply
+was to my own claim that no guard existed. One `ls` of the test directory would have settled it.
+
+This is the third correction to my own recorded reasoning in this stretch - chunk 532's
+reconciliation arithmetic, chunk 538's root-versus-appuser premise, and now this - and they share a
+shape: a claim made once, then built on, without the cheap check that would have falsified it. The
+codebase findings in this session have held up well; the failures have almost all been in what I
+concluded *about* them.
+
+Chunk 544's own work - a guard requiring any new migration's ``noop`` reverse to be justified, and
+an extension of the reversibility audit to migrations 0001-0020 that chunk 459 never reached - is
+kept, and this time I checked for an existing equivalent first. There is none.

@@ -70,6 +70,7 @@ _LOCKED_BEAT_TASKS: dict[str, int] = {
     "spotguessr-stall-sweep": tasks_module._SPOTGUESSR_STALL_SWEEP_LOCK_TIMEOUT_SECONDS,
     "trivia-stall-sweep": tasks_module._TRIVIA_STALL_SWEEP_LOCK_TIMEOUT_SECONDS,
     "consensus-stall-sweep": tasks_module._CONSENSUS_STALL_SWEEP_LOCK_TIMEOUT_SECONDS,
+    "account-deletion-reminders": tasks_module._DELETION_REMINDER_LOCK_TIMEOUT_SECONDS,
 }
 
 
