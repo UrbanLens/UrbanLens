@@ -9611,3 +9611,24 @@ impossible. An in-progress job also keeps refreshing its directory mtime as it w
 export cannot be swept out from under itself.
 
 Seventeenth verified-safe area. Ninth consolidation running (task bg6hkg64z) over chunks 515-521.
+
+## Chunk 523 - the safety escalation chain: correct at every level that could double-page someone
+
+Audited the sweep that notifies emergency contacts, because its failure modes are asymmetric -
+missing an escalation risks someone's safety, and repeating one pages their contacts again at
+3am. Both directions are handled, at three levels:
+
+- **Concurrency**: a distributed lock (token-based, released in `finally`) means two workers
+  cannot escalate the same check-in at once.
+- **Repetition across runs**: `escalate_checkin` iterates
+  `contacts.filter(notified_at__isnull=True)` and stamps `notified_at` per contact *immediately
+  after its own send* - so a crash halfway through reaches the remaining contacts next tick and
+  never re-mails the ones already reached. The status transition is a conditional `update()`
+  gated on the prior status, so it cannot re-fire either. **Verified rather than trusted**: the
+  call site's comment asserts "per-contact idempotent", and this is the code that has to be true.
+- **Isolation**: each check-in's escalation is wrapped individually, so one user's broken contact
+  row cannot stop another user's emergency notification - the single most important property in
+  the whole sweep.
+
+The design also declines to be clever: no batching, no bulk mail, one email per contact with its
+own stamp. Eighteenth verified-safe area, and the one I would have most wanted to find wrong.
