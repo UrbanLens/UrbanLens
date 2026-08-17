@@ -12094,3 +12094,30 @@ consolidation's launch commit and this one's, and 10,981 - 10,973 = 8.
 
 Twenty-one green of twenty-four. The single red remains chunk 570's, and remains mine rather than the
 code's.
+
+## Chunk 598 - "filed for the owner" turned out not to be, once
+
+Sixth self-audit, on the next quantifying claim: the running list of owner decisions I have been
+repeating every chunk as "filed for the owner, do not action". Seven items. Are there seven, and are
+they filed?
+
+Six are, and I checked each against a heading rather than a paraphrase - my first search used my own
+wording and returned zeros for five of them, which would have been a badly wrong conclusion if I had
+stopped there. The real entries: detach-location's 500 (6074), the games feature gate (5416), the
+missing backup restore path (6347), session-chat rate limiting (6385), the fail-open upload quota
+lock (5669), and refunds/chargebacks (5389).
+
+**The seventh was not filed.** Whether logout should wipe the cached E2EE keys - which I raised in
+chunk 565, recorded in this report, and then carried in the "filed" list for thirty-odd chunks - had
+no `docs/PROBLEMS.md` entry at all. It does now, with the reasoning that made it a question rather
+than a defect: the cache is deliberate and its module says so ("same-origin storage is the trust
+boundary either way - this is bookkeeping, not isolation"), and the tradeoff between a shared machine
+and a personal one is a product call.
+
+The distinction that matters: `docs/PROBLEMS.md` is the register the owner reads; this report is a
+narrative of how the work went. Writing something here and calling it filed is a category error, and
+one I repeated in every wakeup note for thirty chunks without noticing, because the list was correct
+about *six* items and I never checked the seventh separately.
+
+Six self-audits, six errors, five of them in claims that quantify over a set. The one enumerable
+claim checked was clean. The rule is holding.
