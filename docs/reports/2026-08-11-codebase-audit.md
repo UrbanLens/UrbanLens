@@ -11489,3 +11489,34 @@ premature by exactly one entry.
 
 The three deferrals checked this chunk before hitting the labelling problem are all still sound and
 are recorded above; the substantive open items that remain are genuinely open.
+
+## Chunk 579 - stopping the labelling work, and why
+
+Checked the DM retention sweep entry's deferral and found it sound: the index half is deliberately
+left to a production measurement this environment cannot take, and migration 0038 shows indexes here
+are actively curated, so a speculative index on a hot write table is exactly what it argues against.
+Its *materialisation* half was fixed on 2026-08-16 - `hard_delete_expired_direct_messages` now takes
+`batch_size=2000` slices under a `max_per_run` ceiling - so the entry is partial, not open.
+
+Chunk 577's regex missed that because the marker reads "**The materialisation half is fixed**"
+rather than starting with "Fixed". That is a third convention. Rather than write a fourth scan, I
+ran a deliberately permissive one - any bold text containing "fixed"/"resolved"/"done" - which
+matched 23 entries and made the real problem obvious: **most of those are negations.** "Not fixed
+here because it needs a product decision", "Deliberately not fixed here", "Wrapping them is not the
+fix, which is why this is filed rather than done". A pattern that cannot tell a fix from a refusal
+to fix is not a classifier, and tightening it further just moves which half it gets wrong.
+
+So this is where the labelling work stops. Three more entries relabelled from the permissive pass -
+the two unambiguous fixes and the DM sweep - and the rest left as they are, because the remaining
+matches are correctly-open entries whose bodies explain, at length and well, why they are open.
+
+Fifteen entries relabelled across three chunks. The useful part was never the count: it was that
+the open list is the input to the method that has been finding real bugs, so its accuracy compounds.
+The unuseful part was believing, twice, that a scan had finished the job. Each time the file had one
+more convention than my pattern knew about, and each time I found out by reading an entry and being
+surprised rather than by the scan telling me.
+
+The general shape, worth carrying: *automating a judgement over prose written by many hands, over
+months, in a file nobody standardised, converges slowly and expensively.* Reading fifteen entries
+would have cost less than three passes of pattern-chasing. Diminishing returns here are steep, and
+recognising that is the finding.

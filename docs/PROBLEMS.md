@@ -551,7 +551,7 @@ Found during a sweep of read-then-unconditional-write single-use markers; every 
 (`BackupCode` after its fix, `SafetyCheckinPartner`, `PushDevice`, `ApiKey`, `UserSubscription`)
 is either conditional or genuinely idempotent.
 
-## LOW 2026-08-11: the hourly DM retention sweep seq-scans, then materialises its whole result set
+## PARTIAL 2026-08-11: the hourly DM retention sweep seq-scans, then materialises its whole result set (materialisation fixed 2026-08-16; the index is a measured decision)
 
 `DirectMessageQuerySet.due_for_hard_delete` (`models/direct_messages/queryset.py:98`) filters on
 `sender_delete_after` + `read_at`. Confirmed against a real database - the only indexes on
@@ -4098,7 +4098,7 @@ Also unaffected by that caveat: the frontend work landed today is host-side only
 copied into the container, so `shared/confirm-dialog.ts` and the happy-dom harness are outside this
 run entirely. They are covered by `bun test` (162 passing) and `tsc --noEmit` (clean).
 
-## Two pre-existing bugs surfaced by extracting base.html's comment utilities (2026-08-07)
+## RESOLVED 2026-08-07: two pre-existing bugs surfaced by extracting base.html's comment utilities
 
 **Both are now fixed** (commit follows the extraction). Recorded here because they had been
 live in production inside `base.html`'s inline script, unnoticed and untestable, since the
@@ -7001,7 +7001,7 @@ migration question, not a refactor.
 
 ---
 
-## Per-row queries inside loops: 12 sites (the same root cause, unfixed)
+## PARTIAL: per-row queries inside loops - 12 sites, 3 fixed 2026-08-14, the same root cause
 
 Three instances of this were fixed on 2026-08-14 (`Pin.to_json`'s `.filter()`, `Pin.rating`'s
 `.latest()`, and `views_pin_bulk`'s `.exists()` costing len(pins) x len(labels)). An AST sweep for
