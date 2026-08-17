@@ -2229,13 +2229,15 @@ N+1, and no live-connection revocation on partner removal - all covered by new t
 `test_safety_archival.py`/`test_safety_partners.py`/`test_safety_live_location.py`/`test_safety.py`).
 Two narrower items were identified but deliberately left open:
 
-- **Blocking a partner doesn't revoke their existing access.** `Profile.are_blocked` creation has
-  no signal wired to `SafetyCheckinPartner` cleanup - blocking someone who is already an accepted
-  partner on one of your check-ins leaves that `SafetyCheckinPartner` row (and any open WebSocket
-  connection) intact. `remove_checkin_partner` now correctly force-closes a live connection and
-  is the right mechanism to call, but nothing currently calls it from the blocking flow. Fix would
-  be a signal/hook on block-creation that calls `remove_checkin_partner` for every
-  `SafetyCheckinPartner` row between the two profiles (either direction).
+- **Blocking a partner doesn't revoke their existing access.** ~~`Profile.are_blocked` creation has
+  no signal wired to `SafetyCheckinPartner` cleanup~~ **RESOLVED 2026-08-17 (chunk 580).**
+  `block_profile` now calls `remove_checkin_partner` for every `SafetyCheckinPartner` row between
+  the two profiles in either direction, which was this entry's own prescription - that helper
+  already deletes the row *and* force-closes any live WebSocket, so nothing new was needed beyond
+  calling it. Outstanding invitations are revoked alongside accepted rows, an unaccepted invite
+  being an offer of exactly the access in question. Covered by
+  `test_block_revokes_safety_partner.py`, including that an unrelated partner on the same check-in
+  is untouched. The deferral here was review scope, not principle.
 - **A malformed/corrupted `MessagingKeyBundle.public_key` makes `archive_checkin` fail forever,
   loudly but without escalation.** `archive_checkin` now isolates one checkin's failure from
   others in the 5-minute sweep (a bad row no longer blocks the rest of the batch) and every

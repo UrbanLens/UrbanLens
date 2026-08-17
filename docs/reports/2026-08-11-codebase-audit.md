@@ -11520,3 +11520,33 @@ The general shape, worth carrying: *automating a judgement over prose written by
 months, in a file nobody standardised, converges slowly and expensively.* Reading fifteen entries
 would have cost less than three passes of pattern-chasing. Diminishing returns here are steep, and
 recognising that is the finding.
+
+## Chunk 580 - back to code: a block that left someone watching your live location
+
+Back to code after three chunks of document work. Two filed entries were candidates; the SCSS
+dark-mode one states its own one-line remedy, but the entry immediately below it was more
+consequential and sat on two threads this session had already pulled.
+
+**Blocking someone did not revoke their safety-partner access.** An accepted `SafetyCheckinPartner`
+sees the owner's live location, their check-in chat, and their escalation status. Blocking is the
+strongest stop this app offers, and it left those rows - and any open WebSocket - entirely intact.
+
+The deferral was review scope, not principle: the entry that filed it had already fixed nine issues
+in that feature and explicitly named this fix - "a signal/hook on block-creation that calls
+`remove_checkin_partner` for every `SafetyCheckinPartner` row between the two profiles (either
+direction)". `remove_checkin_partner` deletes the row *and* calls
+`_broadcast_partner_access_revoked`, which chunk 571 confirmed closes live connections whose
+permission was only checked at connect(). So the whole fix was calling something that already
+existed, from a place nothing called it.
+
+Both directions are revoked, per the entry: blocking is mutual disengagement, and "still watching
+someone you blocked" is the same relationship from the other end. Outstanding invitations go too -
+an unaccepted invite is an offer of exactly the access being revoked. Reproduced with three failing
+tests first; a fourth pins the scoping, asserting an unrelated partner on the same check-in survives.
+572 friendship/blocking/social tests pass.
+
+Worth noting what made this findable: it is the third time this session that *blocking* and
+*connect-time-only permission* have turned out to interact - chunk 571 (a kicked player's socket),
+chunk 574 (a delayed email to someone who blocked the sender), and now this. A permission model
+where the strongest user action is enforced at some entry points and not others produces the same
+bug repeatedly, in whatever surface was written last.

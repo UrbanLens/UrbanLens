@@ -533,6 +533,8 @@ def block_profile(actor: Profile, target: Profile) -> Friendship:
     Returns:
         The blocked Friendship, with ``actor`` as ``from_profile``.
     """
+    _revoke_safety_partner_access(actor, target)
+
     friendship = Friendship.objects.all().between(target, actor)
     if friendship:
         friendship.from_profile = actor
@@ -545,6 +547,34 @@ def block_profile(actor: Profile, target: Profile) -> Friendship:
         to_profile=target,
         status=FriendshipStatus.BLOCKED,
     )
+
+
+def _revoke_safety_partner_access(actor: Profile, target: Profile) -> None:
+    """End any safety-partner relationship between two profiles being blocked apart.
+
+    An accepted partner watches the owner's live location, check-in chat and
+    escalation status, so a block that left those rows in place would be the
+    weakest thing in the app rather than the strongest. ``remove_checkin_partner``
+    is the mechanism: it deletes the row *and* closes any live WebSocket, whose
+    permission was only ever checked at connect() time.
+
+    Both directions go. Blocking is a mutual disengagement, and "still watching
+    someone you blocked" is the same relationship seen from the other end.
+    Outstanding invitations go too - an unaccepted invite is an offer of exactly
+    the access being revoked.
+
+    Args:
+        actor: The profile doing the blocking.
+        target: The profile being blocked.
+    """
+    from urbanlens.dashboard.models.safety.model import SafetyCheckinPartner
+    from urbanlens.dashboard.services.visits.safety import remove_checkin_partner
+
+    partners = SafetyCheckinPartner.objects.filter(
+        Q(checkin__profile=actor, profile=target) | Q(checkin__profile=target, profile=actor),
+    ).select_related("checkin")
+    for partner in partners:
+        remove_checkin_partner(partner)
 
 
 def unblock_profile(actor: Profile, target: Profile) -> Friendship:
