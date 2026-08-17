@@ -11972,3 +11972,22 @@ correction ("a living document that may contain inaccuracies").
 I did not fix the 9 errors. They are in a file the project has deliberately excluded from linting, and
 cleaning one excluded file while leaving the rest of the suite unlinted would be tidying rather than
 improving. Whether to lint tests at all is a project decision.
+
+## Chunk 593 - auditing the summary I wrote three chunks ago
+
+Consolidation 24 is still running, so this chunk audited chunk 590's session summary against the
+commit record rather than starting anything new.
+
+It claimed "Defects fixed (14)" and described **thirteen**. The missing one was
+`do not send coordinates from the map search when tracking is off` - chunk 562, and the least
+dramatic of the fourteen, which is presumably why it fell out when I was grouping the rest by theme.
+Added, with the qualification it deserves: the server enforces the tracking preference, so nothing
+was ever stored, and the fix stops coordinates leaving the browser rather than closing a leak.
+
+A summary that counts fourteen and lists thirteen is worse than no summary, because the count is the
+part a reader trusts without checking. This is the third time this session that auditing my own
+output found an error in it - the vacuous guard in chunk 561, the unverified guard in chunk 586, and
+now a miscount - and in all three cases the error was invisible from the artefact itself and obvious
+the moment it was checked against something external.
+
+Nothing else to report. The remaining obligation is consolidation 24's verdict.
