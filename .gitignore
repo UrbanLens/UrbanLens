@@ -60,3 +60,6 @@ bin/settings.py
 *db.sqlite3
 pgsql
 sample_data/Google Takeout.csv
+
+# mutmut copies the tree here to mutate it.
+mutants/

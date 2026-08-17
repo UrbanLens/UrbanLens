@@ -20,6 +20,15 @@
 #   bin/run_tests.sh --no-sync [pytest args...] # reuse the container as-is
 #   bin/run_tests.sh --verify-only              # just compare host and container
 #   bin/run_tests.sh --allow-drift ...          # run despite drift, on purpose
+#   bin/run_tests.sh --fast [pytest args...]    # reuse a persistent database
+#   bin/run_tests.sh --fresh-db [pytest args...]# rebuild it (needed after a migration)
+#
+# --fast is worth knowing about. A unique database per run is what keeps
+# parallel sessions from colliding, but building one costs about three minutes,
+# which dwarfs the tests themselves: the consensus field-scope file takes 188
+# seconds cold and 3.5 seconds against a database that already exists. For a
+# tight edit-run loop, or anything that runs the same tests hundreds of times
+# (mutation testing), reuse the database and rebuild it when the schema moves.
 #
 # Environment:
 #   UL_TEST_CONTAINER   test-runner container name (default urbanlens_development_main_test_runner)
@@ -33,6 +42,8 @@ set -euo pipefail
 CONTAINER="${UL_TEST_CONTAINER:-urbanlens_development_main_test_runner}"
 SYNC=1
 VERIFY_ONLY=0
+FAST=0
+FRESH_DB=0
 # Verifying a fix by breaking it means deliberately editing the container's copy
 # and expecting the tests to fail. That is drift on purpose, so it needs a way
 # past the guard - named so it cannot be reached by accident or by habit.
@@ -43,6 +54,8 @@ for arg in "$@"; do
     case "$arg" in
         --no-sync) SYNC=0 ;;
         --allow-drift) ALLOW_DRIFT=1 ;;
+        --fast) FAST=1 ;;
+        --fresh-db) FAST=1; FRESH_DB=1 ;;
         --verify-only) VERIFY_ONLY=1 ;;
         *) args+=("$arg") ;;
     esac
@@ -119,6 +132,27 @@ else
 fi
 [ "$VERIFY_ONLY" -eq 1 ] && exit 0
 
-DB_NAME="${UL_TEST_DB_NAME:-t_$(date +%s)_$$}"
+if [ "$FAST" -eq 1 ]; then
+    # A stable name, so the database survives between runs and can be reused.
+    DB_NAME="${UL_TEST_DB_NAME:-ul_fast}"
+    if [ "$FRESH_DB" -eq 1 ]; then
+        DB_FLAG="--create-db"
+        echo "==> rebuilding the reusable database '$DB_NAME'"
+    else
+        DB_FLAG="--reuse-db"
+        # --reuse-db does not apply new migrations to an existing database, so a
+        # schema change shows up as a confusing column error rather than as a
+        # missing migration. Rebuild with --fresh-db when models move.
+        echo "==> reusing database '$DB_NAME' (run --fresh-db after any migration)"
+    fi
+else
+    DB_NAME="${UL_TEST_DB_NAME:-t_$(date +%s)_$$}"
+    DB_FLAG=""
+fi
+
 echo "==> pytest (UL_TEST_DB_NAME=$DB_NAME)"
-docker exec -e UL_TEST_DB_NAME="$DB_NAME" "$CONTAINER" /app/.venv/bin/python -m pytest "${args[@]}"
+if [ -n "$DB_FLAG" ]; then
+    docker exec -e UL_TEST_DB_NAME="$DB_NAME" "$CONTAINER" /app/.venv/bin/python -m pytest "$DB_FLAG" "${args[@]}"
+else
+    docker exec -e UL_TEST_DB_NAME="$DB_NAME" "$CONTAINER" /app/.venv/bin/python -m pytest "${args[@]}"
+fi
