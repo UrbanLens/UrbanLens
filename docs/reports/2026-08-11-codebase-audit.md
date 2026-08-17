@@ -12425,3 +12425,36 @@ This is the same shape as chunks 591 and 592: instructions stating a command wit
 naming a tool without checking it exists. It is also the last of them - `README.md`, the
 release-please config, `bunfig.toml` and the tool configs contain no claims that can be checked
 against behaviour.
+
+## Chunk 610 - closing the mechanical sweep
+
+Read the last never-opened files. Three things checked, two clean, one fixed.
+
+**Python version is consistent everywhere** - `.python-version`, `pyproject.toml`'s
+`requires-python`, the Dockerfile's base image, CI's `PYTHON_VERSION`, and `pyrightconfig.json` all
+say 3.12. The `.devcontainer`'s `postCreateCommand` (`uv sync --frozen && bun install`) matches the
+documented setup.
+
+**The README's "leave integrations blank" claim is true, and narrowly so.** It tells a newcomer that
+unset API keys degrade gracefully - which holds only because `AppSettings` carries
+`env_ignore_empty=True`. Without it, pydantic-settings reads `.env-sample`'s 27 blank values as
+explicit empty strings, fails `Url` validation, and crash-loops every process that imports Django
+settings. Two documents, one flag, and the flag is what makes the other true; verified present in
+chunk 605.
+
+**Fixed: the README's start command used `docker-compose` (v1).** That binary is not installed on
+this host and is not what the rest of the repository uses - `bin/deploy.sh` calls `docker compose`
+five times, and the v2 plugin is what is actually present. It was the single compose invocation in
+the file, and it is step 3 of "getting started": the one command a newcomer runs, failing with
+"command not found" on any current Docker install. One word.
+
+That closes the mechanical sweep begun in chunk 607. Every tracked path outside `src/urbanlens/dashboard`
+and `docs/` has now been opened: `bin/`, the Dockerfile and `.dockerignore`, the entrypoint,
+`docker-compose.yml`, `gunicorn.conf.py`, the settings package and environments, all four workflows,
+`.devcontainer/`, the tool configs, and the root markdown files.
+
+Chunks 602-610 produced findings in eight areas I had called exhausted at chunk 601: two ops-script
+failure paths, `.env` in deploy-host images, a stale contributor checklist, a corrected filing of my
+own, a footgun script, a broken start command - plus one regression avoided by checking before
+editing, and five hypotheses killed by reading. The exhaustion claim was the least reliable thing I
+said in this session.
