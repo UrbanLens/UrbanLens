@@ -7,8 +7,19 @@ isn't re-derived), and **which audit methods produce misleading results on this 
 Open items found during the sweep were filed in `docs/PROBLEMS.md` and are only cross-referenced
 here.
 
-**Verification (current as of 2026-08-14).** The full Python suite runs in a single pass -
-**10,765 passed, 0 failed, 1:11:17**, the run that validated the nine prefetch/N+1 fixes together. That run was left strictly alone for its duration; two
+**Verification (current as of 2026-08-17).** The full Python suite runs in a single pass -
+**10,972 passed, 1 xfailed, 1,483 subtests, 1:35:12, zero failures** (the twenty-third consolidation
+run). Twenty-three such runs have completed across this audit; twenty were green, and the one red was
+an error of mine rather than a defect - a file restored on the host but not re-copied into the test
+container, so the run executed against a deliberate regression left over from verifying a guard. The
+TypeScript suite, which no Python consolidation covers, is **414 passed across 31 files** with a
+clean `tsc` typecheck; CI now runs both (it previously ran neither).
+
+Read the numbered sections below for the audit's chronological record. The 2026-08-17 sessions are
+summarised at the end under "Session summary".
+
+The earlier baseline, retained for continuity: **10,765 passed, 0 failed, 1:11:17**, the run that
+validated the nine prefetch/N+1 fixes together. That run was left strictly alone for its duration; two
 earlier full runs had source copied into the container mid-flight and are recorded in section 4d
 as inconsistent snapshots rather than reported as results. Alongside it: **mypy clean across 784
 source files**, `ruff check src/urbanlens` clean, `bun run typecheck` clean, `bun test`
@@ -11846,3 +11857,60 @@ checking; the games case is clean because someone removed the delegation entirel
 one of the three that stays clean by itself.
 
 No code changed. Consolidation 24 continues in the background.
+
+# Session summary (chunks 558-590, 2026-08-17)
+
+The chronological entries above are the record; this is the short version, for someone arriving at
+the file rather than following it.
+
+## Defects fixed (14)
+
+Each was reproduced with a failing test first, or - where the fix came first - verified afterwards by
+breaking the code and watching the test fail.
+
+**Data loss and 500s from bounded columns.** A notification title assembled from a 255-wide wiki name
+plus 26 characters of wrapper overflowed its own 255-wide column, and because it was raised at the
+*top* of `escalate_checkin`, an overdue safety check-in at a long-named place notified nobody at all -
+not the community, not the emergency contacts. Ten more columns took request text with no length
+check (`PinList.name`, `SavedFilter.name`/`icon`, `Label.name`/`icon`, `PinAlias.name`,
+`WikiAlias.name`, `Pin.name`, `Wiki.name`, `Trip.name`), plus `Image.caption` on the three
+user-typed upload paths and `SiteSettings.default_name_source_priority`, whose regex bounded each
+token's characters but neither its length nor their number.
+
+**Access that outlived its revocation.** A kicked game participant's WebSocket stayed subscribed and
+kept receiving other players' answers and chat. Blocking someone left them a safety-check-in partner,
+still watching the blocker's live location, and left a pending pin share they could still accept. A
+message unsent inside the 120-second delay window still had its text emailed out of band, as did a
+message from someone the recipient had since blocked.
+
+**Correctness.** Stripe's out-of-order webhook delivery could resurrect a cancelled subscription for
+up to a day. Open-Meteo forecast slots were compared as local wall clock against UTC activity times -
+four to five hours out in New York, nine in Tokyo. Achievement signal receivers were keyed by model
+rather than subscription, so a second trigger for the same model would have silently replaced the
+first. Two `innerHTML` interpolations skipped the escaping their own modules use. A reaction emoji
+serializer allowed 32 characters into a 10-wide column.
+
+## Filed for the owner, not actioned
+
+Product and policy decisions: the group-key stale-version trade-off (confidentiality vs availability),
+the deleted-message notification preview (needs a schema decision), the un-swept export directory on
+enqueue failure, and the seven pre-existing product decisions. Also the missing planning documents -
+root `TODO.md` was tracked, then deleted in a release commit, while five documents still cite it.
+
+## Checked and found clean (so it is not re-derived)
+
+Albums, trips, the plugin system, safety archival, notifications, wiki, search, imports/exports, the
+photo-import tasks, `core/`'s test apparatus, and the external API's write serializers. Fifteen
+`PROBLEMS.md` entries were relabelled after being found already fixed under one of three different
+resolution conventions. Four docstring-delegated guarantees were audited by enumerating their
+callers; three were honoured everywhere.
+
+## Method notes worth keeping
+
+The framings that produced findings: *two properties that look like one* (ordering is not
+idempotency; "still unread" is not "still exists"), *permission checked at entry but not ongoing*,
+*deferred work carries stale state*, and *what else changes during this window*. The searches that
+produced noise: any scan matching model fields by name across all models, and any attempt to
+classify prose by regex. Roughly one real defect per two or three hypotheses; the ones that died
+usually died because someone had already thought about the problem and left the reasoning in a
+comment - so read the surrounding prose before trusting a scan.
