@@ -34,6 +34,13 @@ def sync_from_stripe_subscription(role_subscription: RoleSubscription, stripe_su
     Also recomputes ``threshold_met`` against the role's *current* pay-what-you-want
     threshold - this is the actual "did this charge clear the bar" moment for
     dynamic-threshold roles, since ``cost_per_user()`` can drift between billing cycles.
+
+    Saved with an explicit field list, not a bare ``save()``. Stripe is authoritative
+    for exactly these columns; the usage ledger's (``total_paid_cents``,
+    ``amount_used_cents``, ``usage_covered_until``) are computed locally from payments,
+    and writing them from this instance means writing whichever values it was loaded
+    with. Every caller holds that instance across a ``Subscription.retrieve``
+    round-trip, so a payment landing in that window was being written back out.
     """
     item = stripe_subscription["items"]["data"][0]
     price = item["price"]
@@ -45,7 +52,18 @@ def sync_from_stripe_subscription(role_subscription: RoleSubscription, stripe_su
     role_subscription.current_period_end = _to_datetime(item.get("current_period_end"))
     role_subscription.canceled_at = _to_datetime(stripe_subscription.get("canceled_at"))
     role_subscription.threshold_met = pricing.pledge_meets_threshold(role_subscription.role, role_subscription.pledged_amount_cents)
-    role_subscription.save()
+    role_subscription.save(
+        update_fields=[
+            "status",
+            "stripe_price_id",
+            "pledged_amount_cents",
+            "cancel_at_period_end",
+            "current_period_end",
+            "canceled_at",
+            "threshold_met",
+            "updated",
+        ]
+    )
 
 
 def _handle_checkout_session_completed(session: dict) -> None:

@@ -12627,3 +12627,40 @@ Verified by breaking: with both `_lock_and_refresh` calls disabled in the contai
 tests fail; restored, all 42 billing tests pass. The first attempt at that check was itself
 vacuous - `docker exec` without `-i` does not attach stdin, so the heredoc that was meant to patch
 the file ran an empty program and the "broken" run was against the fixed code.
+
+## Chunk 616 - a Stripe sync was writing the ledger columns it does not own
+
+Chunk 615's note flagged `sync_stripe_subscriptions` as "judged safe by side-effect shape, not traced
+end to end". Tracing it found the same money bug one function over, and one that chunk 615's row lock
+does **not** cover.
+
+`sync_from_stripe_subscription` copies status/price/period off a live Stripe Subscription and then
+calls a bare `save()` - which writes *every* column on the instance, including the three the
+pay-what-you-want ledger owns: `total_paid_cents`, `amount_used_cents`, `usage_covered_until`. Stripe
+has no opinion about any of them; they are computed locally from payments.
+
+Every caller holds its instance across a `Subscription.retrieve` round-trip:
+
+- `_handle_invoice_payment_succeeded` loads the row, retrieves from Stripe, syncs, *then* calls
+  `apply_payment`. So the sync writes back pre-round-trip ledger values, and the locked, refreshed
+  read inside `apply_payment` then picks up the stale values the sync just committed - chunk 615's
+  lock is doing its job and still loses, because the corruption happened upstream of it.
+- `sync_stripe_subscriptions`, the nightly sweep, does one `retrieve` per row across every
+  non-canceled subscription, holding each snapshot for the length of its own API call.
+
+Reproduced first: a payment credited between the snapshot and the sync is erased outright -
+`total_paid_cents` 5000 -> 0, with coverage rewound to match.
+
+Fixed by saving an explicit field list covering exactly what Stripe is authoritative for. The two
+complement tests matter as much as the failing one: narrowing what a function writes is a fix that
+can trivially be over-applied into "writes nothing", so one test asserts every Stripe-owned field
+still lands, and another asserts `threshold_met` still *falls* when a pledge drops under the bar,
+since it is recomputed rather than merely set.
+
+Verified by breaking: reverting to the bare `save()` in the container fails the erasure test and
+leaves the other two passing, which is the signal wanted - the complement tests are insensitive to
+this change, the erasure test is not. 55 billing/celery tests pass with the fix.
+
+The general lesson is worth more than the instance: a bare `save()` on a row that more than one
+subsystem writes is a whole-row overwrite from a snapshot, and reads as innocuous. `RoleSubscription`
+has two writers - Stripe sync and the local ledger - and nothing in the model said so.
