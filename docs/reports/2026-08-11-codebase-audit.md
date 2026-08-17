@@ -11737,3 +11737,39 @@ TypeScript suite re-run as part of the sweep: 414 pass, 0 fail.
 Fifteen files, one gap, closed. Worth noting the asymmetry that produced it: every test written
 *before* its fix is verified by construction, and every test written *after* one needs a deliberate
 step that is easy to skip precisely because everything is already green.
+
+## Chunk 587 - why this session's numbers mean anything
+
+`src/urbanlens/core/` had never been traced, and it is the part everything else is measured with. A
+session that reports eleven thousand passing tests ought to be able to say why those passes mean
+something, so this chunk audited the measuring apparatus rather than the code it measures.
+
+**The network guard is sound, and - crucially - active under pytest.** `core/testing_network.py`
+patches `socket.create_connection` and `socket.socket.connect`, allowing only loopback, the empty
+host and `None` (a Unix socket path, which is not a network). What matters for this session is that
+`conftest.py` starts it as a session-scoped autouse fixture *and* calls
+`verify_external_network_blocked()`, which actively dials an external host and `pytest.exit`s the
+entire run if the connection reaches the OS stack. So a run in which the guard was silently inactive
+would not have produced a passing suite - it would have produced no suite at all. None of my runs set
+`UL_ALLOW_TEST_INTERNET`, the one documented escape hatch.
+
+That matters because a test reaching the real internet is not hypothetical here: `docs/PROBLEMS.md`
+records one that was doing exactly that, found by root-causing the last failing test in the suite.
+
+Coverage is not total, and the honest statement is narrow: `connect_ex` and UDP `sendto` are not
+patched. I have no evidence any dependency uses them - `requests`/`urllib3` go through
+`create_connection`, and `psycopg2` connects in C below the Python socket layer, which is why the
+database works at all. So this is a theoretical hole, not a demonstrated one, and I am recording it
+as such rather than as a finding.
+
+**Nothing suppresses failures.** `core/tests/result.py` is 31 lines and overrides exactly one method,
+`getDescription`, to prefix a test's description. It never touches `addError` or `addFailure`. The
+custom runner sets test-mode settings and patches the AI gateway so no test can make a real model
+call - it does not filter results either.
+
+One observation, not a change: `core/tests/` is excluded from ruff by the project's own config, which
+is why that file carries seven unused imports. Lint debt accumulating in the test infrastructure is
+the least dangerous place for it, and also the place nothing will ever flag.
+
+No code changed this chunk. The result is that the previous chunks' results are trustworthy for a
+stated reason, which was worth an hour.
