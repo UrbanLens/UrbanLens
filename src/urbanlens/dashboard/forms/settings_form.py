@@ -17,7 +17,47 @@ from urbanlens.dashboard.models.profile.model import (
 )
 
 
-class MarkupDefaultsForm(forms.ModelForm):
+class ProfileSettingsForm(forms.ModelForm):
+    """Base for the settings page's per-section forms over ``Profile``.
+
+    Writes only the columns the form declares. Django's ``ModelForm.save()``
+    calls ``instance.save()`` with no ``update_fields``, i.e. a whole-row write
+    from the instance the request loaded - and ``Profile`` has around
+    twenty-five other writers that scope their updates to what they own: the
+    pin-create signal clearing the cached map centre, the importer writing the
+    privacy and contact blocks over a job lasting minutes, the home-widget
+    layout, the external API's settings patch. A section save was reverting
+    whatever they had committed while the page was open.
+
+    Subclasses must declare ``Meta.fields``; ``exclude`` would leave
+    ``_meta.fields`` as None and silently restore whole-row writes, which
+    ``test_settings_form_field_scope`` fails on.
+    """
+
+    def save(self, commit: bool = True) -> Profile:
+        """Persist only this form's own fields.
+
+        Args:
+            commit: Whether to write to the database, matching ``ModelForm``.
+
+        Returns:
+            The profile instance, saved when *commit*.
+        """
+        instance = super().save(commit=False)
+        self.finalize_instance(instance)
+        if commit:
+            instance.save(update_fields=[*self._meta.fields, "updated"])
+        return instance
+
+    def finalize_instance(self, instance: Profile) -> None:
+        """Adjust *instance* after binding but before the scoped write.
+
+        Args:
+            instance: The profile about to be saved.
+        """
+
+
+class MarkupDefaultsForm(ProfileSettingsForm):
     """Default fill/border color and opacity for new pin-detail annotations."""
 
     markup_fill_color = forms.CharField(
@@ -56,7 +96,7 @@ class MarkupDefaultsForm(forms.ModelForm):
 _FRIEND_REQUEST_CHOICES = [(k, v) for k, v in VisibilityChoice.choices if k != VisibilityChoice.FRIENDS]
 
 
-class PrivacySettingsForm(forms.ModelForm):
+class PrivacySettingsForm(ProfileSettingsForm):
     """Controls who can see this user's profile, comments, photos, contact info, and friend requests."""
 
     profile_visibility = forms.ChoiceField(
@@ -141,7 +181,7 @@ class PrivacySettingsForm(forms.ModelForm):
                 field.disabled = True
 
 
-class DirectMessageSettingsForm(forms.ModelForm):
+class DirectMessageSettingsForm(ProfileSettingsForm):
     """Controls direct-message presence privacy, disappearing messages, and friend recommendations."""
 
     online_status_visibility = forms.ChoiceField(
@@ -224,7 +264,7 @@ class ContactSettingsForm(forms.Form):
         return email
 
 
-class StyleSettingsForm(forms.ModelForm):
+class StyleSettingsForm(ProfileSettingsForm):
     """Site-wide appearance - color theme, map dark mode, and in-app help."""
 
     theme_mode = forms.ChoiceField(
@@ -272,7 +312,7 @@ class StyleSettingsForm(forms.ModelForm):
 _DISCORD_USERNAME_RE = re.compile(r"^[a-zA-Z0-9._#-]{2,100}$")
 
 
-class ContactMethodsForm(forms.ModelForm):
+class ContactMethodsForm(ProfileSettingsForm):
     """Optional contact methods stored on the profile."""
 
     phone_number = forms.CharField(
@@ -341,7 +381,7 @@ class ContactMethodsForm(forms.ModelForm):
         return value
 
 
-class MapDisplayForm(forms.ModelForm):
+class MapDisplayForm(ProfileSettingsForm):
     """Map display and performance settings."""
 
     default_map_view = forms.ChoiceField(
@@ -376,7 +416,7 @@ class MapDisplayForm(forms.ModelForm):
         fields = ["default_map_view", "cluster_radius", "use_pin_cache", "suggest_pin_restructure"]
 
 
-class MapCenterForm(forms.ModelForm):
+class MapCenterForm(ProfileSettingsForm):
     """Saved map center preference - mode, optional custom coordinates, and default zoom."""
 
     map_center_mode = forms.ChoiceField(
@@ -411,26 +451,24 @@ class MapCenterForm(forms.ModelForm):
         zoom = self.cleaned_data.get("map_default_zoom")
         return zoom if zoom is not None else 13
 
-    def save(self, commit: bool = True):
-        """Save map center preferences.
+    def finalize_instance(self, instance: Profile) -> None:
+        """Keep the saved custom location when the mode isn't CUSTOM.
 
         ``map_custom_latitude`` / ``map_custom_longitude`` are only meaningful
-        when the mode is CUSTOM.  In GPS or AUTO modes the hidden form fields
+        when the mode is CUSTOM. In GPS or AUTO modes the hidden form fields
         contain whatever the preview map happened to be showing, which must not
         overwrite the user's saved custom location.
+
+        Args:
+            instance: The profile about to be saved.
         """
-        instance = super().save(commit=False)
         if instance.map_center_mode != MapCenterMode.CUSTOM:
-            # Restore original custom coordinates from the database.
-            original = (type(instance).objects.filter(pk=instance.pk).values("map_custom_latitude", "map_custom_longitude").first()) or {}
+            original = type(instance).objects.filter(pk=instance.pk).values("map_custom_latitude", "map_custom_longitude").first() or {}
             instance.map_custom_latitude = original.get("map_custom_latitude")
             instance.map_custom_longitude = original.get("map_custom_longitude")
-        if commit:
-            instance.save()
-        return instance
 
 
-class PlacesLayerForm(forms.ModelForm):
+class PlacesLayerForm(ProfileSettingsForm):
     """Which data sources contribute pins to the Places map layer."""
 
     places_google_enabled = forms.BooleanField(
@@ -487,7 +525,7 @@ class DeleteAccountForm(forms.Form):
         return confirm_text
 
 
-class AISettingsForm(forms.ModelForm):
+class AISettingsForm(ProfileSettingsForm):
     """AI feature preferences - which label kinds can be auto-assigned on pin creation."""
 
     ai_enabled = forms.BooleanField(
@@ -520,7 +558,7 @@ class AISettingsForm(forms.ModelForm):
         fields = ["ai_enabled", "ai_label_categories", "ai_label_tags", "ai_label_statuses"]
 
 
-class KeywordTaggingSettingsForm(forms.ModelForm):
+class KeywordTaggingSettingsForm(ProfileSettingsForm):
     """Keyword-based auto-tagging preferences - independent of the AI settings above.
 
     Keyword matching is local pattern/substring matching with no external API
@@ -557,7 +595,7 @@ class KeywordTaggingSettingsForm(forms.ModelForm):
         fields = ["keyword_tagging_enabled", "keyword_label_categories", "keyword_label_tags", "keyword_label_statuses"]
 
 
-class HistorySettingsForm(forms.ModelForm):
+class HistorySettingsForm(ProfileSettingsForm):
     """Which visit/location-history categories get saved. Independently adjustable at any time."""
 
     track_pin_visits = forms.BooleanField(
@@ -596,7 +634,7 @@ class HistorySettingsForm(forms.ModelForm):
         fields = ["track_pin_visits", "track_routes", "track_geolocation", "track_device_scans", "generate_photo_keywords"]
 
 
-class CommunitySettingsForm(forms.ModelForm):
+class CommunitySettingsForm(ProfileSettingsForm):
     """Master switch for pin privacy, profile visibility, and friendships."""
 
     community_enabled = forms.BooleanField(
@@ -629,7 +667,7 @@ class CommunitySettingsForm(forms.ModelForm):
         fields = ["community_enabled", "show_wiki_cover_photos", "auto_create_pin_article_from_wikipedia", "show_supporter_badge"]
 
 
-class PinSuggestionSettingsForm(forms.ModelForm):
+class PinSuggestionSettingsForm(ProfileSettingsForm):
     """Master switch plus per-source toggles for the pin-suggestions surface (Memories -> Locations)."""
 
     pin_suggestions_enabled = forms.BooleanField(
@@ -662,7 +700,7 @@ class PinSuggestionSettingsForm(forms.ModelForm):
         fields = ["pin_suggestions_enabled", "suggest_public_pins", "suggest_pins_from_photos", "suggest_pins_from_external_apis"]
 
 
-class WikiSyncSettingsForm(forms.ModelForm):
+class WikiSyncSettingsForm(ProfileSettingsForm):
     """Automatic syncing between a pin's private details and its community wiki."""
 
     sync_rating_to_wiki = forms.BooleanField(
@@ -708,7 +746,7 @@ class WikiSyncSettingsForm(forms.ModelForm):
                 field.disabled = True
 
 
-class ExternalApiSettingsForm(forms.ModelForm):
+class ExternalApiSettingsForm(ProfileSettingsForm):
     """Master switch for external API calls made on this profile's behalf."""
 
     external_apis_enabled = forms.BooleanField(

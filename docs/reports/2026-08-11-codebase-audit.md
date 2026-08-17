@@ -12704,3 +12704,41 @@ now says what the caller must do instead of just "call `wiki.save()` afterwards"
 Verified by breaking: with the helper reverted to a bare `save()` in the container, the three
 concurrency tests fail and the complement (an edit still writes every field it was given) passes -
 the right signal, since the complement is insensitive to the change. 44 wiki tests pass with the fix.
+
+## Chunk 618 - the settings page wrote the whole profile row, fifteen times
+
+Continuing the ownership sweep to the most contested model in the app. `Profile` has around
+twenty-five writers, and every one of them scopes its update to the columns it owns: the pin-create
+signal clearing the cached map centre, the importer writing the privacy and contact blocks by
+targeted update over a job lasting minutes, the home-widget layout, the map-suggestions intro flag,
+the external API's settings patch (`profile.save(update_fields=[*touched, "updated"])`).
+
+The settings page was the outlier. It splits a profile's preferences across fifteen small
+`ModelForm`s, each posted independently, and every one ended in Django's default `ModelForm.save()` -
+which calls `instance.save()` with no `update_fields`. A whole-row write from the instance the
+request loaded, reverting whatever anyone else committed while the page was open.
+
+Reproduced first, in both of the shapes that actually happen: a pin-create signal clearing the map
+centre, and the importer writing a privacy field. In each case saving an unrelated settings section
+put the old value back.
+
+The tell is the same one the wiki had, and worth naming as a pattern: **a local hand-patch marks the
+general defect.** `MapCenterForm.save` already re-read `map_custom_latitude`/`longitude` from the
+database, because the hidden fields "must not overwrite the user's saved custom location". That *is*
+this bug, noticed for one pair of columns on one form and fixed by hand there rather than at the
+shape that causes it - exactly as `revert_edit_fields`' conflict check was the wiki's local patch for
+the same whole-row write.
+
+Fixed with a `ProfileSettingsForm` base carrying a scoped `save()` and a `finalize_instance` hook;
+all fourteen other forms now inherit it, and `MapCenterForm`'s override is folded into the hook,
+which deletes its duplicated save. The completeness arm matters here: the scoped save derives its
+field list from `Meta.fields`, so a future form written with `exclude` would have `_meta.fields` of
+None and silently return to whole-row writes. That shape now fails in tests instead of in production.
+
+One thing checked before trusting the change: `Profile.save()` coerces community-gated visibility
+fields when Community is off, and a scoped write could have dropped that coercion. It does not -
+the model already appends its forced fields to `kwargs["update_fields"]` when it is given one. The
+model anticipated scoped saves; the forms simply never passed any.
+
+Verified by breaking (the two concurrency tests fail with the whole-row save restored, the complement
+and completeness arms stay green), plus 1,476 settings/profile tests passing.
