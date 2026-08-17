@@ -9538,3 +9538,17 @@ reader reaching for it expecting a history operation gets a hard reset and a ser
 Not changed: it is a convenience script in `package.json`, its behaviour may be exactly what its
 author wants at a terminal, and `bin/deploy.sh` already exists as the safe path. Recorded so the
 difference between the two is a choice rather than a surprise.
+
+### Pin suggestion `hit_count` is a read-modify-write (noted 2026-08-17)
+
+`services/pins/pin_suggestions.py`'s `_upsert_matched_suggestion` and
+`_upsert_new_pin_suggestion` do `existing.hit_count += _weight_of(...)` and save, and their caller
+`ingest_location_hits` takes no lock. Two concurrent ingests for one profile - a repeated Immich
+sweep overlapping a local-scan upload, which the function's own docstring names as the case it
+handles - lose an increment, and can also both miss on the check-then-act and create duplicate
+pending suggestions for the same pin.
+
+Left unfixed deliberately: unlike the ledger/wiki/rating cases, `PinSuggestion` rows are per-profile,
+so contention needs one user running two scans at once, and the damage is an undercounted ranking
+signal rather than lost money, a reverted edit, or a discarded rating period. Worth an `F()`
+expression plus a unique constraint if suggestion quality is ever reported as flaky.
