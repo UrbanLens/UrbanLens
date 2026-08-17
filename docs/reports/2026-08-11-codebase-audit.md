@@ -11914,3 +11914,30 @@ produced noise: any scan matching model fields by name across all models, and an
 classify prose by regex. Roughly one real defect per two or three hypotheses; the ones that died
 usually died because someone had already thought about the problem and left the reasoning in a
 comment - so read the surrounding prose before trusting a scan.
+
+## Chunk 591 - documenting the thing that nearly made me report a false alarm
+
+Low-cost accuracy work rather than a new scan. The guidance in `docs/ROADMAP.md` said "use pytest
+(never `manage.py test` - staticfiles-manifest 500s)", which is right about the symptom and silent
+about the cause. Reading only that, I concluded in chunk 584 that CI's Django step - which runs
+exactly `manage.py test` - had to be broken, reproduced the failure locally (28 of 33 errors in one
+module), and got as far as drafting the finding before checking the workflow's `env:` block.
+
+The cause is not the one the phrasing implies. The runner *does* set `TESTING`, in
+`setup_test_environment()`. But `STORAGES` is computed from `TESTING` at **settings-import time**, so
+the manifest storage is already chosen by the time that hook runs. `pytest` escapes it because
+`TESTING` also tests for `pytest` in `sys.argv`, which is true before settings are read. CI escapes it
+because it sets `DJANGO_SETTINGS_MODULE=...settings.test`, and that module sets `TESTING = True` at
+import.
+
+So the mechanism is now in `docs/NOTES.md` - the file for exactly this kind of non-obvious behaviour -
+including the explicit statement that CI is *not* misconfigured, and the ROADMAP line scopes its
+warning to the default settings module and points there.
+
+The correction is small; the reason for making it is not. A warning that gives a symptom without a
+mechanism invites the reader to infer one, and the inference available here - "CI runs the forbidden
+command, therefore CI is broken" - is wrong in a way that costs a chunk to disprove. I wrote that
+chunk. The next person should not have to.
+
+Note also that the stale phrasing exists in the *private* `CLAUDE.local.md` too, which is untracked
+and not mine to edit; putting the accurate version in the shared docs is the part I can do.
