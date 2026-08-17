@@ -534,6 +534,7 @@ def block_profile(actor: Profile, target: Profile) -> Friendship:
         The blocked Friendship, with ``actor`` as ``from_profile``.
     """
     _revoke_safety_partner_access(actor, target)
+    _withdraw_pending_pin_shares(actor, target)
 
     friendship = Friendship.objects.all().between(target, actor)
     if friendship:
@@ -575,6 +576,31 @@ def _revoke_safety_partner_access(actor: Profile, target: Profile) -> None:
     ).select_related("checkin")
     for partner in partners:
         remove_checkin_partner(partner)
+
+
+def _withdraw_pending_pin_shares(actor: Profile, target: Profile) -> None:
+    """Reject any still-pending pin share between two profiles being blocked apart.
+
+    A pending share is a standing offer, and the accept path does not re-check
+    blocking - so without this a blocked profile could accept afterwards and end
+    up owning a copy of a place the blocker had just withdrawn from them.
+
+    Accepted shares are deliberately left alone, following the line
+    ``DirectMessageShare.revoke`` already draws: accepting runs
+    ``create_pin_from_share``, so the recipient owns their own ``Pin`` and there
+    is nothing a status change could take back.
+
+    Args:
+        actor: The profile doing the blocking.
+        target: The profile being blocked.
+    """
+    from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
+    from urbanlens.dashboard.models.pin_share.model import PinShare
+
+    PinShare.objects.filter(
+        Q(from_profile=actor, to_profile=target) | Q(from_profile=target, to_profile=actor),
+        status=PinShareStatus.PENDING,
+    ).update(status=PinShareStatus.REJECTED)
 
 
 def unblock_profile(actor: Profile, target: Profile) -> Friendship:

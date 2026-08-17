@@ -11550,3 +11550,39 @@ Worth noting what made this findable: it is the third time this session that *bl
 chunk 574 (a delayed email to someone who blocked the sender), and now this. A permission model
 where the strongest user action is enforced at some entry points and not others produces the same
 bug repeatedly, in whatever surface was written last.
+
+## Chunk 581 - the sweep, and the line the codebase had already drawn
+
+Chunk 580 fixed blocking to revoke safety-partner access, and the obvious next move was to apply the
+same rule to every other granted-access row: trip memberships, group chat memberships, pin shares,
+place grants. That would have been wrong, and the codebase says why in a docstring.
+
+`DirectMessageShare.revoke` undoes a share "only if the recipient hasn't acted on it yet", leaving
+already-accepted pin shares and already-responded trip invites "completely alone - there is nothing
+to revoke once the recipient has acted". Accepting a pin share runs `create_pin_from_share`: the
+recipient ends up owning **their own `Pin`**. Flipping the share row's status afterwards takes
+nothing back.
+
+So the distinction is not "granted access" versus "not granted". It is:
+
+- **A continuing capability** - a safety partner's live-location stream, chat, escalation status -
+  which a block should end, and now does.
+- **A completed transaction** - an accepted pin share - where the data has already moved and the
+  row is a receipt, not a key.
+- **A standing offer** - a *pending* share - which is the case this codebase already withdraws
+  elsewhere, and the one still open here.
+
+That third case was a real gap. The accept path does not re-check blocking, so a profile could block
+someone and have them accept the standing offer afterwards, ending up with a copy of a place the
+blocker had just withdrawn from them. `block_profile` now rejects pending shares in either
+direction and deliberately leaves accepted ones alone. Four tests: both directions, the
+accepted-share boundary, and an unrelated pending share surviving.
+
+Trip and group-chat memberships were left alone on a different ground: they are multi-party. Ejecting
+someone from a trip because one of its members blocked them is a decision about whose trip it is, and
+the owner's, not mine to make.
+
+The sweep's value was in the boundary, not the count. A pattern that produced three findings in a row
+does not extend indefinitely, and the place it stops was already written down by whoever wrote
+`revoke`'s docstring - which is the second time this session that reading the surrounding prose
+answered the question the scan was about to ask.

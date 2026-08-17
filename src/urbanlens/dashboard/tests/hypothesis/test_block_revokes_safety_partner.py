@@ -28,6 +28,8 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.profile.model import Profile
+from urbanlens.dashboard.models.pin_share.meta import PinShareStatus
+from urbanlens.dashboard.models.pin_share.model import PinShare
 from urbanlens.dashboard.models.safety.model import SafetyCheckinPartner, SafetyCheckinPartnerStatus
 from urbanlens.dashboard.services.social.friendship import block_profile
 
@@ -102,3 +104,62 @@ class BlockRevokesSafetyPartnerTests(TestCase):
         block_profile(self.blocker, self.blocked)
 
         self.assertTrue(SafetyCheckinPartner.objects.filter(pk=partner.pk).exists(), "blocking one profile removed an unrelated partner")
+
+
+class BlockWithdrawsPendingPinShareTests(TestCase):
+    """A pending share is an offer; blocking withdraws it.
+
+    This codebase already draws the line: ``DirectMessageShare.revoke`` undoes a
+    share "only if the recipient hasn't acted on it yet", and leaves accepted
+    ones "completely alone - there is nothing to revoke once the recipient has
+    acted". Accepting a pin share runs ``create_pin_from_share``, so the
+    recipient ends up owning their own Pin - taking the share row back would
+    give nothing back.
+
+    A *pending* share is the other case, and the accept path does not re-check
+    blocking: without this, a profile could block someone and have them accept
+    the standing offer afterwards, ending up with a copy of a place the blocker
+    had just withdrawn from them.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.blocker = _profile()
+        self.blocked = _profile()
+
+    def _share(self, sender: Profile, recipient: Profile, status: str) -> PinShare:
+        return baker.make(PinShare, from_profile=sender, to_profile=recipient, status=status)
+
+    def test_a_pending_share_to_the_blocked_profile_is_withdrawn(self) -> None:
+        share = self._share(self.blocker, self.blocked, PinShareStatus.PENDING)
+
+        block_profile(self.blocker, self.blocked)
+
+        share.refresh_from_db()
+        self.assertEqual(share.status, PinShareStatus.REJECTED, "a blocked profile can still accept the standing offer")
+
+    def test_a_pending_share_from_the_blocked_profile_is_withdrawn_too(self) -> None:
+        share = self._share(self.blocked, self.blocker, PinShareStatus.PENDING)
+
+        block_profile(self.blocker, self.blocked)
+
+        share.refresh_from_db()
+        self.assertEqual(share.status, PinShareStatus.REJECTED)
+
+    def test_an_accepted_share_is_left_alone(self) -> None:
+        """The recipient already owns their own pin; there is nothing to take back."""
+        share = self._share(self.blocker, self.blocked, PinShareStatus.ACCEPTED)
+
+        block_profile(self.blocker, self.blocked)
+
+        share.refresh_from_db()
+        self.assertEqual(share.status, PinShareStatus.ACCEPTED)
+
+    def test_an_unrelated_pending_share_is_untouched(self) -> None:
+        bystander = _profile()
+        share = self._share(self.blocker, bystander, PinShareStatus.PENDING)
+
+        block_profile(self.blocker, self.blocked)
+
+        share.refresh_from_db()
+        self.assertEqual(share.status, PinShareStatus.PENDING)
