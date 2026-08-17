@@ -11414,3 +11414,47 @@ field moves. That closes an offset error of four to five hours in New York, nine
 Worth generalising: a filed problem records what was true when it was written. "Needs a product
 decision" is a conclusion with premises, and premises expire. Re-reading old entries for expired
 premises found more in one chunk than the last two chunks of fresh searching did.
+
+## Chunk 577 - the filed-problem list was lying about its own state
+
+Continued chunk 576's method - re-read open entries in `docs/PROBLEMS.md` and check whether the
+reason each was deferred still holds. Three checked, and unlike the weather entry, **all three
+deferrals are still sound**, which is worth recording so they are not re-opened:
+
+- **`Friendship.muted` is stored but nothing reads it.** Only its sequencing premise expired ("the
+  external API's `is_muted` surface needs the flag to exist first" - it exists now). The blocker is
+  the *other* muted entry: there is one `Friendship` row per pair, so `muted` is shared. Wiring
+  suppression in without splitting the column first would make A's mute silence B as well - fixing
+  one bug by introducing a worse one.
+- **FCM push registers but never dispatches.** Blocked on a Google service-account credential and a
+  Play-flavour client. External infrastructure, not an expired premise.
+- **Bulk-accepting 200 pin suggestions makes 200 sequential outbound calls.** The entry already
+  measured the scope carefully (0 of 15 ordinary GET endpoints call out synchronously; it is confined
+  to write paths that create a `Location`). Deferring name resolution to Celery means a pin appears
+  under a placeholder name and is renamed a moment later - visible to the user, and entangled with
+  `name_is_user_provided`. A genuine product decision.
+
+Then the fourth read turned up something better. **`FriendInvitation.mark_accepted` reads as open and
+has been fixed for weeks** - the fix and its test are written directly above the original entry,
+which is retained below a "The original entry follows" marker. Scanning for that pattern across all
+9,300 lines found **seven entries whose heading says OPEN or Note while the body records a fix**.
+Five are genuinely resolved and are now labelled so; two are partial and now say which half
+(`PARTIAL`), because "E2EE - the client trusts server-supplied Argon2 parameters" has its server side
+fixed and its client side explicitly "not fixed - needs a coordinated client+server change".
+
+This matters more than it looks: the method that has been producing findings for two chunks is
+*reading the open list*, and a seventh of that list was mislabelled. I cost myself one full entry
+read on an item fixed weeks ago.
+
+**And one of the seven corrects me.** `docs/notes/ai/completed.md` was already investigated in
+chunk 388 and resolved as *gitignored, not missing* - `.gitignore:49` ignores that whole directory.
+My chunk-567 filing listed it alongside `TODO.md` as "never tracked", which is literally true and
+materially misleading: local-only agent notes are a different thing from a deleted document. That
+entry also framed the structural defect better than mine did - *tracked documentation referencing
+gitignored content*. My entry now says so and narrows itself to what is actually new: root `TODO.md`
+**was** tracked and was deleted in a release commit while five documents kept citing it, and
+`docs/prompts/` is a third path matching neither pattern.
+
+Filing a defect that a previous entry in the same file had already analysed is the cost of not
+reading the whole list first. The list is 9,300 lines; the fix is that it now labels itself
+honestly, so the next reader can trust the headings.

@@ -152,7 +152,7 @@ Swept the rest of the import surface the same way afterwards: `-k 'import or pre
 guard's own exception, so an unmocked integration shows up as a passing test plus a log line
 rather than a failure. Grepping ERROR logs across passing tests is the way to find the rest.
 
-## OPEN 2026-08-12: trip activity weather matches against times in the wrong timezone
+## RESOLVED 2026-08-17: trip activity weather matches against times in the wrong timezone
 
 `ForecastSlot.date` has no timezone contract, and the three providers that populate it disagree.
 `controllers/trip.py::_build_activity_forecasts` then compares them against an activity's
@@ -5328,7 +5328,7 @@ decision, because it is entangled with user-facing behaviour:
 Per this repo's migration guidance, each constraint also needs a de-duplication step ahead of it
 in the same migration, and index creation goes last.
 
-## OPEN 2026-08-12: E2EE - the client trusts server-supplied Argon2 parameters
+## PARTIAL 2026-08-12: E2EE - the client trusts server-supplied Argon2 parameters (server side fixed; client not)
 
 `password_wrapped_secret` is the user's private key wrapped under a key derived from their
 password, and the security claim — stated in `e2ee-crypto.ts`'s own docstring — is that the
@@ -7353,7 +7353,7 @@ about client behaviour while looking thorough. Until the inline JS is migrated, 
 client-side behaviour must cover `templates/**/*.html` as well.
 
 
-## OPEN 2026-08-14: the dev stack's `app` container has been unhealthy for its entire uptime
+## PARTIAL 2026-08-14: the dev stack's `app` container has been unhealthy for its entire uptime (one branch resolved)
 
 Found by a runtime check (audit chunk 351) rather than by reading code - the first finding in this
 audit that no static analysis could have produced.
@@ -7588,7 +7588,7 @@ Recorded rather than resolved - deciding which requires the history behind that 
 answer changes whether this is a stale pointer or an unfiled gap.
 
 
-## Note 2026-08-14: `account.py` cites an unfiled decision about raw-password validation
+## RESOLVED 2026-08-15: `account.py` cites an unfiled decision about raw-password validation
 
 **Resolved (chunk 454, 2026-08-15): the decision family now has a tracked record.** The four
 2026-07-23 decisions (per-recipient payloads, opaque identifiers, wire them all, option (a))
@@ -7617,7 +7617,7 @@ rules in TypeScript) is stated inline. The missing piece is whatever weighed opt
 alternatives, including the ones not named here.
 
 
-## Note 2026-08-14: the "wire them all" WhatsApp/SMS decision is cited twice and filed nowhere
+## RESOLVED 2026-08-15: the "wire them all" WhatsApp/SMS decision is cited twice and filed nowhere
 
 **Resolved (chunk 454, 2026-08-15): the decision family now has a tracked record.** The four
 2026-07-23 decisions (per-recipient payloads, opaque identifiers, wire them all, option (a))
@@ -7645,7 +7645,7 @@ The code implementing the decision exists and its docstring explains the reasoni
 is unexplained. What is missing is the record the two comments assert exists.
 
 
-## Note 2026-08-14: `completed.md` is referenced from three places and does not exist
+## RESOLVED 2026-08-14: `completed.md` is referenced from three places and does not exist (it is gitignored)
 
 Chasing the unfiled 2026-07-23 decisions led here. `docs/PROBLEMS.md` (~line 1508) points at
 `docs/notes/ai/completed.md` for "the whole PR #111 cluster"; `CLAUDE.local.md` points at
@@ -7888,7 +7888,7 @@ local/development and `DJANGO_SECRET_KEY` is unset, raise `ImproperlyConfigured`
 generating one. That converts a silent, confusing failure into a loud one at boot.
 
 
-## OPEN 2026-08-15: `test_only_submitted_fields_ever_move` fails in the full suite, passes alone and at module scope
+## RESOLVED 2026-08-16: `test_only_submitted_fields_ever_move` fails in the full suite, passes alone and at module scope
 
 **Two more of the same species (2026-08-15).** `test_spotguessr_socket_scopes.py::
 GameSessionSocketScopeTests::test_a_session_connection_is_unaffected` (seen once, chunk 489) and
@@ -9239,7 +9239,7 @@ them is in the tree:
 | --- | --- | --- |
 | `TODO.md` (repo root) | `docs/FEATURES.md:4`, `docs/NOTES.md:344,402`, `docs/ROADMAP.md:4,13,124`, `CLAUDE.local.md` | Existed - 416 lines - deleted in `3f12e875` ("Release v0.5.0b0") |
 | `docs/prompts/completed.md`, `docs/prompts/todo.md` | `CLAUDE.local.md` | Never tracked in git |
-| `docs/notes/ai/completed.md`, `docs/notes/ai/todo.md` | `docs/ROADMAP.md`, `docs/designs/place-consolidation.md` | Never tracked in git |
+| `docs/notes/ai/completed.md`, `docs/notes/ai/todo.md` | `docs/ROADMAP.md`, `docs/designs/place-consolidation.md` | **Gitignored, not missing** - see the earlier `completed.md` entry |
 
 This is not cosmetic. `CLAUDE.md` and `CLAUDE.local.md` both instruct contributors (including agents)
 to consult these before assuming something is unbuilt or unplanned, and `docs/NOTES.md` cites
@@ -9259,6 +9259,18 @@ have been deliberate. But the current state is the worst of both: the file is go
 documents still treat it as live. Either restore it or update those references; the same choice
 applies to the two agent-note directories, where the fix may simply be deleting instructions that
 point at paths which never existed.
+
+**Corrected 2026-08-17.** The `docs/notes/ai/` row above overstated the case, and an earlier entry
+in this same file had already established why: `.gitignore:49` ignores that directory, so those
+files are local-only agent notes rather than lost ones. That entry also states the structural
+problem better than this one did - *tracked documentation referencing gitignored content* - which
+applies to `docs/ROADMAP.md` and `docs/designs/place-consolidation.md` citing them, and is a
+different defect from a file being deleted.
+
+What remains specific to this entry, and is not covered there: root `TODO.md` **was** tracked, in
+git, and was removed in the `3f12e875` release commit while five documents went on citing it as
+live - including `docs/NOTES.md` quoting ticket ids inside it. `docs/prompts/` is a third path,
+cited by `CLAUDE.local.md`, that matches neither pattern.
 
 Not actioned here because recreating 416 lines of someone else's planning document, or editing
 four documents' cross-references, is a decision about the project's own record rather than a defect
