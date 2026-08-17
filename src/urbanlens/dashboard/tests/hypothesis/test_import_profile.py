@@ -17,7 +17,34 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.services.import_export.export import _export_profile
-from urbanlens.dashboard.services.import_export.import_data import ImportResult, _import_profile
+from urbanlens.dashboard.services.import_export.import_data import ImportResult
+
+
+def _export_area(key: str, profile, temp_dir: str) -> None:
+    """Run one registered export area by key.
+
+    The private ``_export_*`` functions these tests called were replaced by the
+    ``ExportType`` registry. Dispatching by key keeps the round-trip coverage
+    without depending on internals that have already moved once.
+    """
+    from urbanlens.dashboard.services.import_export.export import _REGISTERED_EXPORTERS
+
+    _REGISTERED_EXPORTERS[key](profile, temp_dir, base_url="http://testserver")
+
+
+def _import_area(key: str, profile, temp_dir: str, result, *, pin_uuid_map=None, label_uuid_map=None) -> None:
+    """Run one registered import area by key."""
+    from urbanlens.dashboard.services.import_export.import_data import _REGISTERED_IMPORTERS, ImportContext
+
+    importer = _REGISTERED_IMPORTERS[key]
+    ctx = ImportContext(
+        profile=profile,
+        data_dir=temp_dir,
+        result=result,
+        pin_uuid_map=pin_uuid_map or {},
+        label_uuid_map=label_uuid_map or {},
+    )
+    importer.run(importer.load(temp_dir), ctx)
 
 
 class ProfileRoundTripTests(TestCase):
@@ -41,7 +68,7 @@ class ProfileRoundTripTests(TestCase):
             self.profile.phone_number = ""
             self.profile.signal_username = ""
             self.profile.save()
-            _import_profile(self.profile, temp_dir, ImportResult(), pin_uuid_map={}, label_uuid_map={})
+            _import_area("profile", self.profile, temp_dir, ImportResult())
         self.profile.refresh_from_db()
         self.user.refresh_from_db()
 
@@ -63,7 +90,7 @@ class ProfileRoundTripTests(TestCase):
             data["email"] = "impostor@example.test"
             with open(f"{temp_dir}/profile.json", "w", encoding="utf-8") as fh:
                 json.dump(data, fh)
-            _import_profile(self.profile, temp_dir, ImportResult(), pin_uuid_map={}, label_uuid_map={})
+            _import_area("profile", self.profile, temp_dir, ImportResult())
         self.user.refresh_from_db()
         self.assertEqual(self.user.username, "keeper")
         self.assertEqual(self.user.email, "keeper@example.test")
@@ -72,7 +99,7 @@ class ProfileRoundTripTests(TestCase):
         with tempfile.TemporaryDirectory() as temp_dir:
             with open(f"{temp_dir}/profile.json", "w", encoding="utf-8") as fh:
                 json.dump({"bio": "new bio"}, fh)
-            _import_profile(self.profile, temp_dir, ImportResult(), pin_uuid_map={}, label_uuid_map={})
+            _import_area("profile", self.profile, temp_dir, ImportResult())
         self.profile.refresh_from_db()
         self.assertEqual(self.profile.bio, "new bio")
         self.assertEqual(self.profile.phone_number, "+15551234567", "an archive without a contact block must not blank existing handles")
