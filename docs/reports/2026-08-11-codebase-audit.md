@@ -12553,3 +12553,33 @@ I had already fixed one chunk earlier and reported success. With `profile=None` 
 time: a test that passes because it never reached the code it names.
 
 545 label and customization tests pass. Consolidation 26 is running.
+
+## Chunk 614 - following an incomplete-fix thread to a confident negative
+
+The incomplete-fix query from chunk 613 named three unfollowed threads. This chunk took the
+decompression-bomb one - "the enrichment path catches decompression bombs, like its sibling already
+did" - because a fix that reached a second path invites the question of a third.
+
+Four guarded sites exist (`tasks.py`, `labels.py`'s icon resize, `photo_enrichment`,
+`photo_keywords`), and `services/media/images.py` - the central image service, with **six**
+`PILImage.open` calls - is not among them. That looked like the third path.
+
+It is not, for two separate reasons, and both had to be checked:
+
+- The only site there that *decodes* is `downscale_stored_image`, whose `img.thumbnail(...)` is
+  genuinely unguarded inside the function - but it has exactly two callers, `tasks.py:662` and
+  `photo_enrichment.py:103`, and **both** sit inside
+  `except (OSError, ValueError, PILDecompressionBombError)`. That pair is precisely the sibling fix
+  the commit message describes, and it reached both.
+- The other four sites are `_get_gps_ifd`, `_get_exif_ifd`, `_get_ifd0` and `extract_exif_data`, and
+  none of them decodes: zero `.load()`, `.thumbnail()`, `.convert()`, `.resize()` or `.save()` calls
+  between them. `Image.open()` reads a header, so the bomb cannot fire. `extract_exif_data` carries a
+  broad `except Exception` regardless.
+
+`MAX_IMAGE_PIXELS` is left at PIL's default, which is what makes the guards meaningful in the first
+place - worth noting, because a project that raised it would silently disarm all four.
+
+So the thread closes: that fix was complete. A negative worth the chunk, because the alternative was
+carrying "there might be a third decompression-bomb path" as an open suspicion indefinitely, and the
+check that settles it also documents *why* the EXIF paths are safe - which is not obvious from
+reading them.
