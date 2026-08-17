@@ -12341,3 +12341,29 @@ opened: `bin/` (2 findings), the Dockerfile and `.dockerignore` (1 finding, 1 re
 the entrypoint, `docker-compose.yml`, the Pydantic settings, the environments package, and the four
 workflows. Four chunks of findings, two chunks of clean results, and five hypotheses killed by
 reading rather than by testing.
+
+## Chunk 607 - the mechanical check found a file that corrects one of my filings
+
+Rather than assert exhaustion again, listed every tracked path outside the areas the report says were
+examined. That surfaced `gunicorn.conf.py`, `.devcontainer/`, `sample_data/`, several tool configs -
+and a root `ROADMAP.md`, 367 lines, entirely distinct from the `docs/ROADMAP.md` I edited in chunk
+591.
+
+**It corrects chunk 567's filing.** That entry said `docs/NOTES.md`'s citations of "`TODO.md` UL-294"
+were now *unresolvable* because `TODO.md` had been deleted. The root `ROADMAP.md` carries **251 `UL-`
+references**, each against a one-line description of the planned work - including UL-294, UL-70,
+UL-360 and UL-277, which are the ids I named. So the tickets are resolvable; what is missing is the
+file the citation points at, and whatever extra context it carried. The filing now says so, because
+the difference changes what the owner would decide to do: restoring a deleted planning document is a
+different task from repointing four citations at a file that already exists.
+
+I filed that entry after searching for `TODO.md` and finding it gone. I never checked whether the
+ticket ids it referenced resolved elsewhere - the obvious next question, and one a single `grep` would
+have answered at the time.
+
+Two roadmaps with the same filename in different directories is confusing but not a defect: the root
+one is a feature backlog ("Currently Planned Features"), `docs/ROADMAP.md` is a strategy and
+agent-working document. Both are current; they are not duplicates of each other.
+
+Also checked, and clean: my chunk-591 correction to the `manage.py test` guidance did *not* need
+applying to the root roadmap - that file never carried the claim.

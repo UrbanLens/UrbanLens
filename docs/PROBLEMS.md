@@ -9253,8 +9253,15 @@ them is in the tree:
 | `docs/notes/ai/completed.md`, `docs/notes/ai/todo.md` | `docs/ROADMAP.md`, `docs/designs/place-consolidation.md` | **Gitignored, not missing** - see the earlier `completed.md` entry |
 
 This is not cosmetic. `CLAUDE.md` and `CLAUDE.local.md` both instruct contributors (including agents)
-to consult these before assuming something is unbuilt or unplanned, and `docs/NOTES.md` cites
-specific ticket ids in them - "see `TODO.md` UL-294" - which are now unresolvable. `docs/ROADMAP.md`
+to consult these before assuming something is unbuilt or unplanned.
+
+**Corrected 2026-08-17 (chunk 607): the ticket ids are *not* unresolvable, and this entry originally
+said they were.** The root `ROADMAP.md` - a separate document from `docs/ROADMAP.md`, and one I had
+not opened when filing this - carries 251 `UL-` references, including UL-294, UL-70, UL-360 and
+UL-277, each against a one-line description of the planned work. So a reader chasing "see `TODO.md`
+UL-294" can find what UL-294 *is*; what they cannot find is the file the citation names, or whatever
+additional context it held. That is a smaller problem than the one first written here, and the
+difference matters to whoever decides what to do about it. `docs/ROADMAP.md`
 says it was itself "generated 2026-07-18 from a full review of `TODO.md`" and tells readers to keep
 that file updated alongside it. Anyone following those instructions finds nothing and cannot tell
 whether the answer is "not planned" or "the document is missing".
