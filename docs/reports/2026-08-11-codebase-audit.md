@@ -12307,3 +12307,37 @@ imports Django settings.
 Three chunks into tree I had called exhausted: two ops findings, one image-contents finding, one
 regression avoided by checking before editing, and one misreading caught in a single command. The
 claim was wrong; the work of disproving it was worth more than the claim.
+
+## Chunk 606 - three hypotheses, three deaths, and the tree is genuinely read now
+
+Read `settings/environments/` and the remaining workflows. Nothing to fix; three hypotheses died, each
+in one command, and each is worth a line so nobody re-raises it.
+
+**"Production could run with DEBUG on."** It cannot. `Production` sets `debug_default=False` *and*
+`debug_override=OVERRIDE_OFF`, and carries a `field_validator` that raises `ValueError("Debug mode is
+not allowed in production")` if anything tries to force it on. Defence in depth, with the depth
+actually enforced rather than documented.
+
+**"`UL_ENVIRONMENT` is only a build ARG, so the runtime container falls back to `LOCAL`."** This was
+the strongest of the three: `select_environment` defaults to `EnvironmentTypes.LOCAL` when the
+variable is unset, `Local` has `debug_default=True`, and the Dockerfile declares `UL_ENVIRONMENT`
+only as an `ARG` - which does not persist into a running container. If that were the whole story, a
+production container would resolve to Local and `_is_dev` would be True. It is not the whole story:
+`docker-compose.yml` sets `UL_ENVIRONMENT: ${UL_ENVIRONMENT:-production}` in the shared anchor every
+service inherits, and its second line explains that the value is passed *both* ways deliberately -
+as a build arg so the Dockerfile's conditional steps work, and as a runtime variable so the app
+resolves its environment. The answer was in a comment above the line I was suspicious of.
+
+**"Unknown `UL_ENVIRONMENT` values fall through silently."** They do not - `EnvironmentTypes(env_type)`
+raises, and the `match` ends in `case _: raise ValueError`.
+
+The workflows are fine too: `security.yml` runs CodeQL over `python,javascript-typescript` - both
+languages, not just the backend - with `contents: read`, and `publish.yml` scopes itself to
+`contents: read` plus `packages: write` for the registry push, with `contents: write` narrowed to the
+one job that needs it.
+
+That closes the deployment and configuration surface. Chunks 602-606 read every file I had never
+opened: `bin/` (2 findings), the Dockerfile and `.dockerignore` (1 finding, 1 regression avoided),
+the entrypoint, `docker-compose.yml`, the Pydantic settings, the environments package, and the four
+workflows. Four chunks of findings, two chunks of clean results, and five hypotheses killed by
+reading rather than by testing.
