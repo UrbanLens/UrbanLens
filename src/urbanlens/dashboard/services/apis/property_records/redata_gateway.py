@@ -332,6 +332,34 @@ class RedataGateway(Gateway):
         body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/buildings/")
         return list(body) if isinstance(body, list) else []
 
+    def lookup_boundaries(self, parcel_uuid: str) -> list[dict[str, Any]]:
+        """Return every boundary candidate REData can find for a parcel, scored.
+
+        Deliberately unfiltered: passing any ``?source=`` makes REData skip
+        scoring altogether, leaving ``confidence: 0.0`` and
+        ``is_suggested: false`` on every record - which would discard the only
+        reason to call this rather than picking a polygon ourselves.
+
+        Like :meth:`lookup_buildings`, this never fetches or caches a *new*
+        parcel; it reads candidates for one REData already resolved.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid.
+
+        Returns:
+            Candidate dicts (possibly empty), each with ``geometry`` as
+            standard GeoJSON plus ``kind`` (``"parcel"`` for the parcel's own
+            cadastral line, ``"area"`` for something merely related to it),
+            ``confidence``, ``is_suggested`` and ``confidence_breakdown``. The
+            array is **not** sorted by confidence - see
+            :func:`suggested_boundary` for the selection rule.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/boundaries/")
+        return list(body) if isinstance(body, list) else []
+
     def lookup_cultural_resources(self, latitude: float, longitude: float, *, radius_meters: float = 200) -> list[dict[str, Any]]:
         """Find (fetching/caching as needed) CRIS cultural/historic resources near a coordinate.
 

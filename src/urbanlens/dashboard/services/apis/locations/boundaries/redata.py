@@ -13,17 +13,24 @@ Esri-ring-fixing conversion (``esri_rings_to_polygon``), which is still needed
 only for providers that hand back genuine Esri rings natively (Census
 TIGERweb, via ``geo_boundary.py``).
 
-Coverage is real but partial - not every jurisdiction has ``parcel_geometry``
-available, and ``building_geometry`` is rarer still (not every county that
-publishes a parcels layer also publishes a building-footprint one). When
-``parcel_geometry`` is missing but REData still resolved a parcel (and
-therefore its buildings - county GIS footprints plus NY SHPO's CRIS
-inventory, see ``plugins.builtin.parcel_buildings``), the convex hull of
-those buildings' points stands in for the property boundary: still-real
-survey/CRIS-derived geometry, and a much tighter fit than falling through the
-rest of the chain to the synthesized default circle. Only a genuine miss -
-no parcel at all, or fewer than 3 usable building coordinates - falls back to
-the next provider in the chain.
+Coverage is real but partial, and ``parcel_geometry`` being absent is the
+common case rather than the exception: it is null for every New York parcel by
+construction, because the state's Tier 1 source is a centroid *point* layer with
+no ring to extract. So the order below is what a NY pin actually resolves
+through, not a rarely-taken tail.
+
+1. ``parcel_geometry`` - the county's own cadastral line, where one exists.
+2. ``/parcels/{uuid}/boundaries/``, REData's scored candidates, choosing the one
+   it flags ``is_suggested`` (see :func:`suggested_boundary`). REData routinely
+   finds a county parcel line too small, a CRIS consultation polygon too small
+   and a CRIS archaeological buffer absurdly too large for one parcel at once,
+   and scores them against ten signals; that ranking is the whole reason to ask.
+3. The convex hull of the parcel's own buildings, as a last resort - restricted
+   to buildings REData flags ``is_on_property``. Unrestricted, it produced the
+   hull of a ~1,040-acre archaeological sensitivity zone's contents.
+
+Only a genuine miss - no parcel at all, or fewer than 3 usable building
+coordinates - falls through to the next provider in the chain.
 """
 
 from __future__ import annotations
@@ -55,6 +62,37 @@ def _largest_polygon(geom: Polygon | MultiPolygon | None) -> Polygon | None:
         candidates = [polygon for polygon in geom if isinstance(polygon, Polygon)]
         return max(candidates, key=lambda polygon: polygon.area) if candidates else None
     return None
+
+
+def suggested_boundary(candidates: list[dict]) -> Polygon | MultiPolygon | None:
+    """Pick the candidate REData scored highest, by REData's own rule.
+
+    REData routinely finds several boundaries for one parcel at once - a county
+    parcel line too small, a CRIS consultation polygon too small, a CRIS
+    archaeological buffer absurdly too large - and ranks them itself against ten
+    signals. Exactly one record carries ``is_suggested``. The array is not
+    sorted, so taking the first element picks a boundary at random.
+
+    Args:
+        candidates: Records from ``RedataGateway.lookup_boundaries``.
+
+    Returns:
+        The chosen geometry, or None when nothing usable came back.
+    """
+    usable = [(c, polygon) for c in candidates if isinstance(c, dict) and (polygon := geojson_polygon_to_geos(c.get("geometry"))) is not None]
+    for candidate, polygon in usable:
+        if candidate.get("is_suggested"):
+            return polygon
+
+    # Nothing won the scoring (an unscored call, or every candidate tied at
+    # zero), so fall back the way REData's own rule reads: the parcel's own
+    # cadastral line before anything merely related to it, then best-scoring,
+    # then smallest - a too-large boundary is what sent 2604 buildings to the UI.
+    def rank(entry: tuple[dict, Polygon | MultiPolygon]) -> tuple[int, float, float]:
+        candidate, polygon = entry
+        return (0 if candidate.get("kind") == "parcel" else 1, -float(candidate.get("confidence") or 0.0), polygon.area)
+
+    return min(usable, key=rank)[1] if usable else None
 
 
 @dataclass(slots=True)
@@ -95,12 +133,40 @@ class RedataBoundaryProvider(BoundaryProvider):
 
         property_polygon = geojson_polygon_to_geos(payload.get("parcel_geometry"))
         if property_polygon is None:
+            property_polygon = self._scored_boundary(gateway, payload.get("uuid"))
+        if property_polygon is None:
             property_polygon = self._buildings_convex_hull(gateway, payload.get("uuid"))
 
         return {
             "property": property_polygon,
             "building": geojson_polygon_to_geos(payload.get("building_geometry")),
         }
+
+    def _scored_boundary(self, gateway: RedataGateway, parcel_uuid: str | None) -> Polygon | MultiPolygon | None:
+        """REData's own best boundary for this parcel, when it has no cadastral line.
+
+        ``parcel_geometry`` is null for every New York parcel by construction -
+        the state's Tier 1 source is a centroid point layer, so there is no ring
+        to extract - which is why this path, not the cadastral one, is what a NY
+        pin actually resolves through.
+
+        Args:
+            gateway: The already-constructed gateway to reuse.
+            parcel_uuid: The parcel's REData uuid, or None when the lookup
+                resolved no parcel at all.
+
+        Returns:
+            The suggested boundary, or None when REData offers no candidate or
+            the request failed.
+        """
+        if not parcel_uuid:
+            return None
+        try:
+            candidates = gateway.lookup_boundaries(parcel_uuid)
+        except PropertyRecordsUnavailableError as exc:
+            logger.debug("REData boundary candidates unavailable for parcel %s: %s", parcel_uuid, exc)
+            return None
+        return suggested_boundary(candidates)
 
     def _buildings_convex_hull(self, gateway: RedataGateway, parcel_uuid: str | None) -> Polygon | None:
         """Approximate the property boundary as the convex hull of the parcel's own buildings.
