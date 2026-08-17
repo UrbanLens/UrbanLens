@@ -78,6 +78,16 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
     let geoWarned = false;
     /** The most recent sharing-flag POST, so a forced "off" can queue behind it. */
     let toggleRequest: Promise<void> = Promise.resolve();
+    /**
+     * Bumped by every sharing decision - the user's own, and a forced disable.
+     *
+     * A queued write compares this against the value it captured, because
+     * waiting behind an in-flight request means the intent it represents can be
+     * overtaken: deny permission while the enable POST is still open, then
+     * grant it and switch back on, and the queued "off" would land after the
+     * new "on" and disable sharing under a checked toggle and a live watcher.
+     */
+    let toggleGeneration = 0;
 
     const post = (url: string, body: FormData): Promise<Response> => fetch(url, { method: "POST", headers: { "X-CSRFToken": csrfToken }, body });
 
@@ -104,11 +114,13 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
         toggle.checked = false;
         notify("error", message);
         // Queued behind any in-flight sharing POST so this "off" cannot overtake
-        // the "on" it is undoing.
+        // the "on" it is undoing - and abandoned if a later decision supersedes
+        // it while it waits.
+        const generation = ++toggleGeneration;
         void toggleRequest
-            .then(() => postToggle(false))
+            .then(() => (generation === toggleGeneration ? postToggle(false) : null))
             .then((response) => {
-                if (!response.ok) forcedOffRefused();
+                if (response && !response.ok) forcedOffRefused();
             })
             .catch(forcedOffRefused);
     }
@@ -210,6 +222,9 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
 
     toggle.addEventListener("change", () => {
         const enabled = toggle.checked;
+        // This is now the account's intent, so any disable still waiting behind
+        // an in-flight request is stale and must not fire after it.
+        toggleGeneration += 1;
 
         // Started optimistically so the switch feels immediate, then undone if the
         // server refuses - otherwise the page claims to be sharing a location that

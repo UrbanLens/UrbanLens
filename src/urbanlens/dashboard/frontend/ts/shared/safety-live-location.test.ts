@@ -33,6 +33,23 @@ function stubNetworkFailure(): void {
     globalThis.fetch = (() => Promise.reject(new Error("offline"))) as unknown as typeof fetch;
 }
 
+/** Hold every request open until ``flush`` is called, so ordering is testable. */
+function stubDeferredFetch(status = 204): { flush: () => void } {
+    posted = [];
+    const pending: (() => void)[] = [];
+    globalThis.fetch = ((url: string, init: RequestInit) => {
+        posted.push({ url: String(url), body: init.body as FormData });
+        return new Promise<Response>((resolve) => {
+            pending.push(() => resolve({ ok: status >= 200 && status < 300, status } as Response));
+        });
+    }) as unknown as typeof fetch;
+    return {
+        flush: () => {
+            while (pending.length) pending.shift()?.();
+        },
+    };
+}
+
 function setup(checked = false, hasGeolocation = true): Harness {
     let clock = 1_000_000;
     document.body.innerHTML = `<input type="checkbox" id="t" ${checked ? "checked" : ""}>`;
@@ -386,6 +403,29 @@ describe("when location permission is denied", () => {
         await settle();
 
         expect(h.errors).toHaveLength(1);
+    });
+
+    // The disable waits behind the in-flight enable it is undoing, which means
+    // the intent it represents can be overtaken while it waits: grant the
+    // permission and switch back on, and a stale "off" landing afterwards would
+    // disable sharing on the server under a checked toggle and a live watcher -
+    // every position update then rejected, with the page showing no sign of it.
+    test("a queued disable is abandoned when sharing is switched back on first", async () => {
+        const h = setup();
+        const deferred = stubDeferredFetch();
+
+        h.toggle.checked = true;
+        h.toggle.dispatchEvent(new Event("change")); // enable POST now in flight
+        h.emitError(1); // permission denied - disable queues behind it
+        h.toggle.checked = true;
+        h.toggle.dispatchEvent(new Event("change")); // permission granted, back on
+        deferred.flush();
+        await settle();
+
+        const toggles = posted.filter((p) => p.url === "/toggle/");
+        expect(toggles.map((p) => p.body.get("enabled"))).toEqual(["1", "1"]);
+        expect(h.toggle.checked).toBe(true);
+        expect(h.watching()).toBe(true);
     });
 });
 
