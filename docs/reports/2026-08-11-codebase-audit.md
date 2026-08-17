@@ -13272,3 +13272,41 @@ Method lesson, and the reason this is written up rather than quietly dropped: **
 record before choosing a search angle, not after.** Two of this session's most useful chunks came
 from following evidence in the report; this one came from picking a plausible-sounding area cold, and
 plausible-sounding areas are exactly the ones a thorough earlier pass already covered.
+
+## Chunk 629 - the migration conventions, and the one nothing was checking
+
+Consulting the coverage index first this time. It showed the undo framework already swept (four
+entries), and frontend build/test health too - so both of the angles I had lined up were spent. It
+also showed that of the migration conventions `CLAUDE.md` states, exactly **one** had been checked:
+"index creation last in a migration chain" (the earlier entry's "four conventions" were three
+non-migration ones plus that). The rest were genuinely unswept.
+
+All five hold:
+
+- **Index creation last.** Previously verified - only the three squashed historical migrations
+  violate it, and they have already run.
+- **A new nullable+unique field declares `unique=True` in the `AddField` itself.** Across 447
+  `AddField` operations and 120 `AlterField`s that set `unique=True`, **zero** cases where a field
+  was added non-unique and made unique later - the dance that leaves a duplicate index behind.
+- **`RenameIndex` only in the squashed historical migrations** (`0002`, `0007`), which is where the
+  warning about it says it is safe.
+- **No stale squashed-migration references.** Zero `NNNN_..._squashed_MMMM_...` module names
+  anywhere in the tree.
+- **Every in-app dependency resolves to a tracked file.** 46 migrations, zero dangling.
+
+That last one is the one worth protecting, and nothing was protecting it. `makemigrations` builds a
+new migration's `dependencies` from whatever files are sitting in `migrations/`, with no notion of
+which git is tracking - so an in-progress feature's uncommitted migration, left on disk in the same
+checkout, can silently become the parent of a migration that *is* committed. The failure is invisible
+where it was made, because the parent is right there on disk, and fatal everywhere else:
+`NodeNotFoundError` on any other checkout or deploy, before the app, the workers or the suite can
+start. CI's `makemigrations --check --dry-run` does not see it - that detects *missing* migrations,
+not dependencies on files a fresh checkout won't have.
+
+`bin/check_migration_graph.py` now checks it structurally, deliberately without loading Django, for
+the same reason `check_imports_tracked.py` doesn't: importing the app proves only that *this*
+machine's files are complete, which was never the thing in doubt.
+
+Verified by building the exact accident it exists for - an untracked migration on disk, then a
+committed migration pointed at it. It reports both halves separately and with the right diagnosis:
+the stray file, and the committed migration whose parent git will not ship.

@@ -99,6 +99,13 @@ jobs:
       - name: Documentation citations point at real lines
         run: python3 bin/check_doc_line_refs.py
 
+      # makemigrations builds `dependencies` from whatever files are on disk,
+      # tracked or not - so an uncommitted migration can become the parent of a
+      # committed one. Invisible in the checkout that made it; NodeNotFoundError
+      # everywhere else, before the app or the workers can start.
+      - name: Migration graph resolves in the committed tree
+        run: python3 bin/check_migration_graph.py
+
       # Nothing else checks this: a model change without its migration only
       # surfaces if some test happens to touch the field, and otherwise waits
       # until the column is needed in production.
