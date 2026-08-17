@@ -11883,6 +11883,12 @@ still watching the blocker's live location, and left a pending pin share they co
 message unsent inside the 120-second delay window still had its text emailed out of band, as did a
 message from someone the recipient had since blocked.
 
+**Privacy hygiene.** With location tracking switched off, the map's search path still transmitted the
+user's coordinates to a server that then discarded them - the sibling path three thousand lines up
+already declined to send them. Nothing was stored either way (the server enforces the preference), so
+this is the one item here that was defence-in-depth rather than a live defect; it is counted because
+someone who opts out should not have the coordinates leave the browser at all.
+
 **Correctness.** Stripe's out-of-order webhook delivery could resurrect a cancelled subscription for
 up to a day. Open-Meteo forecast slots were compared as local wall clock against UTC activity times -
 four to five hours out in New York, nine in Tokyo. Achievement signal receivers were keyed by model
