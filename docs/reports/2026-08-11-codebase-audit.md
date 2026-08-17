@@ -12742,3 +12742,42 @@ model anticipated scoped saves; the forms simply never passed any.
 
 Verified by breaking (the two concurrency tests fail with the whole-row save restored, the complement
 and completeness arms stay green), plus 1,476 settings/profile tests passing.
+
+## Chunk 619 - the map quick-edit, and the end of the bare-save sweep
+
+`Pin` is the most heavily written model in the codebase - around forty writers, more than `Profile` -
+and it has **exactly one** bare `save()` against it: `MapController.patch_pin`, the map popup's
+quick-edit. Everything else already scopes its update, including the background writers that make the
+collision real: visit logging setting `last_visited`, the placeholder-name sweep clearing `name`, pin
+suggestions, and `share_provenance` setting `inferred_source_share`.
+
+That last field is why this one is worth more than a lost preference. `inferred_source_share` is part
+of the `LocationExposure` provenance chain that `CLAUDE.md` names as an invariant ("any new
+pin/location share path must call `resolve_origin_share` + `record_share_exposure`"). A quick edit
+silently reverting it breaks a documented guarantee rather than a convenience.
+
+The window is one request, but not a short one - the handler accepts a `custom_icon` upload, validates
+it, and can repoint the pin to a find-or-created `Location`.
+
+The reproduction injects the concurrent write through a real seam: `get_nearby_or_create`, which
+patch_pin calls between loading the pin and saving it. That is the actual interleaving, made
+deterministic, rather than a simulated one. Confirmed: `last_visited` came back as None.
+
+Fixed by accumulating the posted fields into a `touched` list and saving only those. `updated` is
+always included, matching what the bare save did.
+
+**The sweep is now finished, and the shape of the result is worth recording.** Of 85 bare `save()`
+calls outside tests and migrations, the ones that mattered were found by ranking models by *number of
+distinct writers*, not by call count or I/O proximity (an I/O heuristic scored 13/13 false positives
+in chunk 617). Four sites in four chunks: `RoleSubscription` (Stripe sync vs local ledger), `Wiki`
+(community editors), `Profile` (fifteen forms vs twenty-five writers), `Pin` (one site vs forty
+writers). The remaining bare saves are on rows with a single writer, where a whole-row write is
+what it looks like.
+
+Two reusable tells came out of it, both confirmed twice:
+
+- **A local hand-patch marks the general defect.** `MapCenterForm.save` re-reading two columns, and
+  `revert_edit_fields`' per-field conflict check, were each someone noticing this bug in one spot and
+  fixing it there instead of at the shape causing it.
+- **Look for guards whose own caller undoes them.** The wiki revert's conflict check was defeated by
+  the `save()` two lines below it.

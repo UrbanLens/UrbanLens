@@ -784,23 +784,34 @@ class MapController(LoginRequiredMixin, GenericViewSet):
 
         import contextlib
 
+        # Only the posted fields are written. Pin has around forty other writers
+        # scoping their updates to what they own - visit logging, the placeholder-name
+        # sweep, pin suggestions, share provenance - and a whole-row save from this
+        # request's instance reverted whatever landed while it was in flight.
+        touched: list[str] = []
         if name is not None:
             pin.name = name or None
             pin.name_is_user_provided = bool(name.strip())
+            touched += ["name", "name_is_user_provided"]
         # Coordinates live on the Location; a move repoints the pin to a
         # find-or-created Location at the new point rather than mutating a shared row.
         if latitude is not None and longitude is not None:
             with contextlib.suppress(ValueError, TypeError):
                 pin.location, _ = Location.objects.get_nearby_or_create(float(latitude), float(longitude))
+                touched.append("location")
         if icon is not None:
             pin.icon = clean_icon(icon)
+            touched.append("icon")
         if color is not None:
             pin.color = color or None
+            touched.append("color")
         if custom_icon:
             pin.custom_icon = custom_icon
+            touched.append("custom_icon")
         elif request.POST.get("clear_custom_icon"):
             pin.custom_icon = None
-        pin.save()
+            touched.append("custom_icon")
+        pin.save(update_fields=[*touched, "updated"])
 
         if label_ids:
             from urbanlens.dashboard.models.labels.model import KIND_USER as _KIND_USER
