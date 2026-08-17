@@ -9473,3 +9473,35 @@ The fix is close to free: lift `wait_for_healthy` (or `docker compose ps --forma
 here** for the same reason as above - the script hard-resets the working tree and rebuilds the running
 stack, so it cannot be exercised in this environment, and its failure handling is precisely what the
 change would alter.
+
+## `.dockerignore` does not exclude `.env`, so deploy-host image builds bake the secrets in
+
+Found 2026-08-17 reading the Dockerfile, which had not been examined. `.dockerignore` lists caches,
+`node_modules`, `docs/`, virtualenvs and editor directories - but not `.env`. The Dockerfile then does
+`COPY --chown=appuser:appuser . /app`, copying the whole build context.
+
+`.env` is correctly gitignored (`.gitignore:53`) and is 3.3 KB of real secrets on this host:
+`DJANGO_SECRET_KEY`, database credentials, `UL_FIELD_ENCRYPTION_KEY`, Stripe keys, OAuth client
+secrets and API keys for the plugin fleet. Keeping it out of git and then copying it into the image
+undoes most of the benefit.
+
+**Scope, stated precisely, because it is narrower than it first looks.** Images published to
+`ghcr.io` by `.github/workflows/publish.yml` are built from `actions/checkout`, which produces a
+clean git checkout - `.env` is gitignored and therefore absent, so **published images do not contain
+it**. The exposure is images built *on the deploy host*, which is exactly how `bin/deploy.sh` builds
+them (`docker compose up --build`). There, anyone who can read the image can usually already read
+`.env` on the same filesystem, so the practical gap is narrow: `docker save`/export of that image, or
+Docker-daemon access without filesystem access.
+
+**Not fixed here**, and the reason is worth recording because it is not squeamishness:
+`settings/app.py` deliberately loads `Path(DEFAULT_ROOT, ".env")` - the Pydantic settings read that
+file from disk, with a comment explaining where it lives relative to `src/`. `docker-compose.yml`
+supplies configuration through `environment:` blocks rather than `env_file:`, so the baked copy is
+*probably* redundant, but "probably" is not enough to justify a change that could alter how a
+production container resolves its configuration, in an environment where I cannot run the real
+deployment to find out.
+
+**`.git` is a different matter and is *not* a defect.** It is also copied in, and that is deliberate:
+`core/version.py` shells out to git to compare the deployed commit against upstream, and the
+Dockerfile configures `git config --system safe.directory /app` for development images so that keeps
+working. Excluding `.git` would break the version check. Noting it explicitly so nobody "fixes" it.

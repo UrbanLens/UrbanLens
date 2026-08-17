@@ -12247,3 +12247,32 @@ rebuild a running stack and drop a database, their failure paths are exactly wha
 and neither can be exercised here.
 
 `build-frontend.ts` and `map_layers.py` read as well; nothing to report in either.
+
+## Chunk 604 - the Dockerfile, and a near-miss fix I did not make
+
+Read the Dockerfile, never opened this session. It is careful work - a non-root user created *before*
+the source copy so `COPY --chown` sets ownership at copy time rather than needing a recursive chown,
+every runtime-writable directory pre-created, and `gosu` in the entrypoint to drop privileges after
+fixing volume-mount ownership.
+
+**`.dockerignore` does not exclude `.env`.** With `COPY . /app`, that means an image built on the
+deploy host contains the real secrets file - and `bin/deploy.sh` builds exactly that way. Published
+`ghcr.io` images are unaffected, because `publish.yml` builds from `actions/checkout` where `.env` is
+gitignored and absent; the exposure is the locally-built image, where the practical gap is `docker
+save` or daemon-without-filesystem access rather than anything dramatic. Filed with that scoping
+rather than as a headline.
+
+**The more useful part of this chunk is the fix I did not make.** The obvious remedy is to add `.env`
+*and* `.git` to `.dockerignore`. Adding `.git` would have broken the application: `core/version.py`
+shells out to git to compare the deployed commit against upstream, and the Dockerfile explicitly sets
+`git config --system safe.directory /app` so that survives the root-owned copy. One `grep` before
+editing turned a plausible one-line "hardening" into a regression avoided.
+
+And `.env` is not safe to exclude blind either - `settings/app.py` deliberately loads
+`Path(DEFAULT_ROOT, ".env")`, so the baked copy may be load-bearing for some deployment path.
+`docker-compose.yml` passes configuration through `environment:` blocks, which suggests it is
+redundant, but a suggestion is not a basis for changing how a production container finds its
+credentials when the real deployment cannot be exercised here.
+
+Both entries in `docs/PROBLEMS.md` say which is which, including an explicit note that `.git`'s
+presence is deliberate, so the next reader does not "fix" it.
