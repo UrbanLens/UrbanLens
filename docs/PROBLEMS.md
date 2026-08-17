@@ -9371,3 +9371,30 @@ The matching fix would be a periodic sweep of export/import working directories 
 TTL, which needs no per-job bookkeeping - the directory's own mtime is enough. Filed rather than
 added because it means introducing a beat task, and how aggressively to reap those directories is
 an operational choice.
+
+## Should logging out wipe the cached E2EE keys? (product decision, filed 2026-08-17)
+
+`frontend/ts/shared/e2ee-store.ts` caches decrypted E2EE material in IndexedDB - the identity private
+key, and every unsealed conversation and group key - so day-to-day use never prompts for a password
+or recovery key. Nothing clears it on logout. `clearProfileKeys` exists and does the right thing, but
+its only caller is the key-reset flow.
+
+**This is deliberate and documented**, which is why it is a question rather than a defect. The
+module's own header says the cache is keyed by profile slug so two accounts sharing a browser cannot
+read each other's rows "by accident", and states the boundary plainly: "same-origin storage is the
+trust boundary either way - this is bookkeeping, not isolation."
+
+The question is whether an explicit logout should be treated differently from a page close. Someone
+logging out on a shared or borrowed machine would probably expect their decrypted message keys to go
+with them; someone logging out and back in on their own laptop would probably not expect to re-enter
+a recovery key. Both are defensible, and the tradeoff is a product call rather than an engineering
+one, so it is recorded rather than decided.
+
+If the answer is "yes", `clearProfileKeys(selfSlug)` on logout is the whole change. Note also that
+its docstring offers "logout-everywhere / key reset" as its purpose while no logout-everywhere
+feature exists anywhere in the codebase - worth correcting whichever way this is decided.
+
+(Raised while tracing the messaging/E2EE surface. It was recorded in
+`docs/reports/2026-08-11-codebase-audit.md` at the time and carried in that session's running list of
+owner decisions, but never written here until now - which is what made it worth catching: a filed
+item that lives only in a narrative report is not filed.)
