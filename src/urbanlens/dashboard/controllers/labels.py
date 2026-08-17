@@ -749,12 +749,16 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
             conflict = find_conflicting_label(profile=profile, name=name, kind=new_kind, exclude_pk=label.pk)
             if conflict is not None:
                 return HttpResponse(label_conflict_message(conflict, singular_title=self._cfg().singular_title), status=400)
+            name_error = column_length_error(Label, "name", name, self._cfg().singular_title)
+            if name_error:
+                return HttpResponse(name_error, status=400)
             label.name = name
 
         label.description = request.POST.get("description", "").strip() or None
-        # CharField(max_length=50); save() does not run full_clean(), so an over-long
-        # icon reached the database as a 500.
-        label.icon = (request.POST.get("icon") or "").strip()[: Label._meta.get_field("icon").max_length] or None  # noqa: SLF001 - _meta is public API
+        # Through clean_icon, like the create path: truncating to the column width
+        # fixed the over-long-icon 500 but still let arbitrary free text be stored
+        # as an icon here while create rejected it.
+        label.icon = clean_icon(request.POST.get("icon"), max_length=column_max_length(Label, "icon")) or None
         label.color = clean_color(request.POST.get("color"))
         label.order = safe_int(request.POST.get("order"), label.order)
 

@@ -12481,3 +12481,36 @@ work is on `@release/v_0_7_0`. The commit messages only reach the changelog if t
 does - a squash merge would collapse forty-seven messages into one, and the fourteen `fix:` entries
 would stop being individually visible. That is entirely the owner's call about merge strategy; it is
 recorded only because the value of writing careful commit messages depends on it.
+
+## Chunk 612 - git history as a signal, and my own fix that reached one of two sites
+
+A genuinely new axis, and the first one in a while that was not a file I had failed to open: **the
+history itself**. Change frequency predicts defect density, and thirty-nine sessions of commits were
+sitting there unused.
+
+Raw churn over three months put `tasks.py` first (35 changes), but churn without context is weak, so
+I computed **fix-density** - what fraction of each file's changes were `fix:` commits.
+`controllers/labels.py` is **8 of 18, 44%**, against 17% for `tasks.py`, 22% for `controllers/pin.py`
+and 6% for `models/pin/model.py`. Nearly half its recent history is bug fixes.
+
+Reading those eight, six are the same theme - validating user-supplied label attributes on the way in
+- and two say outright that they caught what an earlier pass missed: "the colour and max_length writes
+three regex passes missed", "two bulk-payload bugs my own filter had hidden". A file whose fixes keep
+finding what the last fix missed is the one to look at again.
+
+**It had two live inconsistencies between its create and edit paths, and one is mine.**
+
+- `label.name` on the edit path had no length check, while the create path has had
+  `column_length_error` since chunk 559 - *because I put it there and never looked at the sibling*.
+  A 256-character rename was a `DataError` 500. The same defect I fixed, on the same model, in the
+  same file, twenty chunks earlier.
+- `label.icon` on the edit path truncated arbitrary text to the column width instead of running
+  `clean_icon`, so edit accepted free text as an icon that create would reject. The comment above it
+  records an earlier fix for the *length* half of that problem - another instance of the pattern the
+  fix-density flagged.
+
+Both reproduced first, then fixed to match the create path. 542 label tests pass.
+
+The lesson is not "check siblings" - I knew that, and wrote it into three earlier entries. It is that
+**I had no way to know I had missed one**, and the history did. Fix-density pointed at a file I had
+already edited this session, on evidence I generated myself and never read back.

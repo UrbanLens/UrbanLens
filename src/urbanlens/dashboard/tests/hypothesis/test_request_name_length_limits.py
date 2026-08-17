@@ -71,6 +71,31 @@ class RequestNameLengthTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertFalse(PinAlias.objects.filter(name__startswith="nnn").exists())
 
+    def test_label_edit_rejects_an_overlong_name(self) -> None:
+        """The edit path, which chunk 559's fix to the create path did not reach.
+
+        `controllers/labels.py` has the highest fix-density in the repository -
+        8 of 18 changes in three months were bug fixes, six of them about
+        validating user-supplied label attributes on the way in. This is the
+        same defect as the create path's, still live on its sibling.
+        """
+        label = baker.make(Label, profile=self.profile, kind="tag", name="original")
+
+        response = self.client.post(reverse("label.edit", kwargs={"label_kind": "tags", "label_id": label.pk}), {"name": _too_long(Label, "name")})
+
+        self.assertEqual(response.status_code, 400)
+        label.refresh_from_db()
+        self.assertEqual(label.name, "original", "an over-long name was written to a 255-wide column")
+
+    def test_label_edit_refuses_an_icon_that_create_would_refuse(self) -> None:
+        """Edit truncated arbitrary text; create runs it through clean_icon."""
+        label = baker.make(Label, profile=self.profile, kind="tag", name="tagname", icon="star")
+
+        self.client.post(reverse("label.edit", kwargs={"label_kind": "tags", "label_id": label.pk}), {"name": "tagname", "icon": "not an icon at all"})
+
+        label.refresh_from_db()
+        self.assertNotEqual(label.icon, "not an icon at all", "edit stored free text as an icon")
+
     def test_a_name_at_exactly_the_limit_is_still_accepted(self) -> None:
         """The boundary belongs to the user, not to the error path."""
         limit = PinList._meta.get_field("name").max_length
