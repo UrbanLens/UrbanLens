@@ -1,10 +1,10 @@
 
 from __future__ import annotations
 
-from typing import Dict, Iterable, List, Collection, TYPE_CHECKING, Tuple, Any, Optional
-
+from collections.abc import Collection, Iterable
 import logging
 import traceback
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 import unittest
 
 from urbanlens.core.tests.testcase import TestCase
@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 class MessageResult(unittest.TextTestResult):
 
-    def getDescription(self, test : 'TestCase') -> str:
+    def getDescription(self, test : TestCase) -> str:
         """
         Override the default getDescription method to include the class name and method name of the code we're testing
 

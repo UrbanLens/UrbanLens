@@ -6,9 +6,9 @@ import socket
 from unittest import mock
 
 from urbanlens.core.testing_network import (
+    VERIFY_PROBE_ADDRESS,
     ExternalNetworkGuardVerificationError,
     LocalhostOnlyNetwork,
-    VERIFY_PROBE_ADDRESS,
     _address_host,
     _host_is_localhost,
     verify_external_network_blocked,

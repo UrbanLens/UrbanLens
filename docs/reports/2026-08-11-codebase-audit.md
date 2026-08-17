@@ -13310,3 +13310,63 @@ machine's files are complete, which was never the thing in doubt.
 Verified by building the exact accident it exists for - an untracked migration on disk, then a
 committed migration pointed at it. It reports both halves separately and with the right diagnosis:
 the stray file, and the committed migration whose parent git will not ship.
+
+## Chunk 630 - building the tools the audit's failures asked for
+
+Implemented the tooling proposed at the end of the session, each grounded in a
+specific way something got through. Four of them found or closed real defects
+while being built, which is the only evidence worth having about a diagnostic.
+
+**A 50x faster test loop, by measurement.** Building a test database costs ~190
+seconds; the tests themselves cost seconds. The consensus field-scope file runs in
+**188s cold and 3.05s against a database that already exists**. `bin/run_tests.sh
+--fast` reuses one, `--fresh-db` rebuilds it after a migration. This is what makes
+mutation testing feasible at all, and it should have been found months ago - the
+cost was hiding in plain sight in every run.
+
+**The scaling harness now validates its own premise.** `QueryScalingMixin`
+requires the response body to grow between measurements, so a seed that doesn't
+exercise the endpoint fails as "the seed does not exercise this endpoint" rather
+than passing quietly. The threshold is measured rather than picked: four repeats
+with nothing seeded spanned **11 bytes**, ten real trips added **12,033**. On
+failure it now names the statements that multiplied.
+
+**Mutation testing found an untested lock.** Its first run produced 341 mutants
+(141 killed, 92 survived) at ~1/second, and one survivor mattered:
+`_lock_and_refresh`'s `select_for_update()` replaced by `None` - keeping the
+refresh, dropping the lock - passed every existing test. Correct, and damning:
+those tests drive two in-process snapshots, where the refresh is what repairs the
+lost update. **A lock is invisible on one connection.** In production the refresh
+alone is not enough. `test_billing_ledger_lock.py` closes it with real threads and
+kills that mutant.
+
+**The writer-cardinality report found a fifth lost-update site.**
+`bin/report_model_writers.py` ranks models by how many modules write them and
+lists bare `save()` calls against each - the question that found four of the five
+lost updates. Run against the tree it immediately surfaced
+`consensus/fields.py:171`, a bare `wiki.save()` the chunk-617 sweep missed, on a
+model with thirteen writers and a staleness window a whole game session wide.
+Fixed, with the written columns declared explicitly because the pin-type setter
+assigns two of them.
+
+**Three things the tools got wrong, caught by using them:**
+
+- The first prune rule in `run_tests.sh` deleted every container file the host
+  lacked - **19,687 of them**, mostly bytecode and collected static. Nothing broke
+  because those regenerate, but deleting build output is not a test runner's job.
+  Narrowed to `.py` files outside `__pycache__`.
+- The parity guard blocked the break-verification workflow it was built alongside.
+  Added `--allow-drift`, named so it cannot be reached by habit.
+- The citation-repair heuristic accepted `ident =` as a definition and "fixed" a
+  ZIP-member size check to an unrelated keyword argument 1,100 lines away.
+  Spot-checking the proposed targets caught it.
+
+**Negatives worth recording.** Three shuffled seeds across the scaling, consensus
+and helper suites found **no order dependence**, so `pytest-randomly` is safe to
+adopt. `bin/report_defect_history.py`'s fix-density ranking puts
+`services/social/friendship.py` (3 of 5 commits), `pin_lists/detail.html` (3 of 5)
+and `memories/index.html` (4 of 7) at the top - none examined yet, and a worklist
+for whoever goes next.
+
+Everything is indexed in `docs/TOOLING.md`, linked from `CLAUDE.md`, because the
+lesson of chunk 628 is that knowledge which cannot be found gets rebuilt.

@@ -10,6 +10,11 @@ UrbanLens is a Django mapping application for photographers and urban explorers 
 
 **Docs** - `docs/FEATURES.md` - an inventory of features. Infrastructure should be reused whenever possible (e.g. a generic height-based client pagination system, a shared visit dialog, shared map toolbar/layers components). `docs/NOTES.md` - explains some non-obvious behavior; `docs/designs/plugins.md` - documents the plugin contribution API.
 
+`docs/TOOLING.md` - the diagnostic and CI tooling: how to run tests fast, mutation
+testing, the two "where to look" reports, the three structural CI checks, and the
+shared test helpers. Each entry records the defect that motivated it, so its value
+does not have to be re-derived.
+
 `CLAUDE.local.md` at the repo root contains environment-specific info.
 
 ## Quick Start
