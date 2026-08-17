@@ -18,6 +18,12 @@ UrbanLens is a Django mapping application for photographers and urban explorers 
 
 Always run ruff with `--fix`.
 
+Note what it does *not* cover: `pyproject.toml`'s `extend-exclude` skips `tests`, `settings`,
+`migrations` and `__init__.py`, and those are bare path components, so **every** test directory is
+excluded - the whole test suite's source is unlinted. A clean `ruff check src/urbanlens` says
+nothing about test code, which is why unused imports survive in e.g. `core/tests/result.py`. Lint
+those files by hand or by pointing ruff at them explicitly if it matters.
+
 **MyPy**
 The purpose of mypy is to find bugs and improve code quality, not to silence warnings. This sometimes requires going to the origin of the call to adjust types, rather than papering over it at the point of failure. Never use "cast" or similar fixes. Fix bad assumptions and types, implement generics. If you're unsure, mark it as a TODO instead of silencing the warning.
 
