@@ -12862,3 +12862,33 @@ the DM thread did not - tell #1 once more, the same gap solved in the sibling. B
 correct on its own terms and is what makes the prefetch reachable.
 
 After: no query grows with share count at all.
+
+## Chunk 622 - surveying the rest of the listing surface: no N+1s, and a fourth kind of vacuity
+
+Applying chunk 621's lesson (measure, don't guess) to the endpoints its harness doesn't cover. The
+diagnostic is cheap and reusable: render each endpoint at two data sizes, normalise the captured SQL
+(digits and quoted strings replaced), and diff the two `Counter`s to name exactly which queries grew.
+Building it as a survey - catching per-endpoint errors instead of aborting the run - matters, since
+one endpoint raising would otherwise take the whole report with it.
+
+**Result: no N+1s.** Fourteen endpoints measured, every one flat: trips list, four memories views,
+both organize views, both label views, tools index, messages list, achievements list, and both friend
+views. The listing surface is in good shape, which is the honest headline.
+
+**The fourth kind of vacuity, caught by checking my own measurement.** The seed grows pins, labels,
+images, trips and pin-lists. It does *not* grow friends, achievements or conversations - so
+`friend.list`, `achievement.list` and `messages.list` were rendering a constant-size list and their
+"flat" result measured nothing at all. Adding friends to the seed converted `friend.list` and
+`friend.page` into real measurements (still flat, 23 -> 23 with twelve friends);
+`achievement.list` and `messages.list` remain unexercised and are reported as such rather than
+counted as passes.
+
+The general form, after three earlier variants this session: **a result can look clean because the
+setup never varied the thing under test.** Previously that was a guard prefix matching too much, a
+fixture never reaching the code under test, and a fixture taking a path that serialised by accident.
+Here it is a scaling measurement where the axis never grew.
+
+Three of the surveyed endpoints are now pinned in `test_query_scaling.py` so the flatness is
+protected rather than merely observed. `memories.photos` was measured flat but is left out: it needs
+images with real files rather than the bare rows the shared seed creates, and pinning it would mean
+changing that seed under the four tests already relying on it.

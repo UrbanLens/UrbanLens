@@ -87,3 +87,20 @@ class QueryScalingTests(TestCase):
 
     def test_external_photo_list_does_not_scale_with_photo_count(self) -> None:
         self._assert_flat(reverse("external_api:photos"), HTTP_AUTHORIZATION=f"Bearer {self.raw_key}")
+
+    # The three below were surveyed rather than found broken: each was measured at two
+    # data sizes, came out flat, and is pinned here so it stays that way. The seed
+    # above grows pins, labels, images and trips, which is what these list - an
+    # endpoint whose row type the seed does not grow would render a constant-size
+    # list and pass without measuring anything. (``memories.photos`` was measured flat
+    # too, but needs images with real files rather than the bare rows seeded here, so
+    # pinning it would mean changing the seed under the four tests above.)
+    def test_trips_list_does_not_scale_with_trip_count(self) -> None:
+        self._assert_flat(reverse("trips.list"))
+
+    def test_label_index_does_not_scale_with_label_count(self) -> None:
+        self._assert_flat(reverse("label.index", kwargs={"label_kind": "tags"}))
+
+    def test_organize_index_does_not_scale_with_pin_count(self) -> None:
+        self._assert_flat(reverse("organize.index"))
+
