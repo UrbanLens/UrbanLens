@@ -9925,3 +9925,21 @@ are either already handled (`Friendship`, `SafetyCheckinPartner`, pending `PinSh
 `DirectMessageTemporaryAccess`'s read-time veto), private annotations the author owns
 (`ProfileNote`, `ProfileNickname`, `ProfileTrust`, `ProfileLabelAssignment`), or deliberately
 preserved history (`DirectMessage`, `ConversationKey`).
+
+## OPEN 2026-08-17: two encryption migrations disagree about whether encrypting is reversible
+
+`0007_pinshare_bundled_with_markup_map_removed_flags.py` encrypts credential tokens and carries a
+real decrypting `reverse_code` - the guard's own note calls that "exactly the case that must NOT be
+noop". `0048_encrypt_preference_and_contact_label.py` encrypts two preference columns and reverses to
+`RunPython.noop`, with the opposite reasoning stated just as plainly: a reverse would have to decrypt
+under whatever key is active at rollback time, and getting that wrong writes garbage over real data,
+so restore from a backup instead.
+
+Both arguments are sound in isolation and they cannot both be the rule. The question is which risk the
+project accepts: a reverse that can corrupt data under a rotated key, or a reverse that silently
+leaves a column unreadable by the pre-migration code. Whichever is chosen should be written down in
+`docs/DATA_ENCRYPTION.md` and applied to both, because the next person encrypting a column will copy
+whichever migration they happen to open.
+
+Found by `test_migration_noop_reverse_guard`, which forces exactly this review and had not yet seen
+0048 - it arrived in the 2026-08-17 merge.

@@ -26,7 +26,7 @@ _IMPORT_SETTINGS = "import urbanlens.UrbanLens.settings.base"
 class SecretKeyGuardTests(SimpleTestCase):
     def _boot(self, environment: str) -> subprocess.CompletedProcess:
         env = {**os.environ, "UL_ENVIRONMENT": environment, "DJANGO_SECRET_KEY": ""}
-        return subprocess.run(  # noqa: S603
+        return subprocess.run(
             [sys.executable, "-c", _IMPORT_SETTINGS],
             capture_output=True,
             text=True,
@@ -41,11 +41,22 @@ class SecretKeyGuardTests(SimpleTestCase):
         self.assertIn("ImproperlyConfigured", result.stderr)
         self.assertIn("DJANGO_SECRET_KEY", result.stderr)
 
-    def test_development_without_a_secret_key_refuses_to_boot(self) -> None:
-        """Dev compose runs multiple processes (app, workers) - the per-process-key hazard applies there too."""
+    def test_development_without_a_secret_key_still_boots(self) -> None:
+        """Development is exempt, deliberately - staging and production are not.
+
+        This asserted the opposite until the 2026-08-17 merge, on the reasoning
+        that dev compose also runs several processes and so shares the
+        per-process-key hazard. The merged guard draws the line at durable data
+        instead: ephemeral keys are safe where no encrypted data needs to
+        survive a restart, which covers developer machines and test runs.
+
+        The tradeoff is real and worth knowing: a dev database *can* hold
+        encrypted rows, and restarting without a key orphans them. That is an
+        annoyance on a dev box and a catastrophe in staging, which is why only
+        the latter fails hard.
+        """
         result = self._boot("development")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertIn("ImproperlyConfigured", result.stderr)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_local_without_a_secret_key_still_boots(self) -> None:
         result = self._boot("local")

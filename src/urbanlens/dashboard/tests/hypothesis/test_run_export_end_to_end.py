@@ -25,7 +25,15 @@ from urbanlens.dashboard.services.import_export.export import VALID_EXPORT_TYPES
 #: everything else runs on any account.
 _TYPES = sorted(VALID_EXPORT_TYPES - {"google_takeout", "direct_messages"})
 
-_EXPECTED_FILES = {"profile.json", "safety.json", "map_annotations.json", "saved_searches.json", "pins.json"}
+#: The archive must carry the legacy areas plus every registered one. Registered
+#: filenames are read from their declarations rather than repeated here - the
+#: 2026-08-17 merge renamed two of them (safety.json -> safety_checkins.json,
+#: saved_searches.json -> saved_filters.json) and a hardcoded list simply went
+#: stale without saying why.
+def _expected_files() -> set[str]:
+    from urbanlens.dashboard.services.import_export.export import _REGISTERED_EXPORT_TYPES
+
+    return {"profile.json", "pins.json"} | {export_type.filename for export_type in _REGISTERED_EXPORT_TYPES}
 
 
 class RunExportEndToEndTests(TestCase):
@@ -42,7 +50,7 @@ class RunExportEndToEndTests(TestCase):
         baker.make(User)
         user = baker.make(User)
         names = self._run(user)
-        self.assertLessEqual(_EXPECTED_FILES, names, f"missing files in archive: {_EXPECTED_FILES - names}")
+        self.assertLessEqual(_expected_files(), names, f"missing files in archive: {_expected_files() - names}")
 
     def test_an_account_with_new_kind_content_exports_it(self) -> None:
         baker.make(User)
@@ -52,4 +60,4 @@ class RunExportEndToEndTests(TestCase):
         baker.make("dashboard.MarkupMap", profile=profile, title="Sketch")
         baker.make("dashboard.SavedFilter", profile=profile, name="ruins")
         names = self._run(user)
-        self.assertLessEqual(_EXPECTED_FILES, names)
+        self.assertLessEqual(_expected_files(), names)

@@ -1255,14 +1255,16 @@ def _apply_pending_invitation(invitation, profile) -> None:
     direction, since the side effects here (a friend request, a notification,
     a subscription grant) are ones a user would notice twice.
     """
+    # Claimed exactly once. Both branches of the 2026-08-17 merge added this
+    # guard and the resolution kept both copies, so the second call always
+    # returned False against its own predecessor and the function bailed before
+    # creating anything - an email-verified invitation produced no friend
+    # request, no notification and no subscription grant.
     if not invitation.mark_accepted():
         return
 
     from urbanlens.dashboard.controllers.friendship import notify_friend_request
     from urbanlens.dashboard.models.friendship.model import Friendship
-
-    if not invitation.mark_accepted():
-        return
 
     is_self_invite = invitation.inviter == profile
     if not is_self_invite:

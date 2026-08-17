@@ -637,19 +637,25 @@ class E2EEPasskeyWrapView(DualAuthJsonView):
             "see the enroll endpoint for the rationale."
         ),
     )
-    def post(self, request: Request) -> Response:
+    def post(self, request: Request, credential_id: str | None = None) -> Response:
         """Create or replace the wrap for one of the caller's passkeys.
 
         Args:
             request: JSON body with ``credential_id`` (base64url), ``prf_input``
                 (base64 32-byte PRF evaluation input), ``wrapped_secret``, and
                 ``current_password`` on password-backed accounts.
+            credential_id: Only ever supplied by the item route, which exists for
+                ``delete``. Accepted so a POST there answers 405 instead of
+                raising TypeError from the dispatcher - both routes resolve to
+                this one view, so the URL kwarg reaches whichever method runs.
 
         Returns:
             201 JSON ``{ok: true}`` on create, 200 on replace; 400 on malformed
             input or an unknown credential; 403 on bad proof; 404 when not
             enrolled.
         """
+        if credential_id is not None:
+            return Response({"error": "Use DELETE to remove a passkey wrap, or POST to the collection URL to create one."}, status=405)
         profile = _get_profile(request)
         bundle = MessagingKeyBundle.objects.for_profile(profile).first()
         if bundle is None:

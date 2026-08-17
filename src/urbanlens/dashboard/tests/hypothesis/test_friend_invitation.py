@@ -15,7 +15,6 @@ from urbanlens.dashboard.models.friendship.meta import FriendshipStatus
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.notifications.meta import NotificationType
 from urbanlens.dashboard.models.notifications.model import NotificationLog
-from urbanlens.dashboard.models.subscriptions import grant_subscription
 from urbanlens.dashboard.models.subscriptions.model import PendingSubscriptionGrant, SubscriptionRole, UserSubscription
 
 
@@ -147,63 +146,49 @@ class PendingSubscriptionGrantRedemptionTests(TestCase):
         self.assertFalse(UserSubscription.objects.filter(user=invitee).exists())
 
 
-class InvitationClaimIsSingleUseTests(TestCase):
-    """An invitation's side effects run once, even for two racing verifications.
+class MarkAcceptedClaimTests(TestCase):
+    """``mark_accepted`` must be a write-time conditional claim, not a blind update."""
 
-    ``_collect_pending_invitations`` filters on ``accepted_at__isnull=True``,
-    which guards at *selection* time: a double-clicked verification link puts
-    two callers past that filter holding equally-stale instances. The
-    single-use guarantee therefore has to live in the write, which is why
-    ``mark_accepted`` is a conditional claim rather than an unconditional
-    update, and why it runs before the side effects rather than after.
-    """
+    def test_mark_accepted_returns_true_once_then_false(self) -> None:
+        inviter = baker.make(User).profile
+        invitation = FriendInvitation.objects.create(inviter=inviter, email="invitee@example.com")
 
-    def setUp(self) -> None:
-        super().setUp()
-        self.inviter = baker.make(User).profile
-        self.invitee = baker.make(User, email="invitee@example.com", is_active=False)
-        self.invitation = FriendInvitation.objects.create(inviter=self.inviter, email=self.invitee.email)
+        self.assertTrue(invitation.mark_accepted())
+        self.assertTrue(invitation.is_accepted())
+        self.assertFalse(invitation.mark_accepted())
 
-    def test_only_the_first_claim_wins(self) -> None:
-        self.assertTrue(self.invitation.mark_accepted())
-        self.assertFalse(self.invitation.mark_accepted(), "an already-accepted invitation was claimed a second time")
+        invitation.refresh_from_db()
+        self.assertIsNotNone(invitation.accepted_at)
 
-    def test_the_first_claim_does_not_move_the_recorded_time(self) -> None:
-        self.invitation.mark_accepted()
-        first = FriendInvitation.objects.get(pk=self.invitation.pk).accepted_at
-        self.invitation.mark_accepted()
-        self.assertEqual(FriendInvitation.objects.get(pk=self.invitation.pk).accepted_at, first)
+    def test_stale_instance_cannot_reclaim(self) -> None:
+        """A second in-memory copy (as held by a concurrent request) loses the claim."""
+        inviter = baker.make(User).profile
+        invitation = FriendInvitation.objects.create(inviter=inviter, email="invitee@example.com")
+        stale = FriendInvitation.objects.get(pk=invitation.pk)
 
-    def test_a_second_application_of_a_stale_instance_runs_no_side_effects(self) -> None:
-        """The double-clicked-link shape: the same open-looking instance, applied twice.
+        self.assertTrue(invitation.mark_accepted())
+        self.assertFalse(stale.mark_accepted())
 
-        Asserted against the side effects being *attempted*, not against their
-        result. Today's side effects happen to be individually idempotent -
-        `Friendship.request` refuses a duplicate, `grant_subscription`
-        recomputes an absolute expiry rather than stacking - so counting rows
-        would pass with or without the claim. What the claim guarantees is
-        that the second caller never gets there at all, which is what protects
-        a side effect added later that does *not* have that property.
-        """
-        profile = self.invitee.profile
-        stale = FriendInvitation.objects.get(pk=self.invitation.pk)
 
-        with patch.object(Friendship, "request", wraps=Friendship.request) as requested:
-            _apply_pending_invitation(stale, profile)
-            _apply_pending_invitation(stale, profile)
+class ApplyPendingInvitationReplayTests(TestCase):
+    """An already-accepted invitation must not fire side effects a second time."""
 
-        self.assertEqual(requested.call_count, 1, "the invitation's side effects ran a second time on an already-accepted invite")
+    def test_already_accepted_invite_performs_no_side_effects(self) -> None:
+        inviter = baker.make(User).profile
+        invitee = baker.make(User, email="invitee@example.com")
+        # A concurrent request selected the invitation while it was still open,
+        # so its in-memory copy predates the other request's claim.
+        invitation = FriendInvitation.objects.create(inviter=inviter, email=invitee.email)
+        stale = FriendInvitation.objects.get(pk=invitation.pk)
+        self.assertTrue(invitation.mark_accepted())
 
-    def test_a_grant_is_not_re_redeemed_on_a_second_application(self) -> None:
-        admin = baker.make(User)
-        role = baker.make(SubscriptionRole)
-        PendingSubscriptionGrant.objects.create(invitation=self.invitation, role=role, granted_by=admin, duration_months="3")
-        profile = self.invitee.profile
-        stale = FriendInvitation.objects.get(pk=self.invitation.pk)
+        with (
+            patch("urbanlens.dashboard.models.friendship.model.Friendship.request") as request_mock,
+            patch("urbanlens.dashboard.controllers.friendship.notify_friend_request") as notify_mock,
+            patch("urbanlens.dashboard.models.subscriptions.grant_subscription") as grant_mock,
+        ):
+            _apply_pending_invitation(stale, invitee.profile)
 
-        with patch("urbanlens.dashboard.models.subscriptions.grant_subscription", wraps=grant_subscription) as granted:
-            _apply_pending_invitation(stale, profile)
-            _apply_pending_invitation(stale, profile)
-
-        self.assertEqual(granted.call_count, 1)
-        self.assertEqual(UserSubscription.objects.filter(user=self.invitee, role=role, revoked_at__isnull=True).count(), 1)
+        request_mock.assert_not_called()
+        notify_mock.assert_not_called()
+        grant_mock.assert_not_called()

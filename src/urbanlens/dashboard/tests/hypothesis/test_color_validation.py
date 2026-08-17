@@ -17,8 +17,19 @@ from urbanlens.dashboard.services.core.colors import NO_COLOR, clean_color
 
 class CleanColorTests(SimpleTestCase):
     def test_palette_colours_pass_through(self) -> None:
-        for value in ("#F44336", "#2196F3", "#abc", "#ABCDEF"):
+        for value in ("#F44336", "#2196F3", "#ABCDEF"):
             self.assertEqual(clean_color(value), value)
+
+    def test_three_digit_shorthand_is_rejected(self) -> None:
+        """Storage is restricted to what the renderers can actually mean.
+
+        `#abc` used to be accepted here as "unambiguously a colour, and free to
+        allow". The merged rule is the stricter one that arrived with the markup
+        XSS work: a 6-digit hex colour, matching `safeColor` in
+        `frontend/ts/shared/markup-engine.ts`, so neither side has to guess what
+        the other permits. Nothing in the palettes emits shorthand.
+        """
+        self.assertIsNone(clean_color("#abc"))
 
     def test_attribute_breakout_is_rejected(self) -> None:
         self.assertIsNone(clean_color('x" onmouseover="alert(1)'))
