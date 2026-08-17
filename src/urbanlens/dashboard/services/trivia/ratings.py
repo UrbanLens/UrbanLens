@@ -10,12 +10,14 @@ distance-based fraction, but the same player-skill/content-difficulty pairing.
 
 from __future__ import annotations
 
+from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.models.trivia.model import PlayerTriviaRating, TriviaAnswer, TriviaQuestionRating, TriviaRound
 from urbanlens.dashboard.services.spotguessr import glicko2
 
 
+@transaction.atomic
 def apply_round_ratings(round_: TriviaRound, answers: list[TriviaAnswer]) -> None:
     """Update every participant's PlayerTriviaRating and the round's TriviaQuestionRating.
 
@@ -29,6 +31,11 @@ def apply_round_ratings(round_: TriviaRound, answers: list[TriviaAnswer]) -> Non
 
     now = timezone.now()
     question_rating = TriviaQuestionRating.objects.get_or_create_for(round_.question)
+    # Locked first, before any player row: this is the row two rounds contend for
+    # (the same question asked in two sessions at once), and taking the shared row
+    # first gives every caller one lock order. Without it both rounds compute from
+    # the same question_before and the second save discards the first round entirely.
+    question_rating.refresh_from_db(from_queryset=TriviaQuestionRating.objects.select_for_update())
     # Both sides of this round's update must see the question's rating
     # *before* any of this round's answers touch it - captured once, up front.
     question_before = glicko2.Rating(mu=question_rating.mu, phi=question_rating.phi, sigma=question_rating.sigma)
@@ -37,6 +44,7 @@ def apply_round_ratings(round_: TriviaRound, answers: list[TriviaAnswer]) -> Non
     for answer in answers:
         score = 1.0 if answer.is_correct else 0.0
         player_rating = PlayerTriviaRating.objects.get_or_create_for(answer.profile)
+        player_rating.refresh_from_db(from_queryset=PlayerTriviaRating.objects.select_for_update())
         player_before = glicko2.Rating(mu=player_rating.mu, phi=player_rating.phi, sigma=player_rating.sigma)
 
         updated_player = glicko2.rate(player_before, [glicko2.Opponent(mu=question_before.mu, phi=question_before.phi, score=score)])

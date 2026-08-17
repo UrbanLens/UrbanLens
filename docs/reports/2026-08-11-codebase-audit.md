@@ -12781,3 +12781,47 @@ Two reusable tells came out of it, both confirmed twice:
   fixing it there instead of at the shape causing it.
 - **Look for guards whose own caller undoes them.** The wiki revert's conflict check was defeated by
   the `save()` two lines below it.
+
+## Chunk 620 - tell #1 as its own sweep: one negative, one find, one vacuous test caught
+
+Applying the tell from chunk 619 - *a local hand-patch marks the general defect* - as a search in its
+own right. The mechanical form: find code that increments a column in Python and saves it, then ask
+which of those the codebase has already protected somewhere else.
+
+An AST scan for `x.attr += ...` followed by a save found 11 functions, 4 already guarded. Of the 7
+"unguarded", one was chunk 615's own fix (the lock lives in a helper, which the per-function scan
+can't see).
+
+**The negative, and it is the important one.** `services/consensus/tentative.py` looked like a
+textbook find: `support_count += 1` in two branches, no lock, in a feature whose whole purpose is
+accumulating support across concurrent sessions. It is not a defect. The public entry point
+`record_tentative_answers` takes `select_for_update` on the parent `Wiki`, serialising both branches
+per wiki, and its docstring already names both failure modes - the split rows *and* "the row-level
+`+=` loses an increment on top of that" - and explains why a unique constraint cannot cover it (the
+coordinate branch dedups by proximity; the text branch's constraint is on `Lower(text_value)` while
+the lookup is on `normalized_text`). There is even an existing `test_consensus_tentative_races.py`
+asserting it under real threads. **The scan's per-function scope was the flaw**: a lock in the caller
+is invisible to it, so every hit needs caller context before it counts as a finding.
+
+**The find.** `services/{spotguessr,trivia}/ratings.py`'s `apply_round_ratings` reads the *shared*
+rating row (`LocationModeRating` / `TriviaQuestionRating`), captures it as the round's "before"
+rating, computes a Glicko-2 update, and saves - with no lock. Two sessions playing the same location
+or asking the same question at once is ordinary, and unserialised the second save discards the first
+round's entire rating update, `games_played` included. The function's docstring forbids calling it
+twice for *one* round; two different rounds sharing a question is the case neither it nor
+`_finish_round` covers. Consensus solved this identical shape one subsystem over by locking the
+parent row.
+
+Fixed by locking the shared row first and the player rows under it, giving every caller one lock
+order.
+
+**The vacuous test, caught by breaking the code.** The first version of the race test passed with the
+lock removed. The reason is worth keeping: it used a brand-new question, so both threads took
+`get_or_create`'s *insert* path, where the unique index blocks the second thread until the first
+commits - serialising them by accident and hiding the defect completely. The damaging path is the
+ordinary one, where the row already exists and both threads merely SELECT it. Seeding one round first
+makes the test fail (2 != 3) without the lock and pass with it.
+
+That is now the third vacuity of a distinct kind this session (after a guard whose prefix matched too
+much, and a test whose fixture never reached the code under test). The common thread: a test can pass
+because the *setup* avoided the condition, not because the code is right.
