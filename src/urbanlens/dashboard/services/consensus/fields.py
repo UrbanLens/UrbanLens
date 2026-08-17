@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any
 
 from urbanlens.dashboard.models.consensus.model import ConsensusFieldKind
 from urbanlens.dashboard.services.locations.naming import is_meaningful_name, normalize_name_for_comparison
+from urbanlens.dashboard.services.wiki.wiki_edits import save_edited_fields
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterable
@@ -139,6 +140,7 @@ def _wiki_field_strategy(
     current_value: Callable[[Wiki], Any],
     confirmed_value: Callable[[Wiki], Any | None],
     set_value: Callable[[Wiki, Any], None],
+    written_fields: tuple[str, ...] = (),
     normalize: Callable[[Any], Any] = _text_normalize,
     agrees: Callable[[Any, Any], bool] = _text_agrees,
 ) -> ConsensusFieldStrategy:
@@ -148,6 +150,12 @@ def _wiki_field_strategy(
     what counts as "confirmed" - everything else (round shape, diff
     recording) is identical, so it's expressed once here rather than
     duplicated four times.
+
+    Args:
+        written_fields: Columns ``set_value`` actually assigns, when that is not
+            just ``field_name``. The pin-type strategy also sets
+            ``pin_type_is_user_provided``, and a scoped save that listed only the
+            named field would silently drop it.
     """
 
     def find_missing(pool: Iterable[Wiki]) -> list[Wiki]:
@@ -168,7 +176,11 @@ def _wiki_field_strategy(
     def apply_answer(wiki: Wiki, value: Any, profile: Profile, round_: ConsensusRound) -> dict | None:
         old_value = current_value(wiki)
         set_value(wiki, value)
-        wiki.save()
+        # Scoped, not a bare save: a Wiki is community-editable and has a dozen
+        # writers, and this instance was loaded when the round was built. Writing
+        # every column would revert whatever was committed while the round ran -
+        # the same defect fixed in services.wiki.wiki_edits.
+        save_edited_fields(wiki, written_fields or (field_name,))
         return {field_name: {"from": old_value, "to": current_value(wiki)}}
 
     return ConsensusFieldStrategy(
@@ -372,6 +384,7 @@ _STRATEGIES: dict[str, ConsensusFieldStrategy] = {
         current_value=_current_pin_type,
         confirmed_value=_confirmed_pin_type,
         set_value=_set_pin_type,
+        written_fields=("pin_type", "pin_type_is_user_provided"),
         normalize=_choice_normalize,
         agrees=_choice_agrees,
     ),

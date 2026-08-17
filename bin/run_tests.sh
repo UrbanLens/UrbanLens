@@ -19,6 +19,7 @@
 #   bin/run_tests.sh [pytest args...]           # sync, then run
 #   bin/run_tests.sh --no-sync [pytest args...] # reuse the container as-is
 #   bin/run_tests.sh --verify-only              # just compare host and container
+#   bin/run_tests.sh --allow-drift ...          # run despite drift, on purpose
 #
 # Environment:
 #   UL_TEST_CONTAINER   test-runner container name (default urbanlens_development_main_test_runner)
@@ -32,11 +33,16 @@ set -euo pipefail
 CONTAINER="${UL_TEST_CONTAINER:-urbanlens_development_main_test_runner}"
 SYNC=1
 VERIFY_ONLY=0
+# Verifying a fix by breaking it means deliberately editing the container's copy
+# and expecting the tests to fail. That is drift on purpose, so it needs a way
+# past the guard - named so it cannot be reached by accident or by habit.
+ALLOW_DRIFT=0
 
 args=()
 for arg in "$@"; do
     case "$arg" in
         --no-sync) SYNC=0 ;;
+        --allow-drift) ALLOW_DRIFT=1 ;;
         --verify-only) VERIFY_ONLY=1 ;;
         *) args+=("$arg") ;;
     esac
@@ -106,7 +112,11 @@ verify_parity() {
 }
 
 [ "$SYNC" -eq 1 ] && sync_tree
-verify_parity
+if [ "$ALLOW_DRIFT" -eq 1 ]; then
+    echo "==> skipping parity check (--allow-drift): the container is expected to differ"
+else
+    verify_parity
+fi
 [ "$VERIFY_ONLY" -eq 1 ] && exit 0
 
 DB_NAME="${UL_TEST_DB_NAME:-t_$(date +%s)_$$}"
