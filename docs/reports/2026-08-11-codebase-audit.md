@@ -12003,3 +12003,28 @@ now a miscount - and in all three cases the error was invisible from the artefac
 the moment it was checked against something external.
 
 Nothing else to report. The remaining obligation is consolidation 24's verdict.
+
+## Chunk 594 - "checked" was doing too much work
+
+Consolidation 24 advanced from 26% to 38% during the quiet ten minutes, which confirms the pacing
+change was the right call: my own per-chunk runs were what had been starving it.
+
+Second audit of chunk 590's summary, and it found a second error - a worse one than the miscount.
+The summary listed **wiki, search, notifications, safety archival and the plugin system** under
+"Checked and found clean (so it is not re-derived)", beside albums, billing, trips and the rest.
+
+Those five were not checked here. What actually happened is that I counted their test modules -
+37 for wiki, 44 for search, 10 for notifications, 23 for plugins - read one or two guard docstrings,
+and deliberately moved on rather than re-derive work earlier sessions had done. That is a reasonable
+decision and I would make it again. It is not the same activity as tracing albums through model,
+service, controller and template, and putting both under one heading invites a future reader to skip
+those five on my authority. I have not earned that authority for them.
+
+The summary now separates the two lists explicitly, states that the module counts are the whole basis
+for the second, and points at the earlier sections where wiki and search *were* examined.
+
+Fourth self-audit, fourth error found (561 vacuous guard, 586 unverified guard, 593 miscount, 594
+this). The pattern is consistent enough to state as a rule: **my summaries drift toward claiming more
+than my work supports, and the drift is invisible from inside the summary.** Every one of the four
+was obvious within a minute of comparing the artefact to something outside it - a commit list, a
+reverted line of code, a section heading. None was visible from re-reading the artefact alone.
