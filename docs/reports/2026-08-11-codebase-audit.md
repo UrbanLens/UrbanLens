@@ -11865,8 +11865,12 @@ the file rather than following it.
 
 ## Defects fixed (14)
 
-Each was reproduced with a failing test first, or - where the fix came first - verified afterwards by
-breaking the code and watching the test fail.
+Thirteen of the fourteen were reproduced with a failing test first, or - where the fix came first -
+verified afterwards by breaking the code and watching the test fail. The exception is the map-search
+coordinates fix below, which added no test: the server already enforces the tracking preference and
+`test_memories_toggles` already covers that, so the change stops a request being sent rather than
+altering any outcome a test could observe. That was a deliberate call at the time and is stated here
+rather than absorbed into an "each".
 
 **Data loss and 500s from bounded columns.** A notification title assembled from a 255-wide wiki name
 plus 26 characters of wrapper overflowed its own 255-wide column, and because it was raised at the
