@@ -11458,3 +11458,34 @@ gitignored content*. My entry now says so and narrows itself to what is actually
 Filing a defect that a previous entry in the same file had already analysed is the cost of not
 reading the whole list first. The list is 9,300 lines; the fix is that it now labels itself
 honestly, so the next reader can trust the headings.
+
+## Chunk 578 - my own cleanup had a blind spot
+
+Chunk 577 relabelled seven entries whose headings said OPEN while their bodies recorded a fix, and
+concluded the open list was now trustworthy. It was not. The very next entry read this chunk -
+`check_in`/`cancel_checkin` writing `status` from a stale instance - turned out to have been fixed on
+2026-08-16, and my scan had missed it.
+
+The reason is a second convention in the same file. Some entries append the resolution to the body,
+which is what chunk 577 searched for. Others write the resolution *above* the retained original
+heading, ending with "The original entry follows." My scan split the document on `##` headings, so
+those resolutions were attributed to the **preceding** entry - the fix text was found, just filed
+against the wrong heading, which is precisely the failure mode that made the entry look open.
+
+Scanning for the second convention found five more. Four are genuine fixes and are relabelled;
+`LabelReorderView.post issues one UPDATE per label` I checked against the code rather than the prose,
+since its window match was a false positive - `controllers/labels.py:857` does `bulk_update` and
+`test_label_reorder_query_count` exists, so it is resolved regardless of what the surrounding text
+said. The fifth is not a fix at all: "one notification preference is named after the enum member"
+carries "**Re-checked 2026-08-16 and deliberately not renamed**", so it is now labelled `DECIDED`
+rather than resolved - a decision to leave something alone is a different state from a fix, and
+flattening the two would lose the reasoning.
+
+Twelve mislabelled entries across two chunks, in a 9,300-line file whose open list is the input to
+the method that has been finding things. Worth stating the general point plainly: **a scan I write to
+audit a document inherits that document's conventions, and I only know one of them until I read
+enough of it to be surprised.** Chunk 577's confidence that the list was now trustworthy was
+premature by exactly one entry.
+
+The three deferrals checked this chunk before hitting the labelling problem are all still sound and
+are recorded above; the substantive open items that remain are genuinely open.

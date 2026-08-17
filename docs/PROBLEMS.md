@@ -462,7 +462,7 @@ decision is the owner's; this is not a defect to fix unattended.
 
 The original entry follows.
 
-## LOW 2026-08-11: one notification preference is named after the enum *member*, not its *value*
+## DECIDED 2026-08-16 (deliberately not renamed): one notification preference is named after the enum *member*, not its *value*
 
 `NotificationType.SAFETY_CHECKIN_PARTNER_INVITE` has the **value**
 `"safety_ci_partner_invite"`, but its three preference columns on `NotificationPreference` are
@@ -519,7 +519,7 @@ so counting rows would have been a vacuous test of this fix.
 
 The original entry follows.
 
-## LOW 2026-08-11: `FriendInvitation.mark_accepted` claims at selection time, not write time
+## RESOLVED 2026-08-16: `FriendInvitation.mark_accepted` claims at selection time, not write time
 
 `_collect_pending_invitations` (`controllers/account.py:995`) filters on
 `accepted_at__isnull=True` and its docstring says that "already guards against reprocessing".
@@ -780,7 +780,7 @@ Covered by `test_safety_resolution_races.py::OwnerResolutionIsAlsoCompareAndSetT
 
 The original entry follows.
 
-## LOW 2026-08-11: `check_in`/`cancel_checkin` still write `status` from a possibly-stale instance
+## RESOLVED 2026-08-16: `check_in`/`cancel_checkin` still write `status` from a possibly-stale instance
 
 Found 2026-08-11 while fixing the sweep-driven resolution races (see
 `test_safety_resolution_races.py`). `services/visits/safety.py`'s `check_in` and
@@ -6517,7 +6517,7 @@ below are also untouched, and for the same reason as before - their values are n
 
 The original entry follows.
 
-## `Pin.icon` is unvalidated free text rendered into a `src` attribute
+## RESOLVED 2026-08-16: `Pin.icon` is unvalidated free text rendered into a `src` attribute
 
 `Pin.icon` is `CharField(max_length=255, null=True, blank=True)` - no validator, no choices - and
 is assigned straight from request data by the pin write paths, exactly as colours were before
@@ -7265,7 +7265,7 @@ belonging to the profile are silently ignored" behaviour is preserved by the sco
 
 The original entry follows.
 
-## `LabelReorderView.post` issues one UPDATE per label
+## RESOLVED: `LabelReorderView.post` issues one UPDATE per label (now `bulk_update`, covered by `test_label_reorder_query_count`)
 
 `controllers/labels.py`, in the never-executed set from the coverage run:
 
