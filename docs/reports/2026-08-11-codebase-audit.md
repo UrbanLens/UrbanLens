@@ -11933,9 +11933,19 @@ The framings that produced findings: *two properties that look like one* (orderi
 idempotency; "still unread" is not "still exists"), *permission checked at entry but not ongoing*,
 *deferred work carries stale state*, and *what else changes during this window*. The searches that
 produced noise: any scan matching model fields by name across all models, and any attempt to
-classify prose by regex. Roughly one real defect per two or three hypotheses; the ones that died
-usually died because someone had already thought about the problem and left the reasoning in a
-comment - so read the surrounding prose before trusting a scan.
+classify prose by regex.
+
+On hit rate, a figure worth stating carefully rather than as a ratio: **fourteen defects against
+roughly twenty-two hypotheses I wrote down and disproved** - the seven in the deferred-task sweep,
+four docstring delegations, three consumer families, two alarms about CI, two on the map's location
+marker, and a handful of singles. That is the countable part. It undercounts, because hypotheses
+abandoned mid-read were never written down, and there were many; it is not a measured rate and
+should not be quoted as one. (An earlier entry in this file put it at "one defect per two or three
+hypotheses" - that was an impression, not a count, and this is the count.)
+
+What is consistent, and more useful than any ratio: the hypotheses that died usually died because
+someone had already thought about the problem and left the reasoning in a comment - so read the
+surrounding prose before trusting a scan.
 
 ## Chunk 591 - documenting the thing that nearly made me report a false alarm
 
