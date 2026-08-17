@@ -12276,3 +12276,34 @@ credentials when the real deployment cannot be exercised here.
 
 Both entries in `docs/PROBLEMS.md` say which is which, including an explicit note that `.git`'s
 presence is deliberate, so the next reader does not "fix" it.
+
+## Chunk 605 - the deployment surface, and a misreading caught in one command
+
+Read `docker-entrypoint.sh`, the rest of `docker-compose.yml`, and the Pydantic settings module. All
+three are sound; the useful part is one hypothesis that looked strong and died immediately.
+
+**The entrypoint's paths looked wrong and are not.** It chowns
+`/app/src/urbanlens/frontend/static` and `/app/src/urbanlens/media` before dropping to `appuser`,
+and I had spent this whole session working in `src/urbanlens/**dashboard**/frontend/static` - so a
+missing `dashboard/` segment, silently created by `mkdir -p` rather than failing, looked like exactly
+the kind of stale-path bug that leaves a volume-mounted directory root-owned and uploads failing at
+runtime. One `ls` plus two lines of settings settled it: `STATIC_ROOT` is
+`PROJECT_ROOT/frontend/static` and `MEDIA_ROOT` is `PROJECT_ROOT/media`, both of which exist. The
+`dashboard/frontend/static` I had been living in is `STATICFILES_DIRS` - the *source* assets, not the
+collectstatic target. Two static directories, and I had only ever seen one of them.
+
+Worth recording as a genuine non-obvious property of this tree rather than as a near-miss: a reader
+who knows only `dashboard/frontend/static` will misread the entrypoint, the Dockerfile's pre-created
+directories, and any deployment discussion of static files.
+
+**Nothing else to report from the deployment surface.** The entrypoint is 14 lines with `set -e` and
+does exactly what its comment says. `docker-compose.yml` publishes exactly one port - nginx's - while
+`db` and `valkey` expose none, so the datastores are reachable only on the internal network. And the
+Pydantic settings still carry `env_ignore_empty=True`, which matters more than it looks: `.env-sample`
+ships 27 keys with empty values, and without that flag pydantic-settings treats a blank as an explicit
+empty string rather than "unset", which fails `Url` validation and crash-loops every process that
+imports Django settings.
+
+Three chunks into tree I had called exhausted: two ops findings, one image-contents finding, one
+regression avoided by checking before editing, and one misreading caught in a single command. The
+claim was wrong; the work of disproving it was worth more than the claim.
