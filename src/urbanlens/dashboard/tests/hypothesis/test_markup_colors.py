@@ -78,6 +78,50 @@ class SanitizeOptionalColorTests(SimpleTestCase):
         self.assertTrue(result == "" or result == "none" or len(result) == 7, result)
 
 
+class PinMarkupBulkCreateColorTests(TestCase):
+    """bulk_create never calls save(), so the coercion has to reach it separately.
+
+    The undo restore rebuilds a deleted map's annotations this way, from a
+    payload captured at delete time - which is precisely where a value stored
+    before this validation existed would still be sitting.
+    """
+
+    def setUp(self):
+        self.user = baker.make("auth.User")
+        self.profile = self.user.profile
+        self.pin = baker.make("dashboard.Pin", profile=self.profile)
+
+    def _unsaved(self, **kwargs) -> PinMarkup:
+        return PinMarkup(
+            parent_pin=self.pin,
+            profile=self.profile,
+            markup_type=MarkupType.LINE,
+            geometry={"type": "LineString", "coordinates": [[0, 0], [1, 1]]},
+            **kwargs,
+        )
+
+    def test_a_breakout_colour_does_not_survive_a_bulk_restore(self):
+        created = PinMarkup.objects.bulk_create([self._unsaved(color=BREAKOUT, border_color=BREAKOUT)])
+
+        reloaded = PinMarkup.objects.get(pk=created[0].pk)
+        self.assertEqual(reloaded.color, "#e53e3e")
+        self.assertEqual(reloaded.border_color, "")
+
+    def test_valid_colours_are_untouched_by_a_bulk_restore(self):
+        created = PinMarkup.objects.bulk_create([self._unsaved(color="#1a2b3c", border_color="none")])
+
+        reloaded = PinMarkup.objects.get(pk=created[0].pk)
+        self.assertEqual(reloaded.color, "#1a2b3c")
+        self.assertEqual(reloaded.border_color, "none")
+
+    def test_a_generator_of_items_is_still_created(self):
+        """The override materializes its argument; a lazy caller must still work."""
+        created = PinMarkup.objects.bulk_create(self._unsaved(color=BREAKOUT) for _ in range(2))
+
+        self.assertEqual(len(created), 2)
+        self.assertEqual({item.color for item in created}, {"#e53e3e"})
+
+
 class PinMarkupColorStorageTests(TestCase):
     """save() coerces colours regardless of which write path set them."""
 

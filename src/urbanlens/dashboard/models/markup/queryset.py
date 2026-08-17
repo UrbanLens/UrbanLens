@@ -13,6 +13,28 @@ logger = logging.getLogger(__name__)
 class PinMarkupQuerySet(abstract.FrontendDashboardQuerySet):
     """QuerySet for PinMarkup map annotations (lines, arrows, text labels)."""
 
+    def bulk_create(self, objs, *args, **kwargs):
+        """Create the items, coercing their colours the way ``save`` would.
+
+        ``bulk_create`` issues raw SQL and never calls ``save``, so the
+        model-level colour validation - the thing standing between a stored
+        string and the client's ``innerHTML`` - does not apply to it. Doing it
+        here rather than in the one caller that exists today means a future
+        bulk writer cannot reopen the hole by not knowing about it.
+
+        Args:
+            objs: The items to create.
+            *args: Passed through to Django's ``bulk_create``.
+            **kwargs: Passed through to Django's ``bulk_create``.
+
+        Returns:
+            The created items, as Django's ``bulk_create`` returns them.
+        """
+        objs = list(objs)
+        for obj in objs:
+            obj.coerce_colors()
+        return super().bulk_create(objs, *args, **kwargs)
+
     def for_pin(self, pin) -> Self:
         """All markup items belonging to a specific parent pin."""
         return self.filter(parent_pin=pin)

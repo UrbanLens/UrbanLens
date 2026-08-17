@@ -484,19 +484,32 @@ class PinMarkup(abstract.FrontendDashboardModel):
 
     objects = PinMarkupManager()
 
+    def coerce_colors(self) -> None:
+        """Reduce this item's colours to values a renderer can actually mean.
+
+        Separate from ``save`` because a bulk write never calls it: the undo
+        restore rebuilds a deleted map's annotations with ``bulk_create``, which
+        would otherwise reinstate a stored value verbatim - and a payload
+        written before this validation existed is exactly where a bad one would
+        be. ``PinMarkupQuerySet.bulk_create`` applies it for every such caller.
+
+        Invalid values fall back the same way the renderer's own ``safeColor``
+        does, so a bad colour degrades to the default instead of failing the
+        write.
+        """
+        self.color = sanitize_hex_color(self.color, "#e53e3e")
+        self.border_color = sanitize_optional_color(self.border_color)
+
     def save(self, *args, **kwargs) -> None:
-        """Persist the item, coercing its colours to values a renderer can mean.
+        """Persist the item, coercing its colours first.
 
         Enforced here rather than in each view because both colours are written
         by several paths (the create/edit JSON endpoints, ``from_snapshot_shape``
         on import, map clones) and are interpolated into markup that reaches
         ``innerHTML`` on the client, where an arbitrary string would be a stored
-        XSS vector. Invalid values fall back the same way the renderer's own
-        ``safeColor`` does, so a bad colour degrades to the default instead of
-        failing the write.
+        XSS vector.
         """
-        self.color = sanitize_hex_color(self.color, "#e53e3e")
-        self.border_color = sanitize_optional_color(self.border_color)
+        self.coerce_colors()
         super().save(*args, **kwargs)
 
     def to_json(self) -> dict:

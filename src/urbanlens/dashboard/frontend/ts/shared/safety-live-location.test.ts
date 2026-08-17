@@ -427,6 +427,44 @@ describe("when location permission is denied", () => {
         expect(h.toggle.checked).toBe(true);
         expect(h.watching()).toBe(true);
     });
+
+    // The same collision one step later: the disable has already been sent, so
+    // dropping it is no longer an option and the re-enable has to land after
+    // it. The flag is last-write-wins server-side, so an "on" sent while the
+    // "off" is still open can be overtaken by it.
+    test("a re-enable is sent after an in-flight disable, not alongside it", async () => {
+        const h = setup(true);
+        const deferred = stubDeferredFetch();
+
+        h.emitError(1); // permission denied - disable POST now in flight
+        h.toggle.checked = true;
+        h.toggle.dispatchEvent(new Event("change")); // permission granted, back on
+        deferred.flush();
+        await settle();
+        deferred.flush(); // whatever the queue sent once the disable landed
+        await settle();
+
+        const toggles = posted.filter((p) => p.url === "/toggle/");
+        expect(toggles.map((p) => p.body.get("enabled"))).toEqual(["0", "1"]);
+        expect(h.toggle.checked).toBe(true);
+        expect(h.watching()).toBe(true);
+    });
+
+    test("only one sharing write is ever in flight", async () => {
+        const h = setup(true);
+        const deferred = stubDeferredFetch();
+
+        h.emitError(1);
+        h.toggle.checked = true;
+        h.toggle.dispatchEvent(new Event("change"));
+
+        expect(posted.filter((p) => p.url === "/toggle/")).toHaveLength(1);
+        deferred.flush();
+        await settle();
+        expect(posted.filter((p) => p.url === "/toggle/")).toHaveLength(2);
+        deferred.flush();
+        await settle();
+    });
 });
 
 describe("when the browser has no geolocation at all", () => {

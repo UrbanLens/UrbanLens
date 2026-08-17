@@ -76,30 +76,55 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
     let failures = 0;
     let warned = false;
     let geoWarned = false;
-    /** The most recent sharing-flag POST, so a forced "off" can queue behind it. */
-    let toggleRequest: Promise<void> = Promise.resolve();
     /**
-     * Bumped by every sharing decision - the user's own, and a forced disable.
+     * The sharing state we want the server to hold, waiting to be sent.
      *
-     * A queued write compares this against the value it captured, because
-     * waiting behind an in-flight request means the intent it represents can be
-     * overtaken: deny permission while the enable POST is still open, then
-     * grant it and switch back on, and the queued "off" would land after the
-     * new "on" and disable sharing under a checked toggle and a live watcher.
+     * Sharing writes are serialized through one chain rather than fired as
+     * they arise, because the flag is last-write-wins on the server and these
+     * decisions interleave: a permission denial forces "off" while the user's
+     * "on" is still open, and the user may switch back on before either
+     * settles. Anything that races there ends with the server disabled under a
+     * checked toggle and a running watcher - every position rejected, with
+     * nothing on the page saying so. One request at a time, latest intent last,
+     * removes the orderings instead of handling them.
      */
-    let toggleGeneration = 0;
+    let pendingIntent: { enabled: boolean; onRefused: () => void } | null = null;
+    let flushing = false;
 
     const post = (url: string, body: FormData): Promise<Response> => fetch(url, { method: "POST", headers: { "X-CSRFToken": csrfToken }, body });
 
-    function postToggle(enabled: boolean): Promise<Response> {
-        const body = new FormData();
-        body.append("enabled", enabled ? "1" : "0");
-        const request = post(toggleUrl, body);
-        toggleRequest = request.then(
-            () => undefined,
-            () => undefined,
-        );
-        return request;
+    /**
+     * Ask the server for a sharing state, superseding any write not yet sent.
+     *
+     * @param enabled - The state to converge on.
+     * @param onRefused - Called if the server refuses *and* nothing newer has
+     *   been asked for since - a refusal that a later intent has already
+     *   overtaken is not worth reporting.
+     */
+    function requestSharingState(enabled: boolean, onRefused: () => void): void {
+        pendingIntent = { enabled, onRefused };
+        if (!flushing) void flushSharingState();
+    }
+
+    async function flushSharingState(): Promise<void> {
+        flushing = true;
+        try {
+            while (pendingIntent) {
+                const intent = pendingIntent;
+                pendingIntent = null;
+                const body = new FormData();
+                body.append("enabled", intent.enabled ? "1" : "0");
+                let ok = false;
+                try {
+                    ok = (await post(toggleUrl, body)).ok;
+                } catch {
+                    ok = false;
+                }
+                if (!ok && !pendingIntent) intent.onRefused();
+            }
+        } finally {
+            flushing = false;
+        }
     }
 
     /**
@@ -113,16 +138,7 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
         stopWatching();
         toggle.checked = false;
         notify("error", message);
-        // Queued behind any in-flight sharing POST so this "off" cannot overtake
-        // the "on" it is undoing - and abandoned if a later decision supersedes
-        // it while it waits.
-        const generation = ++toggleGeneration;
-        void toggleRequest
-            .then(() => (generation === toggleGeneration ? postToggle(false) : null))
-            .then((response) => {
-                if (response && !response.ok) forcedOffRefused();
-            })
-            .catch(forcedOffRefused);
+        requestSharingState(false, forcedOffRefused);
     }
 
     /**
@@ -222,9 +238,6 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
 
     toggle.addEventListener("change", () => {
         const enabled = toggle.checked;
-        // This is now the account's intent, so any disable still waiting behind
-        // an in-flight request is stale and must not fire after it.
-        toggleGeneration += 1;
 
         // Started optimistically so the switch feels immediate, then undone if the
         // server refuses - otherwise the page claims to be sharing a location that
@@ -243,11 +256,7 @@ export function installSafetyLiveLocation(options: LiveLocationOptions): LiveLoc
             notify("error", "Could not update live location sharing.");
         };
 
-        void postToggle(enabled)
-            .then((response) => {
-                if (!response.ok) refuse();
-            })
-            .catch(refuse);
+        requestSharingState(enabled, refuse);
     });
 
     if (toggle.checked) startWatching();
