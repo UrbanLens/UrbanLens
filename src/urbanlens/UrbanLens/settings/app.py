@@ -441,16 +441,27 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                         value.mkdir(parents=True, exist_ok=True)
                     else:
                         value.parent.mkdir(parents=True, exist_ok=True)
-            except FileNotFoundError:
-                logger.error("Error ensuring path: %s - %s", key, value)
+            except OSError:
+                # OSError, not FileNotFoundError: a read-only or wrong-owner app
+                # directory raises PermissionError, which used to escape from here
+                # and take down settings import - and therefore every process -
+                # before anything could report which path was at fault.
+                logger.warning("Could not ensure path %s (%s); continuing without it.", key, value, exc_info=True)
 
         # Ensure app.log, debugging.log, and test.log exist in log dir
         for filename in ["app.log", "debugging.log", "test.log"]:
-            if not self.log_root.exists():
-                self.log_root.mkdir(parents=True, exist_ok=True)
-            filepath = Path(self.log_root, filename)
-            if not filepath.exists():
-                Path(filepath).write_text("")
+            try:
+                if not self.log_root.exists():
+                    self.log_root.mkdir(parents=True, exist_ok=True)
+                filepath = Path(self.log_root, filename)
+                if not filepath.exists():
+                    filepath.write_text("")
+            except OSError:
+                # Pre-creating these is a convenience for the file handlers, not a
+                # requirement. Django's own logging config reports an unwritable log
+                # directory far more usefully than an unhandled error at import time,
+                # which surfaces as a silent container that never binds a port.
+                logger.warning("Could not pre-create %s in %s; continuing.", filename, self.log_root, exc_info=True)
 
     def refresh_django(self):
         """
