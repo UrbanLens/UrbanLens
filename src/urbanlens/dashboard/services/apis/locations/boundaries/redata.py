@@ -126,6 +126,8 @@ class RedataBoundaryProvider(BoundaryProvider):
             coordinates, the points are collinear (the hull degenerates to a
             line or point), or the buildings lookup itself failed.
         """
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
+
         if not parcel_uuid:
             return None
         try:
@@ -135,7 +137,7 @@ class RedataBoundaryProvider(BoundaryProvider):
             return None
 
         points: list[Point] = []
-        for building in buildings:
+        for building in buildings_on_property(buildings):
             latitude, longitude = building.get("latitude"), building.get("longitude")
             if latitude is None or longitude is None:
                 continue

@@ -275,7 +275,11 @@ def missing_buildings(pin: Pin) -> list[dict[str, Any]]:
     Returns:
         Uncovered building records, or ``[]``.
     """
-    buildings = site_scope.parcel_buildings(pin.location) or []
+    from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
+
+    # The panel filters the same way; an unfiltered dialog would offer to
+    # create a child pin per building in a county-scale sensitivity zone.
+    buildings = buildings_on_property(site_scope.parcel_buildings(pin.location) or [])
     if len(buildings) < site_scope.MULTI_BUILDING_THRESHOLD:
         return []
     return unmatched_buildings(buildings, list(pin.detail_pins.select_related("location")))

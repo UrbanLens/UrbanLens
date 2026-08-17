@@ -77,3 +77,42 @@ class BuildingRowSourceLabelTests(SimpleTestCase):
         row = self._row({"name": "Shed", "sources": [{"source": "some_new_source"}]})
 
         self.assertEqual(row["source_label"], "")
+
+
+class BuildingsOnPropertyTests(SimpleTestCase):
+    """REData labels what it over-returns; ignoring the label is how 2604 happened.
+
+    A parcel inside a broad CRIS archaeological sensitivity zone gets every
+    surveyed building in that zone, each flagged ``is_on_property: false``. The
+    campus's own survey roster is 124.
+    """
+
+    def test_off_property_records_are_dropped(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
+
+        kept = buildings_on_property([{"name": "on", "is_on_property": True}, {"name": "off", "is_on_property": False}])
+
+        self.assertEqual([b["name"] for b in kept], ["on"])
+
+    def test_an_absent_flag_is_not_a_negative_one(self) -> None:
+        """Overpass rows carry no flag at all and must survive."""
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
+
+        self.assertEqual(len(buildings_on_property([{"name": "osm row", "source": "osm"}])), 1)
+
+    def test_an_envelope_is_not_an_extra_building(self) -> None:
+        """A parent is an envelope *over* buildings; counting it double-counts them."""
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
+
+        records = [
+            {"ref": "osm:way/552009229", "child_refs": ["cris:1", "cris:2"]},
+            {"ref": "cris:1", "parent_ref": "osm:way/552009229"},
+            {"ref": "cris:2", "parent_ref": "osm:way/552009229"},
+        ]
+
+        self.assertEqual([b["ref"] for b in buildings_on_property(records)], ["cris:1", "cris:2"])
+
+    def test_the_panel_rows_are_filtered(self) -> None:
+        rows = building_rows([{"name": "on", "is_on_property": True}, {"name": "off", "is_on_property": False}], [])
+
+        self.assertEqual([r["name"] for r in rows], ["on"])

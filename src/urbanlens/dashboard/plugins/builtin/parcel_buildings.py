@@ -79,6 +79,33 @@ def record_sources(building: dict[str, Any]) -> list[str]:
     return [key] if (key := building.get("source")) else []
 
 
+def buildings_on_property(buildings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The records that are really buildings standing on this property.
+
+    REData over-returns deliberately and labels what it returns. A parcel
+    inside a broad CRIS archaeological sensitivity zone gets every surveyed
+    building in that zone - roughly a thousand acres' worth here - each flagged
+    ``is_on_property: false`` precisely so a consumer can drop it. CRIS's own
+    survey roster for this campus is 124 buildings, against the 2604 that
+    reached the UI.
+
+    Envelopes go too, for a different reason. Where one source's footprint
+    encloses several of another's buildings, REData keeps the finer records as
+    the buildings and makes the coarse one their parent, carrying
+    ``child_refs``. That parent is an envelope *over* buildings, not an extra
+    building, so counting it double-counts every structure inside it.
+
+    Args:
+        buildings: Raw building records from either provider.
+
+    Returns:
+        Only the records that stand for one real building on this property.
+        Absent flags are kept: Overpass rows carry neither, and a missing
+        label is not a negative one.
+    """
+    return [b for b in buildings if b.get("is_on_property") is not False and not b.get("child_refs")]
+
+
 def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
     """Resolve every building on a location's parcel, REData first then Overpass.
 
@@ -192,7 +219,7 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None,
 
     rows: list[dict[str, Any]] = []
     unmatched = list(children)
-    for building in buildings:
+    for building in buildings_on_property(buildings):
         child = match_marker(building, unmatched)
         if child is not None:
             # One child can only stand for one building - on a dense campus
