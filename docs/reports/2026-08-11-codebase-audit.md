@@ -12085,3 +12085,12 @@ That is a small enough sample to state carefully rather than confidently. But it
 way "check your work" is not: when auditing my own output, go to the sentences that quantify over a
 set - *each*, *every*, *all*, *none*, a total - and check the set. The individual claims underneath
 them have generally been right.
+
+## Twenty-fourth consolidation
+
+`10980 passed, 1 xfailed, 43 warnings, 1483 subtests passed in 5837.62s (1:37:17)`, no `FAILED` or
+`INTERNALERROR` lines. Reconciles exactly: 8 test functions added between the twenty-third
+consolidation's launch commit and this one's, and 10,981 - 10,973 = 8.
+
+Twenty-one green of twenty-four. The single red remains chunk 570's, and remains mine rather than the
+code's.
