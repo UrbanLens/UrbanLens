@@ -12990,3 +12990,31 @@ members who don't accept DMs, and `username` lives on `User`, not `Profile` - a 
 build its own scenario measures nothing.
 
 125 group-chat and trip tests pass alongside.
+
+## Chunk 626 - surveying the external API, and one more per-row masking check
+
+Applying the two-data-size diagnostic to the external API's list endpoints, the last unmeasured
+listing surface. Thirteen endpoints; three answered 403 for this key's scopes and are unmeasured.
+
+Of the nine that rendered, **eight were already flat** - pins, photos, labels, lists, trips,
+notifications, saved filters, settings, whoami - several at six or seven queries regardless of row
+count. One scaled: **`friends`, 7 queries for 2 rows and 17 for 12**, one per relationship.
+
+Same cause as chunks 624 and 625, in the third place it appears: `_friend_identity` masks a profile
+the caller may not identify, and asked that question one row at a time. `FriendsView.get` now resolves
+the page's subjects once through `Profile.visible_profile_pks` and passes the set down through
+`_serialize_friendship`. Flat afterwards, and the agreement tests from chunk 624 still hold the batch
+to `can_view_profile`'s answers.
+
+Pinned in the harness, and the shared seed now grows friendships - without that the new assertion
+would have rendered a constant-size list and measured nothing, which is chunk 622's lesson applied
+before making the mistake rather than after. Verified by breaking: disconnecting the batch gives
+10 -> 20 queries and the test fails; restored, flat.
+
+**A process note worth keeping.** The first attempt to patch this file asserted its anchor matched
+exactly once and it matched **three times** - `except FriendshipActionError ... return Response(` is
+the shape of three different endpoints in that module. The assertion refused the edit rather than
+silently patching two unrelated views. That habit, adopted after an earlier import-prefix collision
+this session, has now paid for itself twice.
+
+149 friendship tests pass.

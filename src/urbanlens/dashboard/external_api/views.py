@@ -3481,7 +3481,7 @@ class PushDeviceDetailView(ExternalApiView):
         return Response(status=204)
 
 
-def _friend_identity(viewer: Profile, subject: Profile) -> dict[str, Any]:
+def _friend_identity(viewer: Profile, subject: Profile, *, visible_pks: set[int] | None = None) -> dict[str, Any]:
     """Shape ``subject`` for ``FriendProfileSerializer`` as ``viewer`` may see them.
 
     Always routed through ``services.profile.identity_visibility.resolve_visible_identity``
@@ -3493,11 +3493,14 @@ def _friend_identity(viewer: Profile, subject: Profile) -> dict[str, Any]:
     Args:
         viewer: The profile doing the looking.
         subject: The profile being displayed.
+        visible_pks: Pre-resolved ``Profile.visible_profile_pks`` when several
+            subjects are serialized together, so the visibility lookup runs once
+            for the page rather than once per row.
 
     Returns:
         A dict matching ``FriendProfileSerializer``'s fields.
     """
-    identity = resolve_visible_identity(viewer, subject)
+    identity = resolve_visible_identity(viewer, subject, visible_pks=visible_pks)
     masked = identity["is_masked"]
     return {
         "uuid": subject.uuid,
@@ -3508,7 +3511,7 @@ def _friend_identity(viewer: Profile, subject: Profile) -> dict[str, Any]:
     }
 
 
-def _serialize_friendship(viewer: Profile, friendship: Friendship) -> dict[str, Any]:
+def _serialize_friendship(viewer: Profile, friendship: Friendship, *, visible_pks: set[int] | None = None) -> dict[str, Any]:
     """Shape one ``Friendship`` from ``viewer``'s point of view.
 
     ``status`` and ``relationship_type`` are passed through untouched so the
@@ -3517,6 +3520,8 @@ def _serialize_friendship(viewer: Profile, friendship: Friendship) -> dict[str, 
     Args:
         viewer: The profile the relationship is being described to.
         friendship: The relationship row.
+        visible_pks: Pre-resolved ``Profile.visible_profile_pks`` when a page of
+            relationships is serialized together.
 
     Returns:
         A dict matching ``FriendshipSerializer``'s fields.
@@ -3524,7 +3529,7 @@ def _serialize_friendship(viewer: Profile, friendship: Friendship) -> dict[str, 
     outgoing = friendship.from_profile_id == viewer.pk
     other = friendship.to_profile if outgoing else friendship.from_profile
     return {
-        "profile": _friend_identity(viewer, other),
+        "profile": _friend_identity(viewer, other, visible_pks=visible_pks),
         "status": friendship.status,
         "relationship_type": friendship.relationship_type,
         "direction": "outgoing" if outgoing else "incoming",
@@ -3573,9 +3578,15 @@ class FriendsView(ExternalApiView):
         except FriendshipActionError as exc:
             return Response({"error": exc.safe_message}, status=400)
 
+        # Resolved once for the page: _friend_identity masks a profile the caller
+        # may not identify, and asking that per row re-derived the caller's own
+        # friend/trip/pin sets for every relationship listed.
+        others = [friendship.to_profile if friendship.from_profile_id == profile.pk else friendship.from_profile for friendship in page.friendships]
+        visible_pks = Profile.visible_profile_pks(profile, others)
+
         return Response(
             {
-                "results": [_serialize_friendship(profile, friendship) for friendship in page.friendships],
+                "results": [_serialize_friendship(profile, friendship, visible_pks=visible_pks) for friendship in page.friendships],
                 "next_cursor": page.next_cursor,
             }
         )

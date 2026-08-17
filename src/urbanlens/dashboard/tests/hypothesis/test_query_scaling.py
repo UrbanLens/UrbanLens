@@ -22,6 +22,8 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKeyScope
+from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
+from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.images.model import Image
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.location.model import Location
@@ -57,6 +59,15 @@ class QueryScalingTests(TestCase):
             baker.make(Image, pin=pin, profile=self.profile, location=location)
             trip = baker.make(Trip, creator=self.profile)
             trip.profiles.add(self.profile)
+            # Friendships grow too, so the external friend-list assertion below is
+            # measuring a list that actually changes size.
+            Friendship.objects.create(
+                from_profile=self.profile,
+                to_profile=baker.make(User).profile,
+                status=FriendshipStatus.ACCEPTED,
+                relationship_type=FriendshipType.FRIEND,
+                permissions=Permission.VIEW_PROFILE,
+            )
 
     def _count(self, url: str, **extra) -> int:
         with CaptureQueriesContext(connection) as ctx:
@@ -103,4 +114,12 @@ class QueryScalingTests(TestCase):
 
     def test_organize_index_does_not_scale_with_pin_count(self) -> None:
         self._assert_flat(reverse("organize.index"))
+
+    def test_external_friend_list_does_not_scale_with_friend_count(self) -> None:
+        """Each row masks a profile the caller may not identify - that check was per row.
+
+        Surveying the external API's list endpoints found this one alone scaling
+        (7 queries for 2 friends, 17 for 12); the rest were already flat.
+        """
+        self._assert_flat(reverse("external_api:friends"), HTTP_AUTHORIZATION=f"Bearer {self.raw_key}")
 
