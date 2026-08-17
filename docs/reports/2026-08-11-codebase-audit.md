@@ -12964,3 +12964,29 @@ success" as a failure** - which reads like a regression and was the fix working.
 actually says before assuming its direction.
 
 931 privacy/messaging tests pass.
+
+## Chunk 625 - the batch-named function that wasn't batched
+
+`resolve_visible_identities` exists for exactly one purpose - render several people together, giving
+each masked entry its own ordinal so two masked members don't read as the same person. It resolved
+them **one at a time**: a loop over `resolve_visible_identity`, every call reaching
+`can_view_profile` and re-deriving the viewer's own friend, trip and pinned-location sets.
+
+So chunk 624's fix had covered the conversation list and nothing else, while the function whose name
+promises batching carried the same defect for every other list in the app: group member dialogs,
+group message senders, and - through `mask_profile_references` - trip participants and comment
+authors.
+
+Measured on the group members dialog, whose row count is exactly the member count: **55 queries for
+2 extra members, 165 for 12**, about eleven per member, matching the conversation list's rate
+exactly. After routing it through `Profile.visible_profile_pks` once per list: flat.
+
+The complement test is the one worth keeping. Batching a masking decision could plausibly mask
+everyone or name everyone and still look "fixed" on a query count, so it asserts a public profile
+still comes back named and a friends-only stranger still comes back masked as "Member 1".
+
+Two fixture corrections on the way, both the same lesson as chunk 622: `create_group_chat` refuses
+members who don't accept DMs, and `username` lives on `User`, not `Profile` - a test that fails to
+build its own scenario measures nothing.
+
+125 group-chat and trip tests pass alongside.

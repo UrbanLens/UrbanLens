@@ -106,13 +106,19 @@ def resolve_visible_identities(viewer: Profile | None, subjects: Sequence[Profil
         object-identity mutation because their own objects were built from a
         separate query than ``subjects``.
     """
+    from urbanlens.dashboard.models.profile.model import Profile as ProfileModel
     from urbanlens.dashboard.services.profile.avatar_colors import assign_avatar_colors
 
     subjects = list(subjects)
+    # Resolved for the whole list, not per subject: every caller here is rendering
+    # people together (group members, message senders, trip participants), and
+    # ``can_view_profile`` re-derives the viewer's own friend/trip/pin sets on each
+    # call - so a list of members cost that work once per member.
+    visible_pks = ProfileModel.visible_profile_pks(viewer, subjects)
     results: dict[int, dict[str, Any]] = {}
     masked_ordinal = 0
     for subject in subjects:
-        identity = resolve_visible_identity(viewer, subject)
+        identity = resolve_visible_identity(viewer, subject, visible_pks=visible_pks)
         if identity["is_masked"]:
             masked_ordinal += 1
             identity["display_name"] = f"Member {masked_ordinal}"
