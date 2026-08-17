@@ -12156,3 +12156,24 @@ moved. Guidance gets corrected; history does not.
 Seven audits, seven errors, six in claims quantifying over a set. The one enumerable claim remains
 the only clean one - and this last error is the same shape as the rest, just wearing a number
 instead of an "each".
+
+## Chunk 600 - handoff hygiene, and nothing else
+
+Consolidation 25 at 43%, advancing about 1.1% a minute while the CPU is quiet. The self-audit vein is
+spent - every quantifying claim in the summary has now been checked - so rather than invent an eighth
+audit, this chunk did the one verification that actually matters before work is handed off, and then
+stopped.
+
+- **Working tree clean.** `git status --short` is empty; everything this session produced is
+  committed.
+- **No artefacts leaked in.** The scans written this session lived in the session scratchpad, and
+  none of them - nor any `.bak`, probe or debug file - appears in the diff.
+- **No debug leftovers.** No `print(`, `breakpoint(`, `console.log`, `pdb`, `FIXME` or `XXX` was
+  added anywhere in `src/` across 1,522 added lines in 45 files.
+- **Only two files outside `src/` and `docs/`** were touched: `.github/workflows/ci.yml` (the
+  TypeScript, migration and import checks) and `CLAUDE.md` (recording that ruff skips the test
+  suite). Both deliberate.
+
+That is the whole chunk. The remaining obligation is consolidation 25's verdict, and the honest thing
+to do while a ninety-minute run finishes is to let it finish rather than manufacture work in front of
+it - especially since my own test runs are what slow it down.
