@@ -218,6 +218,16 @@
                                     <i class="material-symbols-outlined">tune</i>
                                     <span>Custom fields</span>
                                 </label>
+                                {% for export_type in registered_export_types %}
+                                <label class="export-checkbox-item" title="{{ export_type.description }}">
+                                    <span class="ul-checkbox-wrap">
+                                        <input type="checkbox" name="export_types" value="{{ export_type.key }}" class="export-type-cb" checked>
+                                        <span class="ul-checkbox"></span>
+                                    </span>
+                                    <i class="material-symbols-outlined">inventory_2</i>
+                                    <span>{{ export_type.label }}</span>
+                                </label>
+                                {% endfor %}
                             </div>
 
                             {# -- Format options -- #}

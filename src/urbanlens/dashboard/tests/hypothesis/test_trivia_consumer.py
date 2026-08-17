@@ -17,6 +17,7 @@ from django.test import TransactionTestCase, override_settings
 from model_bakery import baker
 
 from urbanlens.core.tests.celery_inline import broadcasts_delivered_inline
+from urbanlens.core.tests.features import grant_alpha_features
 from urbanlens.dashboard.consumers import TriviaSessionConsumer
 from urbanlens.dashboard.models.friendship.model import Friendship
 from urbanlens.dashboard.models.location.model import Location
@@ -42,7 +43,10 @@ def _make_location() -> Location:
 
 
 def _make_profile() -> Profile:
-    return Profile.objects.get(user=baker.make("auth.User"))
+    user = baker.make("auth.User")
+    # The socket is gated on the same entitlement as every game HTTP route.
+    grant_alpha_features(user)
+    return Profile.objects.get(user=user)
 
 
 @override_settings(CHANNEL_LAYERS=_IN_MEMORY_CHANNEL_LAYERS)

@@ -22,7 +22,7 @@ import re
 from unittest.mock import patch
 
 from django.template.loader import render_to_string
-from django.test import Client
+from django.test import Client, override_settings
 from django.urls import reverse
 from django.utils import timezone
 from model_bakery import baker
@@ -729,6 +729,25 @@ class TripActivityCompleteViewTests(TestCase):
         self.client.post(self._url(), data={"completed_date": "not-a-date"})
         self.activity.refresh_from_db()
         self.assertEqual(self.activity.status, TripActivity.STATUS_COMPLETED)
+
+    @override_settings(TIME_ZONE="Pacific/Kiritimati")
+    def test_completion_clamps_against_the_configured_timezone_not_the_server_clock(self):
+        """"Today" must mean today in Django's TIME_ZONE, not the host OS's date.
+
+        At this fixed instant the configured zone (UTC+14) is already on Jan 2
+        while UTC is still on Jan 1, so a `date.today()`-based clamp would reject
+        a legitimately "today" completion as a future date and cap it a day early.
+        """
+        instant = datetime.datetime(2026, 1, 1, 20, 0, tzinfo=datetime.UTC)
+        local_today = timezone.localtime(instant).date()
+        self.assertEqual(local_today, datetime.date(2026, 1, 2))
+
+        with patch("django.utils.timezone.now", return_value=instant):
+            self.client.post(self._url(), data={"completed_date": local_today.isoformat()})
+
+        self.activity.refresh_from_db()
+        self.assertEqual(self.activity.status, TripActivity.STATUS_COMPLETED)
+        self.assertEqual(timezone.localtime(self.activity.scheduled_at).date(), local_today)
 
     def test_completed_date_produces_a_timezone_aware_scheduled_at(self):
         """Regression guard for the same naive-datetime bug as

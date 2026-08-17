@@ -138,6 +138,16 @@
                        value="{{ settings.login_max_attempts }}" min="0" max="100" step="1">
             </div>
             <div class="form-row">
+                <label for="login-ip-max-attempts">Max failed login attempts per IP</label>
+                <p class="form-help">
+                    How many failed login attempts a single IP address may make (across any
+                    accounts) before further attempts from that address are temporarily blocked.
+                    Set to <strong>0</strong> to disable the per-IP throttle.
+                </p>
+                <input type="number" name="login_ip_max_attempts" id="login-ip-max-attempts"
+                       value="{{ settings.login_ip_max_attempts }}" min="0" max="1000" step="1">
+            </div>
+            <div class="form-row">
                 <label for="login-lockout-minutes">Lockout duration (minutes)</label>
                 <p class="form-help">
                     How many minutes a locked account must wait before login attempts are accepted

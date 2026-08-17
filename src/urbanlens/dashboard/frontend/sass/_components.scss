@@ -285,6 +285,24 @@
 	}
 }
 
+// Muted inline chip used as <span class="badge badge--muted"> in templates.
+// The base span.badge (_reset.scss) is a right-floated count badge; this
+// modifier resets those properties to render as an inline pill instead.
+// The doubled class keeps specificity above span.badge.
+.badge.badge--muted {
+	display: inline-block;
+	float: none;
+	min-width: 0;
+	height: auto;
+	margin-left: 0;
+	padding: .1rem .5rem;
+	border-radius: $radius-full;
+	font-size: .75rem;
+	line-height: normal;
+	background: var(--ul-surface-raised);
+	color: var(--ul-grey-6);
+}
+
 // -- Dropdown ------------------------------------------------------------------
 
 .ul-dropdown {
@@ -421,6 +439,22 @@
 		background: $color-red-100;
 		color: $color-red-900;
 		border-color: $color-red-300;
+	}
+}
+
+// Full-width alert banner (e.g. admin cost dashboard error states).
+.ul-alert {
+	padding: .6rem .9rem;
+	border-radius: $radius-sm;
+	font-size: .875rem;
+	border: 1px solid var(--ul-surface-border);
+	background: var(--ul-surface-raised);
+	color: var(--ul-grey-7);
+
+	&--error {
+		background: var(--ul-color-danger-bg);
+		color: var(--ul-color-danger-text);
+		border-color: var(--ul-color-danger-border);
 	}
 }
 

@@ -43,6 +43,137 @@ was never missing - it was filed under a heading nobody would search when the si
 Each entry should have enough detail (repro steps, file:line, symptoms) for a future session
 to pick up without re-discovering the problem from scratch.
 
+## OPEN 2026-08-15: frontend TypeScript audit - remaining findings
+
+Full-tree audit of `dashboard/frontend/ts/` (every file read, eight passes). The four
+security/safety items were fixed in the same pass; everything below was found but **not** fixed.
+Line numbers are as of 2026-08-15 and will drift.
+
+**Highest-value single change:** ~40 raw `fetch()` call sites bypass `shared/fetch-json.ts`
+(`fetchJson`/`sendJson`), several with no `response.ok` check at all, so a non-2xx dies in a
+`void`-ed promise with no toast. Six hand-rolled wrappers exist beside it: `postForm`/`getJson`
+(triplicated across the three games), `postForHtml` (organize-tab-manager), `postJson`
+(album-items), `savePosition` (album-map). Migrating them is mechanical, adds timeouts (several
+uploads can currently hang forever), and converts the dominant silent-failure mode into the
+required toast-on-error behaviour. Two deliberate exceptions to keep: `webauthn-client.ts`
+(self-contained for the minimal auth layout, already ok-checked) and the two E2EE calls that need
+raw `Response` semantics (201-vs-200, `redirected`).
+
+**Correctness, user-visible:**
+
+- `entries/map-annotations.ts:2264` - right-click-to-delete-vertex is dead code:
+  `m.on("contextmenu.rcdelete" as never, ...)` is jQuery-style event namespacing that Leaflet does
+  not support, so it binds a literal event name that never fires - while the toast at :2338 tells
+  the user to right-click. The `as never` casts were the compiler flagging exactly this.
+- `entries/map-annotations.ts:1371` - `loadDetailPins` has no ok-check and **clears the existing
+  pin layer and list** on failure (console.warn only). :2558 `flushDpAutoSave` swallows validation
+  errors, so autosaved edits are silently lost. :2047 `placeMediaItemAt` has no ok-check and no
+  loading indicator for a server-side image materialize. :1643/:1712 bulk promote/delete
+  `Promise.all` paths have no `.catch`, so one failure is an unhandled rejection with the
+  selection never cleared.
+- `entries/photo-location-scan.ts:207` - the `webkitdirectory` fallback path (Firefox/Safari)
+  reuses an already-aborted `AbortController`, so after one Stop click **every** later scan halts
+  on the first file. Also: hits accumulate across scans (re-scanning double-counts into clusters),
+  and the photo uploads that run *after* the "Uploaded" toast have no progress indicator.
+- `shared/map-export.ts:270` + `themes/base.html:816` - `download()` awaits tile fetches (up to 8s
+  each) but no caller awaits it: no spinner, no toast, unhandled rejections, and the save flow
+  closes the composer mid-export so shapes project against a map being torn down.
+- `shared/markup-toolbar.ts:748` - `flushMarkupAutoSave` never checks `r.ok`, so a 400 (e.g.
+  over-long label) reports success; the single pending-save slot also means editing item A then B
+  inside the 500ms debounce silently discards A's changes, and nothing flushes on unload.
+- `entries/organize.ts:106,311` - the Media tab is **fully dead UI**: the template renders it
+  selectable with checkboxes, a filter bar and Edit buttons, but no `OrgTabManager` is built for
+  it, `ORG_FILTER_NAMESPACES`/`TAB_FILTER_NS` omit it, and the consolidated dialog opener has no
+  `media-label-edit-dialog-body` case, so Edit swaps a form into a dialog nothing opens.
+  Separately, `_organize_label_card.html:77` references `peopleMergeSingle`, which is defined
+  nowhere in the codebase.
+- `shared/organize-filter-engine.ts:188` - `countVisibleCards` tests `card.style.display`, but
+  tree view sets `display` on the `.tag-tree-item` *wrapper*, so cross-tab match counts and the
+  "N categories also match" footer count every card as visible. It duplicates `getOrgVisibleCards`
+  (:99), which gets it right.
+- `shared/map-image-overlays.ts:209` - corner drag never handles `pointercancel`; an interrupted
+  touch gesture leaves `map.dragging` disabled permanently.
+- `entries/spotguessr.ts:1491` - `submitGuess` has no in-flight guard, so a double-click posts
+  twice and double-counts the session score; :840 `reportRoundTimeout` has no error handling, so a
+  failed timeout POST hangs the round forever. All three games silently null the WebSocket on
+  close with no reconnect and no "connection lost" notice.
+- `entries/trivia.ts:856` and `entries/consensus.ts:1051` - missing the round-id guard spotguessr
+  has (`lastRevealedRoundId`), so the last player to answer double-counts HUD points.
+- `shared/organize-priority.ts:69` and `shared/album-items.ts:118` - optimistic reorder with no
+  rollback on failure and no save sequencing, so two rapid drags can persist the stale order while
+  the DOM shows the new one. `shared/album-map.ts:113` is the model to copy - it rethrows after
+  toasting so the marker snaps back.
+- `shared/confirm-dialog.ts:90` - re-entrancy: opening a second dialog while one is open
+  overwrites `resolveCurrent` (first promise pends forever) and `showModal()` on an open dialog
+  throws into the promise executor.
+- `shared/scroll-to-hash.ts:50` - re-scrolls on *every* `htmx:afterSettle` for the page's life, so
+  any later swap yanks the reader back to the original anchor.
+- `shared/onboarding-tour.ts:87` - auto-dismiss hooks bind only to elements present at init; HTMX
+  swaps orphan them, so dismissed cards reappear.
+- `shared/organize-header.ts:113` - a transient window resize below 768px *permanently* overwrites
+  the stored gallery view preference.
+- `entries/article-wysiwyg.ts:532` - the first WYSIWYG keystroke re-serializes the whole article
+  through a lossy `tiptap-markdown` parse (`html: false`), rewriting content document-wide, not
+  just at the edit point. Needs round-trip tests over real saved articles before it is trusted.
+- `shared/e2ee-client.ts:238` - the `e2ee-busy` class it sets during login has **no CSS rule
+  anywhere**, so the ~1s synchronous Argon2id derivation shows no indicator at all; the unlock
+  dialog (:682) has no busy state either, while the reset dialog next to it does it correctly.
+- `shared/e2ee-client.ts:1326` - retry storm: a thread with an unreadable key re-fetches the same
+  conversation/group key once per message (50 sequential identical failing requests on a
+  50-message thread). :1459 `decryptDom` also strips `data-e2ee-*` *before* attempting decryption,
+  so a transient failure is permanently unrecoverable on WS-appended messages.
+- E2EE keys persist in IndexedDB across logout - `clearProfileKeys` is called only from
+  `resetKeys`. Possibly intended (documented same-origin trust boundary), but the logout gap looks
+  unconsidered rather than chosen; decide it explicitly and add a "forget this device" action.
+
+**Operational:**
+
+- `shared/location-search-engine.ts:140,197,916` - three direct browser-to-Nominatim calls bypass
+  the server-side rate limiter and cost tracking and violate Nominatim's usage policy. The file's
+  own comment already flags this as a KNOWN GAP. Needs the server-side geocode proxy (mirroring
+  the Google Places one), which would also enable one aggregated suggestion endpoint.
+
+**Structural (no user-visible symptom):**
+
+- The three games triplicate ~1,500 lines of session/lobby/chat/invite/fetch plumbing (19 blocks
+  differing only by an `sg-`/`cs-`/`trivia-` prefix). Extracting `game-net` / `game-session` /
+  `game-friends` / `score-rows` removes ~1,000 net lines and makes the next game cost ~500 lines
+  instead of ~1,300.
+- `entries/map-annotations.ts` is eight features in one 2,645-line `init()` closure. Three
+  extractions are nearly free today: rectangle-select (already generic, zero closure deps), the
+  satellite/street-view carousel twins (95% identical), and the building-import dialog.
+- `shared/e2ee-client.ts` (1,537 lines) mixes key-lifecycle service code with three hand-built
+  `innerHTML` dialogs; the crypto/store layering beneath it is clean and should not be disturbed.
+- Five picker widgets reimplement the same dropdown mechanics (four different blur-close timeouts,
+  three chip implementations, five `escapeHtml` variants, keyboard nav missing entirely from
+  `createChipPicker` and `label-rel-picker`). Note these files are otherwise **correctly**
+  HTMX-shaped - the server renders their option lists and TS only filters - so do not "fix" them
+  by adding round trips.
+- Organize's five modules communicate over four channels at once (imports, 13 window globals with
+  last-writer-wins handler slots, CustomEvents, an htmx response header), and the kind/ns/tab
+  vocabulary is encoded in five separate places. It also runs a private copy of the shared
+  `window.ulBulkToolbar` that `static/js/bulk-toolbar.js` says it mirrors.
+- `shared/map-layers.ts:198` has no `destroy()`, so document/matchMedia/map listeners accumulate
+  on per-dialog maps (the comment-map composer). `shared/photo-map.ts:204` is the model.
+- Test coverage is inverted: all test files cover the small shared modules; the four largest files
+  (`map-annotations`, `spotguessr`, `e2ee-client`, `consensus`) had zero until this pass added
+  `e2ee-client.test.ts`/`e2ee-store.test.ts` (see `ts/testing/fake-indexeddb.ts` - happy-dom has
+  no IndexedDB, which is why the store was untested).
+
+**HTMX opportunities** (per the HTMX-first rule) - roughly 1,500-2,000 lines of DOM templating
+that the server could render: game lobby lists/summaries/friend pickers, map-annotations' detail
+sidebar + photo panel + bulk-edit dialog + `doSendSelectedDpToWiki` (which hand-parses
+`HX-Trigger` over raw fetch - it is hand-rolled htmx already), organize's merge dialog (a third
+copy of card rendering the server owns) and `postForHtml`/`replaceRows` (a hand-rolled
+`hx-post`+`hx-swap`), album add/remove (two round trips where sibling flows do one `hx-post`), the
+article live preview (already POSTs to a server render endpoint), and the three E2EE dialog shells.
+
+**Out of scope but larger than all of the above:** 21,378 lines of untyped, untested, unlinted
+inline JavaScript across 131 template `<script>` blocks - `map/index.html` alone is 5,152 lines
+(and holds the pin-cache *writer*), `messages/index.html` 1,771, `trips/detail.html` 1,375,
+`location/index.html` 1,284, `base.html` 1,116. Several audited bugs sit on the inline side of a
+TS/template seam; that is where bugs collect, because the types stop there.
+
 ## RESOLVED 2026-08-12: a 225 KB generated source map was tracked while its stylesheet was ignored
 
 `.gitignore` ignores `**/frontend/static/**/*.css`, which does **not** match `.css.map` - so
@@ -152,7 +283,17 @@ Swept the rest of the import surface the same way afterwards: `-k 'import or pre
 guard's own exception, so an unmocked integration shows up as a passing test plus a log line
 rather than a failure. Grepping ERROR logs across passing tests is the way to find the rest.
 
-## RESOLVED 2026-08-17: trip activity weather matches against times in the wrong timezone
+## ~~OPEN 2026-08-12: trip activity weather matches against times in the wrong timezone~~ RESOLVED 2026-08-15 (`f3acdf56`)
+
+**RESOLVED without a timezone library.** This entry framed the fix as needing a per-location
+timezone (and therefore a product decision); it does not. Open-Meteo's `timezone=auto` response
+already carries a top-level `utc_offset_seconds`, which is enough to recover the real instant.
+`ForecastSlot` now has an aware-UTC `date_utc` populated by all three converters (Open-Meteo via
+that offset, OpenWeatherMap from its UTC `dt_txt`, REData from its parsed value - documented as
+the TypedDict's contract), and `_build_activity_forecasts` matches slots and computes `gap_hours`
+against it, with the old naive comparison kept as a fallback for slots lacking it. The AI
+suggestion day-bucketing got the same correction. Display still uses the naive local `date`, so
+no panel changed. The crash half was already fixed earlier. Original entry below.
 
 `ForecastSlot.date` has no timezone contract, and the three providers that populate it disagree.
 `controllers/trip.py::_build_activity_forecasts` then compares them against an activity's
@@ -204,21 +345,18 @@ Found by chasing the single `RuntimeWarning` in a full test run (a naive datetim
 `Pin.last_visited`). That warning itself is only test-fixture hygiene -
 `test_pin_queryset.py:134` passes `date.today()` - but it prompted the sweep that turned this up.
 
-**RESOLVED 2026-08-17 (chunk 576).** Both premises above were wrong, and re-checking them was the
-whole fix. Open-Meteo already reports the offset it applied, as top-level `utc_offset_seconds`, so
-no timezone library or per-location field is needed - the data was in the response all along, simply
-unread. And `ForecastSlot["date"]` has exactly two readers, both the matching arithmetic in
-`controllers/trip.py`; it is never rendered, so normalising it cannot change what users see. The
-request still asks for `timezone=auto`, so every display path (sun times, panel local times) is
-untouched.
+## ~~OPEN 2026-08-11: bulk-accepting pin suggestions makes up to 200 live API calls inside one request~~ RESOLVED 2026-08-15 (`683f0632`)
 
-`OpenMeteoGateway` now subtracts the reported offset, defaulting to zero when the field is absent so
-a response without it behaves exactly as before, and `ForecastSlot.date` finally carries the
-documented contract this entry said it lacked: naive UTC. Covered by
-`test_open_meteo_slot_timezone.py`, including both offset directions, the absent-field default, and
-that no other slot field moves.
-
-## OPEN 2026-08-11: bulk-accepting pin suggestions makes up to 200 live API calls inside one request
+**RESOLVED**: the product blocker this entry named ("do we accept placeholder names?") had already
+dissolved - lazy name resolution exists end to end (`resolve_location_place_name` backfills in the
+background, and `place_info.py`'s own docstring blesses `fetch_if_missing=False` for bulk paths).
+So `fetch_if_missing` is now threaded through `_create_location_with_canonical_name` →
+`resolve_location_for_point` → `accept_pin_suggestion`; both bulk views pass `False` and enqueue
+the backfill per newly created Location, gated on `external_apis_enabled`. **No user-visible
+naming change**: `pin.name` comes from the suggestion regardless, so no placeholder ever appears -
+only the shared Location's official name backfills asynchronously. Single-accept stays
+synchronous. Tests assert the Google entry point is never called from either bulk endpoint.
+Original entry below.
 
 Found by root-causing the last failing test in the suite (`test_pin_suggestion_bulk_partial::
 test_accepting_marks_the_suggestions_handled`, which was reaching the real internet). The test is
@@ -279,7 +417,16 @@ is the one that turns a bounded cost into an unbounded one, and is worth address
 even before the broader Celery migration. (13 test modules already mock
 `GooglePlaceService._resolve_name`, which is a good independent map of everything on this path.)
 
-## RESOLVED 2026-08-15 (chunk 464): the nightly achievement sweep is O(profiles × metrics) and gets killed at 3600s
+## ~~PARTLY RESOLVED 2026-08-12: the nightly achievement sweep is O(profiles × metrics) and gets killed at 3600s~~ RESOLVED 2026-08-15 (`5ac09566`)
+
+**RESOLVED - both remaining halves.** (2) `sweep_achievements` is now a dispatcher that slices
+profiles into pk ranges and enqueues a per-chunk subtask, so no single invocation can approach the
+3600s `CELERY_TASK_TIME_LIMIT` and a crashed chunk affects only its own range. (1) `Metric` gained
+an optional `compute_bulk` implemented via grouped aggregates for the count-shaped metrics, with
+`compute_values_bulk` falling back to per-profile `value_for` where a grouped aggregate is not
+equivalent - the streak metrics stay per-profile deliberately, since they are path-dependent.
+Property tests assert `compute_bulk` agrees with per-profile `compute`. The resume/checkpoint
+cursor from the earlier pass is retained. Original entry below.
 
 `tasks.sweep_achievements` → `evaluate_all_profiles` iterates **every** `Profile` and evaluates
 every active achievement for each one. Each metric is an independent per-profile query -
@@ -329,16 +476,26 @@ still worth doing if the run time keeps growing.
 Not attempted here: (1) is a refactor across the metric registry, and (2) changes the shape of a
 scheduled job - both want a maintainer's call on batch size and ordering guarantees.
 
-**Resolved (chunk 464, 2026-08-15): fix (1) is in.** Every builtin metric carries a
-`compute_bulk` returning `{profile_id: value}` from one grouped query; the sweep computes them
-once up front and each profile's evaluation becomes dictionary lookups plus award writes -
-~30 queries/profile drops to ~19 queries/run plus the award path. The per-write signal path is
-untouched (it never bulk-computes). The agreement invariant - bulk equals per-profile for every
-profile, absent meaning zero - is pinned by `test_achievement_bulk_metrics.py`, because a
-drifting bulk variant would make awards flap between the nightly and signal paths. Fix (2)
-(chunking the task) is now moot at realistic scales; the checkpoint/resume guard stays.
+## ~~FEATURE GAP 2026-08-11: the data export omits 11 kinds of user-authored content~~ MOSTLY RESOLVED 2026-08-15 (`a2743a29`)
 
-## MOSTLY RESOLVED 2026-08-11: the data export omits 11 kinds of user-authored content
+**RESOLVED for 9 of the 11**, via a declarative `ExportType` registry rather than nine more
+copy-pasted exporters: `VALID_EXPORT_TYPES`, the run order and `run_export`'s dispatch table all
+derive from one tuple, so a tenth area is a class plus one entry. New areas: **safety_checkins**
+(check-ins + contacts + messages), **map_annotations** (MarkupMap/PinMarkup/MapImageOverlay incl.
+overlay image files), **saved_filters**, **routes**. **PinAlias** folds into the per-pin dicts;
+**SocialLink** and **ProfileEmail** fold into the profile. The reverse-direction gap is closed too
+- there is now a `_import_profile` restoring content fields only (bio/area/dates/contact block),
+explicitly skipping username/email/date_joined.
+
+Registry entries also carry a `label`/`description`, and the Tools page renders them from the
+registry, so a future export area needs no template edit - the four new areas were otherwise
+unreachable in the UI, since that checkbox list is hardcoded.
+
+**Still deliberately excluded, pending a product decision** (the two this entry itself flagged):
+`ProfileNote` (a note *about* another user - exporting one user's private characterization of
+another is a real disclosure question) and `WikiEdit` (community-shared revision history, not
+solely the exporter's content). Recommendation if asked: export ProfileNote but never import it,
+and leave WikiEdit alone. Original entry below.
 
 `VALID_EXPORT_TYPES` covers 13 areas (profile, settings, custom fields, pins, google_takeout,
 labels, connections, visit history, comments, photos, trips, pin lists, direct messages). Pins
@@ -444,25 +601,18 @@ transaction, but the count is inflated by dispatchers: the top hit
 (`controllers/settings.py:159`, "18 writes") is a 15-branch `if/elif` on `section` where exactly
 one branch runs. Only paths whose writes share an invariant are worth looking at.
 
-## NEUTRALISED 2026-08-16 (the trap is closed; the rename is now an API break) - one notification preference is named after the enum *member*, not its *value*
+## ~~LOW 2026-08-11: one notification preference is named after the enum *member*, not its *value*~~ RESOLVED (verified 2026-08-15)
 
-**Re-checked 2026-08-16 and deliberately not renamed.** The hazard this entry is about - the
-WhatsApp/SMS path building its field name from the *type value* and silently `getattr`-missing to
-`False` - no longer exists. `notification_text_alerts._enabled_channels` now resolves the column
-from the enum **member name**, which is what every other consumer already used, and
-`TEXT_ALERTABLE_TYPES` includes the type, so the "add it to that set and the toggle is permanently
-off" outcome cannot occur. Both halves are pinned by `test_text_alert_preference_stems.py`.
-
-What remains is the cosmetic inconsistency, and renaming it is no longer a migration plus one read
-site: `preference_field_names()` feeds the **external API's** notification-preference field names,
-so renaming the three columns renames three public API fields. `test_external_api_notifications.py::
-test_one_preference_stem_does_not_match_its_notification_type` asserts the mismatch on purpose, so
-that a rename fails there and becomes a deliberate decision rather than a silent API change. That
-decision is the owner's; this is not a defect to fix unattended.
-
-The original entry follows.
-
-## DECIDED 2026-08-16 (deliberately not renamed): one notification preference is named after the enum *member*, not its *value*
+**RESOLVED**: the trap is closed, not merely dormant. `_enabled_channels`
+(`notification_text_alerts.py:132-133`) now derives the preference prefix from the enum *member
+name* (`NotificationType(...).name.lower()`), which matches the `safety_checkin_partner_invite*`
+columns, and `safety_ci_partner_invite` is now listed in `TEXT_ALERTABLE_TYPES`
+(`notification_text_alerts.py:63`). Regression coverage:
+`tests/hypothesis/test_text_alert_preference_stems.py` asserts `TEXT_ALERTABLE_TYPES` equals
+exactly the stems with a toggle pair and that the mismatched type's toggles are read correctly;
+`test_external_api_notifications.py:99` pins the known stem/value divergence. The suggested column
+rename was not done, but no remaining code derives preference field names from the type *value*,
+so the two lookup styles no longer need to agree. Original entry below for context.
 
 `NotificationType.SAFETY_CHECKIN_PARTNER_INVITE` has the **value**
 `"safety_ci_partner_invite"`, but its three preference columns on `NotificationPreference` are
@@ -502,24 +652,19 @@ exactly these and must not invent defaults for the types that are missing"), and
 the safety escalation chain in particular - are arguably *right* to be non-silenceable. Recorded
 only so the gap is visible when someone asks why a given notification has no setting.
 
-## RESOLVED 2026-08-16: `FriendInvitation.mark_accepted` claims at selection time, not write time
+## ~~LOW 2026-08-11: `FriendInvitation.mark_accepted` claims at selection time, not write time~~ RESOLVED 2026-08-15
 
-**Fixed 2026-08-16.** `mark_accepted()` is now a conditional claim
-(`filter(pk=..., accepted_at__isnull=True).update(...)`, returning whether it matched) and
-`_apply_pending_invitation` calls it *first*, returning early when it loses - the shape this entry
-prescribed, including its trade: a crash between the claim and the grant now loses that grant
-rather than replaying it, which is the safer direction for side effects a user would notice twice.
-`_collect_pending_invitations`' docstring no longer claims its filter prevents reprocessing; it now
-says which write actually does.
-
-Covered by `test_friend_invitation.py::InvitationClaimIsSingleUseTests`, which asserts against the
-side effects being *attempted* (`Friendship.request`/`grant_subscription` call counts) rather than
-their result - the individual idempotence recorded below means row counts would pass either way,
-so counting rows would have been a vacuous test of this fix.
-
-The original entry follows.
-
-## RESOLVED 2026-08-16: `FriendInvitation.mark_accepted` claims at selection time, not write time
+**RESOLVED**: `mark_accepted()` is now a write-time conditional claim
+(`filter(pk=..., accepted_at__isnull=True).update(...) == 1`, returning bool, syncing the
+in-memory instance on a won claim), and `_apply_pending_invitation` claims FIRST -
+`if not invitation.mark_accepted(): return` - before `Friendship.request`/notify/grant.
+Deliberately NOT wrapped in `transaction.atomic()`: `Friendship.save()` fires the achievements
+post_save handler whose `active_metric_keys` catches bare `Exception` including `DatabaseError`,
+which inside an atomic block would poison the transaction exactly as this doc's own NOTE at
+line ~353 warns - so the accepted trade-off is a crash after the claim loses that invite's side
+effects rather than double-applying them (documented in the controller docstring). 3 new tests in
+`test_friend_invitation.py` (9/9 passing), including a stale-instance replay asserting zero side
+effects. Original entry below.
 
 `_collect_pending_invitations` (`controllers/account.py:995`) filters on
 `accepted_at__isnull=True` and its docstring says that "already guards against reprocessing".
@@ -551,7 +696,17 @@ Found during a sweep of read-then-unconditional-write single-use markers; every 
 (`BackupCode` after its fix, `SafetyCheckinPartner`, `PushDevice`, `ApiKey`, `UserSubscription`)
 is either conditional or genuinely idempotent.
 
-## PARTIAL 2026-08-11: the hourly DM retention sweep seq-scans, then materialises its whole result set (materialisation fixed 2026-08-16; the index is a measured decision)
+## ~~LOW 2026-08-11: the hourly DM retention sweep seq-scans, then materialises its whole result set~~ RESOLVED 2026-08-15 (batching; index still deliberately deferred)
+
+**RESOLVED (the batching half)**: `hard_delete_expired_direct_messages()` now takes
+`batch_size: int = 2000` and `max_per_run: int = 50000`, and slices the due-id query, bounding the
+materialised list and every downstream `IN` clause. A backlog drains in batches *within* a run up
+to `max_per_run`, and across runs beyond that, so neither the parameter limit nor the task's
+runtime is unbounded. (Two implementations of this landed independently on parallel branches; the
+merge kept the one with the per-run ceiling.) 3 new tests in
+`test_direct_message_hard_delete.py` (20/20 passing). The partial index proposed below remains
+deliberately NOT added - that stays a measured production decision per this entry's own
+reasoning; the proposed index definition is preserved below for whoever measures. Original entry:
 
 `DirectMessageQuerySet.due_for_hard_delete` (`models/direct_messages/queryset.py:98`) filters on
 `sender_delete_after` + `read_at`. Confirmed against a real database - the only indexes on
@@ -764,23 +919,16 @@ threshold (pairs and halves both come back clean, so it is not a simple poisoner
 happy-dom than 20.11.2; or run this one file in its own bun process so it stops sharing a
 `GlobalWindow` at all, which sidesteps rather than diagnoses.
 
-## RESOLVED 2026-08-16: `check_in`/`cancel_checkin` still write `status` from a possibly-stale instance
+## ~~LOW 2026-08-11: `check_in`/`cancel_checkin` still write `status` from a possibly-stale instance~~ RESOLVED 2026-08-15
 
-**Fixed 2026-08-16**, on the "worth converting if this code is touched anyway" grounds below.
-Both now go through `_claim_resolution`, a conditional UPDATE excluding the resolved statuses -
-the same shape as `_resolve_as_found_safe` - and return whether they won. All five lifecycle
-transitions now use compare-and-set, so there is no longer a wrong one to copy. The in-memory copy
-is mutated only on a successful claim, so a loser's instance keeps describing the stored row.
-
-The two API callers (`SafetyCheckinCheckInApiView`, `SafetyCheckinCancelApiView`) `refresh_from_db()`
-when the claim is lost, so their 200 payload reports the resolution that actually happened rather
-than the one they attempted. The HTML callers redirect to a page that re-reads anyway.
-
-Covered by `test_safety_resolution_races.py::OwnerResolutionIsAlsoCompareAndSetTests`.
-
-The original entry follows.
-
-## RESOLVED 2026-08-16: `check_in`/`cancel_checkin` still write `status` from a possibly-stale instance
+**RESOLVED**: both functions now use the `_resolve_as_found_safe` compare-and-set shape
+(`filter(pk=...).exclude(status__in=resolved_statuses()).update(...)`) and return bool; a lost
+race returns False with zero side effects (no re-broadcast, no `_conclude_checkin`, no archival
+scheduling - the winner already did them), and the external API's mark-safe/cancel endpoints 409
+on a lost race instead of silently no-opping. Controller callers ignore the bool by design (their
+`is_resolved` pre-checks remain the fast path; a lost race correctly no-ops). 4 new race tests in
+`test_safety_resolution_races.py`; 173/173 tests across the six safety-related files pass.
+Original entry below.
 
 Found 2026-08-11 while fixing the sweep-driven resolution races (see
 `test_safety_resolution_races.py`). `services/visits/safety.py`'s `check_in` and
@@ -959,39 +1107,16 @@ Found 2026-08-04 during the Place refactor; deliberately not fixed there, since 
 command's behaviour should not change as a side effect of an unrelated refactor. The fix looks
 like uncommenting the line, but someone should confirm it wasn't disabled on purpose first.
 
-## RESOLVED 2026-08-16: `.badge--muted` is used everywhere but never defined (and it is not the only one)
+## ~~`.badge--muted` is used everywhere but never defined (and it is not the only one)~~ RESOLVED 2026-08-15 (`1e799da9`)
 
-**Fixed 2026-08-16 by deleting the undefined classes rather than defining them.** The "picking a
-colour is a design call" objection dissolves once you notice the design system already has both
-components, with a gallery page (`pages/site_admin_ui_components.html`) demonstrating them:
-
-- `badge badge--muted` → `ul-badge ul-badge--neutral` (7 usages across 5 templates - two more than
-  this entry listed: `partials/assistant/_messages.html` and `pages/site_admin.html`).
-- `ul-alert ul-alert--error` → `ul-notice ul-notice--danger` (2 usages), matching what
-  `partials/admin/_achievement_rows.html` already does for the same `role="alert"` shape.
-
-No new CSS was written, so there was no colour to choose.
-
-Worth knowing: `.badge--muted` was not merely *unstyled*. The only `.badge` rule in the codebase
-(`_reset.scss`, `span.badge`) is a **count** badge - `float: right`, `min-width: 3rem`,
-`margin-left: 14px` - so those inline text pills were being right-floated out of their cards at
-three rems wide. That is a layout bug, not a missing tint, and it is why this was worth doing
-rather than leaving as cosmetic.
-
-**`.dm-bubble-menu__item` was a false positive.** It *is* defined, as a nested `&__item` (with its
-`&--danger`) inside `.dm-bubble-menu` in `_messages.scss:1648`. A selector scan that reads SCSS
-source textually cannot see nested BEM; the re-enumeration recipe below should compile the SCSS
-first and scan the *output*, which resolves nesting for free.
-
-Re-run that way 2026-08-16 (compiled CSS + inline `<style>` + TypeScript vs every `class="..."`
-token containing `--`/`__`): 622 modifier/element classes used, 77 with no rule anywhere. Spot-
-checking confirms the entry's own characterisation of the remainder as noise - `users-list__col`
-and `subscription-list__col` are grid *items* positioned entirely by the parent's
-`grid-template-columns`, `form-row--title`/`detail-item--built` are semantic hooks, and several
-(`cal-cell--today'`, `cal-event--'`) are scan artifacts from classes assembled in JS expressions.
-None of the 77 is a second instance of the real bug.
-
-**Original entry.**
+**RESOLVED**: `.badge.badge--muted` (doubled class so its overrides beat `span.badge`'s 0-1-1
+specificity) and `.ul-alert`/`.ul-alert--error` are now defined in `_components.scss`, mirroring
+`.safety-badge--muted` and the theme-aware `--ul-color-danger-*` tokens respectively; compiled and
+grep-verified in `static/dashboard/style.css`. One correction to this entry's later 2026-08-11
+update: `.dm-bubble-menu__item` (+`--danger`) was **never** missing - it is defined via SCSS
+`&__item` parent-selector nesting inside `.dm-bubble-menu` (`_messages.scss:1649-1668`), which a
+literal-selector grep cannot see. When re-enumerating undefined classes, grep the *compiled*
+`style.css`, not the SCSS sources. Original entry below for context.
 
 **Update 2026-08-11**: this is a small class of issue, not a one-off. Two more components are
 referenced only by templates and defined in *no* stylesheet - not the SCSS, not any inline
@@ -1123,7 +1248,19 @@ Deliberately left out of the schema change: wiring a new suppression rule into e
 notification producer is a behaviour change of its own size, and the external API's `is_muted`
 surface (Batch S) needs the flag to exist first.
 
-## 2026-07-28: Satellite/street-view imagery render path re-runs the full provider chain even when "ready"
+## ~~2026-07-28: Satellite/street-view imagery render path re-runs the full provider chain even when "ready"~~ RESOLVED (verified 2026-08-15)
+
+**RESOLVED**: the harm named here - unbounded full-chain latency with no fast-placeholder
+short-circuit - no longer exists. `controllers/pin.py:1043-1044` now returns a fast polling
+placeholder (`_pending_panel` → `schedule_panel_fetch`) whenever `is_ready` is false, including
+the lapsed-but-not-rewarmed gap this entry describes; the comment at `pin.py:1040-1042` states the
+chain "must never run on the request path". The ready path runs `collect()` against warm
+per-provider caches bounded by `call_with_deadline(EXTERNAL_CALL_DEADLINE=20s)`
+(`pin.py:1059-1064`), and `SLIDES_READY_TTL_SECONDS=12h` is deliberately shorter than the 24h
+slide caches so the marker lapses before entries can expire mid-render
+(`external_data.py:918-922`). Residual (accepted trade-off, documented at `pin.py:1046-1049`): a
+per-provider cache eviction inside the ready window can still refetch inline, bounded to 20s -
+"bounded staleness beats an unbounded inline refetch". Original entry below for context.
 
 `services/pins/external_data.py`'s `SlidesPanelSource` (base of `SatellitePanelSource`/street-view
 equivalent) tracks readiness with a summary marker (`is_ready`, `ready_key`) set after a background
@@ -1610,7 +1747,16 @@ with a toggle pair is alertable, so a settable-but-unfirable toggle cannot be in
 updated to resolve by member name too - it derived columns from the value, which only held while
 the broken type was absent from the set.
 
-## OPEN 2026-07-26: FCM push transport is registered but never dispatched
+## ~~OPEN 2026-07-26: FCM push transport is registered but never dispatched~~ RESOLVED 2026-08-15 (`60c6f6cb`, tier 1 - honesty, not dispatch)
+
+**RESOLVED for the harm actually recorded here** (a registrant getting silence with no signal):
+`PushDevice.dispatch_enabled` (true only for UnifiedPush) is now surfaced read-only on
+`PushDeviceResponseSerializer`, so both the register 201 and any future list response say plainly
+whether the server will ever push to that device, and `docs/EXTERNAL_API.md` documents the field
+plus the FCM caveat. FCM registrations are still **accepted deliberately** - rejecting them would
+break the documented contract and the module keeps them so re-registration is seamless once a
+sender exists. Actual FCM dispatch (HTTP v1, service-account credential, google-auth dependency)
+remains unbuilt and is correctly gated on the mobile client existing. Original entry below.
 
 `services/notifications/push.py` accepts and stores FCM device registrations, but only the UnifiedPush
 transport actually dispatches; FCM rows are skipped at send time until a Play-flavor client
@@ -2144,7 +2290,32 @@ profile). Until fixed, verify backend changes on these dev machines via direct D
 tests (no Django test client, no `realtime.broadcast`) plus a manual browser walkthrough against
 the running `docker compose up` stack, rather than the full `pytest` suite.
 
-## SpotGuessr: down-voted photos permanently shrink a small pin pool's playable rounds, with no expiry (found 2026-07-25)
+## ~~SpotGuessr: down-voted photos permanently shrink a small pin pool's playable rounds, with no expiry~~ RESOLVED 2026-08-15 (the expiry half)
+
+**RESOLVED**: reports now age out. Each `REPORTED` row is weighted
+`0.5 ** (age_days / 180)` and, below `GAME_REPORT_MIN_WEIGHT = 0.01` (~6.6 half-lives, roughly
+3 years), drops out entirely.
+
+**The expiry floor is the part that actually fixes it, and it is easy to miss** - I initially
+shipped decay alone and a test caught that it does *not* break the ratchet: exponential decay is
+asymptotic, so an old report leaves a photo at about -0.0000009, which still fails
+`candidate_image_for_location`'s `effective_relevance(image) >= 0` gate. Excluded photos are never
+shown, so they can never earn the "shown, no reaction" impressions that would lift them back up -
+the score has to reach *exactly* zero for the loop to break.
+
+Only reports decay. Thumbs up/down and no-reaction are still counted in bulk with one grouped
+query: a report is a rare deliberate act (cheap to read row-by-row), while `NO_REACTION` accrues on
+every impression and would be thousands of rows per popular photo. A freshly re-reported photo
+stays excluded regardless of how old its other reports are - covered by a test, since "decay
+amnesties a photo people are actively reporting" would be the obvious way to get this wrong.
+
+The pre-existing `test_game_report_counts_at_full_negative_weight` moved from `assertEqual(-1.0)`
+to `assertAlmostEqual`, because decay now starts immediately. 26 tests pass.
+
+**Still open** (the second half of this entry): the empty state does not distinguish "no photos at
+all" from "photos exist but community feedback filtered them", so the exclusion remains
+undiscoverable in the UI. That needs a sentinel threaded from `candidate_image_for_location`
+through the controller into `_empty_state.html`. Original entry below.
 
 Reported symptom: after playing one full solo session against a ~10-pin pool, starting a new
 session sometimes shows the empty state ("Nothing to play yet") even though the profile clearly
@@ -5269,7 +5440,21 @@ Whichever is chosen, the invariant worth keeping is the one `test_gps_strip_by_f
 encodes: a format the app *accepts* must either be scrubbable or refused, never silently stored
 with the coordinates the uploader asked to have removed.
 
-## OPEN 2026-08-12: which setting owns dwell-detected visits?
+## ~~OPEN 2026-08-12: which setting owns dwell-detected visits?~~ RESOLVED 2026-08-15: both gate
+
+**RESOLVED - the codebase already answered the product question.** The sibling Takeout importers
+(`google/location_history.py`, `google/my_activity.py`) both check `visit_logging_allowed` before
+creating visits, so the GPX dwell path was the lone importer ignoring `track_pin_visits` - and
+that setting's own help text already promises the user it covers imports. So the answer is "both
+toggles gate": `track_routes` governs saving the Route (the user's own track), and
+`track_pin_visits` governs the PinVisit rows a dwell writes.
+
+`detect_dwells_and_create_visits` now returns 0 early when visit logging is off. The gate is
+inside that function rather than at its caller so any future caller inherits it. Route import
+itself is unchanged - a profile that tracks routes but not visits gets the track and no visits,
+which a new test asserts explicitly (route row still exists, zero PinVisits). 15/15 pass.
+`route_import_allowed`'s docstring no longer claims to cover the bundled visits. Original entry
+below.
 
 Three `Profile` toggles all plausibly describe the `PinVisit` rows that
 `gpx_tracks.detect_dwells_and_create_visits` creates from an imported track, and only one
@@ -5298,7 +5483,39 @@ that trade belongs to whoever owns the settings copy.
 If the answer is "both must be on", the change is one `and` in `save_routes_streaming`; if it is
 "track_routes alone owns it", `track_pin_visits`' help text should stop advertising imports.
 
-## OPEN 2026-08-12: `get_or_create` without a backing unique constraint
+## PARTLY RESOLVED 2026-08-15: `get_or_create` without a backing unique constraint
+
+**Links are done** (migration 0047); `Label` was already done earlier (0042/0043).
+**Still open: `SafetyContactOptOut` and `PinVisit`** - see the original entry below for both.
+
+`PinLink` and `WikiLink` now carry `UniqueConstraint(F(owner), MD5("url"))`. The URL is **hashed
+rather than indexed directly** - it holds up to 2000 characters, and a btree entry over that in
+multibyte UTF-8 can exceed Postgres' ~2704-byte row limit, so a plain unique index would have
+traded a duplicate row for an *insert failure on long URLs*, which is worse.
+
+The migration keeps the lowest-pk row per group. Links have no dependent rows, and the survivor is
+the one every existing reader already returned via `.filter(...).first()`.
+
+**Adding a constraint is the easy half; the call sites were the real work.** Six write paths
+existed, and only one was already safe:
+- `external_links.py` (both helpers) - kept the `exists()` check as a fast path that avoids a
+  savepoint, and now absorbs `IntegrityError`. These run inside a `LocationCache` signal on a
+  Celery queue, where an escaping error is a task failure.
+- `pin_subresources.create_pin_link` - raises a new `LinkExistsError`, mirroring the existing
+  `AliasExistsError` precedent right above it.
+- `controllers/links.py` (wiki add) - returns 400, and deliberately writes **no `WikiEdit`** on the
+  duplicate path; recording an edit that changed nothing would leave a phantom revision.
+- `external_api/views_wiki.py` - returns 400; `_SUBRESOURCE_ERROR_STATUS` maps `LinkExistsError`
+  to 409, matching `AliasExistsError`.
+- `pin_suggestions.py` - its in-call `existing_urls` set does not cover a concurrent accept.
+- `google/maps.py` - already caught `DatabaseError`; unchanged.
+
+Without those, a user adding a link they already had would have gone from a harmless duplicate to
+a 500. `test_external_link_duplicates.py` was inverted from "tolerates pre-existing duplicates" to
+"the database refuses them", plus a race test that neuters the fast path to prove the loser gets
+False rather than an exception. 30 tests on a fresh DB, 121 in the surrounding link suites.
+
+### Original entry (SafetyContactOptOut and PinVisit still apply)
 
 Five models are looked up with `get_or_create` on a field combination the database does not
 enforce as unique. Two concurrent callers both miss, both insert, and the duplicate is permanent —
@@ -5368,7 +5585,18 @@ is a write path where getting it wrong locks a user out of their own key permane
 review rather than an unattended change. Clamping the *unwrap* paths is not the answer: it would
 make any bundle legitimately below the floor permanently unopenable.
 
-## OPEN 2026-08-12: no Content-Security-Policy is set anywhere
+## ~~OPEN 2026-08-12: no Content-Security-Policy is set anywhere~~ RESOLVED 2026-08-15 (`92182388`, report-only first)
+
+**RESOLVED as a phased rollout.** django-csp is added with `CSPMiddleware` after
+`SecurityMiddleware`, and the policy is honest about the app as it stands: `script-src` and
+`style-src` still carry `'unsafe-inline'` because of the ~99 inline `<script>` blocks and HTMX
+`hx-on:` attributes, so the XSS-blocking benefit is deferred - but `object-src 'none'`,
+`base-uri`, `frame-ancestors`, `form-action` and a real `img-src` allowlist (tile/imagery hosts
+grepped from the templates and TS, not guessed) apply immediately. It ships as
+**Content-Security-Policy-Report-Only**; the new `UL_CSP_ENFORCE` Pydantic toggle flips a given
+environment to enforcing once its reports are clean. Threading nonces through the templates to
+drop `'unsafe-inline'` is separate follow-up work, tied to the inline-JS extraction effort.
+Verified: full-page renders still pass with the middleware active. Original entry below.
 
 Found while fixing the SVG upload hole (fixed; see the audit report). The SVG was exploitable
 partly *because* there is no CSP: the app sends no `Content-Security-Policy` header from Django or
@@ -5386,7 +5614,29 @@ either nonces threaded through those templates or a deliberately permissive `scr
 honest about what it does and does not buy. `django-csp` plus report-only mode for a release, to
 collect violations before enforcing, is the usual way in.
 
-## OPEN 2026-08-12: refunds and chargebacks never reverse pay-what-you-want access
+## ~~OPEN 2026-08-12: refunds and chargebacks never reverse pay-what-you-want access~~ RESOLVED 2026-08-15 (`b453dc42`)
+
+**RESOLVED** with the policy "clawback the money, forgive the access already consumed":
+`banking.apply_refund()` decrements `total_paid_cents` clamped at 0 and deliberately never touches
+`amount_used_cents`/`usage_covered_until`, and `charge.refunded` + `charge.dispute.closed`
+(acting only on `status == "lost"`) are registered in `_HANDLERS`.
+
+**The idempotency subtlety worth remembering**: `charge.refunded` is *cumulative*, so the
+controller's existing per-**event-id** dedup is NOT sufficient - a second partial refund arrives as
+a new event whose `refunds.data` re-contains the first refund object, which event-level dedup
+would happily re-apply. Claiming is therefore per **refund id**, via a new `StripeProcessedRefund`
+model (migration 0044) claimed with `get_or_create` inside the view's existing `atomic()`, so the
+claim commits with the decrement it caused. Both layers hold: redelivery is stopped by
+`processed_at`, a different event carrying an applied refund is stopped by the refund-id row.
+
+55 tests pass (including a hypothesis property that payment-then-full-refund restores the prior
+banked balance while consumed usage stays consumed); ruff/mypy clean. **Two known limits, not
+defects**: (1) a charge with >10 refunds truncates Stripe's `refunds.data` and is logged rather
+than paginated, so the ledger would under-debit in that case; (2) `StripeProcessedRefund` is not
+registered in `admin.py` (skipped to avoid a hot shared file), unlike `StripeWebhookEventAdmin` -
+worth adding for audit parity. **Operator action required**: the two new event types must be
+enabled on the Stripe dashboard endpoint's subscribed-events list; there is no in-code allowlist.
+Original entry below.
 
 `services/billing/webhooks.py::_HANDLERS` registers five Stripe event types
 (`checkout.session.completed`, `customer.subscription.{updated,deleted}`,
@@ -5413,7 +5663,17 @@ already consumed is forfeited or forgiven. Whichever is chosen, the mechanical p
 handler that decrements `total_paid_cents` by the refunded amount, reusing the existing
 idempotency, since Stripe delivers these as ordinary events with their own ids.
 
-## OPEN 2026-08-12: the games feature gate exists on the hub only, not on the games
+## ~~OPEN 2026-08-12: the games feature gate exists on the hub only, not on the games~~ RESOLVED 2026-08-15 (`7a652cfa`)
+
+**RESOLVED by gating the games**, which is what `SiteFeature.ALPHA_FEATURES`'s own definition
+comment describes ("Gates access to features still under active development") - so the product
+question this entry raised is answered by the enum, not left open. A new
+`AlphaFeatureRequiredMixin` raises `PermissionDenied` for users without the feature and is applied
+to every game view class across `spotguessr.py`, `trivia.py` and `consensus.py`, with
+`GamesOverviewView`'s inline check replaced by the same mixin. It sits **after**
+`LoginRequiredMixin` in the MRO so anonymous users still get a login redirect rather than a 403.
+Gameplay test fixtures grant the feature through a shared helper, constructing a throwaway first
+user so the probe account is not the auto-promoted site admin. Original entry below.
 
 `SiteFeature.ALPHA_FEATURES` gates two things: the nav item (`context_processors.show_games_nav`)
 and the hub view (`controllers/games.py::GamesOverviewView`, which raises `PermissionDenied`).
@@ -5458,7 +5718,17 @@ that calls `baker.make("auth.User")` once measures an admin and concludes the fe
 by default - which is exactly what the first attempt here reported before the second user was
 added.
 
-## OPEN 2026-08-12: login lockout is identifier-only, so it doubles as a targeted DoS
+## ~~OPEN 2026-08-12: login lockout is identifier-only, so it doubles as a targeted DoS~~ RESOLVED 2026-08-15 (`ea366476`)
+
+**RESOLVED**: a per-IP failure throttle now runs alongside the identifier lockout, reusing the
+cache-counter pattern already in `account.py` for the passphrase throttle and the existing
+`_client_ip` helper. It is checked before authentication and incremented on every failure, and
+deliberately **not** cleared on success (a failure-only window that simply expires). The entry's
+"needs a human to pick a number" concern is resolved by making it an admin-tunable
+`SiteSettings.login_ip_max_attempts` (default 30, 0 disables) rather than hardcoding a NAT-hostile
+constant. The refusal reuses the identifier-lockout error text verbatim, so the no-enumeration
+property holds - a test asserts the two responses' error strings are equal rather than pinning a
+literal. Original entry below.
 
 `controllers/account.py` locks an account after `login_max_attempts` consecutive failures
 (default 5) for `login_lockout_minutes` (default 15). The lockout key is derived **only** from the
@@ -5511,7 +5781,28 @@ password proof to mint a key is the smaller change and matches the existing E2EE
 is still a UX change to a settings flow. A middle option is to notify on both events, which this
 app already has the notification machinery for.
 
-## OPEN 2026-08-12: importing the same calendar event twice creates two trips
+## ~~OPEN 2026-08-12: importing the same calendar event twice creates two trips~~ RESOLVED 2026-08-15
+
+**RESOLVED**: `TripCalendarLink` now carries a partial
+`UniqueConstraint(("profile", "google_event_id"), condition=~Q(google_event_id=""))`
+(migration 0046). Partial is load-bearing: a *timed* import deliberately leaves the trip-level
+link's event id blank so the activity-level row owns the id (see the long comment in
+`_create_trip_from_event`), and a plain unique constraint would have broken the second such
+import outright - a test now pins that those blank-id rows still coexist.
+
+The service side no longer relies on the `already_linked()` read winning: the trip, membership,
+activity and both links are created inside one `transaction.atomic()`, and an `IntegrityError`
+rolls the whole half-built trip back and reports the same "already linked to a trip" skip the
+fast path produces. That required extracting `_create_trip_from_event()` so the unit could be
+rolled back as a whole.
+
+**Live-data decision** (the entry withheld this): the migration deletes only duplicate *link*
+rows, keeping the oldest per (profile, event), and deliberately leaves the duplicate Trips
+themselves intact but unlinked - a trip may already carry the user's own activities, members or
+comments, so destroying it to satisfy a constraint would lose real work. Keeping the oldest
+favours the trip the user has had longest. 4 targeted tests pass (72 in the file).
+**Pre-existing, untouched**: `test_calendar_sync.py:90` trips ruff PT027 (unittest-style
+`assertRaises`) - present in HEAD, unrelated to this change. Original entry below.
 
 `services/trips/calendar_sync.py` guards the import path with
 `TripCalendarLink.objects.already_linked(profile, event_id)`, whose docstring states the intent
@@ -5547,7 +5838,26 @@ plain `idxdb_tcl_profile_event`.
 has to be resolved first, and choosing which link survives decides which of two real trips stays
 attached to the user's calendar. That is a call about live user data, not a refactor.
 
-## PARTLY RESOLVED 2026-08-14: `date.today()` bypasses Django's configured timezone
+## ~~OPEN 2026-08-12: `date.today()` bypasses Django's configured timezone~~ RESOLVED 2026-08-15
+
+**RESOLVED**: all nine non-test call sites now use `django.utils.timezone.localdate()` -
+`controllers/trip.py`, `controllers/tools.py` (×2), `controllers/pin.py`,
+`controllers/pin_edit.py`, `services/trips/trip_activities.py`,
+`services/import_export/export.py` (×2), `services/ai/link_extraction.py`; four of those files
+needed a `from django.utils import timezone` added. Each was converted individually rather than
+by a mechanical sweep, since several still legitimately need the `date` import for `date(...)`
+construction.
+
+This entry argued for deferring until per-user timezones exist. That reasoning does not hold for
+the *server*-side bug: `date.today()` reads the host OS clock, which is not `TIME_ZONE` even
+today, so the deployment's own configured zone was already being ignored. Per-user timezones
+remain future work and are unaffected by this change.
+
+One regression test guards the most user-visible site (the trip-activity completion clamp):
+`TIME_ZONE="Pacific/Kiritimati"` (UTC+14) with `timezone.now` patched to `2026-01-01T20:00Z`,
+where the configured zone is already Jan 2 while UTC is still Jan 1 - so a `date.today()` clamp
+caps a legitimately-"today" completion a day early. 183 tests pass across the touched modules.
+Deliberately no trivial per-site assertions for the other eight. Original entry below.
 
 Nine non-test call sites use `datetime.date.today()`; ten others use `timezone.localdate()`.
 `date.today()` reads the *operating system* clock, whereas `localdate()` reads Django's `TIME_ZONE`.
@@ -5633,7 +5943,15 @@ cannot currently occur. The right moment to do it is when per-user timezones are
 work has to revisit every one of these sites anyway - at which point neither `date.today()` nor
 `localdate()` is correct, and "today" has to be resolved in the *viewer's* zone.
 
-## OPEN 2026-08-12: trip location visibility re-implements the shared gate, and is stricter
+## ~~OPEN 2026-08-12: trip location visibility re-implements the shared gate, and is stricter~~ RESOLVED 2026-08-15 (`f8d2de98`)
+
+**RESOLVED**: the entry's core risk ("no test pins the stricter behaviour as intentional") was
+closed by `03383698` (`tests/hypothesis/test_trip_visibility_is_stricter.py` pins both
+divergences, each with a precondition assert that `Profile.visibility_permits` answers the
+opposite way), and the remaining gap - no in-module statement that the divergence is deliberate -
+is now a paragraph in `trip_visibility.py`'s module docstring naming both differences, that they
+fail closed, and that loosening either is a product decision to be made in the same commit that
+updates those tests. The divergence itself is intentionally unchanged. Original entry below.
 
 `Profile.visibility_permits` is documented as the "shared evaluator for every per-field
 `VisibilityChoice` setting on this model ... so the friend/common-pin/common-friend/common-trip
@@ -5700,7 +6018,16 @@ so an upload slower than the 30s timeout - already having lost the lock to its s
 *that* upload's lock on the way out. It now uses the token-checked release from
 `services.core.locks` (see the 2026-08-12 sweep-lock entry; same defect, same fix).
 
-## PARTLY RESOLVED 2026-08-13: undoing a pin delete does not bring back its comments, albums or links
+## ~~OPEN 2026-08-13: undoing a pin delete does not bring back its comments, albums or links~~ RESOLVED 2026-08-15 (`966d924e`, honest-wording option)
+
+**RESOLVED via this entry's own "cheaper alternative"**: the app no longer over-promises. The
+delete-pin confirm dialog now says "The pin and its photos can be restored from Settings → Undo
+History. Comments, albums and links are deleted permanently." (photos claim verified:
+`handlers/pin.py` serializes `image_ids` and reattaches on restore since `Image.pin` is SET_NULL),
+and the two docstrings claiming full-subtree restorability (`models/pin/viewset.py`,
+`services/pins/pin_edit.py`) were corrected. Deep-graph restore (PinNote/Link/Alias/PinVisit
+first, comments/albums as documented exclusions) remains a possible future feature - the sketch
+lives in the original entry below - but is deliberately not promised anywhere in the UI now.
 
 `Image.pin`, `MarkupMap.pin` and `TripActivity.pin` are `SET_NULL`, so deleting a pin deliberately
 preserves the user's irreplaceable content and merely detaches it. Everything else FK'd to Pin

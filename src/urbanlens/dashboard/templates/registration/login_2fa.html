@@ -53,12 +53,34 @@
 {% block auth_scripts %}
 {% if has_passkey %}
 <script src="{% static 'dashboard/js/webauthn.js' %}"></script>
+<script src="{% static 'dashboard/js/e2ee.js' %}"></script>
 <script>
+    // The assertion options may carry PRF inputs for passkeys that hold an
+    // E2EE wrap (services/auth/webauthn.py) - beforeRedirect runs once the
+    // session exists, so the same tap that completed 2FA also unlocks the
+    // user's encrypted messages on a cold device. Best-effort by design:
+    // any failure here must never block the login redirect.
+    UrbanLensE2EE.init({
+        selfSlug: null,
+        urls: {
+            loginParams: "{% url 'e2ee.login_params' %}",
+            enroll: "{% url 'e2ee.enroll' %}",
+            keys: "{% url 'e2ee.keys' %}",
+            rewrap: "{% url 'e2ee.rewrap' %}",
+            reset: "{% url 'e2ee.reset' %}",
+            partnerKeyBase: "{% url 'e2ee.keys' %}",
+            conversationKeyBase: "{% url 'e2ee.conversation_key' 'e2ee-slug-token' %}".replace("e2ee-slug-token/", ""),
+            login: "{% url 'login' %}",
+        },
+    });
     UrbanLensWebAuthn.runLogin({
         optionsUrl: "{% url 'login.2fa.options' %}",
         verifyUrl: "{% url 'login.2fa.verify' %}",
         retryButtonId: "webauthn-2fa-retry",
         statusElId: "webauthn-2fa-status",
+        beforeRedirect: function (credential) {
+            return UrbanLensE2EE.unlockFromLoginAssertion(credential).then(function () {});
+        },
     });
 </script>
 {% endif %}

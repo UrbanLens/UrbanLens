@@ -1117,7 +1117,7 @@ def _parse_bbox(bbox_str: str) -> tuple[float, float, float, float] | None:
     return south, west, north, east
 
 
-def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: str | None = None) -> Location:
+def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: str | None = None, fetch_if_missing: bool = True) -> Location:
     """Create a new Location using its canonical Google place name.
 
     The user's custom pin name must never be used as a Location's official_name
@@ -1131,6 +1131,11 @@ def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: 
         place_name: Optional canonical name already known by the caller (e.g. from
             a Google Places marker).  When provided and meaningful, this skips an
             outbound geocoding API call.
+        fetch_if_missing: When False, never make a live geocoding call for the
+            name - the Location is created with ``official_name=None`` and the
+            caller is responsible for backfilling it via
+            ``tasks.resolve_location_place_name``. Pass False from bulk paths
+            that would otherwise issue one outbound call per row.
 
     Returns:
         The newly created Location instance.
@@ -1142,12 +1147,11 @@ def _create_location_with_canonical_name(lat: float, lon: float, *, place_name: 
 
     # When the caller already knows the canonical name we skip the geocoding
     # round-trip by passing fetch_if_missing=False.
-    fetch_if_missing = not is_meaningful_name(place_name)
     google_place = GooglePlaceService().get_or_create_for_coordinates(
         lat,
         lon,
         place_name=place_name if is_meaningful_name(place_name) else None,
-        fetch_if_missing=fetch_if_missing,
+        fetch_if_missing=fetch_if_missing and not is_meaningful_name(place_name),
     )
     canonical_name = "Unnamed Location"
     if is_meaningful_name(place_name):

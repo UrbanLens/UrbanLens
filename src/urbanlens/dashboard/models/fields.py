@@ -6,7 +6,7 @@ import base64
 from functools import lru_cache
 import hashlib
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Self
 
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from django.conf import settings as django_settings
@@ -94,6 +94,66 @@ def reset_encryption_keys() -> None:
     _fernet.cache_clear()
 
 
+class UndecryptableValue(str):
+    """A ``fail_soft`` read that could not be decrypted, carrying its ciphertext.
+
+    Subclasses ``str`` so every consumer - templates, serializers, ``len()``,
+    comparisons - sees exactly the field default it would have seen anyway
+    (usually ``""``). The original ciphertext rides along in
+    :attr:`ciphertext` purely so :meth:`EncryptedTextField.get_prep_value` can
+    put it back unchanged if the instance is saved before the key is fixed.
+
+    Without this, ``fail_soft``'s promise that the row is "left intact so a
+    recovered key can still restore it" held only until something saved the
+    model for an unrelated reason: Django writes every column on a default
+    ``save()``, so the degraded default would replace the still-recoverable
+    ciphertext. ``Profile`` is saved on many ordinary paths, so during a
+    key-mismatch window that window closed row by row under normal traffic -
+    exactly the incident ``fail_soft`` exists to survive.
+
+    Only applies to fields whose default is a string. A ``null=True`` field
+    degrades to ``None``, which cannot carry an attribute and cannot be faked
+    (``x is None`` is not overridable), so those fields keep the old
+    save-destroys-ciphertext behaviour - prefer ``blank=True, default=""`` over
+    ``null=True`` when adding a ``fail_soft`` content field.
+    """
+
+    __slots__ = ("ciphertext",)
+
+    #: The undecryptable ciphertext exactly as read from the database.
+    ciphertext: str
+
+    def __new__(cls, default: str, ciphertext: str) -> Self:
+        """Build a default-valued string that remembers its ciphertext.
+
+        Args:
+            default: The field default to present to callers.
+            ciphertext: The raw stored value that could not be decrypted.
+
+        Returns:
+            A ``str`` equal to the field default, tagged with the ciphertext.
+        """
+        instance = super().__new__(cls, default)
+        instance.ciphertext = ciphertext
+        return instance
+
+    def __reduce__(self) -> tuple[type[Self], tuple[str, str]]:
+        """Support pickling and copying, which a degraded model instance will hit.
+
+        Required, not incidental: ``str``'s default reduction rebuilds the value
+        by calling ``cls(one_argument)``, which raises ``TypeError`` against this
+        two-argument ``__new__``. Anything that pickles or copies a model holding
+        a degraded field would then crash - and ``SiteSettings``, whose
+        ``notify_gotify_token`` is exactly such a field, is cached. That would
+        convert ``fail_soft``'s graceful degradation into the site-wide outage it
+        exists to prevent.
+
+        Returns:
+            The callable and arguments needed to rebuild an equivalent value.
+        """
+        return (type(self), (str(self), self.ciphertext))
+
+
 class EncryptedTextField(TextField):
     """A ``TextField`` whose value is encrypted at rest with Fernet.
 
@@ -118,6 +178,12 @@ class EncryptedTextField(TextField):
       loads on nearly every authenticated request, so one bad row would take the
       whole site down for that user rather than degrading one field. The row is
       left intact so a recovered key can still restore it.
+
+    "Left intact" survives an ordinary ``save()`` only for fields with a string
+    default, via :class:`UndecryptableValue`: Django writes every column on a
+    default save, so without that the degraded value would overwrite the
+    recoverable ciphertext. Declare new ``fail_soft`` content fields as
+    ``blank=True, default=""`` rather than ``null=True`` to get that protection.
     """
 
     def __init__(self, *args: Any, fail_soft: bool = False, **kwargs: Any) -> None:
@@ -152,6 +218,13 @@ class EncryptedTextField(TextField):
         Returns:
             The ciphertext to store, or the original falsy value unchanged.
         """
+        # A value that failed to decrypt on read goes back exactly as it came,
+        # never re-encrypted and never replaced by the degraded default it was
+        # standing in for. Checked before the falsy guard below because the
+        # default it carries is usually "" - which would otherwise fall
+        # straight through and overwrite the ciphertext with an empty string.
+        if isinstance(value, UndecryptableValue):
+            return value.ciphertext
         prepped = super().get_prep_value(value)
         if not prepped:
             return prepped
@@ -191,5 +264,12 @@ class EncryptedTextField(TextField):
                     model_name,
                     self.name,
                 )
-                return self.get_default()
+                # Not a bare default: the ciphertext travels with it so a later
+                # save writes the original bytes back instead of destroying
+                # them. See UndecryptableValue - which only covers string
+                # defaults, so a nullable field still degrades to plain None.
+                default = self.get_default()
+                if isinstance(default, str):
+                    return UndecryptableValue(default, value)
+                return default
             raise InvalidToken(f"Could not decrypt {model_name}.{self.name} - field_encryption_key may have changed.") from None

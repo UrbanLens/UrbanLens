@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
     from django.contrib.auth.models import User
 
-    from urbanlens.dashboard.models.billing.model import BillingCustomer, RoleSubscription, StripeWebhookEvent
+    from urbanlens.dashboard.models.billing.model import BillingCustomer, RoleSubscription, StripeProcessedRefund, StripeWebhookEvent
 
 
 class BillingCustomerQuerySet(abstract.DashboardQuerySet["BillingCustomer"]):
@@ -111,4 +111,12 @@ class StripeWebhookEventQuerySet(abstract.DashboardQuerySet["StripeWebhookEvent"
 
 
 class StripeWebhookEventManager(abstract.DashboardManager.from_queryset(StripeWebhookEventQuerySet)):
+    pass
+
+
+class StripeProcessedRefundQuerySet(abstract.DashboardQuerySet["StripeProcessedRefund"]):
+    """Filters for the per-refund-object idempotency ledger."""
+
+
+class StripeProcessedRefundManager(abstract.DashboardManager.from_queryset(StripeProcessedRefundQuerySet)):
     pass

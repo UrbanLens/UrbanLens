@@ -10,6 +10,7 @@ from __future__ import annotations
 import time
 
 from django.contrib.auth.models import User
+from django.test import override_settings
 from django.urls import reverse
 from model_bakery import baker
 import pyotp
@@ -400,3 +401,220 @@ class LoginTwoFactorCodeViewTests(TestCase):
         response = self.client.post(reverse("login"), {"username": "totp_only", "password": "correct horse battery staple"})
         self.assertRedirects(response, reverse("login.2fa"))
         self.assertNotIn("_auth_user_id", self.client.session)
+
+
+class LoginIpThrottleTests(TestCase):
+    """The per-IP failed-login throttle that backs the per-identifier lockout.
+
+    The identifier lockout alone lets a single address spray attempts across
+    many identifiers (and doubles as a targeted DoS on any one of them), so
+    ``CustomLoginView`` also counts failures per client IP. Each test uses
+    distinct TEST-NET addresses so counters cannot cross-talk with other
+    tests' requests (the test client defaults to 127.0.0.1).
+    """
+
+    PASSWORD = "correct horse battery staple"  # noqa: S105  # nosec B105 - test credential, not a real secret
+    ATTACKER_IP = "203.0.113.7"
+    OTHER_IP = "198.51.100.9"
+
+    def setUp(self) -> None:
+        super().setUp()  # clears the cache (lockout counters live there)
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        self.user: User = baker.make(User, username="ip_throttle_victim", is_active=True)
+        self.user.set_password(self.PASSWORD)
+        self.user.save()
+        settings = SiteSettings.get_current()
+        settings.login_ip_max_attempts = 3
+        settings.save()
+
+    def tearDown(self) -> None:
+        # IP-keyed counters are not rolled back with the transaction; don't
+        # leak them into test classes that skip the cache-clearing setUp.
+        from django.core.cache import cache
+
+        cache.clear()
+        super().tearDown()
+
+    def _fail(self, ip: str, username: str):
+        """One failed login attempt for ``username`` from ``ip``."""
+        return self.client.post(reverse("login"), {"username": username, "password": "wrong-password"}, REMOTE_ADDR=ip)
+
+    def _login(self, ip: str):
+        """A correct-credential login attempt for the real account from ``ip``."""
+        return self.client.post(reverse("login"), {"username": self.user.username, "password": self.PASSWORD}, REMOTE_ADDR=ip)
+
+    def test_spraying_different_usernames_blocks_the_ip(self) -> None:
+        for i in range(3):
+            self._fail(self.ATTACKER_IP, f"sprayed_{i}")
+
+        response = self._login(self.ATTACKER_IP)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+        self.assertTrue(response.context["form"].errors.get("__all__"))
+
+    def test_other_ip_is_unaffected(self) -> None:
+        for i in range(3):
+            self._fail(self.ATTACKER_IP, f"sprayed_{i}")
+
+        response = self._login(self.OTHER_IP)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    def test_zero_disables_the_ip_throttle(self) -> None:
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        settings = SiteSettings.get_current()
+        settings.login_ip_max_attempts = 0
+        settings.save()
+        for i in range(6):
+            self._fail(self.ATTACKER_IP, f"sprayed_{i}")
+
+        response = self._login(self.ATTACKER_IP)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    def test_a_forged_forwarded_for_prefix_cannot_mint_fresh_counters(self) -> None:
+        """The throttle must key on what our proxy appended, not what the client sent.
+
+        config/nginx appends its real_ip-resolved client address to whatever
+        X-Forwarded-For arrived, so a client that sends its own header ends up
+        leftmost in the chain. Reading from that end gave an attacker a new
+        cache key per request - unlimited spraying through a throttle that
+        looked like it was working.
+        """
+        for i in range(3):
+            self.client.post(
+                reverse("login"),
+                {"username": f"sprayed_{i}", "password": "wrong-password"},
+                REMOTE_ADDR="172.18.0.5",
+                HTTP_X_FORWARDED_FOR=f"10.0.0.{i}, {self.ATTACKER_IP}",
+            )
+
+        response = self.client.post(
+            reverse("login"),
+            {"username": self.user.username, "password": self.PASSWORD},
+            REMOTE_ADDR="172.18.0.5",
+            HTTP_X_FORWARDED_FOR=f"10.0.0.99, {self.ATTACKER_IP}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_a_different_real_client_behind_the_same_proxy_is_unaffected(self) -> None:
+        """The counter still has to distinguish visitors, not lump the proxy together."""
+        for i in range(3):
+            self.client.post(
+                reverse("login"),
+                {"username": f"sprayed_{i}", "password": "wrong-password"},
+                REMOTE_ADDR="172.18.0.5",
+                HTTP_X_FORWARDED_FOR=f"10.0.0.{i}, {self.ATTACKER_IP}",
+            )
+
+        response = self.client.post(
+            reverse("login"),
+            {"username": self.user.username, "password": self.PASSWORD},
+            REMOTE_ADDR="172.18.0.5",
+            HTTP_X_FORWARDED_FOR=self.OTHER_IP,
+        )
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    @override_settings(TRUSTED_PROXY_COUNT=0)
+    def test_with_no_proxy_configured_the_header_is_ignored_entirely(self) -> None:
+        """Nothing in front of the app means X-Forwarded-For is purely client input."""
+        for i in range(3):
+            self.client.post(
+                reverse("login"),
+                {"username": f"sprayed_{i}", "password": "wrong-password"},
+                REMOTE_ADDR=self.ATTACKER_IP,
+                HTTP_X_FORWARDED_FOR=f"10.0.0.{i}",
+            )
+
+        response = self.client.post(
+            reverse("login"),
+            {"username": self.user.username, "password": self.PASSWORD},
+            REMOTE_ADDR=self.ATTACKER_IP,
+            HTTP_X_FORWARDED_FOR="10.0.0.99",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("_auth_user_id", self.client.session)
+
+    def test_hitting_a_locked_identifier_does_not_drain_the_ip_budget(self) -> None:
+        """A gate response is not a failed credential check, and must not count as one.
+
+        Retries against an already-locked identifier used to feed the IP
+        counter, so an attacker could lock one account and then burn any
+        address's budget on it.
+        """
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        site_settings = SiteSettings.get_current()
+        site_settings.login_max_attempts = 2
+        site_settings.save()
+
+        # Lock one identifier from an address that stays under its own limit.
+        self._fail("192.0.2.20", "locked_identifier")
+        self._fail("192.0.2.20", "locked_identifier")
+        for _ in range(5):
+            self._fail(self.ATTACKER_IP, "locked_identifier")
+
+        response = self._login(self.ATTACKER_IP)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    def test_a_throttled_ip_cannot_lock_someone_elses_account(self) -> None:
+        """The reverse direction, which is the targeted half.
+
+        Once an address is throttled, every further attempt short-circuits at
+        the gate - before any credential is checked. Counting those as the
+        submitted account's failures let an attacker trip their own IP limit
+        and then lock any account they could name, with no password at all.
+        """
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        site_settings = SiteSettings.get_current()
+        site_settings.login_max_attempts = 2
+        site_settings.save()
+
+        for i in range(3):
+            self._fail(self.ATTACKER_IP, f"sprayed_{i}")
+        for _ in range(4):
+            self._fail(self.ATTACKER_IP, self.user.username)
+
+        # A clean address, the victim's own correct password.
+        response = self._login(self.OTHER_IP)
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("_auth_user_id", self.client.session)
+
+    def test_ip_gate_error_text_is_identical_to_identifier_lockout(self) -> None:
+        """The two gates must be indistinguishable - compares live responses, not literals."""
+        from urbanlens.dashboard.models.site_settings import SiteSettings
+
+        settings = SiteSettings.get_current()
+        settings.login_max_attempts = 2
+        settings.save()
+
+        # Identifier lockout: two failures on one identifier (from an IP that
+        # stays under its own limit), then a rejected attempt from a clean IP.
+        self._fail("192.0.2.10", "locked_identifier")
+        self._fail("192.0.2.10", "locked_identifier")
+        identifier_response = self._fail("192.0.2.99", "locked_identifier")
+        identifier_errors = identifier_response.context["form"].errors["__all__"]
+
+        # IP throttle: three failures across different identifiers, then a
+        # rejected attempt with a fresh identifier from the same IP.
+        for i in range(3):
+            self._fail(self.ATTACKER_IP, f"sprayed_{i}")
+        ip_response = self._fail(self.ATTACKER_IP, "fresh_username")
+        ip_errors = ip_response.context["form"].errors["__all__"]
+
+        self.assertTrue(list(identifier_errors))
+        self.assertEqual(list(identifier_errors), list(ip_errors))

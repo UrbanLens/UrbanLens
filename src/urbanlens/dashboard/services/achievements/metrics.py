@@ -23,15 +23,17 @@ import logging
 from typing import TYPE_CHECKING, TypedDict
 
 # Django Imports
-from django.db.models import Q
+from django.db.models import Count, F, Q
 from django.utils import timezone
 
 # App Imports
 from urbanlens.dashboard.models.achievements.meta import ActivityKind, streak_metric_key
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Iterable
+    from collections.abc import Callable, Iterable, Sequence
     import datetime
+
+    from django.db.models import QuerySet
 
     from urbanlens.dashboard.models.profile import Profile
 
@@ -65,6 +67,12 @@ class Metric:
             progress ("42 / 100 pins").
         description: What the metric counts, including anything it excludes.
         compute: Returns the metric's current value for a profile.
+        compute_bulk: Returns the metric's value for many profiles at once,
+            keyed by profile pk, in a constant number of grouped queries.
+            Optional; a metric without one is computed per profile via
+            ``compute``. Profile pks the mapping omits read as 0, so an
+            implementation only needs to report profiles with a non-zero
+            value. Must agree with ``compute`` for every profile.
         group: Which section of the admin dropdown this belongs to.
         triggers: Activity events that can change this metric. Signals pass an
             event name and only the metrics listing it are recomputed, so a new
@@ -78,12 +86,7 @@ class Metric:
     unit: str
     description: str
     compute: Callable[[Profile], int]
-    #: Optional bulk variant: one grouped query returning ``{profile_id: value}``
-    #: for every profile with a nonzero value (absent means 0). The nightly
-    #: sweep uses it to replace a query per profile with ~one per metric; the
-    #: per-write signal path never calls it. A metric without one simply falls
-    #: back to ``compute`` per profile.
-    compute_bulk: Callable[[], dict[int, int]] | None = None
+    compute_bulk: Callable[[Sequence[int]], dict[int, int]] | None = None
     group: str = GROUP_CONTENT
     triggers: frozenset[str] = field(default_factory=frozenset)
     requirement_template: str = "Reach {threshold}"
@@ -104,20 +107,31 @@ class Metric:
             logger.exception("Achievement metric %s failed for profile %s", self.key, getattr(profile, "pk", None))
             return 0
 
-    def bulk_values(self) -> dict[int, int] | None:
-        """Return ``{profile_id: value}`` across all profiles, or None.
+    def values_for_many(self, profiles: Sequence[Profile]) -> dict[int, int]:
+        """Return this metric's current value for every profile, never raising.
 
-        None when this metric has no bulk implementation, or when the bulk
-        query blew up - the caller then falls back to per-profile
-        ``value_for``, matching its never-raising contract.
+        Uses :attr:`compute_bulk` when the metric provides one, so a chunk of
+        profiles costs a constant number of queries instead of one per
+        profile. A metric without a bulk form - or whose bulk form raises -
+        falls back to :meth:`value_for` per profile, which keeps the failure
+        surface identical to per-profile evaluation rather than zeroing a
+        whole chunk at once.
+
+        Args:
+            profiles: The profiles to measure.
+
+        Returns:
+            Mapping of profile pk to current value. Every pk in *profiles* is
+            present; ones the bulk query did not mention read as 0.
         """
-        if self.compute_bulk is None:
-            return None
-        try:
-            return {int(pk): int(v) for pk, v in self.compute_bulk().items()}
-        except Exception:
-            logger.exception("Achievement metric %s bulk computation failed; falling back to per-profile", self.key)
-            return None
+        if self.compute_bulk is not None:
+            profile_ids = [profile.pk for profile in profiles]
+            try:
+                computed = self.compute_bulk(profile_ids)
+                return {pk: int(computed.get(pk, 0)) for pk in profile_ids}
+            except Exception:
+                logger.exception("Achievement metric %s failed in bulk; falling back to per-profile", self.key)
+        return {profile.pk: self.value_for(profile) for profile in profiles}
 
 
 _METRICS: dict[str, Metric] = {}
@@ -199,14 +213,39 @@ TRIGGER_STREAK = "streak"
 
 
 # ---------------------------------------------------------------------------
-# Metric implementations
+# Metric implementations. Each countable metric has two forms that must agree:
+# ``_x(profile)`` for signal-driven single-profile checks, and ``_x_bulk(ids)``
+# for the nightly sweep, which prices a whole chunk of profiles at a constant
+# number of grouped queries instead of one query per profile.
 # ---------------------------------------------------------------------------
+
+
+def _grouped_count(queryset: QuerySet, group_field: str, count_field: str = "id", *, distinct: bool = False) -> dict[int, int]:
+    """Collapse *queryset* to a ``{group_field value: row count}`` mapping.
+
+    Args:
+        queryset: Rows to count, already filtered to the profiles of interest.
+        group_field: Field (or related lookup) holding the profile pk.
+        count_field: Field counted within each group.
+        distinct: Whether to count distinct ``count_field`` values only.
+
+    Returns:
+        Mapping of profile pk to count. Groups with no rows are absent.
+    """
+    rows = queryset.values(group_field).annotate(_bulk_count=Count(count_field, distinct=distinct))
+    return {row[group_field]: row["_bulk_count"] for row in rows}
 
 
 def _pins_created(profile: Profile) -> int:
     from urbanlens.dashboard.models.pin.model import Pin
 
     return Pin.objects.filter(profile=profile).count()
+
+
+def _pins_created_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    return _grouped_count(Pin.objects.filter(profile_id__in=profile_ids), "profile_id")
 
 
 def _wikis_created(profile: Profile) -> int:
@@ -217,12 +256,24 @@ def _wikis_created(profile: Profile) -> int:
     return Wiki.objects.filter(created_by=profile, officially_created=True).count()
 
 
+def _wikis_created_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+    from urbanlens.dashboard.models.wiki.model import Wiki
+
+    return _grouped_count(Wiki.objects.filter(created_by_id__in=profile_ids, officially_created=True), "created_by_id")
+
+
 def _photos_uploaded(profile: Profile) -> int:
     from urbanlens.dashboard.models.images.model import Image, ImageSource
 
     # Only genuine uploads: rows materialised from Yelp/Wikimedia/etc. are
     # someone else's photo that this profile merely attached.
     return Image.objects.filter(profile=profile, source=ImageSource.UPLOAD).count()
+
+
+def _photos_uploaded_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+    from urbanlens.dashboard.models.images.model import Image, ImageSource
+
+    return _grouped_count(Image.objects.filter(profile_id__in=profile_ids, source=ImageSource.UPLOAD), "profile_id")
 
 
 def _places_visited(profile: Profile) -> int:
@@ -233,10 +284,27 @@ def _places_visited(profile: Profile) -> int:
     return PinVisit.objects.filter(pin__profile=profile, tentative=False).values("pin_id").distinct().count()
 
 
+def _places_visited_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+    from urbanlens.dashboard.models.visits.model import PinVisit
+
+    return _grouped_count(
+        PinVisit.objects.filter(pin__profile_id__in=profile_ids, tentative=False),
+        "pin__profile_id",
+        count_field="pin_id",
+        distinct=True,
+    )
+
+
 def _places_rated(profile: Profile) -> int:
     from urbanlens.dashboard.models.reviews.model import Review
 
     return Review.objects.filter(profile=profile).count()
+
+
+def _places_rated_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+    from urbanlens.dashboard.models.reviews.model import Review
+
+    return _grouped_count(Review.objects.filter(profile_id__in=profile_ids), "profile_id")
 
 
 def _places_vulnerability_rated(profile: Profile) -> int:
@@ -247,10 +315,22 @@ def _places_vulnerability_rated(profile: Profile) -> int:
     return Pin.objects.filter(profile=profile, vulnerability__gt=0).count()
 
 
+def _places_vulnerability_rated_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    return _grouped_count(Pin.objects.filter(profile_id__in=profile_ids, vulnerability__gt=0), "profile_id")
+
+
 def _places_danger_rated(profile: Profile) -> int:
     from urbanlens.dashboard.models.pin.model import Pin
 
     return Pin.objects.filter(profile=profile, danger__gt=0).count()
+
+
+def _places_danger_rated_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+    from urbanlens.dashboard.models.pin.model import Pin
+
+    return _grouped_count(Pin.objects.filter(profile_id__in=profile_ids, danger__gt=0), "profile_id")
 
 
 def _friends(profile: Profile) -> int:
@@ -260,26 +340,71 @@ def _friends(profile: Profile) -> int:
     return Friendship.objects.profile(profile).is_friend().count()
 
 
+def _friends_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+    from urbanlens.dashboard.models.friendship.model import Friendship
+
+    # A profile can sit on either end of the pair's single shared row, so this
+    # groups each side separately and sums. A row joining two profiles in the
+    # same chunk credits both, exactly as the per-profile count does; the
+    # self-referencing exclusion mirrors ``Q(from=p) | Q(to=p)`` counting such
+    # a row once, not twice.
+    accepted = Friendship.objects.is_friend()
+    counts = _grouped_count(accepted.filter(from_profile_id__in=profile_ids), "from_profile_id")
+    to_side = accepted.filter(to_profile_id__in=profile_ids).exclude(from_profile=F("to_profile"))
+    for pk, count in _grouped_count(to_side, "to_profile_id").items():
+        counts[pk] = counts.get(pk, 0) + count
+    return counts
+
+
 def _trips_planned(profile: Profile) -> int:
     from urbanlens.dashboard.models.trips.model import Trip
 
     return Trip.objects.filter(creator=profile).count()
 
 
+def _trips_planned_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+    from urbanlens.dashboard.models.trips.model import Trip
+
+    return _grouped_count(Trip.objects.filter(creator_id__in=profile_ids), "creator_id")
+
+
+def _finished_trip_q(today: datetime.date) -> Q:
+    """Match trip memberships whose trip has ended as of *today*.
+
+    end_date is optional, so a trip with none falls back to its start_date.
+    """
+    return Q(trip__end_date__lt=today) | Q(trip__end_date__isnull=True, trip__start_date__lt=today)
+
+
 def _trips_attended(profile: Profile) -> int:
     from urbanlens.dashboard.models.trips.model import TripMembership
 
-    today = timezone.localdate()
     # A trip counts as attended once it is over and the member had joined
-    # without declining. end_date is optional, so fall back to start_date.
-    finished = Q(trip__end_date__lt=today) | Q(trip__end_date__isnull=True, trip__start_date__lt=today)
-    return TripMembership.objects.filter(finished, profile=profile, status=TripMembership.STATUS_JOINED).exclude(rsvp=TripMembership.RSVP_NO).count()
+    # without declining.
+    return TripMembership.objects.filter(_finished_trip_q(timezone.localdate()), profile=profile, status=TripMembership.STATUS_JOINED).exclude(rsvp=TripMembership.RSVP_NO).count()
+
+
+def _trips_attended_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+    from urbanlens.dashboard.models.trips.model import TripMembership
+
+    memberships = TripMembership.objects.filter(
+        _finished_trip_q(timezone.localdate()),
+        profile_id__in=profile_ids,
+        status=TripMembership.STATUS_JOINED,
+    ).exclude(rsvp=TripMembership.RSVP_NO)
+    return _grouped_count(memberships, "profile_id")
 
 
 def _wiki_edits(profile: Profile) -> int:
     from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
 
     return WikiEdit.objects.filter(editor=profile, reverted=False).count()
+
+
+def _wiki_edits_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+    from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
+
+    return _grouped_count(WikiEdit.objects.filter(editor_id__in=profile_ids, reverted=False), "editor_id")
 
 
 def _comments_written(profile: Profile) -> int:
@@ -289,10 +414,26 @@ def _comments_written(profile: Profile) -> int:
     return Comment.objects.filter(profile=profile).count() + TripComment.objects.filter(author=profile).count()
 
 
+def _comments_written_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+    from urbanlens.dashboard.models.comments.model import Comment
+    from urbanlens.dashboard.models.trips.model import TripComment
+
+    counts = _grouped_count(Comment.objects.filter(profile_id__in=profile_ids), "profile_id")
+    for pk, count in _grouped_count(TripComment.objects.filter(author_id__in=profile_ids), "author_id").items():
+        counts[pk] = counts.get(pk, 0) + count
+    return counts
+
+
 def _markup_maps_created(profile: Profile) -> int:
     from urbanlens.dashboard.models.markup.model import MarkupMap
 
     return MarkupMap.objects.filter(profile=profile).count()
+
+
+def _markup_maps_created_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+    from urbanlens.dashboard.models.markup.model import MarkupMap
+
+    return _grouped_count(MarkupMap.objects.filter(profile_id__in=profile_ids), "profile_id")
 
 
 def _people_invited(profile: Profile) -> int:
@@ -301,6 +442,12 @@ def _people_invited(profile: Profile) -> int:
     # Accepted invitations only - sending mail to an address nobody signs up
     # from is not a contribution, and rewarding it invites address harvesting.
     return FriendInvitation.objects.filter(inviter=profile, accepted_at__isnull=False).count()
+
+
+def _people_invited_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+    from urbanlens.dashboard.models.friendship.invitation.model import FriendInvitation
+
+    return _grouped_count(FriendInvitation.objects.filter(inviter_id__in=profile_ids, accepted_at__isnull=False), "inviter_id")
 
 
 def _longest_streak(kind: str) -> Callable[[Profile], int]:
@@ -315,6 +462,24 @@ def _longest_streak(kind: str) -> Callable[[Profile], int]:
     return compute
 
 
+def _longest_streak_bulk(kind: str) -> Callable[[Sequence[int]], dict[int, int]]:
+    """Return a bulk compute function reading cached longest streaks for *kind*.
+
+    Streak arithmetic is path-dependent, but this reads none of it: the
+    incremental tracker already collapsed the history into
+    ``ProfileStreak.longest_length``, so the bulk form is a plain grouped read
+    of that column - exactly what the per-profile form does, minus N queries.
+    """
+
+    def compute_bulk(profile_ids: Sequence[int]) -> dict[int, int]:
+        from urbanlens.dashboard.models.achievements.model import ProfileStreak
+
+        rows = ProfileStreak.objects.filter(profile_id__in=profile_ids, kind=kind).values_list("profile_id", "longest_length")
+        return dict(rows)
+
+    return compute_bulk
+
+
 _STREAK_LABELS: dict[str, tuple[str, str]] = {
     ActivityKind.LOGIN: ("Login streak", "Log in on {threshold} days in a row"),
     ActivityKind.PHOTO: ("Photo streak", "Upload a photo on {threshold} days in a row"),
@@ -322,150 +487,6 @@ _STREAK_LABELS: dict[str, tuple[str, str]] = {
     ActivityKind.PIN: ("Pinning streak", "Pin a spot on {threshold} days in a row"),
     ActivityKind.COMMENT: ("Comment streak", "Leave a comment on {threshold} days in a row"),
 }
-
-
-# ---------------------------------------------------------------------------
-# Bulk variants - one grouped query each, for the nightly sweep
-# ---------------------------------------------------------------------------
-
-
-def _count_by(queryset, field: str) -> dict[int, int]:
-    """Group *queryset* by *field* and count rows, as ``{profile_id: n}``."""
-    from django.db.models import Count
-
-    return {row[field]: row["n"] for row in queryset.values(field).annotate(n=Count("pk"))}
-
-
-def _pins_created_bulk() -> dict[int, int]:
-    from urbanlens.dashboard.models.pin.model import Pin
-
-    return _count_by(Pin.objects.all(), "profile_id")
-
-
-def _wikis_created_bulk() -> dict[int, int]:
-    from urbanlens.dashboard.models.wiki.model import Wiki
-
-    return _count_by(Wiki.objects.filter(officially_created=True), "created_by_id")
-
-
-def _photos_uploaded_bulk() -> dict[int, int]:
-    from urbanlens.dashboard.models.images.model import Image, ImageSource
-
-    return _count_by(Image.objects.filter(source=ImageSource.UPLOAD), "profile_id")
-
-
-def _places_visited_bulk() -> dict[int, int]:
-    from django.db.models import Count
-
-    from urbanlens.dashboard.models.visits.model import PinVisit
-
-    rows = PinVisit.objects.filter(tentative=False).values("pin__profile_id").annotate(n=Count("pin_id", distinct=True))
-    return {row["pin__profile_id"]: row["n"] for row in rows}
-
-
-def _places_rated_bulk() -> dict[int, int]:
-    from urbanlens.dashboard.models.reviews.model import Review
-
-    return _count_by(Review.objects.all(), "profile_id")
-
-
-def _places_vulnerability_rated_bulk() -> dict[int, int]:
-    from urbanlens.dashboard.models.pin.model import Pin
-
-    return _count_by(Pin.objects.filter(vulnerability__gt=0), "profile_id")
-
-
-def _places_danger_rated_bulk() -> dict[int, int]:
-    from urbanlens.dashboard.models.pin.model import Pin
-
-    return _count_by(Pin.objects.filter(danger__gt=0), "profile_id")
-
-
-def _friends_bulk() -> dict[int, int]:
-    from collections import Counter
-
-    from urbanlens.dashboard.models.friendship.model import Friendship
-
-    # One shared row joins each pair; each endpoint gains one friend from it.
-    counts: Counter[int] = Counter()
-    for from_id, to_id in Friendship.objects.is_friend().values_list("from_profile_id", "to_profile_id"):
-        counts[from_id] += 1
-        counts[to_id] += 1
-    return dict(counts)
-
-
-def _trips_planned_bulk() -> dict[int, int]:
-    from urbanlens.dashboard.models.trips.model import Trip
-
-    return _count_by(Trip.objects.all(), "creator_id")
-
-
-def _trips_attended_bulk() -> dict[int, int]:
-    from urbanlens.dashboard.models.trips.model import TripMembership
-
-    today = timezone.localdate()
-    finished = Q(trip__end_date__lt=today) | Q(trip__end_date__isnull=True, trip__start_date__lt=today)
-    return _count_by(TripMembership.objects.filter(finished, status=TripMembership.STATUS_JOINED).exclude(rsvp=TripMembership.RSVP_NO), "profile_id")
-
-
-def _wiki_edits_bulk() -> dict[int, int]:
-    from urbanlens.dashboard.models.wiki_edit.model import WikiEdit
-
-    return _count_by(WikiEdit.objects.filter(reverted=False), "editor_id")
-
-
-def _comments_written_bulk() -> dict[int, int]:
-    from collections import Counter
-
-    from urbanlens.dashboard.models.comments.model import Comment
-    from urbanlens.dashboard.models.trips.model import TripComment
-
-    counts: Counter[int] = Counter(_count_by(Comment.objects.all(), "profile_id"))
-    counts.update(_count_by(TripComment.objects.all(), "author_id"))
-    return dict(counts)
-
-
-def _markup_maps_created_bulk() -> dict[int, int]:
-    from urbanlens.dashboard.models.markup.model import MarkupMap
-
-    return _count_by(MarkupMap.objects.all(), "profile_id")
-
-
-def _people_invited_bulk() -> dict[int, int]:
-    from urbanlens.dashboard.models.friendship.invitation.model import FriendInvitation
-
-    return _count_by(FriendInvitation.objects.filter(accepted_at__isnull=False), "inviter_id")
-
-
-def _longest_streak_bulk(kind: str) -> Callable[[], dict[int, int]]:
-    """Return a bulk function reading every profile's longest streak for *kind*."""
-
-    def compute_bulk() -> dict[int, int]:
-        from urbanlens.dashboard.models.achievements.model import ProfileStreak
-
-        return dict(ProfileStreak.objects.filter(kind=kind).values_list("profile_id", "longest_length"))
-
-    return compute_bulk
-
-
-def compute_values_bulk(keys: Iterable[str] | None = None) -> dict[str, dict[int, int]]:
-    """Bulk values for every metric in *keys* that has a bulk implementation.
-
-    Args:
-        keys: Metric keys to compute; None means all registered metrics.
-
-    Returns:
-        ``{metric_key: {profile_id: value}}``. A metric without a bulk variant
-        (or whose bulk query failed) is absent - the caller falls back to
-        per-profile computation for it.
-    """
-    selected = all_metrics() if keys is None else [m for k in dict.fromkeys(keys) if (m := get_metric(k))]
-    out: dict[str, dict[int, int]] = {}
-    for metric in selected:
-        values = metric.bulk_values()
-        if values is not None:
-            out[metric.key] = values
-    return out
 
 
 def _register_builtin_metrics() -> None:
@@ -639,7 +660,7 @@ def _register_builtin_metrics() -> None:
                 unit="days",
                 description=f"Longest run of consecutive days on which the user performed: {ActivityKind(kind).label.lower()}.",
                 compute=_longest_streak(kind),
-            compute_bulk=_longest_streak_bulk(kind),
+                compute_bulk=_longest_streak_bulk(kind),
                 group=GROUP_STREAKS,
                 triggers=frozenset({TRIGGER_STREAK}),
                 requirement_template=requirement,
@@ -662,6 +683,32 @@ def compute_values(profile: Profile, keys: Iterable[str] | None = None) -> dict[
     """
     selected = all_metrics() if keys is None else [m for k in dict.fromkeys(keys) if (m := get_metric(k))]
     return {metric.key: metric.value_for(profile) for metric in selected}
+
+
+def compute_values_bulk(profiles: Sequence[Profile], keys: Iterable[str] | None = None) -> dict[int, dict[str, int]]:
+    """Return current values for *keys* (or every metric) for many profiles.
+
+    The bulk counterpart of :func:`compute_values`, used by the nightly sweep:
+    each metric that defines ``compute_bulk`` is computed for the whole batch
+    in a constant number of grouped queries, so the batch costs on the order
+    of the metric count in queries rather than metrics x profiles. Metrics
+    without a bulk form fall back to per-profile computation.
+
+    Args:
+        profiles: The profiles to measure.
+        keys: Metric keys to compute; None means all registered metrics.
+
+    Returns:
+        A mapping of profile pk to that profile's ``{metric key: value}``
+        mapping, exactly as :func:`compute_values` would have returned for it.
+        Unknown keys are skipped.
+    """
+    selected = all_metrics() if keys is None else [m for k in dict.fromkeys(keys) if (m := get_metric(k))]
+    values: dict[int, dict[str, int]] = {profile.pk: {} for profile in profiles}
+    for metric in selected:
+        for pk, value in metric.values_for_many(profiles).items():
+            values[pk][metric.key] = value
+    return values
 
 
 def streak_summary(profile: Profile, today: datetime.date | None = None) -> list[StreakSummaryRow]:

@@ -1,51 +1,97 @@
-"""Validation for user-supplied colour values on the way into the database.
+"""Shared validation for user-supplied colours.
 
-`Label.color` declares `choices` and `MarkupShape.color`/`border_color` declare nothing at
-all, and in both cases Django enforces field `choices` only inside `full_clean()` - which
-`Model.save()` does not call. Every colour write path assigns straight from request data, so
-without this the stored value is simply "up to N characters of whatever was posted".
+Markup colours are written by JSON endpoints that build models directly, and
+are read back into ``innerHTML`` on the client (text-label spans, arrowhead
+SVG), so an arbitrary string in one of these fields is a stored-XSS vector
+rather than a cosmetic problem. Storage is therefore restricted to what the
+renderers can actually mean: a 6-digit hex colour, plus the ``"none"`` sentinel
+where a field is allowed to opt out of a border/background entirely.
 
-That matters because the browser interpolates these into `style="…"` attributes. The renderers
-validate too (`frontend/ts/shared/color-safety.ts`, `markup-engine.safeColor`), but that is the
-second line: a value that is not a colour has no business being stored, and a renderer added
-later should not have to rediscover the rule.
-
-Invalid input is coerced to the caller's default rather than raising. These values come from
-palette pickers, so anything else is a malformed request rather than a user mistake worth
-reporting, and the existing endpoints already treat a missing colour the same way.
+These mirror ``safeColor``/``safeOptionalColor`` in
+``dashboard/frontend/ts/shared/markup-engine.ts``, which validate the same
+values again at render time - neither side assumes the other ran.
 """
 
 from __future__ import annotations
 
 import re
-from typing import overload
+from typing import TypeGuard
 
-#: `#rgb` and `#rrggbb`. Everything the palettes offer is `#rrggbb`; the shorthand is
-#: accepted because it is unambiguously a colour and costs nothing to allow.
-HEX_COLOR_RE = re.compile(r"^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
+HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 
-#: Markup border colours use this sentinel to mean "draw no border", and the map renderer
-#: checks for it by name - it is a meaningful value, not a missing one.
+#: Sentinel meaning "no border / transparent background", not a colour.
 NO_COLOR = "none"
 
 
-@overload
-def clean_color(value: object, *, default: str, allow_none_keyword: bool = ...) -> str: ...
+def is_hex_color(value: object) -> TypeGuard[str]:
+    """Whether ``value`` is a 6-digit ``#rrggbb`` string.
+
+    A ``TypeGuard`` rather than a plain bool so the sanitizers below can return
+    ``value`` directly in the true branch without the checker losing track of
+    the ``isinstance`` that already happened here.
+
+    Args:
+        value: Any value; non-strings are simply not colours.
+
+    Returns:
+        True when ``value`` is a 6-digit hex colour.
+    """
+    return isinstance(value, str) and bool(HEX_COLOR_RE.match(value))
 
 
-@overload
-def clean_color(value: object, *, default: None = ..., allow_none_keyword: bool = ...) -> str | None: ...
+def sanitize_hex_color(value: object, fallback: str = "#e74c3c") -> str:
+    """Return ``value`` when it is a hex colour, else ``fallback``.
+
+    Args:
+        value: The candidate colour, typically straight off a JSON body.
+        fallback: What to use when ``value`` is not a usable colour.
+
+    Returns:
+        A 6-digit hex colour string.
+    """
+    return value if is_hex_color(value) else fallback
+
+
+def sanitize_optional_color(value: object, fallback: str = "") -> str:
+    """Return ``value`` when it is a hex colour or ``"none"``, else ``fallback``.
+
+    Used for fields where "unset" (``""``) and "explicitly no colour"
+    (``"none"``) are both meaningful, such as ``PinMarkup.border_color``.
+
+    Args:
+        value: The candidate colour, typically straight off a JSON body.
+        fallback: What to use when ``value`` is neither a colour nor ``"none"``;
+            defaults to the empty "unset" value.
+
+    Returns:
+        A 6-digit hex colour, ``"none"``, or ``fallback``.
+    """
+    if value == NO_COLOR:
+        return NO_COLOR
+    return value if is_hex_color(value) else fallback
 
 
 def clean_color(value: object, *, default: str | None = None, allow_none_keyword: bool = False) -> str | None:
     """Return ``value`` when it is a colour this application stores, else ``default``.
 
+    The keyword-argument form used by the form and ``request.POST`` paths, where
+    the caller decides what a missing or malformed colour falls back to. Built on
+    :func:`is_hex_color` so there is one definition of what a colour is.
+
+    Note:
+        This overlaps :func:`sanitize_hex_color` and :func:`sanitize_optional_color`,
+        which arrived independently on another branch for the JSON endpoints. They
+        should converge on one API; until then both are kept because both have
+        callers, and silently dropping either would loosen validation somewhere.
+
     Args:
-        value: The raw submitted value, typically straight off ``request.POST`` or a JSON body.
+        value: The raw submitted value, typically straight off ``request.POST``
+            or a JSON body. Surrounding whitespace is ignored, which form posts
+            routinely carry.
         default: What to return when ``value`` is missing, blank, or not a colour.
-        allow_none_keyword: Permit the literal ``"none"`` (markup borders use it to mean
-            "no border"). Off by default so it cannot leak into fields where it would be
-            rendered as a CSS keyword by accident.
+        allow_none_keyword: Permit the literal ``"none"`` (markup borders use it
+            to mean "no border"). Off by default so it cannot leak into fields
+            where it would be rendered as a CSS keyword by accident.
 
     Returns:
         A validated colour string, or ``default``.
@@ -57,6 +103,4 @@ def clean_color(value: object, *, default: str | None = None, allow_none_keyword
         return default
     if allow_none_keyword and text.lower() == NO_COLOR:
         return NO_COLOR
-    if HEX_COLOR_RE.match(text):
-        return text
-    return default
+    return text if is_hex_color(text) else default

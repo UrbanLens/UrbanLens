@@ -65,6 +65,22 @@ class PushDevice(abstract.FrontendDashboardModel):
             UniqueConstraint(fields=["profile", "address"], name="db_push_device_unique_address"),
         ]
 
+    @property
+    def dispatch_enabled(self) -> bool:
+        """Whether ``services.notifications.push`` will actually send to this device.
+
+        Only UnifiedPush is dispatched. FCM rows are accepted and stored for a
+        future Play-flavor client, but skipped at send time because no FCM
+        sender exists yet (it needs a Google service-account credential), so a
+        registered FCM device receives silence rather than an error. Read
+        surfaces expose this so a client can say so instead of implying
+        delivery works.
+
+        Returns:
+            True when this device's transport is dispatched today.
+        """
+        return self.transport == PushTransport.UNIFIEDPUSH
+
     def __str__(self) -> str:
         status = "revoked" if self.revoked_at else "active"
         return f"PushDevice(profile={self.profile_id}, transport={self.transport}, {status})"

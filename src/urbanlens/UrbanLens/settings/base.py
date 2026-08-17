@@ -23,18 +23,31 @@ _is_local = ENVIRONMENT_NAME == "local"
 _is_dev = ENVIRONMENT_NAME in {"local", "development"}
 
 # SECURITY WARNING: keep the secret key used in production secret!
-_secret_key_env = os.environ.get("DJANGO_SECRET_KEY")
-if not _secret_key_env and not _is_local:
-    # A missing key would otherwise fall back to a fresh random key *per
-    # process*: sessions and CSRF break across workers, and - much worse -
-    # EncryptedTextField derives its encryption key from SECRET_KEY, so rows
-    # written by one process become unreadable to every other and to every
-    # restart. Failing at startup turns silent data corruption into a
-    # configuration error.
-    from django.core.exceptions import ImproperlyConfigured
+#
+# The random fallback is a data-loss hazard wherever encrypted data can exist,
+# not just a session-stability one: SECRET_KEY is also the fallback source for
+# EncryptedTextField's key (dashboard/models/fields.py), gunicorn runs without
+# preload_app, and celery/manage.py are separate processes - so an unset value
+# gives every process a different key, and anything written to an encrypted
+# field is unreadable by every other process and after the next restart. Fail
+# loudly instead of degrading, anywhere a real database is in play.
+SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY") or ""
+if not SECRET_KEY:
+    # Ephemeral keys are only safe where no durable encrypted data exists:
+    # developer machines and test runs. staging/production must fail.
+    _key_optional = _is_dev or ENVIRONMENT_NAME == "testing" or any(arg.endswith("pytest") or "pytest" in arg for arg in sys.argv)
+    if not _key_optional:
+        from django.core.exceptions import ImproperlyConfigured
 
-    raise ImproperlyConfigured(f"DJANGO_SECRET_KEY must be set when UL_ENVIRONMENT is {ENVIRONMENT_NAME!r} (only 'local' may run without one).")
-SECRET_KEY = _secret_key_env or get_random_secret_key()
+        raise ImproperlyConfigured(
+            f"DJANGO_SECRET_KEY must be set when UL_ENVIRONMENT is '{ENVIRONMENT_NAME}'. "
+            "Without it every process derives its own random key, which breaks sessions "
+            "across workers and permanently orphans anything already written to an "
+            "encrypted field. Generate one with: "
+            'python -c "import secrets; print(secrets.token_urlsafe(64))" '
+            "- see .env-sample and docs/DATA_ENCRYPTION.md.",
+        )
+    SECRET_KEY = get_random_secret_key()
 
 
 def _env_bool(name: str, default: bool) -> bool:
@@ -77,6 +90,10 @@ INSTALLED_APPS = [
     "django.contrib.postgres",
     "django.contrib.humanize",
     "corsheaders",
+    # Registers django-csp's system checks (the app itself defines no models);
+    # csp.E001 fires if anyone reintroduces the pre-4.0 `CSP_*` setting format,
+    # which django-csp 4 silently ignores.
+    "csp",
     "urbanlens.dashboard.apps.DashboardConfig",
     "social_django",
     # OAuth2/OIDC provider for native clients (mobile/desktop apps) hitting the
@@ -94,6 +111,11 @@ ASGI_APPLICATION = "urbanlens.UrbanLens.asgi.application"
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Emits the Content-Security-Policy header built from CONTENT_SECURITY_POLICY
+    # (or ..._REPORT_ONLY) below. Sits directly under SecurityMiddleware so the
+    # header is attached to every response that leaves the stack, including ones
+    # short-circuited further in.
+    "csp.middleware.CSPMiddleware",
     # CorsMiddleware must sit above CommonMiddleware (and anything else that
     # can short-circuit a response) so CORS headers are applied to redirects
     # and preflight responses - see django-cors-headers docs.
@@ -500,10 +522,127 @@ SECURE_REDIRECT_EXEMPT = [r"^health"]
 SECURE_HSTS_SECONDS = int(os.getenv("UL_HSTS_SECONDS", "31536000")) if SECURE_SSL_REDIRECT else 0
 SECURE_HSTS_INCLUDE_SUBDOMAINS = _env_bool("UL_HSTS_INCLUDE_SUBDOMAINS", SECURE_HSTS_SECONDS > 0)
 
+# Content-Security-Policy (django-csp >= 4, which takes the CONTENT_SECURITY_POLICY
+# dict rather than the pre-4.0 flat `CSP_*` settings - those are silently ignored,
+# and csp.E001 flags them if they reappear).
+#
+# Every host below was read out of a template or a frontend module rather than
+# assumed; the inventory, and which file each host came from, is in docs/NOTES.md.
+# Leaflet expands the `{s}` placeholder in its tile templates to a/b/c subdomains,
+# so the tile hosts need both the wildcard and the bare form.
+#
+# 'unsafe-inline' in script-src is load-bearing, not laziness: the frontend has
+# ~99 inline <script> blocks (starting with the anti-FOUC block in themes/base.html),
+# HTMX `hx-on:` attributes, and json_script payloads. Removing it requires threading
+# a nonce through every one of those - tracked as the inline-JS extraction roadmap
+# item. Until that lands, script-src buys host restriction (an injected
+# `<script src=//evil>` is blocked) but not injected-inline-script protection.
+# Note also that a nonce and 'unsafe-inline' cannot coexist: browsers ignore
+# 'unsafe-inline' as soon as a nonce is present, so the migration has to convert
+# every inline block at once per response, not incrementally.
+_CSP_DIRECTIVES: dict[str, object] = {
+    "default-src": ["'self'"],
+    # jQuery/toastr/Leaflet/HTMX/Chart.js/Sortable are all loaded from CDNs by
+    # themes/base.html and the per-page templates; maps.googleapis.com is injected
+    # at runtime by the SpotGuessr Street View round.
+    "script-src": [
+        "'self'",
+        "'unsafe-inline'",
+        "https://code.jquery.com",
+        "https://cdnjs.cloudflare.com",
+        "https://unpkg.com",
+        "https://cdn.jsdelivr.net",
+        "https://maps.googleapis.com",
+    ],
+    # 'unsafe-inline' here covers the inline style="" attributes used throughout
+    # the templates as well as Leaflet's runtime positioning styles.
+    "style-src": [
+        "'self'",
+        "'unsafe-inline'",
+        "https://fonts.googleapis.com",
+        "https://cdnjs.cloudflare.com",
+        "https://unpkg.com",
+    ],
+    "font-src": ["'self'", "data:", "https://fonts.gstatic.com", "https://cdnjs.cloudflare.com"],
+    "img-src": [
+        "'self'",
+        "data:",
+        "blob:",
+        # Any HTTPS image host, because map image overlays are a paste-any-URL
+        # feature (_map_overlays_list.html, map-image-overlays.ts) - a finite
+        # list would make every overlay outside it vanish the moment an
+        # operator sets UL_CSP_ENFORCE. Widening img-src is the cheap half of
+        # the trade: images do not execute, and the alternative is proxying
+        # arbitrary user-supplied URLs through the server, which buys an SSRF
+        # surface to avoid a directive that never blocked script. The named
+        # hosts below stay for the documentation value.
+        "https:",
+        # Base map tiles and overlays (frontend/ts/shared/map-layers.ts).
+        "https://*.tile.openstreetmap.org",
+        "https://tile.openstreetmap.org",
+        "https://*.basemaps.cartocdn.com",
+        "https://basemaps.cartocdn.com",
+        "https://*.tile.opentopomap.org",
+        "https://tile.opentopomap.org",
+        "https://server.arcgisonline.com",
+        "https://services.arcgisonline.com",
+        "https://tile.openweathermap.org",
+        # Leaflet's default marker/shadow PNGs (frontend/ts/entries/map-annotations.ts).
+        "https://cdnjs.cloudflare.com",
+        # Result favicons on the web-search page and the Gravatar avatar preview.
+        "https://www.google.com",
+        "https://www.gravatar.com",
+        # Google Maps JS API imagery, including Street View panorama tiles. The
+        # API picks its own image hosts at runtime, so this list is the known set
+        # rather than a proven-complete one - report-only mode is what will show
+        # whether anything else is needed.
+        "https://maps.googleapis.com",
+        "https://maps.gstatic.com",
+    ],
+    # ws: alongside wss: because local/dev deployments are served over plain HTTP
+    # (UNSAFE_ALLOW_HTTP) and the game sockets follow the page protocol.
+    "connect-src": [
+        "'self'",
+        "ws:",
+        "wss:",
+        # Browser-side geocoding, deliberately unproxied (location-search-engine.ts).
+        "https://nominatim.openstreetmap.org",
+        # Place summaries fetched inline by the map page.
+        "https://en.wikipedia.org",
+        "https://maps.googleapis.com",
+    ],
+    # The Street View embed on the location page.
+    "frame-src": ["'self'", "https://www.google.com"],
+    "media-src": ["'self'", "data:", "blob:"],
+    "object-src": ["'none'"],
+    "base-uri": ["'self'"],
+    # NOTE: X_FRAME_OPTIONS is "DENY", which is stricter than this. Browsers that
+    # honour frame-ancestors ignore X-Frame-Options entirely, so enforcing this
+    # policy relaxes framing from "nobody" to "same origin only". Change this to
+    # 'none' if the DENY posture is meant to be kept.
+    "frame-ancestors": ["'self'"],
+    "form-action": ["'self'"],
+}
+
+# Report-only by default: the header is emitted and violations are reported, but
+# nothing is blocked, so a policy mistake shows up in reports instead of as a
+# broken page. Flip per environment with UL_CSP_ENFORCE=true once that
+# environment's reports are clean. Exactly one of the two settings is defined -
+# django-csp emits a header for each one that exists.
+CSP_ENFORCE = _app_settings.csp_enforce
+if CSP_ENFORCE:
+    CONTENT_SECURITY_POLICY = {"DIRECTIVES": _CSP_DIRECTIVES}
+else:
+    CONTENT_SECURITY_POLICY_REPORT_ONLY = {"DIRECTIVES": _CSP_DIRECTIVES}
+
 # Trust the X-Forwarded-Proto header set by Nginx so Django builds https:// URLs
 # when sitting behind a reverse proxy that terminates SSL.
 SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
 USE_X_FORWARDED_HOST = True
+
+# Proxy hops whose X-Forwarded-For entries are ours rather than the client's.
+# Read by the per-IP rate limiters; see the field description in settings/app.py.
+TRUSTED_PROXY_COUNT = _app_settings.trusted_proxy_count
 
 protocols = ["https://"]
 if _is_local:

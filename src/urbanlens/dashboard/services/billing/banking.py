@@ -22,6 +22,7 @@ applied then.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
@@ -29,6 +30,9 @@ from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.services.billing import pricing
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 if TYPE_CHECKING:
     import datetime
@@ -39,31 +43,33 @@ if TYPE_CHECKING:
 _PERIOD = timedelta(days=30)
 
 
-def _lock_and_refresh(role_subscription: RoleSubscription) -> None:
-    """Take a row lock on *role_subscription* and reload it under that lock.
+@contextmanager
+def _locked(role_subscription: RoleSubscription) -> Iterator[RoleSubscription]:
+    """Hold a row lock on this subscription for the body of the block.
 
-    Both ledger mutations below are read-modify-write cycles over money, and the
-    values they read come off an instance the caller loaded at some earlier
-    point - the webhook receiver before its Stripe round-trip, the daily sweep
-    however long ago its loop reached this row. Writing from that snapshot
-    silently discards whatever landed in between.
+    Every ledger mutation is a read-modify-write of running totals, and Stripe
+    delivers concurrently: two partial refunds on one charge, or a payment
+    landing beside a refund, otherwise read the same ``total_paid_cents``,
+    subtract independently, and the second write erases the first. The
+    webhook's ``StripeProcessedRefund`` row still commits, so the lost debit is
+    never retried - access stays funded by refunded money.
 
-    The webhook receiver's own ``select_for_update`` does not cover this: it is
-    keyed on the Stripe event id, so it serializes redeliveries of a single
-    event, while two different events for one subscription take two different
-    locks. This lock is on the subscription row, which is what the invariant is
-    actually about.
+    Yields the locked instance; the caller's original object is refreshed from
+    it on the way out so it does not go on holding pre-lock values.
 
     Args:
-        role_subscription: The subscription to lock. Refreshed in place, so the
-            caller keeps holding a usable instance.
+        role_subscription: The subscription to lock.
+
+    Yields:
+        The freshly-read, locked subscription.
     """
-    from urbanlens.dashboard.models.billing import RoleSubscription
+    with transaction.atomic():
+        locked = type(role_subscription).objects.select_for_update().get(pk=role_subscription.pk)
+        yield locked
+    for field in ("total_paid_cents", "amount_used_cents", "usage_covered_until"):
+        setattr(role_subscription, field, getattr(locked, field))
 
-    role_subscription.refresh_from_db(from_queryset=RoleSubscription.objects.select_for_update())
 
-
-@transaction.atomic
 def advance_usage_ledger(role_subscription: RoleSubscription, as_of: datetime.datetime | None = None) -> None:
     """Advance a pay-what-you-want subscription's usage ledger as of *as_of*.
 
@@ -81,29 +87,35 @@ def advance_usage_ledger(role_subscription: RoleSubscription, as_of: datetime.da
         as_of: Point in time to advance as of; defaults to now.
     """
     as_of = as_of or timezone.now()
-    _lock_and_refresh(role_subscription)
-    cursor = role_subscription.usage_covered_until or role_subscription.created
-    amount_used_cents = role_subscription.amount_used_cents
-    advanced = False
+    # Locked here, not only by callers: ``advance_pwyw_usage_ledgers`` sweeps every
+    # pay-what-you-want subscription and calls this directly, holding each row's
+    # snapshot for as long as its loop takes to reach that row. Re-locking inside
+    # apply_payment's block costs one redundant SELECT, since the row is held already.
+    with _locked(role_subscription) as locked:
+        # Carry the caller's already-loaded role across: the lock re-reads the row
+        # without select_related, so every pricing lookup below would refetch it.
+        locked.role = role_subscription.role
+        cursor = locked.usage_covered_until or locked.created
+        amount_used_cents = locked.amount_used_cents
+        advanced = False
 
-    while cursor <= as_of:
-        threshold = pricing.role_pwyw_threshold_cents(role_subscription.role, as_of=cursor)
-        if threshold is None:
-            break
-        if role_subscription.total_paid_cents < amount_used_cents + threshold:
-            break
-        amount_used_cents += threshold
-        cursor += _PERIOD
-        advanced = True
+        while cursor <= as_of:
+            threshold = pricing.role_pwyw_threshold_cents(locked.role, as_of=cursor)
+            if threshold is None:
+                break
+            if locked.total_paid_cents < amount_used_cents + threshold:
+                break
+            amount_used_cents += threshold
+            cursor += _PERIOD
+            advanced = True
 
-    if not advanced:
-        return
-    role_subscription.amount_used_cents = amount_used_cents
-    role_subscription.usage_covered_until = cursor
-    role_subscription.save(update_fields=["amount_used_cents", "usage_covered_until", "updated"])
+        if not advanced:
+            return
+        locked.amount_used_cents = amount_used_cents
+        locked.usage_covered_until = cursor
+        locked.save(update_fields=["amount_used_cents", "usage_covered_until", "updated"])
 
 
-@transaction.atomic
 def apply_payment(role_subscription: RoleSubscription, amount_paid_cents: int, as_of: datetime.datetime | None = None) -> None:
     """Record a successful pay-what-you-want charge and advance its usage ledger.
 
@@ -117,10 +129,32 @@ def apply_payment(role_subscription: RoleSubscription, amount_paid_cents: int, a
     """
     if not role_subscription.role.pay_what_you_want or amount_paid_cents <= 0:
         return
-    # Credited as an increment onto the *stored* total, not the one this instance
-    # was loaded with: a second payment crediting concurrently is another user's
-    # money, and last-writer-wins would drop it.
-    _lock_and_refresh(role_subscription)
-    role_subscription.total_paid_cents += amount_paid_cents
-    role_subscription.save(update_fields=["total_paid_cents", "updated"])
-    advance_usage_ledger(role_subscription, as_of)
+    with _locked(role_subscription) as locked:
+        locked.total_paid_cents += amount_paid_cents
+        locked.save(update_fields=["total_paid_cents", "updated"])
+        # Inside the lock: advancing the ledger is itself a read-modify-write
+        # of the same running totals.
+        locked.role = role_subscription.role
+        advance_usage_ledger(locked, as_of)
+
+
+def apply_refund(role_subscription: RoleSubscription, amount_refunded_cents: int) -> None:
+    """Claw back a refunded (or lost-dispute) amount from the banked balance, in full.
+
+    Policy: the refunded amount comes straight out of ``total_paid_cents`` (clamped at
+    zero), so future periods simply stop being affordable. Access already consumed is
+    forgiven - ``amount_used_cents`` and ``usage_covered_until`` are left untouched, so
+    periods the ledger has already entered stay covered through their end.
+
+    A no-op for non-PWYW roles or a non-positive amount.
+
+    Args:
+        role_subscription: The subscription to debit. Reads role_subscription.role, so
+            callers should have it select_related.
+        amount_refunded_cents: The amount refunded or lost to a dispute, in cents.
+    """
+    if not role_subscription.role.pay_what_you_want or amount_refunded_cents <= 0:
+        return
+    with _locked(role_subscription) as locked:
+        locked.total_paid_cents = max(0, locked.total_paid_cents - amount_refunded_cents)
+        locked.save(update_fields=["total_paid_cents", "updated"])

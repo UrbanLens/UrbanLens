@@ -1,8 +1,10 @@
 """Deciding which achievements a profile has earned, and granting them.
 
-The whole system funnels through :func:`evaluate_profile`. Signals call it with
-the handful of metric keys their event could have moved; the nightly sweep and
-the new-achievement backfill call it with everything.
+Single-profile evaluation funnels through :func:`evaluate_profile` - signals
+call it with the handful of metric keys their event could have moved. The
+nightly sweep instead goes through :func:`evaluate_profiles_in_range`, one
+bounded pk-range chunk per Celery task, with the metric values computed in
+bulk for the whole chunk.
 """
 
 # Generic imports
@@ -16,25 +18,15 @@ from django.db import IntegrityError, transaction
 from django.urls import NoReverseMatch, reverse
 
 # App Imports
-from urbanlens.dashboard.services.achievements.metrics import compute_values, get_metric
+from urbanlens.dashboard.services.achievements.metrics import compute_values, compute_values_bulk, get_metric
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Iterable, Mapping, Sequence
 
     from urbanlens.dashboard.models.achievements.model import Achievement, UserAchievement
     from urbanlens.dashboard.models.profile import Profile
 
 logger = logging.getLogger(__name__)
-
-#: Where the nightly sweep records how far it got, so a run killed by the Celery
-#: time limit resumes instead of always truncating at the same profile. Cache
-#: rather than a table: losing it costs one sweep starting from the beginning,
-#: which is exactly the pre-existing behaviour and harmless.
-_SWEEP_CURSOR_CACHE_KEY = "urbanlens:achievements:sweep-cursor"
-
-#: Profiles between cursor writes. Bounds how much a killed run repeats without
-#: adding a cache round-trip per profile.
-_SWEEP_CURSOR_STRIDE = 500
 
 
 def active_metric_keys() -> set[str]:
@@ -70,7 +62,6 @@ def evaluate_profile(
     metric_keys: Iterable[str] | None = None,
     *,
     notify: bool = True,
-    precomputed: dict[str, dict[int, int]] | None = None,
 ) -> list[UserAchievement]:
     """Grant every active achievement *profile* now qualifies for.
 
@@ -83,11 +74,6 @@ def evaluate_profile(
             metrics. None evaluates every active achievement.
         notify: Whether to raise an in-app notification per new award. Turned
             off for bulk backfills of historical activity.
-        precomputed: Bulk metric values (``{metric_key: {profile_id: value}}``,
-            from :func:`~urbanlens.dashboard.services.achievements.metrics.compute_values_bulk`).
-            Metrics present here are read from it (absent profile = 0) instead
-            of being queried per profile - the nightly sweep's batching. Keys
-            not present fall back to per-profile computation.
 
     Returns:
         The awards newly granted by this call, in grant order. Empty when the
@@ -111,15 +97,34 @@ def evaluate_profile(
     if not pending:
         return []
 
-    wanted = {a.metric for a in pending}
-    values: dict[str, int] = {}
-    if precomputed:
-        for key in wanted & precomputed.keys():
-            values[key] = precomputed[key].get(profile.pk, 0)
-        wanted -= values.keys()
-    if wanted:
-        values.update(compute_values(profile, wanted))
+    values = compute_values(profile, {a.metric for a in pending})
+    return _award_qualifying(profile, pending, values, notify=notify)
 
+
+def _award_qualifying(
+    profile: Profile,
+    pending: Sequence[Achievement],
+    values: Mapping[str, int],
+    *,
+    notify: bool,
+) -> list[UserAchievement]:
+    """Grant whichever of *pending* the precomputed *values* qualify *profile* for.
+
+    The shared award loop behind :func:`evaluate_profile` and
+    :func:`evaluate_profiles_in_range`, so per-write and sweep evaluation
+    cannot drift apart in how a threshold is judged.
+
+    Args:
+        profile: The profile being evaluated.
+        pending: Active achievements the profile has not already earned.
+        values: Metric values keyed by metric key. A missing key is treated as
+            not qualifying rather than as zero, so an unknown metric can never
+            accidentally grant.
+        notify: Whether to raise an in-app notification per new award.
+
+    Returns:
+        The awards newly granted, in grant order.
+    """
     granted: list[UserAchievement] = []
     for achievement in pending:
         value = values.get(achievement.metric)
@@ -129,7 +134,7 @@ def evaluate_profile(
         if award is not None:
             granted.append(award)
 
-    if granted and notify:
+    if notify:
         for award in granted:
             _notify(profile, award)
 
@@ -247,67 +252,61 @@ def evaluate_achievement_for_all(achievement: Achievement, *, notify: bool = Fal
     return granted
 
 
-def evaluate_all_profiles(*, notify: bool = True) -> int:
-    """Re-evaluate every achievement for every profile.
+def evaluate_profiles_in_range(start_pk: int, end_pk: int, *, notify: bool = True) -> int:
+    """Re-evaluate every active achievement for one pk-range chunk of profiles.
 
-    The nightly safety net. It catches awards that no write touches - a
-    "trips attended" threshold crossed simply because a trip's end date passed -
-    and anything an enqueue lost when the broker was down.
+    One chunk of the nightly safety net, which catches awards no write touches
+    - a "trips attended" threshold crossed simply because a trip's end date
+    passed - and anything an enqueue lost when the broker was down.
+    ``tasks.sweep_achievements`` slices the profile table into bounded ranges
+    and runs each through this in its own Celery task, so no single invocation
+    can approach the hard task time limit and a crashed chunk affects only its
+    own range until the next nightly dispatch re-covers it. (This replaced a
+    single resumable-cursor task over all profiles; the chunking makes the
+    cursor's crash-recovery job redundant.)
 
-    Resumable. The sweep costs ~30 queries per profile and the whole thing is one
-    task under a hard 3600s limit, so at enough profiles a run gets killed
-    mid-iteration. With a plain ``iterator()`` that always truncated at the *same*
-    place, so the same tail of profiles was never evaluated - permanently, and
-    silently, because the task simply died. Progress is now checkpointed, so the
-    next run resumes where the last one stopped and then wraps to the beginning;
-    every profile is reached within two runs even when neither completes. A
-    resumed run logs a warning, which is what makes the truncation visible at all.
-
-    Batched: every metric with a bulk implementation is computed once for all
-    profiles up front (~one grouped query per metric) and each profile's
-    evaluation becomes dictionary lookups plus the award writes - what used to
-    be ~30 queries per profile. The bulk dicts hold one int per profile with a
-    nonzero value per metric; at 100k profiles that is tens of megabytes for
-    the duration of the nightly task, which is the accepted trade. See the
-    now-resolved "nightly achievement sweep is O(profiles x metrics)" entry in
-    ``docs/PROBLEMS.md``.
+    The chunk is priced in metrics, not profiles: values come from
+    :func:`~urbanlens.dashboard.services.achievements.metrics.compute_values_bulk`,
+    which computes each metric for the whole chunk in a constant number of
+    grouped queries. A chunk therefore costs on the order of the active metric
+    count in queries, plus a few per award actually granted.
 
     Args:
+        start_pk: Lowest profile pk in the chunk, inclusive.
+        end_pk: Highest profile pk in the chunk, inclusive.
         notify: Whether to notify recipients of new awards.
 
     Returns:
-        Total number of awards granted across all profiles.
+        Total number of awards granted across the chunk.
     """
-    from urbanlens.dashboard.models.achievements.model import Achievement
+    from urbanlens.dashboard.models.achievements.model import Achievement, UserAchievement
     from urbanlens.dashboard.models.profile import Profile
 
-    if not Achievement.objects.active().exists():
+    achievements: Sequence[Achievement] = list(Achievement.objects.active())
+    if not achievements:
         return 0
 
-    from django.core.cache import cache
+    profiles = list(Profile.objects.filter(pk__gte=start_pk, pk__lte=end_pk).order_by("pk"))
+    if not profiles:
+        return 0
 
-    start_after = cache.get(_SWEEP_CURSOR_CACHE_KEY) or 0
-    if start_after:
-        logger.warning(
-            "Achievement sweep resuming after profile %s - the previous run did not finish. Profiles at or below that id are evaluated on the following run.",
-            start_after,
-        )
+    values_by_profile = compute_values_bulk(profiles, {a.metric for a in achievements})
 
-    from urbanlens.dashboard.services.achievements.metrics import compute_values_bulk
-
-    precomputed = compute_values_bulk(active_metric_keys())
+    earned_by_profile: dict[int, set[int]] = {}
+    earned_rows = UserAchievement.objects.filter(profile_id__in=[p.pk for p in profiles]).values_list(
+        "profile_id",
+        "achievement_id",
+    )
+    for profile_id, achievement_id in earned_rows:
+        earned_by_profile.setdefault(profile_id, set()).add(achievement_id)
 
     granted = 0
-    for processed, profile in enumerate(Profile.objects.filter(pk__gt=start_after).order_by("pk").iterator(), start=1):
-        granted += len(evaluate_profile(profile, notify=notify, precomputed=precomputed))
-        # Checkpoint periodically rather than per profile: the point is only to
-        # bound how much work a killed run repeats, not to be exact.
-        if processed % _SWEEP_CURSOR_STRIDE == 0:
-            cache.set(_SWEEP_CURSOR_CACHE_KEY, profile.pk, timeout=None)
-
-    # Reached the end of the range, so the next run starts from the beginning -
-    # which is what covers any profiles skipped by having resumed mid-way.
-    cache.set(_SWEEP_CURSOR_CACHE_KEY, 0, timeout=None)
+    for profile in profiles:
+        already_earned = earned_by_profile.get(profile.pk, set())
+        pending = [a for a in achievements if a.pk not in already_earned]
+        if not pending:
+            continue
+        granted += len(_award_qualifying(profile, pending, values_by_profile[profile.pk], notify=notify))
     return granted
 
 
@@ -356,7 +355,7 @@ def progress_for_profile(profile: Profile, viewer: Profile | None = None) -> lis
 
 __all__ = [
     "evaluate_achievement_for_all",
-    "evaluate_all_profiles",
     "evaluate_profile",
+    "evaluate_profiles_in_range",
     "progress_for_profile",
 ]

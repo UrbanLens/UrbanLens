@@ -15,6 +15,7 @@ from django.urls import reverse
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
+from urbanlens.dashboard.external_api.serializers import PushDeviceResponseSerializer
 from urbanlens.dashboard.models.account.model import ApiKey, ApiKeyScope
 from urbanlens.dashboard.models.notifications.model import NotificationLog
 from urbanlens.dashboard.models.profile.model import Profile
@@ -171,6 +172,30 @@ class NotificationSignalTests(TestCase):
         self.assertIn(notification.pk, enqueued_ids)
 
 
+class PushDeviceSerializerTests(TestCase):
+    """PushDeviceResponseSerializer is honest about per-transport dispatch status.
+
+    There is no push-device list endpoint today (only register and delete), so
+    the many=True serialization here stands in for any future read surface.
+    """
+
+    def test_serialized_devices_report_dispatch_enabled_per_transport(self) -> None:
+        baker.make(User)  # first user auto-promoted to bootstrap site admin
+        profile = Profile.objects.get(user=baker.make(User))
+        with _fake_resolution("8.8.8.8"):
+            register_device(profile, transport=PushTransport.UNIFIEDPUSH, address="https://ntfy.example.com/upABC")
+        register_device(profile, transport=PushTransport.FCM, address="fcm-token-abc123")
+
+        data = PushDeviceResponseSerializer(PushDevice.objects.for_profile(profile), many=True).data
+        by_transport = {row["transport"]: row["dispatch_enabled"] for row in data}
+        self.assertIs(by_transport[PushTransport.UNIFIEDPUSH.value], True)
+        self.assertIs(by_transport[PushTransport.FCM.value], False)
+
+    def test_dispatch_enabled_property_tracks_transport(self) -> None:
+        self.assertTrue(PushDevice(transport=PushTransport.UNIFIEDPUSH).dispatch_enabled)
+        self.assertFalse(PushDevice(transport=PushTransport.FCM).dispatch_enabled)
+
+
 class PushDeviceEndpointTests(TestCase):
     """The external API's push-device registration surface."""
 
@@ -192,6 +217,18 @@ class PushDeviceEndpointTests(TestCase):
         self.assertNotIn("address", body)
         device = PushDevice.objects.get(uuid=body["uuid"])
         self.assertEqual(device.profile_id, self.profile.pk)
+
+    def test_register_reports_unifiedpush_dispatch_enabled(self) -> None:
+        with _fake_resolution("8.8.8.8"):
+            response = self._post({"address": "https://ntfy.example.com/upABC"})
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertIs(response.json()["dispatch_enabled"], True)
+
+    def test_register_reports_fcm_dispatch_disabled(self) -> None:
+        """FCM registrations are accepted but the response must not imply delivery works."""
+        response = self._post({"transport": PushTransport.FCM.value, "address": "fcm-token-abc123"})
+        self.assertEqual(response.status_code, 201, response.content)
+        self.assertIs(response.json()["dispatch_enabled"], False)
 
     def test_invalid_endpoint_is_a_clean_400(self) -> None:
         response = self._post({"address": "ftp://nope.example.com/up"})

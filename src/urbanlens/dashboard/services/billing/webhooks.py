@@ -6,6 +6,11 @@ not a replay. Every handler resolves its target row and no-ops (logs + returns) 
 isn't found yet rather than raising, since Stripe delivers events with no ordering
 guarantee (e.g. ``customer.subscription.updated`` can arrive before
 ``checkout.session.completed`` has created the row it would update).
+
+There is no event-type allowlist in code - ``handle_event`` ignores anything not in
+``_HANDLERS`` - but the webhook endpoint configured in the Stripe dashboard must be
+subscribed to every event type registered below (including ``charge.refunded`` and
+``charge.dispute.closed``) or Stripe never sends them here at all.
 """
 
 from __future__ import annotations
@@ -194,12 +199,90 @@ def _handle_invoice_payment_failed(invoice: dict) -> None:
     role_subscription.save(update_fields=["status", "updated"])
 
 
+def _handle_charge_refunded(charge: dict) -> None:
+    """Debit each newly seen refund on *charge* from the banked pay-what-you-want balance.
+
+    ``charge.refunded`` payloads are cumulative (every refund to date rides along on each
+    delivery), so refunds are applied per refund-object id via ``StripeProcessedRefund``
+    rather than per event - the event-level dedup in the receiving view cannot tell a
+    redelivered refund inside a fresh event from a new one.
+    """
+    invoice_id = charge.get("invoice")
+    if not invoice_id:
+        # A one-off charge, not a subscription invoice - nothing was ever banked from it.
+        return
+
+    from urbanlens.dashboard.models.billing import RoleSubscription, StripeProcessedRefund
+
+    invoice = stripe.Invoice.retrieve(invoice_id).to_dict()
+    subscription_id = invoice.get("subscription")
+    if not subscription_id:
+        return
+    role_subscription = RoleSubscription.objects.for_stripe_subscription(subscription_id)
+    if role_subscription is None:
+        logger.info("charge.refunded for unknown subscription %s", subscription_id)
+        return
+
+    refunds_list = charge.get("refunds") or {}
+    refunds = refunds_list.get("data") or []
+    if not refunds:
+        logger.warning("charge.refunded %s carried no embedded refund objects; nothing applied", charge.get("id"))
+        return
+    if refunds_list.get("has_more"):
+        logger.warning("charge.refunded %s: refund list is paginated; refunds beyond the embedded page were not applied", charge.get("id"))
+
+    for refund in refunds:
+        refund_id = refund.get("id")
+        if not refund_id:
+            continue
+        amount = refund.get("amount") or 0
+        _record, created = StripeProcessedRefund.objects.get_or_create(
+            stripe_refund_id=refund_id,
+            defaults={"stripe_charge_id": charge.get("id") or "", "amount_cents": amount},
+        )
+        if created:
+            banking.apply_refund(role_subscription, amount)
+
+
+def _handle_charge_dispute_closed(dispute: dict) -> None:
+    """Debit a lost dispute's amount from the banked pay-what-you-want balance.
+
+    Only a dispute closing as ``lost`` moves money (Stripe has taken it back); every
+    other closing status leaves the ledger alone. ``lost`` is terminal for a dispute
+    and each closing delivers under one event id, so the receiving view's per-event
+    dedup is sufficient idempotency here.
+    """
+    if dispute.get("status") != "lost":
+        return
+    charge_id = dispute.get("charge")
+    if not charge_id:
+        return
+
+    from urbanlens.dashboard.models.billing import RoleSubscription
+
+    charge = stripe.Charge.retrieve(charge_id).to_dict()
+    invoice_id = charge.get("invoice")
+    if not invoice_id:
+        return
+    invoice = stripe.Invoice.retrieve(invoice_id).to_dict()
+    subscription_id = invoice.get("subscription")
+    if not subscription_id:
+        return
+    role_subscription = RoleSubscription.objects.for_stripe_subscription(subscription_id)
+    if role_subscription is None:
+        logger.info("charge.dispute.closed for unknown subscription %s", subscription_id)
+        return
+    banking.apply_refund(role_subscription, dispute.get("amount") or 0)
+
+
 _HANDLERS = {
     "checkout.session.completed": _handle_checkout_session_completed,
     "customer.subscription.updated": _handle_subscription_updated,
     "customer.subscription.deleted": _handle_subscription_deleted,
     "invoice.payment_succeeded": _handle_invoice_payment_succeeded,
     "invoice.payment_failed": _handle_invoice_payment_failed,
+    "charge.refunded": _handle_charge_refunded,
+    "charge.dispute.closed": _handle_charge_dispute_closed,
 }
 
 

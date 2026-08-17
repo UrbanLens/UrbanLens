@@ -58,12 +58,16 @@ function arrowheadSvg(color: string, deg: number, sz = 28, opacity: number | nul
     const tip = -(sz * 0.43);
     const bx = sz * 0.36;
     const by = sz * 0.29;
+    // Validated here, at the sink, rather than trusting the caller: this string
+    // is assigned as a divIcon's innerHTML, and callers do pass colors straight
+    // from a server payload.
+    const fill = safeColor(color);
     return (
         `<svg xmlns="http://www.w3.org/2000/svg" width="${sz}" height="${sz}"`
         + ` viewBox="${-h} ${-h} ${sz} ${sz}"`
         + ` style="transform:rotate(${deg.toFixed(1)}deg);opacity:${op.toFixed(2)}">`
         + `<polygon points="0,${tip.toFixed(1)} ${bx.toFixed(1)},${by.toFixed(1)} ${(-bx).toFixed(1)},${by.toFixed(1)}"`
-        + ` fill="${color}" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>`
+        + ` fill="${fill}" stroke="white" stroke-width="1.5" stroke-linejoin="round"/></svg>`
     );
 }
 

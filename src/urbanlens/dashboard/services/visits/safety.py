@@ -1794,6 +1794,12 @@ def _claim_resolution(checkin: SafetyCheckin, *, status: str, resolved_by_label:
 def cancel_checkin(checkin: SafetyCheckin) -> bool:
     """Cancel a check-in so it will never fire a reminder or escalation.
 
+    Guards the transition with the same conditional UPDATE as
+    ``_resolve_as_found_safe``: a resolution that landed between the caller's
+    read and this write (a contact marking the owner safe, or the owner
+    checking in from another tab) must win, not be overwritten - and its
+    side effects must not run a second time.
+
     Args:
         checkin: The check-in to cancel.
 
@@ -1900,6 +1906,11 @@ def send_final_warning(checkin: SafetyCheckin) -> None:
 
 def check_in(checkin: SafetyCheckin, profile: Profile) -> bool:
     """Record that the profile checked in on time (or late, before escalation).
+
+    Guards the transition with the same conditional UPDATE as
+    ``_resolve_as_found_safe``: a contact marking the owner safe at the same
+    moment the owner checks in must not have their resolution overwritten, nor
+    the broadcast/conclusion/archival side effects run twice.
 
     Args:
         checkin: The check-in being resolved.

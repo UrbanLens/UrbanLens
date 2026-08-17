@@ -43,7 +43,12 @@ const REVIEWED_SAFE = new Map<string, string>([
     ['hasCoords ? "Move on map" : "Place on map"', "string literals"],
     ['hasCoords ? "has-gps" : "no-gps"', "string literals"],
     ['hasCoords ? "place" : "location_off"', "string literals"],
-    ['options.password ? "Enter your account password or your recovery key." : "Enter your recovery key."', "string literals"],
+    // Was an inline ternary of the same literals; upstream hoisted it to `intro`
+    // and split the passkey markup into `passkeyBlock`. Both are ternaries over
+    // developer-authored strings - `passkeyBlock` between a fixed HTML literal and
+    // "" - so no external value reaches the markup either way.
+    ["intro", "ternary over string literals"],
+    ["passkeyBlock", "ternary between a static HTML literal and empty string"],
     // Escaped inline rather than via escHtml.
     ['item.name.replace(/&/g, "&amp;").replace(/</g, "&lt;")', "escaped inline; element content, not an attribute"],
     // Numbers.

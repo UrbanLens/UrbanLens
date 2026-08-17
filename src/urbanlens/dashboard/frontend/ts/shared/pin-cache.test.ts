@@ -4,7 +4,7 @@
  * tests write that shape directly rather than importing the map page's script.
  */
 import { beforeEach, describe, expect, test } from "bun:test";
-import { readCachedPinLocations } from "./pin-cache";
+import { pinCacheKey, purgeForeignPinCaches, readCachedPinLocations } from "./pin-cache";
 
 // localStorage comes from the DOM the test preload registers (see testing/dom-setup.ts),
 // so these exercise a real Storage rather than a hand-rolled stand-in.
@@ -77,5 +77,44 @@ describe("readCachedPinLocations", () => {
     test("returns an empty array for malformed JSON", () => {
         localStorage.setItem(`ul_pins_v5_${PROFILE_UUID}`, "{not json");
         expect(readCachedPinLocations(PROFILE_UUID)).toEqual([]);
+    });
+});
+
+describe("purgeForeignPinCaches", () => {
+    const CURRENT = pinCacheKey(PROFILE_UUID);
+
+    test("removes retired-version, foreign-profile and PK-shaped keys but never the current one", () => {
+        writeCache();
+        localStorage.setItem(`ul_pins_v4_${PROFILE_UUID}`, "old-version-blob");
+        localStorage.setItem("ul_pins_v5_22222222-2222-2222-2222-222222222222", "other-account-blob");
+        localStorage.setItem("ul_pins_v3_41", "pre-uuid-pk-shaped-blob");
+
+        expect(purgeForeignPinCaches(CURRENT)).toBe(3);
+
+        expect(localStorage.getItem(CURRENT)).not.toBeNull();
+        expect(localStorage.getItem(`ul_pins_v4_${PROFILE_UUID}`)).toBeNull();
+        expect(localStorage.getItem("ul_pins_v5_22222222-2222-2222-2222-222222222222")).toBeNull();
+        expect(localStorage.getItem("ul_pins_v3_41")).toBeNull();
+    });
+
+    test("leaves unrelated keys alone", () => {
+        writeCache();
+        localStorage.setItem("ul_layers_v1_abc", "layers");
+        localStorage.setItem("ul_pins_dirty", "1");
+        localStorage.setItem("unrelated", "x");
+
+        purgeForeignPinCaches(CURRENT);
+
+        expect(localStorage.getItem("ul_layers_v1_abc")).toBe("layers");
+        expect(localStorage.getItem("unrelated")).toBe("x");
+        // ul_pins_dirty shares the ul_pins_ prefix but is the map's refetch flag,
+        // not a cache blob - sweeping it would silently drop a pending invalidation.
+        expect(localStorage.getItem("ul_pins_dirty")).toBe("1");
+    });
+
+    test("reports nothing reclaimed when only the current cache exists", () => {
+        writeCache();
+        expect(purgeForeignPinCaches(CURRENT)).toBe(0);
+        expect(localStorage.getItem(CURRENT)).not.toBeNull();
     });
 });

@@ -6,7 +6,7 @@
  * rendering. All pure, no Leaflet/DOM dependency, so tested directly.
  */
 import { describe, expect, test } from "bun:test";
-import { arrowheadSize, bearing, safeColor, safeNumber, safeOptionalColor } from "./markup-engine";
+import { MarkupEngine, arrowheadSize, bearing, safeColor, safeNumber, safeOptionalColor } from "./markup-engine";
 
 describe("safeColor", () => {
     test("passes through a valid 6-digit hex color", () => {
@@ -43,6 +43,26 @@ describe("safeOptionalColor", () => {
     test("validates real colors the same as safeColor", () => {
         expect(safeOptionalColor("#112233")).toBe("#112233");
         expect(safeOptionalColor("garbage")).toBe("#e74c3c");
+    });
+});
+
+describe("arrowheadSvg", () => {
+    // The returned string is assigned as a divIcon's innerHTML, and callers do
+    // hand it colours straight off a server payload, so it validates its own
+    // input rather than trusting them.
+    test("renders a valid colour into the polygon fill", () => {
+        expect(MarkupEngine.arrowheadSvg("#1a2b3c", 0)).toContain('fill="#1a2b3c"');
+    });
+
+    test("refuses a colour that would break out of the fill attribute", () => {
+        const svg = MarkupEngine.arrowheadSvg('" onload="alert(1)', 0);
+
+        expect(svg).not.toContain("onload");
+        expect(svg).toContain('fill="#e74c3c"');
+    });
+
+    test("refuses a javascript: payload", () => {
+        expect(MarkupEngine.arrowheadSvg("javascript:alert(1)", 0)).not.toContain("javascript:");
     });
 });
 

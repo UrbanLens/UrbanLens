@@ -24,11 +24,11 @@ from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact, SafetyCheckinStatus
-from urbanlens.dashboard.services.visits.safety import _resolve_as_found_safe, cancel_checkin, check_in, escalate_checkin, send_checkin_reminder
+from urbanlens.dashboard.services.visits.safety import cancel_checkin, check_in, escalate_checkin, send_checkin_reminder
 
 
-class CheckinResolvedMidSweepTests(TestCase):
-    """A stale in-memory check-in must never overwrite a resolution."""
+class _CheckinRaceTestCase(TestCase):
+    """Shared fixtures for the resolution-race tests below."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -45,6 +45,10 @@ class CheckinResolvedMidSweepTests(TestCase):
             **extra,
         }
         return baker.make(SafetyCheckin, profile=self.profile, status=status, **fields)
+
+
+class CheckinResolvedMidSweepTests(_CheckinRaceTestCase):
+    """A stale in-memory check-in must never overwrite a resolution."""
 
     def test_reminder_does_not_resurrect_a_checkin_resolved_mid_send(self) -> None:
         checkin = self._checkin(SafetyCheckinStatus.SCHEDULED)
@@ -106,68 +110,94 @@ class CheckinResolvedMidSweepTests(TestCase):
         self.assertEqual(checkin.status, SafetyCheckinStatus.OVERDUE)
 
 
-class OwnerResolutionIsAlsoCompareAndSetTests(TestCase):
-    """The owner's own two transitions claim the row instead of overwriting it.
+class StaleInstanceResolutionTests(_CheckinRaceTestCase):
+    """``check_in``/``cancel_checkin`` must not clobber a resolution that landed first.
 
-    ``check_in`` and ``cancel_checkin`` used to write ``status`` straight from
-    a possibly-stale instance, unlike the three transitions above. Both only
-    ever move a check-in *into* a terminal state, so the visible damage was
-    limited to a wrong ``resolved_by_label`` - but having three of five
-    lifecycle writes use compare-and-set and two not is the inconsistency that
-    invites the next transition to copy the wrong one.
+    Both used to write ``status``/``resolved_at``/``resolved_by_label`` straight
+    from their (possibly stale) in-memory instance. A contact marking the owner
+    safe in the same moment would have their resolution overwritten and every
+    side effect (broadcast, conclusion, archival scheduling) run twice.
     """
 
-    def setUp(self) -> None:
-        super().setUp()
-        baker.make(User)  # absorbs the bootstrap site-admin promotion
-        self.profile = baker.make(User).profile
-        self.checkin = baker.make(
-            SafetyCheckin,
-            profile=self.profile,
-            status=SafetyCheckinStatus.AWAITING_CHECKIN,
-            title="night shoot",
-            checkin_by=timezone.now() - timedelta(minutes=5),
-            grace_period=timedelta(hours=1),
-            notify_community_wiki=False,
+    def _resolve_behind_the_scenes(self, checkin: SafetyCheckin) -> None:
+        """Resolve the DB row directly, bypassing the in-memory instance."""
+        SafetyCheckin.objects.filter(pk=checkin.pk).update(
+            status=SafetyCheckinStatus.FOUND_SAFE,
+            resolved_at=timezone.now(),
+            resolved_by_label="contact",
         )
 
-    def test_checking_in_does_not_overwrite_a_contact_who_already_reported_you_safe(self) -> None:
-        stale = SafetyCheckin.objects.get(pk=self.checkin.pk)
-        _resolve_as_found_safe(SafetyCheckin.objects.get(pk=self.checkin.pk), resolved_by_label="Dana")
+    def test_check_in_loses_the_race_and_fires_no_side_effects(self) -> None:
+        checkin = self._checkin(SafetyCheckinStatus.AWAITING_CHECKIN)
+        stale = SafetyCheckin.objects.get(pk=checkin.pk)
+        self._resolve_behind_the_scenes(checkin)
 
-        self.assertFalse(check_in(stale, self.profile))
+        with (
+            mock.patch("urbanlens.dashboard.services.visits.safety._broadcast_status_update") as broadcast,
+            mock.patch("urbanlens.dashboard.services.visits.safety._conclude_checkin") as conclude,
+            mock.patch("urbanlens.dashboard.services.visits.safety.schedule_checkin_archival") as archive,
+        ):
+            resolved = check_in(stale, self.profile)
 
-        self.checkin.refresh_from_db()
-        self.assertEqual(self.checkin.status, SafetyCheckinStatus.FOUND_SAFE)
-        self.assertEqual(self.checkin.resolved_by_label, "Dana")
+        self.assertFalse(resolved)
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.status, SafetyCheckinStatus.FOUND_SAFE)
+        self.assertEqual(checkin.resolved_by_label, "contact")
+        broadcast.assert_not_called()
+        conclude.assert_not_called()
+        archive.assert_not_called()
 
-    def test_cancelling_does_not_overwrite_an_existing_resolution(self) -> None:
-        stale = SafetyCheckin.objects.get(pk=self.checkin.pk)
-        _resolve_as_found_safe(SafetyCheckin.objects.get(pk=self.checkin.pk), resolved_by_label="Dana")
+    def test_cancel_checkin_loses_the_race_and_fires_no_side_effects(self) -> None:
+        checkin = self._checkin(SafetyCheckinStatus.AWAITING_CHECKIN)
+        stale = SafetyCheckin.objects.get(pk=checkin.pk)
+        self._resolve_behind_the_scenes(checkin)
 
-        self.assertFalse(cancel_checkin(stale))
+        with (
+            mock.patch("urbanlens.dashboard.services.visits.safety._broadcast_status_update") as broadcast,
+            mock.patch("urbanlens.dashboard.services.visits.safety.schedule_checkin_archival") as archive,
+        ):
+            cancelled = cancel_checkin(stale)
 
-        self.checkin.refresh_from_db()
-        self.assertEqual(self.checkin.status, SafetyCheckinStatus.FOUND_SAFE)
+        self.assertFalse(cancelled)
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.status, SafetyCheckinStatus.FOUND_SAFE)
+        self.assertEqual(checkin.resolved_by_label, "contact")
+        broadcast.assert_not_called()
+        archive.assert_not_called()
 
-    def test_a_losing_check_in_leaves_the_instance_describing_the_stored_row(self) -> None:
-        """The loser's in-memory copy must not claim a resolution it did not make."""
-        stale = SafetyCheckin.objects.get(pk=self.checkin.pk)
-        _resolve_as_found_safe(SafetyCheckin.objects.get(pk=self.checkin.pk), resolved_by_label="Dana")
+    def test_check_in_wins_on_an_unresolved_checkin(self) -> None:
+        checkin = self._checkin(SafetyCheckinStatus.AWAITING_CHECKIN)
 
-        check_in(stale, self.profile)
+        with (
+            mock.patch("urbanlens.dashboard.services.visits.safety._broadcast_status_update") as broadcast,
+            mock.patch("urbanlens.dashboard.services.visits.safety.schedule_checkin_archival") as archive,
+        ):
+            resolved = check_in(checkin, self.profile)
 
-        self.assertNotEqual(stale.status, SafetyCheckinStatus.CHECKED_IN)
+        self.assertTrue(resolved)
+        # In-memory instance is synced without a refresh, mirroring _resolve_as_found_safe.
+        self.assertEqual(checkin.status, SafetyCheckinStatus.CHECKED_IN)
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.status, SafetyCheckinStatus.CHECKED_IN)
+        self.assertEqual(checkin.resolved_by_label, "you")
+        self.assertIsNotNone(checkin.resolved_at)
+        broadcast.assert_called_once()
+        archive.assert_called_once()
 
-    def test_an_uncontested_check_in_still_resolves_normally(self) -> None:
-        self.assertTrue(check_in(self.checkin, self.profile))
-        self.checkin.refresh_from_db()
-        self.assertEqual(self.checkin.status, SafetyCheckinStatus.CHECKED_IN)
-        self.assertEqual(self.checkin.resolved_by_label, "you")
-        self.assertIsNotNone(self.checkin.resolved_at)
+    def test_cancel_checkin_wins_on_an_unresolved_checkin(self) -> None:
+        checkin = self._checkin(SafetyCheckinStatus.SCHEDULED)
 
-    def test_an_uncontested_cancel_still_resolves_normally(self) -> None:
-        self.assertTrue(cancel_checkin(self.checkin))
-        self.checkin.refresh_from_db()
-        self.assertEqual(self.checkin.status, SafetyCheckinStatus.CANCELLED)
-        self.assertEqual(self.checkin.resolved_by_label, "cancelled by owner")
+        with (
+            mock.patch("urbanlens.dashboard.services.visits.safety._broadcast_status_update") as broadcast,
+            mock.patch("urbanlens.dashboard.services.visits.safety.schedule_checkin_archival") as archive,
+        ):
+            cancelled = cancel_checkin(checkin)
+
+        self.assertTrue(cancelled)
+        self.assertEqual(checkin.status, SafetyCheckinStatus.CANCELLED)
+        checkin.refresh_from_db()
+        self.assertEqual(checkin.status, SafetyCheckinStatus.CANCELLED)
+        self.assertEqual(checkin.resolved_by_label, "cancelled by owner")
+        self.assertIsNotNone(checkin.resolved_at)
+        broadcast.assert_called_once()
+        archive.assert_called_once()

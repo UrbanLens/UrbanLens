@@ -267,6 +267,172 @@ class HandleInvoicePaymentFailedTests(TestCase):
         webhooks.handle_event({"type": "invoice.payment_failed", "data": {"object": {"subscription": "sub_unknown"}}})  # must not raise
 
 
+def _charge_refunded_event(
+    *,
+    refunds: list[dict],
+    event_id: str = "evt_ref_1",
+    charge_id: str = "ch_1",
+    invoice: str | None = "in_1",
+    has_more: bool = False,
+) -> dict:
+    return {
+        "id": event_id,
+        "type": "charge.refunded",
+        "data": {"object": {"id": charge_id, "invoice": invoice, "refunds": {"data": refunds, "has_more": has_more}}},
+    }
+
+
+class HandleChargeRefundedTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
+        self.sub = baker.make(
+            RoleSubscription,
+            role=self.role,
+            stripe_subscription_id="sub_123",
+            total_paid_cents=2000,
+            amount_used_cents=500,
+        )
+
+    def _mock_invoice(self, subscription: str | None = "sub_123") -> mock.MagicMock:
+        patcher = mock.patch("stripe.Invoice.retrieve")
+        mock_retrieve = patcher.start()
+        self.addCleanup(patcher.stop)
+        mock_retrieve.return_value.to_dict.return_value = {"id": "in_1", "subscription": subscription}
+        return mock_retrieve
+
+    def test_decrements_the_banked_balance_by_the_refunded_amount(self) -> None:
+        self._mock_invoice()
+        webhooks.handle_event(_charge_refunded_event(refunds=[{"id": "re_1", "amount": 500}]))
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 1500)
+        # Access already consumed is forgiven, not clawed back.
+        self.assertEqual(self.sub.amount_used_cents, 500)
+
+    def test_clamps_the_balance_at_zero(self) -> None:
+        self._mock_invoice()
+        webhooks.handle_event(_charge_refunded_event(refunds=[{"id": "re_1", "amount": 99_999}]))
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 0)
+
+    def test_redelivered_event_applies_each_refund_once(self) -> None:
+        self._mock_invoice()
+        event = _charge_refunded_event(refunds=[{"id": "re_1", "amount": 500}])
+        webhooks.handle_event(event)
+        webhooks.handle_event(event)
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 1500)
+
+    def test_cumulative_second_event_applies_only_the_new_refund(self) -> None:
+        """charge.refunded delivers the charge's *cumulative* refund list - a second
+        partial refund arrives as a fresh event (new event id) that re-contains the
+        first refund, which must not be applied again."""
+        self._mock_invoice()
+        webhooks.handle_event(_charge_refunded_event(event_id="evt_ref_1", refunds=[{"id": "re_1", "amount": 500}]))
+        webhooks.handle_event(
+            _charge_refunded_event(event_id="evt_ref_2", refunds=[{"id": "re_1", "amount": 500}, {"id": "re_2", "amount": 300}])
+        )
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000 - 500 - 300)
+
+    def test_charge_without_an_invoice_is_a_no_op(self) -> None:
+        mock_retrieve = self._mock_invoice()
+        webhooks.handle_event(_charge_refunded_event(invoice=None, refunds=[{"id": "re_1", "amount": 500}]))
+
+        mock_retrieve.assert_not_called()
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
+    def test_invoice_without_a_subscription_is_a_no_op(self) -> None:
+        self._mock_invoice(subscription=None)
+        webhooks.handle_event(_charge_refunded_event(refunds=[{"id": "re_1", "amount": 500}]))
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
+    def test_unknown_subscription_is_a_no_op(self) -> None:
+        self._mock_invoice(subscription="sub_unknown")
+        webhooks.handle_event(_charge_refunded_event(refunds=[{"id": "re_1", "amount": 500}]))  # must not raise
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
+    def test_missing_refund_list_does_not_raise(self) -> None:
+        self._mock_invoice()
+        event = {"id": "evt_ref_1", "type": "charge.refunded", "data": {"object": {"id": "ch_1", "invoice": "in_1"}}}
+        webhooks.handle_event(event)  # must not raise
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
+
+class HandleChargeDisputeClosedTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        self.role = baker.make(SubscriptionRole, pay_what_you_want=True, pwyw_minimum_cents=500)
+        self.sub = baker.make(RoleSubscription, role=self.role, stripe_subscription_id="sub_123", total_paid_cents=2000)
+
+    def _event(self, *, status: str = "lost", amount: int = 500, charge: str | None = "ch_1") -> dict:
+        return {
+            "id": "evt_dp_1",
+            "type": "charge.dispute.closed",
+            "data": {"object": {"id": "dp_1", "status": status, "charge": charge, "amount": amount}},
+        }
+
+    def _mock_stripe(self, *, invoice: str | None = "in_1", subscription: str | None = "sub_123") -> tuple[mock.MagicMock, mock.MagicMock]:
+        charge_patcher = mock.patch("stripe.Charge.retrieve")
+        invoice_patcher = mock.patch("stripe.Invoice.retrieve")
+        mock_charge = charge_patcher.start()
+        mock_invoice = invoice_patcher.start()
+        self.addCleanup(charge_patcher.stop)
+        self.addCleanup(invoice_patcher.stop)
+        mock_charge.return_value.to_dict.return_value = {"id": "ch_1", "invoice": invoice}
+        mock_invoice.return_value.to_dict.return_value = {"id": "in_1", "subscription": subscription}
+        return mock_charge, mock_invoice
+
+    def test_lost_dispute_claws_back_the_disputed_amount(self) -> None:
+        self._mock_stripe()
+        webhooks.handle_event(self._event(status="lost", amount=500))
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 1500)
+
+    def test_clamps_the_balance_at_zero(self) -> None:
+        self._mock_stripe()
+        webhooks.handle_event(self._event(status="lost", amount=99_999))
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 0)
+
+    def test_non_lost_dispute_is_ignored(self) -> None:
+        mock_charge, _mock_invoice = self._mock_stripe()
+        for status in ("won", "needs_response", "under_review", "warning_closed"):
+            with self.subTest(status=status):
+                webhooks.handle_event(self._event(status=status))
+
+        mock_charge.assert_not_called()
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
+    def test_charge_without_an_invoice_is_a_no_op(self) -> None:
+        self._mock_stripe(invoice=None)
+        webhooks.handle_event(self._event())
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
+    def test_unknown_subscription_is_a_no_op(self) -> None:
+        self._mock_stripe(subscription="sub_unknown")
+        webhooks.handle_event(self._event())  # must not raise
+
+        self.sub.refresh_from_db()
+        self.assertEqual(self.sub.total_paid_cents, 2000)
+
+
 class HandleEventUnknownTypeTests(TestCase):
     def test_unhandled_event_type_is_ignored(self) -> None:
         webhooks.handle_event({"type": "customer.updated", "data": {"object": {}}})  # must not raise

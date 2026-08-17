@@ -241,13 +241,30 @@
             return Promise.resolve({ body: body });
         }
         var encrypting = group ? E2EE.encryptForGroup(group, body) : E2EE.encryptForPartner(partner, body);
-        return encrypting.then(function (enc) {
-            if (!enc) return { body: body };
-            return { body: '', ciphertext: enc.ciphertext, nonce: enc.nonce, key_version: enc.key_version };
+        return encrypting.then(function (result) {
+            if (result.status === 'encrypted') {
+                var enc = result.payload;
+                return { body: '', ciphertext: enc.ciphertext, nonce: enc.nonce, key_version: enc.key_version };
+            }
+            if (result.status === 'unencryptable') {
+                // Nobody to encrypt to, or this device is locked. Expected, and
+                // the thread is not claiming to be encrypted either way.
+                return { body: body };
+            }
+            return encryptionFailed(result.reason);
         }).catch(function (err) {
-            console.error('E2EE encrypt failed; sending plaintext', err);
-            return { body: body };
+            return encryptionFailed(err);
         });
+    }
+
+    // Encryption was expected and did not happen. Sending the plaintext anyway
+    // would put a readable message in a thread both people believe is
+    // encrypted, so refuse the send and say why; the caller leaves the composer
+    // untouched so nothing typed is lost.
+    function encryptionFailed(reason) {
+        console.error('E2EE encrypt failed; message not sent', reason);
+        toast('error', 'Could not encrypt this message, so it was not sent. Check your connection and try again.');
+        return null;
     }
 
     function activeThread() { return document.getElementById('dm-thread'); }
@@ -1001,6 +1018,10 @@
         // Encryption (if any) happens before the frame leaves the browser. The
         // body text is only encrypted; attachments stay server-visible in v1.
         buildOutgoingPayload(partner, body).then(function (content) {
+            // Encryption was required and failed - buildOutgoingPayload has
+            // already told the user. Leave the composer as it is so the text
+            // and any attachments survive a retry.
+            if (!content) return;
             if (ws && ws.readyState === WebSocket.OPEN) {
                 var frame = {
                     body: content.body || '',

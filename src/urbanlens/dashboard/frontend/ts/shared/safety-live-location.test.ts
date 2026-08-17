@@ -9,8 +9,8 @@ interface Harness {
     errors: string[];
     /** Deliver a position to the watcher, as the browser would. */
     emit(lat?: number, lng?: number): void;
-    /** Trigger the watcher's error callback. */
-    emitError(): void;
+    /** Trigger the watcher's error callback with a GeolocationPositionError code. */
+    emitError(code?: number): void;
     watching(): boolean;
     /** Advance the clock past the throttle window. */
     advance(ms?: number): void;
@@ -33,19 +33,36 @@ function stubNetworkFailure(): void {
     globalThis.fetch = (() => Promise.reject(new Error("offline"))) as unknown as typeof fetch;
 }
 
-function setup(checked = false): Harness {
+/** Hold every request open until ``flush`` is called, so ordering is testable. */
+function stubDeferredFetch(status = 204): { flush: () => void } {
+    posted = [];
+    const pending: (() => void)[] = [];
+    globalThis.fetch = ((url: string, init: RequestInit) => {
+        posted.push({ url: String(url), body: init.body as FormData });
+        return new Promise<Response>((resolve) => {
+            pending.push(() => resolve({ ok: status >= 200 && status < 300, status } as Response));
+        });
+    }) as unknown as typeof fetch;
+    return {
+        flush: () => {
+            while (pending.length) pending.shift()?.();
+        },
+    };
+}
+
+function setup(checked = false, hasGeolocation = true): Harness {
     let clock = 1_000_000;
     document.body.innerHTML = `<input type="checkbox" id="t" ${checked ? "checked" : ""}>`;
     const toggle = document.getElementById("t") as HTMLInputElement;
     const errors: string[] = [];
 
     let onPosition: ((p: GeolocationPosition) => void) | null = null;
-    let onError: (() => void) | null = null;
+    let onError: ((e: GeolocationPositionError) => void) | null = null;
     let nextId = 1;
     let activeId: number | null = null;
 
     const geolocation = {
-        watchPosition: (success: (p: GeolocationPosition) => void, error: () => void) => {
+        watchPosition: (success: (p: GeolocationPosition) => void, error: (e: GeolocationPositionError) => void) => {
             onPosition = success;
             onError = error;
             activeId = nextId++;
@@ -62,7 +79,7 @@ function setup(checked = false): Harness {
         toggleUrl: "/toggle/",
         updateUrl: "/update/",
         csrfToken: "tok",
-        geolocation: geolocation as unknown as Geolocation,
+        geolocation: hasGeolocation ? (geolocation as unknown as Geolocation) : null,
         notify: (_kind, message) => errors.push(message),
         now: () => clock,
     });
@@ -71,7 +88,7 @@ function setup(checked = false): Harness {
         toggle,
         errors,
         emit: (lat = 40, lng = -73) => onPosition?.({ coords: { latitude: lat, longitude: lng, accuracy: 5 } } as GeolocationPosition),
-        emitError: () => onError?.(),
+        emitError: (code = 2) => onError?.({ code } as GeolocationPositionError),
         watching: () => activeId !== null,
         advance: (ms = 31_000) => {
             clock += ms;
@@ -296,5 +313,182 @@ describe("when the browser cannot provide a location", () => {
         const h = setup(true);
         h.emitError();
         expect(h.errors[0]).toContain("Could not get your location");
+    });
+
+    test("a transient failure keeps sharing on - it usually recovers", () => {
+        const h = setup(true);
+        h.emitError(3); // TIMEOUT
+
+        expect(h.watching()).toBe(true);
+        expect(h.toggle.checked).toBe(true);
+    });
+
+    test("a repeating transient failure is only said once", () => {
+        const h = setup(true);
+        for (let i = 0; i < 5; i += 1) h.emitError(2); // POSITION_UNAVAILABLE
+
+        expect(h.errors).toHaveLength(1);
+    });
+});
+
+describe("when location permission is denied", () => {
+    // Denial is permanent until the user changes a browser setting, so leaving
+    // the switch on left the server - and the partner watching the check-in -
+    // expecting positions that would never be sent.
+    test("sharing is switched off rather than left looking healthy", async () => {
+        const h = setup(true);
+        h.emitError(1); // PERMISSION_DENIED
+        await settle();
+
+        expect(h.watching()).toBe(false);
+        expect(h.toggle.checked).toBe(false);
+    });
+
+    test("the server is told sharing has stopped", async () => {
+        const h = setup(true);
+        posted = [];
+        h.emitError(1);
+        await settle();
+
+        expect(posted.filter((p) => p.url === "/toggle/").at(-1)?.body.get("enabled")).toBe("0");
+    });
+
+    test("the owner is told why, and how to fix it", async () => {
+        const h = setup(true);
+        h.emitError(1);
+        await settle();
+
+        expect(h.errors).toHaveLength(1);
+        expect(h.errors[0]).toContain("permission");
+    });
+
+    test("no positions are reported afterwards", async () => {
+        const h = setup(true);
+        h.emitError(1);
+        await settle();
+        posted = [];
+        h.emit();
+        await settle();
+
+        expect(posted.filter((p) => p.url === "/update/")).toHaveLength(0);
+    });
+
+    // A refused disable is the case this whole path exists to prevent: off
+    // locally, still enabled on the server, partner still watching a stale
+    // marker. A non-ok status resolves like any other response, so it has to
+    // be inspected rather than assumed.
+    test("a refused disable is reported rather than assumed to have worked", async () => {
+        const h = setup(true);
+        stubFetch(500);
+        h.emitError(1);
+        await settle();
+
+        expect(h.errors).toHaveLength(2);
+        expect(h.errors[1]).toContain("still switched on");
+    });
+
+    test("a disable lost to the network is reported too", async () => {
+        const h = setup(true);
+        stubNetworkFailure();
+        h.emitError(1);
+        await settle();
+
+        expect(h.errors).toHaveLength(2);
+        expect(h.errors[1]).toContain("still switched on");
+    });
+
+    test("an accepted disable says nothing further", async () => {
+        const h = setup(true);
+        h.emitError(1);
+        await settle();
+
+        expect(h.errors).toHaveLength(1);
+    });
+
+    // The disable waits behind the in-flight enable it is undoing, which means
+    // the intent it represents can be overtaken while it waits: grant the
+    // permission and switch back on, and a stale "off" landing afterwards would
+    // disable sharing on the server under a checked toggle and a live watcher -
+    // every position update then rejected, with the page showing no sign of it.
+    test("a queued disable is abandoned when sharing is switched back on first", async () => {
+        const h = setup();
+        const deferred = stubDeferredFetch();
+
+        h.toggle.checked = true;
+        h.toggle.dispatchEvent(new Event("change")); // enable POST now in flight
+        h.emitError(1); // permission denied - disable queues behind it
+        h.toggle.checked = true;
+        h.toggle.dispatchEvent(new Event("change")); // permission granted, back on
+        deferred.flush();
+        await settle();
+
+        const toggles = posted.filter((p) => p.url === "/toggle/");
+        expect(toggles.map((p) => p.body.get("enabled"))).toEqual(["1", "1"]);
+        expect(h.toggle.checked).toBe(true);
+        expect(h.watching()).toBe(true);
+    });
+
+    // The same collision one step later: the disable has already been sent, so
+    // dropping it is no longer an option and the re-enable has to land after
+    // it. The flag is last-write-wins server-side, so an "on" sent while the
+    // "off" is still open can be overtaken by it.
+    test("a re-enable is sent after an in-flight disable, not alongside it", async () => {
+        const h = setup(true);
+        const deferred = stubDeferredFetch();
+
+        h.emitError(1); // permission denied - disable POST now in flight
+        h.toggle.checked = true;
+        h.toggle.dispatchEvent(new Event("change")); // permission granted, back on
+        deferred.flush();
+        await settle();
+        deferred.flush(); // whatever the queue sent once the disable landed
+        await settle();
+
+        const toggles = posted.filter((p) => p.url === "/toggle/");
+        expect(toggles.map((p) => p.body.get("enabled"))).toEqual(["0", "1"]);
+        expect(h.toggle.checked).toBe(true);
+        expect(h.watching()).toBe(true);
+    });
+
+    test("only one sharing write is ever in flight", async () => {
+        const h = setup(true);
+        const deferred = stubDeferredFetch();
+
+        h.emitError(1);
+        h.toggle.checked = true;
+        h.toggle.dispatchEvent(new Event("change"));
+
+        expect(posted.filter((p) => p.url === "/toggle/")).toHaveLength(1);
+        deferred.flush();
+        await settle();
+        expect(posted.filter((p) => p.url === "/toggle/")).toHaveLength(2);
+        deferred.flush();
+        await settle();
+    });
+});
+
+describe("when the browser has no geolocation at all", () => {
+    test("turning sharing on reverts instead of pretending to work", async () => {
+        const h = setup(false, false);
+        await flip(h, true);
+
+        expect(h.toggle.checked).toBe(false);
+        expect(h.errors).toHaveLength(1);
+    });
+
+    test("the server is never told sharing is on", async () => {
+        const h = setup(false, false);
+        await flip(h, true);
+
+        expect(posted.some((p) => p.body.get("enabled") === "1")).toBe(false);
+        expect(posted.filter((p) => p.url === "/toggle/").at(-1)?.body.get("enabled")).toBe("0");
+    });
+
+    test("already-on at page load is corrected", async () => {
+        const h = setup(true, false);
+        await settle();
+
+        expect(h.toggle.checked).toBe(false);
+        expect(posted.filter((p) => p.url === "/toggle/").at(-1)?.body.get("enabled")).toBe("0");
     });
 });

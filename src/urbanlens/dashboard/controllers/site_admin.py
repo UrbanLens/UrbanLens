@@ -225,6 +225,12 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
             pass
 
         try:
+            ip_max_attempts = int(request.POST.get("login_ip_max_attempts", settings.login_ip_max_attempts))
+            settings.login_ip_max_attempts = max(0, ip_max_attempts)
+        except (ValueError, TypeError):
+            pass
+
+        try:
             lockout_minutes = int(request.POST.get("login_lockout_minutes", settings.login_lockout_minutes))
             settings.login_lockout_minutes = max(1, lockout_minutes)
         except (ValueError, TypeError):
@@ -283,6 +289,7 @@ class SiteAdminView(LoginRequiredMixin, PermissionRequiredMixin, View):
                 "max_bbox_area_km2",
                 "external_data_cache_days",
                 "login_max_attempts",
+                "login_ip_max_attempts",
                 "login_lockout_minutes",
                 "backup_frequency_hours",
                 "backup_retention",

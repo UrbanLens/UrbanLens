@@ -19,13 +19,13 @@ from __future__ import annotations
 
 import json
 import logging
-import re
 from typing import TYPE_CHECKING
 
 from django.utils import timezone
 from django.utils.dateformat import format as format_date
 
 from urbanlens.dashboard.models.markup.meta import normalize_layer_mode
+from urbanlens.dashboard.services.core.colors import sanitize_hex_color, sanitize_optional_color
 
 if TYPE_CHECKING:
     from django.http import HttpRequest
@@ -39,7 +39,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
 _ALLOWED_SHAPE_TYPES = {"line", "arrow", "circle", "rect", "polygon", "text", "pin"}
 
 
@@ -55,18 +54,16 @@ def _is_valid_lng(v: object) -> bool:
 
 def _sanitize_markup_color(v: object, fallback: str = "#e74c3c") -> str:
     """Return ``v`` if it is a 6-digit hex colour, otherwise ``fallback``."""
-    if isinstance(v, str) and _HEX_COLOR_RE.match(v):
-        return v
-    return fallback
+    return sanitize_hex_color(v, fallback)
 
 
 def _sanitize_optional_color(v: object) -> str | None:
-    """Return ``v`` if it is a hex colour or the string ``"none"``, else None."""
-    if v == "none":
-        return "none"
-    if isinstance(v, str) and _HEX_COLOR_RE.match(v):
-        return v
-    return None
+    """Return ``v`` if it is a hex colour or the string ``"none"``, else None.
+
+    Unlike the shared helper, callers here distinguish "no usable value" from
+    "unset" by testing for None, so the empty-string fallback is mapped back.
+    """
+    return sanitize_optional_color(v) or None
 
 
 def _sanitize_number(v: object, lo: float, hi: float, default: float) -> float:

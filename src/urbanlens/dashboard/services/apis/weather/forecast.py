@@ -8,12 +8,27 @@ path converts into the same ``ForecastSlot``/``SunTimes`` shapes here, so
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, NotRequired, TypedDict
 
 
 class ForecastSlot(TypedDict):
-    """One forecast time slot, in a shape independent of the source provider."""
+    """One forecast time slot, in a shape independent of the source provider.
+
+    ``date`` is the provider's own wall clock, kept for display and carrying
+    **no timezone contract**: Open-Meteo publishes local time for the queried
+    coordinates, OpenWeatherMap publishes UTC, and REData passes through
+    whatever its upstream emitted. Time arithmetic (matching a slot to a
+    scheduled activity, bucketing by day) must use ``date_utc`` instead.
+
+    ``date_utc`` is always timezone-aware UTC when present. Converters derive
+    it as: an aware provider timestamp is ``astimezone(UTC)``; a naive one is
+    assumed to already be UTC (correct for OpenWeatherMap's ``dt_txt``, and
+    the documented assumption for REData) - except Open-Meteo, whose naive
+    local timestamps are first anchored with the response's own
+    ``utc_offset_seconds``. It is absent only when a converter had no way to
+    anchor the provider's wall clock.
+    """
 
     #: Naive **UTC**, so slots from different providers are comparable and can be
     #: matched against `Activity.scheduled_at` (also stored UTC). Providers that
@@ -22,6 +37,9 @@ class ForecastSlot(TypedDict):
     #: the `utc_offset_seconds` it reports back. Not displayed anywhere; the
     #: rendered slots carry their own labels.
     date: datetime
+    #: The slot's instant as an aware UTC datetime - see the class docstring
+    #: for the per-provider derivation and when it can be absent.
+    date_utc: NotRequired[datetime]
     temp: float
     condition: str
     icon: str
@@ -77,7 +95,9 @@ def owm_item_to_slot(item: dict[str, Any]) -> ForecastSlot | None:
     Args:
         item: One entry of OpenWeatherMap's ``list`` response, already
             carrying a parsed ``date`` field (see
-            ``OpenWeatherMapGateway._parse_dates``).
+            ``OpenWeatherMapGateway._parse_dates``). OpenWeatherMap's
+            ``dt_txt`` is UTC, so a naive ``date`` is anchored as UTC for
+            ``date_utc``.
 
     Returns:
         The normalized slot, or None when the entry is missing its date.
@@ -92,6 +112,7 @@ def owm_item_to_slot(item: dict[str, Any]) -> ForecastSlot | None:
     pop = item.get("pop")
     return ForecastSlot(
         date=date,
+        date_utc=date.astimezone(UTC) if date.tzinfo is not None else date.replace(tzinfo=UTC),
         temp=float(main.get("temp") or 0.0),
         condition=condition,
         icon=_OWM_CONDITION_ICONS.get(condition, "cloud"),
@@ -133,6 +154,9 @@ def redata_forecast_to_slots(forecast: list[dict[str, Any]]) -> list[ForecastSlo
     Args:
         forecast: The ``forecast`` array from one REData weather result entry
             (a mix of ``granularity: "hourly"``/``"daily"`` slots).
+            ``starts_at`` keeps whatever awareness its ISO string carried: an
+            offset-carrying value is converted for ``date_utc``, a naive one
+            is assumed to already be UTC (the ``ForecastSlot`` contract).
 
     Returns:
         Normalized slots, skipping any entry with no parseable ``starts_at``.
@@ -154,6 +178,7 @@ def redata_forecast_to_slots(forecast: list[dict[str, Any]]) -> list[ForecastSlo
         slots.append(
             ForecastSlot(
                 date=date,
+                date_utc=date.astimezone(UTC) if date.tzinfo is not None else date.replace(tzinfo=UTC),
                 temp=_celsius_to_fahrenheit(temperature_c) if temperature_c is not None else 0.0,
                 condition=redata_condition_label(condition),
                 icon=_REDATA_CONDITION_ICONS.get(condition, "cloud"),

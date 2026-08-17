@@ -32,6 +32,7 @@ import { installGlobalMapLayers } from "../shared/map-layers";
 import { installGlobalMarkupEngine } from "../shared/markup-engine";
 import { createMarkupToolbar } from "../shared/markup-toolbar";
 import { installGlobalMentionAutocomplete } from "../shared/mention-autocomplete";
+import { installGlobalPinCachePurge } from "../shared/pin-cache";
 import { installGlobalPopupDismiss } from "../shared/popup-dismiss";
 import { installGlobalReactionPicker } from "../shared/reaction-picker";
 import { installGlobalSafetyLiveLocation } from "../shared/safety-live-location";
@@ -57,6 +58,7 @@ installGlobalMarkupEngine();
 installGlobalMapExport();
 installGlobalLabelPicker();
 installGlobalLeaveConfirmation();
+installGlobalPinCachePurge();
 
 window.createMarkupToolbar = createMarkupToolbar;
 

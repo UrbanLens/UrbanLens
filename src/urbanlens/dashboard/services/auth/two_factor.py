@@ -81,10 +81,14 @@ def security_settings_context(user: User, request: HttpRequest, **extra: object)
         **extra: Additional context to merge in, e.g. ``code_error`` for an
             inline TOTP-confirm failure message.
     """
-    from urbanlens.dashboard.services.auth.webauthn import list_credentials
+    from urbanlens.dashboard.services.auth.webauthn import has_passkeys, list_credentials
 
     return {
         "passkeys": list_credentials(user),
+        # The 2FA on/off banner keys off this, NOT the passkeys list: an
+        # unlock-only key (is_login_factor=False) appears in the list but does
+        # not make sign-in two-factor.
+        "has_login_passkey": has_passkeys(user),
         "has_totp": has_totp(user),
         "pending_totp_secret": request.session.get(SESSION_PENDING_TOTP_SECRET),
         "backup_code_count": remaining_backup_code_count(user),

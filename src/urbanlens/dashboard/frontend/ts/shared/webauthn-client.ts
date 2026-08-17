@@ -54,6 +54,18 @@ interface CredentialDescriptorJSON {
     transports?: AuthenticatorTransport[];
 }
 
+/** The `prf` extension in wire form: base64url inputs, exactly the shape
+ * WebAuthn Level 3's parse*OptionsFromJSON uses and the server's
+ * `_with_prf_extension` (services/auth/webauthn.py) emits. */
+interface PrfExtensionJSON {
+    eval?: { first: string; second?: string };
+    evalByCredential?: Record<string, { first: string; second?: string }>;
+}
+
+interface ExtensionsJSON {
+    prf?: PrfExtensionJSON;
+}
+
 interface RegistrationOptionsJSON {
     rp: { id?: string; name: string };
     user: { id: string; name: string; displayName: string };
@@ -63,6 +75,7 @@ interface RegistrationOptionsJSON {
     excludeCredentials?: CredentialDescriptorJSON[];
     authenticatorSelection?: AuthenticatorSelectionCriteria;
     attestation?: AttestationConveyancePreference;
+    extensions?: ExtensionsJSON;
 }
 
 interface AuthenticationOptionsJSON {
@@ -71,6 +84,30 @@ interface AuthenticationOptionsJSON {
     rpId?: string;
     allowCredentials?: CredentialDescriptorJSON[];
     userVerification?: UserVerificationRequirement;
+    extensions?: ExtensionsJSON;
+}
+
+/** Convert wire-form extensions (base64url strings) to the BufferSources the
+ * browser API wants. Only `prf` is understood; unknown extensions are dropped
+ * rather than passed through malformed. */
+function extensionsFromJSON(json: ExtensionsJSON | undefined): AuthenticationExtensionsClientInputs | undefined {
+    const prf = json?.prf;
+    if (!prf) {
+        return undefined;
+    }
+    const converted: { eval?: { first: BufferSource }; evalByCredential?: Record<string, { first: BufferSource }> } = {};
+    if (prf.eval) {
+        converted.eval = { first: base64urlToBuffer(prf.eval.first) };
+    }
+    if (prf.evalByCredential) {
+        converted.evalByCredential = {};
+        for (const [credId, values] of Object.entries(prf.evalByCredential)) {
+            converted.evalByCredential[credId] = { first: base64urlToBuffer(values.first) };
+        }
+    }
+    // Empty {} is meaningful on registration: it asks the authenticator to
+    // enable PRF so later assertions can evaluate it.
+    return { prf: converted } as AuthenticationExtensionsClientInputs;
 }
 
 function creationOptionsFromJSON(json: RegistrationOptionsJSON): CredentialCreationOptions {
@@ -92,6 +129,7 @@ function creationOptionsFromJSON(json: RegistrationOptionsJSON): CredentialCreat
             })),
             authenticatorSelection: json.authenticatorSelection,
             attestation: json.attestation,
+            extensions: extensionsFromJSON(json.extensions),
         },
     };
 }
@@ -108,8 +146,95 @@ function requestOptionsFromJSON(json: AuthenticationOptionsJSON): CredentialRequ
                 transports: cred.transports,
             })),
             userVerification: json.userVerification,
+            extensions: extensionsFromJSON(json.extensions),
         },
     };
+}
+
+/** The base64url rawId of a credential - the id every wrap and wire payload keys on. */
+export function credentialIdOf(credential: PublicKeyCredential): string {
+    return bufferToBase64url(credential.rawId);
+}
+
+/** Shape of getClientExtensionResults().prf, absent from lib.dom.d.ts. */
+interface PrfExtensionResults {
+    enabled?: boolean;
+    results?: { first?: ArrayBuffer | Uint8Array; second?: ArrayBuffer | Uint8Array };
+}
+
+/**
+ * Extract the prf extension's first evaluation result from a credential.
+ *
+ * @param credential - The credential returned by create()/get().
+ * @returns The 32-byte PRF output, or null when the authenticator did not
+ *   evaluate the extension (unsupported, or no input was supplied).
+ */
+export function getPrfResult(credential: PublicKeyCredential): Uint8Array | null {
+    const results = (credential.getClientExtensionResults() as { prf?: PrfExtensionResults }).prf?.results;
+    const first = results?.first;
+    if (!first) {
+        return null;
+    }
+    return first instanceof Uint8Array ? first : new Uint8Array(first);
+}
+
+/**
+ * Report whether a registration enabled PRF on the new credential.
+ *
+ * @param credential - The credential returned by create().
+ * @returns True when the authenticator confirmed PRF support.
+ */
+export function prfEnabled(credential: PublicKeyCredential): boolean {
+    return Boolean((credential.getClientExtensionResults() as { prf?: PrfExtensionResults }).prf?.enabled);
+}
+
+/** What a PRF assertion produced: a usable output, an authenticator that
+ * cannot do PRF at all, or nothing (cancelled, errored, or unsupported). */
+export type PrfAssertionResult = { status: "ok"; credentialId: string; prf: Uint8Array } | { status: "no-prf" } | { status: "unavailable" };
+
+/**
+ * Run a client-challenged assertion purely to evaluate the PRF extension.
+ *
+ * The signature is discarded and nothing is sent to the server - the PRF
+ * output is the entire point (it authenticates nothing; the wrapped blob it
+ * opens is already served to any authenticated session, exactly like
+ * password_wrapped_secret). The challenge is random-local because nobody
+ * verifies it.
+ *
+ * The two failure cases are kept apart because callers act on them
+ * differently: an authenticator that answered but has no PRF means "this key
+ * can never unlock, offer another route", while a cancel or error means "the
+ * user did not choose anything, leave them where they were".
+ *
+ * @param evalByCredential - base64url credential id -> base64url PRF input.
+ * @returns The credential id used and its PRF output, or why it produced none.
+ */
+export async function assertForPrf(evalByCredential: Record<string, string>): Promise<PrfAssertionResult> {
+    if (!window.PublicKeyCredential) {
+        return { status: "unavailable" };
+    }
+    const challenge = new Uint8Array(32);
+    crypto.getRandomValues(challenge);
+    try {
+        const credential = (await navigator.credentials.get({
+            publicKey: {
+                challenge,
+                allowCredentials: Object.keys(evalByCredential).map((id) => ({ id: base64urlToBuffer(id), type: "public-key" as const })),
+                userVerification: "preferred",
+                extensions: extensionsFromJSON({ prf: { evalByCredential: Object.fromEntries(Object.entries(evalByCredential).map(([id, input]) => [id, { first: input }])) } }),
+            },
+        })) as PublicKeyCredential | null;
+        if (!credential) {
+            return { status: "unavailable" };
+        }
+        const prf = getPrfResult(credential);
+        if (!prf) {
+            return { status: "no-prf" };
+        }
+        return { status: "ok", credentialId: bufferToBase64url(credential.rawId), prf };
+    } catch {
+        return { status: "unavailable" };
+    }
 }
 
 function credentialToJSON(credential: PublicKeyCredential): Record<string, unknown> {
@@ -163,11 +288,27 @@ export interface RegisterConfig {
     registerUrl: string;
     /** Optional nickname to save. Left blank, the server auto-generates one (e.g. "Passkey 2") - see webauthn.py. */
     name?: string;
+    /** "unlock" registers an E2EE-unlock-only key (is_login_factor=False server-side). */
+    purpose?: "unlock";
+    /** base64 PRF input to evaluate during creation, when the caller intends
+     * to wrap a key under this credential. Some browsers return the result at
+     * create time, saving the follow-up assertion; others only enable PRF and
+     * the caller falls back to assertForPrf(). */
+    prfInput?: string;
 }
 
 export interface WebAuthnResult {
     ok: boolean;
     error?: string;
+    /** base64url rawId of the new credential (registration only). */
+    credentialId?: string;
+    /** Database id of the new credential, for undoing a registration that
+     * turns out to be unusable (registration only). */
+    credentialPk?: number;
+    /** PRF output when the browser evaluated it at create time. */
+    prf?: Uint8Array | null;
+    /** Whether the authenticator reports PRF support for this credential. */
+    prfEnabled?: boolean;
 }
 
 export async function registerPasskey(cfg: RegisterConfig): Promise<WebAuthnResult> {
@@ -185,6 +326,9 @@ export async function registerPasskey(cfg: RegisterConfig): Promise<WebAuthnResu
             return { ok: false, error: body.error ?? "Could not start passkey registration." };
         }
         const optionsJson = (await optionsResp.json()) as RegistrationOptionsJSON;
+        if (cfg.prfInput) {
+            optionsJson.extensions = { ...optionsJson.extensions, prf: { eval: { first: cfg.prfInput } } };
+        }
         const credential = (await navigator.credentials.create(creationOptionsFromJSON(optionsJson))) as PublicKeyCredential | null;
         if (!credential) {
             return { ok: false, error: "Passkey creation was cancelled." };
@@ -194,6 +338,9 @@ export async function registerPasskey(cfg: RegisterConfig): Promise<WebAuthnResu
         const form = new URLSearchParams();
         form.set("credential", JSON.stringify(credentialToJSON(credential)));
         form.set("name", name);
+        if (cfg.purpose) {
+            form.set("purpose", cfg.purpose);
+        }
         const completeResp = await fetch(cfg.registerUrl, {
             method: "POST",
             headers: { "Content-Type": "application/x-www-form-urlencoded", "X-CSRFToken": csrfToken() },
@@ -204,7 +351,13 @@ export async function registerPasskey(cfg: RegisterConfig): Promise<WebAuthnResu
         if (!completeResp.ok) {
             return { ok: false, error: completeBody.error ?? "That passkey could not be saved." };
         }
-        return { ok: true };
+        return {
+            ok: true,
+            credentialId: bufferToBase64url(credential.rawId),
+            credentialPk: typeof completeBody.id === "number" ? completeBody.id : undefined,
+            prf: getPrfResult(credential),
+            prfEnabled: prfEnabled(credential),
+        };
     } catch (err) {
         return { ok: false, error: isCancellation(err) ? "Passkey creation was cancelled." : "Something went wrong creating that passkey." };
     }
@@ -219,6 +372,13 @@ export interface LoginConfig {
     verifyUrl: string;
     retryButtonId: string;
     statusElId: string;
+    /** Runs after the server accepts the assertion (session established) and
+     * before the redirect. The 2FA options may carry PRF inputs for wrap-bearing
+     * credentials (see services/auth/webauthn.py), so this is where the E2EE
+     * layer harvests the PRF output and unlocks - one tap does both jobs.
+     * Failures are swallowed: key handling must never block getting the user
+     * into the app. */
+    beforeRedirect?: (credential: PublicKeyCredential) => Promise<void>;
 }
 
 export function runLogin(cfg: LoginConfig): void {
@@ -265,6 +425,13 @@ export function runLogin(cfg: LoginConfig): void {
             if (!verifyResp.ok) {
                 setStatus((verifyBody.error as string | undefined) ?? "That passkey could not be verified.");
                 return;
+            }
+            if (cfg.beforeRedirect) {
+                try {
+                    await cfg.beforeRedirect(credential);
+                } catch {
+                    // E2EE unlock is best-effort here; the login itself succeeded.
+                }
             }
             window.location.href = (verifyBody.redirect as string | undefined) || "/";
         } catch (err) {

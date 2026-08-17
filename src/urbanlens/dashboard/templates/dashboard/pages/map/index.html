@@ -1087,24 +1087,56 @@
             return c;
         } catch { return null; }
     }
+    // Delegates to shared/pin-cache.ts (installed on window by core.js, which
+    // base.html loads synchronously in <head>). Falls back to a no-op rather than
+    // throwing if that bundle ever fails to load - reclaiming space is an
+    // optimization, never a correctness requirement.
+    function _purgeOrphanCaches() {
+        try {
+            const removed = window.ulPurgeForeignPinCaches ? window.ulPurgeForeignPinCaches(_CACHE_KEY) : 0;
+            if (removed) console.log('[UL] Reclaimed %d orphaned pin cache blob(s)', removed);
+            return removed;
+        } catch { return 0; }
+    }
+    function _isQuotaError(err) {
+        // Firefox uses its own legacy name; some engines only set the numeric code.
+        return !!err && (err.name === 'QuotaExceededError' || err.name === 'NS_ERROR_DOM_QUOTA_REACHED' || err.code === 22);
+    }
     function _writeCache() {
         if (!_USE_CACHE) return;
         if (!_pinStore.size) return;   // nothing to cache yet
         const ts = Date.now();
+        const payload = JSON.stringify({
+            v: 8, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
+            lastUpdated: _lastKnownUpdated,
+            tiles: [..._fetchedTiles],
+            pins: Object.fromEntries([..._pinStore.entries()].map(([k, v]) => [k, _slimPin(v)])),
+        });
         try {
-            const payload = JSON.stringify({
-                v: 8, ts, profileUuid: _PROFILE_UUID, appUuid: _APP_UUID,
-                lastUpdated: _lastKnownUpdated,
-                tiles: [..._fetchedTiles],
-                pins: Object.fromEntries([..._pinStore.entries()].map(([k, v]) => [k, _slimPin(v)])),
-            });
             localStorage.setItem(_CACHE_KEY, payload);
-            _updateCacheStatus(ts);
-            console.log('[UL] Cache written - %d pins, %dKB', _pinStore.size, Math.round(payload.length / 1024));
         } catch (err) {
-            console.warn('[UL] Cache write failed (%s) - pins will reload next visit', err && err.name || err);
+            if (!_isQuotaError(err)) {
+                console.warn('[UL] Cache write failed (%s) - pins will reload next visit', err && err.name || err);
+                try { localStorage.removeItem(_CACHE_KEY); } catch {}
+                return;
+            }
+            // Out of quota: drop this profile's previous blob and any orphans, then
+            // try exactly once more. Without the retry the session ends uncached even
+            // though the removals just freed the space the write needed.
             try { localStorage.removeItem(_CACHE_KEY); } catch {}
+            _purgeOrphanCaches();
+            try {
+                localStorage.setItem(_CACHE_KEY, payload);
+            } catch (retryErr) {
+                console.warn('[UL] Cache too large for localStorage (%s) - pins will reload next visit', retryErr && retryErr.name || retryErr);
+                try { localStorage.removeItem(_CACHE_KEY); } catch {}
+                const el = document.getElementById('cache-status');
+                if (el) el.textContent = 'cache: too large';
+                return;
+            }
         }
+        _updateCacheStatus(ts);
+        console.log('[UL] Cache written - %d pins, %dKB', _pinStore.size, Math.round(payload.length / 1024));
     }
     function _scheduleCache() {
         if (!_USE_CACHE) return;
@@ -1113,8 +1145,12 @@
     }
     // Flush the cache when the user navigates away so it's always saved
     window.addEventListener('beforeunload', _writeCache);
-    // Purge stale keys from old cache versions
-    if (_PROFILE_UUID) try { localStorage.removeItem(`ul_pins_v4_${_PROFILE_UUID}`); } catch {}
+    // Reclaim every pin-cache blob that is not this profile's current one: retired
+    // versions, pre-v5 PK-shaped keys, and other accounts' blobs on a shared
+    // browser. Nothing else ever reads those, so _readCache's expiry can't free
+    // them, and a stale multi-MB orphan is what pushes a write over the ~5 MB
+    // origin quota (see UL-355 - clearing site data by hand "fixed" that report).
+    _purgeOrphanCaches();
     // Call after any pin mutation (add/delete) to force a fresh fetch next time.
     // Always clears any existing localStorage entry regardless of _USE_CACHE,
     // so disabling and re-enabling caching starts fresh.
