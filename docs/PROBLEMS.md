@@ -9398,3 +9398,33 @@ feature exists anywhere in the codebase - worth correcting whichever way this is
 `docs/reports/2026-08-11-codebase-audit.md` at the time and carried in that session's running list of
 owner decisions, but never written here until now - which is what made it worth catching: a filed
 item that lives only in a narrative report is not filed.)
+
+## `clone_prod_to_staging.sh` can leave a production dump on disk, and can report success after failing
+
+Found 2026-08-17 while reading `bin/`, which had not been examined. Two issues, both from the same
+cause: the script has `#!/bin/bash` with **no `set -e`, no `set -o pipefail`, and no `trap`**.
+
+**1. A failed run leaves a full production dump on the operator's disk.** The sequence is: dump inside
+the prod container (147), `docker cp` it out to `./$DUMP_FILE` (148), remove the container copy (149),
+bring up staging (152), *wait for it to become healthy* (153), restore (158), and only then remove the
+local file (161-163). `wait_for_healthy` ends in `exit 1` on timeout - which lands between the copy
+out and the cleanup. So if the staging database does not come up, a `pg_dump -Fc` of production -
+every user's email, phone number, encrypted personal fields, safety check-in locations, messages and
+photo metadata - stays in the working directory, and nothing says so.
+
+**2. Failures do not stop it.** Without `set -e`, a failing `pg_dump` still proceeds to `docker cp`
+and `pg_restore`, and a failing `pg_restore` still reaches `docker compose up --build` and prints
+`Done. Staging now mirrors production as of $TIMESTAMP.` A partially-restored staging environment
+that announces success is worse than one that stops.
+
+The remedy is small - `set -euo pipefail`, and a `trap` that removes `./$DUMP_FILE` on any exit unless
+`--keep-dump` was passed - but **not made here**, deliberately: this script drops and replaces a
+database, its failure paths are exactly what would change, and there is no way to exercise it in this
+environment without prod and staging stacks. An untested edit to the error handling of a script whose
+happy path destroys data is a bad trade for the size of the fix.
+
+Worth also deciding separately: the clone copies production personal data into staging **unscrubbed**.
+That may well be intended - staging with real data reproduces real bugs - but it is worth being a
+decision rather than a default, and it interacts with `UL_FIELD_ENCRYPTION_KEY`: if staging shares
+production's key the encrypted columns are readable there, and if it does not, they are permanently
+undecryptable in staging (which is fine, but means those code paths are never exercised).
