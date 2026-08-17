@@ -2757,6 +2757,12 @@ def run_scheduled_trivia_wiki_incorporation() -> dict:
         release_lock(lock_key, _lock_token)
 
 
+#: Slugs a pin gets when it is created before anything knows what it is. Listed
+#: explicitly so the sweep below is an indexed lookup rather than a scan of every
+#: pin; ``Pin.slug_is_placeholder`` still has the final say on each candidate.
+_PLACEHOLDER_SLUGS = ("unnamed-location", "unnamed", "dropped-pin", "pin", "location", "place", "point", "marker", "unknown-location", "unknown")
+
+
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
     """Clear a pin's stored placeholder name once its location has a meaningful one to fall back to.
@@ -2805,6 +2811,20 @@ def upgrade_placeholder_pin_names(batch_size: int = 1000) -> int:
             break
     if upgraded:
         logger.info("upgrade_placeholder_pin_names: cleared %s placeholder pin name(s)", upgraded)
+
+    # Slugs are generated once and never revisited, so a pin created before
+    # anything knew what it was keeps `unnamed-location` in its URL even after it
+    # is named - reported from staging on a pin called "HRSH" with three aliases.
+    # Refreshed here rather than on save: the pins that need it were named long
+    # ago, and only a slug that still reads as a placeholder is replaced, so no
+    # working link changes.
+    reslugged = 0
+    for pin in Pin.objects.filter(slug__in=_PLACEHOLDER_SLUGS).select_related("location")[:batch_size]:
+        if pin.refresh_placeholder_slug():
+            reslugged += 1
+    if reslugged:
+        logger.info("upgrade_placeholder_pin_names: replaced %s placeholder slug(s)", reslugged)
+
     return upgraded
 
 

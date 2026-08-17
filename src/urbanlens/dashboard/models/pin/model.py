@@ -934,6 +934,45 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     def _slugify_base(self) -> str:
         return self.effective_name or "pin"
 
+    def slug_is_placeholder(self) -> bool:
+        """Whether this pin's slug was derived from a placeholder rather than a name.
+
+        A pin created before anything knew what it was gets a slug like
+        ``unnamed-location`` or ``dropped-pin``, and slugs are generated once and
+        never revisited - so naming the pin afterwards left the placeholder in the
+        URL forever. Reported from staging: a pin named "HRSH", with three
+        aliases, still addressed as ``unnamed-location``.
+
+        Decided by reading the slug back as words and asking the same question the
+        naming service asks of any name. That keeps the rule in one place, and
+        means a slug is only ever replaced when it says nothing - a slug derived
+        from a real name is never touched, so existing links keep working.
+
+        Returns:
+            True when the current slug carries no information.
+        """
+        from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+        if not self.slug:
+            return True
+        return not is_meaningful_name(self.slug.replace("-", " "))
+
+    def refresh_placeholder_slug(self) -> bool:
+        """Replace a placeholder slug once this pin has a real name.
+
+        Args:
+            None.
+
+        Returns:
+            True when the slug was replaced.
+        """
+        from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+        if not self.slug_is_placeholder() or not is_meaningful_name(self.effective_name):
+            return False
+        self.regenerate_slug()
+        return True
+
     def _slugify_qs(self):
         qs = Pin.objects.filter(profile_id=self.profile_id)
         if self.pk:
