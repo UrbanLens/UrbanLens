@@ -9512,3 +9512,29 @@ deployment to find out.
 `core/version.py` shells out to git to compare the deployed commit against upstream, and the
 Dockerfile configures `git config --system safe.directory /app` for development images so that keeps
 working. Excluding `.git` would break the version check. Noting it explicitly so nobody "fixes" it.
+
+
+## `npm run git-squash` is a force-deploy with none of `deploy.sh`'s guards (minor)
+
+Noted 2026-08-17 while confirming that `gunicorn.conf.py` is actually loaded. `package.json` defines:
+
+```
+"git-squash": "pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start"
+```
+
+Two things about it, neither urgent:
+
+1. **It hard-resets to `origin/main` with no dirty-tree check.** `bin/deploy.sh` refuses to deploy
+   when the working tree has uncommitted changes, and says so; this one discards them silently. Same
+   repository, same operation, and the safety exists in one place only - the pattern already recorded
+   for `deploy.sh` versus `clone_prod_to_staging.sh`.
+2. **The `&&` chain aborts if gunicorn is not running.** `pkill` exits non-zero when nothing matched,
+   so on a host where the server is already stopped the script fetches nothing, resets nothing and
+   starts nothing. That direction fails safe, but silently, and the name gives no hint that it stops.
+
+Also worth noting the name: it neither squashes nor touches git history - it is a force-redeploy. A
+reader reaching for it expecting a history operation gets a hard reset and a server restart.
+
+Not changed: it is a convenience script in `package.json`, its behaviour may be exactly what its
+author wants at a terminal, and `bin/deploy.sh` already exists as the safe path. Recorded so the
+difference between the two is a choice rather than a surprise.

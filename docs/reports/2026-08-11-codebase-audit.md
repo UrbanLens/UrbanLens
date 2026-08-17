@@ -12367,3 +12367,28 @@ agent-working document. Both are current; they are not duplicates of each other.
 
 Also checked, and clean: my chunk-591 correction to the `manage.py test` guidance did *not* need
 applying to the root roadmap - that file never carried the claim.
+
+## Chunk 608 - the gunicorn config is loaded, and one footgun found on the way
+
+`gunicorn.conf.py` reads as carefully as anything in this repository. Its single `post_fork` hook
+registers psycogreen so psycopg2 yields under the gevent worker, and the docstring explains both why
+it is needed (psycopg2 is a C extension that bypasses gevent's patched socket module, so every query
+would otherwise block the worker's whole event loop) and why only this hook applies it (celery, daphne
+and `manage.py` keep stock blocking behaviour, which is correct for them).
+
+Its first line makes a checkable claim - that it is loaded via `-c gunicorn.conf.py` - and a config
+file that is not actually loaded is a silent, expensive failure. So I followed it: Dockerfile `CMD` is
+`python /app/src/bin/init.py`, which at line 400 runs `bun run start`, which is
+`gunicorn ... -k gevent -c gunicorn.conf.py`. The chain holds; the patch applies in production.
+
+On the way, `package.json`'s `git-squash` script:
+`pkill gunicorn && git fetch origin && git reset --hard origin/main && npm run start`. It hard-resets
+to `origin/main` with none of `bin/deploy.sh`'s dirty-tree refusal, its `&&` chain silently aborts
+when gunicorn is not already running (`pkill` exits non-zero on no match), and its name suggests a
+history operation rather than a force-redeploy. Filed as minor - `deploy.sh` already exists as the
+safe path, and a convenience script may be exactly what its author wants at a terminal - but recorded
+so the asymmetry is a choice rather than a surprise.
+
+That is the third instance of the same shape in this repository's operational scripts: `deploy.sh`
+has `set -euo pipefail` and no health check, `clone_prod_to_staging.sh` has a health check and no
+`set -e`, and `git-squash` has neither guard while doing the most destructive thing of the three.
