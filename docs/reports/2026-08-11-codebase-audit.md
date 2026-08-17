@@ -12028,3 +12028,31 @@ this). The pattern is consistent enough to state as a rule: **my summaries drift
 than my work supports, and the drift is invisible from inside the summary.** Every one of the four
 was obvious within a minute of comparing the artefact to something outside it - a commit list, a
 reverted line of code, a section heading. None was visible from re-reading the artefact alone.
+
+## Chunk 595 - the fifth audit, and the first clean one
+
+Consolidation 24 went 38% to 55% across the fifteen quiet minutes - about 1.1% a minute with nothing
+competing, against roughly a tenth of that while per-chunk suites were running.
+
+Fifth audit of my own summary, this time on its most enumerable claim: that ten named columns took
+request text with no length check and are now guarded. Checked each against the source rather than
+against my memory of writing them. `PinList.name`, `Trip.name`, `SavedFilter.name`, `Label.name`,
+`PinAlias.name`, `WikiAlias.name`, `Pin.name` and `Wiki.name` each have exactly one
+`column_length_error` guard in their controller; `Label.icon` and `SavedFilter.icon` go through
+`clean_icon(..., max_length=column_max_length(...))`. Ten for ten.
+
+So the streak breaks: four audits, four errors, then one clean. Worth saying explicitly, because
+"every summary I write is inflated" would be its own overclaim, and the correction I have been
+applying to my summaries deserves the same scepticism as the summaries. The pattern is narrower than
+the streak suggested - **the errors were all in prose that generalised or grouped** (a count, a
+heading covering five subsystems, a themed list) and this claim was clean because it is a list of
+specific names, each of which is either in the code or is not.
+
+That is a usable distinction rather than a mood: enumerable claims check themselves; summarising
+claims do not, and are where to look first.
+
+Two further claims spot-checked and sound, both resting on evidence recorded when they were made
+rather than on re-reading: the safety escalation "notified nobody" (verified in chunk 558 by
+reverting the fix and watching `DataError` escape `escalate_checkin` before the contacts loop), and
+the Stripe resurrection window "up to a day" (the sweep runs 04:10 and selects `not_canceled()`,
+both read in chunk 569).
