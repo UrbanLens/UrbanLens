@@ -11905,11 +11905,23 @@ root `TODO.md` was tracked, then deleted in a release commit, while five documen
 
 ## Checked and found clean (so it is not re-derived)
 
-Albums, trips, the plugin system, safety archival, notifications, wiki, search, imports/exports, the
-photo-import tasks, `core/`'s test apparatus, and the external API's write serializers. Fifteen
-`PROBLEMS.md` entries were relabelled after being found already fixed under one of three different
-resolution conventions. Four docstring-delegated guarantees were audited by enumerating their
-callers; three were honoured everywhere.
+Two different things, worth keeping apart - the first list is much stronger evidence than the second.
+
+**Traced end-to-end this session** (model, service, controller, template, and the tests around them):
+albums, billing, encrypted group chat, the WebSocket consumers, the deferred Celery tasks,
+imports/exports, the photo-import tasks, trips, `core/`'s test apparatus, and the external API's write
+serializers.
+
+**Surveyed and deliberately left alone**, because their existing coverage was substantial and opening
+them looked like re-deriving someone else's work: wiki (37 test modules), search (44), notifications
+(10, including a preference-field completeness guard), safety archival, and the plugin system (23,
+including the gate-isolation guard). These were *not* audited here - the module counts and a reading
+of the relevant guards' docstrings are the whole basis. Earlier sessions did examine wiki and search;
+see the numbered sections above.
+
+Also: fifteen `PROBLEMS.md` entries were relabelled after being found already fixed under one of three
+different resolution conventions, and four docstring-delegated guarantees were audited by enumerating
+their callers - three were honoured everywhere.
 
 ## Method notes worth keeping
 
