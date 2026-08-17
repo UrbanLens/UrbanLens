@@ -12060,3 +12060,28 @@ rather than on re-reading: the safety escalation "notified nobody" (verified in 
 reverting the fix and watching `DataError` escape `escalate_checkin` before the contacts loop), and
 the Stripe resurrection window "up to a day" (the sweep runs 04:10 and selects `not_canceled()`,
 both read in chunk 569).
+
+## Chunk 596 - the rule predicted where the next error would be
+
+Consolidation 24: 55% to 66% across another quiet fifteen minutes.
+
+Chunk 595 concluded that enumerable claims check themselves while summarising claims do not, and
+that summarising claims are where to look first. This chunk tested that by picking the most
+summarising sentence in the session summary - a universal quantifier over all fourteen fixes:
+"Each was reproduced with a failing test first, or ... verified afterwards by breaking the code."
+
+Checked every `fix:` commit for whether it touches a test file. Thirteen do. **One does not**: the
+map-search coordinates change, which added no test because the server already enforces the tracking
+preference and `test_memories_toggles` already covers that - the fix stops a request being sent
+rather than altering any outcome a test could observe. I recorded that reasoning when I made the
+decision in chunk 562, and then wrote a summary sentence that erased both the exception and its
+justification.
+
+So the rule held on its first use: five errors now, and the one predicted class - prose that
+generalises - is where the fifth was. The enumerable claim audited in chunk 595 was clean; every
+error has been in a count, a heading, a themed grouping, or now an "each".
+
+That is a small enough sample to state carefully rather than confidently. But it is actionable in a
+way "check your work" is not: when auditing my own output, go to the sentences that quantify over a
+set - *each*, *every*, *all*, *none*, a total - and check the set. The individual claims underneath
+them have generally been right.
