@@ -11679,3 +11679,30 @@ otherwise waits until the column is needed in production - in a codebase whose `
 careful migration practice at length. `makemigrations --check --dry-run` reports "No changes
 detected" today, so it is cheap to add and green. Added, along with `imports-tracked`, to the job
 that already has the dependencies.
+
+## Chunk 585 - a stale TODO whose reasons expired but whose conclusion held
+
+Applied the "check the stated reason" method to the commented-out `check --deploy` step in CI, which
+carried three numbered blockers. Two have expired: `SECURE_HSTS_SECONDS` is now set in
+`settings/base.py`, and the "copy .env-sample so CI picks up the env vars" note is moot because the
+workflow sets them in its own `env:` block.
+
+But the step still cannot be enabled, for a reason the list never named. This job runs under
+`DJANGO_SETTINGS_MODULE=...settings.test`, where `SECURE_SSL_REDIRECT` is off and `DEBUG` is on *by
+design*. Measured rather than assumed: 18 issues, and the security ones - W004, W008, W018 - are all
+artefacts of pointing a production check at test settings. They describe settings behaving
+correctly. Making the step meaningful means evaluating production-like settings, which is a
+deployment decision rather than a CI one.
+
+So the conclusion survives its own reasoning, which is a distinct outcome from the weather entry in
+chunk 576 (premises expired, conclusion fell) and from chunk 577's three (premises intact). The TODO
+now says what is actually true, so the next person to read it does not re-derive two obsolete points
+and then uncomment a step that produces eighteen confusing warnings.
+
+The run also surfaced 14 `drf_spectacular.W001` duplicate-enum-name warnings. **Already filed** -
+`docs/PROBLEMS.md:5852` records them, and records 224 at the time, so that work is substantially
+done and what remains is the "unresolvable collisions" that entry describes. Checking before filing
+is the habit chunk 577 cost me; this time it worked.
+
+Nothing else changed. A chunk whose entire output is one corrected comment is a fair reflection of
+where this codebase now is.

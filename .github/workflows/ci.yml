@@ -99,10 +99,24 @@ jobs:
         run: python src/urbanlens/manage.py makemigrations --check --dry-run
 
       # ----------------------------------------------------------------------------
-      # Three issues to address here (TODO):
-      # 1 -- ?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting. If your entire site is served only over SSL, you may want to consider setting a value and enabling HTTP Strict Transport Security. Be sure to read the documentation first; enabling HSTS carelessly can cause serious, irreversible problems.
-      # 2 -- ?: (security.W009) Your SECRET_KEY has less than 50 characters, less than 5 unique characters, or it's prefixed with 'django-insecure-' indicating that it was generated automatically by Django. Please generate a long and random value, otherwise many of Django's security-critical features will be vulnerable to attack.
-      # 3 -- Copy .env-sample to .env so CI picks up the env vars.
+      # Deployment checks, still disabled - but not for the three reasons that used
+      # to be listed here. Re-checked 2026-08-17:
+      #
+      #   - SECURE_HSTS_SECONDS is now set (settings/base.py), so W004 no longer
+      #     reflects a missing setting.
+      #   - The ".env is needed" note is moot: this workflow sets the env vars
+      #     directly in its own `env:` block.
+      #
+      # The blocker is one the old list did not name. This job runs under
+      # DJANGO_SETTINGS_MODULE=...settings.test, where SECURE_SSL_REDIRECT is off
+      # and DEBUG is on *by design* - so `check --deploy` reports W004/W008/W018
+      # against settings that are behaving correctly. Measured: 18 issues, of which
+      # the security ones are all artefacts of running a production check against
+      # test settings (the rest are drf-spectacular enum-naming warnings, tracked
+      # separately in docs/PROBLEMS.md).
+      #
+      # Making this meaningful means evaluating production-like settings, not
+      # relaxing the check - which is a deployment decision, not a CI one.
       # ----------------------------------------------------------------------------
       #- name: Django deployment checks
       #  run: python src/urbanlens/manage.py check --deploy --fail-level WARNING
