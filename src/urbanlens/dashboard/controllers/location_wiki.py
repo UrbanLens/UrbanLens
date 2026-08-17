@@ -39,7 +39,7 @@ from urbanlens.dashboard.services.places.scope import scope_badge
 from urbanlens.dashboard.services.undo.handlers.wiki import MODEL_LABEL as WIKI_MODEL_LABEL, with_wiki_descendants
 from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.services.wiki.wiki_access import resolve_visible_wiki, visible_parent_wiki
-from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit
+from urbanlens.dashboard.services.wiki.wiki_edits import WikiEditValidationError, apply_wiki_edit, revert_edit_fields, revert_wiki_edit, save_edited_fields
 
 if TYPE_CHECKING:
     from urbanlens.dashboard.models.location.model import Location
@@ -458,8 +458,8 @@ class LocationWikiEditDeleteView(LoginRequiredMixin, View):
 
         skipped_fields: list[str] = []
         if not target_edit.reverted:
-            _revert_changes, skipped_fields = revert_edit_fields(location, wiki, target_edit)
-            wiki.save()
+            revert_changes, skipped_fields = revert_edit_fields(location, wiki, target_edit)
+            save_edited_fields(wiki, revert_changes)
 
         revert_record = target_edit.reverted_by
         if revert_record is not None:

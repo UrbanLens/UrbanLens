@@ -23,6 +23,8 @@ from urbanlens.dashboard.models.wiki_edit import WikiEdit
 from urbanlens.dashboard.services.core.text_limits import MAX_WIKI_DESCRIPTION_LENGTH, text_length_error
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from urbanlens.dashboard.models.location.model import Location
     from urbanlens.dashboard.models.profile.model import Profile
     from urbanlens.dashboard.models.wiki.model import Wiki
@@ -53,6 +55,26 @@ class WikiEditValidationError(ValueError):
         super().__init__(message)
         self.message = message
         self.field = field
+
+
+def save_edited_fields(wiki: Wiki, changed_fields: Iterable[str]) -> None:
+    """Persist only the wiki columns named in *changed_fields*.
+
+    A bare ``wiki.save()`` writes every column from the in-memory instance, which
+    on a community-editable row means reverting whatever was committed since the
+    request loaded it - a second editor's change to a different field, or
+    ``viewed_by_other``, which the view sets through its own targeted update.
+    That also silently defeats :func:`revert_edit_fields`' conflict check, which
+    goes to the trouble of leaving changed-since fields alone.
+
+    Args:
+        wiki: The wiki to save. Already mutated by the caller.
+        changed_fields: Names of the fields that were changed. Boundary keys
+            (``bounding_box``, ``boundary_*``) are dropped: those edits live on
+            ``Boundary`` rows, which are saved separately.
+    """
+    columns = [field for field in changed_fields if field != "bounding_box" and not field.startswith("boundary_")]
+    wiki.save(update_fields=[*columns, "updated"])
 
 
 def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, strict: bool) -> WikiEdit | None:
@@ -142,7 +164,7 @@ def apply_wiki_edit(wiki: Wiki, profile: Profile, changes: dict[str, Any], *, st
 
     for field, value in new_vals.items():
         setattr(wiki, field, value)
-    wiki.save()
+    save_edited_fields(wiki, new_vals)
 
     return WikiEdit.objects.create(wiki=wiki, editor=profile, changes=audit)
 
@@ -151,7 +173,9 @@ def revert_edit_fields(location: Location, wiki: Wiki, target_edit: WikiEdit) ->
     """Restore the fields captured in ``target_edit.changes`` to their prior ("from") values.
 
     Mutates ``wiki`` (and any associated Boundary rows) in place - the caller
-    is responsible for calling ``wiki.save()`` afterwards.
+    is responsible for persisting it afterwards, via :func:`save_edited_fields`
+    and the returned diff - a bare ``save()`` would undo the conflict check
+    below by writing back every field it deliberately left alone.
 
     Before restoring each field, checks whether the wiki's *current* value for
     that field still matches ``target_edit``'s stored "to" value. If someone
@@ -240,7 +264,7 @@ def revert_wiki_edit(location: Location, wiki: Wiki, profile: Profile, target_ed
         # mark the original as reverted.
         return None, skipped_fields
 
-    wiki.save()
+    save_edited_fields(wiki, revert_changes)
 
     revert_edit = WikiEdit.objects.create(
         wiki=wiki,

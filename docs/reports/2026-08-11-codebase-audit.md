@@ -12664,3 +12664,43 @@ this change, the erasure test is not. 55 billing/celery tests pass with the fix.
 The general lesson is worth more than the instance: a bare `save()` on a row that more than one
 subsystem writes is a whole-row overwrite from a snapshot, and reads as innocuous. `RoleSubscription`
 has two writers - Stripe sync and the local ledger - and nothing in the model said so.
+
+## Chunk 617 - the bare-save() sweep, and the same bug on the wiki
+
+Chunk 616's lesson generalised into a query: a bare `save()` on a row that more than one subsystem
+writes is a whole-row overwrite from a snapshot. 85 bare `save()` calls exist outside tests and
+migrations - too many to read, so the filter was staleness window rather than call count. Two results
+worth recording before the finding itself:
+
+- **`tasks.py` and `consumers.py` have none.** Deferred work and long-lived socket connections are
+  where snapshots go stalest, and both are already clean. That is a real negative, not an absence of
+  looking.
+- An I/O-proximity heuristic (functions containing both a bare save and a network-ish call) produced
+  13 hits and **all 13 were false positives** - it was matching Django's `reverse()` and local
+  helpers named `_request_profile`. Recorded because the heuristic looks reasonable and is not.
+
+The signal was ownership, not I/O. `Wiki` is written by wiki edits, the naming service, the consensus
+service, the undo handlers, image gallery, and the detail view - and it is *community-editable by
+design*, so concurrent editors are the normal case rather than the pathological one.
+
+`apply_wiki_edit` collects the submitted fields, sets them, and bare-saves the whole row. Three
+distinct failures, all reproduced first:
+
+- Two people editing **different fields** of one wiki: the second write reverts the first.
+- An edit resets `viewed_by_other`, which the view sets through its own targeted `.update()`.
+- A **revert** clobbers a field it deliberately skipped.
+
+That third one is the sharp one. `revert_edit_fields` compares each field's current value against the
+edit's recorded "to" value and refuses to restore a field someone changed since - its docstring says
+restoring it "would silently clobber that later change". The bare `save()` two lines later clobbers
+it anyway, through every field the revert did not touch. The guard was already there and was being
+defeated by its own caller.
+
+Fixed with a `save_edited_fields` helper used by all three call sites (the service's two, plus the
+history-delete view, which called `revert_edit_fields` and bare-saved). It drops boundary keys, which
+name `Boundary` rows rather than wiki columns and are saved separately. `revert_edit_fields`' docstring
+now says what the caller must do instead of just "call `wiki.save()` afterwards".
+
+Verified by breaking: with the helper reverted to a bare `save()` in the container, the three
+concurrency tests fail and the complement (an edit still writes every field it was given) passes -
+the right signal, since the complement is insensitive to the change. 44 wiki tests pass with the fix.
