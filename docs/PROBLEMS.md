@@ -1760,7 +1760,7 @@ ping/thumbnail endpoints as an authenticated blind-SSRF oracle. Self-hosted-by-d
 risk is single-tenant, but worth a scheme/private-IP guard in `clean_server_url`.
 
 **SSRF: `services/security/url_safety.py`'s IP blocklist misses RFC 6598 CGNAT space.**
-`is_blocked_address` (`url_safety.py:20-22`) checks `is_private`/`is_loopback`/`is_link_local`/
+`is_blocked_address` (`url_safety.py:28-22`) checks `is_private`/`is_loopback`/`is_link_local`/
 `is_reserved`/`is_multicast` but not the `100.64.0.0/10` Carrier-Grade-NAT range — verified
 `ipaddress.ip_address("100.64.0.5")` returns `False` for every one of those checks. Many cloud
 providers route internal-only infra (AWS NAT gateways, GCP internal LBs) through this range, so a
@@ -1770,7 +1770,7 @@ photo download (`services/pins/pin_suggestions.py`), and media materialization
 (`services/media/media_materialize.py`) — one missed CIDR range is a gap in three subsystems at once.
 
 **Decompression-bomb protection in the full-archive importer only checks forgeable declared
-sizes.** `services/import_export/import_data.py:275-289` sums each ZIP member's *declared* `file_size` against a
+sizes.** `services/import_export/import_data.py:290-296` sums each ZIP member's *declared* `file_size` against a
 ceiling, then calls `zf.extractall()` unbounded. `file_size` in ZIP headers is attacker-controlled;
 Python's `zipfile` only detects a declared-vs-actual mismatch via CRC32 *after* a member is fully
 decompressed and written to disk. A crafted archive well within the 500MB upload cap
@@ -1794,11 +1794,11 @@ consumer classes identically — fix once at the base-class level.
 
 **Two rate-limit/quota checks with the same non-atomic check-then-act race**, each independently
 discovered:
-- `services/core/rate_limiter.py:279-491` — `check_rate_limit` (COUNT) and `log_api_call` (INSERT) are
+- `services/core/rate_limiter.py:341-491` — `check_rate_limit` (COUNT) and `log_api_call` (INSERT) are
   separate operations with no locking; concurrent requests can all pass the check before any log,
   breaching even Nominatim's hard 1 req/sec ToS limit under a handful of simultaneous pin-detail loads.
-- `services/security/email_safety.py:89-111` (`email_rate_limit_error`) — same shape for outbound
-  friend-invite/visit-invite emails (`controllers/friendship.py:649-720`,
+- `services/security/email_safety.py:106-111` (`email_rate_limit_error`) — same shape for outbound
+  friend-invite/visit-invite emails (`controllers/friendship.py:533-570`,
   `services/visits/visit_invites.py:82-109`); concurrent requests can exceed the configured hourly/daily/
   monthly cap arbitrarily.
 Both need either `select_for_update()` around the count+log pair or an atomic increment
@@ -1838,7 +1838,7 @@ gets its own untripped counter). `test_email_login.py` proves the login path tre
 identical; no equivalent test exists for the lockout path.
 
 **`Label` kind-conversion has no branch for converting to Category — silently orphans the row.**
-`controllers/labels.py:467-478` (`_apply_kind_conversion`) handles converting to Status/Tag but has
+`controllers/labels.py:547-478` (`_apply_kind_conversion`) handles converting to Status/Tag but has
 no branch for `new_kind == KIND_CATEGORY`. Converting a global Tag to a Category via the standard
 edit form leaves `label.profile=None`, but Category lookups use exact-match `.for_profile()` with
 no global fallback — the label vanishes from every Organize > Categories listing, and
@@ -1846,7 +1846,7 @@ no global fallback — the label vanishes from every Organize > Categories listi
 **permanently un-editable and un-deletable through the UI** (recoverable only via direct DB access).
 
 **Safety check-in escalation can re-email every emergency contact on any partial failure.**
-`services/visits/safety.py:940-981` (`escalate_checkin`) loops all contacts unconditionally (no
+`services/visits/safety.py:1920-981` (`escalate_checkin`) loops all contacts unconditionally (no
 `notified_at__isnull=True` filter) and only saves `status`/`escalated_at` *after* the whole loop
 completes. If anything raises mid-loop (bad email address, a non-SMTP/OSError mail-backend
 exception), the checkin never flips to `OVERDUE`, so the next 5-minute beat tick re-matches it and
@@ -2467,7 +2467,7 @@ system tests (unrelated to Facts - `services/spotguessr/geo_bonus.py` was never 
 python -m pytest src/urbanlens/dashboard/tests/hypothesis/test_spotguessr_geo_bonus.py`, 1
 failed / 8 passed) - so it's not cross-file pollution, it's within-class.
 
-`bonus_points_for_guess` -> `_reverse_geocode_admin_cached` (`services/spotguessr/geo_bonus.py:79`)
+`bonus_points_for_guess` -> `_reverse_geocode_admin_cached` (`services/spotguessr/geo_bonus.py:157`)
 caches Nominatim's admin lookup in the real Valkey cache keyed by rounded coordinates, and the
 test class never clears that cache between tests. `test_matching_every_offered_tier_stacks_the_bonus`
 and `test_no_match_at_all_earns_nothing` run earlier in the same file against the same
@@ -6984,7 +6984,7 @@ which bypasses the cache, when the mixin it inherits from already provided the c
 2026-08-14 fix made `to_json` match what `Labelled` had been doing correctly all along. Any other
 model method filtering `self.labels` directly should use the inherited property instead; that is a
 one-line grep (`self.labels.filter(kind=`), run 2026-08-14: **one hit**, at
-`models/pin/model.py:820` inside `change_category`. It is a *write*
+`models/pin/model.py:811` inside `change_category`. It is a *write*
 (`labels.remove(*self.labels.filter(...))`) executed once per request rather than per row, in a
 method this audit found has no production callers - so it is not worth changing. No serialisation
 path retains the trap.
@@ -9553,3 +9553,21 @@ so contention needs one user running two scans at once, and the damage is an und
 signal rather than lost money, a reverted edit, or a discarded rating period. Worth an `F()`
 expression plus a unique constraint if suggestion quality is ever reported as flaky.
 
+
+### Fourteen documentation citations still point at the wrong line (noted 2026-08-17)
+
+`bin/check_doc_line_refs.py --report-drift` lists them. They survived the 2026-08-17 sweep because
+they can't be repaired mechanically, and they split into two kinds:
+
+- **The line moved, but the anchor isn't a definition.** `settings/base.py:343` for
+  `hard_delete_expired_direct_messages` (now line 374) is cited via its entry in the beat-schedule
+  dict, and `tasks.py:1629` for `RUN_LOCK_CACHE_KEY` via an import. Renumbering these is safe but
+  needs a human to confirm which usage was meant.
+- **The symbol no longer exists at all.** `controllers/trip.py:135` cites `_mask_trip_identities`
+  and `services/ai/anthropic.py:117` cites `send_prompt`/`send_prompt_list`; neither name appears
+  anywhere in the tree now. The repair is rewriting the sentence around whatever replaced them, not
+  changing the number - and guessing at that would put invented history into the record.
+
+The eight that *were* mechanically provable (anchored on a `def`/`class` the tool could locate
+uniquely) are fixed, and `check_doc_line_refs.py` now runs in CI to keep past-end-of-file citations
+at zero.

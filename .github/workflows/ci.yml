@@ -92,6 +92,13 @@ jobs:
       - name: Imports resolve in the committed tree
         run: python3 bin/check_imports_tracked.py
 
+      # A citation like `controllers/friendship.py:649` in a 583-line file sends
+      # a reader to nothing, and nothing else notices: the file still exists and
+      # the note still reads as authoritative. Only the unambiguous half is
+      # enforced - that the line exists - since "the line moved" needs a human.
+      - name: Documentation citations point at real lines
+        run: python3 bin/check_doc_line_refs.py
+
       # Nothing else checks this: a model change without its migration only
       # surfaces if some test happens to touch the field, and otherwise waits
       # until the column is needed in production.

@@ -13018,3 +13018,45 @@ silently patching two unrelated views. That habit, adopted after an earlier impo
 this session, has now paid for itself twice.
 
 149 friendship tests pass.
+
+## Chunk 627 - clearing the board, and a defect class nothing was checking
+
+Two named leads closed, and a third thing found on the way to them.
+
+**`evaluate_public_pin_candidates`, traced end to end (thread 4).** No defect. Every write is
+`save(update_fields=[...])`; `PublicPinCandidate.location` is a `OneToOneField`, so two overlapping
+runs cannot create duplicate candidates - the database refuses the second, which is a crash rather
+than corruption and self-corrects on the next hourly run; and the region-exclusion set is appended
+in-loop so two candidates in one region can't both pass, exactly as its comment claims. Worth noting
+without changing: `PublicPinVote.objects.tally(candidate)` runs per open candidate, an N+1 - but in
+an hourly background task, where it costs latency nobody waits on.
+
+**The beat-lock stagger's "missed consumer" (thread 3) does not exist.** `CELERY_BEAT_SCHEDULE` has
+exactly three readers - the settings that define it, three comments in `tasks.py`, and
+`test_beat_lock_intervals`, which already handles both crontab and interval entries. The 2-minute
+stall sweeps that stayed interval-based cannot be expressed as a staggered crontab anyway. The
+thread was a suspicion, and the answer is that nothing consumes the schedule that could have been
+missed.
+
+**What the search turned up instead.** Chasing that thread meant checking a `settings/base.py:343`
+citation in `PROBLEMS.md` - and the task it names is at line 374. That generalised into a sweep no
+one had run: of **161 resolvable `path.py:NNN` citations across the docs, 23 pointed somewhere other
+than what they described**, one of them (`controllers/friendship.py:649`) past the end of a 583-line
+file. These fail silently in the worst way - the file still exists, the line still exists, and the
+note still reads as authoritative.
+
+Eight were mechanically provable, anchored on a `def`/`class` the tool could locate uniquely, and are
+repaired. **The heuristic's first version repaired a ninth wrongly**: it accepted `ident =` as a
+definition and "fixed" a ZIP-member size check to an unrelated keyword argument 1,100 lines away.
+Spot-checking the proposed targets caught it; restricting anchors to `def`/`class` removed the whole
+class of error, and that citation was corrected by hand.
+
+The remaining fourteen are filed rather than guessed at, because two of them
+(`_mask_trip_identities`, `send_prompt`) name symbols that no longer exist anywhere - the repair
+there is rewriting the sentence around whatever replaced them, and inventing that would put false
+history into the record.
+
+`bin/check_doc_line_refs.py` now runs in CI, enforcing only the unambiguous half: a cited line must
+exist. That is currently true everywhere, so it can be enforced rather than merely reported;
+"the line exists but moved" stays a `--report-drift` flag for humans. Verified by breaking - a
+citation past EOF exits 1.
