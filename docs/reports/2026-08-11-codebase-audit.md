@@ -12131,3 +12131,28 @@ about *six* items and I never checked the seventh separately.
 
 Six self-audits, six errors, five of them in claims that quantify over a set. The one enumerable
 claim checked was clean. The rule is holding.
+
+## Chunk 599 - a ratio that was an impression
+
+Seventh self-audit, on the last quantifying claim in the summary: "roughly one real defect per two or
+three hypotheses".
+
+Counting what I actually wrote down and disproved - the seven in the deferred-task sweep, four
+docstring delegations, three consumer families, two CI alarms, two on the location marker, and a
+handful of singles - gives about twenty-two, against fourteen defects. That is nearer one in one and
+a half than one in two or three. And it undercounts in the other direction, because hypotheses
+abandoned halfway through a file were never recorded at all, and there were many.
+
+So the number is not wrong so much as **not a measurement**. I wrote it in chunk 573 as an
+impression, in a sentence beginning "worth saying plainly", and then carried it into the summary's
+method notes - the part of the document explicitly meant to calibrate whoever reads it next. A
+made-up denominator in a calibration section is the wrong thing to be confident about.
+
+Replaced with the count, its provenance, and a statement that it is not a measured rate. The chunk
+573 entry is left as written: the chronological sections are a record of what I thought at the time,
+and editing them to match what I later learned would destroy the only evidence of how the thinking
+moved. Guidance gets corrected; history does not.
+
+Seven audits, seven errors, six in claims quantifying over a set. The one enumerable claim remains
+the only clean one - and this last error is the same shape as the rest, just wearing a number
+instead of an "each".
