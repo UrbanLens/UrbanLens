@@ -11608,3 +11608,37 @@ checking rather than assuming, since this repo *does* commit its compiled JavaSc
 
 Also read the two background runs. The regression sweep over sharing/friendship after chunks 580-581
 is **673 passed, 0 failed**, so those two fixes hold across the surface they touch.
+
+## Chunk 583 - trips are clean; CI was not running a suite that exists
+
+Traced trips, the last untraced feature area, with the framings that have been paying. It comes back
+clean, and the interesting part is that the reasoning was already written down:
+
+- **Departure revokes the second channel.** Leaving or being removed calls
+  `disconnect_member_calendar_sync`, and the comment says why in the terms I was about to use: "A
+  live calendar export is a second, independent channel to the same data". The module docstring
+  states the rule outright. This is the shape chunk 572 found unhandled in messaging, handled here.
+- **No stale-socket class.** There is no trip consumer, so membership is checked per request and
+  removal takes effect on the next one.
+- **Creator and organizer are two permissions, not one.** `remove_member` refuses to remove the
+  creator and allows only self-or-creator; `set_member_organizer` is creator-only and refuses to
+  touch the creator's own flag. No takeover path.
+
+So the sweep moved to infrastructure, and found something concrete. **`.github/workflows/ci.yml`
+never runs the TypeScript tests.** Its frontend job sets up Bun, installs dependencies, builds the
+bundle and builds the stylesheet - and stops. `bun run typecheck` and `bun run test:ts` appear only
+in `.pre-commit-config.yaml`, which protects a developer who has pre-commit installed and does not
+pass `--no-verify`.
+
+That means **414 TypeScript tests across 31 files have never run in CI**, including the two contract
+tests this session added (chunk 565's icon-picker `|lower` agreement, chunk 566's innerHTML escaping
+allowlist) and the pre-existing `pin-cache.contract.test.ts` - which exists precisely because that
+reader/writer pair silently drifted once already. A pull request breaking any of them merges green.
+The Python side has no such gap: CI runs ruff, ruff format, mypy and the Django suite with coverage.
+
+Two steps added to the job that already has Bun and the dependencies, so the cost is seconds. Both
+verified locally as written - typecheck clean, 414 pass - and the YAML parses.
+
+Worth naming the shape: a guard is only as good as the thing that runs it, and I added guards for
+ten chunks without once checking whether CI would run them. The tests I wrote in 565 and 566 would
+have protected nothing on a pull request.

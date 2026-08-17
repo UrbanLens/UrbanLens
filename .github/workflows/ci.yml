@@ -107,7 +107,7 @@ jobs:
           if-no-files-found: ignore
 
   frontend:
-    name: Frontend build
+    name: Frontend build and tests
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -120,6 +120,17 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm install
+
+      # Both of these run in pre-commit, which only protects a developer who has
+      # it installed and does not pass --no-verify. Without them here the whole
+      # TypeScript suite - including the contract tests that guard agreements
+      # between a template and the code reading it - never runs in CI, so a pull
+      # request that breaks one merges green.
+      - name: TypeScript typecheck
+        run: bun run typecheck
+
+      - name: TypeScript tests
+        run: bun run test:ts
 
       - name: Build JavaScript bundle
         run: bun run build
