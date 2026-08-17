@@ -96,6 +96,7 @@ class WikiCreationService:
                         WikiStatVote.objects.update_or_create(wiki=wiki, profile=pin.profile, field=field, defaults={"value": value})
                 self._seed_aliases(pin, wiki, alias_ids or set())
                 self._seed_photos(pin, wiki, image_ids or set())
+                self._name_from_pin(pin, wiki, alias_ids or set())
             # Link the pin (and any of the user's other pins on this location
             # that aren't linked yet) to the community wiki.
             Pin.objects.filter(pk=pin.pk).update(wiki=wiki)
@@ -122,6 +123,44 @@ class WikiCreationService:
             transaction.on_commit(_enqueue)
             transaction.on_commit(_seed_article)
         return wiki, newly_official
+
+    def _name_from_pin(self, pin: Pin, wiki: Wiki, alias_ids: set[int]) -> None:
+        """Name a newly-created wiki after the place, not its postal address.
+
+        ``claim_for_location`` names a wiki ``location.official_name``, which for
+        a reverse-geocoded location is a street address - so creating a wiki from
+        a pin called "HRSH", having explicitly chosen the aliases "Hudson
+        Heritage" and "Hudson River State Hospital", produced a wiki titled "83
+        Hudson View Dr, Poughkeepsie, NY 12601, USA". That was reported from
+        staging, and it discards the two things the user actually told us.
+
+        Only aliases are considered, never ``pin.name``. That is a standing
+        decision this service already encodes - "name isn't a seedable field at
+        all; the wiki's name comes from external place data, and the pin's name
+        already surfaces as an alias" - because a pin name is the user's own
+        private label for a place and a wiki is public. The aliases are different:
+        the user picked them in this very dialog precisely to hand them over, and
+        they are copied onto the wiki either way.
+
+        Preference order is the aliases they chose, then official ones. If none is
+        meaningful the claimed name stands - an address beats a placeholder.
+
+        Args:
+            pin: The pin the wiki is being created from.
+            wiki: The freshly-claimed wiki.
+            alias_ids: The aliases the user selected in the dialog.
+        """
+        from urbanlens.dashboard.services.locations.naming import is_meaningful_name
+
+        candidates = []
+        if alias_ids:
+            candidates += [alias.name for alias in pin.aliases.filter(pk__in=alias_ids).exclude(kind=AliasType.OFFICIAL).order_by("pk")]
+        candidates += [alias.name for alias in pin.aliases.filter(kind=AliasType.OFFICIAL).order_by("pk")]
+
+        better = next((name for name in candidates if is_meaningful_name(name)), None)
+        if better and better != wiki.name:
+            wiki.name = better
+            wiki.save(update_fields=["name", "updated"])
 
     def _seed_aliases(self, pin: Pin, wiki: Wiki, alias_ids: set[int]) -> None:
         """Copy the pin's official aliases (always) plus any chosen extras into the wiki."""
