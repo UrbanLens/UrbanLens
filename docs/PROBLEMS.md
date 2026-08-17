@@ -9898,3 +9898,30 @@ they can't be repaired mechanically, and they split into two kinds:
 The eight that *were* mechanically provable (anchored on a `def`/`class` the tool could locate
 uniquely) are fixed, and `check_doc_line_refs.py` now runs in CI to keep past-end-of-file citations
 at zero.
+
+## OPEN 2026-08-17: blocking leaves a saved emergency-contact default pointing at the blocked profile
+
+Found alongside the `MarkupMapShare` revocation, and left for an owner's decision because it is a
+product question rather than a defect.
+
+`EmergencyContactDefault` is a *template*: it is copied onto each new `SafetyCheckin` as a
+`SafetyCheckinContact` snapshot at creation time. Blocking someone does not remove it, so a check-in
+created *after* the block still copies the blocked profile in as an emergency contact - and the
+safety escalation path will page them.
+
+Both answers are defensible, which is why this is filed rather than fixed:
+
+- **Remove it on block.** Consistent with how blocking already treats safety-partner access, and
+  avoids the surprise of paging someone you blocked.
+- **Leave it.** The default is the owner's own saved data, and silently deleting a safety contact is
+  destructive in a feature whose whole purpose is that someone is notified when you do not check in.
+  An owner might block a person socially and still want them called if they go missing.
+
+A third option, probably the best of the three: keep the row, and warn at check-in creation when a
+default resolves to a blocked profile - which informs without deciding for them.
+
+Everything else that links two profiles was enumerated while checking this (twenty models). The rest
+are either already handled (`Friendship`, `SafetyCheckinPartner`, pending `PinShare`,
+`DirectMessageTemporaryAccess`'s read-time veto), private annotations the author owns
+(`ProfileNote`, `ProfileNickname`, `ProfileTrust`, `ProfileLabelAssignment`), or deliberately
+preserved history (`DirectMessage`, `ConversationKey`).

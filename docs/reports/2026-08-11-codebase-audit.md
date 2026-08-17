@@ -13370,3 +13370,34 @@ for whoever goes next.
 
 Everything is indexed in `docs/TOOLING.md`, linked from `CLAUDE.md`, because the
 lesson of chunk 628 is that knowledge which cannot be found gets rebuilt.
+
+## Chunk 631 - the third instance of one defect, found from its own fix history
+
+First chunk driven by `bin/report_defect_history.py`, and it worked as intended.
+`services/social/friendship.py` has the highest fix density in the codebase - three of five commits -
+and reading *what* those fixes were is the whole method: two of the three are "blocking does not
+revoke X" (safety-partner access, then pending pin shares). The question that follows writes itself.
+
+Rather than guess, the candidates were enumerated: twenty models link two profiles. Most are already
+handled, are private annotations the author owns (`ProfileNote`, `ProfileTrust`), or are deliberately
+preserved history (`DirectMessage`, `ConversationKey`).
+
+**`MarkupMapShare` was not.** It has no accept/reject step - its entire purpose is to "grant the
+recipient a permission-checked view of someone else's map" - and `controllers.markup._map_visible_to`
+honours it without ever consulting blocking. So after a block the recipient still sees the owner's
+map *as it changes*, and can still clone it into their own account.
+
+That is the `SafetyCheckinPartner` shape (live access to the owner's data), not the accepted-pin-share
+shape (a materialised copy, deliberately left alone because revoking the row gives nothing back).
+Blocking now deletes those shares in both directions, matching the mutual-disengagement rule the
+other two revocations already follow. The map itself is untouched, which one of the tests pins.
+
+Two channels `_map_visible_to` accepts are deliberately *not* revoked, and saying why matters as much
+as the fix: a DM attachment, because this codebase's stated rule is that a past conversation stays
+readable and only identity is masked; and a `PinShare` attachment, which follows the pin share's own
+fate - pending ones are already withdrawn on block, accepted ones already produced a copy.
+
+Filed rather than fixed: a saved `EmergencyContactDefault` still points at a blocked profile, so a
+check-in created after the block will page them. Both answers are defensible - it is the owner's own
+saved safety data - so it is a product decision, with a suggested third option (warn at check-in
+creation) in `docs/PROBLEMS.md`.

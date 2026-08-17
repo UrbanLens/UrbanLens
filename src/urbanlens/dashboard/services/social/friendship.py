@@ -535,6 +535,7 @@ def block_profile(actor: Profile, target: Profile) -> Friendship:
     """
     _revoke_safety_partner_access(actor, target)
     _withdraw_pending_pin_shares(actor, target)
+    _revoke_map_shares(actor, target)
 
     friendship = Friendship.objects.all().between(target, actor)
     if friendship:
@@ -576,6 +577,35 @@ def _revoke_safety_partner_access(actor: Profile, target: Profile) -> None:
     ).select_related("checkin")
     for partner in partners:
         remove_checkin_partner(partner)
+
+
+def _revoke_map_shares(actor: Profile, target: Profile) -> None:
+    """Delete any standalone map share between two profiles being blocked apart.
+
+    A ``MarkupMapShare`` is live access, not a copy: it has no accept/reject
+    step, and ``controllers.markup._map_visible_to`` honours it every time the
+    recipient opens the map, so they keep seeing the owner's *current* map and
+    can still clone it. Blocking has to end that, for the same reason it ends
+    safety-partner access.
+
+    Both directions, matching the rule the other revocations here follow -
+    blocking is a mutual disengagement, and continuing to watch someone you have
+    blocked is the same relationship seen from the other side.
+
+    The map itself is untouched; only the grant is. The other two channels
+    ``_map_visible_to`` accepts are deliberately left alone: a DM attachment,
+    because a past conversation stays readable by design, and a ``PinShare``
+    attachment, which follows the pin share's own fate above.
+
+    Args:
+        actor: The profile doing the blocking.
+        target: The profile being blocked.
+    """
+    from urbanlens.dashboard.models.markup.share import MarkupMapShare
+
+    MarkupMapShare.objects.filter(
+        Q(from_profile=actor, to_profile=target) | Q(from_profile=target, to_profile=actor),
+    ).delete()
 
 
 def _withdraw_pending_pin_shares(actor: Profile, target: Profile) -> None:
