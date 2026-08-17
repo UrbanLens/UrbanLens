@@ -24,13 +24,12 @@ observable single-threaded.
 
 from __future__ import annotations
 
-import threading
 from unittest import mock
 
-from django.db import connections
 from django.test import TransactionTestCase, override_settings
 from model_bakery import baker
 
+from urbanlens.core.tests.concurrency import run_concurrently
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.profile.model import Profile
 from urbanlens.dashboard.models.trivia.model import (
@@ -84,25 +83,8 @@ class RoundRatingRaceTests(TransactionTestCase):
         self.assertEqual(TriviaQuestionRating.objects.get(question=self.question).games_played, 1)
 
         rounds = [self._round_and_answer(), self._round_and_answer()]
-        barrier = threading.Barrier(2)
-        errors: list[Exception] = []
 
-        def run(round_: TriviaRound, answer: TriviaAnswer) -> None:
-            try:
-                barrier.wait(timeout=10)
-                apply_round_ratings(round_, [answer])
-            except Exception as exc:
-                errors.append(exc)
-            finally:
-                connections.close_all()
-
-        threads = [threading.Thread(target=run, args=pair) for pair in rounds]
-        for thread in threads:
-            thread.start()
-        for thread in threads:
-            thread.join(timeout=30)
-
-        self.assertEqual(errors, [], f"rating a round raised under concurrency: {errors}")
+        run_concurrently([lambda pair=pair: apply_round_ratings(pair[0], [pair[1]]) for pair in rounds])
 
         rating = TriviaQuestionRating.objects.get(question=self.question)
         self.assertEqual(rating.games_played, 3, "a concurrent round's rating update was discarded")

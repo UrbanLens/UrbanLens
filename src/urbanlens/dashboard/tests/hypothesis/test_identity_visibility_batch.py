@@ -25,6 +25,7 @@ from django.contrib.auth.models import User
 from django.utils import timezone
 from model_bakery import baker
 
+from urbanlens.core.tests.agreement import assert_agrees
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
 from urbanlens.dashboard.models.friendship.model import Friendship
@@ -49,17 +50,17 @@ class VisibleProfilePksAgreementTests(TestCase):
         baker.make(User)  # absorbs the bootstrap site-admin promotion
         self.viewer = _profile()
 
-    def _assert_agrees(self, subjects: list[Profile]) -> None:
+    def _assert_agrees(self, subjects: list[Profile], *, viewer: Profile | None = None) -> None:
         """The whole contract: batch == per-subject, for this exact set."""
-        batch = Profile.visible_profile_pks(self.viewer, subjects)
-        for subject in subjects:
-            expected = subject.can_view_profile(self.viewer)
-            self.assertEqual(
-                subject.pk in batch,
-                expected,
-                f"batch and can_view_profile disagree for visibility={subject.profile_visibility!r}: "
-                f"batch says {subject.pk in batch}, can_view_profile says {expected}",
-            )
+        looker = self.viewer if viewer is None else viewer
+        batch = Profile.visible_profile_pks(looker, subjects)
+        assert_agrees(
+            lambda subject: subject.can_view_profile(looker),
+            lambda subject: subject.pk in batch,
+            subjects,
+            describe=lambda subject: f"profile_visibility={subject.profile_visibility!r}",
+            label="visible_profile_pks",
+        )
 
     def _befriend(self, other: Profile) -> None:
         Friendship.objects.create(
@@ -177,10 +178,7 @@ class VisibleProfilePksAgreementTests(TestCase):
     def test_an_anonymous_viewer_sees_only_public_profiles(self) -> None:
         subjects = [_profile(profile_visibility=value) for value in VisibilityChoice.values]
 
-        batch = Profile.visible_profile_pks(None, subjects)
-
-        for subject in subjects:
-            self.assertEqual(subject.pk in batch, subject.can_view_profile(None), f"disagreement for {subject.profile_visibility!r} with no viewer")
+        self._assert_agrees(subjects, viewer=None)
 
     def test_an_empty_subject_list_is_not_a_query(self) -> None:
         self.assertEqual(Profile.visible_profile_pks(self.viewer, []), set())
