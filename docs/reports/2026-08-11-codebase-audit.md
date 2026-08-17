@@ -11773,3 +11773,12 @@ the least dangerous place for it, and also the place nothing will ever flag.
 
 No code changed this chunk. The result is that the previous chunks' results are trustworthy for a
 stated reason, which was worth an hour.
+
+## Twenty-third consolidation
+
+`10972 passed, 1 xfailed, 43 warnings, 1483 subtests passed in 5712.86s (1:35:12)`, no `FAILED` or
+`INTERNALERROR` lines. Reconciles exactly: `git diff 2ee0728f..ad7d474f` over the test tree adds 9
+test functions, and 10,973 - 10,964 = 9.
+
+Twenty green of twenty-three. The one red - the twenty-second - was my container-sync error, not a
+defect, and this run is the first launched *after* the explicit re-sync that error taught me to do.
