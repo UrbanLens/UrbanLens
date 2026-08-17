@@ -20,6 +20,7 @@ from django.test.utils import CaptureQueriesContext
 from django.urls import reverse
 from model_bakery import baker
 
+from urbanlens.core.tests.query_scaling import QueryScalingMixin
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.account.model import ApiKeyScope
 from urbanlens.dashboard.models.friendship.meta import FriendshipStatus, FriendshipType, Permission
@@ -37,7 +38,7 @@ _FIRST_BATCH = 2
 _SECOND_BATCH = 10
 
 
-class QueryScalingTests(TestCase):
+class QueryScalingTests(QueryScalingMixin, TestCase):
     """Rendering more rows must not mean running more queries."""
 
     def setUp(self) -> None:
@@ -51,7 +52,7 @@ class QueryScalingTests(TestCase):
         api_key.save()
         self.client.force_login(self.user)
 
-    def _seed(self, count: int) -> None:
+    def seed_rows(self, count: int) -> None:
         for _ in range(count):
             location = baker.make(Location)
             pin = baker.make(Pin, profile=self.profile, location=location)
@@ -69,35 +70,17 @@ class QueryScalingTests(TestCase):
                 permissions=Permission.VIEW_PROFILE,
             )
 
-    def _count(self, url: str, **extra) -> int:
-        with CaptureQueriesContext(connection) as ctx:
-            response = self.client.get(url, **extra)
-        self.assertEqual(response.status_code, 200, f"{url} returned {response.status_code}")
-        return len(ctx.captured_queries)
-
-    def _assert_flat(self, url: str, **extra) -> None:
-        self._seed(_FIRST_BATCH)
-        small = self._count(url, **extra)
-        self._seed(_SECOND_BATCH)
-        large = self._count(url, **extra)
-        self.assertLessEqual(
-            large,
-            small + 2,
-            f"{url} ran {small} queries for {_FIRST_BATCH} rows and {large} for "
-            f"{_FIRST_BATCH + _SECOND_BATCH} - it is querying per row.",
-        )
-
     def test_map_pin_list_panel_does_not_scale_with_pin_count(self) -> None:
-        self._assert_flat(reverse("map.pins.list"))
+        self.assert_flat(reverse("map.pins.list"))
 
     def test_trips_overview_does_not_scale_with_trip_count(self) -> None:
-        self._assert_flat(reverse("trips.overview"))
+        self.assert_flat(reverse("trips.overview"))
 
     def test_trips_calendar_does_not_scale_with_trip_count(self) -> None:
-        self._assert_flat(reverse("trips.calendar"))
+        self.assert_flat(reverse("trips.calendar"))
 
     def test_external_photo_list_does_not_scale_with_photo_count(self) -> None:
-        self._assert_flat(reverse("external_api:photos"), HTTP_AUTHORIZATION=f"Bearer {self.raw_key}")
+        self.assert_flat(reverse("external_api:photos"), HTTP_AUTHORIZATION=f"Bearer {self.raw_key}")
 
     # The three below were surveyed rather than found broken: each was measured at two
     # data sizes, came out flat, and is pinned here so it stays that way. The seed
@@ -107,13 +90,13 @@ class QueryScalingTests(TestCase):
     # too, but needs images with real files rather than the bare rows seeded here, so
     # pinning it would mean changing the seed under the four tests above.)
     def test_trips_list_does_not_scale_with_trip_count(self) -> None:
-        self._assert_flat(reverse("trips.list"))
+        self.assert_flat(reverse("trips.list"))
 
     def test_label_index_does_not_scale_with_label_count(self) -> None:
-        self._assert_flat(reverse("label.index", kwargs={"label_kind": "tags"}))
+        self.assert_flat(reverse("label.index", kwargs={"label_kind": "tags"}))
 
     def test_organize_index_does_not_scale_with_pin_count(self) -> None:
-        self._assert_flat(reverse("organize.index"))
+        self.assert_flat(reverse("organize.index"))
 
     def test_external_friend_list_does_not_scale_with_friend_count(self) -> None:
         """Each row masks a profile the caller may not identify - that check was per row.
@@ -121,5 +104,5 @@ class QueryScalingTests(TestCase):
         Surveying the external API's list endpoints found this one alone scaling
         (7 queries for 2 friends, 17 for 12); the rest were already flat.
         """
-        self._assert_flat(reverse("external_api:friends"), HTTP_AUTHORIZATION=f"Bearer {self.raw_key}")
+        self.assert_flat(reverse("external_api:friends"), HTTP_AUTHORIZATION=f"Bearer {self.raw_key}")
 
