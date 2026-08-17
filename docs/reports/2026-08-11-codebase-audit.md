@@ -12892,3 +12892,37 @@ Three of the surveyed endpoints are now pinned in `test_query_scaling.py` so the
 protected rather than merely observed. `memories.photos` was measured flat but is left out: it needs
 images with real files rather than the bare rows the shared seed creates, and pinning it would mean
 changing that seed under the four tests already relying on it.
+
+## Chunk 623 - tell #2 closes as a negative, and the vacuity lesson immediately pays
+
+Two halves.
+
+**Tell #2 ("guards whose own caller undoes them") finds nothing, for a good reason.** Two mechanical
+forms were tried. A scan for discarded tuple returns gave 158 hits, essentially all `_created` from
+`get_or_create` and `_location`/`_profile` from resolve helpers. A scan for the sharper shape - code
+that computes an `allowed_`/`visible_`/`safe_` subset and then passes the *unfiltered* name onward -
+gave exactly three hits, and all three are correct: `owner_access` uses the raw list only inside
+`len()` to compute `parties_withheld`, `trip_ai_suggestions` builds its payload *from* the visible
+list, and `views_labels_bulk` uses the cycle-guarded subset for the write and the raw one only for a
+count.
+
+The reason the sweep is empty is worth more than the sweep: the wiki guard was defeated *by a bare
+whole-object save*, and chunks 617-619 already removed every bare save on a multi-writer model. Tell
+#2 and the bare-save sweep were the same defect approached from two directions, and the earlier one
+had already covered it.
+
+**Chunk 622's vacuity lesson paid off within one chunk.** That chunk flagged `messages.list` as
+measured-flat-but-not-actually-exercised, because the seed grew pins and labels rather than
+conversations. Seeding conversations properly: **45 queries for 2, 155 for 12 - about 11 per
+conversation.** The "flat" result had been meaningless, exactly as suspected.
+
+Measured before touching anything (chunk 621's lesson): the queries that grow are the viewer's
+friendships (three separate ones), trip memberships, pins-in-common, and temporary DM access - all
+re-evaluated per row by `display_identity_for` -> `resolve_visible_identity`, behind
+`conv.display_name` and `conv.display_avatar_url`.
+
+Left unfixed on purpose, and filed. That per-row work *is* the privacy decision that anonymizes a
+partner the viewer may no longer identify, so a batching mistake leaks an identity rather than merely
+slowing a page down. The reproduction is committed as `@expectedFailure` so the measurement survives
+and the gap cannot be quietly forgotten; the fix wants the viewer-scoped sets resolved once per
+request, with tests asserting an anonymized partner stays anonymized in a batch.
