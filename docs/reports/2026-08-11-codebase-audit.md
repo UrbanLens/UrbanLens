@@ -12514,3 +12514,42 @@ Both reproduced first, then fixed to match the create path. 542 label tests pass
 The lesson is not "check siblings" - I knew that, and wrote it into three earlier entries. It is that
 **I had no way to know I had missed one**, and the history did. Fix-density pointed at a file I had
 already edited this session, on evidence I generated myself and never read back.
+
+## Chunk 613 - the same fix, missed twice more, found by a sharper query
+
+Chunk 612 fixed the label *edit* path after fix-density pointed at the file, and I wrote that the
+lesson was "I had no way to know I had missed one". This chunk found I had missed two more, using a
+query sharper than churn: **commits whose own message records an earlier fix as incomplete.**
+
+Searching four months of history for "missed", "one of two", "sibling", "the first sweep" returns
+seven, several of them mine: "the account-deletion reminder takes the overlap lock its siblings
+already had", "the enrichment path catches decompression bombs, like its sibling already did", "five
+more `date.today()` sites missed by the previous chunk's check", "validate the eight colour writes the
+first sweep missed". This codebase's incomplete fixes are not occasional; they are its most repeated
+defect shape, and mine sit among them.
+
+Two of those threads are now closed - `date.today()` is at **zero** occurrences in non-test source,
+so that sweep finished. The colour one led somewhere else: colour writes are clean, but the **icon**
+writes beside them are not, and there are five.
+
+| path | before |
+| --- | --- |
+| `labels.py` create | `clean_icon` (chunk 559) |
+| `labels.py` edit | `clean_icon` (chunk 612) |
+| `labels.py` bulk payload | truncated to the column width, never validated |
+| `upsert_label_customization` | `_normalize` only - **no bound at all** |
+| `external_api` label create | serializer `max_length=50`, never validated |
+
+The customization path is a live 500: `_normalize` strips whitespace and nothing else, so an icon
+longer than `LabelCustomization.icon`'s 50 characters reaches the column as a `DataError`. Fixed
+there, in the bulk payload, and left documented for the API path, which is bounded and so cannot
+crash.
+
+**My first attempt to reproduce it passed, and the passing was the bug in my test.** I built the
+fixture with `profile=self.profile`, but `LabelCustomizeView` delegates any profile-owned label
+straight to `LabelEditView` - customization exists for *global* labels. So the test exercised the path
+I had already fixed one chunk earlier and reported success. With `profile=None` it fails with the
+`DataError` immediately. That is the fourth fixture error of this session, and the same shape each
+time: a test that passes because it never reached the code it names.
+
+545 label and customization tests pass. Consolidation 26 is running.

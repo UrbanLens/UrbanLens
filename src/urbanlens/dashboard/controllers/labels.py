@@ -472,9 +472,9 @@ def _parse_bulk_payload(data: dict) -> dict:
         "has_color": "color" in data,
         "has_description": "description" in data,
         "has_order": "order" in data,
-        # icon is a CharField(max_length=50); save() does not run full_clean(), so an
-        # over-long value from the bulk path reached the database as a 500.
-        "icon": (str(data.get("icon")).strip()[: Label._meta.get_field("icon").max_length] if data.get("icon") else None),  # noqa: SLF001 - _meta is public API
+        # Through clean_icon like the create and edit paths: truncating alone
+        # fixed the over-long-value 500 but still stored free text as an icon.
+        "icon": clean_icon(data.get("icon"), max_length=column_max_length(Label, "icon")),
         "color": clean_color(data.get("color")),
         "description": data.get("description", ""),
         "order": _safe_int(data.get("order"), 0),

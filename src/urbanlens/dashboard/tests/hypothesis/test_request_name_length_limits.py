@@ -96,6 +96,25 @@ class RequestNameLengthTests(TestCase):
         label.refresh_from_db()
         self.assertNotEqual(label.icon, "not an icon at all", "edit stored free text as an icon")
 
+    def test_label_customization_rejects_an_overlong_icon(self) -> None:
+        """The third of five Label icon write paths, and the only one that 500s.
+
+        `upsert_label_customization` normalises the icon by stripping it and
+        nothing else - no length bound and no `clean_icon` - so a value longer
+        than `LabelCustomization.icon`'s 50 characters reaches the column.
+        """
+        # profile=None: customization applies to *global* labels only. A
+        # profile-owned label is delegated to LabelEditView instead, so this
+        # test silently exercised the wrong path until the fixture was fixed.
+        label = baker.make(Label, profile=None, kind="tag", name="globaltag")
+
+        response = self.client.post(
+            reverse("label.customize", kwargs={"label_kind": "tags", "label_id": label.pk}),
+            {"icon": "x" * 80, "name": "", "color": ""},
+        )
+
+        self.assertNotEqual(response.status_code, 500, "an over-long customization icon reached the column")
+
     def test_a_name_at_exactly_the_limit_is_still_accepted(self) -> None:
         """The boundary belongs to the user, not to the error path."""
         limit = PinList._meta.get_field("name").max_length

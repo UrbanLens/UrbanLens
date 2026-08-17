@@ -77,9 +77,13 @@ def upsert_label_customization(
     """
     from urbanlens.dashboard.models.labels.customization import LabelCustomization
     from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.core import icons
+    from urbanlens.dashboard.services.core.text_limits import column_max_length
 
     clean_name = _normalize(name)
-    clean_icon = _normalize(icon)
+    # Through the shared validator, not just _normalize: this writes to a
+    # 50-wide column, and an unvalidated override reached it as a DataError.
+    clean_icon = icons.clean_icon(_normalize(icon), max_length=column_max_length(LabelCustomization, "icon"))
     clean_color = _normalize(color)
 
     if clean_name is None and clean_icon is None and clean_color is None:
