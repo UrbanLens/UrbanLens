@@ -46,14 +46,20 @@ def geometry_stale(place: Place) -> bool:
         place: The place to check.
 
     Returns:
-        True when the provider chain has run for it and the result is now
-        older than ``SiteSettings.boundary_cache_days``. A place that has
-        never been generated is *pending*, not stale, and returns False.
+        True when the result is older than ``SiteSettings.boundary_cache_days``,
+        or when the provider chain has never run for this place at all.
+
+        A null timestamp means the latter and nothing else: ``upsert_place``
+        stamps one on both its branches, so the only rows carrying a null are
+        those ``0027_places_backfill`` created from pre-places location
+        boundaries. Treating those as fresh pinned them to that geometry
+        permanently - no provider was ever asked, so a better parcel (REData's,
+        say) could only ever be recorded as a losing candidate.
     """
     from urbanlens.dashboard.models.site_settings import SiteSettings
 
     if place.geometry_generated_at is None:
-        return False
+        return True
     return timezone.now() - place.geometry_generated_at > timedelta(days=SiteSettings.get_current().boundary_cache_days)
 
 
