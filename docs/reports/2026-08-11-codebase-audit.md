@@ -12583,3 +12583,47 @@ So the thread closes: that fix was complete. A negative worth the chunk, because
 carrying "there might be a third decompression-bomb path" as an open suspicion indefinitely, and the
 check that settles it also documents *why* the EXIF paths are safe - which is not obvious from
 reading them.
+
+## Chunk 615 - the pay-what-you-want ledger advanced from a stale snapshot
+
+Took the beat-lock thread next: *"the account-deletion reminder takes the overlap lock its siblings
+already had"* - i.e. are there scheduled sweeps still missing it? Of the 25 beat entries, 11 take a
+lock. Walking the other 14 for non-idempotent side effects, most are `filter().delete()` prunes
+(overlap is harmless) or converge on re-run (`upgrade_placeholder_pin_names` clears a name to None).
+One does not: `advance_pwyw_usage_ledgers`, which moves money.
+
+`services/billing/banking.py` turned out to have a lost-update bug that has nothing to do with beat
+scheduling, and is worse than the one I went looking for. Both `apply_payment` and
+`advance_usage_ledger` are read-modify-write cycles - they read `total_paid_cents` /
+`amount_used_cents` / `usage_covered_until` off the in-memory `RoleSubscription` they were handed,
+compute new values, and `save(update_fields=...)`. Last writer wins, so any caller holding a snapshot
+taken before someone else's write silently discards it.
+
+The webhook receiver looked like it covered this and does not. Its `select_for_update` is keyed on
+the **Stripe event id**, so it serializes redeliveries of one event; two different
+`invoice.payment_succeeded` events for the same subscription take two different locks and run
+concurrently. The daily sweep takes no lock at all and holds each row's snapshot for as long as its
+loop takes to reach that row.
+
+Two distinct failures, both reproduced first:
+
+- **Payment vs payment.** Two concurrent credits both read `total_paid_cents = X` and write `X+a`
+  and `X+b`. One payment's money vanishes from the ledger - the user paid and got nothing for it.
+- **Sweep vs payment.** The sweep writes `usage_covered_until` from a pre-payment snapshot, moving
+  coverage *backwards*: in the test, from day 90 to day 60. The user paid for time and lost it.
+
+Sweep vs sweep is harmless, which is worth stating because it is the case the beat-lock framing would
+have predicted: `advance_usage_ledger` is a pure function of the snapshot it is given, so two
+identical stale snapshots compute identical writes. The damage needs a writer the stale reader has
+not seen, and that is what a payment is. A beat lock would therefore have fixed nothing here.
+
+Fixed by locking the row that the invariant is actually about: `_lock_and_refresh` does
+`refresh_from_db(from_queryset=RoleSubscription.objects.select_for_update())`, and both mutations are
+`@transaction.atomic`. This covers both callers with one change, leaves the caller holding a current
+instance rather than a silently divergent one, and does not hold the lock across the Stripe
+round-trip (which happens before `apply_payment`). With it, the sweep needs no overlap lock.
+
+Verified by breaking: with both `_lock_and_refresh` calls disabled in the container, all three new
+tests fail; restored, all 42 billing tests pass. The first attempt at that check was itself
+vacuous - `docker exec` without `-i` does not attach stdin, so the heredoc that was meant to patch
+the file ran an empty program and the "broken" run was against the fixed code.

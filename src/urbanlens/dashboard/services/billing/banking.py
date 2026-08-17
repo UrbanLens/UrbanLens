@@ -25,6 +25,7 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import TYPE_CHECKING
 
+from django.db import transaction
 from django.utils import timezone
 
 from urbanlens.dashboard.services.billing import pricing
@@ -38,6 +39,31 @@ if TYPE_CHECKING:
 _PERIOD = timedelta(days=30)
 
 
+def _lock_and_refresh(role_subscription: RoleSubscription) -> None:
+    """Take a row lock on *role_subscription* and reload it under that lock.
+
+    Both ledger mutations below are read-modify-write cycles over money, and the
+    values they read come off an instance the caller loaded at some earlier
+    point - the webhook receiver before its Stripe round-trip, the daily sweep
+    however long ago its loop reached this row. Writing from that snapshot
+    silently discards whatever landed in between.
+
+    The webhook receiver's own ``select_for_update`` does not cover this: it is
+    keyed on the Stripe event id, so it serializes redeliveries of a single
+    event, while two different events for one subscription take two different
+    locks. This lock is on the subscription row, which is what the invariant is
+    actually about.
+
+    Args:
+        role_subscription: The subscription to lock. Refreshed in place, so the
+            caller keeps holding a usable instance.
+    """
+    from urbanlens.dashboard.models.billing import RoleSubscription
+
+    role_subscription.refresh_from_db(from_queryset=RoleSubscription.objects.select_for_update())
+
+
+@transaction.atomic
 def advance_usage_ledger(role_subscription: RoleSubscription, as_of: datetime.datetime | None = None) -> None:
     """Advance a pay-what-you-want subscription's usage ledger as of *as_of*.
 
@@ -55,6 +81,7 @@ def advance_usage_ledger(role_subscription: RoleSubscription, as_of: datetime.da
         as_of: Point in time to advance as of; defaults to now.
     """
     as_of = as_of or timezone.now()
+    _lock_and_refresh(role_subscription)
     cursor = role_subscription.usage_covered_until or role_subscription.created
     amount_used_cents = role_subscription.amount_used_cents
     advanced = False
@@ -76,6 +103,7 @@ def advance_usage_ledger(role_subscription: RoleSubscription, as_of: datetime.da
     role_subscription.save(update_fields=["amount_used_cents", "usage_covered_until", "updated"])
 
 
+@transaction.atomic
 def apply_payment(role_subscription: RoleSubscription, amount_paid_cents: int, as_of: datetime.datetime | None = None) -> None:
     """Record a successful pay-what-you-want charge and advance its usage ledger.
 
@@ -89,6 +117,10 @@ def apply_payment(role_subscription: RoleSubscription, amount_paid_cents: int, a
     """
     if not role_subscription.role.pay_what_you_want or amount_paid_cents <= 0:
         return
+    # Credited as an increment onto the *stored* total, not the one this instance
+    # was loaded with: a second payment crediting concurrently is another user's
+    # money, and last-writer-wins would drop it.
+    _lock_and_refresh(role_subscription)
     role_subscription.total_paid_cents += amount_paid_cents
     role_subscription.save(update_fields=["total_paid_cents", "updated"])
     advance_usage_ledger(role_subscription, as_of)
