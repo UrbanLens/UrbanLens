@@ -12177,3 +12177,18 @@ stopped.
 That is the whole chunk. The remaining obligation is consolidation 25's verdict, and the honest thing
 to do while a ninety-minute run finishes is to let it finish rather than manufacture work in front of
 it - especially since my own test runs are what slow it down.
+
+## Twenty-fifth consolidation
+
+`10982 passed, 1 xfailed, 43 warnings, 1483 subtests passed in 5600.13s (1:33:20)`, no `FAILED` or
+`INTERNALERROR` lines. Reconciles exactly: `git diff 7a9686ea..ce752b93` over the test tree adds 2
+test functions - chunk 588's reaction-emoji pair - and 10,983 - 10,981 = 2.
+
+**Twenty-two green of twenty-five.** The three that were not: two predate this session's chunks and
+are recorded above; the third is chunk 570's, which was my container-sync error rather than a defect
+in the code, and remains the only red this session produced.
+
+That closes the verification chain. Every fix in the session summary has been through at least one
+full-suite run after landing, and the last three runs - 10,972, 10,980 and 10,982 passing - each
+reconcile exactly against the tests added between their launch commits, which is the property that
+makes the numbers mean something rather than merely look large.
