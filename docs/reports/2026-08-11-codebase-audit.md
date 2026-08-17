@@ -11642,3 +11642,40 @@ verified locally as written - typecheck clean, 414 pass - and the YAML parses.
 Worth naming the shape: a guard is only as good as the thing that runs it, and I added guards for
 ten chunks without once checking whether CI would run them. The tests I wrote in 565 and 566 would
 have protected nothing on a pull request.
+
+## Chunk 584 - two alarms that were mine, and one real gap
+
+Continued chunk 583's line: anything enforced locally but not in CI. Five pre-commit hooks, three
+already in CI (ruff, ruff-format, and the two TypeScript steps added last chunk). That left
+`imports-tracked`, and a broader question about what CI does not check at all.
+
+**Two alarms, both mine, both nearly published.**
+
+The first: `CLAUDE.local.md` warns that `manage.py test` "never sets the `TESTING` flag, so any test
+rendering a full page template hits a staticfiles-manifest 500" - and CI's Django step runs exactly
+`manage.py test`. I reproduced it locally: 28 of 33 errors on one module, all
+`Missing staticfiles manifest entry`. The mechanism is real and subtler than the warning states -
+the custom runner sets `TESTING` in `setup_test_environment()`, but `STORAGES` was already computed
+from it at settings-import time, so the flag arrives too late. **CI is nonetheless fine**, because
+its workflow sets `DJANGO_SETTINGS_MODULE: urbanlens.UrbanLens.settings.test`, and that module sets
+`TESTING = True` at import. My reproduction used the default settings module. Checking the env block
+before claiming "CI is red" is the only reason that did not go out.
+
+The second: I ran `bin/check_imports_tracked.py` in the app container and it reported four committed
+test files importing `services/wiki/wiki_creation`, "which no committed file provides". I got as far
+as reading the module and confirming five committed files import it - including production
+controllers - before checking the premise. **The module is tracked**, committed in `e8070767`. The
+script asks git what is committed; the container has no git history, so everything looks untracked.
+It passes on the host. Same instrument error as chunk 576's container-sync mistake: a tool run in the
+wrong place answers a different question confidently.
+
+I also misread the earlier evidence: `git status` and `git ls-files` in one command, and I attributed
+the single line of output to the first when it came from the second. Two commands, one line, and no
+way to tell them apart without running them separately - which I then did.
+
+**The real gap: nothing checks for missing migrations.** Not CI, not pre-commit, not a test.
+A model change without its migration surfaces only if some test happens to touch the field, and
+otherwise waits until the column is needed in production - in a codebase whose `CLAUDE.md` documents
+careful migration practice at length. `makemigrations --check --dry-run` reports "No changes
+detected" today, so it is cheap to add and green. Added, along with `imports-tracked`, to the job
+that already has the dependencies.

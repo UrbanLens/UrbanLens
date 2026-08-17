@@ -83,6 +83,21 @@ jobs:
       - name: Static type check
         run: mypy src
 
+      # Structural, and cheap: every urbanlens.* import in a committed file must
+      # resolve to a file git actually has. Runs in pre-commit too, but that only
+      # protects a developer who has it installed and does not pass --no-verify -
+      # and the incident it was written for (a commit that landed 139 files while
+      # leaving five imported modules untracked) broke model loading for the app,
+      # every management command, both workers and the whole suite.
+      - name: Imports resolve in the committed tree
+        run: python3 bin/check_imports_tracked.py
+
+      # Nothing else checks this: a model change without its migration only
+      # surfaces if some test happens to touch the field, and otherwise waits
+      # until the column is needed in production.
+      - name: No missing migrations
+        run: python src/urbanlens/manage.py makemigrations --check --dry-run
+
       # ----------------------------------------------------------------------------
       # Three issues to address here (TODO):
       # 1 -- ?: (security.W004) You have not set a value for the SECURE_HSTS_SECONDS setting. If your entire site is served only over SSL, you may want to consider setting a value and enabling HTTP Strict Transport Security. Be sure to read the documentation first; enabling HSTS carelessly can cause serious, irreversible problems.
