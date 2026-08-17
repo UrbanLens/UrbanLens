@@ -331,8 +331,10 @@ The app now has real users with 8k+ pins; several systems were designed for hund
 
 ### 3.5 Testing strategy
 
-- **TDD for bug reports**: failing test first, then fix. Use pytest (never `manage.py test` —
-  staticfiles-manifest 500s), always set a unique `UL_TEST_DB_NAME`.
+- **TDD for bug reports**: failing test first, then fix. Use pytest (never `manage.py test` under
+  the default settings module — staticfiles-manifest 500s; see `docs/NOTES.md` for why, and why CI
+  running `manage.py test` under `settings.test` is nonetheless correct), always set a unique
+  `UL_TEST_DB_NAME`.
 - **Hypothesis property tests wherever possible** (UL-120/369) — but `@given` + `self.client`
   don't mix in this repo's TestCase (state leaks across examples): property-test pure
   logic/services directly; plain tests for views. (Fixing TestCase so they *do* mix is itself a

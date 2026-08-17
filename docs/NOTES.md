@@ -464,6 +464,20 @@ time migrations get re-squashed.
 
 - Custom test runner (`urbanlens.core.tests.runner.TestRunner`) suppresses log output on passing
   tests and surfaces it only on failure.
+- **Why `manage.py test` fails locally but works in CI.** The advice elsewhere is "use pytest, never
+  `manage.py test`", and the symptom is real - `ValueError: Missing staticfiles manifest entry` on
+  any test that renders a page (measured: 28 of 33 errors in one module). The reason is worth
+  knowing, because it is not "the runner never sets `TESTING`". It does, in
+  `setup_test_environment()`. But `STORAGES` is computed **at settings-import time** from `TESTING`
+  (`settings/base.py`), and the runner's hook runs after that, so the manifest storage has already
+  been chosen. `pytest` avoids it because `TESTING` also checks for `pytest` in `sys.argv`, which is
+  true before settings are read.
+
+  CI is unaffected and is *not* misconfigured: `.github/workflows/ci.yml` sets
+  `DJANGO_SETTINGS_MODULE=urbanlens.UrbanLens.settings.test`, and that module sets `TESTING = True`
+  at import - before `STORAGES` is decided. So `manage.py test` under `settings.test` is fine, and
+  only the default settings module hits this. (Established 2026-08-17 while checking whether CI's
+  Django step was silently broken; it is not.)
 - `@given` (Hypothesis) and Django's `self.client` don't mix cleanly in this repo's `TestCase` —
   prefer calling the view/service function directly under `@given`, or drop Hypothesis for that
   particular test. TODO NOTE From Jess: We should probably fix TestCase so it does work cleanly.
