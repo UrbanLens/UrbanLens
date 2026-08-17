@@ -203,7 +203,12 @@ class PinShare(abstract.DashboardModel):
         """
         if self.status != PinShareStatus.ACCEPTED:
             return None
-        created = self.pins_created.first()
+        # ``.all()`` rather than ``.first()``: a share card is rendered per message,
+        # and .first() appends ORDER BY + LIMIT so it always queries, even when the
+        # caller prefetched. .all() reads the prefetch cache when there is one and
+        # costs the same single query when there isn't - same reasoning as
+        # ``PinList.pin_count`` and ``Pin.rating``.
+        created = next(iter(self.pins_created.all()), None)
         if created is not None:
             return created
         location_id = self.shared_location_id

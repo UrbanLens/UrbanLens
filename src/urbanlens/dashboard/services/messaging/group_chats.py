@@ -845,7 +845,7 @@ def group_thread_page(membership: GroupChatMembership, *, before_id: int | None 
     # this page now summarizes reactions per message (see
     # ``external_api.serializers_messaging.build_group_message_payload``);
     # without it a 50-message page issues 50 extra queries.
-    queryset = GroupMessage.objects.visible_window(membership).select_related("sender", "sender__user").prefetch_related("shares__pin_share__pin", "shares__pin_share__pin__location", "reactions__profile")
+    queryset = GroupMessage.objects.visible_window(membership).select_related("sender", "sender__user").prefetch_related("shares__pin_share__pin", "shares__pin_share__pin__location", "shares__pin_share__pins_created", "reactions__profile")
     if before_id is not None:
         queryset = queryset.filter(pk__lt=before_id)
     page = list(queryset.order_by("-id")[: limit + 1])

@@ -12825,3 +12825,40 @@ makes the test fail (2 != 3) without the lock and pass with it.
 That is now the third vacuity of a distinct kind this session (after a guard whose prefix matched too
 much, and a test whose fixture never reached the code under test). The common thread: a test can pass
 because the *setup* avoided the condition, not because the code is right.
+
+## Chunk 621 - a performance lens, and the cost of guessing instead of measuring
+
+Switching register after six correctness chunks. The sweep: model *properties* that query, since a
+template calls one per rendered row.
+
+Two negatives first, and both say something about this codebase:
+
+- `PinList.pin_count`, `Album.photo_count` and `Pin.rating` all look like N+1s and are not. Each
+  deliberately uses `.all()` rather than `.count()`/`.latest()` *so that a prefetch is reused*, and
+  each documents that reasoning. **My scan's signal was inverted**: in this codebase `.all()` inside a
+  property is the careful pattern, and `.filter()`/`.count()`/`.first()` are the ones that cannot read
+  a prefetch cache.
+- `Trip.effective_start_date`/`effective_end_date` are also already solved - an `_eff_start`
+  annotation from `TripQuerySet.for_list_page` plus an instance memo, with the docstring quantifying
+  the old cost ("about five activity queries" per trip).
+
+The codebase also has its own N+1 harness, `test_query_scaling.py`, asserting slope rather than an
+exact count. It covers four endpoints. **Message threads were not among them**, and they render
+`PinShare.resulting_pin` and `Pin.display_label` per share card.
+
+Measured: a conversation cost 45 queries with 2 shares and 75 with 12 - exactly three per share card.
+
+**The process failure worth recording.** I predicted the cause (`resulting_pin`'s
+`pins_created.first()`), fixed that, and re-measured: *45 and 75, unchanged*. The prediction was
+wrong, and only re-measuring caught it. Dumping the queries that actually grew took one diagnostic
+run and named all three immediately - `pins`, `locations`, `wikis` - which is `display_label` walking
+Pin → Location → Wiki. The prefetch I had added was on `location_mentions__pin_share`, while the card
+walks `share__pin_share`: a real relation, just not the one being rendered. **Guessing the cause of a
+performance problem cost more than measuring it would have.**
+
+The fix is the prefetch the group-chat thread already had (`shares__pin_share__pin__location`) and
+the DM thread did not - tell #1 once more, the same gap solved in the sibling. Both threads now reach
+`pin__location__wiki` and `pins_created`. The `.all()` change to `resulting_pin` is kept: it is
+correct on its own terms and is what makes the prefetch reachable.
+
+After: no query grows with share count at all.
