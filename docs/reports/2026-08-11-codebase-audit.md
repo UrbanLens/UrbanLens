@@ -18,6 +18,176 @@ clean `tsc` typecheck; CI now runs both (it previously ran neither).
 Read the numbered sections below for the audit's chronological record. The 2026-08-17 sessions are
 summarised at the end under "Session summary".
 
+
+## Coverage index — what has already been swept
+
+Section 3 records what was checked and found clean *specifically so it is not re-derived*, but
+it runs to well over a thousand lines, and on 2026-08-17 I re-ran two of its sweeps (the
+`|safe`/XSS surface and the documented template traps) without noticing they were already there.
+This index exists so the next reader can see the answer without reading the section.
+
+**Already swept and clean — do not re-run without a reason to doubt the earlier result:**
+
+- CeleryTaskStatusView.get — §3, line 3084
+- Interaction risk of the nine N+1 fixes — §3, line 3114
+- Other viewsets missing a prefetch — §3, line 3126
+- Documentation cross-references — §3, line 3137
+- Side effects inside transactions — §3, line 3148
+- Production frontend build, and bundle sizes — §3, line 3160
+- Unguarded index access — §3, line 3170
+- JSON body parsing — §3, line 3174
+- CalendarImportView.post — §3, line 3182
+- ConsensusPhotoUploadView.post — §3, line 3191
+- AlbumEditView.post — §3, line 3203
+- docs/FEATURES.md accuracy — §3, line 3214
+- Dead weight: templates, SCSS, TypeScript, routes — §3, line 3222
+- Injection, deserialization, and time correctness — §3, line 3239
+- Middleware — §3, line 3256
+- WebSocket consumers — §3, line 3299
+- Authorization — §3, line 3294
+- WebSocket consumers — §3, line 3299
+- XSS surface — §3, line 3308
+- Bulk writes vs save()-derived fields — §3, line 3321
+- Signal hygiene — §3, line 3329
+- The add template-filter trap — §3, line 3332
+- Work inside transactions — §3, line 3335
+- LabelledModel — §3, line 3342
+- Celery beat and queue routing — §3, line 4604
+- SQL injection surface — §3, line 3355
+- Upload path traversal — §3, line 3361
+- Timezone handling — §3, line 3369
+- Email surface — §3, line 3377
+- Django's own deployment audit — §3, line 3392
+- Dead templates and bundles — §3, line 3403
+- Template and route cross-references — §3, line 3417
+- {% static %} references — §3, line 3425
+- settings.X references — §3, line 3433
+- Celery dispatch arity — §3, line 3438
+- Model validation that never runs — §3, line 3448
+- N+1 inside Celery tasks — §3, line 3460
+- select_for_update correctness — §3, line 3471
+- Undo restore vs unique constraints — §3, line 3479
+- External API writes vs unique constraints — §3, line 3490
+- HTML controller writes vs unique constraints — §3, line 3501
+- Management commands — §3, line 3535
+- Inline handlers calling undefined globals — §3, line 3554
+- External API scopes — §3, line 3568
+- E2EE / messaging — §3, line 3572
+- 2FA — §3, line 3575
+- Import archives — §3, line 3577
+- Undo framework — §3, line 3580
+- Synchronous outbound calls — §3, line 3582
+- Encrypted fields — §3, line 3585
+- Lint exclusions — §3, line 3588
+- Every documented template trap in templates/CLAUDE.md — §3, line 3590
+- Account deletion — §3, line 3609
+- Export/import round trip — §3, line 3618
+- Data export coverage — §3, line 3621
+- Cross-file constant couplings — §3, line 3626
+- Docker system packages all justified — §3, line 3639
+- get_or_create constraint backing — §3, line 3644
+- Management commands and OAuth provisioning — §3, line 3655
+- Every auto-escape bypass in the templates — §3, line 3670
+- Django admin and site-admin exposure — §3, line 3688
+- Index coverage for the retention sweeps — §3, line 3697
+- Shared mutable state — §3, line 3716
+- select_for_update() transaction coverage — §3, line 3724
+- Raw SQL — §3, line 3729
+- E2EE crypto primitives — §3, line 3735
+- Frontend listener lifetime — §3, line 3741
+- Frontend build and test health — §3, line 3749
+- Password reset — §3, line 3757
+- Login rate limiting — §3, line 3770
+- All 11 per-field visibility settings are enforced — §3, line 3780
+- The journal's fail-closed claim holds; its completeness had no guard — §3, line 3789
+- Location-mention visibility is sound, and well placed — §3, line 3802
+- Notification delivery is properly isolated — §3, line 3816
+- Game areas were the last user-drawn geometry with the same bug; fixed at the source — §3, line 3823
+- Chunk 125's antimeridian fix was incomplete - smart-list boundaries had the same bug — §3, line 3835
+- Cross-module private imports swept; one more fixed, the rest judged not worth churning — §3, line 3850
+- A plugin was reaching into a model's private helper to redo two shared conversions — §3, line 3864
+- TOTP and backup codes audited; nothing to change — §3, line 3878
+- WebAuthn/passkeys audited; nothing to change — §3, line 3894
+- Absolute claims in security-relevant docstrings, spot-audited; these ones hold — §3, line 3906
+- Wiki access control is sound - and the documentation describing it was wrong — §3, line 3922
+- Three risk areas checked, all clean; one guard added — §3, line 3935
+- Five haversine implementations consolidated into one — §3, line 3947
+- Dwell detection and the History consent gates are sound — §3, line 3962
+- Billing and subscriptions audited; sound — §3, line 3972
+- Full suite: 10,579 passed, 0 failures — §3, line 3989
+- "Arbitrary row where a specific one is meant" swept; no further instances — §3, line 3992
+- find_nearest_pin did not return the nearest pin — §3, line 4004
+- Wiki nesting checked and sound — §3, line 4019
+- Full-suite run started — §3, line 4025
+- Saved-filter and smart-list regions had the same date-line bug as the viewport — §3, line 4028
+- A map viewport crossing the date line showed the whole world except itself — §3, line 4062
+- Two more antimeridian bugs, found by sweeping the class — §3, line 4074
+- Fact POINT evidence averaged longitude arithmetically, breaking at the antimeridian — §3, line 4089
+- The same photo-orphaning bug existed for wikis and safety check-ins — §3, line 4103
+- Undoing a pin delete now restores its photos — §3, line 4119
+- merge_labels checked the same way and is correct — §3, line 4132
+- Merging a pin destroyed its albums, map overlays and custom layers — §3, line 4143
+- External API scope enforcement is complete, and now guarded — §3, line 4160
+- Notification preference drift now has a guard — §3, line 4177
+- Email uniqueness is enforced on the normalised value, not the raw one — §3, line 4186
+- A name that sanitized away was stored as a blank alias — §3, line 4194
+- All 12 save-time field mutations audited; the rest are sound — §3, line 4203
+- Underscores were silently stripped from every user-facing name — §3, line 4212
+- Search criteria verified correct — §3, line 4223
+- mypy is clean across all 780 files — §3, line 4229
+- Two more bug classes swept to exhaustion, both already clean — §3, line 4235
+- Group-chat removal cuts off live delivery correctly — §3, line 4247
+- Every cache-based lock swept for the release defect; a third instance found and fixed — §3, line 4261
+- Detail pages are flat too — §3, line 4276
+- The upload quota lock released a lock it no longer held — §3, line 4281
+- Every parameterless page swept for query scaling; one more N+1 found and fixed — §3, line 4291
+- The Organize page issued a query per label card, three times over — §3, line 4302
+- Deleted-account fallout, swept — §3, line 4318
+- Settings export/import round-trip now has a completeness arm — §3, line 4325
+- A deleted account's trip locations became visible to everyone — §3, line 4336
+- trip_visibility re-implements the shared gate and is stricter than it — §3, line 4350
+- "Visited Together" leaked past the privacy gate its neighbour respects — §3, line 4359
+- Outbound HTTP timeouts are complete — §3, line 4373
+- Two TODO: Don't hardcode 'user' string markers closed — §3, line 4378
+- A double-clicked Undo restored everything twice — §3, line 4380
+- Keyset cursors and pagination are correct — §3, line 4395
+- Rate-limit rejections consumed the budget that rejected them — §3, line 4403
+- _reserve_call itself is sound — §3, line 4421
+- Sweep locks released unconditionally, so an overrun degraded exclusion — §3, line 4424
+- send_checkin_reminder is correctly guarded against repeat sends — §3, line 4448
+- Signal and transaction discipline, swept exhaustively — §3, line 4452
+- PIN_CACHE_VERSION is consistent — §3, line 4461
+- date.today() reads the OS clock, not Django's TIME_ZONE — §3, line 4463
+- One unused import removed — §3, line 4470
+- Object-level authorization, swept across the whole controller layer — §3, line 4476
+- pin.categories/.tags/.statuses silently defeated every caller's prefetch — §3, line 4484
+- Calendar sync — §3, line 4495
+- Check-then-write races, swept generally — §3, line 4506
+- Pagination ordering — §3, line 4523
+- Consensus trust math — §3, line 4537
+- Exception hierarchies across the other untrusted-input parsers — §3, line 4548
+- Image pipeline fidelity — §3, line 4555
+- Mass assignment and form validation — §3, line 4559
+- Subscription feature gating — §3, line 4569
+- Stripe billing — §3, line 4578
+- Storage quota enforcement — §3, line 4594
+- Celery beat and queue routing — §3, line 4604
+- WebSocket authorization — §3, line 4617
+- The rest of the tracking/privacy toggle matrix — §3, line 4625
+- Derived artefacts don't reintroduce stripped location — §3, line 4633
+- Cache-key scoping — §3, line 4640
+- The rest of the geospatial surface — §3, line 4648
+- Naive-datetime handling is otherwise correct — §3, line 4663
+- Exception-swallowing discipline is good — §3, line 4669
+- Full-suite ERROR-log sweep — §3, line 4682
+- Plugin system — §3, line 4699
+- Signal rules — §3, line 4710
+- Payload/serializer drift — §3, line 4713
+- Achievement sweep cost — §3, line 4715
+- Global search cross-user isolation — §3, line 4718
+
+Chunk-by-chunk entries continue past section 6; each names its own subject in the heading.
+
 The earlier baseline, retained for continuity: **10,765 passed, 0 failed, 1:11:17**, the run that
 validated the nine prefetch/N+1 fixes together. That run was left strictly alone for its duration; two
 earlier full runs had source copied into the container mid-flight and are recorded in section 4d
@@ -13041,7 +13211,7 @@ missed.
 **What the search turned up instead.** Chasing that thread meant checking a `settings/base.py:343`
 citation in `PROBLEMS.md` - and the task it names is at line 374. That generalised into a sweep no
 one had run: of **161 resolvable `path.py:NNN` citations across the docs, 23 pointed somewhere other
-than what they described**, one of them (`controllers/friendship.py:649`) past the end of a 583-line
+than what they described**, one of them (a citation to line 649 of `controllers/friendship.py`) past the end of a 583-line
 file. These fail silently in the worst way - the file still exists, the line still exists, and the
 note still reads as authoritative.
 
@@ -13060,3 +13230,45 @@ history into the record.
 exist. That is currently true everywhere, so it can be enforced rather than merely reported;
 "the line exists but moved" stays a `--report-drift` flag for humans. Verified by breaking - a
 citation past EOF exits 1.
+
+## Chunk 628 - a chunk that found nothing, because it had already been found
+
+With the named-lead board clear, I picked a fresh angle: template correctness. Both sweeps came back
+clean, and **both had already been run and recorded in this very file.**
+
+- The four template traps `CLAUDE.md` documents - the `|add:` filter silently yielding `''` on an
+  integer id, multi-line `{# #}` comments leaking to the page, `next_page_number()` raising when
+  exhausted, and `_pagination_controls.html`'s `request.path` assumption - are all clean. Section 3
+  already said so, across 418 templates.
+- The escaping surface: all twelve `|safe` sites trace to a sanitizer or a safe encoder. User HTML
+  (article bodies, visit notes) goes through `nh3` against a tag/attribute/scheme allowlist; the
+  Wikipedia extract through the same, explicitly because it is external and untrusted; nineteen JSON
+  payloads through `safe_json_for_script`, which escapes `<`, `>`, `&` so a label cannot close the
+  enclosing `<script>`; `smart_boundary.geojson` is GEOS-generated coordinates with no user strings
+  in it; `button.spec.extra_html` has exactly one assignment, a hardcoded literal. Section 3 already
+  said this too - and had re-verified it once after catching itself sampling instead of tracing.
+
+So the finding is the duplicated effort, and its cause is structural rather than careless. This
+file's own preamble states that it records what was checked "so it isn't re-derived" - but section 3
+is now over 1,700 lines of prose, and the answer to "has anyone swept X?" was not reachable without
+reading it. Knowledge that cannot be found is knowledge that gets rebuilt.
+
+Added a **coverage index** immediately after the preamble: 157 one-line entries, each naming a swept
+area and the line where its result lives, generated from section 3's own topic markers. That is the
+artefact I needed and did not have.
+
+Two checks on the index itself, both of which caught real errors:
+
+- The line numbers were computed *before* inserting the index, so all 157 were off by the length of
+  what I had just inserted. Recomputed against the final file and spot-checked.
+- `bin/check_doc_line_refs.py`, added one chunk earlier, immediately failed on this file - because
+  chunk 627's own prose quotes a broken citation (line 649 of a 583-line
+  `controllers/friendship.py`) as an example.
+  A checker that cannot tell a specimen from a claim will flag prose about broken references;
+  rephrasing the example to avoid the literal token was the right fix here, but the limitation is
+  worth knowing before someone adds a doc page full of examples.
+
+Method lesson, and the reason this is written up rather than quietly dropped: **check the coverage
+record before choosing a search angle, not after.** Two of this session's most useful chunks came
+from following evidence in the report; this one came from picking a plausible-sounding area cold, and
+plausible-sounding areas are exactly the ones a thorough earlier pass already covered.
