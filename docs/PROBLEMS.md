@@ -2218,6 +2218,15 @@ for that fix: `.pin-list-more-menu-danger` (`color: #ef4444 !important`, ~line 3
 are likely a quick follow-up: swap the raw hex for `var(--ul-color-danger-text, <original-hex>)`
 the same way the region-mode buttons were fixed.
 
+**RESOLVED 2026-08-17 (chunk 582).** All five occurrences across the three controls now use the
+token, keeping their original hex as the fallback. `--ul-color-danger-text` is defined in `:root`
+and again under `[data-theme="dark"]` (`#f87171`), so it resolves in both themes as this entry
+said. The `#fca5a5` hover on `.pin-list-item-remove` was worth a second look rather than a
+mechanical swap: it is a *pale* red, chosen for a dark surface, on a control whose rest state
+already inverts through `--ul-grey-4` - so it was a light-mode contrast problem, not a deliberate
+lighter-on-hover treatment. Compiled clean with `sass`; the built CSS is gitignored
+(`.gitignore:9`), so the source change is what ships.
+
 ## Safety check-in partners: two residual gaps found during a fresh-eyes feature review (2026-07-25)
 
 A full review of the partner/live-location/post-resolution-encryption feature (two independent

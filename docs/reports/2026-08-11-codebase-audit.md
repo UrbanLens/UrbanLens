@@ -11586,3 +11586,25 @@ The sweep's value was in the boundary, not the count. A pattern that produced th
 does not extend indefinitely, and the place it stops was already written down by whoever wrote
 `revoke`'s docstring - which is the second time this session that reading the surrounding prose
 answered the question the scan was about to ask.
+
+## Chunk 582 - the cheap one, with one judgement in it
+
+The last filed item that was genuinely cheap: three danger-red controls in `_pin_lists.scss`
+carrying raw hexes with no dark-theme counterpart, where `--ul-color-danger-text` already exists and
+`_pin-detail.scss` / `_tags.scss` already use it in exactly the prescribed form. Five occurrences
+swapped, each keeping its original hex as the fallback.
+
+Two of the three were mechanical. The third was not, and is the reason this was worth reading rather
+than sed-ing: `.pin-list-item-remove`'s hover is `#fca5a5`, a *pale* red, which could easily be a
+deliberate lighter-on-hover treatment rather than a theme bug. It is not - the control's rest state
+is `var(--ul-grey-4)`, an inverting token, so it sits on an ordinary themed surface, and a pale red
+there is a light-mode contrast problem. The pale hex is a dark-surface colour on a surface that is
+only sometimes dark.
+
+Verified by compiling (`bun node_modules/.bin/sass` directly, since `bun run sass` crashes on this
+host through the Node shebang) and by confirming the token is defined both in `:root` and under
+`[data-theme="dark"]`. The built CSS is gitignored, so the source change is what ships - worth
+checking rather than assuming, since this repo *does* commit its compiled JavaScript.
+
+Also read the two background runs. The regression sweep over sharing/friendship after chunks 580-581
+is **673 passed, 0 failed**, so those two fixes hold across the surface they touch.

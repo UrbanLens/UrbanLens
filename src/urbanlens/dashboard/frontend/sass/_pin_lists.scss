@@ -322,9 +322,9 @@
 }
 
 .pin-list-more-menu-danger {
-    color: #ef4444 !important;
+    color: var(--ul-color-danger-text, #ef4444) !important;
 
-    .material-symbols-outlined { color: #ef4444 !important; }
+    .material-symbols-outlined { color: var(--ul-color-danger-text, #ef4444) !important; }
 
     &:hover { background: rgba(239, 68, 68, .12) !important; }
 }
@@ -520,7 +520,10 @@
     transition: color .15s, background .15s;
 
     &:hover {
-        color: #fca5a5;
+        // Was a fixed #fca5a5, which is a dark-surface red: pale enough on white
+        // to be hard to read, while the rest state next to it already inverts
+        // through --ul-grey-4.
+        color: var(--ul-color-danger-text, #fca5a5);
         background: rgba(239, 68, 68, .12);
     }
 }
@@ -626,9 +629,9 @@
 }
 
 .saved-filter-delete-btn {
-    color: #ef4444;
+    color: var(--ul-color-danger-text, #ef4444);
 
-    .material-symbols-outlined { color: #ef4444; }
+    .material-symbols-outlined { color: var(--ul-color-danger-text, #ef4444); }
 }
 
 // -- Saved filter create/edit dialog -----------------------------------------
