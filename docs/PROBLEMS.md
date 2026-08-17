@@ -204,6 +204,20 @@ Found by chasing the single `RuntimeWarning` in a full test run (a naive datetim
 `Pin.last_visited`). That warning itself is only test-fixture hygiene -
 `test_pin_queryset.py:134` passes `date.today()` - but it prompted the sweep that turned this up.
 
+**RESOLVED 2026-08-17 (chunk 576).** Both premises above were wrong, and re-checking them was the
+whole fix. Open-Meteo already reports the offset it applied, as top-level `utc_offset_seconds`, so
+no timezone library or per-location field is needed - the data was in the response all along, simply
+unread. And `ForecastSlot["date"]` has exactly two readers, both the matching arithmetic in
+`controllers/trip.py`; it is never rendered, so normalising it cannot change what users see. The
+request still asks for `timezone=auto`, so every display path (sun times, panel local times) is
+untouched.
+
+`OpenMeteoGateway` now subtracts the reported offset, defaulting to zero when the field is absent so
+a response without it behaves exactly as before, and `ForecastSlot.date` finally carries the
+documented contract this entry said it lacked: naive UTC. Covered by
+`test_open_meteo_slot_timezone.py`, including both offset directions, the absent-field default, and
+that no other slot field moves.
+
 ## OPEN 2026-08-11: bulk-accepting pin suggestions makes up to 200 live API calls inside one request
 
 Found by root-causing the last failing test in the suite (`test_pin_suggestion_bulk_partial::

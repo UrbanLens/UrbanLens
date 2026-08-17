@@ -92,7 +92,17 @@ class OpenMeteoGateway(Gateway):
         try:
             response = self.session.get(_FORECAST_URL, params=params, timeout=15)
             response.raise_for_status()
-            hourly = response.json().get("hourly") or {}
+            payload = response.json()
+            hourly = payload.get("hourly") or {}
+            # `timezone=auto` makes every `hourly.time` a *local* wall clock for
+            # the coordinates, and reports the offset that produced it. Slot
+            # dates are only ever compared against `Activity.scheduled_at`
+            # (stored UTC) - never displayed - so they are normalised to UTC
+            # here. Without it the comparison was local-minus-UTC: out by the
+            # location's offset, which picked the wrong slot and skewed the
+            # out-of-range test by the same amount. Defaults to 0 so a response
+            # without the field behaves exactly as before.
+            utc_offset = timedelta(seconds=int(payload.get("utc_offset_seconds") or 0))
         except Exception:
             logger.warning("Open-Meteo forecast unavailable for %s, %s", redact_coordinate(latitude), redact_coordinate(longitude), exc_info=True)
             return None
@@ -108,7 +118,7 @@ class OpenMeteoGateway(Gateway):
             if not time_str.endswith(("T09:00", "T18:00")):
                 continue
             try:
-                date = datetime.fromisoformat(time_str)
+                date = datetime.fromisoformat(time_str) - utc_offset
             except ValueError:
                 continue
             icon, label = wmo_code_to_icon_and_label(int(codes[index])) if index < len(codes) else _DEFAULT_WMO

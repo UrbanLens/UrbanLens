@@ -15,6 +15,12 @@ from typing import Any, NotRequired, TypedDict
 class ForecastSlot(TypedDict):
     """One forecast time slot, in a shape independent of the source provider."""
 
+    #: Naive **UTC**, so slots from different providers are comparable and can be
+    #: matched against `Activity.scheduled_at` (also stored UTC). Providers that
+    #: report local time convert on the way out - see `OpenMeteoGateway`, which
+    #: requests `timezone=auto` for its own local-time behaviour and subtracts
+    #: the `utc_offset_seconds` it reports back. Not displayed anywhere; the
+    #: rendered slots carry their own labels.
     date: datetime
     temp: float
     condition: str

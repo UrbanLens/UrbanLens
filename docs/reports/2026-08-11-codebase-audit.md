@@ -11368,3 +11368,49 @@ unrelated column). `_MAX_LAYER_NAME_LENGTH` bounds `CustomLayer.name`, `_MAX_NAM
 `MapImageOverlay.name`, and both repeated 100 rather than reading it. Same drift as chunk 568's
 album fix, same remedy. Constants defined *in* a model module and used as the field's own
 `max_length` were left alone - those are the single definition, not a copy of one. 37 tests pass.
+
+## Twenty-second consolidation - one failure, and it was mine
+
+`10962 passed, 1 failed, 1 xfailed, 1483 subtests passed in 5821.53s (1:37:01)`. Reconciles exactly:
+`git diff bce95022..2ee0728f` over the test tree adds 8 test functions, and 10,964 - 10,956 = 8.
+
+The single failure is `test_removing_a_member_flags_rotation` - my own test from chunk 570 - and it
+failed for a reason that has nothing to do with the code. That chunk's binding check edits
+`controllers/e2ee.py` to a deliberately broken subset comparison, copies it into the container,
+confirms the test fails, then restores the file. **The restore happened on the host only.** I
+launched this consolidation minutes later without re-syncing, so it ran against a container still
+holding the deliberate regression, and my test correctly caught it.
+
+Host and container now agree, and the test passes against the real code. Nineteen green of
+twenty-two, with this one explained rather than excused.
+
+The lesson is specific and worth keeping: *break, verify, restore* leaves the container out of sync
+with the host, and every later `docker exec` run inherits that until something copies over it. The
+restore step has to include the `docker cp`, not just the file.
+
+## Chunk 576 - a filed problem whose premises had expired
+
+With most areas traced, this chunk re-read the open entries in `docs/PROBLEMS.md` looking for one
+whose "not fixed because..." had stopped being true. The trip-activity weather timezone bug (filed
+2026-08-12) was exactly that.
+
+Its reasoning was that a correct comparison "genuinely cannot be built from what is already here" -
+no timezone library, no per-location timezone field - and that switching to UTC "would change what
+users see everywhere". Both were checkable, and both turned out false:
+
+- Open-Meteo is asked for `timezone=auto` and **reports the offset it applied**, as top-level
+  `utc_offset_seconds`. The gateway reads `response.json()["hourly"]` and discards the rest. No
+  library needed; the data was already in the payload.
+- `ForecastSlot["date"]` has **two readers**, both the matching arithmetic in `controllers/trip.py`.
+  It is never rendered, so converting it cannot change any display. The request still asks for
+  `timezone=auto`, so sun times and panel local times are untouched.
+
+The gateway now subtracts the reported offset, defaulting to zero so a response lacking the field
+behaves as before, and `ForecastSlot.date` carries the naive-UTC contract the entry said it was
+missing. Four tests cover it: both offset directions, the absent-field default, and that no other
+field moves. That closes an offset error of four to five hours in New York, nine in Tokyo - a wrong
+"closest" slot, and a skewed out-of-range threshold.
+
+Worth generalising: a filed problem records what was true when it was written. "Needs a product
+decision" is a conclusion with premises, and premises expire. Re-reading old entries for expired
+premises found more in one chunk than the last two chunks of fresh searching did.
