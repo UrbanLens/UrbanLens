@@ -209,18 +209,42 @@ class DjangoProjectInitializer:
         # Safe to call even on existing databases; IF NOT EXISTS makes it idempotent.
         self.enable_postgis()
 
+    #: Environments where a working `.env` is a local-checkout convenience. Everywhere
+    #: else the process is configured by real environment variables - compose passes
+    #: them with `env_file:` - and `.env` is deliberately kept out of the image.
+    _ENV_FILE_ENVIRONMENTS = frozenset({"local", "development", "testing"})
+
     def copy_sample_env(self):
-        """
-        Copies .env-sample to .env
+        """Seed a local checkout's ``.env`` from ``.env-sample``, if it needs one.
 
-        Raises:
-            UnrecoverableError: if the file cannot be copied
+        Skipped entirely in staging and production. Those get their configuration
+        from the environment (compose's ``env_file:``), and ``.env*`` is excluded
+        from the image on purpose - a secret baked into a layer outlives its own
+        rotation, since the layer survives in ``/var/lib/docker`` and
+        ``docker history`` recovers it. There is therefore nothing to seed, the
+        image directory is not writable by the app user anyway, and writing
+        ``.env-sample``'s placeholders next to real environment variables would at
+        best be noise and at worst shadow a value someone meant to set.
 
+        Never fatal. This file is a convenience for someone running the project
+        from a checkout; it is not how a deployed process is configured. Aborting
+        startup over it took the whole stack down in staging on 2026-08-17, when
+        excluding ``.env`` from the image turned a path that had always returned
+        early into one that tried to write to a read-only directory. A real
+        configuration problem still fails loudly and with a better message - see
+        the ``DJANGO_SECRET_KEY`` guard in ``settings/base.py``.
         """
         env_file = ROOT_DIR / ".env"
         env_sample = ROOT_DIR / ".env-sample"
 
         if env_file.exists():
+            return
+
+        if self.environment not in self._ENV_FILE_ENVIRONMENTS:
+            logger.info(
+                "No .env in %s, and none is needed: this environment is configured from real environment variables.",
+                self.environment,
+            )
             return
 
         try:
@@ -229,13 +253,12 @@ class DjangoProjectInitializer:
             with env_file.open("w", encoding="utf-8") as new_file:
                 new_file.write(sample_data)
             logger.info("Copied .env-sample to .env.")
-        except OSError as e:
-            logger.exception("Error copying .env-sample: %s", e)
-            raise UnrecoverableError from e
-
-        if not env_file.exists():
-            logger.error(".env was copied but still does not exist.")
-            raise UnrecoverableError(".env was copied but still does not exist.")
+        except OSError:
+            logger.warning(
+                "Could not create %s from .env-sample; continuing. Set the configuration through the environment instead.",
+                env_file,
+                exc_info=True,
+            )
 
     def update_env(self, username: str, email: str):
         """

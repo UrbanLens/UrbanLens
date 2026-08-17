@@ -2,6 +2,11 @@
 #
 # Run pytest inside the test container, with the sync this repo requires.
 #
+# Syncs all of src/, not just src/urbanlens: src/bin/init.py is the container's
+# entrypoint and is real, imported code. Syncing only the package meant a change
+# there was tested against the image's stale copy - which is exactly the failure
+# this script exists to prevent, and it had this bug until 2026-08-17.
+#
 # The container's /app/src is baked into the image, not bind-mounted, so it
 # reflects whenever the image was last built. Every run therefore has to copy
 # the working tree in first - and `docker cp` preserves *source* ownership, so
@@ -68,9 +73,9 @@ fi
 
 sync_tree() {
     echo "==> syncing working tree into $CONTAINER"
-    docker cp src/urbanlens/. "$CONTAINER":/app/src/urbanlens/
+    docker cp src/. "$CONTAINER":/app/src/
     # Not optional: docker cp preserves host ownership, and the app runs as appuser.
-    docker exec -u root "$CONTAINER" chown -R appuser:appuser /app/src/urbanlens
+    docker exec -u root "$CONTAINER" chown -R appuser:appuser /app/src
 
     # `docker cp` only ever adds and overwrites - a Python file deleted on the host
     # stays in the container forever. That is not cosmetic: a scratch test file
@@ -84,8 +89,8 @@ sync_tree() {
     # but deleting build output is not this script's job.
     local host_list container_list
     host_list=$(mktemp); container_list=$(mktemp)
-    (cd src && find urbanlens -name '*.py' -not -path '*/__pycache__/*' | sort) > "$host_list"
-    docker exec "$CONTAINER" sh -c "cd /app/src && find urbanlens -name '*.py' -not -path '*/__pycache__/*' | sort" > "$container_list"
+    (cd src && find . -name '*.py' -not -path '*/__pycache__/*' | sort) > "$host_list"
+    docker exec "$CONTAINER" sh -c "cd /app/src && find . -name '*.py' -not -path '*/__pycache__/*' | sort" > "$container_list"
     local stale
     stale=$(comm -13 "$host_list" "$container_list" || true)
     rm -f "$host_list" "$container_list"
@@ -103,8 +108,8 @@ verify_parity() {
     container_list=$(mktemp)
     trap 'rm -f "$host_list" "$container_list"' RETURN
 
-    (cd src && find urbanlens -name '*.py' | sort) > "$host_list"
-    docker exec "$CONTAINER" sh -c "cd /app/src && find urbanlens -name '*.py' | sort" > "$container_list"
+    (cd src && find . -name '*.py' | sort) > "$host_list"
+    docker exec "$CONTAINER" sh -c "cd /app/src && find . -name '*.py' | sort" > "$container_list"
 
     if ! diff -q "$host_list" "$container_list" >/dev/null; then
         echo "error: host and container differ - the run would test the wrong code:" >&2
@@ -115,8 +120,8 @@ verify_parity() {
     # File lists matching is not enough: a stale *content* copy has the same
     # names. Compare a checksum of the tree, which is what actually gets run.
     local host_sum container_sum
-    host_sum=$(cd src && find urbanlens -name '*.py' -exec md5sum {} + | sort -k2 | md5sum | cut -d' ' -f1)
-    container_sum=$(docker exec "$CONTAINER" sh -c "cd /app/src && find urbanlens -name '*.py' -exec md5sum {} + | sort -k2 | md5sum | cut -d' ' -f1")
+    host_sum=$(cd src && find . -name '*.py' -exec md5sum {} + | sort -k2 | md5sum | cut -d' ' -f1)
+    container_sum=$(docker exec "$CONTAINER" sh -c "cd /app/src && find . -name '*.py' -exec md5sum {} + | sort -k2 | md5sum | cut -d' ' -f1")
     if [ "$host_sum" != "$container_sum" ]; then
         echo "error: host and container file lists match but contents differ - re-run without --no-sync." >&2
         return 1
