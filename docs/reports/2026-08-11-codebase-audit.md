@@ -11706,3 +11706,34 @@ is the habit chunk 577 cost me; this time it worked.
 
 Nothing else changed. A chunk whose entire output is one corrected comment is a fair reflection of
 where this codebase now is.
+
+## Chunk 586 - auditing my own guards for the failure mode that bit twice
+
+Two guards in this session passed without exercising anything - chunk 561's receiver count, caught by
+arithmetic coincidence, and the vacuous first version of chunk 570's. Both were found by deliberately
+breaking the code afterwards. This chunk asked the question of all fifteen test files added since
+chunk 558: **was each one ever seen failing for the right reason?**
+
+Fourteen were. Most were written test-first against a reproduced defect, and the rest were verified by
+breaking the code on purpose - reverting `PinRelinkView.get`'s signature, disabling the encryption
+skip, deleting a JS chunk and an entry file, removing the template's `|lower`, un-escaping `img.url`,
+narrowing the group-key comparison to a subset check, disabling the socket close.
+
+**One was not.** Chunk 576 fixed the Open-Meteo timezone conversion *first* and then wrote tests that
+passed - which proves the code works today and nothing about whether the test would notice if it
+stopped. Verified now by reverting the subtraction: both offset tests fail, while the
+absent-field-default and other-fields-unchanged tests correctly keep passing, which is the shape you
+want (a guard that fails on everything is as uninformative as one that fails on nothing). Restored,
+and this time the restore included the `docker cp` - chunk 576's own lesson, applied to chunk 576's
+own code.
+
+The second half: every scan-type guard - the ones that *can* match nothing - carries a vacuity check.
+The route-signature guard has two, and the compiled-JS, achievement-receiver, icon-picker and
+innerHTML-escaping guards have one each. The behavioural tests are not exposed to that mode; they
+assert on concrete outcomes rather than on the size of a match set.
+
+TypeScript suite re-run as part of the sweep: 414 pass, 0 fail.
+
+Fifteen files, one gap, closed. Worth noting the asymmetry that produced it: every test written
+*before* its fix is verified by construction, and every test written *after* one needs a deliberate
+step that is easy to skip precisely because everything is already green.
