@@ -12926,3 +12926,41 @@ partner the viewer may no longer identify, so a batching mistake leaks an identi
 slowing a page down. The reproduction is committed as `@expectedFailure` so the measurement survives
 and the gap cannot be quietly forgotten; the fix wants the viewer-scoped sets resolved once per
 request, with tests asserting an anonymized partner stays anonymized in a batch.
+
+## Chunk 624 - batching a privacy decision without changing it
+
+The conversation-list N+1 filed in chunk 623, fixed. About eleven queries per conversation, now flat.
+
+The root cause is worth stating exactly, because it is one line of reasoning rather than a missing
+prefetch. `visibility_permits(visibility, subject, viewer)` is evaluated once per row with the
+subject varying and the viewer **fixed** - and inside `_have_common_pin`, `_have_common_friend` and
+`_have_common_trip`, *both* sides' sets are rebuilt on every call. So the viewer's own pinned
+locations, accepted friends and trip ids were re-queried for every conversation in the list. That is
+precisely the 2+2+2 per row the diagnostic showed.
+
+The fix is a batch equivalent, `Profile.visible_profile_pks(viewer, subjects)`, which resolves the
+viewer's sets once and answers every subject from them - a fixed number of queries regardless of how
+many subjects there are - plus `DirectMessageTemporaryAccess.granted_profile_pks` as the batch form
+of the grant check (same unexpired-grant rule, same BLOCKED veto). `resolve_visible_identity` and
+`display_identity_for` accept a pre-resolved set, and `conversations_for` computes it once.
+
+**The guarantee matters more than the speedup.** This is a reimplementation of the predicate that
+decides whether someone's real name and avatar are shown, so a divergence does not cost latency, it
+discloses an identity. `test_identity_visibility_batch` therefore asserts the batch agrees with
+`can_view_profile` *subject by subject* - across every `VisibilityChoice`, every route that can
+satisfy one (friendship, directional pending request, common pin/friend/trip, each route into
+`ANYTHING_IN_COMMON`), temporary grants with their block veto and expiry, an anonymous viewer, and
+self - rather than against hand-written expectations. The mixed-list case is explicit, since a
+batching bug smears a neighbour's answer far more readily than it gets a single subject wrong.
+
+**It caught a real bug in the fix within minutes.** An early `if not undecided: return visible`
+skipped the temporary-access fallback, so a `NO_ONE` profile holding a valid grant came back masked
+where `can_view_profile` would have shown it. Write the differential test *before* trusting a
+reimplemented predicate.
+
+One process note: ruff reformatted the test file between reading and patching it, so an edit anchor
+failed its assertion and left `@expectedFailure` in place. Pytest then reported **"Unexpected
+success" as a failure** - which reads like a regression and was the fix working. Check what a failure
+actually says before assuming its direction.
+
+931 privacy/messaging tests pass.

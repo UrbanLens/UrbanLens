@@ -70,5 +70,40 @@ class DirectMessageTemporaryAccess(abstract.DashboardModel):
             status=FriendshipStatus.BLOCKED,
         ).exists()
 
+    @classmethod
+    def granted_profile_pks(cls, profile_ids: set[int], viewer_id: int) -> set[int]:
+        """Batch equivalent of :meth:`grants_access` for many profiles at once.
+
+        Same rule, same veto: an unexpired grant to ``viewer_id``, cancelled by a
+        BLOCKED relationship in either direction. Answering one profile at a time costs
+        two queries each, which is what made rendering a list of people scale.
+
+        Args:
+            profile_ids: The profiles being viewed.
+            viewer_id: The profile requesting access.
+
+        Returns:
+            The subset of ``profile_ids`` that ``viewer_id`` may view via a grant.
+        """
+        if not profile_ids:
+            return set()
+
+        from django.db.models import Q
+
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+
+        granted = set(
+            cls.objects.filter(profile_id__in=profile_ids, granted_to_id=viewer_id, expires_at__gt=timezone.now()).values_list("profile_id", flat=True),
+        )
+        if not granted:
+            return set()
+
+        blocked = set(
+            Friendship.objects.filter(from_profile_id__in=granted, to_profile_id=viewer_id, status=FriendshipStatus.BLOCKED).values_list("from_profile_id", flat=True),
+        ) | set(
+            Friendship.objects.filter(to_profile_id__in=granted, from_profile_id=viewer_id, status=FriendshipStatus.BLOCKED).values_list("to_profile_id", flat=True),
+        )
+        return granted - blocked
+
     class Meta(abstract.DashboardModel.Meta):
         db_table = "dashboard_dm_temporary_access"

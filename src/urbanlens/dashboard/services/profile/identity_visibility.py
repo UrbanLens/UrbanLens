@@ -24,7 +24,13 @@ if TYPE_CHECKING:
 DEFAULT_MASKED_PLACEHOLDER = "Member"
 
 
-def resolve_visible_identity(viewer: Profile | None, subject: Profile, *, placeholder: str = DEFAULT_MASKED_PLACEHOLDER) -> dict[str, Any]:
+def resolve_visible_identity(
+    viewer: Profile | None,
+    subject: Profile,
+    *,
+    placeholder: str = DEFAULT_MASKED_PLACEHOLDER,
+    visible_pks: set[int] | None = None,
+) -> dict[str, Any]:
     """Return how ``subject`` should be displayed to ``viewer`` right now.
 
     Args:
@@ -36,6 +42,11 @@ def resolve_visible_identity(viewer: Profile | None, subject: Profile, *, placeh
             simultaneously-masked people in one list should use
             ``resolve_visible_identities`` instead so each gets a distinct
             placeholder rather than all sharing this same string.
+        visible_pks: Pre-resolved output of ``Profile.visible_profile_pks`` for a
+            batch of subjects. When given, membership replaces this subject's own
+            ``can_view_profile`` call, which costs several queries each and re-derives
+            the viewer's own friend/trip/pin sets every time. The two are held to
+            identical answers by ``test_identity_visibility_batch``.
 
     Returns:
         Dict with ``display_name``, ``display_avatar_url`` (str or None),
@@ -47,7 +58,8 @@ def resolve_visible_identity(viewer: Profile | None, subject: Profile, *, placeh
         applied, but only once they've also checked ``is_masked``: a masked identity's
         own supporter status must not leak alongside its scrubbed name/avatar.
     """
-    if subject.can_view_profile(viewer):
+    can_view = subject.pk in visible_pks if visible_pks is not None else subject.can_view_profile(viewer)
+    if can_view:
         from django.urls import reverse
 
         return {

@@ -9553,22 +9553,3 @@ so contention needs one user running two scans at once, and the damage is an und
 signal rather than lost money, a reverted edit, or a discarded rating period. Worth an `F()`
 expression plus a unique constraint if suggestion quality is ever reported as flaky.
 
-### The conversation list runs a privacy check per conversation (noted 2026-08-17)
-
-`messages.list` (the sidebar conversation list) costs about **11 queries per conversation** -
-measured at 45 queries for 2 conversations and 155 for 12. Each row renders `conv.display_name` and
-`conv.display_avatar_url`, which call `display_identity_for` -> `resolve_visible_identity` for that
-partner, and each call re-evaluates the viewer's friendships (three separate queries), trip
-memberships, pins-in-common, and temporary DM access.
-
-Reproduced by `ConversationListQueryScalingTests` in `test_query_scaling_messages.py`, marked
-`@expectedFailure` so the measurement is kept and the gap cannot be quietly forgotten.
-
-Not fixed in place deliberately. The per-row work *is* the privacy decision that anonymizes a partner
-the viewer is no longer allowed to identify ("Former contact"), so a batching mistake leaks an
-identity rather than merely slowing a page. The fix wants the viewer-scoped sets (friend ids, trip
-ids, pins-in-common) resolved once per request and passed down, with tests asserting an anonymized
-partner *stays* anonymized in a batch of many.
-
-Found only because the conversation seed grew: the earlier listing survey reported `messages.list`
-as "flat" while seeding pins and labels, so the list it rendered never changed size.

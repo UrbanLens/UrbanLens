@@ -18,8 +18,6 @@ for shares that produced no new pin, so it does not scale with the ordinary case
 
 from __future__ import annotations
 
-from unittest import expectedFailure
-
 from django.contrib.auth.models import User
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -128,20 +126,18 @@ class ConversationListQueryScalingTests(TestCase):
         self.assertEqual(response.status_code, 200, f"{url} returned {response.status_code}")
         return len(ctx.captured_queries)
 
-    @expectedFailure  # Known N+1, measured below - see docs/PROBLEMS.md. Fix pending.
     def test_conversation_list_does_not_scale_with_conversation_count(self) -> None:
-        """Currently ~11 queries per conversation (45 for 2, 155 for 12).
+        """Was about eleven queries per conversation - 45 for 2, 155 for 12.
 
         Each row renders ``conv.display_name``/``display_avatar_url``, which call
         ``display_identity_for`` -> ``resolve_visible_identity`` per partner, and
-        that re-evaluates the viewer's friendships, trip memberships,
+        that re-evaluated the viewer's friendships, trip memberships,
         pins-in-common and temporary DM access every single time.
 
-        Marked expected-failure rather than fixed in place: the per-row work is
-        the privacy decision that anonymizes a partner the viewer may no longer
-        see, and batching it wrongly would leak an identity rather than merely
-        slow a page down. The measurement is kept here so the fix has a target
-        and so this cannot be quietly forgotten.
+        ``conversations_for`` now resolves the whole list once through
+        ``Profile.visible_profile_pks``. That is a reimplementation of a privacy
+        decision, so it is held to the original's answers by
+        ``test_identity_visibility_batch`` rather than trusted.
         """
         url = reverse("messages.list")
 

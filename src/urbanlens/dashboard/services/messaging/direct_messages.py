@@ -1098,7 +1098,7 @@ def set_conversation_muted(viewer: Profile, partner: Profile, *, muted: bool) ->
     return muted
 
 
-def display_identity_for(viewer: Profile, partner: Profile) -> dict[str, Any]:
+def display_identity_for(viewer: Profile, partner: Profile, *, visible_pks: set[int] | None = None) -> dict[str, Any]:
     """Return how `partner` should be displayed to `viewer` in a DM context right now.
 
     A past conversation stays fully readable even after `partner`'s privacy
@@ -1110,6 +1110,9 @@ def display_identity_for(viewer: Profile, partner: Profile) -> dict[str, Any]:
     Args:
         viewer: The profile viewing the conversation.
         partner: The conversation partner whose identity is being displayed.
+        visible_pks: Pre-resolved output of ``Profile.visible_profile_pks`` when
+            several partners are being rendered together, so the visibility
+            queries run once for the list instead of once per row.
 
     Returns:
         Dict with ``display_name``, ``display_avatar_url`` (str or None),
@@ -1117,7 +1120,7 @@ def display_identity_for(viewer: Profile, partner: Profile) -> dict[str, Any]:
     """
     from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
 
-    identity = resolve_visible_identity(viewer, partner, placeholder="Former contact")
+    identity = resolve_visible_identity(viewer, partner, placeholder="Former contact", visible_pks=visible_pks)
     identity["is_anonymized"] = identity.pop("is_masked")
     return identity
 
@@ -1150,6 +1153,11 @@ def conversations_for(profile: Profile) -> list[dict[str, Any]]:
     last_messages = DirectMessage.objects.filter(pk__in=[row["last_message_id"] for row in rows]).prefetch_related("images").in_bulk()
     muted_sender_ids = set(DirectMessageMute.objects.filter(viewer=profile).values_list("sender_id", flat=True))
 
+    # Resolved once for the whole list: display_identity_for asks whether this
+    # viewer may identify each partner, and answering that per row re-ran the
+    # viewer's own friendship/trip/pin lookups for every conversation.
+    visible_pks = ProfileModel.visible_profile_pks(profile, list(partners.values()))
+
     conversations = []
     for row in rows:
         partner = partners.get(row["partner_id"])
@@ -1164,7 +1172,7 @@ def conversations_for(profile: Profile) -> list[dict[str, Any]]:
                 "unread_count": row["unread_count"],
                 "is_muted": partner.pk in muted_sender_ids,
                 "last_activity": last_message.created,
-                **display_identity_for(profile, partner),
+                **display_identity_for(profile, partner, visible_pks=visible_pks),
             },
         )
     return conversations

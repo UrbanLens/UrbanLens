@@ -48,6 +48,8 @@ from urbanlens.dashboard.models.profile.queryset import ProfileManager
 from urbanlens.dashboard.services.core.text_limits import MAX_ADDITIONAL_PREFERENCES_LENGTH, MAX_PREFERENCE_OTHER_LENGTH, MAX_PROFILE_BIO_LENGTH
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from django.db.models import Manager as DjangoManager
 
     from urbanlens.dashboard.models.labels.queryset import LabelManager
@@ -1143,6 +1145,116 @@ class Profile(abstract.PublicDashboardModel):
         from urbanlens.dashboard.models.direct_messages.model import DirectMessage
 
         return DirectMessage.objects.filter(sender=self, recipient=sender).exists()
+
+    @staticmethod
+    def visible_profile_pks(viewer: Profile | None, subjects: Sequence[Profile]) -> set[int]:
+        """Batch equivalent of :meth:`can_view_profile` over many subjects at once.
+
+        ``can_view_profile`` costs a fixed number of queries *per subject*, and every
+        relationship helper it reaches rebuilds the **viewer's** own set (pinned
+        locations, accepted friends, trip ids) on each call. Rendering a list of people
+        - a conversation list, a member list - therefore scaled linearly: the sidebar
+        conversation list measured about eleven queries per row.
+
+        This resolves the viewer's sets once and answers every subject from them, so the
+        cost is fixed regardless of how many subjects there are.
+
+        Semantics must match ``can_view_profile`` exactly, since a divergence here shows
+        a real name where the single-subject path would have masked it.
+        ``test_identity_visibility_batch`` asserts the two agree across every
+        ``VisibilityChoice`` and relationship combination rather than trusting this
+        reimplementation.
+
+        Args:
+            viewer: The profile viewing, or None for an anonymous viewer.
+            subjects: The profiles whose visibility is being resolved.
+
+        Returns:
+            The pks of the subjects whose identity ``viewer`` may see.
+        """
+        from urbanlens.dashboard.models.direct_messages.temporary_access import DirectMessageTemporaryAccess
+        from urbanlens.dashboard.models.friendship.model import Friendship, FriendshipStatus
+        from urbanlens.dashboard.models.pin.model import Pin
+        from urbanlens.dashboard.models.trips.model import TripMembership
+
+        subjects = list(subjects)
+        visible = {subject.pk for subject in subjects if subject.profile_visibility == VisibilityChoice.ANYONE}
+        if viewer is None:
+            return visible
+        visible |= {subject.pk for subject in subjects if subject.pk == viewer.pk}
+
+        # NO_ONE subjects skip the visibility gates but must still reach the
+        # temporary-access fallback below, exactly as can_view_profile does - an
+        # early return here masked a profile holding a valid grant.
+        undecided = [subject for subject in subjects if subject.pk not in visible and subject.profile_visibility != VisibilityChoice.NO_ONE]
+        pending_pks = {subject.pk for subject in undecided}
+
+        accepted = FriendshipStatus.ACCEPTED
+        friends: set[int] = set()
+        requesters: set[int] = set()
+        if pending_pks:
+            friends = set(
+                Friendship.objects.filter(from_profile=viewer, to_profile__in=pending_pks, status=accepted).values_list("to_profile_id", flat=True),
+            ) | set(
+                Friendship.objects.filter(to_profile=viewer, from_profile__in=pending_pks, status=accepted).values_list("from_profile_id", flat=True),
+            )
+            # Directional, matching has_pending_request_to(subject, viewer): a request
+            # the subject sent opens the subject's own gates to its recipient, one way.
+            requesters = set(
+                Friendship.objects.filter(
+                    from_profile__in=pending_pks,
+                    to_profile=viewer,
+                    status__in=(FriendshipStatus.REQUESTED, FriendshipStatus.PENDING),
+                ).values_list("from_profile_id", flat=True),
+            )
+        connected = friends | requesters
+
+        needs = {subject.profile_visibility for subject in undecided if subject.pk not in connected}
+        common_pin: set[int] = set()
+        common_friend: set[int] = set()
+        common_trip: set[int] = set()
+        wants_pin = needs & {VisibilityChoice.COMMON_PIN, VisibilityChoice.ANYTHING_IN_COMMON}
+        wants_friend = needs & {VisibilityChoice.COMMON_FRIEND, VisibilityChoice.ANYTHING_IN_COMMON}
+        wants_trip = needs & {VisibilityChoice.COMMON_TRIP, VisibilityChoice.ANYTHING_IN_COMMON}
+
+        if wants_pin:
+            viewer_locations = set(Pin.objects.filter(profile=viewer, location__isnull=False).values_list("location_id", flat=True))
+            if viewer_locations:
+                common_pin = set(
+                    Pin.objects.filter(profile__in=pending_pks, location_id__in=viewer_locations).values_list("profile_id", flat=True),
+                )
+        if wants_friend:
+            viewer_friends = set(
+                Friendship.objects.filter(from_profile=viewer, status=accepted).values_list("to_profile_id", flat=True),
+            ) | set(
+                Friendship.objects.filter(to_profile=viewer, status=accepted).values_list("from_profile_id", flat=True),
+            )
+            if viewer_friends:
+                common_friend = set(
+                    Friendship.objects.filter(from_profile__in=pending_pks, to_profile__in=viewer_friends, status=accepted).values_list("from_profile_id", flat=True),
+                ) | set(
+                    Friendship.objects.filter(to_profile__in=pending_pks, from_profile__in=viewer_friends, status=accepted).values_list("to_profile_id", flat=True),
+                )
+        if wants_trip:
+            viewer_trips = set(TripMembership.objects.trip_ids_for(viewer))
+            if viewer_trips:
+                common_trip = set(
+                    TripMembership.objects.filter(profile__in=pending_pks, trip_id__in=viewer_trips).values_list("profile_id", flat=True),
+                )
+
+        for subject in undecided:
+            visibility = subject.profile_visibility
+            if subject.pk in connected:
+                visible.add(subject.pk)
+                continue
+            if (visibility == VisibilityChoice.COMMON_PIN and subject.pk in common_pin) or (visibility == VisibilityChoice.COMMON_FRIEND and subject.pk in common_friend) or (visibility == VisibilityChoice.COMMON_TRIP and subject.pk in common_trip) or (visibility == VisibilityChoice.ANYTHING_IN_COMMON and (subject.pk in common_pin or subject.pk in common_friend or subject.pk in common_trip)):
+                visible.add(subject.pk)
+
+        # The temporary-access fallback, last, exactly as can_view_profile reaches it.
+        remaining = [subject for subject in subjects if subject.pk not in visible]
+        if remaining:
+            visible |= DirectMessageTemporaryAccess.granted_profile_pks({subject.pk for subject in remaining}, viewer.pk)
+        return visible
 
     def can_view_profile(self, viewer: Profile | None) -> bool:
         """Return True if viewer may see this profile's identity (name, etc).
