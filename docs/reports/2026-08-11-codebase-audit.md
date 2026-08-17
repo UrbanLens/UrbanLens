@@ -11814,3 +11814,35 @@ The lesson is about the expectation rather than the bug: I went looking for the 
 sibling and found it stronger in the place I checked first, then found the real defect somewhere I
 had not predicted. A contract stated in a docstring - "already length-capped by the caller" - was
 honoured by one of three callers, and nothing checked that it was honoured by the others.
+
+## Chunk 589 - enumerating the callers a docstring trusts
+
+Chunk 588's bug came from a contract stated in prose - "already length-capped by the caller" -
+honoured by one of three callers. That is a searchable shape, so this chunk searched it: every
+docstring in non-test code delegating a guarantee ("caller must", "by the caller", "caller is
+responsible"), then enumerating the callers of each.
+
+Four delegations checked, three clean:
+
+- **`build_pin_detail`** says outright "Caller is responsible for ownership checks - this never
+  filters by profile itself", which is the classic IDOR shape. All three call sites resolve the pin
+  through `get_owned_pin` → `_owned_pins`, profile-scoped, 404 on miss.
+- **`tombstone_text_for`** says "callers must never hide a message from its own sender". Six callers,
+  all passing a *viewer*: `viewer.pk` in the two serializers, `viewer_id` in the template tag, the
+  exporting profile in the export, and `recipient_id` in the two delayed-alert tasks I wrote in
+  chunks 572 and 574. The failure mode here is subtle and worth naming - passing the *sender* returns
+  `None` unconditionally, so a caller that got it wrong would not raise or misbehave visibly; it
+  would silently never suppress anything. My own two callers pass the recipient, which is right,
+  because the recipient is who the email reaches.
+- **`SpotGuessrSessionScopedView`** turned out to be the *opposite* shape: a base class holding the
+  participation and solo checks in one place specifically so a new endpoint cannot forget them, which
+  its docstring says in as many words. The remedy for delegation rather than an instance of it.
+
+So: one real bug in four delegations, which is a fair hit rate for a search this cheap, and worth
+recording as spent rather than repeating. The general point is narrower than "docstrings lie" - it is
+that **a guarantee stated in prose has no enforcement, so its cost scales with the number of callers
+and nothing tells you when that number grows.** The two clean cases are clean because someone kept
+checking; the games case is clean because someone removed the delegation entirely, which is the only
+one of the three that stays clean by itself.
+
+No code changed. Consolidation 24 continues in the background.
