@@ -18,6 +18,8 @@ for shares that produced no new pin, so it does not scale with the ordinary case
 
 from __future__ import annotations
 
+from unittest import expectedFailure
+
 from django.contrib.auth.models import User
 from django.db import connection
 from django.test.utils import CaptureQueriesContext
@@ -94,3 +96,63 @@ class ConversationQueryScalingTests(TestCase):
         self.assertIsNotNone(share)
         self.assertIsNotNone(share.resulting_pin, "an accepted share must still resolve its recipient-side pin")
         self.assertEqual(share.resulting_pin.profile, self.recipient)
+
+
+class ConversationListQueryScalingTests(TestCase):
+    """The sidebar conversation list must not query per conversation.
+
+    Closes a gap left open by the listing survey: ``messages.list`` measured
+    "flat" there only because the seed grew pins and labels, not conversations,
+    so the list it rendered never changed size. A scaling assertion is only
+    worth anything when the seed grows the rows the endpoint lists.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.viewer = baker.make(User)
+        self.profile: Profile = self.viewer.profile
+        self.client.force_login(self.viewer)
+
+    def _seed_conversations(self, count: int) -> None:
+        from urbanlens.dashboard.models.direct_messages.model import DirectMessage
+
+        for _ in range(count):
+            partner = baker.make(User).profile
+            DirectMessage.objects.create(sender=partner, recipient=self.profile, body="hello there")
+            DirectMessage.objects.create(sender=self.profile, recipient=partner, body="hello back")
+
+    def _count(self, url: str) -> int:
+        with CaptureQueriesContext(connection) as ctx:
+            response = self.client.get(url)
+        self.assertEqual(response.status_code, 200, f"{url} returned {response.status_code}")
+        return len(ctx.captured_queries)
+
+    @expectedFailure  # Known N+1, measured below - see docs/PROBLEMS.md. Fix pending.
+    def test_conversation_list_does_not_scale_with_conversation_count(self) -> None:
+        """Currently ~11 queries per conversation (45 for 2, 155 for 12).
+
+        Each row renders ``conv.display_name``/``display_avatar_url``, which call
+        ``display_identity_for`` -> ``resolve_visible_identity`` per partner, and
+        that re-evaluates the viewer's friendships, trip memberships,
+        pins-in-common and temporary DM access every single time.
+
+        Marked expected-failure rather than fixed in place: the per-row work is
+        the privacy decision that anonymizes a partner the viewer may no longer
+        see, and batching it wrongly would leak an identity rather than merely
+        slow a page down. The measurement is kept here so the fix has a target
+        and so this cannot be quietly forgotten.
+        """
+        url = reverse("messages.list")
+
+        self._seed_conversations(_FIRST_BATCH)
+        small = self._count(url)
+        self._seed_conversations(_SECOND_BATCH)
+        large = self._count(url)
+
+        self.assertLessEqual(
+            large,
+            small + 2,
+            f"the conversation list ran {small} queries for {_FIRST_BATCH} conversations and {large} for "
+            f"{_FIRST_BATCH + _SECOND_BATCH} - it is querying per conversation.",
+        )
