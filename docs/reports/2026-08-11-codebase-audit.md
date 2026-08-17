@@ -11941,3 +11941,28 @@ chunk. The next person should not have to.
 
 Note also that the stale phrasing exists in the *private* `CLAUDE.local.md` too, which is untracked
 and not mine to edit; putting the accurate version in the shared docs is the part I can do.
+
+## Chunk 592 - one avenue closed cleanly, one blind spot documented
+
+Two small results, both negative in the useful sense.
+
+**The serializer-versus-column check cannot be automated here.** Chunk 588 found the reaction emoji
+bound by reading serializers, after a name-matching scan produced 30 hits that were mostly noise. The
+precise version of that scan - resolve each `ModelSerializer`'s `Meta.model` and compare only fields
+that model actually has - finds **zero** candidates, because the external API defines plain
+`Serializer` classes throughout rather than `ModelSerializer` subclasses with overrides. So there is
+no accurate automated form of that check on this codebase, and reading them was not a shortcut but
+the only option. Recorded so nobody builds the scan twice.
+
+**Ruff does not lint the test suite.** `pyproject.toml`'s `extend-exclude` lists `tests`, `settings`,
+`migrations` and `__init__.py` as bare path components, which match any path segment - so every test
+directory is skipped. `CLAUDE.md` says "Always run ruff with `--fix`", which reads as full coverage; a
+clean `ruff check src/urbanlens` says nothing whatsoever about test code. Pointed at
+`core/tests/result.py` directly, ruff reports 9 errors in a 31-line file. That is the same shape as
+chunk 591's finding - guidance stating an instruction without its scope, leaving a wrong inference
+available - and it is now written down in `CLAUDE.md` itself, which invites exactly this kind of
+correction ("a living document that may contain inaccuracies").
+
+I did not fix the 9 errors. They are in a file the project has deliberately excluded from linting, and
+cleaning one excluded file while leaving the rest of the suite unlinted would be tidying rather than
+improving. Whether to lint tests at all is a project decision.
