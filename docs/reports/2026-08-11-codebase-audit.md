@@ -11782,3 +11782,35 @@ test functions, and 10,973 - 10,964 = 9.
 
 Twenty green of twenty-three. The one red - the twenty-second - was my container-sync error, not a
 defect, and this run is the first launched *after* the explicit re-sync that error taught me to do.
+
+## Chunk 588 - the external API as the other sibling
+
+A new axis: compare the external API against the internal controllers for the same operations. The
+expectation, from every previous instance of the one-of-two-siblings shape, was that the API would be
+the neglected half. **It is mostly the better-guarded one.** The name-length bounds chunk 559 had to
+add to the internal HTMX controllers were already declared on the API's write serializers -
+`SavedFilterWriteSerializer` at 100, `LabelWriteSerializer` at 255 and its icon at 50, each matching
+its column. The internal paths were the gap.
+
+Comparing every serializer `max_length` against same-named columns produced 30 hits and was mostly
+noise - it matches by field name across all models, so a Pin serializer's `name=255` gets flagged
+against `Album.name` (100). The same false-positive shape as chunk 559's first scan, and the same
+remedy: read them rather than trust the list.
+
+One was unambiguous, because `emoji` exists on exactly one model. `ReactionSerializer` declares
+`max_length=32`; `Reaction.emoji` is **10**. And `is_safe_reaction_emoji`, which both paths call,
+checks only that the value is non-empty and free of HTML-significant characters - its docstring says
+the input is "already length-capped by the caller". The internal HTML path honours that contract with
+`[:10]`, exactly the column width. Both external API paths - direct-message and group reactions -
+pass 32.
+
+So an emoji of 11 to 32 characters validated, passed the safety check, and hit `DataError` on insert:
+a 500 where a 400 belonged. **Not adversarial input** - a family sequence with skin-tone modifiers is
+eleven code points, so any picker offering those can produce one. Reproduced first, then fixed by
+reading the serializer's bound from the column with `column_max_length`, so it cannot drift the way
+the literal did. 86 reaction tests pass.
+
+The lesson is about the expectation rather than the bug: I went looking for the API as the weaker
+sibling and found it stronger in the place I checked first, then found the real defect somewhere I
+had not predicted. A contract stated in a docstring - "already length-capped by the caller" - was
+honoured by one of three callers, and nothing checked that it was honoured by the others.

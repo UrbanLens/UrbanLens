@@ -33,7 +33,8 @@ from rest_framework import serializers
 
 from urbanlens.dashboard.models.direct_messages.meta import MessageRetentionChoice
 from urbanlens.dashboard.models.group_chats.model import MAX_GROUP_NAME_LENGTH
-from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH
+from urbanlens.dashboard.models.reactions.model import Reaction
+from urbanlens.dashboard.services.core.text_limits import MAX_DIRECT_MESSAGE_LENGTH, column_max_length
 from urbanlens.dashboard.services.messaging.direct_messages import reaction_summary, serialize_direct_message
 
 if TYPE_CHECKING:
@@ -323,7 +324,12 @@ class ReactionSerializer(serializers.Serializer):
     are relayed verbatim into other participants' clients.
     """
 
-    emoji = serializers.CharField(max_length=32)
+    #: Read from the column, not a literal. ``is_safe_reaction_emoji`` documents
+    #: that its input is "already length-capped by the caller", and the internal
+    #: HTML path caps at exactly this width - this one declared 32 against a
+    #: 10-wide column, so an ordinary long ZWJ sequence (a family with skin-tone
+    #: modifiers is eleven code points) validated and then failed at the insert.
+    emoji = serializers.CharField(max_length=column_max_length(Reaction, "emoji"))
 
 
 class ReactionResultSerializer(serializers.Serializer):

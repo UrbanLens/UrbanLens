@@ -118,6 +118,45 @@ class MessagingBaseTestCase(TestCase):
         return self.client.post(url, data=json.dumps(payload), content_type="application/json", **{**self.auth, **extra})
 
 
+class ReactionEmojiLengthTests(MessagingBaseTestCase):
+    """A long emoji must be refused, not 500.
+
+    ``is_safe_reaction_emoji``'s docstring states the contract: the value is
+    "already length-capped by the caller". The internal HTML path honours it with
+    ``[:10]``, exactly ``Reaction.emoji``'s column width. ``ReactionSerializer``
+    declares ``max_length=32``, so this path accepted three times the column and
+    reached the insert.
+
+    Not adversarial input: a family sequence with skin-tone modifiers is eleven
+    code points, and any emoji picker offering those can send one.
+    """
+
+    def _react_url(self, message_id: int) -> str:
+        return reverse("external_api:messages.react", kwargs={"peer_slug": self.partner.ensure_slug(), "message_id": message_id})
+
+    def _message(self):
+        from urbanlens.dashboard.services.messaging.direct_messages import create_direct_message
+
+        return create_direct_message(self.sender, self.partner, "hello")
+
+    def test_an_over_long_emoji_is_refused(self) -> None:
+        message = self._message()
+        # 11 code points: four people, four skin tones, three joiners.
+        long_emoji = "\U0001F468\U0001F3FB\u200D\U0001F469\U0001F3FB\u200D\U0001F467\U0001F3FB\u200D\U0001F466\U0001F3FB"
+        self.assertGreater(len(long_emoji), 10, "precondition: longer than the column")
+
+        response = self._post_json(self._react_url(message.pk), {"emoji": long_emoji})
+
+        self.assertEqual(response.status_code, 400, "an emoji longer than the column reached the insert")
+
+    def test_an_ordinary_emoji_still_works(self) -> None:
+        message = self._message()
+
+        response = self._post_json(self._react_url(message.pk), {"emoji": "\U0001F44D"})
+
+        self.assertIn(response.status_code, (200, 201))
+
+
 class SendMessageTests(MessagingBaseTestCase):
     """Sending a plain message through the API."""
 
