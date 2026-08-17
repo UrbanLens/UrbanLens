@@ -1,5 +1,6 @@
 import { getCsrfToken } from "./csrf";
 import { toast, confirmAction } from "./dialogs";
+import { safeColor } from "./markup-engine";
 import type { ShapeSpec } from "./markup-engine";
 
 // See markup-engine.ts for why `L` is declared locally instead of imported.
@@ -265,10 +266,27 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         return Math.max(8, Math.min(72, Math.round(base * scale)));
     }
 
+    const TEXT_BACKGROUND_DEFAULT = "rgba(255,255,255,0.94)";
+
+    /**
+     * Colors are stored as free text server-side and land in innerHTML here
+     * (text labels) and in Leaflet path options, so every one is validated on
+     * the way out - a stored color is not a trusted string.
+     */
+    function itemColor(item: MarkupItem): string {
+        return safeColor(item.color, "#e53e3e");
+    }
+
+    /** The stored border color, or null when unset / explicitly "none". */
+    function itemBorderColor(item: MarkupItem): string | null {
+        if (!item.border_color || item.border_color === "none") return null;
+        return safeColor(item.border_color, "#0f172a");
+    }
+
     function textBackground(item: MarkupItem): string {
         if (item.border_color === "none") return "transparent";
-        if (item.border_color) return item.border_color;
-        return "rgba(255,255,255,0.94)";
+        if (item.border_color) return safeColor(item.border_color, TEXT_BACKGROUND_DEFAULT);
+        return TEXT_BACKGROUND_DEFAULT;
     }
 
     function textBoxPixelRect(item: MarkupItem): { w: number; h: number; anchorX: number; anchorY: number } | null {
@@ -293,10 +311,11 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         // for a drag-created box, the box just defines a fixed wrap/clip region
         // around that text instead of the box height dictating the font size.
         const sz = textFontSize(item);
+        const color = itemColor(item);
         if (rect) {
-            return `<span class="map-text-label map-text-label--box" style="color:${item.color};background:${bg};` + `width:${rect.w}px;height:${rect.h}px;font-size:${sz}px;">${escapeMarkupLabel(label) || "&nbsp;"}</span>`;
+            return `<span class="map-text-label map-text-label--box" style="color:${color};background:${bg};` + `width:${rect.w}px;height:${rect.h}px;font-size:${sz}px;">${escapeMarkupLabel(label) || "&nbsp;"}</span>`;
         }
-        return `<span class="map-text-label" style="color:${item.color};font-size:${sz}px;background:${bg}">${escapeMarkupLabel(label) || "&nbsp;"}</span>`;
+        return `<span class="map-text-label" style="color:${color};font-size:${sz}px;background:${bg}">${escapeMarkupLabel(label) || "&nbsp;"}</span>`;
     }
 
     function textIcon(item: MarkupItem): L.DivIcon {
@@ -307,17 +326,15 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
     }
 
     function shapeOptions(item: MarkupItem): L.PathOptions {
-        const bc = item.border_color;
-        const strokeColor = bc && bc !== "none" ? bc : "white";
-        const hasBorder = !!(bc && bc !== "none");
+        const bc = itemBorderColor(item);
         const fillOp = (item.fill_opacity != null ? item.fill_opacity : 87) / 100;
         const borderOp = (item.border_opacity != null ? item.border_opacity : 100) / 100;
         return {
             pane: "markupPane",
-            color: strokeColor,
-            fillColor: item.color,
+            color: bc ?? "white",
+            fillColor: itemColor(item),
             fillOpacity: fillOp,
-            weight: hasBorder ? item.stroke_width || 2 : 0,
+            weight: bc ? item.stroke_width || 2 : 0,
             opacity: borderOp,
         };
     }
@@ -337,21 +354,22 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
             const isArrow = type === "arrow";
             const fillOp = (item.fill_opacity != null ? item.fill_opacity : 87) / 100;
             const borderOp = (item.border_opacity != null ? item.border_opacity : 100) / 100;
-            const outlineColor = item.border_color && item.border_color !== "none" ? item.border_color : "white";
+            const lineColor = itemColor(item);
+            const borderColor = itemBorderColor(item);
 
             if (isArrow) {
-                layers.push(L.polyline(latlngs, { pane: "markupPane", color: outlineColor, weight: w + 4, opacity: borderOp * 0.75, interactive: false }));
-            } else if (item.border_color && item.border_color !== "none") {
-                layers.push(L.polyline(latlngs, { pane: "markupPane", color: item.border_color, weight: w + 3, opacity: borderOp * 0.7, interactive: false }));
+                layers.push(L.polyline(latlngs, { pane: "markupPane", color: borderColor ?? "white", weight: w + 4, opacity: borderOp * 0.75, interactive: false }));
+            } else if (borderColor) {
+                layers.push(L.polyline(latlngs, { pane: "markupPane", color: borderColor, weight: w + 3, opacity: borderOp * 0.7, interactive: false }));
             }
 
-            layers.push(L.polyline(latlngs, { pane: "markupPane", color: item.color, weight: isArrow ? w + 2 : w, opacity: fillOp }));
+            layers.push(L.polyline(latlngs, { pane: "markupPane", color: lineColor, weight: isArrow ? w + 2 : w, opacity: fillOp }));
 
             if (isArrow && latlngs.length >= 2) {
                 const deg = window.MarkupEngine.bearing(latlngs[latlngs.length - 2]!, latlngs[latlngs.length - 1]!);
                 const sz = arrowheadSize();
                 const arrowMarker = L.marker(latlngs[latlngs.length - 1]!, {
-                    icon: L.divIcon({ className: "", html: window.MarkupEngine.arrowheadSvg(item.color, deg, sz, fillOp), iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }),
+                    icon: L.divIcon({ className: "", html: window.MarkupEngine.arrowheadSvg(lineColor, deg, sz, fillOp), iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }),
                     interactive: false,
                 });
                 layers.push(arrowMarker);
@@ -852,7 +870,7 @@ export function createMarkupToolbar(map: L.Map, markupLayer: L.LayerGroup, confi
         markupItems.forEach((item) => {
             if (item._arrowheadMarker) {
                 const itemOp = (item.fill_opacity != null ? item.fill_opacity : 87) / 100;
-                item._arrowheadMarker.setIcon(L.divIcon({ className: "", html: window.MarkupEngine.arrowheadSvg(item.color, item._arrowheadDeg!, sz, itemOp), iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }));
+                item._arrowheadMarker.setIcon(L.divIcon({ className: "", html: window.MarkupEngine.arrowheadSvg(itemColor(item), item._arrowheadDeg!, sz, itemOp), iconSize: [sz, sz], iconAnchor: [sz / 2, sz / 2] }));
             }
             if (item._textMarker) {
                 item._textMarker.setIcon(textIcon(item));
