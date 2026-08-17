@@ -81,7 +81,7 @@ class PoliceIncidentsPanelSource(CoordinateGatedInfoPanelSource):
         # rather than letting the panel imply address-level knowledge.
         meta.append({"label": "Precision", "value": "Locations are approximate (block scale, as published)"})
 
-        return {"chips": chips, "meta": meta, "nested": True}
+        return {"chips": chips, "meta": meta}
 
     def debug_count(self, data: dict) -> int:
         """Number of incidents found (before the traffic filter)."""

@@ -57,7 +57,7 @@ class HydrologyPanelSource(CoordinateGatedInfoPanelSource):
         watershed = next((feature for feature in features if feature.get("kind") == "watershed"), None)
         nearby = [feature for feature in features if feature.get("kind") != "watershed"]
 
-        context: dict = {"nested": True}
+        context: dict = {}
         if watershed and watershed.get("name"):
             context["heading_name"] = f"{watershed['name']} watershed"
 

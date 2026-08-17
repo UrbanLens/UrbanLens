@@ -70,7 +70,7 @@ class PhotonPanelSource(CoordinateGatedInfoPanelSource):
             if key != heading_key and data.get(key):
                 meta.append({"label": label, "value": data[key]})
 
-        return {"heading_name": data[heading_key], "chips": [], "meta": meta, "nested": True}
+        return {"heading_name": data[heading_key], "chips": [], "meta": meta}
 
 
 class PhotonPlugin(UrbanLensPlugin):

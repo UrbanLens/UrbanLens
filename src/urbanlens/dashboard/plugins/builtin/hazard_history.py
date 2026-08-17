@@ -100,7 +100,7 @@ class HazardHistoryPanelSource(CoordinateGatedInfoPanelSource):
             label_kind = (event.get("event_type") or "disaster").replace("_", " ")
             meta.append({"label": f"{label_kind.capitalize()} {year or '?'}", "value": detail or "Federal disaster declaration", "href": event.get("url") or ""})
 
-        return {"chips": chips, "meta": meta, "nested": True}
+        return {"chips": chips, "meta": meta}
 
     def debug_count(self, data: dict) -> int:
         """Number of fire/disaster events cached."""

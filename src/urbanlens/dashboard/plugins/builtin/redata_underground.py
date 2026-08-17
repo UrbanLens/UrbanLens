@@ -76,7 +76,7 @@ class UndergroundPanelSource(CoordinateGatedInfoPanelSource):
                 details.append("disused/abandoned")
             meta.append({"label": label, "value": ", ".join(part for part in details if part) or label})
 
-        return {"chips": chips, "meta": meta, "nested": True}
+        return {"chips": chips, "meta": meta}
 
     def debug_count(self, data: dict) -> int:
         """Number of subsurface structures found."""

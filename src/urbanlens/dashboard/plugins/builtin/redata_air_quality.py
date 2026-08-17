@@ -75,7 +75,7 @@ class AirQualityPanelSource(CoordinateGatedInfoPanelSource):
 
         if not facts and not sensors:
             return None
-        return {"facts": facts, "chips": chips, "nested": True}
+        return {"facts": facts, "chips": chips}
 
     def debug_count(self, data: dict) -> int:
         """Number of readings found across both source kinds."""

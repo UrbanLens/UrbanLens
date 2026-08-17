@@ -387,7 +387,7 @@ class CrisBuildingPanelSource(CoordinateGatedInfoPanelSource, GalleryMediaSource
             if value:
                 meta.append({"label": label, "value": value})
 
-        return {"heading_name": usn_name, "meta": meta, "nested": True}
+        return {"heading_name": usn_name, "meta": meta}
 
     def media_items(self, data: dict) -> list[MediaItem]:
         """Turn cached CRIS attachments (photos, documents, and extracted images) into gallery items.

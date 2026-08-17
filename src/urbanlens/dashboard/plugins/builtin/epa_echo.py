@@ -316,7 +316,6 @@ class EpaEchoNearbyPanelSource(_EpaEchoPanelSourceBase):
         return {
             "chips": [f"{len(meta)} nearby"],
             "meta": meta,
-            "nested": True,
         }
 
     def debug_count(self, data: dict) -> int:

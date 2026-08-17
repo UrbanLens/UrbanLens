@@ -99,7 +99,7 @@ class SiteConditionsPanelSource(CoordinateGatedInfoPanelSource):
                 label = f"{name} ({percent:.0f}%)" if isinstance(percent, (int, float)) else name
                 meta.append({"label": label, "value": ", ".join(details) or "Unrated"})
 
-        return {"facts": facts, "meta": meta, "nested": True}
+        return {"facts": facts, "meta": meta}
 
     def debug_count(self, data: dict) -> int:
         """Number of domains that answered."""

@@ -75,7 +75,6 @@ class INaturalistPanelSource(CoordinateGatedInfoPanelSource):
             "chips": [f"{len(observations)} nearby"],
             "meta": meta,
             "footer_link": {"url": footer_url, "label": "View nearby observations on iNaturalist"},
-            "nested": True,
         }
 
     def debug_count(self, data: dict) -> int:

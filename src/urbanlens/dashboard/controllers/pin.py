@@ -108,6 +108,16 @@ _LOCATION_DATA_PLUGIN_TABS = {
     "open_elevation": "Elevation",
 }
 
+
+#: Every panel key rendered inside a tab strip rather than as its own card.
+#: A panel's chrome is decided here, not by the panel: only this module knows
+#: whether a given key ends up inside a strip (which supplies the card) or
+#: standalone (which does not). Panels used to declare ``nested`` themselves in
+#: ``render_context``, and eight standalone ones declared it wrongly - so they
+#: rendered with no card at all, which is what "Water & Hydrology is not styled
+#: like the other cards" turned out to be.
+_TABBED_PANEL_KEYS = _CONDENSED_PLUGIN_TABS.keys() | _NEARBY_RESEARCH_TABS.keys() | _LOCATION_DATA_PLUGIN_TABS.keys()
+
 # Mirrors plugins.builtin.open_elevation's own module-level constant - kept as
 # a separate copy since importing a private constant across module boundaries
 # would couple this controller to that plugin's internals.
@@ -237,8 +247,7 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         condensed_panel_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _CONDENSED_PLUGIN_TABS.items() if key in all_info_panels]
         nearby_research_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _NEARBY_RESEARCH_TABS.items() if key in all_info_panels]
         location_data_tabs = [{"key": key, "label": label, "icon": all_info_panels[key].icon} for key, label in _LOCATION_DATA_PLUGIN_TABS.items() if key in all_info_panels]
-        _tabbed_panel_keys = _CONDENSED_PLUGIN_TABS.keys() | _NEARBY_RESEARCH_TABS.keys() | _LOCATION_DATA_PLUGIN_TABS.keys()
-        simple_info_panels = [source for key, source in all_info_panels.items() if key not in _tabbed_panel_keys]
+        simple_info_panels = [source for key, source in all_info_panels.items() if key not in _TABBED_PANEL_KEYS]
 
         # Regional Data and Nearby Research used to be two separate cards, each
         # with their own tab strip - merged into one "Regional Data" section.
@@ -1881,6 +1890,11 @@ class PinController(LoginRequiredMixin, GenericViewSet):
         context["section_id"] = panel.section_id
         context["icon"] = panel.icon
         context["title"] = panel.title
+        # Decided here rather than taken from render_context: a panel cannot know
+        # whether it was rendered into a tab strip (which supplies the card chrome)
+        # or standalone (which does not - the placeholder it replaces via
+        # hx-swap="outerHTML" takes its card with it).
+        context["nested"] = panel_key in _TABBED_PANEL_KEYS
         context["debug"] = self._debug_entry(request, panel_key, cached.query_key, from_cache=True, count=panel.debug_count(data))
         # Links a panel marks with ai_extract=True get the AI extraction button.
         context["pin"] = pin

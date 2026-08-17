@@ -85,7 +85,7 @@ class BuildingPermitsPanelSource(CoordinateGatedInfoPanelSource):
                 },
             )
 
-        return {"chips": chips, "meta": meta, "nested": True}
+        return {"chips": chips, "meta": meta}
 
     def debug_count(self, data: dict) -> int:
         """Number of filings found."""
