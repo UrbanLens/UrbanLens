@@ -12222,3 +12222,28 @@ GitLab shared-token paths compare with `hmac.compare_digest` rather than `==`.
 
 The lesson is the one I keep relearning: "exhausted" was a claim about the axes I had thought of, and
 it took ten seconds of `ls` to find a directory none of them covered.
+
+## Chunk 603 - the two ops scripts each have the safety the other lacks
+
+Finished reading `bin/`. `deploy.sh` is careful where the clone script is not - `set -euo pipefail`,
+refuses a dirty tree, exits early when already at `origin/$BRANCH` - and careless where the clone
+script is careful.
+
+It ends `docker compose down`, `docker compose up --build -d`, then logs "Deploy complete". `up -d`
+returns when containers start, not when they serve; `docker-compose.yml` gives `app` and `app-ws`
+healthchecks with 30s and 25s start periods, and this project's notes describe that healthcheck as
+not passing until migrations, `collectstatic` and the frontend build finish. So the success line
+prints while the site may still be starting - and prints identically if the new image never becomes
+healthy. `set -e` cannot catch it, because `up -d` genuinely succeeded. `bin/deploy_webhook.py` shells
+out to this script, so an automated deploy reports success to the Git host in exactly that case.
+
+The pairing is what makes both findings solid rather than stylistic: **`clone_prod_to_staging.sh`
+defines and uses a `wait_for_healthy` helper twice and has no `set -e`; `deploy.sh` has `set -euo
+pipefail` and no health check at all.** Each script is missing the protection the other has, in the
+same directory, which is much harder to read as deliberate than either omission alone.
+
+Filed rather than fixed, for the reason given in chunk 602: these scripts hard-reset a working tree,
+rebuild a running stack and drop a database, their failure paths are exactly what a fix would change,
+and neither can be exercised here.
+
+`build-frontend.ts` and `map_layers.py` read as well; nothing to report in either.

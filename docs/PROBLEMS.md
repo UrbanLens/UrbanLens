@@ -9437,3 +9437,39 @@ That may well be intended - staging with real data reproduces real bugs - but it
 decision rather than a default, and it interacts with `UL_FIELD_ENCRYPTION_KEY`: if staging shares
 production's key the encrypted columns are readable there, and if it does not, they are permanently
 undecryptable in staging (which is fine, but means those code paths are never exercised).
+
+
+## `deploy.sh` reports success without waiting for the stack to come up
+
+Found 2026-08-17 alongside the `clone_prod_to_staging.sh` entry above, reading `bin/` for the first
+time. This one is well-guarded in most respects - `set -euo pipefail`, a refusal to deploy with a
+dirty working tree, and an early exit when `origin/$BRANCH` already matches `HEAD`. The gap is at the
+end:
+
+```
+docker compose down
+docker compose up --build -d
+log "==> Deploy complete at $(git rev-parse --short HEAD)"
+```
+
+`up -d` returns when containers have *started*, not when they are serving. `docker-compose.yml` gives
+`app` and `app-ws` healthchecks with 30s and 25s start periods, and this project's own notes describe
+the app healthcheck as not passing until migrations, `collectstatic` and the frontend build have
+finished - minutes on a cold build. So "Deploy complete" is printed while the site may still be
+starting, and prints identically if the new image never becomes healthy at all. `set -e` does not
+help: `up -d` genuinely succeeded.
+
+Combined with the `down` on the line before, the failure mode is: site goes down, new stack fails its
+healthcheck, script exits 0 reporting success, site stays down. `bin/deploy_webhook.py` shells out to
+this script, so an automated deploy answers the Git host with success in exactly that case.
+
+**Same sibling evidence as the entry above, pointing the other way.** `clone_prod_to_staging.sh` -
+the *staging* script - defines and uses a `wait_for_healthy` helper, twice. `deploy.sh` - the
+*production* one - has no health check at all. Between the two scripts, each has the safety the other
+is missing.
+
+The fix is close to free: lift `wait_for_healthy` (or `docker compose ps --format` polling) into
+`deploy.sh` after `up --build -d`, and fail the deploy if the app never becomes healthy. **Not made
+here** for the same reason as above - the script hard-resets the working tree and rebuilds the running
+stack, so it cannot be exercised in this environment, and its failure handling is precisely what the
+change would alter.
