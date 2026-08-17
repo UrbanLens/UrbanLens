@@ -9417,6 +9417,15 @@ and `pg_restore`, and a failing `pg_restore` still reaches `docker compose up --
 `Done. Staging now mirrors production as of $TIMESTAMP.` A partially-restored staging environment
 that announces success is worse than one that stops.
 
+**This is an omission, not a house style.** Its sibling `bin/deploy.sh` opens with
+`set -euo pipefail` at line 20; the clone script, which is the one handling a production data dump,
+does not. Same directory, same author, one hardened and one not - the shape this audit kept finding
+in application code, here in the ops scripts.
+
+(For completeness, since `bin/` was being read: `bin/deploy_webhook.py` is sound. Both signature
+schemes - GitHub's HMAC-SHA256 and GitLab's shared token - are compared with
+`hmac.compare_digest`, not `==`.)
+
 The remedy is small - `set -euo pipefail`, and a `trap` that removes `./$DUMP_FILE` on any exit unless
 `--keep-dump` was passed - but **not made here**, deliberately: this script drops and replaces a
 database, its failure paths are exactly what would change, and there is no way to exercise it in this

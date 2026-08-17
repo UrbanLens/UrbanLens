@@ -12192,3 +12192,33 @@ That closes the verification chain. Every fix in the session summary has been th
 full-suite run after landing, and the last three runs - 10,972, 10,980 and 10,982 passing - each
 reconcile exactly against the tests added between their launch commits, which is the property that
 makes the numbers mean something rather than merely look large.
+
+## Chunk 602 - checking my own "exhausted" claim, and finding bin/
+
+The verification chain closed with the twenty-fifth consolidation, and I had said the search axes were
+exhausted. Chunk 594's lesson is that I overclaim, and "every axis is exhausted" is exactly that
+shape - so before resting on it I looked for tree I had genuinely never opened. `bin/` was there: six
+files, 821 lines, of which I had used one (`check_imports_tracked.py`) and read none.
+
+**`clone_prod_to_staging.sh` has two failure-path bugs.** It runs under `#!/bin/bash` with no
+`set -e`, no `pipefail` and no `trap`. Its `wait_for_healthy` helper ends in `exit 1` on timeout, and
+that lands *between* copying a `pg_dump` of production onto the operator's disk and deleting it - so a
+staging database that fails to come up leaves a full production dump, personal data and all, sitting
+in the working directory with nothing said about it. Separately, without `set -e`, a failed
+`pg_restore` still reaches `docker compose up --build` and prints "Done. Staging now mirrors
+production."
+
+What makes it a finding rather than a preference: **`bin/deploy.sh`, in the same directory, opens with
+`set -euo pipefail`.** One of two sibling scripts is hardened and the other is not, and the one that
+is not is the one handling production data. That is the same shape this audit kept finding in
+application code.
+
+**Filed, not fixed.** The script drops and replaces a database, its failure paths are exactly what a
+fix would touch, and there is no way to exercise it here without prod and staging stacks. An untested
+edit to the error handling of a script whose happy path destroys data is a bad trade for three lines.
+
+`bin/deploy_webhook.py` was read at the same time and is sound - both the GitHub HMAC-SHA256 and
+GitLab shared-token paths compare with `hmac.compare_digest` rather than `==`.
+
+The lesson is the one I keep relearning: "exhausted" was a claim about the axes I had thought of, and
+it took ten seconds of `ls` to find a directory none of them covered.
