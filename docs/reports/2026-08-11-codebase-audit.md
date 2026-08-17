@@ -12392,3 +12392,36 @@ so the asymmetry is a choice rather than a surprise.
 That is the third instance of the same shape in this repository's operational scripts: `deploy.sh`
 has `set -euo pipefail` and no health check, `clone_prod_to_staging.sh` has a health check and no
 `set -e`, and `git-squash` has neither guard while doing the most destructive thing of the three.
+
+## Chunk 609 - the contributing guide names a tool the project does not have
+
+`SECURITY.md` is fine: private vulnerability reporting, a 5-business-day acknowledgement, and a list
+of what to include. Nothing to check against code.
+
+`CONTRIBUTING.md` was a different matter. Its submission checklist said "Make sure `basedpyright` and
+existing tests pass before submitting", and the type-checking story behind that turned out to be
+broken in three places at once:
+
+- **`basedpyright` appears nowhere** in `pyproject.toml` or `package.json`. It is not a dependency of
+  this project.
+- **`package.json`'s `lint` script runs `pyright`** - a different tool - and neither it nor
+  `basedpyright` is installed in the virtualenv.
+- **`pyrightconfig.json` points at `"venv": ".venv_windows"`**, a Windows-only path that does not
+  exist on a Linux checkout.
+
+Meanwhile the checks that actually decide whether a PR merges - ruff, ruff format, mypy, the Django
+suite, and (since chunk 583) the TypeScript typecheck and tests, plus the imports-tracked and
+missing-migrations guards added in chunk 584 - were not mentioned at all. So a contributor following
+the guide would run a tool they do not have, skip every gate CI enforces, and be failed for something
+the guide never told them about.
+
+Replaced with the actual commands, each of which I have run in this session, including the caveats
+that cost me time to learn: ruff excludes `tests/`, `settings/` and `migrations/`; mypy needs GDAL and
+so wants the container on a host without it; pytest wants a unique `UL_TEST_DB_NAME`. The pyright
+config is mentioned rather than deleted - it may well be what the author uses on Windows - but with
+the note that its result says nothing about whether a PR will merge.
+
+This is the same shape as chunks 591 and 592: instructions stating a command without its scope, or
+naming a tool without checking it exists. It is also the last of them - `README.md`, the
+release-please config, `bunfig.toml` and the tool configs contain no claims that can be checked
+against behaviour.
