@@ -168,7 +168,11 @@ def _render_building_attributes(data: dict[str, Any]) -> dict[str, Any] | None:
     if not heading_name and not meta:
         return None
 
-    chips = [label] if (label := _SOURCE_LABELS.get(data.get("source") or "")) else []
+    # A reconciled REData record names its sources in `sources[]`; the flat
+    # top-level `source` it replaced is still what Overpass-shaped rows carry.
+    from urbanlens.dashboard.plugins.builtin.parcel_buildings import record_sources
+
+    chips = [label for key in record_sources(data) if (label := _SOURCE_LABELS.get(key))]
     return {"heading_name": heading_name, "chips": chips, "meta": meta}
 
 

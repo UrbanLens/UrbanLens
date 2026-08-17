@@ -53,6 +53,32 @@ SOURCE_LABELS: dict[str, str] = {
 }
 
 
+def record_sources(building: dict[str, Any]) -> list[str]:
+    """Every source that references one building, richest-information first.
+
+    REData's ``/parcels/{uuid}/buildings/`` now returns one record per physical
+    building with a ``sources[]`` array (see its
+    ``docs/buildings-dedup-spec.md``), having removed the top-level ``source``
+    string a single-observation record used to carry. Reading only the old key
+    leaves the provenance chip blank for every REData building; reading only
+    the new one drops Overpass, which still answers in the flat shape.
+
+    Args:
+        building: A raw building record from either shape.
+
+    Returns:
+        Source keys in the order REData ordered them (``BUILDING_SOURCES``
+        precedence, so the first is the richest), or a single-entry list for a
+        flat record, or empty when neither key is present.
+    """
+    sources = building.get("sources")
+    if isinstance(sources, list):
+        keys = [key for entry in sources if isinstance(entry, dict) and (key := entry.get("source"))]
+        if keys:
+            return keys
+    return [key] if (key := building.get("source")) else []
+
+
 def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
     """Resolve every building on a location's parcel, REData first then Overpass.
 
@@ -176,13 +202,14 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None,
         elif boundary_polygon is not None and not _building_within(building, boundary_polygon):
             continue
         geometry = building_footprint_geojson(building)
+        sources = record_sources(building)
         rows.append(
             {
                 "name": building.get("name") or "",
                 "building_number": building.get("building_number") or "",
                 "year_built": building.get("year_built") or "",
-                "source": building.get("source") or "",
-                "source_label": SOURCE_LABELS.get(building.get("source") or "", ""),
+                "source": sources[0] if sources else "",
+                "source_label": " + ".join(label for key in sources if (label := SOURCE_LABELS.get(key, ""))),
                 "latitude": building.get("latitude"),
                 "longitude": building.get("longitude"),
                 "geometry": geometry,
