@@ -190,7 +190,7 @@ class PinRestructureApplyView(LoginRequiredMixin, View):
 
         buildings = _selected_buildings(request, plan.buildings)
         created = pin_restructure.create_building_pins(pin, buildings)
-        wiki_created = pin_restructure.mirror_buildings_to_wiki(pin, buildings, pin.profile)
+        _queue_wiki_mirror(pin, buildings)
         nested = pin_restructure.nest_root_pins(pin, plan.nestable)
 
         parts = []
@@ -198,9 +198,21 @@ class PinRestructureApplyView(LoginRequiredMixin, View):
             parts.append(f"Added {created} building pin{'s' if created != 1 else ''}.")
         if nested:
             parts.append(f"Nested {nested} existing pin{'s' if nested != 1 else ''} under this property.")
-        if wiki_created:
-            parts.append(f"{wiki_created} added to the community wiki.")
         return _toast(HttpResponse("", status=200), "success", " ".join(parts) or "Nothing left to organize.", refresh=True)
+
+
+def _queue_wiki_mirror(pin, buildings) -> None:
+    """Mirror an import onto the community wiki in the background.
+
+    Deliberately fire-and-forget: the child pins already exist by now, so a
+    wiki-side failure must not turn a successful pin action into a 500 (see
+    docs/PROBLEMS.md, 2026-08-18).
+    """
+    from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+    from urbanlens.dashboard.tasks import mirror_buildings_to_wiki
+
+    keys = [pin_restructure.building_selection_key(building) for building in buildings]
+    safely_enqueue_task(mirror_buildings_to_wiki, pin.pk, keys)
 
 
 class PinBuildingImportView(LoginRequiredMixin, View):
@@ -230,9 +242,7 @@ class PinBuildingImportView(LoginRequiredMixin, View):
             return _toast(HttpResponse("", status=200), "info", "Select at least one building to add.")
 
         created = pin_restructure.create_building_pins(pin, buildings)
-        wiki_created = pin_restructure.mirror_buildings_to_wiki(pin, buildings, pin.profile)
+        _queue_wiki_mirror(pin, buildings)
 
         message = f"Added {created} building pin{'s' if created != 1 else ''}."
-        if wiki_created:
-            message += f" {wiki_created} added to the community wiki."
         return _toast(HttpResponse("", status=200), "success", message, refresh=True)

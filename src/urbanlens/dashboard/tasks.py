@@ -132,6 +132,39 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def mirror_buildings_to_wiki(pin_id: int, selection_keys: list[str]) -> int:
+    """Mirror imported buildings onto the community wiki, off the request.
+
+    The pin side of a building import has already succeeded by the time this
+    runs, so nothing here may fail it: a wiki-side problem used to surface as
+    a 500 for work that was done (see docs/PROBLEMS.md, 2026-08-18).
+
+    Takes selection keys rather than the building records themselves so the
+    task body stays small and re-resolves against the current cache - a stale
+    key simply finds nothing.
+
+    Args:
+        pin_id: The parent pin whose buildings were imported.
+        selection_keys: ``building_selection_key`` values for the imported
+            buildings.
+
+    Returns:
+        How many child wikis were created.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.locations import site_scope
+    from urbanlens.dashboard.services.pins import pin_restructure
+
+    pin = Pin.objects.filter(pk=pin_id).select_related("location", "profile").first()
+    if pin is None:
+        return 0
+    buildings = pin_restructure.select_buildings(site_scope.parcel_buildings(pin.location) or [], selection_keys)
+    if not buildings:
+        return 0
+    return pin_restructure.mirror_buildings_to_wiki(pin, buildings, pin.profile)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def auto_nest_building_pins(pin_id: int) -> int:
     """Build a new pin's default child-pin structure from cached building data.
 

@@ -18,6 +18,8 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
+from unittest import mock
+
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon
 from django.urls import reverse
@@ -426,7 +428,13 @@ class RestructureApplyTests(TestCase):
 
 
 class RestructureWikiMirrorTests(TestCase):
-    """Child wikis are contributed only when a community wiki already exists."""
+    """The wiki mirror, which now runs *after* the request that triggered it.
+
+    The pin side has already succeeded by the time the mirror runs, so it was
+    moved onto a task: a wiki-side failure used to surface as a 500 for work
+    that was done (docs/PROBLEMS.md, 2026-08-18). These therefore exercise the
+    mirror directly, and the view's job is only to enqueue it.
+    """
 
     def setUp(self) -> None:
         super().setUp()
@@ -437,25 +445,42 @@ class RestructureWikiMirrorTests(TestCase):
         LocationCache.set(self.location, PARCEL_BUILDINGS_CACHE_SOURCE, {"buildings": _BUILDINGS, "provider": "redata"})
         self.url = reverse("pin.restructure.apply", kwargs={"pin_slug": self.pin.slug})
 
-    def test_no_wiki_means_no_wiki_is_created(self) -> None:
-        self.client.post(self.url)
-        self.assertFalse(Wiki.objects.filter(location=self.location).exists())
+    def _mirror(self) -> int:
+        return pin_restructure.mirror_buildings_to_wiki(self.pin, _BUILDINGS, self.user.profile)
+
+    def test_the_view_enqueues_the_mirror_rather_than_running_it(self) -> None:
+        with mock.patch("urbanlens.dashboard.services.core.celery.safely_enqueue_task") as enqueue:
+            self.client.post(self.url)
+
+        self.assertTrue(any("mirror_buildings" in getattr(call.args[0], "name", "") for call in enqueue.call_args_list), "the building import must hand the wiki mirror to a task")
+
+    def test_a_place_with_no_wiki_gains_a_draft_not_a_published_page(self) -> None:
+        self._mirror()
+
+        wiki = Wiki.objects.get(location=self.location)
+        self.assertFalse(wiki.officially_created, "a mirror must not publish a community page behind the user's back")
 
     def test_an_existing_wiki_gets_matching_child_wikis(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Campus")
-        self.client.post(self.url)
+
+        self._mirror()
+
         self.assertEqual(wiki.child_wikis.filter(pin_type=PinType.BUILDING).count(), 3)
 
     def test_the_import_is_one_wiki_edit_not_one_per_building(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Campus")
-        self.client.post(self.url)
+
+        self._mirror()
+
         edits = WikiEdit.objects.filter(wiki=wiki)
         self.assertEqual(edits.count(), 1)
         self.assertIn("child_wikis_imported", edits.first().changes)
 
     def test_the_wiki_becomes_parcel_scope_too(self) -> None:
         wiki = baker.make(Wiki, location=self.location, name="Campus")
-        self.client.post(self.url)
+
+        self._mirror()
+
         self.assertTrue(is_site_scope(Wiki.objects.get(pk=wiki.pk)))
 
 

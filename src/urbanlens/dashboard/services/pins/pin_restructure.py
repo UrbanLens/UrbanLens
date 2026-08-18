@@ -481,15 +481,19 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
     Returns:
         How many child wikis were created.
     """
-    from urbanlens.dashboard.controllers.detail_pins import _location_for_child_wiki
-    from urbanlens.dashboard.models.wiki.model import Wiki
+    from urbanlens.dashboard.controllers.detail_pins import ChildWikiLocationError, _location_for_child_wiki
+    from urbanlens.dashboard.models.wiki.model import Wiki, Wiki as WikiModel
     from urbanlens.dashboard.models.wiki_edit import WikiEdit
     from urbanlens.dashboard.services.places import provisioning
 
     try:
         wiki = pin.location.wiki
     except ObjectDoesNotExist:
-        return 0
+        # A draft, never an official page: drafts are already auto-created for
+        # every pinned location (tasks.ensure_draft_wiki_for_location) and stay
+        # invisible until somebody claims them, so seeding one here mirrors the
+        # buildings without publishing a community page behind the user's back.
+        wiki, _created = WikiModel.objects.get_or_create_draft_for_location(pin.location)
 
     from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_tree_order
 
@@ -517,13 +521,23 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
             # Mirror REData's building tree: a nested building's wiki hangs
             # under its containing building's wiki, not flat under the parcel.
             parent = wiki_by_ref.get(str(building.get("parent_ref") or ""), wiki)
+            try:
+                child_location = _location_for_child_wiki(building["latitude"], building["longitude"])
+            except ChildWikiLocationError:
+                # Something already has a wiki marker on that exact point -
+                # most often the parent wiki itself, because a parcel's
+                # coordinate is frequently one of its buildings' centroids.
+                # That building is already represented; skipping it is right,
+                # and it must not take the rest of the import down with it.
+                logger.info("mirror_buildings_to_wiki: skipping %s - a wiki marker already occupies its point", building_name(building) or "building")
+                continue
             child = Wiki.objects.create(
                 name=building_name(building) or wiki.name,
                 pin_type=PinType.BUILDING,
                 pin_type_is_user_provided=False,
                 parent_wiki=parent,
                 place=place,
-                location=_location_for_child_wiki(building["latitude"], building["longitude"]),
+                location=child_location,
             )
             if ref := str(building.get("ref") or ""):
                 wiki_by_ref[ref] = child

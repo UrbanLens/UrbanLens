@@ -9963,3 +9963,30 @@ which this run did not record because `-q` suppressed the header.
 Worth fixing properly rather than pinning the seed: an order-dependent test is a test that will
 fail on someone else's machine for no visible reason. When picking it up, run the full suite with
 `-p randomly --randomly-seed=<n>` and bisect with `pytest --randomly-seed=<n> -x`.
+
+
+## RESOLVED 2026-08-18: importing buildings on a *pin* page 500'd on the wiki side
+
+Reported from staging with a traceback: adding several buildings from the pin detail page raised
+`ChildWikiLocationError: There is already a wiki marker at these exact coordinates` out of
+`mirror_buildings_to_wiki` -> `_location_for_child_wiki`, **after** the child pins had already been
+created. The user saw a 500 for work that had succeeded.
+
+Three defects behind the one traceback, all fixed:
+
+- A building whose coordinate coincides with an existing wiki marker raised instead of being
+  skipped. The common case is the parent wiki itself, because a parcel's coordinate is frequently
+  one of its buildings' centroids - so the building is already represented and skipping it is the
+  right answer. One such building used to abort the whole mirror.
+- The mirror ran inline in the request. It is now a task (`tasks.mirror_buildings_to_wiki`), taking
+  selection keys rather than records so a stale key simply resolves to nothing. Both import paths
+  (the panel action and the restructure apply) enqueue it.
+- The mirror did nothing when the place had no wiki, so the community side never gained the
+  buildings. It now seeds a *draft* - the same thing `ensure_draft_wiki_for_location` already
+  creates for every pinned location, invisible until claimed - which keeps "community pages are
+  promoted explicitly, never created official behind a user's back" intact.
+
+Note for anyone testing this area: `CELERY_TASK_ALWAYS_EAGER` is opt-in via
+`UL_CELERY_TASK_ALWAYS_EAGER` and is **off** in the normal test settings, so an enqueued task does
+not run during a test. Three existing tests asserted child wikis appeared after a POST; they now
+exercise the mirror directly and assert separately that the view enqueues it.
