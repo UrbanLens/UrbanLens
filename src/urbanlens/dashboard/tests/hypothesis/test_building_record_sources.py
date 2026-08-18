@@ -100,19 +100,104 @@ class BuildingsOnPropertyTests(SimpleTestCase):
 
         self.assertEqual(len(buildings_on_property([{"name": "osm row", "source": "osm"}])), 1)
 
-    def test_an_envelope_is_not_an_extra_building(self) -> None:
-        """A parent is an envelope *over* buildings; counting it double-counts them."""
+    def test_a_parent_is_kept_in_the_list(self) -> None:
+        """A building containing others is still a building.
+
+        The Kirkbride case: a large building whose wings are separately mapped
+        parents them, while remaining the structure the site is named after.
+        Filtering it out would delete the most significant building on a campus.
+        """
         from urbanlens.dashboard.plugins.builtin.parcel_buildings import buildings_on_property
 
-        records = [
-            {"ref": "osm:way/552009229", "child_refs": ["cris:1", "cris:2"]},
-            {"ref": "cris:1", "parent_ref": "osm:way/552009229"},
-            {"ref": "cris:2", "parent_ref": "osm:way/552009229"},
-        ]
+        kept = buildings_on_property(_NESTED)
 
-        self.assertEqual([b["ref"] for b in buildings_on_property(records)], ["cris:1", "cris:2"])
+        self.assertEqual([b["ref"] for b in kept], ["osm:way/552009229", "cris:1", "cris:2"])
+
+    def test_a_parent_is_not_counted_alongside_its_children(self) -> None:
+        """Counting the container as well as its contents double-counts them."""
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import countable_buildings
+
+        self.assertEqual([b["ref"] for b in countable_buildings(_NESTED)], ["cris:1", "cris:2"])
+
+    def test_counting_still_excludes_off_property_records(self) -> None:
+        from urbanlens.dashboard.plugins.builtin.parcel_buildings import countable_buildings
+
+        records = [*_NESTED, {"ref": "cris:99", "is_on_property": False}]
+
+        self.assertNotIn("cris:99", [b["ref"] for b in countable_buildings(records)])
 
     def test_the_panel_rows_are_filtered(self) -> None:
         rows = building_rows([{"name": "on", "is_on_property": True}, {"name": "off", "is_on_property": False}], [])
 
         self.assertEqual([r["name"] for r in rows], ["on"])
+
+
+_NESTED = [
+    {"ref": "osm:way/552009229", "name": "Kirkbride", "child_refs": ["cris:1", "cris:2"]},
+    {"ref": "cris:1", "name": "North Wing", "parent_ref": "osm:way/552009229"},
+    {"ref": "cris:2", "name": "South Wing", "parent_ref": "osm:way/552009229"},
+]
+
+
+class BuildingNestingTests(SimpleTestCase):
+    """Nesting is reported by REData, not inferred from geometry here.
+
+    It is a tree of arbitrary depth (a campus block parenting a wing parenting
+    an annex), and it is not always cross-source - OSM models a `building`
+    outline over its own `building:part` segments.
+    """
+
+    def test_children_follow_their_parent(self) -> None:
+        rows = building_rows(_NESTED, [])
+
+        self.assertEqual([r["name"] for r in rows], ["Kirkbride", "North Wing", "South Wing"])
+
+    def test_depth_marks_the_nesting_level(self) -> None:
+        rows = building_rows(_NESTED, [])
+
+        self.assertEqual([r["depth"] for r in rows], [0, 1, 1])
+
+    def test_nesting_can_be_more_than_one_level_deep(self) -> None:
+        """A child links to its most specific parent, which may itself be a child."""
+        records = [
+            {"ref": "block", "name": "Block", "child_refs": ["wing"]},
+            {"ref": "wing", "name": "Wing", "parent_ref": "block", "child_refs": ["annex"]},
+            {"ref": "annex", "name": "Annex", "parent_ref": "wing"},
+        ]
+
+        rows = building_rows(records, [])
+
+        self.assertEqual([r["name"] for r in rows], ["Block", "Wing", "Annex"])
+        self.assertEqual([r["depth"] for r in rows], [0, 1, 2])
+
+    def test_same_source_nesting_is_honoured(self) -> None:
+        """An OSM outline over its own building:part segments is one source."""
+        records = [
+            {"ref": "osm:way/1", "name": "Outline", "sources": [{"source": "osm"}], "child_refs": ["osm:way/2"]},
+            {"ref": "osm:way/2", "name": "Part", "sources": [{"source": "osm"}], "parent_ref": "osm:way/1"},
+        ]
+
+        self.assertEqual([r["depth"] for r in building_rows(records, [])], [0, 1])
+
+    def test_a_parent_outside_the_list_leaves_the_child_visible(self) -> None:
+        """Its parent may have been dropped as off-property; the child is not lost."""
+        records = [{"ref": "cris:1", "name": "Orphan", "parent_ref": "gone"}]
+
+        rows = building_rows(records, [])
+
+        self.assertEqual([r["name"] for r in rows], ["Orphan"])
+        self.assertEqual(rows[0]["depth"], 0)
+
+    def test_a_parent_ref_cycle_does_not_hang_or_drop_rows(self) -> None:
+        records = [
+            {"ref": "a", "name": "A", "parent_ref": "b"},
+            {"ref": "b", "name": "B", "parent_ref": "a"},
+        ]
+
+        self.assertEqual(sorted(r["name"] for r in building_rows(records, [])), ["A", "B"])
+
+    def test_flat_records_are_still_sorted_by_building_number(self) -> None:
+        """Nesting must not disturb the numeric ordering people navigate by."""
+        records = [{"building_number": "10", "name": "ten"}, {"building_number": "9", "name": "nine"}]
+
+        self.assertEqual([r["name"] for r in building_rows(records, [])], ["nine", "ten"])

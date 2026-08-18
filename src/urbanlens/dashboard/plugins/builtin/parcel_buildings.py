@@ -80,7 +80,7 @@ def record_sources(building: dict[str, Any]) -> list[str]:
 
 
 def buildings_on_property(buildings: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """The records that are really buildings standing on this property.
+    """The records that stand on this property, dropping the ones that don't.
 
     REData over-returns deliberately and labels what it returns. A parcel
     inside a broad CRIS archaeological sensitivity zone gets every surveyed
@@ -89,21 +89,90 @@ def buildings_on_property(buildings: list[dict[str, Any]]) -> list[dict[str, Any
     survey roster for this campus is 124 buildings, against the 2604 that
     reached the UI.
 
-    Envelopes go too, for a different reason. Where one source's footprint
-    encloses several of another's buildings, REData keeps the finer records as
-    the buildings and makes the coarse one their parent, carrying
-    ``child_refs``. That parent is an envelope *over* buildings, not an extra
-    building, so counting it double-counts every structure inside it.
+    Deliberately *not* filtered here: a record carrying ``child_refs``. Those
+    are excluded from counts (see :func:`countable_buildings`) but not from the
+    list, because a parent is often a real building in its own right - a large
+    building whose wings are separately mapped becomes their parent while
+    remaining the building people actually name the site after. Dropping it
+    would delete the most significant structure on a campus.
 
     Args:
         buildings: Raw building records from either provider.
 
     Returns:
-        Only the records that stand for one real building on this property.
-        Absent flags are kept: Overpass rows carry neither, and a missing
-        label is not a negative one.
+        Only the records on this property. An absent flag is kept: Overpass
+        rows carry none, and a missing label is not a negative one.
     """
-    return [b for b in buildings if b.get("is_on_property") is not False and not b.get("child_refs")]
+    return [b for b in buildings if b.get("is_on_property") is not False]
+
+
+def countable_buildings(buildings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The records to count, one per physical building.
+
+    A record carrying ``child_refs`` contains other records in this same list,
+    so counting it as well as its children counts a subdivided structure twice.
+    Counting the leaves is REData's own stated rule.
+
+    Args:
+        buildings: Raw building records from either provider.
+
+    Returns:
+        The on-property records that are nobody's parent.
+    """
+    return [b for b in buildings_on_property(buildings) if not b.get("child_refs")]
+
+
+def _tree_ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Order rows so each building is followed by the buildings inside it.
+
+    REData reports nesting rather than flattening it, and it is not a flat
+    parent/child pair: a child links to its *most specific* container, and that
+    container may itself be someone else's child, so the structure is a tree of
+    arbitrary depth (a campus block parenting a wing parenting an annex). Nor is
+    it always cross-source - OSM models a ``building`` outline over its own
+    ``building:part`` segments.
+
+    Each row gains a ``depth``, so a template can indent without walking the
+    tree itself.
+
+    Args:
+        rows: Rendered rows, each possibly carrying ``ref``/``parent_ref``.
+
+    Returns:
+        The same rows, depth-first, siblings in :func:`_row_sort_key` order.
+    """
+    known = {row["ref"] for row in rows if row.get("ref")}
+    children: dict[str, list[dict[str, Any]]] = {}
+    roots: list[dict[str, Any]] = []
+    for row in rows:
+        parent = row.get("parent_ref")
+        # A parent_ref pointing outside this list (filtered out as off-property,
+        # say) leaves the child a root rather than orphaning it entirely.
+        if parent and parent in known:
+            children.setdefault(parent, []).append(row)
+        else:
+            roots.append(row)
+
+    ordered: list[dict[str, Any]] = []
+    placed: set[int] = set()
+
+    def walk(row: dict[str, Any], depth: int) -> None:
+        if id(row) in placed:
+            return
+        placed.add(id(row))
+        row["depth"] = depth
+        ordered.append(row)
+        for child in sorted(children.get(row.get("ref") or "", []), key=_row_sort_key):
+            walk(child, depth + 1)
+
+    for root in sorted(roots, key=_row_sort_key):
+        walk(root, 0)
+    # Anything left is in a parent_ref cycle; show it rather than lose it.
+    for row in rows:
+        if id(row) not in placed:
+            row["depth"] = 0
+            ordered.append(row)
+    return ordered
 
 
 def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
@@ -241,6 +310,10 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None,
                 "longitude": building.get("longitude"),
                 "geometry": geometry,
                 "has_geometry": geometry is not None,
+                "ref": building.get("ref") or "",
+                "parent_ref": building.get("parent_ref") or "",
+                "child_refs": list(building.get("child_refs") or []),
+                "depth": 0,
                 "selection_key": building.get("_selection_key") or "",
                 "child_name": _marker_name(child) if child is not None else "",
                 "child_uuid": str(child.uuid) if child is not None and getattr(child, "uuid", None) else "",
@@ -248,7 +321,7 @@ def building_rows(buildings: list[dict[str, Any]], children: list, url_for=None,
             },
         )
 
-    return sorted(rows, key=_row_sort_key)
+    return _tree_ordered(rows)
 
 
 def _building_within(building: dict[str, Any], boundary_polygon: GEOSGeometry) -> bool:
@@ -428,7 +501,9 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
                 for row in rows
             ],
             "provider": data.get("provider") or "",
-            "unpinned_count": sum(1 for row in rows if not row["child_name"]),
+            # Leaves only: a parent contains rows in this same list, so counting
+            # it too reports a subdivided structure twice.
+            "unpinned_count": sum(1 for row in rows if not row["child_name"] and not row["child_refs"]),
         }
 
 
