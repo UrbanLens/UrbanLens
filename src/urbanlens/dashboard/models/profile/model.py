@@ -466,6 +466,10 @@ class Profile(abstract.PublicDashboardModel):
 
     # AI feature preferences (only relevant when the user has an AI subscription).
     ai_enabled = BooleanField(default=True, help_text="Allow AI features on your account.")
+    # Auto-tagging is on for everyone who has the capability - the interesting
+    # setting is turning it *off*, so this is phrased as the exception rather
+    # than making every user opt in to something they were granted.
+    disable_auto_tagging = BooleanField(default=False, help_text="Turn off automatic tagging of your pins. Individual labels can also be excluded on the Organize page.")
     ai_label_tags = BooleanField(default=False, help_text="AI can automatically suggest and add tags when a pin is created.")
     ai_label_categories = BooleanField(default=False, help_text="AI can automatically suggest and add categories when a pin is created.")
     ai_label_statuses = BooleanField(default=False, help_text="AI can automatically suggest and add statuses when a pin is created.")

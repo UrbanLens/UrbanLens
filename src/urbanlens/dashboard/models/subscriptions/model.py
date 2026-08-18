@@ -50,6 +50,11 @@ class SiteFeature(TextChoices):
     # users' own contributions and stay visible to everyone (see
     # ``services.property.owner_access``).
     PROPERTY_OWNERS = "property_owners", "Official property owner names & contact info"
+    # Automatic tag/category assignment from REData's label-suggestion service.
+    # Its own feature rather than part of AI: suggestions come from REData
+    # matching a place against the user's own taxonomy, not from an LLM call,
+    # so the cost profile and the grant decision are different.
+    AUTO_TAGGING = "auto_tagging", "Automatic tagging of pins"
     # Gates access to features still under active development, but stable enough
     # for general (VIP) use - a single flag reused across every in-progress
     # feature, rather than one SiteFeature per beta, so a feature can graduate

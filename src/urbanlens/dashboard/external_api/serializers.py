@@ -885,6 +885,7 @@ class SettingsSerializer(serializers.Serializer):
     # AI (feature-gated).
     ai_enabled = serializers.BooleanField(read_only=True)
     ai_label_categories = serializers.BooleanField(read_only=True)
+    disable_auto_tagging = serializers.BooleanField(read_only=True)
     ai_label_tags = serializers.BooleanField(read_only=True)
     ai_label_statuses = serializers.BooleanField(read_only=True)
     # Keyword tagging.
@@ -998,6 +999,7 @@ class SettingsPatchSerializer(serializers.Serializer):
     # AI (feature-gated - rejected with 400 while the feature is off).
     ai_enabled = serializers.BooleanField(required=False)
     ai_label_categories = serializers.BooleanField(required=False)
+    disable_auto_tagging = serializers.BooleanField(required=False)
     ai_label_tags = serializers.BooleanField(required=False)
     ai_label_statuses = serializers.BooleanField(required=False)
     # Keyword tagging.

@@ -143,6 +143,7 @@ SETTINGS_FIELDS: tuple[str, ...] = (
     "ai_label_tags",
     "ai_label_statuses",
     # Keyword tagging (KeywordTaggingSettingsForm).
+    "disable_auto_tagging",
     "keyword_tagging_enabled",
     "keyword_label_categories",
     "keyword_label_tags",

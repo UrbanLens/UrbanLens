@@ -304,13 +304,17 @@ def _queryset_for_kind(kind: str, profile: Profile) -> QuerySet[Label]:
 
 
 def _auto_tag_available(user, profile: Profile, label_kind: str) -> bool:
-    """Whether *profile* has any auto-tagging path - AI or keyword - for this label kind.
+    """Whether *profile* may auto-tag labels of this kind at all.
 
     One helper for both halves of the same decision: the edit form asks this to decide
-    whether to show the ``allow_auto_tag`` toggle, and the save handler asks it to decide
+    whether to show the per-label opt-out, and the save handler asks it to decide
     whether to honour the submitted value. Written out separately (as they were), the two
     can drift into rendering a control the server silently ignores, or ignoring one the
     server would have accepted.
+
+    Auto-tagging is granted, not opted into: a user who has the capability and
+    has not switched it off gets it for every tag and category label, minus
+    whichever labels they excluded individually.
 
     Args:
         user: The requesting user, for the site-level AI feature check.
@@ -321,20 +325,12 @@ def _auto_tag_available(user, profile: Profile, label_kind: str) -> bool:
     Returns:
         True when at least one auto-tagging path is available.
     """
-    ai_kind_enabled = {
-        KIND_CATEGORY: profile.ai_label_categories,
-        KIND_TAG: profile.ai_label_tags,
-        KIND_STATUS: profile.ai_label_statuses,
-    }.get(label_kind, False)
-    keyword_kind_enabled = {
-        KIND_CATEGORY: profile.keyword_label_categories,
-        KIND_TAG: profile.keyword_label_tags,
-        KIND_STATUS: profile.keyword_label_statuses,
-    }.get(label_kind, False)
-
-    ai_path = user_has_feature(user, SiteFeature.AI) and profile.ai_enabled and ai_kind_enabled
-    keyword_path = profile.keyword_tagging_enabled and keyword_kind_enabled
-    return bool(ai_path or keyword_path)
+    # Only tags and categories: REData's suggestion service models "which of my
+    # labels describes this place", which statuses (visited, demolished) and
+    # people/media labels are not.
+    if label_kind not in {KIND_CATEGORY, KIND_TAG}:
+        return False
+    return bool(user_has_feature(user, SiteFeature.AUTO_TAGGING) and not profile.disable_auto_tagging)
 
 
 def _parent_candidates(profile: Profile, kind: str, exclude_id: int | None = None) -> QuerySet[Label]:
@@ -768,8 +764,10 @@ class LabelEditView(_LabelKindMixin, LoginRequiredMixin, View):
         if not label.is_protected:
             can_toggle_auto_tag = _auto_tag_available(request.user, profile, label.kind)
             if can_toggle_auto_tag:
-                label.allow_auto_tag = "allow_auto_tag" in request.POST
-            label.keywords = request.POST.get("keywords", "").strip() or None
+                # The form asks the question the other way round now: the
+                # control is "exclude this label", so its absence means the
+                # label participates.
+                label.allow_auto_tag = "disable_auto_tag" not in request.POST
 
         icon_error = _apply_custom_icon_from_post(label, request)
         if icon_error:
