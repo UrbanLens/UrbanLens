@@ -410,10 +410,16 @@ class MapDisplayForm(ProfileSettingsForm):
         label="Pin Organization Suggestions",
         help_text="When you open a property with several buildings, offer to add a child pin for each one and to nest any of your existing pins that stand inside it.",
     )
+    auto_create_building_pins = forms.BooleanField(
+        required=False,
+        widget=forms.CheckboxInput(attrs={"class": "settings-checkbox"}),
+        label="Automatic Building Pins",
+        help_text="When a property is confidently known to hold several buildings, add a child pin for each one automatically. Ambiguous buildings always wait for your approval, and you can delete any that aren't wanted.",
+    )
 
     class Meta:
         model = Profile
-        fields = ["default_map_view", "cluster_radius", "use_pin_cache", "suggest_pin_restructure"]
+        fields = ["default_map_view", "cluster_radius", "use_pin_cache", "suggest_pin_restructure", "auto_create_building_pins"]
 
 
 class MapCenterForm(ProfileSettingsForm):

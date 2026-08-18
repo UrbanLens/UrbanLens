@@ -160,6 +160,14 @@ class Pin(abstract.PublicDashboardModel, abstract.SecurityModel, abstract.Addres
     # suggestion can never come back on its own.
     restructure_offer_dismissed = BooleanField(default=False)
 
+    # When this pin's confident buildings were automatically turned into child
+    # pins (see services.pins.auto_nest). One-shot per pin: once stamped, the
+    # sweep never runs for it again, so deleting an auto-created child is a
+    # decision that sticks rather than something the next refresh undoes.
+    # Buildings discovered later go through the explicit "add buildings"
+    # dialog instead.
+    buildings_auto_nested_at = DateTimeField(null=True, blank=True)
+
     # Direct hex color override for this pin (e.g. "#F44336"). Used by detail pins
     # when the user explicitly picks a color in the dialog.
     color = CharField(max_length=20, null=True, blank=True)

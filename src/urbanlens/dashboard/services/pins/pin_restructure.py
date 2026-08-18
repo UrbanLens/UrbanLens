@@ -365,12 +365,15 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
     Returns:
         How many child pins were created.
     """
+    from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_tree_order
     from urbanlens.dashboard.services.locations.site_scope import reclassify_markers_on_place
     from urbanlens.dashboard.services.pins.pin_creation import PinCreationError, resolve_child_pin_location
     from urbanlens.dashboard.services.places import provisioning
     from urbanlens.dashboard.services.places.resolution import attach_location
 
-    selected = buildings[:MAX_RESTRUCTURE_ITEMS]
+    # Parents first, so a nested building's pin can nest under its parent
+    # building's pin the way REData reports the containment.
+    selected = building_tree_order(buildings[:MAX_RESTRUCTURE_ITEMS])
     place = pin.location.place if (pin.location_id and pin.location.place_id) else None
     parcel = place.parcel if place is not None else None
 
@@ -384,6 +387,7 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
     place_by_key = {building_selection_key(record): places[index] for index, record in enumerate(known) if index in places}
 
     created = 0
+    pin_by_ref: dict[str, Pin] = {}
     with transaction.atomic():
         for building in selected:
             name = building_name(building)
@@ -402,7 +406,11 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
             # parcel, and the marker would describe the whole property again.
             if (building_place := place_by_key.get(building_selection_key(building))) is not None:
                 attach_location(location, building_place)
-            Pin.objects.create(
+            # A building inside another building nests under that building's
+            # pin; a parent outside this batch (already pinned, or filtered
+            # out) leaves the child directly under the parcel pin instead.
+            parent = pin_by_ref.get(str(building.get("parent_ref") or ""), pin)
+            child = Pin.objects.create(
                 name=name or None,
                 # Derived from a building record, not typed by the user, so
                 # external name refreshes may still improve it later.
@@ -413,13 +421,15 @@ def create_building_pins(pin: Pin, buildings: list[dict[str, Any]]) -> int:
                 # would have reached on its own - no need to queue one task per
                 # building to re-derive it.
                 pin_type_is_user_provided=False,
-                parent_pin=pin,
+                parent_pin=parent,
                 profile=pin.profile,
                 location=location,
                 color=BUILDING_PIN_ICON_COLOR,
                 detail_bg_color=BUILDING_PIN_BG_COLOR,
                 detail_bg_opacity=BUILDING_PIN_BG_OPACITY,
             )
+            if ref := str(building.get("ref") or ""):
+                pin_by_ref[ref] = child
             created += 1
 
     if parcel is not None:
@@ -481,7 +491,9 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
     except ObjectDoesNotExist:
         return 0
 
-    selected = buildings[:MAX_RESTRUCTURE_ITEMS]
+    from urbanlens.dashboard.plugins.builtin.parcel_buildings import building_tree_order
+
+    selected = building_tree_order(buildings[:MAX_RESTRUCTURE_ITEMS])
     wiki_place = wiki.place if wiki.place_id else None
     parcel = wiki_place.parcel if wiki_place is not None else None
     known = site_scope.parcel_buildings(pin.location) or selected
@@ -490,6 +502,7 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
 
     unmatched = list(wiki.child_wikis.select_related("location"))
     created = 0
+    wiki_by_ref: dict[str, Wiki] = {}
     with transaction.atomic():
         for building in selected:
             existing = match_marker(building, unmatched)
@@ -501,14 +514,19 @@ def mirror_buildings_to_wiki(pin: Pin, buildings: list[dict[str, Any]], profile:
             # already has a page gets that page rather than a second one.
             if place is not None and Wiki.objects.filter(place=place).exists():
                 continue
-            Wiki.objects.create(
+            # Mirror REData's building tree: a nested building's wiki hangs
+            # under its containing building's wiki, not flat under the parcel.
+            parent = wiki_by_ref.get(str(building.get("parent_ref") or ""), wiki)
+            child = Wiki.objects.create(
                 name=building_name(building) or wiki.name,
                 pin_type=PinType.BUILDING,
                 pin_type_is_user_provided=False,
-                parent_wiki=wiki,
+                parent_wiki=parent,
                 place=place,
                 location=_location_for_child_wiki(building["latitude"], building["longitude"]),
             )
+            if ref := str(building.get("ref") or ""):
+                wiki_by_ref[ref] = child
             created += 1
 
     if created:

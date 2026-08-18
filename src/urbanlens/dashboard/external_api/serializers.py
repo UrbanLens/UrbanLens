@@ -867,6 +867,7 @@ class SettingsSerializer(serializers.Serializer):
     cluster_radius = serializers.IntegerField(read_only=True, allow_null=True)
     use_pin_cache = serializers.BooleanField(read_only=True)
     suggest_pin_restructure = serializers.BooleanField(read_only=True)
+    auto_create_building_pins = serializers.BooleanField(read_only=True)
     # Map center.
     map_center_mode = serializers.ChoiceField(choices=MapCenterMode.choices, read_only=True)
     map_custom_latitude = serializers.DecimalField(max_digits=9, decimal_places=6, read_only=True, allow_null=True)
@@ -979,6 +980,7 @@ class SettingsPatchSerializer(serializers.Serializer):
     cluster_radius = serializers.IntegerField(required=False, allow_null=True, min_value=0, max_value=1000)
     use_pin_cache = serializers.BooleanField(required=False)
     suggest_pin_restructure = serializers.BooleanField(required=False)
+    auto_create_building_pins = serializers.BooleanField(required=False)
     # Map center.
     map_center_mode = serializers.ChoiceField(choices=MapCenterMode.choices, required=False)
     map_custom_latitude = serializers.DecimalField(max_digits=9, decimal_places=6, required=False, allow_null=True, min_value=-90, max_value=90)

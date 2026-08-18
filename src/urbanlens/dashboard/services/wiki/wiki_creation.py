@@ -116,12 +116,26 @@ class WikiCreationService:
 
             seed_wiki_article_from_wikipedia(location)
 
+        def _seed_building_wikis() -> None:
+            # A wiki for a multi-building property describes the grounds; the
+            # confidently-known buildings become child wikis by default, the
+            # same structure the pin side builds (see services.pins.auto_nest).
+            # Ambiguous buildings (unresolved overlap) wait for a person.
+            from urbanlens.dashboard.plugins.builtin.parcel_buildings import confident_buildings
+            from urbanlens.dashboard.services.locations import site_scope
+            from urbanlens.dashboard.services.pins import pin_restructure
+
+            confident = confident_buildings(site_scope.parcel_buildings(location) or [])
+            if len(confident) >= site_scope.MULTI_BUILDING_THRESHOLD:
+                pin_restructure.mirror_buildings_to_wiki(pin, confident, pin.profile)
+
         if newly_official:
             # Re-running enrichment here is safe even for a promoted draft
             # that was already enriched by ensure_draft_wiki_for_location -
             # enrich_wiki_location only ever fills in what's still missing.
             transaction.on_commit(_enqueue)
             transaction.on_commit(_seed_article)
+            transaction.on_commit(_seed_building_wikis)
         return wiki, newly_official
 
     def _name_from_pin(self, pin: Pin, wiki: Wiki, alias_ids: set[int]) -> None:

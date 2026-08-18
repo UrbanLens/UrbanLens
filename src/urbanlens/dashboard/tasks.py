@@ -132,6 +132,31 @@ def enrich_wiki_location(self, wiki_id: int) -> bool:
 
 
 @shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
+def auto_nest_building_pins(pin_id: int) -> int:
+    """Build a new pin's default child-pin structure from cached building data.
+
+    Enqueued at pin creation when the location's building list is already
+    cached (another user pinned it first) - creating up to a campus worth of
+    child pins is not request-time work. When nothing is cached yet, the
+    fetch/enrichment paths run the same sweep once the list arrives instead.
+
+    Args:
+        pin_id: The freshly-created root pin.
+
+    Returns:
+        How many child pins were created, or 0 when the pin is gone or not
+        eligible.
+    """
+    from urbanlens.dashboard.models.pin.model import Pin
+    from urbanlens.dashboard.services.pins.auto_nest import auto_nest_pin
+
+    pin = Pin.objects.filter(pk=pin_id).select_related("location", "profile").first()
+    if pin is None:
+        return 0
+    return auto_nest_pin(pin)
+
+
+@shared_task(autoretry_for=(OSError,), retry_backoff=True, retry_kwargs={"max_retries": 3})
 def generate_boundaries_for_location(location_id: int) -> bool:
     """Generate (or, if stale, refresh) the default property/building boundaries for a Location.
 

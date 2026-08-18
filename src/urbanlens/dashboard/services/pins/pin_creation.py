@@ -385,4 +385,14 @@ def create_pin_for_profile(
 
         safely_enqueue_task(suggest_pin_category, pin.pk)
 
+    # When another user already pinned this location, its building list is
+    # cached and this pin's default structure can be built right away - no
+    # need to wait for a fetch that will never re-run. Queued, not inline: a
+    # campus can mean hundreds of child pins, which is not request-time work.
+    if location is not None and pin.parent_pin_id is None:
+        from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+        from urbanlens.dashboard.tasks import auto_nest_building_pins
+
+        safely_enqueue_task(auto_nest_building_pins, pin.pk)
+
     return PinCreationResult(pin=pin, all_locations=all_locations)

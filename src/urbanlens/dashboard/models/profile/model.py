@@ -531,6 +531,12 @@ class Profile(abstract.PublicDashboardModel):
     # See services.pins.pin_restructure.
     suggest_pin_restructure = BooleanField(default=True, help_text="Offer to organize pins into buildings and child pins when you open a property that has several.")
 
+    # Whether confidently-identified buildings on a multi-building property
+    # become child pins automatically, without the dialog. Only buildings the
+    # data is sure about are created this way; ambiguous ones always stay in
+    # the "add buildings" list. See services.pins.auto_nest.
+    auto_create_building_pins = BooleanField(default=True, help_text="Automatically add child pins for the buildings on a property when they are confidently identified. Ambiguous buildings still wait for your approval.")
+
     # Master switch for the whole pin-suggestion surface (Memories -> Locations).
     # Off overrides every per-source toggle below: no new suggestions are
     # created and any already-pending ones are hidden (not deleted) - see

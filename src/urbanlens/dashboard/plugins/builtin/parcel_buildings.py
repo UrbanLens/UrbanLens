@@ -122,7 +122,30 @@ def countable_buildings(buildings: list[dict[str, Any]]) -> list[dict[str, Any]]
     return [b for b in buildings_on_property(buildings) if not b.get("child_refs")]
 
 
-def _tree_ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+def confident_buildings(buildings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """The on-property records certain enough to act on without asking.
+
+    The dividing line is ``overlap_refs``: REData sets it when a building's
+    geometry substantially overlaps another source's building without being
+    contained in it or being obviously the same structure - the one case its
+    reconciliation deliberately refuses to resolve, because merging would
+    destroy real information. If REData cannot say what the record is, neither
+    can we, so those wait for a person (the "add buildings" dialog) instead of
+    becoming pins on their own.
+
+    Containment is not ambiguity: a parent and its ``child_refs`` children are
+    a *verified* relationship, so nested buildings are confident on both sides.
+
+    Args:
+        buildings: Raw building records from either provider.
+
+    Returns:
+        The on-property records with no unresolved overlap.
+    """
+    return [b for b in buildings_on_property(buildings) if not b.get("overlap_refs")]
+
+
+def _tree_ordered(rows: list[dict[str, Any]], *, annotate_depth: bool = True) -> list[dict[str, Any]]:
     """Order rows so each building is followed by the buildings inside it.
 
     REData reports nesting rather than flattening it, and it is not a flat
@@ -160,7 +183,8 @@ def _tree_ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if id(row) in placed:
             return
         placed.add(id(row))
-        row["depth"] = depth
+        if annotate_depth:
+            row["depth"] = depth
         ordered.append(row)
         for child in sorted(children.get(row.get("ref") or "", []), key=_row_sort_key):
             walk(child, depth + 1)
@@ -170,9 +194,31 @@ def _tree_ordered(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
     # Anything left is in a parent_ref cycle; show it rather than lose it.
     for row in rows:
         if id(row) not in placed:
-            row["depth"] = 0
+            if annotate_depth:
+                row["depth"] = 0
             ordered.append(row)
     return ordered
+
+
+def building_tree_order(buildings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Order raw building records parents-first, children directly after.
+
+    The importer needs this ordering to mirror REData's building tree as a pin
+    tree: a child's pin can only be parented under its building's pin if that
+    pin exists by the time the child is created.
+
+    Args:
+        buildings: Raw building records carrying ``ref``/``parent_ref``.
+
+    Deliberately does *not* annotate depth: raw cached records are hashed
+    whole by ``pin_restructure.building_selection_key``, so writing any key
+    into them silently changes their identity and breaks every place/selection
+    lookup keyed on it.
+
+    Returns:
+        The same records, depth-first (see :func:`_tree_ordered`).
+    """
+    return _tree_ordered(buildings, annotate_depth=False)
 
 
 def fetch_parcel_buildings(location: Location) -> dict[str, Any]:
@@ -435,10 +481,14 @@ class ParcelBuildingsPanelSource(LocationCachePanelSource):
     def fetch(self, pin: Pin) -> None:
         """Enumerate the parcel's buildings and cache them against the pin's location."""
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
+        from urbanlens.dashboard.services.pins.auto_nest import auto_nest_location
 
         location = pin.location
         payload = fetch_parcel_buildings(location)
         LocationCache.set(location, self.cache_source, payload, query_key=f"{float(location.latitude or 0):.5f},{float(location.longitude or 0):.5f}")
+        # The moment the list lands is the moment the default structure can be
+        # built - confident buildings become child pins with no dialog.
+        auto_nest_location(location)
 
     def api_payload(self, pin: Pin) -> dict[str, Any] | None:
         """Every building on the pin's parcel, each paired with its child pin.
@@ -520,6 +570,14 @@ class ParcelBuildingsEnrichmentSource(LocationCacheEnrichmentSource):
         """Enumerate the location's parcel buildings and return them for caching."""
         payload = fetch_parcel_buildings(location)
         return payload, f"{float(location.latitude or 0):.5f},{float(location.longitude or 0):.5f}"
+
+    def enrich(self, location: Location) -> bool:
+        """Cache the building list, then build the default pin structure from it."""
+        from urbanlens.dashboard.services.pins.auto_nest import auto_nest_location
+
+        result = super().enrich(location)
+        auto_nest_location(location)
+        return result
 
 
 class ParcelBuildingsPlugin(UrbanLensPlugin):

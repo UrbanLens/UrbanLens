@@ -121,6 +121,7 @@ SETTINGS_FIELDS: tuple[str, ...] = (
     "cluster_radius",
     "use_pin_cache",
     "suggest_pin_restructure",
+    "auto_create_building_pins",
     # Map center (MapCenterForm). The cached/remembered coordinate fields are
     # excluded on purpose: they are server-maintained state, not preferences.
     "map_center_mode",
