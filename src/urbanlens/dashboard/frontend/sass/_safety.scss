@@ -908,3 +908,22 @@
     color: var(--ul-grey-7);
     cursor: pointer;
 }
+
+// A saved emergency contact who has since been blocked. Kept, not deleted -
+// see services.visits.safety.blocked_default_contacts for why - so this has
+// to be visible enough to act on without reading as an error.
+.safety-blocked-contact-warning {
+    display: flex;
+    gap: 0.6rem;
+    align-items: flex-start;
+    padding: 0.7rem 0.9rem;
+    margin-bottom: 0.9rem;
+    border: 1px solid #ef6c00;
+    border-radius: 8px;
+    background: color-mix(in srgb, #ef6c00 10%, transparent);
+
+    p {
+        margin: 0.25rem 0 0;
+        font-size: 0.9rem;
+    }
+}

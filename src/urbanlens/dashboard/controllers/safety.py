@@ -35,6 +35,7 @@ from urbanlens.dashboard.services.visits.safety import (
     accept_checkin_partner_invite,
     apply_checkin_edit,
     attach_draft_markup_map,
+    blocked_default_contacts,
     check_in,
     create_checkin,
     decline_checkin_partner_invite,
@@ -452,6 +453,7 @@ class SafetySettingsView(LoginRequiredMixin, View):
             {
                 "preference": preference,
                 "default_contacts": default_contacts_as_input(profile),
+                "blocked_default_contacts": blocked_default_contacts(profile),
                 "connections": get_connections(profile),
             },
         )
@@ -525,6 +527,7 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
             {
                 "preference": preference,
                 "default_contacts": default_contacts_as_input(profile),
+                "blocked_default_contacts": blocked_default_contacts(profile),
                 "connections": get_connections(profile),
                 "checkin": None,
                 "trip": trip,
@@ -549,6 +552,7 @@ class SafetyCheckinCreateView(LoginRequiredMixin, View):
         error_context = {
             "preference": get_or_create_preference(profile),
             "default_contacts": default_contacts_as_input(profile),
+            "blocked_default_contacts": blocked_default_contacts(profile),
             "connections": get_connections(profile),
             "checkin": None,
             "trip": trip,

@@ -9926,7 +9926,27 @@ The eight that *were* mechanically provable (anchored on a `def`/`class` the too
 uniquely) are fixed, and `check_doc_line_refs.py` now runs in CI to keep past-end-of-file citations
 at zero.
 
-## OPEN 2026-08-17: blocking leaves a saved emergency-contact default pointing at the blocked profile
+## RESOLVED 2026-08-18: blocking leaves a saved emergency-contact default pointing at the blocked profile
+
+**Resolution: the third option this filing proposed - keep the row, and say so.**
+
+Neither silent answer is chosen for the owner, because both are wrong in an obvious way: leaving it
+pages someone they blocked, and deleting it destroys a safety contact in the one feature whose
+entire purpose is that somebody is told when you do not come back. Someone may block a person
+socially and still want them called if they go missing.
+
+``services.visits.safety.blocked_default_contacts`` reports which saved defaults now resolve to a
+blocked profile (in both directions, via ``Profile.are_blocked``), and the check-in creation form
+and the safety settings page both warn, naming them, and pointing at where to remove them. The row
+is untouched.
+
+Covered by ``test_safety_blocked_contact_warning.py``, including that blocking does *not* delete
+the default, that it holds whichever side placed the block, and that an email-only default has no
+profile to check.
+
+The original filing follows.
+
+## (ORIGINAL FILING) OPEN 2026-08-17: blocking leaves a saved emergency-contact default pointing at the blocked profile
 
 Found alongside the `MarkupMapShare` revocation, and left for an owner's decision because it is a
 product question rather than a defect.

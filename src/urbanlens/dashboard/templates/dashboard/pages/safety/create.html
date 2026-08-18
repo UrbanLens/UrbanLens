@@ -76,6 +76,16 @@
             <label for="contact_message">Message to emergency contacts</label>
             <textarea name="contact_message" id="contact_message" rows="3" class="safety-autoexpand">{{ preference.default_message }}</textarea>
         </div>
+{% if blocked_default_contacts %}
+<div class="safety-blocked-contact-warning" role="status">
+    <i class="material-symbols-outlined">report</i>
+    <div>
+        <strong>{% if blocked_default_contacts|length == 1 %}One of your saved emergency contacts is someone you have blocked.{% else %}Some of your saved emergency contacts are people you have blocked.{% endif %}</strong>
+        <p>{% for contact in blocked_default_contacts %}{{ contact.display_name|default:contact.username }}{% if not forloop.last %}, {% endif %}{% endfor %}
+        {% if blocked_default_contacts|length == 1 %}will still be contacted{% else %}will still be contacted{% endif %} if you do not check in. Kept on purpose - blocking someone socially is not the same as not wanting them called if you go missing - but you can remove them in Safety settings.</p>
+    </div>
+</div>
+{% endif %}
         {% include "dashboard/partials/safety/_contact_picker.html" with contacts=default_contacts %}
         <div class="form-actions">
             <button type="submit" class="btn btn--primary btn--lg">Create check-in</button>

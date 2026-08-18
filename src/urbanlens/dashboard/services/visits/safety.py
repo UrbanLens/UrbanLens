@@ -250,6 +250,33 @@ def default_contacts_as_input(profile: Profile) -> list[ContactInput]:
     return [(default.contact_profile, default.email, default.label) for default in EmergencyContactDefault.objects.for_owner(profile)]
 
 
+def blocked_default_contacts(profile: Profile) -> list[Profile]:
+    """Saved default emergency contacts that now resolve to a blocked profile.
+
+    ``EmergencyContactDefault`` is a *template*: it is copied onto each new
+    ``SafetyCheckin`` as a snapshot, so blocking someone does not stop a
+    check-in created afterwards from paging them.
+
+    Deliberately reported rather than deleted (docs/PROBLEMS.md, 2026-08-17).
+    Both silent answers are wrong in an obvious way: leaving it pages someone
+    the owner blocked, while removing it quietly destroys a safety contact in
+    the one feature whose entire purpose is that somebody is told when you do
+    not come back. Someone may well block a person socially and still want
+    them called if they go missing - that is the owner's call, and this exists
+    so they can make it knowingly.
+
+    Args:
+        profile: The check-in owner.
+
+    Returns:
+        The blocked contact profiles among their saved defaults, in saved
+        order. Empty for the overwhelmingly common case, at the cost of one
+        query over a handful of rows.
+    """
+    contacts = [default.contact_profile for default in EmergencyContactDefault.objects.for_owner(profile).select_related("contact_profile") if default.contact_profile_id]
+    return [contact for contact in contacts if Profile.are_blocked(profile, contact)]
+
+
 def get_active_checkin(profile: Profile, trip: Trip | None = None) -> SafetyCheckin | None:
     """Return the profile's current active (unresolved) check-in for one scope, if any.
 
