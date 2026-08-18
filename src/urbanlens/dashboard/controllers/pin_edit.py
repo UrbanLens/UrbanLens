@@ -631,22 +631,43 @@ class PinRelinkView(LoginRequiredMixin, View):
                     )
                 return render(request, "dashboard/partials/pins/pin_overview_partial.html", _overview_context(pin))
         else:
-            # Detach: create a new bare Location at this pin's coordinates.
-            # Use the existing location's canonical name if available; otherwise
-            # fetch the Google place name.  Never fall back to pin.name -
-            # that is personal data and must not become a community place name.
+            # Detach: give this pin a Location of its own at its own point, so it
+            # stops sharing the community record (and the access that record
+            # confers).
+            #
+            # This used to `Location.objects.create(...)` unconditionally, which
+            # is a guaranteed IntegrityError: Location is unique on
+            # (latitude, longitude), and a pin's coordinates *are* its current
+            # location's, so the row it tried to create always already existed
+            # (docs/PROBLEMS.md, 2026-08-13 - a 500 on every attempt).
+            #
+            # Detaching is only meaningful when the pin sits at a point the
+            # shared Location does not occupy - which happens because pins
+            # attach to a *nearby* Location, not only an exact one. When the
+            # shared record is at this exact point there is no second Location
+            # to move to, and saying so is better than silently doing nothing.
             lat = float(pin.effective_latitude or 0)
             lng = float(pin.effective_longitude or 0)
-            if pin.location and pin.location.official_name and pin.location.official_name != "Unnamed Location":
-                location = Location.objects.create(
-                    official_name=pin.location.official_name,
-                    latitude=lat,
-                    longitude=lng,
-                )
-            else:
-                from urbanlens.dashboard.controllers.maps import _create_location_with_canonical_name
+            location, created = Location.objects.get_exact_or_create(lat, lng)
+            if not created and location.pk == pin.location_id:
+                message = "This pin sits exactly on its shared place, so there is nothing to detach it to. Move the pin first, then detach it."
+                if is_xhr:
+                    return JsonResponse({"error": message}, status=400)
+                return HttpResponse(message, status=400)
+            if created and pin.location and pin.location.official_name and pin.location.official_name != "Unnamed Location":
+                # Carry the canonical name across rather than re-fetching it.
+                # Never fall back to pin.name - that is personal data and must
+                # not become a community place name.
+                Location.objects.filter(pk=location.pk).update(official_name=pin.location.official_name)
+                location.refresh_from_db(fields=["official_name"])
+            elif created:
+                # Name it the way every other bulk-created Location is named -
+                # a background lookup, never the pin's own name, which is
+                # personal and would seed a community wiki title.
+                from urbanlens.dashboard.services.core.celery import safely_enqueue_task
+                from urbanlens.dashboard.tasks import resolve_location_place_name
 
-                location = _create_location_with_canonical_name(lat, lng)
+                safely_enqueue_task(resolve_location_place_name, location.pk)
 
         # Wikis are user-created only: link to the location's wiki when one
         # exists, otherwise leave the pin wiki-less until someone creates one.

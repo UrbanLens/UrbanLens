@@ -1,56 +1,73 @@
-"""Detaching a pin from its shared Location currently 500s, and nothing executed the path.
+"""Detaching a pin from its shared Location must not 500.
 
-`PinRelinkView` serves two routes. `pin.link.to` (relink to a named Location) is covered by
-`test_pin_relink_access.py` and `test_pin_location_conflict.py`. `pin.link` - detach, no
-location slug - had no test at all: searching the tree for it returns only `pin.link.delete`,
-an unrelated endpoint for removing external links.
+Filed 2026-08-13 and reproduced: the detach branch called
+``Location.objects.create(latitude=pin.effective_latitude, ...)``, but a pin's
+coordinates *are* its current location's, and Location is unique on
+(latitude, longitude) - so the row it tried to create always already existed.
+Every attempt was an IntegrityError.
 
-The branch builds a new `Location` at the pin's *current* coordinates, and `Location` is
-`unique_together = ("latitude", "longitude")`, so it is a guaranteed constraint violation.
-See the 2026-08-13 entry in `docs/PROBLEMS.md`.
-
-**Marked `xfail(strict=True)` deliberately.** The correct behaviour is an open product
-question - nudge the coordinates, express separation via the pin's own marker fields, or
-refuse coherently - and this test must not presuppose the answer. What strict xfail buys is
-that the moment detach stops raising, this fails loudly and whoever fixed it is told to
-replace the marker with a real assertion. A plain skip would stay silent forever; asserting
-the 500 would cement the bug as intended behaviour.
+The filing left the product decision open. What it resolves to, given the
+model: a pin attaches to a *nearby* Location, not only an exact one, so
+detaching is meaningful exactly when the pin sits somewhere the shared record
+does not. Then it gets its own Location there. When the shared record is at
+the pin's exact point there is no second Location to move to, and saying so is
+better than a 500 - or than silently doing nothing and reporting success.
 """
 
 from __future__ import annotations
 
+from django.contrib.auth.models import User
 from django.urls import reverse
 from model_bakery import baker
-import pytest
 
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.location.model import Location
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.profile.model import Profile
 
 
 class PinDetachLocationTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
-        self.user = baker.make("auth.User")
-        self.profile = Profile.objects.get(user=self.user)
+        baker.make(User)  # absorbs the bootstrap site-admin promotion
+        self.user = baker.make(User)
         self.client.force_login(self.user)
-        self.location = baker.make(Location, latitude=42.1234, longitude=-73.5678)
-        self.pin = baker.make(Pin, profile=self.profile, location=self.location)
 
-    @pytest.mark.xfail(strict=True, reason="Detach creates a Location at coordinates one already occupies; see PROBLEMS.md 2026-08-13")
-    def test_detaching_a_pin_from_its_location_does_not_error(self) -> None:
-        response = self.client.post(reverse("pin.link", args=[self.pin.slug]))
+    def _pin_at(self, *, pin_lat: float, location_lat: float) -> Pin:
+        location = baker.make(Location, latitude=location_lat, longitude=-73.9, official_name="Hudson River State Hospital")
+        # Slugs route through [-a-zA-Z0-9_]+, so no decimal point in it.
+        self._seq = getattr(self, "_seq", 0) + 1
+        pin = baker.make(Pin, profile=self.user.profile, location=location, parent_pin=None, slug=f"pin-{self._seq}")
+        if pin_lat != location_lat:
+            # The pin's own point, distinct from the shared record's - which is
+            # what a nearby-match attachment produces.
+            Location.objects.filter(pk=location.pk).update(latitude=location_lat)
+            pin.refresh_from_db()
+        return pin
 
-        self.assertLess(response.status_code, 500, "detach raised instead of handling the coordinate collision")
+    def _detach(self, pin: Pin):
+        return self.client.post(reverse("pin.link", kwargs={"pin_slug": pin.slug}), {})
 
-    def test_the_detach_route_exists_and_is_reachable(self) -> None:
-        """Guards the test above: if the route name changes, the xfail must not silently 'pass'.
+    def test_detaching_a_pin_on_its_shared_point_explains_rather_than_500s(self) -> None:
+        pin = self._pin_at(pin_lat=41.7, location_lat=41.7)
 
-        A strict xfail that errors during *setup* (a NoReverseMatch, say) still counts as an
-        expected failure, so the route has to be exercised somewhere that reports honestly.
-        """
-        url = reverse("pin.link", args=[self.pin.slug])
+        response = self._detach(pin)
 
-        self.assertTrue(url)
-        self.assertIn(self.pin.slug, url)
+        self.assertEqual(response.status_code, 400, "this used to be an IntegrityError 500 on every attempt")
+        self.assertIn(b"nothing to detach", response.content)
+
+    def test_the_pin_keeps_its_location_when_detaching_is_refused(self) -> None:
+        pin = self._pin_at(pin_lat=41.7, location_lat=41.7)
+        original = pin.location_id
+
+        self._detach(pin)
+
+        pin.refresh_from_db()
+        self.assertEqual(pin.location_id, original)
+
+    def test_no_orphan_location_is_left_behind_by_a_refusal(self) -> None:
+        pin = self._pin_at(pin_lat=41.7, location_lat=41.7)
+        before = Location.objects.count()
+
+        self._detach(pin)
+
+        self.assertEqual(Location.objects.count(), before)

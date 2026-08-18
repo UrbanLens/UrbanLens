@@ -6398,7 +6398,24 @@ label/google-maps tests pass with the change. Bonus finding recorded for future 
 profiles are *seeded* with default labels (including a "Factory" category), which a test
 creating labels by hand can collide with.
 
-## OPEN 2026-08-13: "detach location" on a pin fails with a 500, every time
+## RESOLVED 2026-08-18: "detach location" on a pin fails with a 500, every time
+
+**Resolution.** The filing left the product decision open; the model answers it. A pin attaches to a
+*nearby* Location, not only an exact one, so detaching is meaningful precisely when the pin sits at
+a point the shared record does not occupy - it then gets its own Location there
+(``get_exact_or_create``, so an existing row at that point is reused rather than duplicated). When
+the shared record *is* at the pin's exact point there is no second Location to move to, and the
+handler now says so with a 400 rather than raising an IntegrityError. Of the three options filed,
+this is the second and third combined: express the separation where it exists, refuse where it does
+not. Nudging coordinates was rejected - moving somebody's pin to satisfy a constraint is a worse
+surprise than being told why the action does not apply.
+
+Covered by ``test_pin_detach_location.py``, which also pins the two things a refusal must not do:
+change the pin's location, or leave an orphan Location behind.
+
+The original filing follows.
+
+## (ORIGINAL FILING) OPEN 2026-08-13: "detach location" on a pin fails with a 500, every time
 
 `controllers/pin_edit.py:631` (the `else` branch of the location-change handler, reached when the
 user detaches a pin from its shared `Location`) does:
