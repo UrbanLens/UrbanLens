@@ -43,10 +43,12 @@ DOM, the OOB fragment is simply ignored by htmx.
     </button>
 </div>
 {% else %}
-{# Rendered even with no filters, and on the page itself rather than only in an
-   OOB response: an out-of-band swap needs an element with this id already in
-   the DOM, so without this, creating your *first* saved filter updated
-   nothing until the page was reloaded. Empty and class-less, so it is
-   invisible until it holds something. #}
+{% comment %}
+Rendered even with no filters, and on the page itself rather than only in an
+OOB response: an out-of-band swap needs an element with this id already in the
+DOM, so without this, creating your *first* saved filter updated nothing until
+the page was reloaded. Empty and class-less, so it is invisible until it holds
+something.
+{% endcomment %}
 <div id="map-saved-filters-toolbar"{% if oob %} hx-swap-oob="true"{% endif %}></div>
 {% endif %}

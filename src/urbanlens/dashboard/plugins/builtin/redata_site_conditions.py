@@ -54,6 +54,7 @@ class SiteConditionsPanelSource(CoordinateGatedInfoPanelSource):
         lng = float(pin.effective_longitude or 0)
 
         data: dict[str, Any] = {}
+        failed = 0
         for domain, fetch_one in (
             ("land_cover", lambda: RedataLandCoverGateway().get_land_cover(lat, lng).results),
             ("walkability", lambda: RedataWalkabilityGateway().get_walkability(lat, lng).results),
@@ -62,7 +63,17 @@ class SiteConditionsPanelSource(CoordinateGatedInfoPanelSource):
             try:
                 data[domain] = fetch_one()
             except LocationContextUnavailableError as exc:
+                failed += 1
                 logger.warning("Site-conditions %s lookup failed: %s", domain, exc)
+        if failed and not data:
+            # Every domain failed, so there is nothing to cache but the outage.
+            # The existence of the row marks this source as fetched, so writing
+            # an empty dict would leave the panel permanently blank rather than
+            # retried - the same shape as the SearXNG image cache. A *partial*
+            # result is still written: the domains that answered are real data,
+            # and the missing ones re-fetch when the row next goes stale.
+            logger.warning("Site-conditions: every domain failed, leaving it unfetched to retry")
+            return
         LocationCache.set(pin.location, self.cache_source, data, query_key=f"{lat:.5f},{lng:.5f}")
 
     def render_context(self, pin: Pin, data: dict) -> dict | None:

@@ -191,9 +191,16 @@ class SearxngImageMediaSource(GalleryMediaSource):
             try:
                 results = RedataSearchGateway().search_web(query, images=True, max_results=_MAX_IMAGES)
             except LocationContextUnavailableError as exc:
-                # A REData-side outage or misconfiguration degrades to "no
-                # results" rather than failing the whole Media gallery loader.
-                logging.getLogger(__name__).warning("REData image search failed for %r: %s", query, exc)
+                # An outage must not be written to the cache. The *existence* of
+                # a LocationCache row is what marks this source as having run
+                # (see LocationCacheEnrichmentSource), so caching an empty list
+                # here turns a transient failure into a durable "no photographs
+                # here" that nothing retries - which is exactly what happened
+                # while the SearXNG instance was returning 403s: the emptiness
+                # outlived the outage. Returning without writing leaves the
+                # source unfetched, so the next pass tries again.
+                logging.getLogger(__name__).warning("REData image search failed for %r, leaving it unfetched to retry: %s", query, exc)
+                return
         LocationCache.set(pin.location, self.cache_source, {"items": results, "query": query or ""}, query_key=query or "")
 
     def media_items(self, data: dict) -> list[MediaItem]:

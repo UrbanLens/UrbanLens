@@ -54,19 +54,14 @@ _NETWORK_GUARD_MARKER = "External network access is disabled during tests"
 #: already covered, which was the same over-claim in miniature.
 _WRITE_METHODS = ("get", "post", "delete")
 
-#: Routes known to crash, with the reason. Exactly one, and it is the route that
-#: motivated this whole sweep: ``pin.link`` (detach a pin from its shared
-#: Location) raises ``IntegrityError`` every time, because it creates a
-#: ``Location`` at coordinates a ``Location`` already occupies and that pair is
-#: unique. That is an open **product decision**, not an oversight - see
-#: PROBLEMS.md, "detach location on a pin fails with a 500", which lists three
-#: defensible fixes and declines to pick one - and it already has a strict
-#: ``xfail`` test of its own in ``test_pin_detach_location.py``.
-#:
-#: Kept honest by ``test_the_known_crash_is_still_crashing``: if the product
-#: decision is made and the route fixed, that test fails and says to delete this
-#: entry. An exemption nobody re-checks is how an allowlist rots into a blindfold.
-_KNOWN_CRASHES = {"pin.link"}
+#: Routes known to crash, with the reason. **Empty**, and the way it emptied is
+#: the point: it held exactly one entry, ``pin.link`` (detach a pin from its
+#: shared Location), excused as an open product decision. When that decision was
+#: made (2026-08-18 - detaching is not expressible, so the route now refuses
+#: with a 400), ``test_the_known_crash_is_still_crashing`` failed and said to
+#: delete the entry, which is what an exemption that nobody re-checks would
+#: never have done. Keep that property if anything is ever added here.
+_KNOWN_CRASHES: set[str] = set()
 
 #: Routes skipped because exercising them would sabotage the sweep itself rather
 #: than test anything - not because they are excused. Deliberately tiny: every
@@ -240,10 +235,13 @@ class WriteRouteSmokeTests(TestCase):
         self.assertEqual(unexpected, {}, "write routes crashed on a minimal request:\n" + "\n".join(f"{n} {h}" for n, h in unexpected.items()))
 
     def test_the_known_crash_is_still_crashing(self) -> None:
-        """Stops the exemption above outliving the bug it describes.
+        """Stops an exemption outliving the bug it describes.
 
-        When the detach-location product decision is finally made, this fails and
-        says so, rather than leaving a permanently-excused route in the sweep.
+        With ``_KNOWN_CRASHES`` empty this asserts the absence of excuses, which
+        is the state to defend: every write route is swept for real. If a route
+        is ever added back, this fails the moment it is fixed and says to remove
+        it, rather than leaving a permanently-excused route in the sweep - which
+        is exactly how it caught the detach-location fix.
         """
         still_broken = set(self._crashing_routes()) & _KNOWN_CRASHES
 
