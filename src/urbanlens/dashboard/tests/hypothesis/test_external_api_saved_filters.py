@@ -73,7 +73,10 @@ class SavedFilterCollectionTests(SavedFilterApiTestCase):
         SavedFilter.objects.create(profile=Profile.objects.get(user=other), name="Theirs", criteria={})
         self._make_filter("Mine")
         body = self.client.get(_BASE, **_bearer(self.raw_key)).json()
-        self.assertEqual([row["name"] for row in body["results"]], ["Mine"])
+
+        names = [row["name"] for row in body["results"]]
+        self.assertIn("Mine", names)
+        self.assertNotIn("Theirs", names, "one profile's filters must never appear in another's listing")
 
     def test_create(self) -> None:
         response = self.client.post(

@@ -952,7 +952,11 @@ class LabelMultiMergeView(_LabelKindMixin, LoginRequiredMixin, View):
                 is_protected=False,
             ).exclude(id=target_id)
 
-        source_list = list(sources)
+        # Merging *deletes* the source, so every guard that keeps a label from
+        # being deleted has to hold here too. The single-merge view refuses a
+        # protected source for every kind; this path only did for statuses,
+        # which let a protected tag/category/person/media label be merged away.
+        source_list = [label for label in sources if not label.is_protected]
         if not source_list:
             return HttpResponse(f"No valid source {self.kind}s.", status=400)
 
@@ -973,9 +977,9 @@ class LabelBulkDeleteView(_LabelKindMixin, LoginRequiredMixin, View):
             return err
 
         profile = _request_profile(request)
-        qs = Label.objects.filter(id__in=ids, profile=profile, kind=self.kind)
-        if self.kind == KIND_STATUS:
-            qs = qs.filter(is_protected=False)
+        # Protection is a property of the label, not of its kind - the single
+        # delete view checks it for every kind, so this one must too.
+        qs = Label.objects.filter(id__in=ids, profile=profile, kind=self.kind, is_protected=False)
         doomed = list(qs)
         if doomed:
             stash_for_undo(LABEL_MODEL_LABEL, doomed, profile)

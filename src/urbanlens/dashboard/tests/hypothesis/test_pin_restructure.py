@@ -16,9 +16,8 @@ external service is contacted.
 
 from __future__ import annotations
 
-from unittest.mock import patch
-
 from unittest import mock
+from unittest.mock import patch
 
 from django.contrib.auth.models import User
 from django.contrib.gis.geos import MultiPolygon, Polygon

@@ -253,7 +253,11 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
         """Apply structured label filter groups returned by ``SearchForm.parse_label_groups()``.
 
         Args:
-            groups: List of ``{"op": "and"|"or"|"not", "ids": [int, ...]}``.
+            groups: List of ``{"op": "and"|"or"|"not", "ids": [int, ...]}``. An
+                ``"or"`` group may additionally carry ``"min_priority"``,
+                which joins that group's disjunction - the only way to express
+                "has this label *or* is at least this important", since groups
+                themselves are ANDed.
 
         Returns:
             Filtered QuerySet (not yet distinct - caller must call ``.distinct()``).
@@ -275,6 +279,13 @@ class PinQuerySet(abstract.PublicDashboardQuerySet):
                 for bid in ids:
                     expanded = _Label.get_label_and_descendants(bid)
                     or_q |= Q(labels__id__in=expanded)
+                # An "or" group may also take a priority threshold, so
+                # "wanted *or* high priority" is one condition. The top-level
+                # min_priority cannot express that: groups are ANDed together,
+                # so it would narrow the labels rather than widen them.
+                if (floor := group.get("min_priority")) is not None:
+                    with contextlib.suppress(ValueError, TypeError):
+                        or_q |= Q(priority__gte=int(floor))
                 qs = qs.filter(or_q)
             elif op == "not":
                 for bid in ids:

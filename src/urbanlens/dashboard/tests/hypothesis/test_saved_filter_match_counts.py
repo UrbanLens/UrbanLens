@@ -39,10 +39,16 @@ class SavedFilterMatchCountsViewTests(TestCase):
         query = "&".join(f"{k}={v}" for k, v in params.items())
         return f"{base}?{query}"
 
-    def test_no_saved_filters_returns_empty_counts(self) -> None:
+    def test_a_profile_with_only_its_defaults_counts_them_all_at_zero(self) -> None:
+        """A new profile starts with two default saved filters (see
+        labels.signals.create_default_saved_filters), so "nothing of its own"
+        means the defaults - each matching nothing, since it has no pins."""
         response = self.client.get(self._url())
+
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json(), {"counts": {}})
+        counts = response.json()["counts"]
+        self.assertEqual(set(counts.values()), {0})
+        self.assertEqual(len(counts), self.profile.saved_filters.count())
 
     def test_single_filter_count_matches_its_own_criteria(self) -> None:
         saved_filter = SavedFilter.objects.create(profile=self.profile, name="Tagged Only", criteria={"name": "Tagged"})
@@ -86,6 +92,10 @@ class SavedFilterMatchCountsViewTests(TestCase):
 
     def test_other_profiles_filters_are_not_included(self) -> None:
         other_profile: Profile = baker.make(User).profile
-        SavedFilter.objects.create(profile=other_profile, name="Not Mine", criteria={})
+        theirs = SavedFilter.objects.create(profile=other_profile, name="Not Mine", criteria={})
+
         response = self.client.get(self._url())
-        self.assertEqual(response.json(), {"counts": {}})
+
+        counts = response.json()["counts"]
+        self.assertNotIn(str(theirs.uuid), counts)
+        self.assertEqual(set(counts), {str(uuid) for uuid in self.profile.saved_filters.values_list("uuid", flat=True)})

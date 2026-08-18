@@ -14,8 +14,6 @@ from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.labels.meta import KIND_TAG
 from urbanlens.dashboard.models.labels.model import Label
 from urbanlens.dashboard.models.pin.model import Pin
-from urbanlens.dashboard.models.undo import UndoAction
-from urbanlens.dashboard.services.undo.service import stash_for_undo
 from urbanlens.dashboard.models.safety.model import SafetyCheckin, SafetyCheckinContact
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 from urbanlens.dashboard.models.trips.model import Trip, TripMembership
@@ -420,22 +418,22 @@ class UndoDescriptionFitsItsColumnTests(TestCase):
         from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
 
-        longest = "x" * Label._meta.get_field("name").max_length  # noqa: SLF001 - _meta is public API
+        longest = "x" * Label._meta.get_field("name").max_length
         label = baker.make(Label, profile=self.profile, kind=KIND_TAG, name=longest)
 
         action = stash_for_undo(LABEL_MODEL_LABEL, [label], self.profile)
 
-        self.assertLessEqual(len(action.object_repr), UndoAction._meta.get_field("object_repr").max_length)  # noqa: SLF001
+        self.assertLessEqual(len(action.object_repr), UndoAction._meta.get_field("object_repr").max_length)
 
     def test_the_name_really_is_long_enough_to_have_overflowed(self) -> None:
         """Anti-vacuity: the fixture must actually exceed the column on its own."""
         from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.services.undo.handlers.label import LabelUndoHandler
 
-        longest = "x" * Label._meta.get_field("name").max_length  # noqa: SLF001
+        longest = "x" * Label._meta.get_field("name").max_length
         described = LabelUndoHandler.describe([baker.prepare(Label, name=longest, profile=self.profile)])
 
-        self.assertGreater(len(described), UndoAction._meta.get_field("object_repr").max_length)  # noqa: SLF001
+        self.assertGreater(len(described), UndoAction._meta.get_field("object_repr").max_length)
 
     def test_a_bulk_delete_of_long_names_also_fits(self) -> None:
         """The bulk path describes several names at once, so it overflows sooner."""
@@ -443,9 +441,9 @@ class UndoDescriptionFitsItsColumnTests(TestCase):
         from urbanlens.dashboard.models.labels.model import Label
         from urbanlens.dashboard.services.undo.handlers.label import MODEL_LABEL as LABEL_MODEL_LABEL
 
-        limit = Label._meta.get_field("name").max_length  # noqa: SLF001
+        limit = Label._meta.get_field("name").max_length
         labels = [baker.make(Label, profile=self.profile, kind=KIND_TAG, name=f"{index}" + "y" * (limit - 1)) for index in range(3)]
 
         action = stash_for_undo(LABEL_MODEL_LABEL, labels, self.profile)
 
-        self.assertLessEqual(len(action.object_repr), UndoAction._meta.get_field("object_repr").max_length)  # noqa: SLF001
+        self.assertLessEqual(len(action.object_repr), UndoAction._meta.get_field("object_repr").max_length)

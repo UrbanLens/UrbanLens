@@ -10,54 +10,7 @@ Context: same as _saved_filter_form_dialog.html - saved_filter (optional),
 criteria, form, security_fields, security_level_choices, security_values,
 selected_tag_ids, selected_exclude_tag_ids, custom_field_values.
 {% endcomment %}
-<div class="form-row">
-    <label for="saved-filter-name">Filter name <span class="required">*</span></label>
-    <input type="text" name="filter_name" id="saved-filter-name" required maxlength="100"
-           value="{{ saved_filter.name|default:'' }}" placeholder="e.g. Unvisited 4-star spots" autocomplete="off">
-</div>
-<div class="form-row">
-    <label>Icon</label>
-    <div class="icon-picker-wrap">
-        {% with picker_id=saved_filter.uuid|default:"new" field_name="icon" show_upload=False %}
-        {% include "dashboard/partials/ui/_icon_picker.html" %}
-        {% endwith %}
-    </div>
-</div>
-{% with picker_id=saved_filter.uuid|default:"new" %}
-<div class="form-row">
-    <label>Color <span class="form-optional">(optional)</span></label>
-    <div class="dp-color-picker" id="saved-filter-color-picker-{{ picker_id }}">
-        {% for color_hex, color_name in color_choices %}
-        <button type="button" class="dp-color-swatch {% if current_color == color_hex %}dp-color-swatch--active{% endif %}"
-                data-color="{{ color_hex }}" style="background:{{ color_hex }}" title="{{ color_name }}"></button>
-        {% endfor %}
-    </div>
-    <input type="hidden" name="color" id="saved-filter-color-value-{{ picker_id }}" value="{{ current_color|default:'' }}">
-</div>
-<div class="form-row">
-    <label class="markup-form-label-row">
-        <span class="markup-form-label-line">
-            Color opacity&nbsp;<span id="saved-filter-opacity-val-{{ picker_id }}">{{ current_opacity|default:100 }}</span>%
-        </span>
-        <input type="range" name="opacity" min="0" max="100" value="{{ current_opacity|default:100 }}"
-               oninput="document.getElementById('saved-filter-opacity-val-{{ picker_id }}').textContent=this.value">
-    </label>
-</div>
-<script>
-(function () {
-    var picker = document.getElementById("saved-filter-color-picker-{{ picker_id }}");
-    var input = document.getElementById("saved-filter-color-value-{{ picker_id }}");
-    if (!picker || !input) return;
-    picker.addEventListener("click", function (e) {
-        var btn = e.target.closest(".dp-color-swatch");
-        if (!btn) return;
-        picker.querySelectorAll(".dp-color-swatch").forEach(function (b) { b.classList.remove("dp-color-swatch--active"); });
-        btn.classList.add("dp-color-swatch--active");
-        input.value = btn.dataset.color;
-    });
-})();
-</script>
-{% endwith %}
+{% include "dashboard/partials/pin_lists/_saved_filter_appearance_fields.html" %}
 <div class="form-row">
     <label for="saved-filter-name-contains">Pin name contains</label>
     <input type="text" name="name" id="saved-filter-name-contains" maxlength="150" autocomplete="off"

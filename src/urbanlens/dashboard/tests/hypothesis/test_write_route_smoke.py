@@ -225,7 +225,7 @@ class WriteRouteSmokeTests(TestCase):
                     with transaction.atomic():
                         self.client.force_login(self.user)
                         response = getattr(self.client, method)(url, data={})
-                except Exception as exc:  # noqa: BLE001 - classifying, then re-reporting
+                except Exception as exc:
                     if _NETWORK_GUARD_MARKER in str(exc):
                         continue
                     crashes[name] = f"[{method.upper()}] raised {type(exc).__name__}: {str(exc)[:160]}"
@@ -266,6 +266,6 @@ class WriteRouteSmokeTests(TestCase):
             try:
                 if self.client.post(url, data={}).status_code < 500:
                     answered += 1
-            except Exception:  # noqa: BLE001, S110 - counted by absence, not re-raised
+            except Exception:
                 continue
         self.assertGreater(answered, 0, "no route answered at all - the sweep is not issuing real requests")

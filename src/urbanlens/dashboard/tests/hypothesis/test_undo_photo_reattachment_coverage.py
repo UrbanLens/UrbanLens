@@ -119,7 +119,7 @@ class UndoPhotoReattachmentTests(TestCase):
                 try:
                     if get_handler(candidate) is not None:
                         with_handlers.add(candidate)
-                except Exception:  # noqa: BLE001 - no handler registered under that label
+                except Exception:
                     continue
         self.assertEqual(
             sorted(with_handlers - set(_PHOTO_OWNERS)),

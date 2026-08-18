@@ -13,8 +13,7 @@ Model tests require the database; the helper tests do not.
 from __future__ import annotations
 
 from django.test import SimpleTestCase
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 from model_bakery import baker
 
 from urbanlens.core.tests.testcase import TestCase

@@ -21,8 +21,8 @@ from django.db import connection
 from django.urls import reverse
 from django.utils import timezone
 from hypothesis import given, strategies as st
-import pytest
 from model_bakery import baker
+import pytest
 
 from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 from urbanlens.dashboard.models.calendar_sync.model import CalendarSyncDirection, GoogleCalendarAccount, TripCalendarLink

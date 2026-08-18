@@ -397,10 +397,7 @@
                 hx-target="#fp-saved-filters-mount" hx-swap="outerHTML"
                 hx-on::after-request="if(event.detail.successful){this.closest('dialog').close();this.reset();}">
                 {% csrf_token %}
-                <div class="form-row">
-                    <label for="saved-filter-name">Name <span class="required">*</span></label>
-                    <input type="text" name="filter_name" id="saved-filter-name" required maxlength="100" placeholder="e.g. Must-visit demolitions" autocomplete="off">
-                </div>
+                {% include "dashboard/partials/pin_lists/_saved_filter_appearance_fields.html" %}
                 <div class="form-actions">
                     <button type="submit" class="btn btn--primary">Save Filter</button>
                     <button type="button" class="btn btn--ghost" onclick="this.closest('dialog').close()">Cancel</button>
@@ -865,8 +862,32 @@
     // Show the "you are here" dot immediately from a cached fix (if any) rather
     // than waiting up to 8s for the live read below to resolve; that live read
     // then relocates this same marker once it comes back.
-    if (_MAP_CENTER_MODE === 'gps' && _cachedUserLoc) {
+    //
+    // Deliberately independent of _MAP_CENTER_MODE: knowing where you are is
+    // useful on every map, not only one that centres on you. Gating this on
+    // GPS mode meant a user who centres on their last position - or a custom
+    // point - had shared their location and still had no idea where they were
+    // standing relative to their pins.
+    if (_cachedUserLoc) {
         _showUserLocationMarker(_cachedUserLoc.lat, _cachedUserLoc.lng);
+    }
+
+    // With permission already granted, keep that dot current without prompting
+    // and without moving the map. Permission is checked first precisely so this
+    // never turns into a prompt for somebody who hasn't opted in; GPS mode does
+    // its own (map-moving) read below, so it is excluded here.
+    if (_MAP_CENTER_MODE !== 'gps' && navigator.geolocation && navigator.permissions?.query) {
+        navigator.permissions.query({ name: 'geolocation' }).then(function (status) {
+            if (status.state !== 'granted') return;
+            navigator.geolocation.getCurrentPosition(
+                function (pos) {
+                    _cacheUserLocation(pos.coords.latitude, pos.coords.longitude);
+                    _showUserLocationMarker(pos.coords.latitude, pos.coords.longitude);
+                },
+                function () { /* a refused or failed passive read is not worth surfacing */ },
+                { maximumAge: 300000, timeout: 8000 },
+            );
+        }).catch(function () { /* Permissions API unavailable - stay with the cached dot */ });
     }
 
     // GPS mode: refine the initial centre with a live geolocation read.
@@ -1591,7 +1612,7 @@
 
         const popupContent = `
             <div class="pin-popup" data-uuid="${pin.uuid}" data-id="${pin.id || ''}">
-                <div class="popup-title">${_escHtml(pin.name || '')}</div>
+                <a class="popup-title" href="${_escHtml(pin.viewLocationUrl)}" title="Open this pin's details">${_escHtml(pin.name || '')}</a>
                 ${pin.address ? `<div class="popup-address"><i class="material-icons" style="font-size:.7rem;vertical-align:middle;opacity:.6;">location_on</i> ${_escHtml(pin.address)}</div>` : ''}
                 ${pin.description ? `<div class="popup-desc">${_escHtml(pin.description)}</div>` : ''}
                 ${pin.last_visited && pin.last_visited !== 'Never' ? `
@@ -1605,10 +1626,17 @@
                 ${tagChips ? `<div class="popup-tags">${tagChips}</div>` : ''}
                 <div class="popup-actions">
                     <a href="${_escHtml(pin.viewLocationUrl)}" class="view-full-pin">View Details</a>
-                    ${pin.id ? `<button class="add-to-list-button" onclick="event.stopPropagation(); openAddToListDialog(${pin.id})" title="Add to list"><i class="material-symbols-outlined">playlist_add</i></button>` : ''}
-                    ${pin.child_count > 0 ? `<button class="btn btn--icon promote-children-button" onclick="event.stopPropagation(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})" title="Promote all child pins up one level"><i class="material-symbols-outlined">move_up</i></button>` : ''}
-                    <button class="edit-pin-button" onclick="openEditPinDialog('${pin.uuid}')" title="Edit pin"><i class="material-symbols-outlined">edit</i></button>
-                    <button class="delete-button" onclick="deletePin(this)" title="Delete pin"><i class="material-symbols-outlined">delete</i></button>
+                    <div class="popup-menu">
+                        <button type="button" class="popup-menu-toggle" aria-haspopup="true" aria-expanded="false"
+                                title="More actions" aria-label="More actions for this pin"
+                                onclick="togglePinPopupMenu(this)"><i class="material-symbols-outlined">more_vert</i></button>
+                        <div class="popup-menu-items" role="menu" hidden>
+                            ${pin.id ? `<button type="button" role="menuitem" class="add-to-list-button" onclick="event.stopPropagation(); closePinPopupMenus(); openAddToListDialog(${pin.id})"><i class="material-symbols-outlined">playlist_add</i> Add to list</button>` : ''}
+                            ${pin.child_count > 0 ? `<button type="button" role="menuitem" class="promote-children-button" onclick="event.stopPropagation(); closePinPopupMenus(); promoteChildPins('${pin.slug || pin.uuid}', ${pin.child_count})"><i class="material-symbols-outlined">move_up</i> Promote child pins</button>` : ''}
+                            <button type="button" role="menuitem" class="edit-pin-button" onclick="closePinPopupMenus(); openEditPinDialog('${pin.uuid}')"><i class="material-symbols-outlined">edit</i> Edit pin</button>
+                            <button type="button" role="menuitem" class="delete-button" onclick="deletePin(this)"><i class="material-symbols-outlined">delete</i> Delete pin</button>
+                        </div>
+                    </div>
                 </div>
             </div>`;
         marker.bindPopup(popupContent);
@@ -3078,6 +3106,38 @@
         _refreshPinList();
         return true;
     }
+
+    // -- Pin popup overflow menu -----------------------------------------
+    // The popup's destructive and secondary actions (add to list, promote,
+    // edit, delete) live behind one button so the popup reads as information
+    // with a way in, rather than a row of icons to decode. Leaflet rebuilds
+    // popup DOM on every open, so these are delegated by class rather than
+    // wired per marker.
+    function closePinPopupMenus() {
+        document.querySelectorAll('.popup-menu-items:not([hidden])').forEach(function (menu) {
+            menu.hidden = true;
+            const toggle = menu.parentElement?.querySelector('.popup-menu-toggle');
+            if (toggle) toggle.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    function togglePinPopupMenu(button) {
+        const menu = button.parentElement?.querySelector('.popup-menu-items');
+        if (!menu) return;
+        const wasOpen = !menu.hidden;
+        closePinPopupMenus();
+        menu.hidden = wasOpen;
+        button.setAttribute('aria-expanded', String(!wasOpen));
+    }
+
+    // A click anywhere else, or Escape, closes it - including a click on the
+    // map itself, which Leaflet does not route through the popup.
+    document.addEventListener('click', function (event) {
+        if (!event.target.closest('.popup-menu')) closePinPopupMenus();
+    });
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') closePinPopupMenus();
+    });
 
     async function deletePin(button) {
         const popup = button.closest('.pin-popup');

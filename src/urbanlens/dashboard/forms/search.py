@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from functools import partial
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from django import forms
 
@@ -284,7 +284,12 @@ class SearchForm(forms.Form):
                     # always positive (Django's default auto-incrementing PK), so a
                     # negative id never occurs for a real label in practice, and this
                     # function's contract is to never raise on malformed input.
-                    validated.append({"op": op, "ids": [int(i) for i in ids if str(i).isdigit()]})
+                    group: dict[str, Any] = {"op": op, "ids": [int(i) for i in ids if str(i).isdigit()]}
+                    # Only meaningful on an "or" group - see
+                    # PinQuerySet.apply_label_groups.
+                    if op == "or" and str(g.get("min_priority") or "").isdigit():
+                        group["min_priority"] = int(g["min_priority"])
+                    validated.append(group)
             return validated or None
         except (json.JSONDecodeError, TypeError, ValueError):
             return None

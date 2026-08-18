@@ -110,7 +110,10 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
 
     status_defaults = [
         {"name": "Visited", "icon": "✅", "color": "#4CAF50", "order": 100, "is_protected": True},
-        {"name": "Want to Go", "icon": "⭐", "color": "#2196F3", "order": 90},
+        # Protected like its four siblings: the "To Visit" saved filter every
+        # new profile gets is built on this label, so deleting it would leave
+        # that filter quietly matching the wrong thing.
+        {"name": "Want to Go", "icon": "⭐", "color": "#2196F3", "order": 90, "is_protected": True},
         {"name": "Active", "icon": "🟢", "color": "#009688", "order": 80, "is_protected": True},
         {"name": "Abandoned", "icon": "🏚️", "color": "#FF9800", "order": 70, "is_protected": True},
         {"name": "Demolished", "icon": "💀", "color": "#795548", "order": 60, "is_protected": True},
@@ -182,6 +185,57 @@ def create_default_tags(sender: type[Profile], instance: Profile, created: bool,
             kind=KIND_MEDIA,
             defaults={"icon": d["icon"], "color": d["color"], "order": d["order"]},
         )
+
+    create_default_saved_filters(instance)
+
+
+def create_default_saved_filters(profile: Profile) -> int:
+    """Seed the two saved filters a new profile starts with.
+
+    The main map's filter bar is otherwise an empty shelf that a user has to
+    learn the label formula syntax to fill, and these two are what almost
+    everyone builds first: what I have seen, and what I still want to see.
+
+    Built from the profile's own status labels, so they are ordinary saved
+    filters - editable and deletable like any other. The labels they name are
+    protected, so the filters cannot silently start matching the wrong thing.
+
+    Args:
+        profile: The profile whose labels were just seeded.
+
+    Returns:
+        How many filters were created.
+    """
+    from urbanlens.dashboard.models.labels.model import KIND_STATUS, Label
+    from urbanlens.dashboard.models.saved_filter.model import SavedFilter
+
+    status_ids = dict(Label.objects.filter(profile=profile, kind=KIND_STATUS).values_list("name", "id"))
+    visited, wanted, demolished = (status_ids.get("Visited"), status_ids.get("Want to Go"), status_ids.get("Demolished"))
+    if visited is None or wanted is None:
+        # Nothing to build the filters out of; the defaults above were
+        # customised away or seeding is running against an unusual profile.
+        return 0
+
+    to_visit_groups: list[dict] = [
+        # "or" carries the priority threshold so this reads as
+        # "wanted *or* important", not "wanted *and* important".
+        {"op": "or", "ids": [wanted], "min_priority": 4},
+        {"op": "not", "ids": [visited, *( [demolished] if demolished is not None else [] )]},
+    ]
+
+    defaults = [
+        ("Visited", "check_circle", "#4CAF50", 20, {"label_groups": [{"op": "and", "ids": [visited]}]}),
+        ("To Visit", "flag", "#2196F3", 10, {"label_groups": to_visit_groups}),
+    ]
+    created = 0
+    for name, icon, color, order, criteria in defaults:
+        _filter, was_created = SavedFilter.objects.get_or_create(
+            profile=profile,
+            name=name,
+            defaults={"icon": icon, "color": color, "order": order, "criteria": criteria},
+        )
+        created += int(was_created)
+    return created
 
 
 # -- REData label-suggestion taxonomy sync --------------------------------

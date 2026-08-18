@@ -11,6 +11,17 @@ from model_bakery import baker
 from urbanlens.core.tests.testcase import TestCase
 from urbanlens.dashboard.models.saved_filter.model import SavedFilter
 
+#: The filter these tests create. A new profile now starts with two default
+#: saved filters (see labels.signals.create_default_saved_filters), so a bare
+#: ``objects.get(profile=...)`` no longer identifies "the one under test".
+_FILTER_NAME = "Ruins"
+
+
+#: The filter these tests create. A new profile now starts with two default
+#: saved filters (see labels.signals.create_default_saved_filters), so a bare
+#: ``objects.get(profile=...)`` no longer identifies "the one under test".
+_FILTER_NAME = "Ruins"
+
 
 class SavedFilterCreateColorOpacityTests(TestCase):
     def setUp(self) -> None:
@@ -19,32 +30,32 @@ class SavedFilterCreateColorOpacityTests(TestCase):
         self.profile = self.user.profile
 
     def _create(self, **extra):
-        return self.client.post(reverse("saved_filters.create"), {"filter_name": "Ruins", "name": "Mill", **extra})
+        return self.client.post(reverse("saved_filters.create"), {"filter_name": _FILTER_NAME, "name": "Mill", **extra})
 
     def test_create_persists_color_and_opacity(self) -> None:
         response = self._create(color="#F44336", opacity="60")
         self.assertEqual(response.status_code, 200)
-        saved_filter = SavedFilter.objects.get(profile=self.profile)
+        saved_filter = SavedFilter.objects.get(profile=self.profile, name=_FILTER_NAME)
         self.assertEqual(saved_filter.color, "#F44336")
         self.assertEqual(saved_filter.opacity, 60)
 
     def test_create_without_color_or_opacity_defaults_to_blank_and_full(self) -> None:
         response = self._create()
         self.assertEqual(response.status_code, 200)
-        saved_filter = SavedFilter.objects.get(profile=self.profile)
+        saved_filter = SavedFilter.objects.get(profile=self.profile, name=_FILTER_NAME)
         self.assertEqual(saved_filter.color, "")
         self.assertEqual(saved_filter.opacity, 100)
 
     def test_create_with_invalid_color_blanks_it(self) -> None:
         response = self._create(color="javascript:alert(1)")
         self.assertEqual(response.status_code, 200)
-        saved_filter = SavedFilter.objects.get(profile=self.profile)
+        saved_filter = SavedFilter.objects.get(profile=self.profile, name=_FILTER_NAME)
         self.assertEqual(saved_filter.color, "")
 
     def test_create_clamps_out_of_range_opacity(self) -> None:
         response = self._create(opacity="500")
         self.assertEqual(response.status_code, 200)
-        saved_filter = SavedFilter.objects.get(profile=self.profile)
+        saved_filter = SavedFilter.objects.get(profile=self.profile, name=_FILTER_NAME)
         self.assertEqual(saved_filter.opacity, 100)
 
 
