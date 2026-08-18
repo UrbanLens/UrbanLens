@@ -123,6 +123,36 @@ class FloorplanSaveView(LoginRequiredMixin, View):
         return JsonResponse({"ok": True, "floorplan": {**document_for(floorplan), "origin": "local"}})
 
 
+class FloorplanExtractView(LoginRequiredMixin, View):
+    """POST /map/pin/<pin_slug>/floorplan/extract/<overlay_uuid>/ - trace a blueprint.
+
+    Runs vision extraction over one of the pin's aligned blueprint overlays
+    and returns suggested rooms/walls/openings in world coordinates. The
+    editor merges them as editable suggestions; nothing is persisted here.
+    """
+
+    def post(self, request: HttpRequest, pin_slug: str, overlay_uuid) -> HttpResponse:
+        """Extract structure from one overlay.
+
+        Returns:
+            JsonResponse with ``rooms``/``elements`` fragments; 422 when the
+            sheet couldn't be read as a floorplan; 409 when AI isn't
+            available for this install (the editor falls back to manual
+            tracing and says so).
+        """
+        from urbanlens.dashboard.services.floorplans.extraction import extract_overlay_structure
+
+        pin = get_object_or_404(Pin.objects.select_related("location", "profile"), slug=pin_slug, profile__user=request.user)
+        overlay = get_object_or_404(pin.image_overlays.select_related("image"), uuid=overlay_uuid)
+
+        structure = extract_overlay_structure(overlay)
+        if structure is None:
+            return JsonResponse({"ok": False, "error": "Automatic tracing isn't available - trace the sheet manually."}, status=409)
+        if not structure.get("rooms") and not structure.get("elements"):
+            return JsonResponse({"ok": False, "error": "Couldn't recognize a floorplan on this sheet."}, status=422)
+        return JsonResponse({"ok": True, **structure})
+
+
 class FloorplanEditorView(LoginRequiredMixin, TemplateView):
     """GET /map/pin/<pin_slug>/floorplan/ - the visual editor page."""
 
@@ -141,7 +171,11 @@ class FloorplanEditorView(LoginRequiredMixin, TemplateView):
             slug=kwargs["pin_slug"],
             profile__user=self.request.user,
         )
+        from urbanlens.dashboard.controllers.map_overlays import overlay_payload
+        from urbanlens.dashboard.models.labels.model import Label
+
         context["pin"] = pin
         context["place"] = _building_place(pin)
-        context["overlays"] = list(pin.image_overlays.select_related("image"))
+        context["overlays_json"] = overlay_payload(pin.image_overlays.all())
+        context["labels_json"] = [{"uuid": str(label.uuid), "name": label.name} for label in Label.objects.filter(profile=pin.profile).order_by("name")]
         return context

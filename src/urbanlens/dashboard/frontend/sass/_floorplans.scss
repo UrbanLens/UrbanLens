@@ -1,0 +1,224 @@
+// Floorplan editor: map + drawing toolbar + item sidebar.
+.floorplan-editor {
+    display: grid;
+    grid-template-columns: 1fr 320px;
+    gap: 1rem;
+    align-items: start;
+
+    @media (max-width: 900px) {
+        grid-template-columns: 1fr;
+    }
+}
+
+.floorplan-map {
+    height: min(72vh, 720px);
+    border-radius: 8px;
+
+    &.is-drawing {
+        cursor: crosshair;
+    }
+}
+
+.floorplan-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+
+    &__tools {
+        display: flex;
+        gap: 0.25rem;
+
+        button {
+            border: 1px solid var(--border-color, #ccc);
+            background: var(--card-bg, #fff);
+            border-radius: 6px;
+            padding: 0.35rem 0.5rem;
+            cursor: pointer;
+
+            &.is-active {
+                background: var(--accent-color, #00897b);
+                color: #fff;
+            }
+        }
+    }
+
+    &__overlays {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.9rem;
+    }
+}
+
+.floorplan-origin-banner {
+    background: color-mix(in srgb, var(--accent-color, #00897b) 12%, transparent);
+    border: 1px solid var(--accent-color, #00897b);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+}
+
+.floorplan-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+
+    &__plan {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+}
+
+.floorplan-floors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.floorplan-floor-tab {
+    border: 1px solid var(--border-color, #ccc);
+    background: var(--card-bg, #fff);
+    border-radius: 999px;
+    padding: 0.25rem 0.75rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+
+    &.is-active {
+        background: var(--accent-color, #00897b);
+        color: #fff;
+    }
+
+    &--add {
+        border-style: dashed;
+    }
+}
+
+.floorplan-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+
+    &__hint {
+        font-size: 0.85rem;
+        opacity: 0.75;
+    }
+
+    &__field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+        font-size: 0.85rem;
+
+        input {
+            padding: 0.35rem 0.5rem;
+            border: 1px solid var(--border-color, #ccc);
+            border-radius: 6px;
+        }
+    }
+
+    &__textarea {
+        min-height: 4rem;
+        padding: 0.35rem 0.5rem;
+        border: 1px solid var(--border-color, #ccc);
+        border-radius: 6px;
+    }
+
+    &__labels,
+    &__locks {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        font-size: 0.85rem;
+
+        > span {
+            font-weight: 600;
+        }
+
+        label {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+        }
+    }
+
+    &__lock {
+        display: grid;
+        grid-template-columns: 1fr 1fr auto;
+        gap: 0.25rem;
+
+        input {
+            padding: 0.25rem 0.4rem;
+            border: 1px solid var(--border-color, #ccc);
+            border-radius: 6px;
+            font-size: 0.8rem;
+        }
+    }
+
+    &__add-lock,
+    &__delete {
+        align-self: flex-start;
+        border: 1px solid var(--border-color, #ccc);
+        background: var(--card-bg, #fff);
+        border-radius: 6px;
+        padding: 0.3rem 0.6rem;
+        cursor: pointer;
+        font-size: 0.85rem;
+    }
+
+    &__delete {
+        border-color: #c62828;
+        color: #c62828;
+    }
+}
+
+.floorplan-save {
+    padding: 0.55rem 1rem;
+    border: 0;
+    border-radius: 8px;
+    background: var(--accent-color, #00897b);
+    color: #fff;
+    font-weight: 600;
+    cursor: pointer;
+
+    &.is-dirty::after {
+        content: " •";
+    }
+}
+
+.floorplan-room-label {
+    background: transparent;
+    border: 0;
+    box-shadow: none;
+    font-weight: 600;
+    color: #00695c;
+    text-shadow: 0 1px 2px rgb(255 255 255 / 80%);
+}
+
+.floorplan-no-building {
+    padding: 1rem;
+}
+
+.floorplan-trace-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.floorplan-trace-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+
+    button {
+        border: 1px solid var(--border-color, #ccc);
+        background: var(--card-bg, #fff);
+        border-radius: 6px;
+        padding: 0.25rem 0.6rem;
+        cursor: pointer;
+    }
+}

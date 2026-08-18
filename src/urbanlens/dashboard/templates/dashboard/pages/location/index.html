@@ -169,6 +169,10 @@
         <div class="card-header">
             <i class="material-symbols-outlined">place</i>
             <h3>Location</h3>
+            <a class="card-header-link" href="{% url 'pin.floorplan' pin.slug %}"
+               title="Draw or view this building's floorplan - floors, rooms, walls, doors - over the map">
+                <i class="material-symbols-outlined">architecture</i> Floorplan
+            </a>
         </div>
         <div class="map-wrapper" id="pin-detail-map-wrapper"
              {% if profile.pin_detail_map_height %}style="height: {{ profile.pin_detail_map_height }}px"{% endif %}>

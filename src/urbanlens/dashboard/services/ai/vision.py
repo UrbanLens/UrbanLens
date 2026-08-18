@@ -180,6 +180,66 @@ def describe_photo_keywords(image_bytes: bytes) -> list[str]:
         return []
 
 
+def describe_image_json(image_bytes: bytes, prompt: str, *, service_key: str = SERVICE_AI_PHOTO_KEYWORDS, max_tokens: int = 2000) -> dict | None:
+    """Ask the configured vision provider a JSON-answer question about an image.
+
+    The structured sibling of :func:`generate_photo_keywords`: same provider
+    dispatch, same rate limiting and cost logging, but the caller supplies the
+    prompt and the answer is parsed as one JSON object (tolerantly - see
+    ``json_answer.parse_json_answer``).
+
+    Args:
+        image_bytes: JPEG/PNG bytes, already downscaled if large.
+        prompt: The instruction; must ask for a single JSON object.
+        service_key: Rate-limit/cost bucket to account the call under.
+        max_tokens: Response budget - structure extraction needs far more
+            than keywording.
+
+    Returns:
+        The parsed object, or None when AI is unconfigured, rate-limited,
+        failed, or answered with something unparseable.
+    """
+    from urbanlens.dashboard.models.site_settings import SiteSettings
+    from urbanlens.dashboard.services.ai.json_answer import parse_json_answer
+
+    if not _rate_limit_gate(service_key):
+        return None
+
+    site = SiteSettings.get_current()
+    started = time.monotonic()
+    try:
+        if site.ai_provider == "openai":
+            from openai import OpenAI
+
+            from urbanlens.dashboard.services.ai.openai import DEFAULT_MODEL
+            from urbanlens.UrbanLens.settings.app import settings
+
+            if not settings.openai_api_key:
+                return None
+            model = site.openai_model or DEFAULT_MODEL
+            client = OpenAI(api_key=settings.openai_api_key)
+            data_url = "data:image/jpeg;base64," + base64.b64encode(image_bytes).decode("ascii")
+            response = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": [{"type": "text", "text": prompt}, {"type": "image_url", "image_url": {"url": data_url, "detail": "high"}}]}],
+                max_tokens=max_tokens,
+            )
+            body = response.choices[0].message.content or ""
+            log_api_call(service_key, success=True, response_ms=int((time.monotonic() - started) * 1000), endpoint=f"openai:{model}")
+            return parse_json_answer(body)
+
+        data = _cloudflare_post(_CF_VISION_MODEL, {"image": list(image_bytes), "prompt": prompt, "max_tokens": max_tokens})
+        if data is None:
+            return None
+        log_api_call(service_key, success=True, response_ms=int((time.monotonic() - started) * 1000), endpoint=f"cloudflare:{_CF_VISION_MODEL}")
+        answer = (data.get("result") or {}).get("description") or (data.get("result") or {}).get("response") or ""
+        return parse_json_answer(str(answer))
+    except Exception:
+        logger.exception("AI image JSON description failed (provider=%s)", site.ai_provider)
+        log_api_call(service_key, success=False)
+        return None
+
+
 def classify_photo(image_bytes: bytes) -> list[tuple[str, float]]:
     """Classify a (downscaled) photo's content via Cloudflare's ResNet-50 model.
 

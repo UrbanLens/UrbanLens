@@ -551,6 +551,11 @@ urlpatterns = [
                                 name="pin.floorplan.save",
                             ),
                             path(
+                                "<slug:pin_slug>/floorplan/extract/<uuid:overlay_uuid>/",
+                                floorplans.FloorplanExtractView.as_view(),
+                                name="pin.floorplan.extract",
+                            ),
+                            path(
                                 "<slug:pin_slug>/markup/json/",
                                 markup.MarkupJsonView.as_view(),
                                 name="pin.markup.json",

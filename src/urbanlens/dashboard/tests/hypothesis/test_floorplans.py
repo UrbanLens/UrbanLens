@@ -254,3 +254,143 @@ class FloorplanResolutionTests(TestCase):
             resolve_document(self.place, on_date=datetime.date(1954, 1, 1))
 
         gateway.return_value.lookup_floorplans.assert_called_once_with("parcel-uuid-1", building_ref="cris:1", on_date="1954-01-01")
+
+
+class BlueprintExtractionTests(TestCase):
+    """The trace pipeline: model output in image space → world coordinates.
+
+    The vision model is always mocked - what's under test is the mapping
+    through the overlay's corner georeference and the tolerance for
+    malformed model output.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.profile = baker.make(User).profile
+        # A 0.01° square: NW at (-73.93, 41.734), SE at (-73.92, 41.724).
+        from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
+
+        self.overlay = baker.make(
+            MapImageOverlay,
+            profile=self.profile,
+            image=baker.make("dashboard.Image"),
+            nw_latitude=41.734, nw_longitude=-73.93,
+            ne_latitude=41.734, ne_longitude=-73.92,
+            se_latitude=41.724, se_longitude=-73.92,
+            sw_latitude=41.724, sw_longitude=-73.93,
+        )
+
+    def _extract(self, structure):
+        from urbanlens.dashboard.services.floorplans import extraction
+
+        with mock.patch.object(extraction, "_structure_from_model", return_value=structure), \
+             mock.patch.object(type(self.overlay), "image", new_callable=mock.PropertyMock) as image:
+            image.return_value = mock.Mock(file=mock.Mock(read=mock.Mock(return_value=b"png")))
+            return extraction.extract_overlay_structure(self.overlay)
+
+    def test_image_corners_map_to_overlay_corners(self) -> None:
+        """(0,0) is the sheet's top-left = the overlay's NW corner."""
+        result = self._extract({"doors": [{"point": [0.0, 0.0]}, {"point": [1.0, 1.0]}]})
+
+        first, second = (element["geometry"]["coordinates"] for element in result["elements"])
+        self.assertAlmostEqual(first[0], -73.93, places=6)
+        self.assertAlmostEqual(first[1], 41.734, places=6)
+        self.assertAlmostEqual(second[0], -73.92, places=6)
+        self.assertAlmostEqual(second[1], 41.724, places=6)
+
+    def test_the_center_maps_to_the_center(self) -> None:
+        result = self._extract({"doors": [{"point": [0.5, 0.5]}]})
+
+        lng, lat = result["elements"][0]["geometry"]["coordinates"]
+        self.assertAlmostEqual(lng, -73.925, places=6)
+        self.assertAlmostEqual(lat, 41.729, places=6)
+
+    def test_rooms_close_their_rings(self) -> None:
+        result = self._extract({"rooms": [{"name": "Ward B", "polygon": [[0.1, 0.1], [0.4, 0.1], [0.4, 0.4]]}]})
+
+        ring = result["rooms"][0]["geometry"]["coordinates"][0]
+        self.assertEqual(ring[0], ring[-1], "a GeoJSON polygon ring must be closed")
+        self.assertEqual(result["rooms"][0]["name"], "Ward B")
+
+    def test_malformed_model_output_is_skipped_not_fatal(self) -> None:
+        result = self._extract({
+            "rooms": [{"polygon": [[0.1, 0.1], [0.2, 0.2]]}, "garbage", {"polygon": None}],
+            "walls": [{"line": [[0.1, "x"], [0.2, 0.2]]}],
+            "doors": [{"point": [1.5, -0.2]}],
+        })
+
+        self.assertEqual(result["rooms"], [], "a two-point polygon is not a room")
+        self.assertEqual([e["kind"] for e in result["elements"]], ["door"], "out-of-range coordinates clamp rather than discard")
+
+    def test_a_non_floorplan_answer_is_empty_not_none(self) -> None:
+        self.assertEqual(self._extract({}), {})
+
+    def test_ai_unavailable_is_none(self) -> None:
+        self.assertIsNone(self._extract(None))
+
+
+class FloorplanEndpointTests(TestCase):
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        self.parcel = baker.make(Place, kind=PlaceKind.PARCEL)
+        self.place = baker.make(Place, kind=PlaceKind.BUILDING, parent=self.parcel)
+        location = baker.make(Location, latitude=41.733, longitude=-73.928, place=self.place)
+        self.pin = baker.make(Pin, profile=self.user.profile, location=location, parent_pin=None, slug="hrsh-admin")
+
+    def test_no_plan_is_a_204_not_an_error(self) -> None:
+        response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/json/")
+
+        self.assertEqual(response.status_code, 204)
+
+    def test_save_then_get_round_trips(self) -> None:
+        import json as jsonlib
+
+        document = {"name": "As built", "floors": [{"level": 0, "name": "Ground", "rooms": [{"name": "Boiler room", "geometry": _SQUARE}]}]}
+        save = self.client.post(
+            f"/dashboard/map/pin/{self.pin.slug}/floorplan/save/",
+            data=jsonlib.dumps(document),
+            content_type="application/json",
+        )
+        self.assertEqual(save.status_code, 200, save.content)
+
+        response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/json/")
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["origin"], "local")
+        self.assertEqual(body["floors"][0]["rooms"][0]["name"], "Boiler room")
+
+    def test_someone_elses_pin_is_a_404(self) -> None:
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        other_location = baker.make(Location, latitude=41.9, longitude=-73.9, place=self.place)
+        other = baker.make(Pin, profile=baker.make(User).profile, location=other_location, parent_pin=None, slug="not-mine")
+
+        self.assertEqual(self.client.get(f"/dashboard/map/pin/{other.slug}/floorplan/json/").status_code, 404)
+
+    def test_a_bad_geometry_is_a_400_naming_the_defect(self) -> None:
+        import json as jsonlib
+
+        document = {"floors": [{"level": 0, "elements": [{"kind": "wall", "geometry": {"type": "LineString", "coordinates": "junk"}}]}]}
+        response = self.client.post(
+            f"/dashboard/map/pin/{self.pin.slug}/floorplan/save/",
+            data=jsonlib.dumps(document),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("geometry", response.json()["error"])
+
+    def test_the_editor_page_renders(self) -> None:
+        response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "floorplan-map")
