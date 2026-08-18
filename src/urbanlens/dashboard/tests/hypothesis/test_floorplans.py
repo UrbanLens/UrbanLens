@@ -928,3 +928,89 @@ class FloorplanDocumentContractTests(TestCase):
     def test_an_out_of_range_level_is_a_message_not_a_500(self) -> None:
         with self.assertRaises(ValueError):
             save_document(self.floorplan, {"floors": [{"level": 99_999}]}, profile=self.profile)
+
+
+class FloorplanEditorContextTests(TestCase):
+    """What the editor page hands the client."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        parcel = baker.make(Place, kind=PlaceKind.PARCEL)
+        self.place = _building(parcel)
+        location = baker.make(Location, latitude=41.7332, longitude=-73.9282, place=self.place)
+        self.pin = baker.make(Pin, profile=self.user.profile, location=location, parent_pin=None, slug="hrsh-ward-b")
+
+    def test_the_pins_photos_are_offered_as_references(self) -> None:
+        """The pool attaches to every item, so a pin's own photos are the
+        likeliest evidence for a wall, a door, or its lock."""
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        photo = baker.make("dashboard.Image", pin=self.pin, caption="Boiler room, 2019")
+        photo.image.save("p.png", SimpleUploadedFile("p.png", _PNG_BYTES, content_type="image/png"), save=True)
+
+        response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/")
+
+        photos = response.context["photos_json"]
+        self.assertEqual([entry["uuid"] for entry in photos], [str(photo.uuid)])
+        self.assertEqual(photos[0]["caption"], "Boiler room, 2019")
+
+    def test_a_pin_with_no_photos_offers_none(self) -> None:
+        response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/")
+
+        self.assertEqual(response.context["photos_json"], [])
+
+
+class FloorplanMultiBuildingPickerTests(TestCase):
+    """A parcel holding several buildings has no single plan - offer a choice."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        self.parcel = baker.make(Place, kind=PlaceKind.PARCEL)
+        self.kirkbride = baker.make(Place, kind=PlaceKind.BUILDING, parent=self.parcel, name="Kirkbride", area_sqm=9000)
+        self.chapel = baker.make(Place, kind=PlaceKind.BUILDING, parent=self.parcel, name="Chapel", area_sqm=400)
+        location = baker.make(Location, latitude=41.7333, longitude=-73.9283, place=self.parcel)
+        self.pin = baker.make(Pin, profile=self.user.profile, location=location, parent_pin=None, slug="hrsh-campus")
+
+    def test_the_picker_lists_the_buildings_largest_first(self) -> None:
+        response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/")
+
+        self.assertIsNone(response.context["place"], "a multi-building parcel has no single plan")
+        self.assertEqual([choice["name"] for choice in response.context["building_choices"]], ["Kirkbride", "Chapel"])
+
+    def test_a_building_with_a_child_pin_links_to_it(self) -> None:
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        child_location = baker.make(Location, latitude=41.7334, longitude=-73.9284, place=self.kirkbride)
+        child = baker.make(Pin, profile=self.user.profile, location=child_location, parent_pin=self.pin, slug="kirkbride")
+
+        response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/")
+
+        chosen = next(entry for entry in response.context["building_choices"] if entry["name"] == "Kirkbride")
+        self.assertEqual(chosen["pin_slug"], child.slug)
+
+    def test_an_unpinned_building_is_listed_without_a_link(self) -> None:
+        response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/")
+
+        chapel = next(entry for entry in response.context["building_choices"] if entry["name"] == "Chapel")
+        self.assertEqual(chapel["pin_slug"], "", "a building with no pin yet cannot be linked to")
+
+    def test_a_single_building_parcel_still_resolves_directly(self) -> None:
+        self.chapel.delete()
+
+        response = self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/")
+
+        self.assertEqual(response.context["place"], self.kirkbride)
+        self.assertEqual(response.context["building_choices"], [])

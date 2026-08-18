@@ -235,6 +235,9 @@ only through their own endpoints (`controllers/floorplans.py`).
   cutting off. The bbox filter runs in the database on the spatial index, so a renderer asks for a
   viewport's worth of one storey instead of ten storeys of every wall. Every feature carries the
   uuid it can be edited by, so anything clicked on a map is findable in the document
+- **References come from the pin's own photos** — the reference pool attaches to every item, so
+  the editor offers this pin's existing photos as thumbnails to attach to a wall, a door or its
+  lock (one pool row per photo however many items cite it), alongside adding one by URL
 - **Relationships geometry can't express** — a door's `connects_rooms` (what a router walks to
   answer "can I get from here to there?"), a stair's or shaft's `spans_floors`, a room's `parent`
   for nesting (a closet inside a ward), plus `thickness_meters` and `rotation_degrees`

@@ -166,6 +166,7 @@ function boot(): void {
         overlayControl.sync(overlays.map((entry) => ({ ...entry, locked: true })));
     }
     const profileLabels = readJson<{ uuid: string; name: string }[]>("floorplan-labels") || [];
+    const pinPhotos = readJson<{ uuid: string; url: string; caption: string }[]>("floorplan-photos") || [];
 
     const state = {
         doc: null as FloorplanDocument | null,
@@ -658,9 +659,37 @@ function boot(): void {
             wrap.appendChild(row);
         }
 
+        if (pinPhotos.length) {
+            const gallery = document.createElement("div");
+            gallery.className = "floorplan-form__photo-picker";
+            for (const photo of pinPhotos.slice(0, 24)) {
+                const button = document.createElement("button");
+                button.type = "button";
+                button.title = photo.caption || "Attach this photo as evidence";
+                const thumb = document.createElement("img");
+                thumb.src = photo.url;
+                thumb.alt = photo.caption || "";
+                thumb.loading = "lazy";
+                button.appendChild(thumb);
+                button.addEventListener("click", () => {
+                    // One pool row per photo: attaching the same photo to a
+                    // wall, its door and the door's lock must not make three.
+                    const existing = pool.find((entry) => entry.image_uuid === photo.uuid);
+                    const reference = existing || { uuid: uuidv4(), kind: "photo", title: photo.caption, url: "", description: "", attributes: {}, image_uuid: photo.uuid };
+                    if (!existing) pool.push(reference);
+                    linked.add(String(reference.uuid));
+                    item.references = Array.from(linked);
+                    markDirty();
+                    renderForm();
+                });
+                gallery.appendChild(button);
+            }
+            wrap.appendChild(gallery);
+        }
+
         const add = document.createElement("button");
         add.type = "button";
-        add.textContent = "+ Add reference";
+        add.textContent = "+ Reference by URL";
         add.addEventListener("click", () => {
             const url = window.prompt("URL of a photo, PDF, or video showing this");
             if (!url) return;

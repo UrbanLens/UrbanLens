@@ -93,6 +93,7 @@
 </div>
 {{ overlays_json|json_script:"floorplan-overlays" }}
 {{ labels_json|json_script:"floorplan-labels" }}
+{{ photos_json|json_script:"floorplan-photos" }}
 <script src="{% static 'dashboard/js/floorplan-editor.js' %}" defer></script>
 {% endif %}
 {% endblock %}

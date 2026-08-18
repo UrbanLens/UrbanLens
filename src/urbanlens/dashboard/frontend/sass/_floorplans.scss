@@ -332,3 +332,30 @@
         }
     }
 }
+
+.floorplan-form__photo-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+
+    button {
+        padding: 0;
+        border: 2px solid transparent;
+        border-radius: 4px;
+        background: none;
+        cursor: pointer;
+        line-height: 0;
+
+        &:hover,
+        &:focus-visible {
+            border-color: var(--accent-color, #00897b);
+        }
+    }
+
+    img {
+        width: 44px;
+        height: 44px;
+        object-fit: cover;
+        border-radius: 3px;
+    }
+}
