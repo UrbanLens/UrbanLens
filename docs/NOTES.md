@@ -570,3 +570,25 @@ moving them off the original.
 
 Reads are profile-scoped for the same reason the writes are careful: a plan names doors, locks and
 key attributes, which is not something to hand to everyone who happens to pin the same building.
+
+
+## The floorplan document is REData's contract, not ours
+
+`services/floorplans/serialization.py` emits and accepts exactly the shape
+`../REData/src/redata/parcels/services/floorplans.py` does, and that is a constraint rather than a
+coincidence: REData's write side **rejects unknown keys outright**, so any field we invent breaks a
+future push upstream, and any field it emits that we ignore is data silently dropped on the way in.
+`FloorplanDocumentContractTests` pins the key sets in both directions.
+
+Two consequences worth knowing before editing that module:
+
+- **Array order is the order.** Items carry a `sort_order` column, assigned from their position in
+  the document, but it is never *emitted* - REData doesn't emit it either, and a second
+  representation of the same fact is a second thing to keep in step. Re-arranging items in an editor
+  survives because the array does.
+- **A reference may name a `key` instead of a uuid.** A client drawing a door on a wall it just drew
+  has no uuid for either, so an item may name itself with a write-only `key` that any reference
+  (`room`, `mounted_on`, `parent`, `connects_rooms`, `spans_floors`, `source`, `references`) can
+  point at. Keys live for one document and are never emitted on read.
+
+`labels` is the one field we add, per item, and it is invisible to the upstream shape.

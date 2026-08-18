@@ -9943,3 +9943,23 @@ whichever migration they happen to open.
 
 Found by `test_migration_noop_reverse_guard`, which forces exactly this review and had not yet seen
 0048 - it arrived in the 2026-08-17 merge.
+
+## Two tests fail only under a randomized full-suite run (2026-08-18)
+
+The full suite on `810edd7b` reported three failures. One was real and is fixed
+(`test_share_pin_copy_fidelity` - `Pin.buildings_auto_nested_at` was added without being
+listed as copied-or-skipped, which is exactly what that guard exists to catch). The other two
+pass in isolation and pass together, so they are order-dependent rather than broken:
+
+- `test_safety_chat.py::SafetyCheckinChatConsumerTests::test_owner_and_contact_exchange_messages`
+- `test_migration_0039_reverse.py::Migration0039ReverseTests::test_encrypt_decrypt_round_trips_and_ciphertext_is_discriminable`
+
+Neither touches anything the floorplan/auto-nest work changed, and the same two passed in the
+earlier clean full run on `90cf9c97`, so the trigger is whatever ordering `pytest-randomly` chose
+that run - a consumer left connected, or key/settings state leaking from an earlier test, are the
+two shapes worth looking at first. `-p no:randomly` hides it; reproducing needs the failing seed,
+which this run did not record because `-q` suppressed the header.
+
+Worth fixing properly rather than pinning the seed: an order-dependent test is a test that will
+fail on someone else's machine for no visible reason. When picking it up, run the full suite with
+`-p randomly --randomly-seed=<n>` and bisect with `pytest --randomly-seed=<n> -x`.

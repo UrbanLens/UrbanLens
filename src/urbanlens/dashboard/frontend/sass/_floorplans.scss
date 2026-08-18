@@ -308,3 +308,27 @@
     border-color: #c62828;
     color: #c62828;
 }
+
+.floorplan-building-picker {
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+
+    a,
+    &__unpinned {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    &__unpinned {
+        opacity: 0.7;
+
+        em {
+            font-size: 0.85rem;
+        }
+    }
+}

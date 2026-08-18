@@ -16,9 +16,30 @@
 {% block content %}
 {% if place is None %}
 <div class="card card--secondary floorplan-no-building">
+    {% if building_choices %}
+    <p>This property holds several buildings, and a floorplan belongs to one structure. Pick the
+    building you want to map:</p>
+    <ul class="floorplan-building-picker">
+        {% for building in building_choices %}
+        <li>
+            {% if building.pin_slug %}
+            <a href="{% url 'pin.floorplan' building.pin_slug %}">
+                <i class="material-symbols-outlined">architecture</i> {{ building.name }}
+            </a>
+            {% else %}
+            <span class="floorplan-building-picker__unpinned">
+                <i class="material-symbols-outlined">add_home</i> {{ building.name }}
+                <em>- add a pin for this building first (Buildings on this Property, on the pin page)</em>
+            </span>
+            {% endif %}
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
     <p>This pin doesn't resolve to a single building yet. A floorplan belongs to one structure -
-    on a multi-building property, open (or create) the child pin for the building you want to map
-    and edit its floorplan there.</p>
+    on a multi-building property, add the child pins for its buildings (Buildings on this Property,
+    on the pin page) and edit the floorplan on the one you want to map.</p>
+    {% endif %}
 </div>
 {% else %}
 <div id="floorplan-origin-banner" class="floorplan-origin-banner" hidden>
@@ -47,7 +68,8 @@
              data-save-url="{% url 'pin.floorplan.save' pin.slug %}"
              data-lat="{{ pin.effective_latitude }}"
              data-lng="{{ pin.effective_longitude }}"
-             data-extract-url="{% url 'pin.floorplan.extract' pin.slug '00000000-0000-0000-0000-000000000000' %}"></div>
+             data-extract-url="{% url 'pin.floorplan.extract' pin.slug '00000000-0000-0000-0000-000000000000' %}"
+             data-publish-url="{% url 'pin.floorplan.publish' pin.slug %}"></div>
     </div>
     <aside class="floorplan-sidebar">
         <div class="floorplan-sidebar__plan">
@@ -62,6 +84,8 @@
         <div id="floorplan-form" class="floorplan-form"></div>
         <div class="floorplan-save-row">
             <button type="button" id="floorplan-save" class="floorplan-save">Save floorplan</button>
+            <button type="button" id="floorplan-publish" class="floorplan-save floorplan-save--version"
+                    title="Share this floorplan on the community wiki for this place, so others who have found it can see and improve it. Your own copy stays yours.">Publish to wiki</button>
             <button type="button" id="floorplan-save-version" class="floorplan-save floorplan-save--version"
                     title="Keep the plan you loaded and save these changes as a new dated version - for a renovation, a fire, a rebuild">Save as new version</button>
         </div>

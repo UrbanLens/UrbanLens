@@ -224,9 +224,20 @@ only through their own endpoints (`controllers/floorplans.py`).
   the overlay's corner georeference into world coordinates
   (`services/floorplans/extraction.py`). Results arrive as editable suggestions, never
   silently-committed rows; with no AI configured the editor works identically by hand
-- **Personal by default** — a plan records where the doors are, what locks them and what opens
-  those locks, so local plans are scoped to their author. REData's aggregated plans (external, and
-  none exist upstream yet) are what a user without their own plan sees, marked as such in the editor
+- **Personal by default, shared on purpose** — a plan records where the doors are, what locks them
+  and what opens those locks, so local plans are scoped to their author. "Publish to wiki" copies a
+  version onto the place's community wiki (the author keeps their own), after which anyone who can
+  see that wiki can see and edit it, each save recorded as a `WikiEdit`. Resolution order is: your
+  own plan, then the community one, then REData's (external, none exist upstream yet)
+- **GeoJSON feature endpoint** (`/map/pin/<slug>/floorplan/features/`) — the map-facing counterpart
+  to the document, mirroring REData's: flat features filtered by viewport (`?bbox=`), storey
+  (`?level=`) and element kind (`?kind=`), capped and reporting `truncated` rather than silently
+  cutting off. The bbox filter runs in the database on the spatial index, so a renderer asks for a
+  viewport's worth of one storey instead of ten storeys of every wall. Every feature carries the
+  uuid it can be edited by, so anything clicked on a map is findable in the document
+- **Relationships geometry can't express** — a door's `connects_rooms` (what a router walks to
+  answer "can I get from here to there?"), a stair's or shaft's `spans_floors`, a room's `parent`
+  for nesting (a closet inside a ward), plus `thickness_meters` and `rotation_degrees`
 
 ## External Data Enrichment (Pin Detail Page)
 

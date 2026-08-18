@@ -43,13 +43,15 @@ from django.db.models import (
     PROTECT,
     SET_NULL,
     DateField,
+    F,
     FloatField,
     ForeignKey,
+    Index,
     ManyToManyField,
     TextChoices,
     URLField,
 )
-from django.db.models.fields import CharField, IntegerField, SmallIntegerField, TextField
+from django.db.models.fields import CharField, IntegerField, PositiveIntegerField, SmallIntegerField, TextField
 from django.db.models.fields.json import JSONField
 
 from urbanlens.dashboard.models import abstract
@@ -69,6 +71,8 @@ class FloorplanElementKind(TextChoices):
     DOOR = "door", "Door"
     STAIR = "stair", "Stair"
     FIXTURE = "fixture", "Fixture"
+    #: What a room-designer tool mostly produces - chairs, beds, appliances.
+    FURNITURE = "furniture", "Furniture"
     KEY = "key", "Key"
     OTHER = "other", "Other"
 
@@ -97,6 +101,10 @@ class FloorplanItem(abstract.FrontendDashboardModel):
         labels: The owner's labels - an UrbanLens addition, absent upstream.
     """
 
+    #: Position within the document that wrote this item. Document order *is*
+    #: the stored order (REData does the same), so a round-trip preserves how
+    #: the author arranged things and a renderer gets a stable draw order.
+    sort_order = PositiveIntegerField(default=0)
     description = TextField(blank=True, default="")
     condition = CharField(max_length=255, blank=True, default="")
     built_date = DateField(null=True, blank=True)
@@ -129,6 +137,12 @@ class Floorplan(FloorplanItem):
     place = ForeignKey("dashboard.Place", on_delete=PROTECT, related_name="floorplans")
     pin = ForeignKey("dashboard.Pin", on_delete=SET_NULL, null=True, blank=True, related_name="floorplans")
     profile = ForeignKey("dashboard.Profile", on_delete=CASCADE, null=True, blank=True, related_name="floorplans")
+    #: Set when the author published this plan to the place's community wiki.
+    #: A community plan is visible to everyone who can see that wiki and
+    #: editable by them, with each save recorded as a WikiEdit; a personal
+    #: plan (wiki null) is its author's alone. Publishing is always explicit -
+    #: a plan names doors, locks and what opens them.
+    wiki = ForeignKey("dashboard.Wiki", on_delete=CASCADE, null=True, blank=True, related_name="floorplans")
     building_ref = CharField(max_length=255, blank=True, default="")
     building_name = CharField(max_length=255, blank=True, default="")
     name = CharField(max_length=255, blank=True, default="")
@@ -140,9 +154,18 @@ class Floorplan(FloorplanItem):
     if TYPE_CHECKING:
         place_id: int
         profile_id: int | None
+        wiki_id: int | None
 
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplans"
+        # Newest first, ties broken by creation - so "the current plan" is a
+        # single deterministic row rather than whichever the planner returned.
+        ordering = [F("valid_from").desc(nulls_last=True), "-created"]
+        indexes = [
+            # The one lookup that matters: this user's plans for this building,
+            # newest first (services.floorplans.resolution).
+            Index(fields=["place", "profile", "valid_from"], name="idx_floorplan_place_owner_date"),
+        ]
 
     def __str__(self) -> str:
         stamp = self.valid_from.isoformat() if self.valid_from else "baseline"
@@ -229,7 +252,7 @@ class FloorplanFloor(FloorplanItem):
 
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplan_floors"
-        ordering = ("level",)
+        ordering = ("level", "sort_order", "id")
 
     def __str__(self) -> str:
         return self.name or f"Level {self.level}"
@@ -249,10 +272,16 @@ class FloorplanRoom(FloorplanItem):
     name = CharField(max_length=255, blank=True, default="")
     geometry = GeometryField(srid=4326, null=True, blank=True)
     height_meters = FloatField(null=True, blank=True)
+    #: The room this one sits inside - a closet within a ward, a cell block
+    #: within a wing. Rooms nest to arbitrary depth.
+    parent = ForeignKey("self", on_delete=SET_NULL, null=True, blank=True, related_name="children")
+    #: Every storey this room reaches through, for an atrium, a light well or
+    #: a double-height hall. Its own ``floor`` remains where it starts.
+    spans_floors = ManyToManyField(FloorplanFloor, blank=True, related_name="spanning_rooms")
 
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplan_rooms"
-        ordering = ("id",)
+        ordering = ("sort_order", "id")
 
     def __str__(self) -> str:
         return self.name or f"room {self.pk}"
@@ -288,10 +317,25 @@ class FloorplanElement(FloorplanItem):
     mounted_on = ForeignKey("self", on_delete=SET_NULL, null=True, blank=True, related_name="mounted_elements")
     base_elevation_meters = FloatField(null=True, blank=True)
     height_meters = FloatField(null=True, blank=True)
+    thickness_meters = FloatField(null=True, blank=True)
+    #: Orientation for an element whose geometry is a bare point - a door's
+    #: swing, a fixture's facing - where the shape cannot express it.
+    rotation_degrees = FloatField(null=True, blank=True)
+    #: What this element joins: a door's two rooms, a window's inside and out.
+    #: The relationship a router walks to answer "can I get from here to
+    #: there?", which geometry alone does not give.
+    connects_rooms = ManyToManyField(FloorplanRoom, blank=True, related_name="connecting_elements")
+    #: Every storey this element passes through - a stair, a shaft, a chimney.
+    spans_floors = ManyToManyField(FloorplanFloor, blank=True, related_name="spanning_elements")
 
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplan_elements"
-        ordering = ("id",)
+        ordering = ("sort_order", "id")
+        indexes = [
+            # Scoped to a plan, because that is how elements are asked for -
+            # "the doors in this plan", never "every door everywhere".
+            Index(fields=["floorplan", "kind"], name="idx_floorplan_element_kind"),
+        ]
 
     def __str__(self) -> str:
         return self.name or f"{self.kind} {self.pk}"
@@ -313,7 +357,7 @@ class FloorplanLock(FloorplanItem):
 
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplan_locks"
-        ordering = ("id",)
+        ordering = ("sort_order", "id")
 
     def __str__(self) -> str:
         return self.name or f"lock {self.pk}"

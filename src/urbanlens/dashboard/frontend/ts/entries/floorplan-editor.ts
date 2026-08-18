@@ -59,6 +59,10 @@ interface ElementItem extends Item {
     mounted_on?: string | null;
     base_elevation_meters?: number | null;
     height_meters?: number | null;
+    thickness_meters?: number | null;
+    rotation_degrees?: number | null;
+    connects_rooms?: string[];
+    spans_floors?: string[];
     locks?: Lock[];
 }
 
@@ -98,6 +102,32 @@ interface FloorplanDocument extends Item {
     versions?: VersionSummary[];
 }
 
+const LOCAL_NAMESPACE = "urbanlens";
+
+/**
+ * The attribute keys REData publishes for each element kind. Free-form
+ * attributes stay free-form; these are the ones with an agreed meaning, so
+ * they get real inputs instead of being dead weight in a JSON bag.
+ */
+const KIND_ATTRIBUTES: Record<string, { key: string; label: string; options?: string[] }[]> = {
+    door: [
+        { key: "swing", label: "Swing", options: ["", "inward", "outward", "sliding", "folding"] },
+        { key: "hinge", label: "Hinge", options: ["", "left", "right"] },
+        { key: "fire_rating", label: "Fire rating" },
+    ],
+    window: [
+        { key: "glazing", label: "Glazing", options: ["", "single", "double", "triple"] },
+        { key: "operation", label: "Operation", options: ["", "fixed", "casement", "sash"] },
+    ],
+    stair: [
+        { key: "direction", label: "Direction", options: ["", "up", "down"] },
+        { key: "flights", label: "Flights" },
+    ],
+    wall: [{ key: "fire_rating", label: "Fire rating" }],
+    ceiling: [{ key: "fire_rating", label: "Fire rating" }],
+    roof: [{ key: "fire_rating", label: "Fire rating" }],
+};
+
 const KIND_STYLE: Record<string, { color: string; weight: number }> = {
     wall: { color: "#37474f", weight: 4 },
     door: { color: "#ef6c00", weight: 3 },
@@ -105,6 +135,7 @@ const KIND_STYLE: Record<string, { color: string; weight: number }> = {
     stair: { color: "#6a1b9a", weight: 3 },
     column: { color: "#455a64", weight: 3 },
     fixture: { color: "#00695c", weight: 3 },
+    furniture: { color: "#8d6e63", weight: 2 },
     other: { color: "#616161", weight: 3 },
 };
 const ROOM_STYLE = { color: "#00897b", weight: 2, fillColor: "#00897b", fillOpacity: 0.12 };
@@ -123,6 +154,7 @@ function boot(): void {
     tileLayer("satellite", { maxZoom: 22, maxNativeZoom: 19 }).addTo(map);
 
     const extractUrlTemplate = mapEl.dataset.extractUrl || "";
+    const publishUrl = mapEl.dataset.publishUrl || "";
     const overlays = readJson<MapOverlayEntry[]>("floorplan-overlays") || [];
     if (overlays.length) {
         // Read-only here: aligning corners happens in the pin map's own
@@ -404,6 +436,7 @@ function boot(): void {
         });
         host.appendChild(description);
 
+        if (type === "element") host.appendChild(kindAttributeEditor(element));
         if (profileLabels.length) host.appendChild(labelPicker(item as Item));
         host.appendChild(sourceEditor(item as Item));
         host.appendChild(referenceEditor(item as Item));
@@ -438,13 +471,28 @@ function boot(): void {
         return wrap;
     }
 
+    /** Consumer-local data is namespaced inside `attributes` so it survives a
+     * round trip through REData, which rejects unknown top-level keys. */
+    function localBag(item: Item): Record<string, unknown> {
+        const attributes = (item.attributes = item.attributes || {});
+        const existing = attributes[LOCAL_NAMESPACE];
+        const bag = (existing && typeof existing === "object" ? existing : {}) as Record<string, unknown>;
+        attributes[LOCAL_NAMESPACE] = bag;
+        return bag;
+    }
+
+    function itemLabels(item: Item): string[] {
+        const bag = localBag(item);
+        return Array.isArray(bag.labels) ? (bag.labels as string[]) : [];
+    }
+
     function labelPicker(item: Item): HTMLElement {
         const wrap = document.createElement("div");
         wrap.className = "floorplan-form__labels";
         const caption = document.createElement("span");
         caption.textContent = "Labels";
         wrap.appendChild(caption);
-        const chosen = new Set(item.labels || []);
+        const chosen = new Set(itemLabels(item));
         for (const label of profileLabels) {
             const row = document.createElement("label");
             const box = document.createElement("input");
@@ -453,12 +501,81 @@ function boot(): void {
             box.addEventListener("change", () => {
                 if (box.checked) chosen.add(label.uuid);
                 else chosen.delete(label.uuid);
-                item.labels = Array.from(chosen);
+                localBag(item).labels = Array.from(chosen);
                 markDirty();
             });
             row.append(box, document.createTextNode(label.name));
             wrap.appendChild(row);
         }
+        return wrap;
+    }
+
+    /** Inputs for the attribute keys REData publishes for this element's kind. */
+    function kindAttributeEditor(element: ElementItem): HTMLElement {
+        const wrap = document.createElement("div");
+        wrap.className = "floorplan-form__attributes";
+        const fields = KIND_ATTRIBUTES[element.kind] || [];
+        const attributes = (element.attributes = element.attributes || {});
+
+        if (element.kind === "wall") {
+            wrap.appendChild(numberRow("Thickness (m)", element.thickness_meters, (value) => {
+                element.thickness_meters = value;
+                markDirty();
+            }));
+        }
+        if (element.geometry?.type === "Point") {
+            // A point has no shape to carry orientation, so a chair or an
+            // appliance is undrawable without this.
+            wrap.appendChild(numberRow("Rotation (° from north)", element.rotation_degrees, (value) => {
+                element.rotation_degrees = value;
+                markDirty();
+            }));
+        }
+
+        for (const field of fields) {
+            const row = document.createElement("label");
+            row.className = "floorplan-form__field";
+            const caption = document.createElement("span");
+            caption.textContent = field.label;
+            let input: HTMLInputElement | HTMLSelectElement;
+            if (field.options) {
+                const select = document.createElement("select");
+                for (const option of field.options) {
+                    const node = document.createElement("option");
+                    node.value = option;
+                    node.textContent = option || "— unset —";
+                    select.appendChild(node);
+                }
+                select.value = String(attributes[field.key] ?? "");
+                input = select;
+            } else {
+                const text = document.createElement("input");
+                text.type = "text";
+                text.value = String(attributes[field.key] ?? "");
+                input = text;
+            }
+            input.addEventListener("change", () => {
+                if (input.value) attributes[field.key] = input.value;
+                else delete attributes[field.key];
+                markDirty();
+            });
+            row.append(caption, input);
+            wrap.appendChild(row);
+        }
+        return wrap;
+    }
+
+    function numberRow(label: string, value: number | null | undefined, onChange: (value: number | null) => void): HTMLElement {
+        const wrap = document.createElement("label");
+        wrap.className = "floorplan-form__field";
+        const caption = document.createElement("span");
+        caption.textContent = label;
+        const input = document.createElement("input");
+        input.type = "number";
+        input.step = "any";
+        input.value = value === null || value === undefined ? "" : String(value);
+        input.addEventListener("change", () => onChange(input.value === "" ? null : Number(input.value)));
+        wrap.append(caption, input);
         return wrap;
     }
 
@@ -620,7 +737,7 @@ function boot(): void {
 
     const POLYGON_TOOLS = new Set(["room", "outline"]);
     const LINE_TOOLS = new Set(["wall"]);
-    const POINT_TOOLS = new Set(["door", "window", "stair", "fixture", "column", "other"]);
+    const POINT_TOOLS = new Set(["door", "window", "stair", "fixture", "furniture", "column", "other"]);
 
     function setTool(tool: string): void {
         state.tool = tool;
@@ -759,6 +876,13 @@ function boot(): void {
         else if (params.get("date")) url = `${jsonUrl}?date=${encodeURIComponent(params.get("date") as string)}`;
         const response = await fetch(url, { headers: { Accept: "application/json" } });
         state.doc = response.status === 204 ? emptyDoc() : ((await response.json()) as FloorplanDocument);
+        if (state.doc.origin === "community") {
+            const banner = document.getElementById("floorplan-origin-banner");
+            if (banner) {
+                banner.textContent = "This is the community floorplan for this place. Your edits are shared with everyone who can see its wiki.";
+                banner.hidden = false;
+            }
+        }
         if (state.doc.origin === "redata") {
             const banner = document.getElementById("floorplan-origin-banner");
             if (banner) banner.hidden = false;
@@ -840,6 +964,26 @@ function boot(): void {
     renderTraceButtons();
 
     document.getElementById("floorplan-save")?.addEventListener("click", () => void save());
+    document.getElementById("floorplan-publish")?.addEventListener("click", () => {
+        void (async () => {
+            if (!state.doc?.uuid) {
+                toast.info("Save the floorplan before publishing it.");
+                return;
+            }
+            if (state.dirty && !window.confirm("Publish the last saved version? Your unsaved changes are not included.")) return;
+            const response = await fetch(publishUrl, {
+                method: "POST",
+                headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrfToken() },
+                body: JSON.stringify({ uuid: state.doc.uuid }),
+            });
+            const body = await response.json().catch(() => ({}));
+            if (!response.ok || !body.ok) {
+                toast.warning(body.error || "Could not publish this floorplan.");
+                return;
+            }
+            toast.success("Published to the community wiki.");
+        })();
+    });
     document.getElementById("floorplan-save-version")?.addEventListener("click", () => {
         if (!state.doc) return;
         // Dropping the plan uuid makes the save create a second version and

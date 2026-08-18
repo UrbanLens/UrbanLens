@@ -44,25 +44,82 @@ _EXTRACTION_PROMPT = (
 )
 
 
-def _corner_transform(overlay: MapImageOverlay):
-    """Map normalized image coordinates through the overlay's corner georeference.
+def _solve(matrix: list[list[float]], rhs: list[float]) -> list[float] | None:
+    """Gaussian elimination with partial pivoting, or None when singular."""
+    size = len(rhs)
+    rows = [[*matrix[index], rhs[index]] for index in range(size)]
+    for column in range(size):
+        pivot = max(range(column, size), key=lambda row: abs(rows[row][column]))
+        if abs(rows[pivot][column]) < 1e-12:
+            return None
+        rows[column], rows[pivot] = rows[pivot], rows[column]
+        divisor = rows[column][column]
+        rows[column] = [value / divisor for value in rows[column]]
+        for row in range(size):
+            if row == column:
+                continue
+            factor = rows[row][column]
+            if factor:
+                rows[row] = [value - factor * rows[column][index] for index, value in enumerate(rows[row])]
+    return [row[size] for row in rows]
 
-    Bilinear interpolation across NW/NE/SE/SW.
+
+def _corner_transform(overlay: MapImageOverlay):
+    """Map normalized image coordinates through the overlay's georeference.
+
+    A *projective* transform, not a bilinear one, because that is what the
+    browser already uses to draw the sheet (``matrix3dForCorners`` in
+    ``shared/map-image-overlays.ts`` solves the same eight-parameter system
+    for its CSS ``matrix3d``). Tracing has to agree with what the user sees:
+    under bilinear interpolation a sheet whose corners are not an affine
+    parallelogram - which is exactly what dragging corners onto oblique
+    imagery produces - renders one way and traces another, so the geometry
+    lands beside the walls it was traced from.
+
+    Falls back to bilinear only when the corner arrangement is degenerate
+    (three corners collinear), where the projective system has no solution.
+
+    Args:
+        overlay: The georeferenced sheet.
 
     Returns:
-        Callable ``(x, y) -> (longitude, latitude)`` with x/y in 0..1.
+        Callable ``(x, y) -> (longitude, latitude)`` with x/y in 0..1, the
+        image's own top-left origin.
     """
     nw = (overlay.nw_longitude, overlay.nw_latitude)
     ne = (overlay.ne_longitude, overlay.ne_latitude)
     se = (overlay.se_longitude, overlay.se_latitude)
     sw = (overlay.sw_longitude, overlay.sw_latitude)
+    source = ((0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0))
+    target = (nw, ne, se, sw)
 
-    def transform(x: float, y: float) -> tuple[float, float]:
-        top = (nw[0] + (ne[0] - nw[0]) * x, nw[1] + (ne[1] - nw[1]) * x)
-        bottom = (sw[0] + (se[0] - sw[0]) * x, sw[1] + (se[1] - sw[1]) * x)
-        return (top[0] + (bottom[0] - top[0]) * y, top[1] + (bottom[1] - top[1]) * y)
+    matrix: list[list[float]] = []
+    rhs: list[float] = []
+    for (sx, sy), (tx, ty) in zip(source, target, strict=True):
+        matrix.append([sx, sy, 1, 0, 0, 0, -sx * tx, -sy * tx])
+        rhs.append(tx)
+        matrix.append([0, 0, 0, sx, sy, 1, -sx * ty, -sy * ty])
+        rhs.append(ty)
+    solution = _solve(matrix, rhs)
 
-    return transform
+    if solution is None:
+        def bilinear(x: float, y: float) -> tuple[float, float]:
+            top = (nw[0] + (ne[0] - nw[0]) * x, nw[1] + (ne[1] - nw[1]) * x)
+            bottom = (sw[0] + (se[0] - sw[0]) * x, sw[1] + (se[1] - sw[1]) * x)
+            return (top[0] + (bottom[0] - top[0]) * y, top[1] + (bottom[1] - top[1]) * y)
+
+        logger.debug("floorplan extraction: degenerate corners on overlay %s, falling back to bilinear", overlay.pk)
+        return bilinear
+
+    a, b, c, d, e, f, g, h = solution
+
+    def projective(x: float, y: float) -> tuple[float, float]:
+        denominator = g * x + h * y + 1
+        if abs(denominator) < 1e-12:
+            return (nw[0], nw[1])
+        return ((a * x + b * y + c) / denominator, (d * x + e * y + f) / denominator)
+
+    return projective
 
 
 def _clamp01(value: Any) -> float | None:

@@ -546,6 +546,16 @@ urlpatterns = [
                                 name="pin.floorplan.json",
                             ),
                             path(
+                                "<slug:pin_slug>/floorplan/publish/",
+                                floorplans.FloorplanPublishView.as_view(),
+                                name="pin.floorplan.publish",
+                            ),
+                            path(
+                                "<slug:pin_slug>/floorplan/features/",
+                                floorplans.FloorplanFeaturesView.as_view(),
+                                name="pin.floorplan.features",
+                            ),
+                            path(
                                 "<slug:pin_slug>/floorplan/save/",
                                 floorplans.FloorplanSaveView.as_view(),
                                 name="pin.floorplan.save",

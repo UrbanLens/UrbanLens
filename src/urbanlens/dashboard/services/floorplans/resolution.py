@@ -10,11 +10,13 @@ shadowed by a stale mirror.
 
 from __future__ import annotations
 
-import datetime
 import logging
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    import datetime
+
+    from urbanlens.dashboard.models.floorplans.model import Floorplan
     from urbanlens.dashboard.models.place.model import Place
     from urbanlens.dashboard.models.profile.model import Profile
 
@@ -48,7 +50,26 @@ def resolve_document(place: Place, *, profile: Profile | None = None, on_date: d
     if local is not None:
         return {**document_for(local), "origin": "local"}
 
+    community = _community_plan(place, profile, on_date)
+    if community is not None:
+        return {**document_for(community), "origin": "community"}
+
     return _redata_document(place, on_date)
+
+
+def _community_plan(place: Place, profile: Profile | None, on_date: datetime.date | None):
+    """The published plan for this building, when the user can see its wiki.
+
+    Community plans follow the wiki's own visibility rule rather than
+    inventing a second one: a user sees the wiki (and so its floorplan) once
+    they have discovered the place - see ``services.wiki.wiki_access``.
+    """
+    from urbanlens.dashboard.models.floorplans.model import Floorplan
+    from urbanlens.dashboard.services.wiki.wiki_access import place_visible_to
+
+    if profile is None or not place_visible_to(place, profile):
+        return None
+    return Floorplan.objects.at(place, on_date, community=True)
 
 
 def _redata_document(place: Place, on_date: datetime.date | None) -> dict[str, Any] | None:
@@ -85,6 +106,73 @@ def _redata_document(place: Place, on_date: datetime.date | None) -> dict[str, A
     return {**document, "origin": "redata"}
 
 
+def publish_to_wiki(floorplan: Floorplan, profile: Profile) -> Floorplan | None:
+    """Copy a personal plan onto the place's community wiki.
+
+    A copy rather than a hand-over: the author keeps their own version, and
+    the community one is a separate row anyone who can see the wiki may edit
+    from then on. Publishing is explicit for the reason the read scope is
+    narrow - a plan names doors, locks and what opens them.
+
+    Args:
+        floorplan: The personal version to publish.
+        profile: The publishing author, credited on the wiki edit.
+
+    Returns:
+        The community plan, or None when the place has no wiki to publish to.
+    """
+    from django.core.exceptions import ObjectDoesNotExist
+    from django.db import transaction
+
+    from urbanlens.dashboard.models.floorplans.model import Floorplan
+    from urbanlens.dashboard.models.wiki_edit import WikiEdit
+    from urbanlens.dashboard.services.floorplans.serialization import document_for, save_document
+
+    try:
+        wiki = floorplan.place.wiki
+    except ObjectDoesNotExist:
+        return None
+
+    document = document_for(floorplan)
+    with transaction.atomic():
+        existing = Floorplan.objects.filter(place=floorplan.place, wiki=wiki, valid_from=floorplan.valid_from).first()
+        community = existing or Floorplan.objects.create(
+            place=floorplan.place,
+            wiki=wiki,
+            profile=profile,
+            valid_from=floorplan.valid_from,
+            building_ref=floorplan.building_ref,
+        )
+        # The copy's items are new rows, so the personal plan's own items are
+        # never moved out from under it.
+        document.pop("uuid", None)
+        save_document(community, document, profile=profile)
+        WikiEdit.objects.create(
+            wiki=wiki,
+            editor=profile,
+            changes={"floorplan": {"from": None if existing is None else "updated", "to": community.name or "published"}},
+        )
+    return community
+
+
+def can_edit_community(floorplan: Floorplan, profile: Profile) -> bool:
+    """Whether this profile may edit a published plan.
+
+    The wiki's own rule, not a second one: anyone who can see the wiki can
+    edit its content.
+
+    Args:
+        floorplan: A community (wiki-owned) plan.
+        profile: The would-be editor.
+
+    Returns:
+        True when the plan is community-owned and its wiki is visible here.
+    """
+    from urbanlens.dashboard.services.wiki.wiki_access import place_visible_to
+
+    return floorplan.wiki_id is not None and place_visible_to(floorplan.place, profile)
+
+
 def floorplan_for_editing(place: Place, profile: Profile, *, version_uuid: str = "", on_date: datetime.date | None = None):
     """The local floorplan version a save should write into.
 
@@ -92,9 +180,11 @@ def floorplan_for_editing(place: Place, profile: Profile, *, version_uuid: str =
     work and a save must never destroy someone else's:
 
     - A save naming a version *this profile owns* updates it in place.
+    - A save naming a *published* version updates it too, when the wiki is
+      visible here - community content is edited in place by design.
     - Anything else - no uuid, an unknown uuid, a REData-origin document, or
-      a version belonging to another user - creates a new version owned by
-      the saver. The document's item uuids simply won't match the new
+      another user's personal version - creates a new version owned by the
+      saver. The document's item uuids simply won't match the new
       version's (empty) contents, so its contents are recreated rather than
       moved.
 
@@ -114,9 +204,13 @@ def floorplan_for_editing(place: Place, profile: Profile, *, version_uuid: str =
     from urbanlens.dashboard.models.floorplans.model import Floorplan
 
     if version_uuid:
-        owned = Floorplan.objects.filter(place=place, uuid=version_uuid, profile=profile).first()
-        if owned is not None:
-            return owned
+        named = Floorplan.objects.filter(place=place, uuid=version_uuid).first()
+        if named is not None and named.wiki_id is None and named.profile_id == profile.pk:
+            return named
+        # A published plan is community content: anyone who can see the wiki
+        # edits the same row, the way every other wiki field works.
+        if named is not None and can_edit_community(named, profile):
+            return named
     return Floorplan.objects.create(
         place=place,
         profile=profile,
