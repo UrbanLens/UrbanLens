@@ -14,8 +14,13 @@ Three models are easy to confuse and have strictly separated responsibilities:
   at the same `Location`.
 - **`Pin`** — one user's *personal* record for a location: custom name override (nullable —
   `None` means "use the location's name", see `pin.effective_name`), private notes, icon,
-  priority, status, last-visited date, marker coordinates. Address/place metadata is read via
-  proxy properties that delegate to `self.location`; it is never stored directly on `Pin`.
+  priority, status, last-visited date. Address/place metadata is read via proxy properties that
+  delegate to `self.location`; it is never stored directly on `Pin`.
+
+  **A pin has no coordinates of its own.** `Pin._meta` carries no latitude/longitude field at all,
+  and `pin.effective_latitude` returns `float(self.location.latitude)` — so a pin's position *is*
+  its location's position, exactly, always. (This line used to claim "marker coordinates" among a
+  pin's own fields, which cost a session's worth of wrong reasoning; see the detach entry below.)
 - **`Wiki`** — an *opt-in*, community-editable page about a `Location`. Not every Location has
   one; users seed them explicitly. Keeping Wiki opt-in was a deliberate privacy decision — see
   "coordinate immutability" below for the related concern about leaking exact locations, and
@@ -25,6 +30,14 @@ Three models are easy to confuse and have strictly separated responsibilities:
 DB trigger). Address components stay mutable to allow geocode backfill. Use
 `Location.objects.get_nearby_or_create(...)` rather than constructing new Locations directly when
 coordinates might already exist nearby.
+
+**To move a pin or a wiki, relink it to a different `Location` — never change the coordinates of
+the one it currently points at.** The two rules compose into a thing worth stating outright,
+because it is not obvious from either alone: since a pin has no coordinates of its own, and a
+location's cannot change, "give this pin its own place at the same point" is not expressible at
+all. That is why detaching a pin from its `Location` refuses with an explanation rather than
+inventing a row (see `controllers/pin_edit.PinRelinkView`, and the 2026-08-13 entry in
+`docs/PROBLEMS.md`).
 
 ## Wiki visibility — pinned, not public
 
