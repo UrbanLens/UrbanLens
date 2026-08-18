@@ -1,8 +1,16 @@
-"""Auto-tagging service: keyword and AI-based label suggestion for pins and wikis.
+"""Auto-tagging service: label suggestion for pins and wikis.
 
-Pipeline per label kind:
-  1. Keyword match - label name patterns (CATEGORY_PATTERNS) + label.keywords field.
-  2. AI match     - remaining eligible labels sent to LLM as a constrained list.
+Pipeline per label kind, for a **pin**:
+  1. REData suggestions - REData matches the place against the owner's own
+     tag/category taxonomy (see ``services.labels.redata_suggestions``) and
+     returns scored labels. Gated on ``SiteFeature.AUTO_TAGGING`` and the
+     owner's ``disable_auto_tagging`` switch.
+  2. AI match - remaining eligible labels sent to an LLM as a constrained
+     list, gated separately on ``SiteFeature.AI`` and the per-kind AI prefs.
+
+A **wiki** has no owner and so no per-user REData taxonomy to match against;
+it keeps the keyword stage (label name patterns plus each label's ``keywords``
+field), which needs no external service and no user identity.
 
 Callers use AutoTagService.suggest_for_pin / suggest_for_wiki; both return
 the matched Label instances and optionally apply them immediately.
@@ -22,6 +30,12 @@ if TYPE_CHECKING:
     from urbanlens.dashboard.models.wiki.model import Wiki
 
 logger = logging.getLogger(__name__)
+
+#: Minimum REData confidence before a label is applied automatically. A
+#: starting value, not a measured one: applying a label is cheap to undo but
+#: annoying to find, so this errs high and should be tuned against real
+#: suggestion data rather than guessed at again.
+REDATA_CONFIDENCE_FLOOR = 0.6
 
 # Maps label kind → Profile field that enables AI-based auto-tagging for that kind.
 _AI_KIND_PREF: dict[str, str] = {
@@ -92,15 +106,18 @@ class AutoTagService:
         results: list[Label] = []
         for kind in self.kinds:
             if profile is not None:
-                do_keyword = self._keyword_kind_enabled_for_profile(kind, profile)
+                do_redata = self._redata_kind_enabled_for_profile(kind, profile)
                 do_ai = self._ai_kind_enabled_for_profile(kind, profile)
-                if not do_keyword and not do_ai:
+                if not do_redata and not do_ai:
                     logger.debug("Auto-tagging kind '%s' disabled for profile %s", kind, profile.pk)
                     continue
             else:
-                do_keyword = do_ai = True
+                do_redata = do_ai = True
             eligible = self._eligible_labels(kind, profile=profile)
-            matched = self._match(pin, eligible, kind, do_keyword=do_keyword, do_ai=do_ai)
+            matched = self._redata_match(pin, eligible, kind) if do_redata else []
+            if do_ai:
+                remaining = [label for label in eligible if label not in matched]
+                matched = matched + self._match(pin, remaining, kind, do_keyword=False, do_ai=True)
             if apply and matched:
                 to_apply = self._exclude_removed(pin, matched)
                 if to_apply:
@@ -193,6 +210,59 @@ class AutoTagService:
             return False
         pref_field = _KEYWORD_KIND_PREF.get(kind)
         return bool(getattr(profile, pref_field, True)) if pref_field else True
+
+    @staticmethod
+    def _redata_kind_enabled_for_profile(kind: str, profile: Profile) -> bool:
+        """Whether REData-sourced auto-tagging applies for this kind and profile.
+
+        The same decision the Organize page's per-label opt-out is shown on
+        (``controllers.labels._auto_tag_available``) - one capability, one
+        user switch, tags and categories only.
+
+        Args:
+            kind: Label kind string.
+            profile: Owner profile to check.
+
+        Returns:
+            True when this profile may have labels of this kind applied
+            automatically from REData's suggestions.
+        """
+        from urbanlens.dashboard.models.labels.meta import KIND_CATEGORY, KIND_TAG
+        from urbanlens.dashboard.models.subscriptions.model import SiteFeature, user_has_feature
+
+        if kind not in {KIND_CATEGORY, KIND_TAG} or getattr(profile, "disable_auto_tagging", False):
+            return False
+        user = getattr(profile, "user", None)
+        return bool(user is not None and user_has_feature(user, SiteFeature.AUTO_TAGGING))
+
+    @staticmethod
+    def _redata_match(pin: Pin, eligible: list[Label], kind: str) -> list[Label]:
+        """Labels REData suggests for this pin, restricted to the eligible set.
+
+        REData answers about the profile's whole taxonomy, so the result is
+        filtered back through ``eligible`` - which is what enforces the
+        per-label opt-out and the protected-label exclusion here, rather than
+        trusting the upstream answer to respect either.
+
+        Args:
+            pin: The pin being tagged.
+            eligible: Labels of this kind the profile allows auto-tagging on.
+            kind: Label kind string, for the log line.
+
+        Returns:
+            Matched labels, highest confidence first; empty when REData is
+            unconfigured, fails, or suggests nothing above the floor.
+        """
+        from urbanlens.dashboard.services.labels.redata_suggestions import get_suggestions
+
+        suggestions = get_suggestions(pin)
+        if not suggestions:
+            return []
+        allowed = {label.pk for label in eligible}
+        matched = [label for label, confidence in suggestions if label.pk in allowed and confidence >= REDATA_CONFIDENCE_FLOOR]
+        if matched:
+            logger.debug("REData auto-tag matched %d %s label(s) for pin %s", len(matched), kind, pin.pk)
+        return matched
 
     @staticmethod
     def _eligible_labels(kind: str, *, profile: Profile | None) -> list[Label]:
