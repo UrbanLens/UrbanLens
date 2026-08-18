@@ -6400,18 +6400,28 @@ creating labels by hand can collide with.
 
 ## RESOLVED 2026-08-18: "detach location" on a pin fails with a 500, every time
 
-**Resolution.** The filing left the product decision open; the model answers it. A pin attaches to a
-*nearby* Location, not only an exact one, so detaching is meaningful precisely when the pin sits at
-a point the shared record does not occupy - it then gets its own Location there
-(``get_exact_or_create``, so an existing row at that point is reused rather than duplicated). When
-the shared record *is* at the pin's exact point there is no second Location to move to, and the
-handler now says so with a 400 rather than raising an IntegrityError. Of the three options filed,
-this is the second and third combined: express the separation where it exists, refuse where it does
-not. Nudging coordinates was rejected - moving somebody's pin to satisfy a constraint is a worse
-surprise than being told why the action does not apply.
+**Resolution: the third filed option - detaching was never coherent, and the handler now says so
+with a 400 instead of raising an IntegrityError.**
 
-Covered by ``test_pin_detach_location.py``, which also pins the two things a refusal must not do:
-change the pin's location, or leave an orphan Location behind.
+The first attempt at this fix reasoned that a pin attaches to a *nearby* Location, so detaching
+would be meaningful whenever the pin sat at a point the shared record did not occupy. That is
+wrong, and the schema says so in two places:
+
+- ``Pin.effective_latitude`` returns ``self.location.latitude`` - a pin has no coordinate of its
+  own, whatever ``docs/NOTES.md`` implies about "marker coordinates".
+- A database trigger, ``dashboard_locations_freeze_identity``, makes a Location's coordinates
+  immutable ("Get-or-create a new Location for the changed coordinates instead of mutating this
+  row"), so a location cannot drift away from its pins either.
+
+A pin's point is therefore always *exactly* its location's point, and "give this pin its own
+Location at the same place" cannot be satisfied without moving the pin. Nudging the coordinates was
+rejected for that reason: silently moving somebody's pin to satisfy a database constraint is a
+worse surprise than being told the action does not apply. A pin that should not share a place's
+record wants a *different* place, which relinking already does.
+
+Covered by ``test_pin_detach_location.py``, which pins the two things a refusal must not do (change
+the pin's location, leave an orphan Location behind) and asserts both schema facts the decision
+rests on, since either could be quietly relaxed later.
 
 The original filing follows.
 
