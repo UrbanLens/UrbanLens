@@ -548,3 +548,25 @@ which process triggers the package import first - celery workers hit it, a plain
 check` didn't. Letting `ruff --fix` or an editor's organize-imports re-sort either file
 reintroduces the race. (Promoted here 2026-08-15 from the two files' comments, which previously
 pointed at a PROBLEMS.md entry that never existed.)
+
+
+## A floorplan save forks rather than overwrites
+
+Floorplans are hours of hand tracing, so `services/floorplans/resolution.floorplan_for_editing` is
+deliberately narrow about what a save may write into. Only a version the saving profile *owns*, named
+by uuid in the posted document, is updated in place. Everything else - no uuid, an unknown uuid, a
+REData-origin document, or another user's version - creates a new version owned by the saver.
+
+Two ways work would otherwise have been lost, both real:
+
+- Re-dating a loaded plan resolved "the version in force at the new date" and rewrote *that*, so
+  setting `valid_from` on a baseline destroyed the baseline instead of recording a renovation.
+- Resolution is place-scoped, so any user could load - and then overwrite - another user's plan for
+  the same building.
+
+The document's item uuids belong to the version they came from, which is what makes forking safe:
+they don't match the new version's (empty) contents, so `_sync` recreates the items rather than
+moving them off the original.
+
+Reads are profile-scoped for the same reason the writes are careful: a plan names doors, locks and
+key attributes, which is not something to hand to everyone who happens to pin the same building.

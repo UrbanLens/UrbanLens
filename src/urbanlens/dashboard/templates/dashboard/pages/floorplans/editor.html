@@ -53,13 +53,18 @@
         <div class="floorplan-sidebar__plan">
             <label class="floorplan-form__field"><span>Plan name</span>
                 <input type="text" id="floorplan-name" placeholder="As built, after the 1962 fire..."></label>
+            <div id="floorplan-versions" class="floorplan-versions" hidden></div>
             <label class="floorplan-form__field"><span>Valid from</span>
                 <input type="date" id="floorplan-valid-from" title="When this version of the building took effect. Leave empty for the original layout."></label>
         </div>
         <div id="floorplan-floors" class="floorplan-floors"></div>
         <div id="floorplan-trace-list" class="floorplan-trace-list" hidden></div>
         <div id="floorplan-form" class="floorplan-form"></div>
-        <button type="button" id="floorplan-save" class="floorplan-save">Save floorplan</button>
+        <div class="floorplan-save-row">
+            <button type="button" id="floorplan-save" class="floorplan-save">Save floorplan</button>
+            <button type="button" id="floorplan-save-version" class="floorplan-save floorplan-save--version"
+                    title="Keep the plan you loaded and save these changes as a new dated version - for a renovation, a fire, a rebuild">Save as new version</button>
+        </div>
     </aside>
 </div>
 {{ overlays_json|json_script:"floorplan-overlays" }}

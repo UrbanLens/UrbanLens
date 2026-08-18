@@ -252,6 +252,7 @@ class FloorplanRoom(FloorplanItem):
 
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplan_rooms"
+        ordering = ("id",)
 
     def __str__(self) -> str:
         return self.name or f"room {self.pk}"
@@ -290,6 +291,7 @@ class FloorplanElement(FloorplanItem):
 
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplan_elements"
+        ordering = ("id",)
 
     def __str__(self) -> str:
         return self.name or f"{self.kind} {self.pk}"
@@ -311,6 +313,7 @@ class FloorplanLock(FloorplanItem):
 
     class Meta(abstract.FrontendDashboardModel.Meta):
         db_table = "dashboard_floorplan_locks"
+        ordering = ("id",)
 
     def __str__(self) -> str:
         return self.name or f"lock {self.pk}"

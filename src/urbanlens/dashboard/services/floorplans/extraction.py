@@ -87,6 +87,26 @@ def _points(raw: Any, transform) -> list[list[float]]:
     return points
 
 
+def _overlay_image_bytes(overlay: MapImageOverlay) -> bytes | None:
+    """The overlay's stored sheet as bytes, or None when there isn't one.
+
+    ``Image``'s file field is ``image`` (an ImageField); an overlay may
+    instead reference an external URL or a tile pyramid, neither of which has
+    local bytes to read.
+    """
+    if overlay.image_id is None:
+        return None
+    stored = getattr(overlay.image, "image", None)
+    if not stored:
+        return None
+    try:
+        with stored.open("rb") as handle:
+            return handle.read()
+    except (OSError, ValueError):
+        logger.debug("floorplan extraction: could not read overlay %s image", overlay.pk, exc_info=True)
+        return None
+
+
 def _structure_from_model(image_bytes: bytes) -> dict[str, Any] | None:
     """Ask the configured vision model for the sheet's structure, or None."""
     from urbanlens.dashboard.services.ai.vision import describe_image_json
@@ -107,12 +127,8 @@ def extract_overlay_structure(overlay: MapImageOverlay) -> dict[str, Any] | None
         when extraction isn't possible (no stored image, AI unconfigured,
         or the model's answer was unusable).
     """
-    if overlay.image_id is None or not overlay.image.file:
-        return None
-    try:
-        image_bytes = overlay.image.file.read()
-    except OSError:
-        logger.debug("floorplan extraction: could not read overlay %s image", overlay.pk, exc_info=True)
+    image_bytes = _overlay_image_bytes(overlay)
+    if image_bytes is None:
         return None
 
     structure = _structure_from_model(image_bytes)

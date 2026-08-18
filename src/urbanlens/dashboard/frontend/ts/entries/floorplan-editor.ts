@@ -13,6 +13,18 @@
  */
 import { getCsrfToken } from "../shared/csrf";
 import { toast } from "../shared/dialogs";
+import {
+    closeRing,
+    dropTrailingDuplicates,
+    insertVertex,
+    isClosedRing,
+    midpoint,
+    minimumVertices,
+    moveVertex,
+    removeVertex,
+    ringOf,
+    vertexCount,
+} from "../shared/floorplan-geometry";
 import { createMapImageOverlays, type MapOverlayEntry } from "../shared/map-image-overlays";
 import { tileLayer } from "../shared/map-layers";
 
@@ -66,6 +78,12 @@ interface FloorItem extends Item {
     elements?: ElementItem[];
 }
 
+interface VersionSummary {
+    uuid: string;
+    name: string;
+    valid_from: string | null;
+}
+
 interface FloorplanDocument extends Item {
     name?: string;
     building_ref?: string;
@@ -77,6 +95,7 @@ interface FloorplanDocument extends Item {
     floors?: FloorItem[];
     elements?: ElementItem[];
     origin?: string;
+    versions?: VersionSummary[];
 }
 
 const KIND_STYLE: Record<string, { color: string; weight: number }> = {
@@ -125,7 +144,9 @@ function boot(): void {
         dirty: false,
     };
     const itemLayers = L.layerGroup().addTo(map);
+    const handleLayers = L.layerGroup().addTo(map);
     const layerByItem = new Map<object, L.Layer>();
+
 
     const emptyDoc = (): FloorplanDocument => ({
         name: "",
@@ -148,6 +169,7 @@ function boot(): void {
 
     function render(): void {
         itemLayers.clearLayers();
+        handleLayers.clearLayers();
         layerByItem.clear();
         renderFloorTabs();
         const floor = currentFloor();
@@ -165,6 +187,7 @@ function boot(): void {
             const style = KIND_STYLE[element.kind] || (KIND_STYLE.other as { color: string; weight: number });
             addLayer(element, geometryToLayer(element.geometry, style), "element");
         }
+        renderVertexHandles();
         renderForm();
         const saveButton = document.getElementById("floorplan-save");
         if (saveButton) saveButton.classList.toggle("is-dirty", state.dirty);
@@ -208,6 +231,25 @@ function boot(): void {
             });
             host.appendChild(button);
         });
+        if ((state.doc.floors || []).length > 1) {
+            const remove = document.createElement("button");
+            remove.type = "button";
+            remove.className = "floorplan-floor-tab floorplan-floor-tab--remove";
+            remove.textContent = "Delete floor";
+            remove.title = "Remove this floor and everything drawn on it";
+            remove.addEventListener("click", () => {
+                const floors = state.doc?.floors || [];
+                const floor = floors[state.floorIndex];
+                const drawn = ((floor?.rooms || []).length + (floor?.elements || []).length) as number;
+                if (drawn && !window.confirm(`Delete ${floor?.name || "this floor"} and the ${drawn} item${drawn === 1 ? "" : "s"} on it?`)) return;
+                floors.splice(state.floorIndex, 1);
+                state.floorIndex = Math.max(0, state.floorIndex - 1);
+                state.selected = null;
+                markDirty();
+                render();
+            });
+            host.appendChild(remove);
+        }
         const add = document.createElement("button");
         add.type = "button";
         add.className = "floorplan-floor-tab floorplan-floor-tab--add";
@@ -221,6 +263,112 @@ function boot(): void {
             render();
         });
         host.appendChild(add);
+    }
+
+    // ---------- vertex editing ----------
+
+    function handleIcon(kind: "vertex" | "midpoint"): L.DivIcon {
+        return L.divIcon({
+            className: `floorplan-handle floorplan-handle--${kind}`,
+            iconSize: kind === "vertex" ? [12, 12] : [9, 9],
+        });
+    }
+
+    /**
+     * Draggable handles for the selected item's geometry: one per vertex,
+     * plus a midpoint handle between each pair that inserts a vertex when
+     * dragged. Alt-clicking a vertex removes it, down to the minimum a shape
+     * needs (3 for a room, 2 for a wall).
+     */
+    function renderVertexHandles(): void {
+        if (!state.selected || state.tool !== "select") return;
+        const item = state.selected.item as { geometry?: Geometry };
+        const geometry = item.geometry;
+        if (!geometry) return;
+
+        if (geometry.type === "Point") {
+            const [x, y] = geometry.coordinates as [number, number];
+            const marker = L.marker([y, x], { draggable: true, icon: handleIcon("vertex") });
+            marker.on("drag dragend", (event: L.LeafletEvent) => {
+                const position = (event.target as L.Marker).getLatLng();
+                geometry.coordinates = [position.lng, position.lat];
+                if (event.type === "dragend") {
+                    markDirty();
+                    render();
+                }
+            });
+            handleLayers.addLayer(marker);
+            return;
+        }
+
+        const ring = ringOf(geometry);
+        if (!ring) return;
+        const closed = isClosedRing(geometry);
+        const count = vertexCount(geometry);
+        const minimum = minimumVertices(geometry);
+
+        for (let index = 0; index < count; index += 1) {
+            const point = ring[index] as [number, number];
+            const marker = L.marker([point[1], point[0]], { draggable: true, icon: handleIcon("vertex") });
+            marker.on("drag", (event: L.LeafletEvent) => {
+                const position = (event.target as L.Marker).getLatLng();
+                moveVertex(geometry, index, [position.lng, position.lat]);
+                redrawSelected();
+            });
+            marker.on("dragend", () => {
+                markDirty();
+                render();
+            });
+            marker.on("click", (event: L.LeafletMouseEvent) => {
+                if (!(event.originalEvent && (event.originalEvent.altKey || event.originalEvent.metaKey))) return;
+                if (!removeVertex(geometry, index)) {
+                    toast.info(closed ? "A room needs at least three corners." : "A wall needs at least two points.");
+                    return;
+                }
+                markDirty();
+                render();
+            });
+            marker.bindTooltip("Drag to move · Alt-click to remove", { direction: "top" });
+            handleLayers.addLayer(marker);
+        }
+
+        const segments = closed ? count : count - 1;
+        for (let index = 0; index < segments; index += 1) {
+            const from = ring[index] as [number, number];
+            const to = ring[(index + 1) % count] as [number, number];
+            const middle = midpoint(from, to);
+            const marker = L.marker([middle[1], middle[0]], { draggable: true, icon: handleIcon("midpoint") });
+            let inserted = false;
+            marker.on("drag", (event: L.LeafletEvent) => {
+                const position = (event.target as L.Marker).getLatLng();
+                if (!inserted) {
+                    insertVertex(geometry, index, [position.lng, position.lat]);
+                    inserted = true;
+                } else {
+                    moveVertex(geometry, index + 1, [position.lng, position.lat]);
+                }
+                redrawSelected();
+            });
+            marker.on("dragend", () => {
+                markDirty();
+                render();
+            });
+            marker.bindTooltip("Drag to add a point", { direction: "top" });
+            handleLayers.addLayer(marker);
+        }
+    }
+
+    /** Redraw just the selected item's own layer mid-drag, handles untouched. */
+    function redrawSelected(): void {
+        if (!state.selected) return;
+        const item = state.selected.item as { geometry?: Geometry };
+        const existing = layerByItem.get(item);
+        if (existing) itemLayers.removeLayer(existing);
+        if (!item.geometry) return;
+        const style = state.selected.type === "room" ? ROOM_STYLE : KIND_STYLE[(item as ElementItem).kind] || (KIND_STYLE.other as { color: string; weight: number });
+        const layer = geometryToLayer(item.geometry, { ...style, color: "#d81b60", weight: 4 });
+        itemLayers.addLayer(layer);
+        layerByItem.set(item, layer);
     }
 
     // ---------- property form ----------
@@ -257,6 +405,8 @@ function boot(): void {
         host.appendChild(description);
 
         if (profileLabels.length) host.appendChild(labelPicker(item as Item));
+        host.appendChild(sourceEditor(item as Item));
+        host.appendChild(referenceEditor(item as Item));
         if (type === "element" && element.kind === "door") host.appendChild(locksEditor(element));
 
         const remove = document.createElement("button");
@@ -309,6 +459,105 @@ function boot(): void {
             row.append(box, document.createTextNode(label.name));
             wrap.appendChild(row);
         }
+        return wrap;
+    }
+
+    function uuidv4(): string {
+        return (crypto as Crypto & { randomUUID?: () => string }).randomUUID?.() || `local-${Math.random().toString(36).slice(2)}-${performance.now().toString(36)}`;
+    }
+
+    /**
+     * Where this item's information came from. Sources live in the plan's
+     * pool so ten walls traced from one drawing share one row - picking an
+     * existing source reuses it rather than duplicating.
+     */
+    function sourceEditor(item: Item): HTMLElement {
+        const wrap = document.createElement("div");
+        wrap.className = "floorplan-form__source";
+        const caption = document.createElement("span");
+        caption.textContent = "Source";
+        wrap.appendChild(caption);
+
+        const pool = (state.doc!.source_pool = state.doc!.source_pool || []);
+        const select = document.createElement("select");
+        const none = document.createElement("option");
+        none.value = "";
+        none.textContent = "— none —";
+        select.appendChild(none);
+        for (const source of pool) {
+            const option = document.createElement("option");
+            option.value = String(source.uuid);
+            option.textContent = String(source.title || source.author || source.url || "source");
+            select.appendChild(option);
+        }
+        select.value = item.source || "";
+        select.addEventListener("change", () => {
+            item.source = select.value || null;
+            markDirty();
+        });
+        wrap.appendChild(select);
+
+        const add = document.createElement("button");
+        add.type = "button";
+        add.textContent = "+ New source";
+        add.addEventListener("click", () => {
+            const title = window.prompt("Where did this come from? (title, e.g. 'HABS sheet 4' or 'measured on site')");
+            if (title === null) return;
+            const url = window.prompt("Link to it, if there is one (optional)") || "";
+            const source = { uuid: uuidv4(), title, url, note: "", author: "", attributes: {} };
+            pool.push(source);
+            item.source = source.uuid;
+            markDirty();
+            renderForm();
+        });
+        wrap.appendChild(add);
+        return wrap;
+    }
+
+    /** Photos, PDFs and videos evidencing this item, from the plan's pool. */
+    function referenceEditor(item: Item): HTMLElement {
+        const wrap = document.createElement("div");
+        wrap.className = "floorplan-form__references";
+        const caption = document.createElement("span");
+        caption.textContent = "References";
+        wrap.appendChild(caption);
+
+        const pool = (state.doc!.reference_pool = state.doc!.reference_pool || []);
+        const linked = new Set(item.references || []);
+        for (const reference of pool) {
+            const row = document.createElement("label");
+            const box = document.createElement("input");
+            box.type = "checkbox";
+            box.checked = linked.has(String(reference.uuid));
+            box.addEventListener("change", () => {
+                if (box.checked) linked.add(String(reference.uuid));
+                else linked.delete(String(reference.uuid));
+                item.references = Array.from(linked);
+                markDirty();
+            });
+            const text = document.createElement("span");
+            text.textContent = String(reference.title || reference.url || reference.kind || "reference");
+            row.append(box, text);
+            wrap.appendChild(row);
+        }
+
+        const add = document.createElement("button");
+        add.type = "button";
+        add.textContent = "+ Add reference";
+        add.addEventListener("click", () => {
+            const url = window.prompt("URL of a photo, PDF, or video showing this");
+            if (!url) return;
+            const title = window.prompt("Title (optional)") || "";
+            const lowered = url.toLowerCase();
+            const kind = lowered.endsWith(".pdf") ? "pdf" : /\.(mp4|mov|webm)$/.test(lowered) ? "video" : /\.(jpg|jpeg|png|gif|webp)$/.test(lowered) ? "photo" : "link";
+            const reference = { uuid: uuidv4(), kind: kind === "link" ? "other" : kind, title, url, description: "", attributes: {} };
+            pool.push(reference);
+            linked.add(reference.uuid);
+            item.references = Array.from(linked);
+            markDirty();
+            renderForm();
+        });
+        wrap.appendChild(add);
         return wrap;
     }
 
@@ -381,6 +630,10 @@ function boot(): void {
             button.classList.toggle("is-active", button.dataset.tool === tool);
         });
         mapEl.classList.toggle("is-drawing", tool !== "select");
+        // Finishing a shape is a double-click; leaving zoom bound to it would
+        // zoom the map every time somebody closes a room.
+        if (tool === "select") map.doubleClickZoom.enable();
+        else map.doubleClickZoom.disable();
         render();
     }
 
@@ -414,11 +667,13 @@ function boot(): void {
         const drawing = state.drawing;
         if (!drawing) return;
         const floor = currentFloor();
-        const points = drawing.latlngs;
+        // A double-click fires two clicks first, so the finishing point has
+        // already been added twice - drop the repeat rather than storing a
+        // zero-length segment.
+        const points = dropTrailingDuplicates(drawing.latlngs);
         state.drawing = null;
         if (POLYGON_TOOLS.has(state.tool) && points.length >= 3) {
-            const ring = [...points, points[0]];
-            const geometry = { type: "Polygon", coordinates: [ring] };
+            const geometry = { type: "Polygon", coordinates: [closeRing(points)] };
             if (state.tool === "room") (floor.rooms = floor.rooms || []).push({ name: "", geometry });
             else floor.geometry = geometry;
             markDirty();
@@ -465,12 +720,43 @@ function boot(): void {
         state.doc = body.floorplan;
         state.dirty = false;
         toast.success("Floorplan saved.");
+        renderVersionPicker();
         render();
     }
 
-    async function load(): Promise<void> {
+    /** Switch between the building's dated plan versions. */
+    function renderVersionPicker(): void {
+        const host = document.getElementById("floorplan-versions");
+        if (!host) return;
+        const versions = state.doc?.versions || [];
+        host.hidden = versions.length < 2;
+        if (host.hidden) return;
+        host.innerHTML = "";
+        const caption = document.createElement("span");
+        caption.textContent = "Version";
+        const select = document.createElement("select");
+        for (const version of versions) {
+            const option = document.createElement("option");
+            option.value = version.uuid;
+            option.textContent = `${version.name || "Floorplan"} · ${version.valid_from || "original"}`;
+            select.appendChild(option);
+        }
+        select.value = String(state.doc?.uuid || "");
+        select.addEventListener("change", () => {
+            if (state.dirty && !window.confirm("Discard unsaved changes and open the other version?")) {
+                select.value = String(state.doc?.uuid || "");
+                return;
+            }
+            void load(select.value);
+        });
+        host.append(caption, select);
+    }
+
+    async function load(versionUuid = ""): Promise<void> {
         const params = new URLSearchParams(window.location.search);
-        const url = params.get("date") ? `${jsonUrl}?date=${encodeURIComponent(params.get("date") as string)}` : jsonUrl;
+        let url = jsonUrl;
+        if (versionUuid) url = `${jsonUrl}?version=${encodeURIComponent(versionUuid)}`;
+        else if (params.get("date")) url = `${jsonUrl}?date=${encodeURIComponent(params.get("date") as string)}`;
         const response = await fetch(url, { headers: { Accept: "application/json" } });
         state.doc = response.status === 204 ? emptyDoc() : ((await response.json()) as FloorplanDocument);
         if (state.doc.origin === "redata") {
@@ -481,15 +767,28 @@ function boot(): void {
         if (nameInput) nameInput.value = state.doc.name || "";
         const dateInput = document.getElementById("floorplan-valid-from") as HTMLInputElement | null;
         if (dateInput) dateInput.value = state.doc.valid_from || "";
+        state.floorIndex = 0;
+        state.selected = null;
+        state.dirty = false;
         const first = (state.doc.floors || []).find((floor) => floor.geometry || (floor.rooms || []).length || (floor.elements || []).length);
         fitTo(first);
+        renderVersionPicker();
         render();
     }
 
+    /** Zoom to everything drawn on a floor - an outline is not required. */
     function fitTo(floor: FloorItem | undefined): void {
         if (!floor) return;
-        const layer = floor.geometry ? geometryToLayer(floor.geometry, { weight: 1 }) : null;
-        const bounds = layer && "getBounds" in (layer as L.Polygon) ? (layer as L.Polygon).getBounds() : null;
+        const geometries: Geometry[] = [floor.geometry || null, ...(floor.rooms || []).map((room) => room.geometry || null), ...(floor.elements || []).map((element) => element.geometry || null)];
+        let bounds: L.LatLngBounds | null = null;
+        for (const geometry of geometries) {
+            if (!geometry) continue;
+            const layer = geometryToLayer(geometry, { weight: 1 });
+            const point = "getBounds" in (layer as L.Polygon) ? null : (layer as L.CircleMarker).getLatLng();
+            const own = point ? L.latLngBounds(point, point) : (layer as L.Polygon).getBounds();
+            if (!own.isValid()) continue;
+            bounds = bounds ? bounds.extend(own) : own;
+        }
         if (bounds && bounds.isValid()) map.fitBounds(bounds.pad(0.3));
     }
 
@@ -541,6 +840,14 @@ function boot(): void {
     renderTraceButtons();
 
     document.getElementById("floorplan-save")?.addEventListener("click", () => void save());
+    document.getElementById("floorplan-save-version")?.addEventListener("click", () => {
+        if (!state.doc) return;
+        // Dropping the plan uuid makes the save create a second version and
+        // leave the loaded one standing - how a building's layout change
+        // (a renovation, a fire) is recorded without losing what came before.
+        delete state.doc.uuid;
+        void save();
+    });
     document.querySelectorAll<HTMLButtonElement>("#floorplan-tools button").forEach((button) => {
         button.addEventListener("click", () => setTool(button.dataset.tool || "select"));
     });

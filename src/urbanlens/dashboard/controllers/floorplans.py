@@ -78,10 +78,36 @@ class FloorplanJsonView(LoginRequiredMixin, View):
         place = _building_place(pin)
         if place is None:
             return HttpResponse(status=204)
-        document = resolve_document(place, on_date=_parse_date(request.GET.get("date")))
+        version_uuid = request.GET.get("version") or ""
+        if version_uuid:
+            document = _document_for_version(place, pin.profile, version_uuid)
+        else:
+            document = resolve_document(place, profile=pin.profile, on_date=_parse_date(request.GET.get("date")))
         if document is None:
             return HttpResponse(status=204)
+        # Every version of this building the user has, so the editor can offer
+        # to switch between them without a second round trip.
+        document["versions"] = _version_list(place, pin.profile)
         return JsonResponse(document)
+
+
+def _version_list(place: Place, profile) -> list[dict]:
+    """This user's plan versions for a building, oldest first."""
+    from urbanlens.dashboard.models.floorplans.model import Floorplan
+
+    return [
+        {"uuid": str(plan.uuid), "name": plan.name, "valid_from": plan.valid_from.isoformat() if plan.valid_from else None}
+        for plan in Floorplan.objects.for_place(place).filter(profile=profile)
+    ]
+
+
+def _document_for_version(place: Place, profile, version_uuid: str) -> dict | None:
+    """One specific version of the user's own plan, or None."""
+    from urbanlens.dashboard.models.floorplans.model import Floorplan
+    from urbanlens.dashboard.services.floorplans.serialization import document_for
+
+    plan = Floorplan.objects.filter(place=place, profile=profile, uuid=version_uuid).first()
+    return {**document_for(plan), "origin": "local"} if plan is not None else None
 
 
 class FloorplanSaveView(LoginRequiredMixin, View):
@@ -113,14 +139,20 @@ class FloorplanSaveView(LoginRequiredMixin, View):
         if not isinstance(document, dict):
             return JsonResponse({"ok": False, "error": "Expected a document object."}, status=400)
 
-        floorplan = floorplan_for_editing(place, pin.profile, on_date=_parse_date(document.get("valid_from")))
+        floorplan = floorplan_for_editing(
+            place,
+            pin.profile,
+            version_uuid=str(document.get("uuid") or ""),
+            on_date=_parse_date(document.get("valid_from")),
+        )
         if floorplan.pin_id is None:
             floorplan.pin = pin
         try:
             save_document(floorplan, document, profile=pin.profile)
         except ValueError as exc:
             return JsonResponse({"ok": False, "error": str(exc)}, status=400)
-        return JsonResponse({"ok": True, "floorplan": {**document_for(floorplan), "origin": "local"}})
+        saved = {**document_for(floorplan), "origin": "local", "versions": _version_list(place, pin.profile)}
+        return JsonResponse({"ok": True, "floorplan": saved})
 
 
 class FloorplanExtractView(LoginRequiredMixin, View):

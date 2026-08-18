@@ -21,11 +21,19 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def resolve_document(place: Place, *, on_date: datetime.date | None = None) -> dict[str, Any] | None:
+def resolve_document(place: Place, *, profile: Profile | None = None, on_date: datetime.date | None = None) -> dict[str, Any] | None:
     """The floorplan document for a building, resolved by date.
+
+    A local plan is the author's own: it records where the doors are, what
+    locks them and what opens those locks, which is not something to hand to
+    everyone who pins the same building. So local lookup is profile-scoped,
+    and REData's aggregated plans - external, non-personal by construction -
+    are what a user without their own plan sees.
 
     Args:
         place: The building.
+        profile: Whose plans to consider local. None looks at no local plans
+            at all (a caller with no user in hand gets the upstream answer).
         on_date: Resolve the plan as of this date; None for current.
 
     Returns:
@@ -36,7 +44,7 @@ def resolve_document(place: Place, *, on_date: datetime.date | None = None) -> d
     from urbanlens.dashboard.models.floorplans.model import Floorplan
     from urbanlens.dashboard.services.floorplans.serialization import document_for
 
-    local = Floorplan.objects.at(place, on_date)
+    local = Floorplan.objects.at(place, on_date, profile=profile) if profile is not None else None
     if local is not None:
         return {**document_for(local), "origin": "local"}
 
@@ -77,24 +85,41 @@ def _redata_document(place: Place, on_date: datetime.date | None) -> dict[str, A
     return {**document, "origin": "redata"}
 
 
-def floorplan_for_editing(place: Place, profile: Profile, *, on_date: datetime.date | None = None):
-    """The local floorplan version to edit, creating an empty one if needed.
+def floorplan_for_editing(place: Place, profile: Profile, *, version_uuid: str = "", on_date: datetime.date | None = None):
+    """The local floorplan version a save should write into.
 
-    Editing never touches a REData-origin document - the user's plan starts
-    empty (or from their existing local version) and simply wins resolution
-    from then on.
+    Writing is deliberately narrow, because a floorplan is expensive hand
+    work and a save must never destroy someone else's:
+
+    - A save naming a version *this profile owns* updates it in place.
+    - Anything else - no uuid, an unknown uuid, a REData-origin document, or
+      a version belonging to another user - creates a new version owned by
+      the saver. The document's item uuids simply won't match the new
+      version's (empty) contents, so its contents are recreated rather than
+      moved.
+
+    That also makes dating explicit: changing ``valid_from`` on a loaded plan
+    edits that plan's date, while "save as a new version" (the editor drops
+    the plan uuid) creates a second version and leaves the original standing.
 
     Args:
         place: The building.
         profile: The editing user.
-        on_date: The version date being edited; None edits the current one.
+        version_uuid: The plan version the document came from, if any.
+        on_date: ``valid_from`` for a newly created version.
 
     Returns:
-        A saved local ``Floorplan`` row.
+        A saved local ``Floorplan`` row the caller may write into.
     """
     from urbanlens.dashboard.models.floorplans.model import Floorplan
 
-    existing = Floorplan.objects.at(place, on_date)
-    if existing is not None:
-        return existing
-    return Floorplan.objects.create(place=place, profile=profile, valid_from=on_date, building_ref=place.provider_key if place.provider == "redata" else "")
+    if version_uuid:
+        owned = Floorplan.objects.filter(place=place, uuid=version_uuid, profile=profile).first()
+        if owned is not None:
+            return owned
+    return Floorplan.objects.create(
+        place=place,
+        profile=profile,
+        valid_from=on_date,
+        building_ref=place.provider_key if place.provider == "redata" else "",
+    )

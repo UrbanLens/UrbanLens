@@ -154,6 +154,36 @@ def document_for(floorplan: Floorplan) -> dict[str, Any]:
     }
 
 
+def _int_in(raw, field: str) -> int | None:
+    """An optional integer from a document payload.
+
+    Raises:
+        ValueError: Present but not a number - reported to the caller as a
+            400 naming the field, rather than reaching the database and
+            surfacing as a 500.
+    """
+    if raw is None or raw == "":
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field} must be a whole number") from exc
+
+
+def _float_in(raw, field: str) -> float | None:
+    """An optional float from a document payload.
+
+    Raises:
+        ValueError: Present but not a number.
+    """
+    if raw is None or raw == "":
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(f"{field} must be a number") from exc
+
+
 def _date_in(raw) -> datetime.date | None:
     """Parse an ISO date or None.
 
@@ -214,7 +244,10 @@ def _apply_item(row: FloorplanItem, payload: dict[str, Any], pools: _Pools, prof
 
     row.description = payload.get("description") or ""
     row.condition = payload.get("condition") or ""
-    row.built_date = _date_in(payload.get("built_date"))
+    try:
+        row.built_date = _date_in(payload.get("built_date"))
+    except ValueError as exc:
+        raise ValueError(f"built_date: {exc}") from exc
     row.attributes = payload.get("attributes") or {}
     row.source = pools.sources.get(str(payload.get("source") or ""))
     row.save()
@@ -269,17 +302,17 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
     if "building_ref" in document:
         floorplan.building_ref = document.get("building_ref") or floorplan.building_ref
     floorplan.valid_from = _date_in(document.get("valid_from"))
-    floorplan.floor_count = document.get("floor_count")
+    floorplan.floor_count = _int_in(document.get("floor_count"), "floor_count")
     _apply_item(floorplan, document, pools, profile)
 
     def build_floor(payload: dict, row: FloorplanFloor | None) -> FloorplanFloor:
         floor = row or FloorplanFloor(floorplan=floorplan)
         floor.floorplan = floorplan
-        floor.level = int(payload.get("level") or 0)
+        floor.level = _int_in(payload.get("level"), "level") or 0
         floor.name = payload.get("name") or ""
         floor.geometry = _geometry_in(payload.get("geometry"))
-        floor.elevation_meters = payload.get("elevation_meters")
-        floor.height_meters = payload.get("height_meters")
+        floor.elevation_meters = _float_in(payload.get("elevation_meters"), "elevation_meters")
+        floor.height_meters = _float_in(payload.get("height_meters"), "height_meters")
         return floor
 
     floors = _sync({str(f.uuid): f for f in floorplan.floors.all()}, document.get("floors"), build_floor, pools, profile)
@@ -292,7 +325,7 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
             room.floor = _floor
             room.name = payload.get("name") or ""
             room.geometry = _geometry_in(payload.get("geometry"))
-            room.height_meters = payload.get("height_meters")
+            room.height_meters = _float_in(payload.get("height_meters"), "height_meters")
             return room
 
         for payload, room in _sync({str(r.uuid): r for r in floor.rooms.all()}, floor_payload.get("rooms"), build_room, pools, profile):
@@ -318,8 +351,8 @@ def save_document(floorplan: Floorplan, document: dict[str, Any], *, profile: Pr
         element.material = payload.get("material") or ""
         element.room = rooms_by_uuid.get(str(payload.get("room") or ""))
         element.mounted_on = None  # second pass
-        element.base_elevation_meters = payload.get("base_elevation_meters")
-        element.height_meters = payload.get("height_meters")
+        element.base_elevation_meters = _float_in(payload.get("base_elevation_meters"), "base_elevation_meters")
+        element.height_meters = _float_in(payload.get("height_meters"), "height_meters")
         _apply_item(element, payload, pools, profile)
         elements_by_uuid[str(payload.get("uuid") or element.uuid)] = element
         kept_elements.append((payload, element))

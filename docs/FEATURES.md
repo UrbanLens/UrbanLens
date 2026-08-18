@@ -190,6 +190,44 @@ never see the rule engine, only vote buttons on a place that already qualifies.
   (`controllers/historical_map_tiles.py`; 200s and definitive 404s cached, institutional outages
   never cached) so REData's API key stays server-side
 
+
+## Building Floorplans
+
+Interior structure for one building, drawn by hand or traced from a schematic. Absent by default -
+most buildings will never have one, so nothing loads a floorplan alongside a building; they answer
+only through their own endpoints (`controllers/floorplans.py`).
+
+- **Data model** (`models/floorplans/`) mirrors REData's floorplan schema shape for shape, so one
+  document format serves both origins and a future push upstream is a field-copy: floors, rooms, one
+  generic element table (wall / floor surface / ceiling / roof / column / window / door / stair /
+  fixture / **key**), zero-to-many locks per element with `key_attributes` describing what opens
+  them, and per-plan **source** and **reference pools** every item points into by uuid (ten walls
+  traced from one drawing share one source row; one photo can evidence a wall, its door and the
+  door's lock at once). Openings mount on a surface via a `mounted_on` self-FK - a skylight is a
+  window on a roof, a hatch is a door in a floor. Every item may carry the owner's labels.
+- **Versioned whole-document, by date** — a layout change (a renovation, a fire) is a *new*
+  `Floorplan` row with a later `valid_from`; the undated baseline is in force from the beginning of
+  time. `?date=YYYY-MM-DD` answers "as of then", no date answers current
+  (`models/floorplans/queryset.py`)
+- **Geometry is WGS-84** so every wall, room and door lands directly on the same map as parcels and
+  building footprints, and any consumer can render or spatially query it
+- **Visual editor** (`/map/pin/<slug>/floorplan/`, `frontend/ts/entries/floorplan-editor.ts`) —
+  draw over satellite imagery with the pin's georeferenced blueprint overlays showing underneath;
+  per-floor tabs, tools for outline/rooms/walls/doors/windows/stairs/fixtures, **vertex-level
+  editing** (drag a corner, drag a midpoint to insert one, alt-click to remove), per-item name /
+  material / condition / built date / description / labels / sources / references, and a lock list
+  with key attributes on doors. Versions are switchable in-page, and "Save as new version" forks
+  rather than overwrites
+- **Blueprint tracing** — upload a schematic as a map image overlay, drag its corners until it lines
+  up (the same georeferencing the historical-map sheets use), then **Auto-trace** asks the
+  configured vision model for rooms, walls, doors and windows in image space and maps them through
+  the overlay's corner georeference into world coordinates
+  (`services/floorplans/extraction.py`). Results arrive as editable suggestions, never
+  silently-committed rows; with no AI configured the editor works identically by hand
+- **Personal by default** — a plan records where the doors are, what locks them and what opens
+  those locks, so local plans are scoped to their author. REData's aggregated plans (external, and
+  none exist upstream yet) are what a user without their own plan sees, marked as such in the editor
+
 ## External Data Enrichment (Pin Detail Page)
 
 On-demand, cached lookups shown as panels on the pin detail page. Many of these are now backed by

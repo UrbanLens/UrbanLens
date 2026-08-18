@@ -16,6 +16,7 @@ The load-bearing properties:
 
 from __future__ import annotations
 
+import base64
 import datetime
 from unittest import mock
 
@@ -37,6 +38,10 @@ from urbanlens.dashboard.services.floorplans.serialization import document_for, 
 _SQUARE = {"type": "Polygon", "coordinates": [[[-73.93, 41.733], [-73.929, 41.733], [-73.929, 41.734], [-73.93, 41.734], [-73.93, 41.733]]]}
 _LINE = {"type": "LineString", "coordinates": [[-73.93, 41.733], [-73.929, 41.733]]}
 _POINT = {"type": "Point", "coordinates": [-73.9295, 41.733]}
+#: A minimal valid 1x1 PNG - real bytes, so the stored-file read path is exercised.
+_PNG_BYTES = base64.b64decode(
+    b"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+)
 
 
 def _building(parcel: Place | None = None) -> Place:
@@ -204,10 +209,21 @@ class FloorplanResolutionTests(TestCase):
         Floorplan.objects.create(place=self.place, profile=self.profile, name="mine")
 
         with mock.patch("urbanlens.dashboard.services.floorplans.resolution._redata_document") as upstream:
-            document = resolve_document(self.place)
+            document = resolve_document(self.place, profile=self.profile)
 
         self.assertEqual(document["origin"], "local")
         upstream.assert_not_called()
+
+    def test_another_users_plan_is_not_served(self) -> None:
+        """A plan records doors, locks and what opens them - not shared data.
+
+        Resolution is place-scoped, so without this every user who pinned the
+        same building would receive whatever anyone else had traced.
+        """
+        Floorplan.objects.create(place=self.place, profile=baker.make(User).profile, name="theirs")
+
+        with mock.patch("urbanlens.dashboard.services.floorplans.resolution._redata_document", return_value=None):
+            self.assertIsNone(resolve_document(self.place, profile=self.profile))
 
     def test_redata_fills_when_local_is_absent(self) -> None:
         url_patch, key_patch = self._configured()
@@ -215,7 +231,7 @@ class FloorplanResolutionTests(TestCase):
             gateway.return_value.lookup_floorplans.return_value = [{"uuid": "fp-1", "building_ref": "cris:1"}]
             gateway.return_value.lookup_floorplan_document.return_value = {"name": "REData plan", "floors": []}
 
-            document = resolve_document(self.place)
+            document = resolve_document(self.place, profile=self.profile)
 
         self.assertEqual(document["origin"], "redata")
         self.assertEqual(document["name"], "REData plan")
@@ -227,7 +243,7 @@ class FloorplanResolutionTests(TestCase):
         with mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway, url_patch, key_patch:
             gateway.return_value.lookup_floorplans.return_value = []
 
-            self.assertIsNone(resolve_document(self.place))
+            self.assertIsNone(resolve_document(self.place, profile=self.profile))
 
         gateway.return_value.lookup_floorplan_document.assert_not_called()
 
@@ -236,13 +252,13 @@ class FloorplanResolutionTests(TestCase):
         with mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway, url_patch, key_patch:
             gateway.return_value.lookup_floorplans.side_effect = RuntimeError("boom")
 
-            self.assertIsNone(resolve_document(self.place))
+            self.assertIsNone(resolve_document(self.place, profile=self.profile))
 
     def test_a_building_with_no_redata_parcel_never_calls_upstream(self) -> None:
         orphan = baker.make(Place, kind=PlaceKind.BUILDING, provider="redata", provider_key="cris:9", parent=None)
 
         with mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway:
-            self.assertIsNone(resolve_document(orphan))
+            self.assertIsNone(resolve_document(orphan, profile=self.profile))
 
         gateway.assert_not_called()
 
@@ -251,7 +267,7 @@ class FloorplanResolutionTests(TestCase):
         with mock.patch("urbanlens.dashboard.services.apis.property_records.redata_gateway.RedataGateway") as gateway, url_patch, key_patch:
             gateway.return_value.lookup_floorplans.return_value = []
 
-            resolve_document(self.place, on_date=datetime.date(1954, 1, 1))
+            resolve_document(self.place, profile=self.profile, on_date=datetime.date(1954, 1, 1))
 
         gateway.return_value.lookup_floorplans.assert_called_once_with("parcel-uuid-1", building_ref="cris:1", on_date="1954-01-01")
 
@@ -269,12 +285,16 @@ class BlueprintExtractionTests(TestCase):
         baker.make(User)
         self.profile = baker.make(User).profile
         # A 0.01° square: NW at (-73.93, 41.734), SE at (-73.92, 41.724).
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
         from urbanlens.dashboard.models.map_overlay.model import MapImageOverlay
 
+        sheet = baker.make("dashboard.Image")
+        sheet.image.save("blueprint.png", SimpleUploadedFile("blueprint.png", _PNG_BYTES, content_type="image/png"), save=True)
         self.overlay = baker.make(
             MapImageOverlay,
             profile=self.profile,
-            image=baker.make("dashboard.Image"),
+            image=sheet,
             nw_latitude=41.734, nw_longitude=-73.93,
             ne_latitude=41.734, ne_longitude=-73.92,
             se_latitude=41.724, se_longitude=-73.92,
@@ -282,12 +302,21 @@ class BlueprintExtractionTests(TestCase):
         )
 
     def _extract(self, structure):
+        """Run extraction with only the *model* mocked.
+
+        Deliberately not mocking the image attribute: an earlier version of
+        this test faked `overlay.image.file`, which does not exist (the field
+        is `Image.image`), so it passed against code that would have raised in
+        production. The stored file below is real, so the read path is under
+        test too.
+        """
         from urbanlens.dashboard.services.floorplans import extraction
 
-        with mock.patch.object(extraction, "_structure_from_model", return_value=structure), \
-             mock.patch.object(type(self.overlay), "image", new_callable=mock.PropertyMock) as image:
-            image.return_value = mock.Mock(file=mock.Mock(read=mock.Mock(return_value=b"png")))
-            return extraction.extract_overlay_structure(self.overlay)
+        with mock.patch.object(extraction, "_structure_from_model", return_value=structure) as model:
+            result = extraction.extract_overlay_structure(self.overlay)
+        if structure is not None:
+            self.assertEqual(model.call_args.args[0], _PNG_BYTES, "the overlay's own stored bytes must reach the model")
+        return result
 
     def test_image_corners_map_to_overlay_corners(self) -> None:
         """(0,0) is the sheet's top-left = the overlay's NW corner."""
@@ -376,6 +405,29 @@ class FloorplanEndpointTests(TestCase):
 
         self.assertEqual(self.client.get(f"/dashboard/map/pin/{other.slug}/floorplan/json/").status_code, 404)
 
+    def test_a_bad_number_is_a_400_naming_the_field(self) -> None:
+        import json as jsonlib
+
+        response = self.client.post(
+            f"/dashboard/map/pin/{self.pin.slug}/floorplan/save/",
+            data=jsonlib.dumps({"floor_count": "several"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400, "a non-numeric field must not reach the database as a 500")
+        self.assertIn("floor_count", response.json()["error"])
+
+    def test_a_bad_date_is_a_400(self) -> None:
+        import json as jsonlib
+
+        response = self.client.post(
+            f"/dashboard/map/pin/{self.pin.slug}/floorplan/save/",
+            data=jsonlib.dumps({"floors": [{"level": 0, "built_date": "sometime in 1890"}]}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
     def test_a_bad_geometry_is_a_400_naming_the_defect(self) -> None:
         import json as jsonlib
 
@@ -394,3 +446,114 @@ class FloorplanEndpointTests(TestCase):
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "floorplan-map")
+
+
+class FloorplanVersionSafetyTests(TestCase):
+    """A save must never destroy a plan it was not editing.
+
+    Floorplans are expensive hand work: hours of tracing. Two ways that work
+    could have been lost - re-dating a loaded plan silently rewrote the
+    version in force at the new date, and any user could write over any other
+    user's plan for the same building, since resolution is place-scoped.
+    Both now fork into a new version instead.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.profile = baker.make(User).profile
+        self.place = _building()
+
+    def _edit(self, *, version_uuid: str = "", on_date=None):
+        from urbanlens.dashboard.services.floorplans.resolution import floorplan_for_editing
+
+        return floorplan_for_editing(self.place, self.profile, version_uuid=version_uuid, on_date=on_date)
+
+    def test_saving_a_loaded_plan_updates_it(self) -> None:
+        mine = Floorplan.objects.create(place=self.place, profile=self.profile, name="mine")
+
+        self.assertEqual(self._edit(version_uuid=str(mine.uuid)).pk, mine.pk)
+        self.assertEqual(Floorplan.objects.count(), 1)
+
+    def test_re_dating_without_a_uuid_creates_a_version_instead_of_overwriting(self) -> None:
+        """The reported shape: a baseline must survive a dated save."""
+        baseline = Floorplan.objects.create(place=self.place, profile=self.profile, name="as built", valid_from=None)
+
+        created = self._edit(on_date=datetime.date(1962, 5, 1))
+
+        self.assertNotEqual(created.pk, baseline.pk)
+        baseline.refresh_from_db()
+        self.assertIsNone(baseline.valid_from, "the baseline was re-dated instead of a new version being created")
+        self.assertEqual(baseline.name, "as built")
+
+    def test_another_users_plan_is_never_written_over(self) -> None:
+        theirs = Floorplan.objects.create(place=self.place, profile=baker.make(User).profile, name="theirs")
+
+        created = self._edit(version_uuid=str(theirs.uuid))
+
+        self.assertNotEqual(created.pk, theirs.pk)
+        self.assertEqual(created.profile_id, self.profile.pk)
+        theirs.refresh_from_db()
+        self.assertEqual(theirs.name, "theirs")
+
+    def test_a_redata_origin_document_forks_to_a_local_plan(self) -> None:
+        """Its uuid is REData's, so it can never match a local row."""
+        created = self._edit(version_uuid="11111111-1111-1111-1111-111111111111")
+
+        self.assertEqual(created.profile_id, self.profile.pk)
+        self.assertEqual(Floorplan.objects.count(), 1)
+
+    def test_repeated_saves_of_one_plan_do_not_pile_up_versions(self) -> None:
+        first = self._edit()
+
+        again = self._edit(version_uuid=str(first.uuid))
+
+        self.assertEqual(again.pk, first.pk)
+        self.assertEqual(Floorplan.objects.count(), 1)
+
+
+class FloorplanVersionListingTests(TestCase):
+    """The editor switches versions without a page reload, so the API lists them."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        baker.make(User)
+        self.user = baker.make(User)
+        self.client.force_login(self.user)
+        from urbanlens.dashboard.models.location.model import Location
+        from urbanlens.dashboard.models.pin.model import Pin
+
+        parcel = baker.make(Place, kind=PlaceKind.PARCEL)
+        self.place = baker.make(Place, kind=PlaceKind.BUILDING, parent=parcel)
+        location = baker.make(Location, latitude=41.7331, longitude=-73.9281, place=self.place)
+        self.pin = baker.make(Pin, profile=self.user.profile, location=location, parent_pin=None, slug="hrsh-kirkbride")
+        self.baseline = Floorplan.objects.create(place=self.place, profile=self.user.profile, name="as built", valid_from=None)
+        self.later = Floorplan.objects.create(place=self.place, profile=self.user.profile, name="after fire", valid_from=datetime.date(1962, 5, 1))
+
+    def _get(self, query: str = ""):
+        return self.client.get(f"/dashboard/map/pin/{self.pin.slug}/floorplan/json/{query}")
+
+    def test_the_response_lists_every_version_oldest_first(self) -> None:
+        body = self._get().json()
+
+        self.assertEqual([v["name"] for v in body["versions"]], ["as built", "after fire"])
+
+    def test_a_specific_version_can_be_opened(self) -> None:
+        body = self._get(f"?version={self.baseline.uuid}").json()
+
+        self.assertEqual(body["uuid"], str(self.baseline.uuid))
+        self.assertEqual(body["name"], "as built")
+
+    def test_another_users_version_cannot_be_opened_by_uuid(self) -> None:
+        theirs = Floorplan.objects.create(place=self.place, profile=baker.make(User).profile, name="theirs")
+
+        response = self._get(f"?version={theirs.uuid}")
+
+        self.assertEqual(response.status_code, 204, "a version uuid must not be a way to read someone else's plan")
+
+    def test_versions_are_listed_only_for_their_owner(self) -> None:
+        Floorplan.objects.create(place=self.place, profile=baker.make(User).profile, name="theirs")
+
+        body = self._get().json()
+
+        self.assertEqual([v["name"] for v in body["versions"]], ["as built", "after fire"])
