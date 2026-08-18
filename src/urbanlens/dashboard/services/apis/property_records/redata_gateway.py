@@ -360,6 +360,53 @@ class RedataGateway(Gateway):
         body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/boundaries/")
         return list(body) if isinstance(body, list) else []
 
+    def lookup_floorplans(self, parcel_uuid: str, *, building_ref: str = "", on_date: str | None = None) -> list[dict[str, Any]]:
+        """List a parcel's floorplan version summaries, resolved by date.
+
+        Mirrors ``GET /api/v1/parcels/{uuid}/floorplans/``: without ``on_date``
+        the effective (current) version per building; with it, the versions in
+        force on that date. No floorplan provider exists in REData yet, so an
+        empty list is the expected answer for a long time - absence is quiet.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid.
+            building_ref: Restrict to one building's plans (the reconciled
+                building ``ref``).
+            on_date: ISO date to resolve as of; None for current.
+
+        Returns:
+            Summary dicts (uuid, building_ref, valid_from, counts), possibly
+            empty.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        params: dict[str, Any] = {}
+        if building_ref:
+            params["building_ref"] = building_ref
+        if on_date:
+            params["date"] = on_date
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/floorplans/", params=params or None)
+        results = body.get("results") if isinstance(body, dict) else None
+        return list(results) if isinstance(results, list) else []
+
+    def lookup_floorplan_document(self, floorplan_uuid: str) -> dict[str, Any] | None:
+        """Fetch one floorplan version's full nested document.
+
+        Mirrors ``GET /api/v1/floorplans/{uuid}/``.
+
+        Args:
+            floorplan_uuid: The plan version's uuid, from a summary row.
+
+        Returns:
+            The document dict, or None when it does not exist.
+        """
+        try:
+            body = self._get_json(f"/api/v1/floorplans/{floorplan_uuid}/")
+        except PropertyRecordsUnavailableError:
+            return None
+        return body if isinstance(body, dict) else None
+
     def lookup_cultural_resources(self, latitude: float, longitude: float, *, radius_meters: float = 200) -> list[dict[str, Any]]:
         """Find (fetching/caching as needed) CRIS cultural/historic resources near a coordinate.
 

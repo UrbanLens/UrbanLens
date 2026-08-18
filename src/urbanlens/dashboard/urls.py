@@ -33,6 +33,7 @@ from urbanlens.dashboard.controllers import (
     direct_messages,
     e2ee,
     flickr,
+    floorplans,
     friendship,
     games,
     google_photos,
@@ -533,6 +534,21 @@ urlpatterns = [
                                 "<slug:pin_slug>/detail-pins/<uuid:detail_pin_uuid>/",
                                 detail_pins.DetailPinEditView.as_view(),
                                 name="pin.detail_pin.edit",
+                            ),
+                            path(
+                                "<slug:pin_slug>/floorplan/",
+                                floorplans.FloorplanEditorView.as_view(),
+                                name="pin.floorplan",
+                            ),
+                            path(
+                                "<slug:pin_slug>/floorplan/json/",
+                                floorplans.FloorplanJsonView.as_view(),
+                                name="pin.floorplan.json",
+                            ),
+                            path(
+                                "<slug:pin_slug>/floorplan/save/",
+                                floorplans.FloorplanSaveView.as_view(),
+                                name="pin.floorplan.save",
                             ),
                             path(
                                 "<slug:pin_slug>/markup/json/",

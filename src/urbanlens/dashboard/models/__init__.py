@@ -60,6 +60,17 @@ from urbanlens.dashboard.models.email_log import EmailSendLog, EmailType
 from urbanlens.dashboard.models.epa_facility import EpaFacility
 from urbanlens.dashboard.models.facts import Fact, FactDataType, FactEvidence, FactSourceKind, FactStatus, FactSubjectType
 from urbanlens.dashboard.models.flickr import FlickrAccount
+from urbanlens.dashboard.models.floorplans import (
+    Floorplan,
+    FloorplanElement,
+    FloorplanElementKind,
+    FloorplanFloor,
+    FloorplanLock,
+    FloorplanReference,
+    FloorplanReferenceKind,
+    FloorplanRoom,
+    FloorplanSource,
+)
 from urbanlens.dashboard.models.friendship import Friendship
 from urbanlens.dashboard.models.friendship.invitation import FriendInvitation
 from urbanlens.dashboard.models.google_photos import GooglePhotosAccount

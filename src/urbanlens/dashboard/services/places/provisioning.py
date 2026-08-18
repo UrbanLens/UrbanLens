@@ -288,7 +288,9 @@ def ensure_building_places(parcel: Place | None, buildings: list[dict], *, provi
     created: dict[int, Place] = {}
     for index, building in enumerate(buildings):
         footprint = building_footprint(building)
-        key = str(building.get("uuid") or building.get("id") or building.get("building_number") or "").strip()
+        # "ref" is the reconciled shape's stable id (e.g. "cris:02714.000098")
+        # and doubles as the key floorplan lookups use - prefer it.
+        key = str(building.get("ref") or building.get("uuid") or building.get("id") or building.get("building_number") or "").strip()
         place = upsert_place(
             PlaceKind.BUILDING,
             _as_multipolygon(footprint),
