@@ -95,6 +95,58 @@ class RedataLabelsGateway(Gateway):
         logger.warning("REData request to %s failed (%s): %s", path, response.status_code, response.text[:500])
         raise GatewayRequestError(f"REData request to {path} failed with status {response.status_code}.")
 
+    def _get_json(self, path: str) -> dict[str, Any]:
+        """GET one REData endpoint and return its decoded JSON body.
+
+        Args:
+            path: Path relative to ``base_url`` (leading slash optional).
+
+        Returns:
+            The decoded JSON response body.
+
+        Raises:
+            GatewayRequestError: The request could not be made, REData returned
+                a non-2xx status, or the body wasn't parseable JSON.
+        """
+        base_url = self.base_url
+        if base_url is None:
+            raise GatewayRequestError("UL_REDATA_API_URL is not configured.")
+        try:
+            response = self.session.get(f"{base_url.rstrip('/')}/{path.lstrip('/')}", headers=self._headers, timeout=_REQUEST_TIMEOUT)
+        except OSError as exc:
+            raise GatewayRequestError(f"Could not reach REData: {exc}") from exc
+
+        if response.status_code == 200:
+            try:
+                return dict(response.json())
+            except ValueError as exc:
+                raise GatewayRequestError("REData returned an unparseable response.") from exc
+
+        logger.warning("REData request to %s failed (%s): %s", path, response.status_code, response.text[:500])
+        raise GatewayRequestError(f"REData request to {path} failed with status {response.status_code}.")
+
+    def get_model(self) -> dict[str, Any]:
+        """Return what is currently producing label suggestions, and how well.
+
+        Aggregate model metadata only - version, holdout metrics, the baselines
+        the promotion decision was made on, and the feature registry. Nothing
+        here is about a person: REData hashes user ids with a keyed HMAC on
+        arrival and never stores the raw value, and this endpoint reports on
+        the model rather than on anyone's labels.
+
+        ``active`` is ``None`` before any model has been promoted, which is a
+        normal state - the heuristic ranker answers in the meantime and is a
+        real answer, not a degraded one, since every user is cold on their
+        first day.
+
+        Returns:
+            The decoded ``GET /labels/model/`` body.
+
+        Raises:
+            GatewayRequestError: The request to REData failed.
+        """
+        return self._get_json("/api/v1/labels/model/")
+
     def define_labels(self, user_id: str, labels: list[dict[str, Any]]) -> dict[str, Any]:
         """Upsert (by ``external_id``) one user's tag/category label definitions.
 

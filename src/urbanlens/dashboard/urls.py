@@ -75,6 +75,7 @@ from urbanlens.dashboard.controllers import (
     setup,
     site_admin,
     site_admin_costs,
+    site_admin_models,
     spotguessr,
     thanks,
     tools,
@@ -1167,6 +1168,7 @@ urlpatterns = [
     path("settings/google-photos/disconnect/", google_photos.GooglePhotosDisconnectView.as_view(), name="settings.google_photos.disconnect"),
     path("settings/google-calendar/", calendar_sync.GoogleCalendarSettingsSectionView.as_view(), name="settings.google_calendar"),
     path("settings/google-calendar/disconnect/", calendar_sync.GoogleCalendarSettingsDisconnectView.as_view(), name="settings.google_calendar.disconnect"),
+    path("site-admin/models/", site_admin_models.SiteAdminModelsView.as_view(), name="site_admin_models"),
     path("undo/<uuid:undo_id>/restore/", undo.UndoRestoreView.as_view(), name="undo.restore"),
     re_path(
         r"^(?P<label_kind>tags?|categor(y|ies)|status(es)?|people|media)/",

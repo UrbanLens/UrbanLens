@@ -95,6 +95,60 @@ class RedataPhotosGateway(Gateway):
         logger.warning("REData request to %s failed (%s): %s", path, response.status_code, response.text[:500])
         raise GatewayRequestError(f"REData request to {path} failed with status {response.status_code}.")
 
+    def _get_json(self, path: str) -> dict[str, Any]:
+        """GET one REData endpoint and return its decoded JSON body.
+
+        Args:
+            path: Path relative to ``base_url`` (leading slash optional).
+
+        Returns:
+            The decoded JSON response body.
+
+        Raises:
+            GatewayRequestError: The request could not be made, REData returned
+                a non-2xx status, or the body wasn't parseable JSON.
+        """
+        base_url = self.base_url
+        if base_url is None:
+            raise GatewayRequestError("UL_REDATA_API_URL is not configured.")
+        try:
+            response = self.session.get(f"{base_url.rstrip('/')}/{path.lstrip('/')}", headers=self._headers, timeout=_REQUEST_TIMEOUT)
+        except OSError as exc:
+            raise GatewayRequestError(f"Could not reach REData: {exc}") from exc
+
+        if response.status_code == 200:
+            try:
+                return dict(response.json())
+            except ValueError as exc:
+                raise GatewayRequestError("REData returned an unparseable response.") from exc
+
+        logger.warning("REData request to %s failed (%s): %s", path, response.status_code, response.text[:500])
+        raise GatewayRequestError(f"REData request to {path} failed with status {response.status_code}.")
+
+    def get_model(self) -> dict[str, Any]:
+        """Return what is currently scoring photo relevance, and how well.
+
+        Aggregate model metadata only - version, holdout metrics,
+        ``baseline_metrics`` (the incumbent's and the heuristic's numbers on
+        the same split, which is what the promotion decision was actually made
+        on), the feature-schema fingerprint and each feature's description.
+
+        Brier score is the headline metric on purpose: it is a proper scoring
+        rule, so unlike AUC it penalises a model that ranks well while being
+        systematically overconfident.
+
+        Deliberately does *not* wrap ``GET /photos/reputation/``. That endpoint
+        answers about one contributor, and this application has no use for a
+        per-person score.
+
+        Returns:
+            The decoded ``GET /photos/model/`` body.
+
+        Raises:
+            GatewayRequestError: The request to REData failed.
+        """
+        return self._get_json("/api/v1/photos/model/")
+
     def submit_photos(self, photos: list[dict[str, Any]]) -> dict[str, Any]:
         """Submit (upsert) photo observations for scoring.
 
