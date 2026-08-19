@@ -50,8 +50,7 @@ _NETWORK_GUARD_MARKER = "External network access is disabled during tests"
 #: already requesting every route, because that sweep asserts a *different*
 #: property: it flags only `200` to a stranger, so a GET that crashes answers
 #: 500 and passes it silently - the identical blind spot that justified building
-#: this file for writes. An earlier version of this comment claimed GET was
-#: already covered, which was the same over-claim in miniature.
+#: this file for writes.
 _WRITE_METHODS = ("get", "post", "delete")
 
 #: Routes known to crash, with the reason. **Empty**, and the way it emptied is

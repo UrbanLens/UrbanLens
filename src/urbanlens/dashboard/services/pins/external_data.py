@@ -395,11 +395,48 @@ class LocationCachePanelSource(PanelSource, ABC):
 
     cache_source: ClassVar[str]
 
+    #: When True, a fresh cache row is not enough to call this panel ready -
+    #: its payload is inspected with :meth:`has_content` as well.
+    #:
+    #: Off by default because it costs bytes: the batched readiness query
+    #: otherwise fetches only source names, and some payloads (boundary
+    #: geometry, image lists) are large. Turn it on for panels that can
+    #: legitimately fetch successfully and still have nothing to say, which
+    #: otherwise render an empty tab - the tab strip's readiness is what
+    #: decides whether a tab appears at all.
+    inspects_content: ClassVar[bool] = False
+
+    def has_content(self, data: dict | None) -> bool:
+        """Whether a fetched payload has anything worth showing a tab for.
+
+        Only consulted when :attr:`inspects_content` is set. Defaults to
+        "anything non-empty is content", which is right for panels whose whole
+        payload is their content; override for a shape where a populated dict
+        can still render nothing.
+
+        Args:
+            data: The cached payload, or None.
+
+        Returns:
+            True when a tab for this panel would render something.
+        """
+        return bool(data)
+
     def is_ready(self, pin: Pin) -> bool:
-        """True when a fresh LocationCache row exists for this source."""
+        """True when this source has something to show for ``pin``.
+
+        A fresh row is enough unless :attr:`inspects_content` is set, in which
+        case the payload must also pass :meth:`has_content`. Kept in step with
+        :func:`panel_readiness`, the bulk form of this question: if the two
+        disagree, a tab strip and the Overview summary reach opposite
+        conclusions about the same panel.
+        """
         from urbanlens.dashboard.models.cache.location_cache import LocationCache
 
-        return LocationCache.get_fresh(pin.location, self.cache_source) is not None
+        row = LocationCache.get_fresh(pin.location, self.cache_source)
+        if row is None:
+            return False
+        return self.has_content(row.data) if self.inspects_content else True
 
     def cached_data(self, pin: Pin) -> dict | None:
         """This source's fresh cached payload, or None when nothing has landed.
@@ -1187,8 +1224,23 @@ def panel_readiness(pin: Pin, sources: Iterable[PanelSource] | None = None) -> d
 
     if cache_backed:
         fresh_sources = _fresh_location_cache_sources(pin)
+        # Panels that opt into a content check need their payload, which the
+        # set-of-names query above deliberately does not carry. Fetched in one
+        # extra query covering only those sources, so the common panel (whose
+        # answer is "a fresh row exists") still costs nothing more.
+        inspecting = [source for source in cache_backed if source.inspects_content and source.cache_source in fresh_sources]
+        payloads: dict[str, dict | None] = {}
+        if inspecting:
+            from urbanlens.dashboard.models.cache.location_cache import LocationCache
+
+            payloads = dict(
+                LocationCache.objects.filter(location_id=pin.location_id, source__in=[source.cache_source for source in inspecting]).values_list("source", "data"),
+            )
         for cache_source in cache_backed:
-            readiness[cache_source.key] = cache_source.cache_source in fresh_sources
+            fresh = cache_source.cache_source in fresh_sources
+            if fresh and cache_source.inspects_content:
+                fresh = cache_source.has_content(payloads.get(cache_source.cache_source))
+            readiness[cache_source.key] = fresh
 
     if slide_backed:
         ready_keys = {slide_source.key: slide_source.ready_key(pin) for slide_source in slide_backed}

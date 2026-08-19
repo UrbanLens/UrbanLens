@@ -64,6 +64,21 @@ class ElevationPanelSource(CoordinateGatedInfoPanelSource):
         envelope = RedataElevationGateway().get_elevation(lat, lng)
         LocationCache.set(pin.location, self.cache_source, {"elevation_m": _pick_elevation(envelope.results), "readings": envelope.results}, query_key=f"{lat:.5f},{lng:.5f}")
 
+    #: A lookup outside every model's coverage caches a row with no reading,
+    #: which rendered an empty tab.
+    inspects_content = True
+
+    def has_content(self, data: dict | None) -> bool:
+        """Mirror of :meth:`render_context`'s own emptiness test.
+
+        Args:
+            data: The cached payload.
+
+        Returns:
+            True when there is an elevation to show.
+        """
+        return (data or {}).get("elevation_m") is not None
+
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build a quick-fact line from the primary reading, plus any other model's reading that disagrees."""
         elevation_m = (data or {}).get("elevation_m")

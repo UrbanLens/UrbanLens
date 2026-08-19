@@ -48,6 +48,21 @@ class PhotonPanelSource(CoordinateGatedInfoPanelSource):
         place = envelope.results[0] if envelope.results else {}
         LocationCache.set(pin.location, self.cache_source, place, query_key=f"{lat:.5f},{lng:.5f}")
 
+    #: A successful lookup at a coordinate with no reverse-geocodable address
+    #: caches a row that renders nothing, which showed as an empty tab.
+    inspects_content = True
+
+    def has_content(self, data: dict | None) -> bool:
+        """Mirror of :meth:`render_context`'s own emptiness test.
+
+        Args:
+            data: The cached payload.
+
+        Returns:
+            True when there is an address to show.
+        """
+        return bool(data and (data.get("locality") or data.get("region") or data.get("country")))
+
     def render_context(self, pin: Pin, data: dict) -> dict | None:
         """Build the address card from REData's normalized address components.
 

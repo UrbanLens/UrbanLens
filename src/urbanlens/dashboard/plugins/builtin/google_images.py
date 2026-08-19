@@ -52,12 +52,15 @@ class GoogleImagesPanelSource(GalleryMediaSource):
             try:
                 results = RedataSearchGateway().search_web(address, images=True, max_results=_MAX_IMAGES)
             except LocationContextUnavailableError as exc:
-                # Quota exhaustion, misconfiguration, or a REData-side outage -
-                # degrade to "no results" rather than failing the whole Media
-                # gallery loader.
+                # Quota exhaustion, misconfiguration, or a REData-side outage.
+                # Nothing is written: the existence of a cache row is what marks
+                # this source as fetched, so caching an empty list here would
+                # turn a transient failure into a permanent "no images here"
+                # that nothing retries. Returning leaves it to the next pass.
                 import logging
 
-                logging.getLogger(__name__).warning("REData image search failed for %r: %s", address, exc)
+                logging.getLogger(__name__).warning("REData image search failed for %r, leaving it unfetched to retry: %s", address, exc)
+                return
         LocationCache.set(pin.location, self.cache_source, {"items": results}, query_key=address)
 
     def media_items(self, data: dict) -> list[MediaItem]:

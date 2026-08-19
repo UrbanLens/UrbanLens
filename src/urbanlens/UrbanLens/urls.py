@@ -99,8 +99,8 @@ urlpatterns = [
     # API (see external_api.views).
     #
     # This mounts django-oauth-toolkit's *whole* URL set, which is wider than the
-    # authorize/token/revoke + application-management this comment used to list:
-    # it also exposes token introspection, the RFC 8628 device-code endpoints,
+    # authorize/token/revoke + application-management it is reached for: it also
+    # exposes token introspection, the RFC 8628 device-code endpoints,
     # and the OpenID discovery documents. Neither of the first two is reachable
     # in practice today - no application is registered with the device grant, and
     # `introspect` is not among OAUTH2_PROVIDER["SCOPES"], so no token can carry

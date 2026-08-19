@@ -1373,11 +1373,11 @@ _MAX_CONSECUTIVE_NO_PROGRESS_RETRIES = 5
 #: How long a deferred-lookup batch keeps trying before it gives up and turns
 #: into PinImportFailure rows for the user to resolve by hand.
 #:
-#: The counters above used to end the batch on their own, which meant ~10
-#: minutes of attempts: a REData cid that resolves an hour later - the common
-#: case for a large import - produced hundreds of import failures for work that
-#: would have completed on its own. They now only choose *how far apart* the
-#: retries are spaced; this deadline is the only thing that ends the batch.
+#: The counters above choose only *how far apart* retries are spaced; this
+#: deadline is the only thing that ends the batch. Letting the counters end it
+#: caps attempts at ~10 minutes, and a REData cid that resolves an hour later -
+#: the common case for a large import - then produces hundreds of import
+#: failures for work that would have completed on its own.
 _DEFERRED_LOOKUP_DEADLINE = timedelta(days=2)
 
 #: Seconds between retries, indexed by attempt number (the last entry repeats).

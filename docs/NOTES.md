@@ -453,16 +453,17 @@ Inbound-facing, unlike everything else in "Rate limiting and cost tracking" abov
 
 ## Windows development environment quirks
 
-- The venv is `.venv_windows\` (not `.venv`) because it was created on Windows — always invoke
-  tools via `.venv_windows\Scripts\<tool>.exe`.
-- GeoDjango's GDAL/GEOS dependency on Windows is satisfied via DLLs vendored by `geopandas`'s
-  `pyogrio` dependency, resolved in `settings/_gdal_windows.py`. This only applies when
-  `UL_ENVIRONMENT=local` (the default for local dev) — it is never invoked in Docker/CI/production,
-  so don't "fix" GDAL issues there using the Windows path.
-- Docker is not run from within Claude's environment — if Docker needs to be exercised, ask the
-  user to run it manually rather than attempting `docker-compose` commands directly.
-- Sass compiles fine natively on Windows via `bun run sass` — no Docker needed for frontend asset
-  builds.
+Applies **only to a Windows checkout**. Linux/macOS checkouts (including every deployed
+environment and the dev hosts) use `.venv` and are unaffected; see `CLAUDE.local.md` for the
+current machine's actual setup, which is authoritative over this section.
+
+- On Windows the venv is `.venv_windows\` (not `.venv`), so tools are invoked via
+  `.venv_windows\Scripts\<tool>.exe`.
+- GeoDjango's GDAL/GEOS dependency is satisfied there via DLLs vendored by `geopandas`'s
+  `pyogrio` dependency, resolved in `settings/_gdal_windows.py`. That module returns immediately
+  unless `os.name == "nt"` **and** `UL_ENVIRONMENT=local`, so it is never involved in
+  Docker/CI/production - don't reach for it when diagnosing GDAL elsewhere.
+- Sass compiles natively on Windows via `bun run sass`, with no Docker needed for asset builds.
 
 ## Migrations churn on squashes
 

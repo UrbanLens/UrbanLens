@@ -432,20 +432,20 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
                     setattr(self, key, value)
 
                 if not value.exists():
-                    # If the path contains a period, infer it is a file and only ensure its
-                    # parent directory exists; otherwise it's a directory and should be created
-                    # itself. (These two branches were previously swapped, which meant
-                    # directory-valued settings like backups_dir/downloads_dir/exports_dir/
-                    # static_root never actually got created - only their parent did.)
+                    # A path containing a period is inferred to be a file, so only its
+                    # parent is ensured; anything else is a directory and is created
+                    # itself. Getting this backwards silently leaves directory-valued
+                    # settings (backups_dir, downloads_dir, exports_dir, static_root)
+                    # uncreated while their parents exist, which fails far from here.
                     if "." not in value.name:
                         value.mkdir(parents=True, exist_ok=True)
                     else:
                         value.parent.mkdir(parents=True, exist_ok=True)
             except OSError:
                 # OSError, not FileNotFoundError: a read-only or wrong-owner app
-                # directory raises PermissionError, which used to escape from here
-                # and take down settings import - and therefore every process -
-                # before anything could report which path was at fault.
+                # directory raises PermissionError, and letting that escape takes
+                # down settings import - and therefore every process - without
+                # reporting which path was at fault.
                 logger.warning("Could not ensure path %s (%s); continuing without it.", key, value, exc_info=True)
 
         # Ensure app.log, debugging.log, and test.log exist in log dir

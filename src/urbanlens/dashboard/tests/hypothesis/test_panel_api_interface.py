@@ -292,13 +292,31 @@ class PanelReadinessTests(TestCase):
     def test_cache_backed_sources_cost_a_constant_number_of_queries(self) -> None:
         """The whole point: readiness for N panels is not N queries.
 
-        One query for the site's cache-age setting plus one for the location's
-        fresh rows. Asking each source individually is one query *per source*,
-        on every pin detail page render.
+        One query for the site's cache-age setting, one for the location's
+        fresh rows, and one more for the payloads of the panels that opt into a
+        content check (``inspects_content``) - those cannot answer "is there
+        anything to show" from a row's existence alone. Asking each source
+        individually is one query *per source*, on every pin detail render.
         """
         cache_backed = [source for source in panel_sources().values() if hasattr(source, "cache_source")]
         self.assertGreater(len(cache_backed), 5)
-        with self.assertNumQueries(2):
+        with self.assertNumQueries(3):
+            panel_readiness(self.pin, cache_backed)
+
+    def test_the_content_check_does_not_scale_with_how_many_panels_use_it(self) -> None:
+        """The property the count above is a proxy for.
+
+        A per-source payload fetch would reintroduce exactly the N+1 this
+        function exists to remove, so every opted-in source must be served by
+        the same single extra query.
+        """
+        from urbanlens.dashboard.services.pins.external_data import LocationCachePanelSource
+
+        cache_backed = [source for source in panel_sources().values() if isinstance(source, LocationCachePanelSource)]
+        inspecting = [source for source in cache_backed if source.inspects_content]
+        self.assertGreaterEqual(len(inspecting), 2, "this asserts nothing unless several panels opt in")
+
+        with self.assertNumQueries(3):
             panel_readiness(self.pin, cache_backed)
 
     def test_pin_without_a_location_is_ready_for_nothing(self) -> None:

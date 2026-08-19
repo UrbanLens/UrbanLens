@@ -302,10 +302,10 @@ UL_BACKUP_RETENTION = int(os.getenv("UL_BACKUP_RETENTION", "30"))
 UL_MAP_SHARE_ZOOM_THRESHOLD = float(os.getenv("UL_MAP_SHARE_ZOOM_THRESHOLD", "14"))
 
 # Interval schedules all fire relative to beat start, so same-interval entries
-# fire *simultaneously* - eleven hourly sweeps used to stampede the default
-# queue at once each hour, delaying user-facing tasks (image processing shares
-# it). Hourly work is therefore staggered across distinct crontab minutes and
-# daily work across off-peak UTC hours. The 5-minute safety-check-in chain
+# fire *simultaneously* - eleven hourly sweeps would stampede the default queue
+# at once each hour, delaying user-facing tasks (image processing shares it).
+# Hourly work is therefore staggered across distinct crontab minutes and daily
+# work across off-peak UTC hours. The 5-minute safety-check-in chain
 # stays interval-based on purpose: it is time-critical, cheap, and its four
 # tasks are sequenced by their own due-time filters rather than by spacing.
 CELERY_BEAT_SCHEDULE = {

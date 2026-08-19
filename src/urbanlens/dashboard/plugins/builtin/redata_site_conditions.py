@@ -63,6 +63,11 @@ class SiteConditionsPanelSource(CoordinateGatedInfoPanelSource):
             try:
                 data[domain] = fetch_one()
             except LocationContextUnavailableError as exc:
+                # outage-cache-ok: one domain of three failing is a partial
+                # result, not an outage - the domains that answered are real
+                # data worth caching, and the missing ones re-fetch when the
+                # row goes stale. The total-failure case returns below without
+                # writing, which is the case the check exists for.
                 failed += 1
                 logger.warning("Site-conditions %s lookup failed: %s", domain, exc)
         if failed and not data:
