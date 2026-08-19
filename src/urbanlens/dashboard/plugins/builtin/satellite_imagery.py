@@ -144,11 +144,11 @@ class RedataSatelliteProvider(SatelliteViewProvider):
             return
 
         gateway = RedataImageryGateway()
-        try:
-            results = gateway.get_imagery(latitude, longitude, providers=list(_REDATA_PROVIDER_NAMES))
-        except LocationContextUnavailableError as exc:
-            logger.debug("REData imagery unavailable for %s, %s: %s", latitude, longitude, exc)
-            return
+        # Deliberately not swallowed: SatelliteViewProvider.get_satellite_slides
+        # distinguishes "this place has no imagery" from "we could not ask", and
+        # caches only the first. Catching here would hide the difference and
+        # cache an outage as a permanent absence.
+        results = gateway.get_imagery(latitude, longitude, providers=list(_REDATA_PROVIDER_NAMES))
 
         seen_urls: set[str] = set()
         for result in results:
@@ -190,6 +190,9 @@ class RedataSatelliteProvider(SatelliteViewProvider):
         """
         from urbanlens.dashboard.services.locations.imagery_timeline import flatten_timeline
 
+        # Swallowed on purpose, unlike the current-imagery call above: the
+        # timeline is an enrichment on top of slides that already exist, so a
+        # timeline outage should not discard them or suppress their caching.
         try:
             envelope = gateway.get_timeline(latitude, longitude)
         except LocationContextUnavailableError as exc:

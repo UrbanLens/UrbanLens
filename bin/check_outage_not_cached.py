@@ -35,10 +35,21 @@ import sys
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
 SEARCH_ROOT = REPO_ROOT / "src" / "urbanlens"
 
+#: Functions whose job is "get data from a source and store it". Named rather
+#: than inferred: a function that caches is not automatically suspect - one that
+#: caches *what it just fetched* is. ``fetch`` alone missed
+#: ``get_satellite_slides``, which cached an empty carousel after its provider
+#: failed, so the list grew when that surfaced rather than staying a guess.
+_CHECKED_FUNCTIONS = frozenset({"fetch", "get_satellite_slides", "get_street_view_slides"})
+
 #: Calls that persist a fetch's result. Matched on attribute name so a caller
 #: aliasing the model still trips it.
 _PERSISTING_CALLS = {"set", "set_many"}
 _PERSISTING_TARGETS = {"LocationCache", "cache"}
+
+#: Calls that hand a value straight back rather than storing it - a `cache.get`
+#: inside a handler is not a write and must not be mistaken for one.
+_READ_ONLY_CALLS = {"get", "get_many"}
 
 
 #: Marker for a handler that deliberately falls through to a write, e.g. one
@@ -64,7 +75,7 @@ def _is_persisting_call(node: ast.AST) -> bool:
     """Whether a node is a call that writes a fetch result to a store."""
     if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
         return False
-    if node.func.attr not in _PERSISTING_CALLS:
+    if node.func.attr in _READ_ONLY_CALLS or node.func.attr not in _PERSISTING_CALLS:
         return False
     target = node.func.value
     return isinstance(target, ast.Name) and target.id in _PERSISTING_TARGETS
@@ -103,7 +114,7 @@ def main() -> int:
             continue
         source_lines = text.split("\n")
         for node in ast.walk(tree):
-            if isinstance(node, ast.FunctionDef) and node.name == "fetch":
+            if isinstance(node, ast.FunctionDef) and node.name in _CHECKED_FUNCTIONS:
                 offences.extend(_offences_in_function(node, path, source_lines))
 
     if offences:

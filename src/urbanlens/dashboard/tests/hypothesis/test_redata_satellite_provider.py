@@ -45,11 +45,29 @@ class RedataSatelliteProviderTests(SimpleTestCase):
         self.assertNotIn("usgs_imagery", requested)
         self.assertNotIn("usgs_topo", requested)
 
-    def test_yields_nothing_when_redata_is_unavailable(self) -> None:
+    def test_an_outage_propagates_so_the_caller_can_tell(self) -> None:
+        """Deliberately not swallowed any more.
+
+        Swallowing made "this place has no imagery" and "we could not ask"
+        identical, and `get_satellite_slides` then cached the outage as a
+        permanent absence. Letting it out is what lets that layer cache the
+        first and not the second - see test_slide_outage_not_cached.py.
+        """
         with mock.patch(_CONFIGURED_PATH, return_value=True), mock.patch(_GATEWAY_PATH) as gateway_cls:
             gateway_cls.return_value.get_imagery.side_effect = LocationContextUnavailableError("source_error", "boom")
-            slides = list(self.provider._generate_satellite_slides(41.7, -73.9))
+
+            with self.assertRaises(LocationContextUnavailableError):
+                list(self.provider._generate_satellite_slides(41.7, -73.9))
+
+    def test_the_carousel_entry_point_still_survives_an_outage(self) -> None:
+        """The property the old test was defending, asserted where it now lives."""
+        with mock.patch(_CONFIGURED_PATH, return_value=True), mock.patch(_GATEWAY_PATH) as gateway_cls:
+            gateway_cls.return_value.get_imagery.side_effect = LocationContextUnavailableError("source_error", "boom")
+
+            slides, from_cache = self.provider.get_satellite_slides(41.7, -73.9)
+
         self.assertEqual(slides, [])
+        self.assertFalse(from_cache)
 
     def test_a_direct_image_delivery_uses_the_url_as_is(self) -> None:
         slides = self._slides([{"provider": "nasa_gibs", "url": "https://gibs.example/tile.jpg", "delivery": "image", "captured_on": "2019", "attribution": "NASA GIBS"}])

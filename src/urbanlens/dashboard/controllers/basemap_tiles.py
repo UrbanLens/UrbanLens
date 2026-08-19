@@ -46,6 +46,24 @@ _CATALOGUE_CACHE_KEY = "ul_redata_tile_sources"
 _NO_TILE = "__ul_no_tile__"
 
 
+def _tile_url_template(layer: str) -> str:
+    """Leaflet-style template for one layer, pointing at this proxy.
+
+    Args:
+        layer: The layer id.
+
+    Returns:
+        A URL with literal ``{z}``/``{x}``/``{y}`` placeholders.
+    """
+    from django.urls import reverse
+
+    # Sentinel coordinates rather than braces: reverse() would encode braces as
+    # %7Bz%7D, handing the client a template it cannot fill in. The values are
+    # chosen not to occur in a layer id.
+    concrete = reverse("map.basemap_tiles", kwargs={"layer": layer, "z": 900001, "x": 900002, "y": 900003})
+    return concrete.replace("900001", "{z}").replace("900002", "{x}").replace("900003", "{y}")
+
+
 class BasemapTileCatalogueView(LoginRequiredMixin, View):
     """GET map/basemap-tiles/sources/ - the layers this deployment can offer."""
 
@@ -90,7 +108,11 @@ class BasemapTileCatalogueView(LoginRequiredMixin, View):
                 "attribution": source.get("attribution") or "",
                 "min_zoom": source.get("min_zoom"),
                 "max_zoom": source.get("max_zoom"),
-                "url_template": f"/dashboard/map/basemap-tiles/{source['id']}/{{z}}/{{x}}/{{y}}/",
+                # Reversed rather than hardcoded, with the tile coordinates
+                # substituted afterwards: reverse() percent-encodes the literal
+                # braces a Leaflet template needs, so they cannot be passed
+                # through it.
+                "url_template": _tile_url_template(source["id"]),
             }
             for source in sources
             if source.get("attribution")

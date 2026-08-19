@@ -6,6 +6,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 import itertools
 import json
+import logging
 from typing import TYPE_CHECKING, ClassVar
 
 from django.contrib.gis.geos import GEOSException, GEOSGeometry, MultiPolygon, Point, Polygon
@@ -71,6 +72,47 @@ class StreetViewSlide:
     longitude: float | None = field(default=None)
 
 
+logger = logging.getLogger(__name__)
+
+
+def _collect_slides(generator, limit: int, what: str) -> tuple[list, bool]:
+    """Drain a slide generator, reporting whether the provider degraded.
+
+    A provider that cannot reach its source yields nothing, which is
+    indistinguishable at this level from a place that genuinely has no
+    imagery - and caching the second is right while caching the first turns a
+    passing outage into "no photographs here" that nothing retries (see
+    bin/check_outage_not_cached.py for the same defect class in panel fetches).
+
+    Providers signal the difference by letting their gateway error propagate
+    out of the generator rather than swallowing it. Slides yielded before the
+    failure are kept: a partial answer is still worth showing, it just is not
+    worth remembering.
+
+    Args:
+        generator: The provider's slide generator.
+        limit: Stop after this many slides; <= 0 means no limit.
+        what: Label for the log line.
+
+    Returns:
+        ``(slides, degraded)`` - ``degraded`` True when the provider failed
+        part-way, meaning the result must not be cached.
+    """
+    from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+    from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
+
+    slides: list = []
+    try:
+        for slide in generator:
+            slides.append(slide)
+            if limit > 0 and len(slides) >= limit:
+                break
+    except (GatewayRequestError, RequestCancelledError, OSError) as exc:
+        logger.warning("%s provider degraded after %d slide(s): %s", what, len(slides), exc)
+        return slides, True
+    return slides, False
+
+
 class SatelliteViewProvider(Gateway, ABC):
     @abstractmethod
     def _generate_satellite_slides(self, latitude: float, longitude: float, *, zoom: int = 17, width: int = 640, height: int = 400, limit: int = -1) -> Generator[SatelliteSlide]: ...
@@ -81,13 +123,13 @@ class SatelliteViewProvider(Gateway, ABC):
         if cached is not _CACHE_MISS:
             return cached, True
 
-        slides = []
-        for slide in self._generate_satellite_slides(latitude, longitude, zoom=zoom, width=width, height=height):
-            slides.append(slide)
-            if limit > 0 and len(slides) >= limit:
-                break
-
-        cache.set(cache_key, slides, _external_data_cache_seconds())
+        slides, degraded = _collect_slides(
+            self._generate_satellite_slides(latitude, longitude, zoom=zoom, width=width, height=height),
+            limit,
+            f"satellite/{self.service_key}",
+        )
+        if not degraded:
+            cache.set(cache_key, slides, _external_data_cache_seconds())
         return slides, False
 
 
@@ -101,13 +143,13 @@ class StreetViewProvider(Gateway, ABC):
         if cached is not _CACHE_MISS:
             return cached, True
 
-        slides = []
-        for slide in self._generate_street_view_slides(latitude, longitude, radius=radius):
-            slides.append(slide)
-            if limit > 0 and len(slides) >= limit:
-                break
-
-        cache.set(cache_key, slides, _external_data_cache_seconds())
+        slides, degraded = _collect_slides(
+            self._generate_street_view_slides(latitude, longitude, radius=radius),
+            limit,
+            f"street-view/{self.service_key}",
+        )
+        if not degraded:
+            cache.set(cache_key, slides, _external_data_cache_seconds())
         return slides, False
 
 

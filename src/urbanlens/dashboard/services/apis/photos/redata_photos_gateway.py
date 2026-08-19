@@ -25,7 +25,8 @@ from dataclasses import dataclass
 import logging
 from typing import Any, ClassVar
 
-from urbanlens.dashboard.services.core.gateway import Gateway, GatewayRequestError
+from urbanlens.dashboard.services.apis.redata_json_gateway import RedataJsonGateway
+from urbanlens.dashboard.services.core.gateway import GatewayRequestError
 from urbanlens.UrbanLens.settings.app import settings
 
 logger = logging.getLogger(__name__)
@@ -39,7 +40,7 @@ MAX_PHOTO_IDS_PER_CONFIDENCE_LOOKUP = 1000
 
 
 @dataclass(slots=True, kw_only=True)
-class RedataPhotosGateway(Gateway):
+class RedataPhotosGateway(RedataJsonGateway):
     """REST client for REData's ``/photos/...`` endpoints."""
 
     service_key: ClassVar[str] = "redata_photos"
@@ -47,83 +48,6 @@ class RedataPhotosGateway(Gateway):
 
     base_url: str | None = settings.redata_api_url
     api_key: str | None = settings.redata_api_key
-
-    def __post_init__(self) -> None:
-        Gateway.__post_init__(self)
-        if not self.base_url:
-            raise ValueError("UL_REDATA_API_URL must be configured.")
-        if not self.base_url.startswith(("http://", "https://")):
-            self.base_url = f"https://{self.base_url}"
-        if not self.api_key:
-            raise ValueError("UL_REDATA_API_KEY must be configured.")
-
-    @property
-    def _headers(self) -> dict[str, str]:
-        return {"Authorization": f"Bearer {self.api_key}", "Accept": "application/json", "Content-Type": "application/json"}
-
-    def _post_json(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
-        """POST one REData ``/photos/...`` endpoint and return its decoded JSON body.
-
-        Args:
-            path: Path relative to ``base_url`` (leading slash optional).
-            body: JSON request body.
-
-        Returns:
-            The decoded JSON response body.
-
-        Raises:
-            GatewayRequestError: The request itself could not be made (network
-                failure), REData returned a non-2xx status, or the response
-                body wasn't parseable JSON.
-        """
-        base_url = self.base_url
-        if base_url is None:
-            # __post_init__ already validates this for the normal construction
-            # path; this only narrows the type for mypy.
-            raise GatewayRequestError("UL_REDATA_API_URL is not configured.")
-        try:
-            response = self.session.post(f"{base_url.rstrip('/')}/{path.lstrip('/')}", json=body, headers=self._headers, timeout=_REQUEST_TIMEOUT)
-        except OSError as exc:
-            raise GatewayRequestError(f"Could not reach REData: {exc}") from exc
-
-        if response.status_code in (200, 201):
-            try:
-                return dict(response.json())
-            except ValueError as exc:
-                raise GatewayRequestError("REData returned an unparseable response.") from exc
-
-        logger.warning("REData request to %s failed (%s): %s", path, response.status_code, response.text[:500])
-        raise GatewayRequestError(f"REData request to {path} failed with status {response.status_code}.")
-
-    def _get_json(self, path: str) -> dict[str, Any]:
-        """GET one REData endpoint and return its decoded JSON body.
-
-        Args:
-            path: Path relative to ``base_url`` (leading slash optional).
-
-        Returns:
-            The decoded JSON response body.
-
-        Raises:
-            GatewayRequestError: The request could not be made, REData returned
-                a non-2xx status, or the body wasn't parseable JSON.
-        """
-        base_url = self.base_url
-        if base_url is None:
-            raise GatewayRequestError("UL_REDATA_API_URL is not configured.")
-        try:
-            response = self.session.get(f"{base_url.rstrip('/')}/{path.lstrip('/')}", headers=self._headers, timeout=_REQUEST_TIMEOUT)
-        except OSError as exc:
-            raise GatewayRequestError(f"Could not reach REData: {exc}") from exc
-
-        if response.status_code == 200:
-            try:
-                return dict(response.json())
-            except ValueError as exc:
-                raise GatewayRequestError("REData returned an unparseable response.") from exc
-
-        logger.warning("REData request to %s failed (%s): %s", path, response.status_code, response.text[:500])
-        raise GatewayRequestError(f"REData request to {path} failed with status {response.status_code}.")
 
     def get_model(self) -> dict[str, Any]:
         """Return what is currently scoring photo relevance, and how well.
