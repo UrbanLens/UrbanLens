@@ -164,3 +164,69 @@ class RouterConfigTests(SimpleTestCase):
         config = router.render_config({"broken": {"hostname": "", "app_port": None}})
 
         self.assertNotIn("proxy_pass http://host.docker.internal:None", config)
+
+
+class ContainerNameCollisionTests(SimpleTestCase):
+    """The guard whose absence let a create recreate the host's dev stack.
+
+    Container names are global to a docker host, so two environments that
+    resolve the same names fight over the same containers - and `docker compose
+    up` reports that as a successful build while somebody else's environment
+    stops working. Isolation therefore cannot depend on a variable being
+    present in the branch being deployed: `UL_CONTAINER_NAME` exists on some
+    branches and not others, and where it is absent the names fall back to
+    `UL_ENVIRONMENT`, which every dev environment sets to `development` to get
+    the autoreloader.
+    """
+
+    def test_a_name_owned_by_another_directory_is_refused(self) -> None:
+        listing = "ul_a_db\t/envs/a/UrbanLens\nurbanlens_development_app\t/projects/UrbanLens/UrbanLens\n"
+
+        conflict = devenv._conflicting_name({"urbanlens_development_app"}, listing, Path("/envs/mine/UrbanLens"))
+
+        self.assertIn("urbanlens_development_app", conflict)
+        self.assertIn("/projects/UrbanLens/UrbanLens", conflict, "the owner is named so the report says whose stack it is")
+
+    def test_our_own_containers_are_not_a_conflict(self) -> None:
+        """Recreating our own stack is what `create` on an existing slug does."""
+        listing = "ul_mine_db\t/envs/mine/UrbanLens\n"
+
+        self.assertEqual(devenv._conflicting_name({"ul_mine_db"}, listing, Path("/envs/mine/UrbanLens")), "")
+
+    def test_an_unrelated_container_is_ignored(self) -> None:
+        listing = "some_other_thing\t/elsewhere\n"
+
+        self.assertEqual(devenv._conflicting_name({"ul_mine_db"}, listing, Path("/envs/mine/UrbanLens")), "")
+
+    def test_a_container_with_no_recorded_owner_still_blocks(self) -> None:
+        """Docker container names are global, so `up` fails on a duplicate whatever
+        started it. This host already carries `ul_*` containers from another tool
+        with no compose labels at all."""
+        listing = "ul_mine_db\t\n"
+
+        conflict = devenv._conflicting_name({"ul_mine_db"}, listing, Path("/envs/mine/UrbanLens"))
+
+        self.assertIn("unknown owner", conflict)
+
+
+class IsolationOverrideTests(SimpleTestCase):
+    def test_every_named_service_is_pinned_to_the_slug(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            (checkout / "docker-compose.yml").write_text("services:\n  app:\n    image: x\n  db:\n    image: y\n", encoding="utf-8")
+
+            override = devenv._isolation_override("abc123", checkout)
+
+            self.assertIn("container_name: ul_abc123_app", override)
+            self.assertIn("container_name: ul_abc123_db", override)
+
+    def test_a_service_the_branch_does_not_define_is_not_invented(self) -> None:
+        """Overriding a service the base file lacks makes compose reject the whole config."""
+        with tempfile.TemporaryDirectory() as directory:
+            checkout = Path(directory)
+            (checkout / "docker-compose.yml").write_text("services:\n  app:\n    image: x\n", encoding="utf-8")
+
+            override = devenv._isolation_override("abc123", checkout)
+
+            self.assertIn("ul_abc123_app", override)
+            self.assertNotIn("clamav", override)

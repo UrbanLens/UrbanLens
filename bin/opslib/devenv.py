@@ -191,6 +191,102 @@ def _write_env_file(path: Path, values: dict[str, str], source: Path | None) -> 
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
 
+#: Services whose container_name the base compose file pins. Anything not
+#: listed simply keeps compose's own project-prefixed name, which is already
+#: unique per project.
+_NAMED_SERVICES = ("app", "app-ws", "nginx", "db", "valkey", "celery-worker", "celery-worker-panels", "celery-beat", "clamav")
+
+
+def _compose(slug: str) -> list[str]:
+    """The compose command for one environment, isolated by project and override."""
+    return ["docker", "compose", "-p", f"ul-{slug}", "-f", "docker-compose.yml", "-f", "docker-compose.agent.yml"]
+
+
+def _isolation_override(slug: str, ul_dir: Path) -> str:
+    """Compose override pinning every container name to this environment.
+
+    Args:
+        slug: Environment slug.
+        ul_dir: The environment's UrbanLens checkout, read to find which
+            services the base file actually defines.
+
+    Returns:
+        The override file's contents.
+    """
+    base = (ul_dir / "docker-compose.yml").read_text(encoding="utf-8")
+    lines = ["# Generated per environment - do not edit.", "#", "# Pins container names so this stack cannot collide with another on the", "# host. Not left to UL_CONTAINER_NAME: that variable does not exist on every", "# branch, and where it is absent the names fall back to UL_ENVIRONMENT and", "# collide with the host's own development stack.", "services:"]
+    for service in _NAMED_SERVICES:
+        if f"\n  {service}:" not in base:
+            continue
+        lines.append(f"  {service}:")
+        lines.append(f"    container_name: ul_{slug}_{service.replace('-', '_')}")
+    return "\n".join(lines) + "\n"
+
+
+def _naming_conflict(slug: str, ul_dir: Path) -> str:
+    """Whether this environment's resolved container names belong to another stack.
+
+    The guard that was missing: a create that recreates somebody else's
+    containers looks like a successful build right up until their environment
+    stops working.
+
+    Args:
+        slug: Environment slug.
+        ul_dir: The environment's UrbanLens checkout.
+
+    Returns:
+        A description of the conflict, or "" when there is none.
+    """
+    try:
+        resolved = subprocess.run([*_compose(slug), "config", "--format", "json"], cwd=ul_dir, capture_output=True, text=True, timeout=180, check=False)
+        services = json.loads(resolved.stdout or "{}").get("services", {})
+    except (OSError, ValueError, subprocess.TimeoutExpired) as exc:
+        return f"could not resolve compose config: {exc}"
+
+    wanted = {config.get("container_name") for config in services.values() if config.get("container_name")}
+    if not wanted:
+        return ""
+
+    try:
+        listed = subprocess.run(["docker", "ps", "-a", "--format", '{{.Names}}\t{{.Label "com.docker.compose.project.working_dir"}}'], capture_output=True, text=True, timeout=120, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return f"could not list containers: {exc}"
+
+    return _conflicting_name(wanted, listed.stdout, ul_dir)
+
+
+def _conflicting_name(wanted: set[str], docker_listing: str, ul_dir: Path) -> str:
+    """Find a wanted container name that belongs to a different directory.
+
+    Split out from the docker call so the decision itself can be tested: this
+    is the check whose absence let a create recreate the host's existing
+    development stack.
+
+    Args:
+        wanted: Container names this environment intends to create.
+        docker_listing: ``docker ps -a`` output, one ``name<TAB>working_dir``
+            per line.
+        ul_dir: This environment's own checkout - containers already owned by
+            it are ours to recreate.
+
+    Returns:
+        A description of the first conflict, or "" when there is none.
+    """
+    for line in docker_listing.splitlines():
+        name, _, owner = line.partition("\t")
+        if name not in wanted:
+            continue
+        if owner and Path(owner) == ul_dir:
+            # Ours already - recreating it is what a repeat create does.
+            continue
+        # Anything else with this name blocks us, owner label or not: docker
+        # container names are global, so `up` fails with "name already in use"
+        # whatever project it belongs to. Refusing here says whose it is;
+        # letting compose fail says only that the name is taken.
+        return f"container {name!r} already exists and belongs to {owner or 'an unknown owner'}"
+    return ""
+
+
 def _clone_command(source: str, branch: str, destination: Path) -> list[str]:
     """Build the clone command for one repository.
 
@@ -297,6 +393,25 @@ def create(*, requested_name: str = "", branch: str = "main", owner: str = "", r
     )
     run.record("write-env", "ok", f"{ul_dir / '.env'}")
 
+    # Container names are pinned by an override rather than by UL_CONTAINER_NAME.
+    # That variable exists only on some branches: on `main` the compose file
+    # names everything after UL_ENVIRONMENT alone, so an environment asking for
+    # `development` (which is what enables the autoreloader) resolves to the
+    # *same container names* as the host's existing development stack and
+    # recreates it. An override is branch-independent, because it does not care
+    # what the file interpolates.
+    (ul_dir / "docker-compose.agent.yml").write_text(_isolation_override(slug, ul_dir), encoding="utf-8")
+    run.record("write-isolation-override", "ok", "container names pinned to this environment")
+
+    conflict = _naming_conflict(slug, ul_dir)
+    if conflict:
+        run.record("check-name-collision", "failed", conflict)
+        entries = _load_registry()
+        entries[slug] = {**env.as_dict(), "status": "failed"}
+        _save_registry(entries)
+        return run.finish()
+    run.record("check-name-collision", "ok", "no container names belong to another stack")
+
     if with_redata and rd_dir.is_dir():
         rd_source = Path(os.getenv("UL_DEV_SEED_RD_ENV", "/projects/UrbanLens/REData/.env"))
         # RD_ENVIRONMENT is a fixed five-value enum that settings branch on, so
@@ -313,7 +428,7 @@ def create(*, requested_name: str = "", branch: str = "main", owner: str = "", r
     # No -p: UL_CONTAINER_NAME in the .env above already sets both the compose
     # project name and every container_name, so passing one here would create a
     # second, competing way to identify the same stack.
-    run.run_step("start-urbanlens", ["docker", "compose", "up", "--build", "-d"], cwd=ul_dir, timeout=5400)
+    run.run_step("start-urbanlens", [*_compose(slug), "up", "--build", "-d"], cwd=ul_dir, timeout=5400)
 
     run.run_check("wait-healthy", lambda: _app_answers(env.app_port), timeout=900, interval=5)
 
@@ -362,14 +477,16 @@ def destroy(slug: str, *, root: Path | None = None, keep_files: bool = False) ->
 
     # UrbanLens resolves its own project name from the .env still sitting in
     # the checkout; REData needs the -p it was created with.
-    teardowns = ((None, env_path / "UrbanLens"), (f"redata-{slug}", env_path / "REData"))
-    for project, cwd in teardowns:
+    # Torn down with the same invocation each was created with, override file
+    # included - a `down` that resolves a different project name leaves the
+    # containers running and reports success.
+    teardowns = ((_compose(slug), env_path / "UrbanLens"), (["docker", "compose", "-p", f"redata-{slug}"], env_path / "REData"))
+    for base_command, cwd in teardowns:
         if not cwd.is_dir():
             continue
         # -v removes the environment's volumes too. These are disposable by
         # construction, and leaving them behind is how a host fills up.
-        command = ["docker", "compose"] + (["-p", project] if project else []) + ["down", "-v", "--remove-orphans"]
-        subprocess.run(command, cwd=cwd, capture_output=True, text=True, timeout=900, check=False)
+        subprocess.run([*base_command, "down", "-v", "--remove-orphans"], cwd=cwd, capture_output=True, text=True, timeout=900, check=False)
         removed["containers"] = True
 
     if not keep_files and env_path.is_dir() and env_path != root:
