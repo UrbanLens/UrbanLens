@@ -3796,19 +3796,21 @@ say so plainly rather than manufacture work.
 
 ## RESOLVED 2026-08-19: HEIC/HEIF uploads cannot have their GPS stripped
 
-**Resolution: the second route - refuse, narrowed so it costs nothing to anyone it does not
-protect.** `uploads.unscrubbable_format_error` refuses a HEIC/HEIF upload only from a profile whose
-settings ask for location stripping, with a message telling them to convert first. A user who keeps
-visit logging on is unaffected: they were never promised a scrub, so refusing their iPhone photos
-would take the format away for nothing.
+**Resolution: the first route - `pillow-heif` is now a dependency, and HEIC is an ordinary format
+everywhere.** The opener is registered in `dashboard.apps.ready`, so every path that opens an image
+(thumbnails, EXIF extraction, the GPS strip) handles HEIC without knowing it is special. No user
+sees a message and nothing has to be converted.
 
-The dependency route stays open and is strictly better if the licensing review lands: adding
-`pillow-heif` empties `_UNSCRUBBABLE_EXTENSIONS`, and the refusal disappears on its own with no
-other change.
+**Registering the opener was necessary but not sufficient, and the gap is worth knowing about.**
+Two allowlists governed this, and they had drifted: `_EXIF_REWRITABLE_FORMATS` decides whether a
+stored file may be re-encoded, while a *second, literal* set decided whether the modified EXIF was
+handed to `save()`. Adding HEIF to the first alone meant the file was faithfully re-encoded - and
+pillow-heif carried the original EXIF straight through, so the GPS survived a rewrite that logged
+success. The second gate now derives from the first, so the two cannot drift again.
 
-What made this worth deciding rather than leaving filed: the failure mode was the app *promising* a
-scrub, failing silently, and keeping the full GPS IFD - for exactly the users who had opted out.
-Covered by `test_heic_gps_refusal.py`.
+Covered by `test_heic_gps_strip.py`, which builds a real HEIC carrying a real GPS IFD and asserts
+it is gone afterwards - and that the photo still opens at its original size, since a strip that
+corrupts the image would be a worse bug than the one it fixes.
 
 The original filing follows.
 

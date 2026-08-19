@@ -42,6 +42,12 @@ dependencies = [
     "pandas~=3.0.3",
     "pdf2image~=1.17.0",
     "pillow>=12.2,<12.4",
+    # HEIC/HEIF decoding for Pillow. Not optional: heic/heif are accepted
+    # uploads (the iPhone default), and without this Pillow cannot open them at
+    # all - so a GPS strip a user asked for failed silently and the file was
+    # stored with its coordinates intact. See dashboard.apps for where the
+    # opener is registered.
+    "pillow-heif>=0.18",
     "psycogreen~=1.0.2",
     "psycopg2-binary~=2.9.12",
     "pydantic~=2.13.4",

@@ -9,6 +9,15 @@ class DashboardConfig(AppConfig):
     name = "urbanlens.dashboard"
 
     def ready(self):
+        # Teach Pillow to open HEIC/HEIF before anything reads an upload.
+        # Registered here rather than at each call site because every path that
+        # opens an image needs it - thumbnails, EXIF extraction, the GPS strip -
+        # and a path that missed it would fail the way HEIC used to: silently,
+        # keeping a file whose coordinates the uploader asked to have removed.
+        from pillow_heif import register_heif_opener
+
+        register_heif_opener()
+
         from django.core.signals import request_finished, request_started
         from django.db.models.signals import post_save
 

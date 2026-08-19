@@ -40,48 +40,6 @@ class UploadRejection:
     status: int
 
 
-#: Formats this application accepts but cannot open, so cannot scrub. Pillow
-#: has no HEIF support without ``pillow-heif``, which is not installed - see
-#: docs/PROBLEMS.md, 2026-08-12. Adding that dependency (note libheif/x265
-#: licensing) would let these flow through the normal pipeline and this set
-#: would go empty.
-_UNSCRUBBABLE_EXTENSIONS = frozenset({"heic", "heif"})
-
-
-def unscrubbable_format_error(image_file: UploadedFile, profile: Profile) -> str | None:
-    """Refuse a format whose GPS this application cannot remove, when it must.
-
-    The invariant, from ``test_gps_strip_by_format.py``: a format the app
-    *accepts* must either be scrubbable or refused - never silently stored with
-    the coordinates the uploader asked to have removed. HEIC broke it in the
-    worst direction, because Pillow cannot open the file at all: the strip
-    failed, the failure was logged, and the upload was kept with its full GPS
-    IFD, for exactly the privacy-conscious users who had opted out.
-
-    Scoped to profiles that actually asked for stripping. A user who keeps
-    visit logging on is not promised a scrub, so refusing their iPhone photos
-    would cost them the format for nothing.
-
-    Args:
-        image_file: The uploaded file.
-        profile: The uploading profile, whose visit-logging setting decides
-            whether a strip was promised.
-
-    Returns:
-        A user-facing message when the upload must be refused, else None.
-    """
-    from urbanlens.dashboard.services.visits.visits import visit_logging_allowed
-
-    extension = (image_file.name or "").rsplit(".", 1)[-1].lower()
-    if extension not in _UNSCRUBBABLE_EXTENSIONS or visit_logging_allowed(profile):
-        return None
-    return (
-        "This is a HEIC/HEIF photo, and your settings ask us not to keep photo locations - "
-        "but this format cannot have its location removed here. Convert it to JPEG first, or "
-        "re-enable visit logging if you are happy for the location to be kept."
-    )
-
-
 def _owner_fields(owner: Pin | Wiki) -> dict:
     """Return the Image ownership FKs for *owner*.
 
@@ -149,9 +107,6 @@ def upload_photo_for_owner(owner: Pin | Wiki, profile: Profile, image_file: Uplo
     if (upload_error := image_upload_error(image_file, MediaKind.PHOTO)) is not None:
         message, status = upload_error
         return UploadRejection(message, status)
-
-    if (strip_error := unscrubbable_format_error(image_file, profile)) is not None:
-        return UploadRejection(strip_error, 415)
 
     checksum = compute_checksum(image_file)
     scope, noun = _duplicate_scope(owner)

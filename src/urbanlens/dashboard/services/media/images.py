@@ -35,14 +35,17 @@ _EXIF_DATETIME_FORMAT = "%Y:%m:%d %H:%M:%S"
 # exotic formats) is stored untouched - only its size is counted.
 _PROCESSABLE_FORMATS = {"JPEG", "PNG", "WEBP", "TIFF"}
 
-_FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".tif", "AVIF": ".avif"}
+_FORMAT_EXTENSIONS = {"JPEG": ".jpg", "PNG": ".png", "WEBP": ".webp", "TIFF": ".tif", "AVIF": ".avif", "HEIF": ".heic"}
 
 # Formats whose stored file we can rewrite carrying modified EXIF. A superset of
 # _PROCESSABLE_FORMATS on purpose: those are the formats the *downscaler* will
 # re-encode, whereas these are the ones a GPS strip can be honoured for. Keeping
 # the two separate is what stops "we would never resize an AVIF" from silently
 # turning into "we never scrub an AVIF's coordinates either".
-_EXIF_REWRITABLE_FORMATS = _PROCESSABLE_FORMATS | {"AVIF"}
+# HEIF covers both .heic and .heif - pillow-heif registers one opener reporting
+# format "HEIF" for both, so the extension a phone happens to use does not
+# change what this pipeline sees.
+_EXIF_REWRITABLE_FORMATS = _PROCESSABLE_FORMATS | {"AVIF", "HEIF"}
 
 # EXIF tag 34853 - the GPSInfo IFD pointer.
 _GPS_IFD_TAG = 0x8825
@@ -524,7 +527,13 @@ def downscale_stored_image(image: Image, max_dimension: int | None, convert_webp
     # relied on the tag came out of a downscale rendering ninety degrees wrong,
     # silently and permanently. (JPEG/WEBP keep the tag and their pixels; TIFF loses
     # the tag but Pillow rotates the pixels on load, so both stay correct.)
-    if exif_bytes and target_format in {"JPEG", "WEBP", "TIFF", "AVIF", "PNG"}:
+    # Gated on the same set that decided this file was rewritable at all. It
+    # used to be a second literal list, and the two drifted the moment a format
+    # was added to one: HEIF passed the rewrite check, so the file *was*
+    # re-encoded, but its stripped EXIF was never handed to save() - pillow-heif
+    # then carried the original EXIF through, and the GPS the user asked to
+    # remove survived a rewrite that logged success.
+    if exif_bytes and target_format in _EXIF_REWRITABLE_FORMATS:
         save_kwargs["exif"] = exif_bytes
     if icc_profile:
         save_kwargs["icc_profile"] = icc_profile
