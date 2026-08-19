@@ -224,18 +224,20 @@ def run_staging_pipeline(
 
     run.run_step("compose-up", ["docker", "compose", "up", "--build", "-d"], cwd=checkout, timeout=3600)
 
+    app_container = f"urbanlens_{container_name}_app"
     base_url = site_url or (f"http://127.0.0.1:{app_port}" if app_port else "")
     if run.steps[-1].status == "failed":
         # Same reasoning as the dev pipeline: a health wait after a failed
         # start burns the timeout to reach a conclusion already known.
         run.record("wait-healthy", "skipped", "compose-up failed; not waiting on a stack that did not start")
-        run.run_step("capture-app-log", ["docker", "compose", "logs", "--tail", "80", "app"], cwd=checkout, timeout=180, check=False)
+        # See the note in devenv: compose's own warnings crowd out the app's
+        # traceback, so the container is asked directly.
+        run.run_step("capture-app-log", ["docker", "logs", "--tail", "60", app_container], cwd=checkout, timeout=180, check=False)
     elif base_url:
         run.run_check("wait-healthy", lambda: _healthy(base_url), timeout=600, interval=5)
     else:
         run.record("wait-healthy", "failed", "neither UL_SITE_URL nor UL_APP_PORT is set in .env")
 
-    app_container = f"urbanlens_{container_name}_app"
     run.run_step(
         "migrations-applied",
         ["docker", "exec", app_container, "/app/.venv/bin/python", "src/urbanlens/manage.py", "migrate", "--check"],

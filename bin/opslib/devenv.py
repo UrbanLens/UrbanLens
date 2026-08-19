@@ -196,6 +196,14 @@ def _write_env_file(path: Path, values: dict[str, str], source: Path | None) -> 
 #: unique per project.
 _NAMED_SERVICES = ("app", "app-ws", "nginx", "db", "valkey", "celery-worker", "celery-worker-panels", "celery-beat", "clamav")
 
+#: Services that run the full migration set on first boot.
+_SLOW_FIRST_BOOT_SERVICES = ("app", "app-ws")
+
+#: Grace before an unhealthy verdict on first boot. Generous on purpose: the
+#: cost of waiting is a slower create, while the cost of being too strict is a
+#: torn-down stack that was working.
+_FIRST_BOOT_GRACE = "20m"
+
 
 def _compose(slug: str) -> list[str]:
     """The compose command for one environment, isolated by project and override."""
@@ -220,6 +228,15 @@ def _isolation_override(slug: str, ul_dir: Path) -> str:
             continue
         lines.append(f"  {service}:")
         lines.append(f"    container_name: ul_{slug}_{service.replace('-', '_')}")
+        if service in _SLOW_FIRST_BOOT_SERVICES and "healthcheck:" in base:
+            # A new environment migrates from an *empty* database - every
+            # migration in the project, not the handful an existing deployment
+            # applies. The base timings are sized for the latter (30s grace,
+            # three 30s retries), so compose declares the app unhealthy while
+            # it is still working and tears the dependent services down. The
+            # container was fine; only the deadline was wrong.
+            lines.append("    healthcheck:")
+            lines.append(f"      start_period: {_FIRST_BOOT_GRACE}")
     return "\n".join(lines) + "\n"
 
 
@@ -387,6 +404,12 @@ def create(*, requested_name: str = "", branch: str = "main", owner: str = "", r
             "UL_APP_PORT": str(env.app_port),
             "UL_DB_NAME": f"urbanlens_{slug}",
             "UL_SITE_URL": env.url,
+            # Without this Django answers 400 to its own hostname, which looks
+            # exactly like a broken proxy: the router forwards correctly and
+            # the app rejects the Host header it was just given. Localhost is
+            # included so the published port is directly usable too, which is
+            # what the health check and any port-forwarded debugging rely on.
+            "UL_ALLOWED_HOSTS": f"{env.hostname},127.0.0.1,localhost",
             "UL_REDATA_API_URL": f"http://127.0.0.1:{env.redata_port}" if with_redata else "",
         },
         source_env if source_env.is_file() else None,
@@ -438,7 +461,11 @@ def create(*, requested_name: str = "", branch: str = "main", owner: str = "", r
         # holds the reason, and fetching it here is the difference between a
         # caller knowing what broke and a caller going to find out.
         run.record("wait-healthy", "skipped", "start failed; not waiting on a container that did not start")
-        run.run_step("capture-app-log", [*_compose(slug), "logs", "--tail", "80", "app"], cwd=ul_dir, timeout=180, check=False)
+        # `docker logs <container>` rather than `docker compose logs`: compose
+        # prefixes its own variable-substitution warnings, and on this project
+        # there are enough of them to push the app's actual traceback out of
+        # any reasonable tail - which defeats the point of capturing it.
+        run.run_step("capture-app-log", ["docker", "logs", "--tail", "60", f"ul_{slug}_app"], cwd=ul_dir, timeout=180, check=False)
 
     from .router import write_routes
 
