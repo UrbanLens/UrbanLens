@@ -121,6 +121,56 @@ export function tileLayer(kind: string, extraOptions?: L.TileLayerOptions): L.Ti
     return L.tileLayer(def.url, { ...def.options, ...extraOptions });
 }
 
+/**
+ * Layers this deployment's REData offers, registered alongside the built-in
+ * ones so `tileLayer()` resolves them by id like any other.
+ *
+ * Fetched rather than hardcoded because the catalogue is per-deployment: which
+ * vendors REData proxies depends on what it has been configured and licensed
+ * for. A deployment without REData simply keeps the built-in layers, which is
+ * why failure here is silent rather than surfaced.
+ *
+ * @returns The ids registered, in catalogue order - empty when REData offers
+ *   nothing or could not be reached.
+ */
+export async function registerRedataLayers(): Promise<string[]> {
+    let layers: RedataLayer[];
+    try {
+        const response = await fetch("/dashboard/map/basemap-tiles/sources/", { headers: { Accept: "application/json" } });
+        if (!response.ok) return [];
+        layers = ((await response.json()) as { layers?: RedataLayer[] }).layers || [];
+    } catch {
+        return [];
+    }
+
+    const registered: string[] = [];
+    for (const layer of layers) {
+        if (!layer.id || !layer.url_template || !layer.attribution) continue;
+        TILE_DEFS[layer.id] = {
+            url: layer.url_template,
+            options: {
+                attribution: layer.attribution,
+                // Leaflet upscales past the vendor's real depth rather than
+                // dropping the layer out, matching the built-in defs above.
+                maxNativeZoom: layer.max_zoom ?? 19,
+                maxZoom: 21,
+                minZoom: layer.min_zoom ?? 0,
+            },
+        };
+        registered.push(layer.id);
+    }
+    return registered;
+}
+
+interface RedataLayer {
+    id: string;
+    name: string;
+    attribution: string;
+    url_template: string;
+    min_zoom?: number | null;
+    max_zoom?: number | null;
+}
+
 /** Creates the geopolitical borders overlay (same tiles on every map). */
 export function bordersOverlay(): L.TileLayer {
     return tileLayer("borders");
