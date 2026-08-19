@@ -428,9 +428,17 @@ def create(*, requested_name: str = "", branch: str = "main", owner: str = "", r
     # No -p: UL_CONTAINER_NAME in the .env above already sets both the compose
     # project name and every container_name, so passing one here would create a
     # second, competing way to identify the same stack.
-    run.run_step("start-urbanlens", [*_compose(slug), "up", "--build", "-d"], cwd=ul_dir, timeout=5400)
+    started = run.run_step("start-urbanlens", [*_compose(slug), "up", "--build", "-d"], cwd=ul_dir, timeout=5400)
 
-    run.run_check("wait-healthy", lambda: _app_answers(env.app_port), timeout=900, interval=5)
+    if started.status == "ok":
+        run.run_check("wait-healthy", lambda: _app_answers(env.app_port), timeout=900, interval=5)
+    else:
+        # Waiting fifteen minutes for a container that already failed to start
+        # is fifteen minutes of nothing. Report why instead: the app's own log
+        # holds the reason, and fetching it here is the difference between a
+        # caller knowing what broke and a caller going to find out.
+        run.record("wait-healthy", "skipped", "start failed; not waiting on a container that did not start")
+        run.run_step("capture-app-log", [*_compose(slug), "logs", "--tail", "80", "app"], cwd=ul_dir, timeout=180, check=False)
 
     from .router import write_routes
 

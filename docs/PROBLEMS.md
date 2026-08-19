@@ -21,6 +21,32 @@ Bugs or quirks identified during other work but out of scope to investigate/fix 
 > Resolved entries live in [`PROBLEMS-ARCHIVE.md`](PROBLEMS-ARCHIVE.md). This file is what is
 > still open, still partial, or still worth knowing before touching the area it describes.
 
+## OPEN 2026-08-19: `main` cannot start from an empty database - conflicting migrations
+
+Found by the new dev-environment tooling on its first clean run: `bin/dev_env.py create --branch
+main` builds the stack, and the app container dies during init with
+
+```
+CommandError: Conflicting migrations detected; multiple leaf nodes in the migration graph:
+(0002_v0_4_0b0, 0006_v0_4_0_indexes in dashboard).
+```
+
+This is a property of the branch, not of the tooling - the environment was correctly isolated
+(`ul_<slug>_*` containers, own database) and every other step passed. Any deploy of `main` against a
+fresh database fails the same way; existing databases are unaffected, because `migrate` only walks
+the graph when it has work to do, which is why nothing has noticed.
+
+The fix is a merge migration (`makemigrations --merge`) on `main`, or removing whichever leaf is
+redundant. Worth checking before the next release branches off it.
+
+`bin/check_migration_graph.py` **does** catch it - pointed at main's tree it reports exactly this,
+naming both leaves. The check simply postdates `main`: that file does not exist on that branch, and
+pre-commit only runs what the checked-out branch carries. So this is not a gap in the check; it is a
+branch that has not received it yet, and merging forward is enough to stop it recurring.
+
+(An earlier draft of this entry claimed the checker lacked a leaf check. That was wrong - verified by
+running it against the cloned main checkout.)
+
 ## ⚠ Dev environment `devs1` is down - read this before restarting anything (2026-08-14)
 
 Four entries below describe one situation. They were filed in discovery order; this is the order
