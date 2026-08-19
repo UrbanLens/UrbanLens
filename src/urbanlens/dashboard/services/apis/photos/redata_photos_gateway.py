@@ -39,6 +39,12 @@ MAX_VOTES_PER_SUBMIT = 1000
 MAX_PHOTO_IDS_PER_CONFIDENCE_LOOKUP = 1000
 
 
+#: Read inline in the site-admin page render, so it is bounded well below
+#: the default: a diagnostics page that hangs for half a minute because
+#: REData is unresponsive is reporting the outage by being one.
+_MODEL_READ_TIMEOUT = 5
+
+
 @dataclass(slots=True, kw_only=True)
 class RedataPhotosGateway(RedataJsonGateway):
     """REST client for REData's ``/photos/...`` endpoints."""
@@ -71,7 +77,7 @@ class RedataPhotosGateway(RedataJsonGateway):
         Raises:
             GatewayRequestError: The request to REData failed.
         """
-        return self._get_json("/api/v1/photos/model/")
+        return self._get_json("/api/v1/photos/model/", timeout=_MODEL_READ_TIMEOUT)
 
     def submit_photos(self, photos: list[dict[str, Any]]) -> dict[str, Any]:
         """Submit (upsert) photo observations for scoring.

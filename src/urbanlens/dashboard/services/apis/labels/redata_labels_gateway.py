@@ -39,6 +39,12 @@ DEFAULT_SUGGEST_LIMIT = 10
 MAX_SUGGEST_LIMIT = 50
 
 
+#: Read inline in the site-admin page render, so it is bounded well below
+#: the default: a diagnostics page that hangs for half a minute because
+#: REData is unresponsive is reporting the outage by being one.
+_MODEL_READ_TIMEOUT = 5
+
+
 @dataclass(slots=True, kw_only=True)
 class RedataLabelsGateway(RedataJsonGateway):
     """REST client for REData's ``/labels/...`` endpoints."""
@@ -69,7 +75,7 @@ class RedataLabelsGateway(RedataJsonGateway):
         Raises:
             GatewayRequestError: The request to REData failed.
         """
-        return self._get_json("/api/v1/labels/model/")
+        return self._get_json("/api/v1/labels/model/", timeout=_MODEL_READ_TIMEOUT)
 
     def define_labels(self, user_id: str, labels: list[dict[str, Any]]) -> dict[str, Any]:
         """Upsert (by ``external_id``) one user's tag/category label definitions.

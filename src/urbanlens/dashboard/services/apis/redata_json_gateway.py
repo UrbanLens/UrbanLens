@@ -96,12 +96,15 @@ class RedataJsonGateway(Gateway):
         logger.warning("REData request to %s failed (%s)", path, response.status_code)
         raise GatewayRequestError(f"REData request to {path} failed with status {response.status_code}.")
 
-    def _get_json(self, path: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _get_json(self, path: str, params: dict[str, Any] | None = None, *, timeout: int = _REQUEST_TIMEOUT) -> dict[str, Any]:
         """GET one endpoint and return its decoded body.
 
         Args:
             path: Path relative to ``base_url``.
             params: Optional query parameters.
+            timeout: Seconds to wait. Lower it for a call made inline in a page
+                render, where the default would let one unresponsive upstream
+                hold the whole response open.
 
         Returns:
             The decoded JSON body.
@@ -111,7 +114,7 @@ class RedataJsonGateway(Gateway):
                 was not a usable JSON object.
         """
         try:
-            response = self.session.get(self._url(path), params=params or {}, headers=self._headers, timeout=_REQUEST_TIMEOUT)
+            response = self.session.get(self._url(path), params=params or {}, headers=self._headers, timeout=timeout)
         except OSError as exc:
             raise GatewayRequestError(f"Could not reach REData: {exc}") from exc
         return self._decode(response, path)
