@@ -12,7 +12,7 @@ arrangement ``redata_historical_maps_gateway`` uses for warped overlay tiles.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, ClassVar
 
 from urbanlens.dashboard.services.apis.locations.redata_context_gateway import RedataLocationContextGateway
 
@@ -21,6 +21,12 @@ _SOURCES_PATH = "/api/v1/tiles/sources/"
 
 class RedataBasemapTilesGateway(RedataLocationContextGateway):
     """Reads ``GET /tiles/sources/`` and ``GET /tiles/{layer}/{z}/{x}/{y}/``."""
+
+    #: Its own key rather than the inherited one: tile traffic is one request
+    #: per pan, an entirely different shape from the point lookups the base
+    #: class's budget is sized for, and sharing a budget would let map panning
+    #: exhaust the allowance every other location feature draws on.
+    service_key: ClassVar[str] = "redata_basemap_tiles"
 
     def list_sources(self) -> list[dict[str, Any]]:
         """Return REData's basemap layer catalogue.
@@ -38,10 +44,18 @@ class RedataBasemapTilesGateway(RedataLocationContextGateway):
             LocationContextUnavailableError: The request to REData failed.
         """
         body = self.get_json(_SOURCES_PATH, {}) or {}
-        # Documented as one entry per layer; tolerate either envelope shape
-        # rather than assuming which one this deployment returns.
-        rows = body.get("results") if isinstance(body, dict) else body
-        return [row for row in (rows or []) if isinstance(row, dict) and row.get("id")]
+        if isinstance(body, list):
+            rows = body
+        elif isinstance(body, dict):
+            # REData answers ``{"sources": [...]}`` for this endpoint - not the
+            # ``results`` envelope its paginated collections use. Both are
+            # accepted because reading the wrong one fails silently as "this
+            # deployment offers no layers", which is indistinguishable from a
+            # deployment that genuinely offers none.
+            rows = body.get("sources") or body.get("results") or []
+        else:
+            rows = []
+        return [row for row in rows if isinstance(row, dict) and row.get("id")]
 
     def download_tile(self, layer: str, z: int, x: int, y: int) -> tuple[int, bytes, str]:
         """Fetch one basemap tile.

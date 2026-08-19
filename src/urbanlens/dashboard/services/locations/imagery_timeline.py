@@ -50,8 +50,11 @@ def flatten_timeline(envelope: dict[str, Any]) -> list[dict[str, Any]]:
                 "captured_on": capture["captured_on"],
                 # False means captured_on is Esri's *publication* date, months
                 # off the real acquisition; REData resolves it in the
-                # background, so a re-read later corrects it.
-                "date_is_exact": capture.get("capture_date_resolved") is not False,
+                # background, so a re-read later corrects it. The flag lives in
+                # `attributes`, not at the capture's top level - reading it
+                # from the wrong place fails silently as "always exact", which
+                # is precisely the caption this exists to prevent.
+                "date_is_exact": _resolved_flag(capture) is not False,
                 "asset": capture.get("asset") or {},
             },
         )
@@ -80,9 +83,51 @@ def flatten_timeline(envelope: dict[str, Any]) -> list[dict[str, Any]]:
                     },
                 )
 
-    # Newest first, keyed on whichever date the entry has. A range sorts by its
-    # end, since that is the most recent imagery it can produce.
-    return sorted(offerings, key=lambda entry: entry.get("captured_on") or entry.get("end") or entry.get("start") or "", reverse=True)
+    return sorted(offerings, key=_sort_key, reverse=True)
+
+
+def _resolved_flag(capture: dict[str, Any]) -> Any:
+    """Read ``capture_date_resolved`` from wherever this REData version puts it.
+
+    It belongs to the capture's ``attributes`` blob; the top level is checked
+    too so a deployment that promotes it later keeps working.
+
+    Args:
+        capture: One ``captures`` entry.
+
+    Returns:
+        ``True``/``False``/``None`` as REData reports it, or ``None`` when
+        absent - which means the source publishes no acquisition date at all,
+        and is not the same claim as ``False``.
+    """
+    attributes = capture.get("attributes")
+    if isinstance(attributes, dict) and "capture_date_resolved" in attributes:
+        return attributes["capture_date_resolved"]
+    return capture.get("capture_date_resolved")
+
+
+def _sort_key(entry: dict[str, Any]) -> str:
+    """Sortable date for one offering, newest first.
+
+    A range sorts by its end, since that is the most recent imagery it can
+    produce - falling back to its start when the range is open-ended.
+
+    Non-string dates are coerced rather than compared raw: one integer year in
+    an otherwise valid envelope would otherwise raise ``TypeError`` mid-sort
+    and take down the whole carousel, which is a poor trade for a malformed
+    field on one capture.
+
+    Args:
+        entry: One flattened offering.
+
+    Returns:
+        A string safe to compare against every other entry's key.
+    """
+    for field_name in ("captured_on", "end", "start"):
+        value = entry.get(field_name)
+        if value not in (None, ""):
+            return str(value)
+    return ""
 
 
 def timeline_years(envelope: dict[str, Any]) -> list[int]:

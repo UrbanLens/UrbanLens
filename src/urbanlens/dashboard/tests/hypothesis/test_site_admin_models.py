@@ -16,6 +16,7 @@ something this codebase controls.
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest import mock
 
 from django.contrib.auth.models import Permission, User
@@ -28,6 +29,9 @@ from urbanlens.dashboard.controllers.site_admin_models import scrub_personal_key
 _LABELS = "urbanlens.dashboard.services.apis.labels.redata_labels_gateway.RedataLabelsGateway.get_model"
 _PHOTOS = "urbanlens.dashboard.services.apis.photos.redata_photos_gateway.RedataPhotosGateway.get_model"
 _CONFIGURED = "urbanlens.dashboard.services.labels.redata_suggestions.redata_labels_configured"
+
+#: The envelope REData returns before any model has been promoted.
+_HEURISTIC = {"active": None, "ranker": "heuristic"}
 
 
 class ScrubPersonalKeysTests(SimpleTestCase):
@@ -82,7 +86,7 @@ class SiteAdminModelsViewTests(TestCase):
 
     def test_no_promoted_model_is_reported_as_the_heuristic_answering(self) -> None:
         """`active: null` is a normal state, not a failure."""
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value={"active": None}), mock.patch(_PHOTOS, return_value={"active": None}):
+        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=_HEURISTIC), mock.patch(_PHOTOS, return_value=_HEURISTIC):
             response = self.client.get(self.url)
 
         summary = response.context["models"][0]["summary"]
@@ -91,16 +95,45 @@ class SiteAdminModelsViewTests(TestCase):
         self.assertContains(response, "heuristic is answering")
 
     def test_a_promoted_model_shows_its_version_and_metrics(self) -> None:
-        body = {"active": 12, "metrics": {"brier": 0.081}, "baseline_metrics": {"heuristic": 0.14}}
+        """Metrics live on the serialized model version, not at the envelope's top level."""
+        body = {
+            "active": {"version": 12, "algorithm": "logreg", "metrics": {"brier": 0.081}, "baseline_metrics": {"heuristic": {"brier": 0.14}}},
+            "ranker": "model",
+        }
 
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=body), mock.patch(_PHOTOS, return_value={"active": None}):
+        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=body), mock.patch(_PHOTOS, return_value=_HEURISTIC):
             response = self.client.get(self.url)
 
         summary = response.context["models"][0]["summary"]
         self.assertTrue(summary["has_model"])
-        self.assertEqual(summary["active"], 12)
+        self.assertEqual(summary["version"], 12)
         self.assertEqual(summary["metrics"]["brier"], 0.081)
-        self.assertEqual(summary["baseline_metrics"]["heuristic"], 0.14)
+        self.assertEqual(summary["baseline_metrics"]["heuristic"]["brier"], 0.14)
+        self.assertContains(response, "Model version 12")
+
+    def test_redatas_own_ranker_field_is_believed_over_inference(self) -> None:
+        """REData states which ranker answered; inferring it would disagree the moment they differ."""
+        body = {"active": {"version": 3}, "ranker": "heuristic"}
+
+        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=body), mock.patch(_PHOTOS, return_value=_HEURISTIC):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.context["models"][0]["summary"]["ranker"], "heuristic")
+
+    def test_the_photo_models_scorer_field_is_read_too(self) -> None:
+        """The same fact is named `ranker` for labels and `scorer` for photos."""
+        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=_HEURISTIC), mock.patch(_PHOTOS, return_value={"active": {"version": 9}, "scorer": "model"}):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.context["models"][1]["summary"]["ranker"], "model")
+
+    def test_a_malformed_active_renders_rather_than_500ing(self) -> None:
+        """A diagnostics page that dies on an unexpected shape hides what it was reporting."""
+        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value={"active": 12}), mock.patch(_PHOTOS, return_value=_HEURISTIC):
+            response = self.client.get(self.url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.context["models"][0]["summary"]["has_model"])
 
     def test_an_unreachable_redata_degrades_instead_of_500ing(self) -> None:
         """A diagnostics page that dies when the thing it diagnoses is down is useless."""
@@ -114,28 +147,100 @@ class SiteAdminModelsViewTests(TestCase):
 
     def test_a_personal_field_never_reaches_the_page(self) -> None:
         """The whole constraint, asserted end to end."""
-        body = {"active": 3, "metrics": {"brier": 0.1}, "uploader": "jess@example.test", "reputation": 0.9}
+        body = {"active": {"version": 3, "metrics": {"brier": 0.1}}, "ranker": "model", "uploader": "jess@example.test", "reputation": 0.9}
 
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=body), mock.patch(_PHOTOS, return_value={"active": None}):
+        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value=body), mock.patch(_PHOTOS, return_value=_HEURISTIC):
             response = self.client.get(self.url)
 
         self.assertNotContains(response, "jess@example.test")
         self.assertNotIn("uploader", response.context["models"][0]["summary"])
 
     def test_both_models_are_reported(self) -> None:
-        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value={"active": 1}), mock.patch(_PHOTOS, return_value={"active": 2}):
+        with mock.patch(_CONFIGURED, return_value=True), mock.patch(_LABELS, return_value={"active": {"version": 1}}), mock.patch(_PHOTOS, return_value={"active": {"version": 2}}):
             response = self.client.get(self.url)
 
         self.assertEqual([entry["title"] for entry in response.context["models"]], ["Label suggestion", "Photo relevance"])
 
 
 class ReputationIsNotConsumedTests(SimpleTestCase):
-    """The per-contributor endpoint must stay unused, not merely unwired today."""
+    """The per-contributor endpoint must stay unused, not merely unwired today.
 
-    def test_no_gateway_wraps_the_reputation_endpoint(self) -> None:
-        import pathlib
+    The first version of this guard could not fail: it globbed a directory that
+    does not exist, so it reported success with a real consumer present. It now
+    proves it is looking at the right tree before drawing any conclusion, and
+    matches *executable* references rather than the substring - two docstrings
+    document the deliberate non-use, and a guard that trips on its own
+    explanation gets deleted rather than heeded.
+    """
 
-        root = pathlib.Path(__file__).resolve().parents[3]
-        hits = [path for path in (root / "urbanlens").rglob("*.py") if "photos/reputation" in path.read_text(encoding="utf-8") and "tests/" not in str(path)]
+    def _source_root(self) -> Path:
 
-        self.assertEqual(hits, [], "a per-contributor reputation score is not something this application has a use for")
+        root = Path(__file__).resolve().parents[4]
+        # Prove the root before trusting a negative result from it.
+        self.assertTrue((root / "urbanlens" / "dashboard" / "controllers").is_dir(), f"source root not found at {root}")
+        return root / "urbanlens"
+
+    def test_the_search_root_is_real(self) -> None:
+        """Guards the guard: an empty scan of a missing tree looks like success."""
+        root = self._source_root()
+
+        self.assertGreater(len(list(root.rglob("*.py"))), 100, "the tree being scanned is implausibly small")
+
+    def test_no_code_calls_the_reputation_endpoint(self) -> None:
+        import ast
+
+        root = self._source_root()
+        offenders = []
+        for path in root.rglob("*.py"):
+            if "/tests/" in str(path):
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            # Identity of the *node*, not of its string value: equal short
+            # strings can be interned to one object, which would let a real
+            # call be mistaken for a docstring.
+            docstring_nodes = {
+                id(node.body[0].value)
+                for node in ast.walk(tree)
+                if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+                and node.body
+                and isinstance(node.body[0], ast.Expr)
+                and isinstance(node.body[0].value, ast.Constant)
+                and isinstance(node.body[0].value.value, str)
+            }
+            for node in ast.walk(tree):
+                # Only strings *used in code* count - a docstring saying the
+                # endpoint is deliberately unused is not a call to it.
+                if isinstance(node, ast.Constant) and isinstance(node.value, str) and "photos/reputation" in node.value and id(node) not in docstring_nodes:
+                    offenders.append(f"{path.name}:{node.lineno}")
+
+        self.assertEqual(offenders, [], "a per-contributor reputation score is not something this application has a use for")
+
+    def test_the_guard_catches_a_real_consumer(self) -> None:
+        """Proves the matcher fires, since a guard is only worth its false-negative rate."""
+        import ast
+
+        source = 'def get_reputation(self, user_id):\n    return self._get_json("/api/v1/photos/reputation/")\n'
+        tree = ast.parse(source)
+        docstring_nodes = {
+            id(node.body[0].value)
+            for node in ast.walk(tree)
+            if isinstance(node, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef))
+            and node.body
+            and isinstance(node.body[0], ast.Expr)
+            and isinstance(node.body[0].value, ast.Constant)
+            and isinstance(node.body[0].value.value, str)
+        }
+        hits = [n for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str) and "photos/reputation" in n.value and id(n) not in docstring_nodes]
+
+        self.assertEqual(len(hits), 1)
+
+    def test_a_docstring_mention_is_not_a_consumer(self) -> None:
+        """Both gateways document the deliberate non-use; that must stay legal."""
+        import ast
+
+        source = '"""Deliberately does not wrap GET /api/v1/photos/reputation/."""\n'
+        tree = ast.parse(source)
+        docstring_nodes = {id(tree.body[0].value)}
+        hits = [n for n in ast.walk(tree) if isinstance(n, ast.Constant) and isinstance(n.value, str) and "photos/reputation" in n.value and id(n) not in docstring_nodes]
+
+        self.assertEqual(hits, [])

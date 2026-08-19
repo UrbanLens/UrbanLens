@@ -22,6 +22,7 @@ stay aggregate.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
 from typing import Any
 
@@ -42,15 +43,16 @@ _PERSONAL_KEYS = frozenset(
         "contributor",
         "contributors",
         "email",
-        "key",
         "photographer",
+        "photographers",
         "reputation",
         "reputations",
-        "source_id",
         "uploader",
-        "user",
+        "uploaders",
         "user_id",
-        "users",
+        "user_ids",
+        "username",
+        "usernames",
     },
 )
 
@@ -77,7 +79,7 @@ def scrub_personal_keys(value: Any) -> Any:
     return value
 
 
-def _model_summary(fetch, label: str) -> dict[str, Any]:
+def _model_summary(fetch: Callable[[], dict[str, Any]], label: str) -> dict[str, Any]:
     """Fetch one model's metadata, or describe why it is unavailable.
 
     Args:
@@ -91,25 +93,47 @@ def _model_summary(fetch, label: str) -> dict[str, Any]:
         diagnoses is down is the least useful moment to lose it.
     """
     from urbanlens.dashboard.services.core.gateway import GatewayRequestError
+    from urbanlens.dashboard.services.core.rate_limiter import RequestCancelledError
 
     try:
         payload = scrub_personal_keys(fetch() or {})
-    except GatewayRequestError as exc:
+    except (GatewayRequestError, RequestCancelledError) as exc:
+        # RequestCancelledError covers this side's own rate limiter refusing or
+        # the service being switched off in admin - neither is a gateway error,
+        # and letting them through would 500 the page that exists to report on
+        # exactly that kind of problem.
         logger.info("REData %s model metadata unavailable: %s", label, exc)
         return {"available": False, "message": str(exc)}
 
+    # The metrics live on the serialized model version, not at the top level -
+    # the envelope is {active, ranker|scorer, feature_schema_fingerprint,
+    # features, recent_versions}.
     active = payload.get("active")
+    # Defensive about the shape as well as the content: this page exists to
+    # report on REData, so an unexpected payload has to render as "no model"
+    # rather than as a 500 that hides what it was trying to say.
+    if not isinstance(active, dict):
+        active = {}
+    # REData states which ranker answered rather than leaving it to be inferred
+    # from `active`; the field is named `ranker` for labels and `scorer` for
+    # photo relevance. Inferring instead would disagree with REData the moment
+    # the two can differ.
+    ranker = payload.get("ranker") or payload.get("scorer") or ("model" if active else "heuristic")
     return {
         "available": True,
-        # `active: null` is normal, not an error - it means no model has been
-        # promoted yet and the heuristic is answering.
-        "active": active,
-        "has_model": active is not None,
-        "metrics": payload.get("metrics") or {},
-        "ranking_metrics": payload.get("ranking_metrics") or {},
-        "baseline_metrics": payload.get("baseline_metrics") or {},
-        "features": payload.get("features") or payload.get("feature_registry") or [],
-        "schema_fingerprint": payload.get("schema_fingerprint") or payload.get("feature_schema_fingerprint") or "",
+        "ranker": ranker,
+        # "heuristic" is a normal state, not a failure: it answers until a
+        # model beats both it and the incumbent on the same holdout.
+        "has_model": bool(active),
+        "version": active.get("version"),
+        "algorithm": active.get("algorithm") or "",
+        "trained_at": active.get("trained_at") or "",
+        "training_rows": active.get("training_rows"),
+        "metrics": active.get("metrics") or {},
+        "ranking_metrics": active.get("ranking_metrics") or {},
+        "baseline_metrics": active.get("baseline_metrics") or {},
+        "features": payload.get("features") or [],
+        "schema_fingerprint": payload.get("feature_schema_fingerprint") or payload.get("schema_fingerprint") or "",
     }
 
 

@@ -121,6 +121,19 @@ SERVICE_REGISTRY: dict[str, ServiceDefaults] = {
         calls_per_day=None,
         notes="Tag/category taxonomy + assignment sync and suggestions via POST /labels/, /labels/assignments/, /labels/suggest/.",
     ),
+    "redata_basemap_tiles": ServiceDefaults(
+        display_name="REData Basemap Tiles",
+        # Deliberately far above the shared "lookup" budget below: a tile
+        # request is one per pan, not one per user action, and REData applies
+        # its own tile throttle that *replaces* rather than stacks with the
+        # per-key budget (see its api-reference.md). Holding tiles to a lookup
+        # allowance would let a few seconds of panning exhaust the budget every
+        # other location feature draws on - which is also why this has its own
+        # key rather than inheriting the base gateway's.
+        calls_per_minute=600,
+        calls_per_day=None,
+        notes="Basemap tiles and their catalogue via GET /tiles/. Proxied so REData's key stays server-side - see controllers.basemap_tiles.",
+    ),
     "redata_geocode": ServiceDefaults(
         display_name="REData Geocoding",
         # Shares REData's single 1,000 req/hour "lookup" pool (see the

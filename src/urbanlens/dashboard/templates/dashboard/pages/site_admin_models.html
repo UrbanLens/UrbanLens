@@ -35,7 +35,7 @@
         {% if not model.summary.available %}
         <p class="form-hint">Unavailable: {{ model.summary.message }}</p>
 
-        {% elif not model.summary.has_model %}
+        {% elif model.summary.ranker != "model" %}
         <p><strong>The heuristic is answering.</strong></p>
         <p class="form-hint">
             No trained model has been promoted yet. This is a normal state rather than a
@@ -45,21 +45,37 @@
         </p>
 
         {% else %}
-        <p><strong>Model {{ model.summary.active }}</strong> is answering.</p>
+        <p>
+            <strong>Model version {{ model.summary.version|default:"?" }}</strong> is answering{% if model.summary.algorithm %},
+            trained with {{ model.summary.algorithm }}{% endif %}{% if model.summary.trained_at %} on {{ model.summary.trained_at }}{% endif %}.
+            {% if model.summary.training_rows %}<span class="form-hint">{{ model.summary.training_rows }} training rows.</span>{% endif %}
+        </p>
 
         {% if model.summary.metrics %}
         <h3>Holdout metrics</h3>
         <table class="admin-table">
-            <thead><tr><th>Metric</th><th>This model</th><th>Baselines it beat</th></tr></thead>
+            <thead><tr><th>Source</th><th>Metrics on the same holdout</th></tr></thead>
             <tbody>
-                {% for name, value in model.summary.metrics.items %}
                 <tr>
-                    <td>{{ name }}</td>
-                    <td>{{ value }}</td>
+                    <td><strong>This model</strong></td>
                     <td>
-                        {% for baseline_name, baseline in model.summary.baseline_metrics.items %}
-                        <span class="badge badge--muted">{{ baseline_name }}: {{ baseline|default:"—" }}</span>
-                        {% empty %}—{% endfor %}
+                        {% for name, value in model.summary.metrics.items %}
+                        <span class="badge badge--muted">{{ name }}: {{ value }}</span>
+                        {% endfor %}
+                        {% for name, value in model.summary.ranking_metrics.items %}
+                        <span class="badge badge--muted">{{ name }}: {{ value }}</span>
+                        {% endfor %}
+                    </td>
+                </tr>
+                {% for baseline_name, baseline in model.summary.baseline_metrics.items %}
+                <tr>
+                    <td>{{ baseline_name }}</td>
+                    <td>
+                        {% if baseline.items %}
+                            {% for name, value in baseline.items %}
+                            <span class="badge badge--muted">{{ name }}: {{ value }}</span>
+                            {% endfor %}
+                        {% else %}{{ baseline }}{% endif %}
                     </td>
                 </tr>
                 {% endfor %}
@@ -69,15 +85,6 @@
             Brier score is the one to read first: it is a proper scoring rule, so unlike AUC it
             penalises a model that ranks well while being systematically overconfident.
         </p>
-        {% endif %}
-
-        {% if model.summary.ranking_metrics %}
-        <h3>Ranking quality</h3>
-        <ul class="admin-list">
-            {% for name, value in model.summary.ranking_metrics.items %}
-            <li>{{ name }}: {{ value }}</li>
-            {% endfor %}
-        </ul>
         {% endif %}
 
         {% if model.summary.schema_fingerprint %}
@@ -90,6 +97,7 @@
             {% for feature in model.summary.features %}
             <li>
                 {% if feature.name %}<strong>{{ feature.name }}</strong>{% endif %}
+                {% if feature.kind %} <span class="badge badge--muted">{{ feature.kind }}</span>{% endif %}
                 {% if feature.description %} - {{ feature.description }}{% endif %}
                 {% if not feature.name and not feature.description %}{{ feature }}{% endif %}
             </li>
