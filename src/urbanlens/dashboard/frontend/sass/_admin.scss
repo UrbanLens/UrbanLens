@@ -1712,6 +1712,60 @@ $users-list-cols: minmax(180px, 1.3fr) minmax(170px, 1.15fr) minmax(110px, .75fr
     }
 
 }
+// -- Suggestion model report (site-admin/models/) ---------------------------
+// Its own block rather than reused admin-table/admin-list names: those do not
+// exist, and inventing class names that no stylesheet defines is how a page
+// ships looking broken while every test passes.
+.model-report {
+  padding: 1rem 1.25rem;
+  margin-bottom: 1rem;
+
+  h2 {
+    margin-top: 0;
+  }
+
+  h3 {
+    margin: 1rem 0 .35rem;
+    font-size: .95rem;
+  }
+}
+
+.model-report__empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: var(--ul-grey-5);
+}
+
+.model-report__table {
+  border-collapse: collapse;
+  width: 100%;
+
+  th,
+  td {
+    padding: .4rem .6rem;
+    border-bottom: 1px solid var(--border-color, rgb(128 128 128 / 25%));
+    text-align: left;
+    vertical-align: top;
+  }
+
+  th {
+    font-size: .8rem;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--ul-grey-5);
+  }
+}
+
+.model-report__list {
+  margin: 0;
+  padding-left: 1.1rem;
+
+  li {
+    margin-bottom: .3rem;
+    font-size: .9rem;
+  }
+}
+
 .api-limits-capabilities {
   margin-top: 1.5rem;
 

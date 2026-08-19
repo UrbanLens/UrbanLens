@@ -16,7 +16,7 @@
 <div class="site-admin-page page-content">
 
     {% if not configured %}
-    <div class="ul-empty-state">
+    <div class="card model-report__empty">
         <i class="material-icons">cloud_off</i>
         <p>REData is not configured for this deployment, so nothing is suggesting labels or scoring photos.</p>
     </div>
@@ -29,7 +29,7 @@
     </p>
 
     {% for model in models %}
-    <section class="admin-card">
+    <section class="card model-report">
         <h2>{{ model.title }}</h2>
 
         {% if not model.summary.available %}
@@ -53,7 +53,7 @@
 
         {% if model.summary.metrics %}
         <h3>Holdout metrics</h3>
-        <table class="admin-table">
+        <table class="model-report__table">
             <thead><tr><th>Source</th><th>Metrics on the same holdout</th></tr></thead>
             <tbody>
                 <tr>
@@ -93,7 +93,7 @@
 
         {% if model.summary.features %}
         <h3>Signals in use</h3>
-        <ul class="admin-list">
+        <ul class="model-report__list">
             {% for feature in model.summary.features %}
             <li>
                 {% if feature.name %}<strong>{{ feature.name }}</strong>{% endif %}

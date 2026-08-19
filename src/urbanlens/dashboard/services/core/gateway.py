@@ -86,7 +86,25 @@ class Gateway(Service, ABC):
         if key and type(self.session) is requests.Session:
             from urbanlens.dashboard.services.core.rate_limiter import _RateLimitedSession
 
-            object.__setattr__(self, "session", _RateLimitedSession(key))
+            object.__setattr__(self, "session", _RateLimitedSession(key, self.endpoint_for_log))
+
+    @staticmethod
+    def endpoint_for_log(url: str) -> str:
+        """How this gateway's URLs are described in ``ApiCallLog``.
+
+        Defaults to the URL itself, which is what every point-lookup service
+        wants. Override where the URL encodes something not worth keeping - a
+        map tile's path *is* a coordinate somebody was looking at, and the log
+        exists to track volume and cost per service, which the coordinate does
+        not contribute to.
+
+        Args:
+            url: The URL about to be requested.
+
+        Returns:
+            The string to record as the call's endpoint.
+        """
+        return url
 
 
 class GatewayRequestError(RuntimeError):

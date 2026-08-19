@@ -21,7 +21,7 @@ from django.core.cache import cache
 from django.urls import reverse
 from model_bakery import baker
 
-from urbanlens.core.tests.testcase import TestCase
+from urbanlens.core.tests.testcase import SimpleTestCase, TestCase
 
 _GATEWAY = "urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway.RedataBasemapTilesGateway"
 #: Patched at its source module, not in the controller's namespace: the
@@ -132,3 +132,52 @@ class BasemapCatalogueTests(TestCase):
             self.client.get(self.url)
 
         self.assertEqual(list_sources.call_count, 1, "documented as called once per session, not once per map load")
+
+
+class TileLogPrivacyTests(SimpleTestCase):
+    """A tile URL is a coordinate somebody was looking at.
+
+    `ApiCallLog` records the endpoint of every gateway call to track volume and
+    cost per service. For every other service the URL is a point lookup the
+    application already knows about; for tiles it is one request per pan, so
+    logging the path verbatim would accumulate a record of which places this
+    deployment's users panned over - in an application whose premise is that
+    pin locations are private.
+
+    The layer answers everything the log is for. The coordinate does not.
+    """
+
+    def _normalize(self, url: str) -> str:
+        from urbanlens.dashboard.services.apis.locations.redata_basemap_tiles_gateway import RedataBasemapTilesGateway
+
+        return RedataBasemapTilesGateway.endpoint_for_log(url)
+
+    def test_the_tile_coordinate_is_not_logged(self) -> None:
+        logged = self._normalize("https://redata.example/api/v1/tiles/usgs-topo/18/77238/98543/")
+
+        self.assertNotIn("77238", logged)
+        self.assertNotIn("98543", logged)
+        self.assertNotIn("/18/", logged)
+
+    def test_the_layer_is_kept(self) -> None:
+        """Volume and cost per layer is the question the log exists to answer."""
+        logged = self._normalize("https://redata.example/api/v1/tiles/usgs-topo/18/77238/98543/")
+
+        self.assertEqual(logged, "https://redata.example/api/v1/tiles/usgs-topo/")
+
+    def test_the_catalogue_url_is_unchanged(self) -> None:
+        url = "https://redata.example/api/v1/tiles/sources/"
+
+        self.assertEqual(self._normalize(url), url)
+
+    def test_an_unrelated_url_passes_through(self) -> None:
+        url = "https://redata.example/api/v1/imagery/?lat=41.7&lng=-73.9"
+
+        self.assertEqual(self._normalize(url), url)
+
+    def test_the_default_gateway_still_logs_the_full_url(self) -> None:
+        """Only this gateway opts out; the rest keep the detail they rely on."""
+        from urbanlens.dashboard.services.core.gateway import Gateway
+
+        url = "https://redata.example/api/v1/geocode/?q=poughkeepsie"
+        self.assertEqual(Gateway.endpoint_for_log(url), url)

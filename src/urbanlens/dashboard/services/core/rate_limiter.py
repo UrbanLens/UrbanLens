@@ -16,6 +16,7 @@ and ``log_api_call`` directly - see their docstrings.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import timedelta
 from decimal import Decimal
@@ -593,11 +594,18 @@ class _RateLimitedSession:
     ``self.session.get(...)`` continues to work unchanged.
     """
 
-    def __init__(self, service_key: str) -> None:
+    def __init__(self, service_key: str, endpoint_for_log: Callable[[str], str] | None = None) -> None:
         import requests
 
         self._service_key = service_key
         self._session = requests.Session()
+        # How this service's URLs are described in ApiCallLog. The default is
+        # the URL itself, which is right for the point lookups every other
+        # service makes. A service whose URL *is* a user's position (map tiles)
+        # overrides it: the log exists to track volume and cost per service,
+        # and the coordinate adds nothing to that while building a record of
+        # which places were looked at.
+        self._endpoint_for_log = endpoint_for_log or str
 
     def __getattr__(self, name: str):
         return getattr(self._session, name)
@@ -634,7 +642,7 @@ class _RateLimitedSession:
         no longer has a check-then-log gap for concurrent callers to race
         through.
         """
-        entry_pk = _reserve_call(self._service_key, endpoint=str(url))
+        entry_pk = _reserve_call(self._service_key, endpoint=self._endpoint_for_log(str(url)))
 
         # requests has no default timeout at all: a gateway call that forgets
         # timeout= would otherwise block its caller (and, when running under a

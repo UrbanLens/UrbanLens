@@ -28,6 +28,29 @@ class RedataBasemapTilesGateway(RedataLocationContextGateway):
     #: exhaust the allowance every other location feature draws on.
     service_key: ClassVar[str] = "redata_basemap_tiles"
 
+    @staticmethod
+    def endpoint_for_log(url: str) -> str:
+        """Record the layer, never the tile coordinate.
+
+        A tile path is ``/tiles/{layer}/{z}/{x}/{y}/``, so logging it verbatim
+        would accumulate a record of which places this deployment's users
+        panned over - in an application whose whole premise is that pin
+        locations are private. ``ApiCallLog`` exists to track volume and cost
+        per service, and the layer is all of that question the URL answers.
+
+        Args:
+            url: The tile or catalogue URL about to be requested.
+
+        Returns:
+            The URL truncated at the layer segment.
+        """
+        marker = "/api/v1/tiles/"
+        if marker not in url:
+            return url
+        prefix, _, rest = url.partition(marker)
+        layer = rest.split("/", 1)[0]
+        return f"{prefix}{marker}{layer}/" if layer else f"{prefix}{marker}"
+
     def list_sources(self) -> list[dict[str, Any]]:
         """Return REData's basemap layer catalogue.
 
