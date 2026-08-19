@@ -238,6 +238,12 @@ only through their own endpoints (`controllers/floorplans.py`).
 - **References come from the pin's own photos** — the reference pool attaches to every item, so
   the editor offers this pin's existing photos as thumbnails to attach to a wall, a door or its
   lock (one pool row per photo however many items cite it), alongside adding one by URL
+- **Historical aerial captures in the satellite carousel** — REData's `/imagery/timeline/`
+  contributes dated frames alongside current imagery, so a site that has been demolished,
+  re-roofed or cleared can be seen as it was. Continuous satellite ranges are deliberately not
+  listed as slides: they are dates to materialise on request, not images that already exist
+- **Extra basemap layers from REData** — `/tiles/sources/` layers are registered alongside the
+  built-in ones and served through an UrbanLens proxy, so REData's key stays server-side
 - **Distress signals on the property card** — recorded liens/fines and tax delinquency from
   REData's `/parcels/{uuid}/liens/` and `/parcels/{uuid}/tax-payments/`. For this application
   they are the most telling records on the card: an open code-enforcement lien and years of

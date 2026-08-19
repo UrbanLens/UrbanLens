@@ -150,10 +150,66 @@ class RedataSatelliteProvider(SatelliteViewProvider):
             logger.debug("REData imagery unavailable for %s, %s: %s", latitude, longitude, exc)
             return
 
+        seen_urls: set[str] = set()
         for result in results:
             slide = self._slide_from_result(gateway, result, latitude, longitude)
             if slide is not None:
+                seen_urls.add(slide.img_src)
                 yield slide
+
+        # Dated historical captures. `/imagery/` answers "what can I show for
+        # this point now"; the timeline answers "what dates exist", and for a
+        # site that has been demolished, re-roofed or cleared, the older frames
+        # are the interesting ones. Each capture carries a full `/imagery/` row
+        # as its asset, so the same slide builder handles them.
+        yield from self._historical_slides(gateway, latitude, longitude, seen_urls)
+
+    def _historical_slides(
+        self,
+        gateway: RedataImageryGateway,
+        latitude: float,
+        longitude: float,
+        seen_urls: set[str],
+    ) -> Generator[SatelliteSlide]:
+        """Slides for dated captures from the imagery timeline.
+
+        Continuous ``time_series`` ranges are deliberately skipped: they are a
+        date *range* to be materialised one date at a time
+        (``POST /imagery/capture/``), not images that already exist, so putting
+        them in a carousel would mean inventing dates to show.
+
+        Args:
+            gateway: The imagery gateway to reuse.
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            seen_urls: Slide sources already yielded, so a capture that is also
+                the current image is not shown twice.
+
+        Yields:
+            One slide per dated capture, newest first.
+        """
+        from urbanlens.dashboard.services.locations.imagery_timeline import flatten_timeline
+
+        try:
+            envelope = gateway.get_timeline(latitude, longitude)
+        except LocationContextUnavailableError as exc:
+            logger.debug("REData imagery timeline unavailable for %s, %s: %s", latitude, longitude, exc)
+            return
+
+        for entry in flatten_timeline(envelope):
+            if entry["kind"] != "capture":
+                continue
+            asset = entry.get("asset") or {}
+            if not asset.get("url"):
+                continue
+            slide = self._slide_from_result(gateway, asset, latitude, longitude)
+            if slide is None or slide.img_src in seen_urls:
+                continue
+            seen_urls.add(slide.img_src)
+            # An unresolved Esri date is the publication date, months off the
+            # acquisition - say so rather than captioning it as fact.
+            date = entry["captured_on"] if entry["date_is_exact"] else f"{entry['captured_on']} (published)"
+            yield SatelliteSlide(img_src=slide.img_src, source=slide.source, date=str(date), detail=slide.detail)
 
     def _slide_from_result(self, gateway: RedataImageryGateway, result: dict[str, Any], latitude: float, longitude: float) -> SatelliteSlide | None:
         """Build one carousel slide from a REData imagery result, or None to skip it."""

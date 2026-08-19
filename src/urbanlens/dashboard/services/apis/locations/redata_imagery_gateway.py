@@ -24,6 +24,7 @@ from urbanlens.dashboard.services.apis.locations.redata_context_gateway import (
 )
 
 _IMAGERY_PATH = "/api/v1/imagery/"
+_TIMELINE_PATH = "/api/v1/imagery/timeline/"
 _DOWNLOAD_TIMEOUT = 30
 
 
@@ -54,6 +55,47 @@ class RedataImageryGateway(RedataLocationContextGateway):
         """
         envelope = self.near_point(_IMAGERY_PATH, latitude, longitude, provider=providers)
         return envelope.results
+
+    def get_timeline(self, latitude: float, longitude: float, *, trigger_archive: bool = False) -> dict[str, Any]:
+        """Return which dates imagery exists for at a coordinate.
+
+        Two shapes come back and both matter, because sources answer
+        differently and neither can be expressed as the other:
+
+        * ``captures`` - concrete dated images, each carrying a full
+          ``/imagery/`` row as its ``asset``.
+        * ``providers_timeline[].time_series`` - continuous-coverage layers
+          where the available dates are a *range*. NASA GIBS alone publishes
+          four, each independently addressable; ``intervals`` and
+          ``time_series_asset_uuid`` never merge across layers, so a date is
+          always attributable to the layer it came from.
+
+        ``since``/``until`` are deliberately not exposed: REData documents them
+        as filtering the response rather than the fetch, and its cache holds
+        one complete answer per point, so narrowing here would only hide
+        captures a later call needs.
+
+        Args:
+            latitude: WGS-84 latitude.
+            longitude: WGS-84 longitude.
+            trigger_archive: Use ``POST``, which re-queries every source live
+                and queues permanent archiving of what it finds. REData
+                documents this as the call to make when about to show a time
+                slider; the ``GET`` never archives. Costs a live fetch, so it
+                is off by default.
+
+        Returns:
+            The timeline envelope (``earliest``, ``latest``, ``years``,
+            ``captures``, ``providers_timeline``, ``providers``), or an empty
+            dict when nothing answered.
+
+        Raises:
+            LocationContextUnavailableError: The request to REData failed.
+        """
+        params = {"lat": latitude, "lng": longitude}
+        if trigger_archive:
+            return self.post_json(_TIMELINE_PATH, params) or {}
+        return self.get_json(_TIMELINE_PATH, params) or {}
 
     def download_bytes(self, url: str) -> bytes:
         """Fetch a credentialed imagery source's bytes through REData's authenticated proxy.
