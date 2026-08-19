@@ -238,6 +238,10 @@ only through their own endpoints (`controllers/floorplans.py`).
 - **References come from the pin's own photos** — the reference pool attaches to every item, so
   the editor offers this pin's existing photos as thumbnails to attach to a wall, a door or its
   lock (one pool row per photo however many items cite it), alongside adding one by URL
+- **Distress signals on the property card** — recorded liens/fines and tax delinquency from
+  REData's `/parcels/{uuid}/liens/` and `/parcels/{uuid}/tax-payments/`. For this application
+  they are the most telling records on the card: an open code-enforcement lien and years of
+  unpaid tax are what "abandoned" looks like in public records
 - **Relationships geometry can't express** — a door's `connects_rooms` (what a router walks to
   answer "can I get from here to there?"), a stair's or shaft's `spans_floors`, a room's `parent`
   for nesting (a closet inside a ward), plus `thickness_meters` and `rotation_degrees`

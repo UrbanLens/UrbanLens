@@ -227,6 +227,52 @@ class RedataGateway(Gateway):
         body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/assessments/") or {}
         return list(body.get("results") or [])
 
+    def lookup_liens(self, parcel_uuid: str) -> list[dict[str, Any]]:
+        """Return recorded liens and fines against a parcel.
+
+        See REData's ``docs/api-reference.md``, "GET /parcels/{uuid}/liens/".
+        Rows carry ``lien_type``, ``amount``, ``filed_date`` and ``status``.
+        ``status`` is free text - publishers spell it inconsistently and REData
+        does not normalise it - so treat it as a label to show, not a value to
+        branch on.
+
+        Unlike owner records, nothing here names a private individual: a lien
+        row describes the property's own encumbrance.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            The raw lien rows, newest filing first; empty outside covered counties.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/liens/") or {}
+        return list(body.get("results") or [])
+
+    def lookup_tax_payments(self, parcel_uuid: str) -> list[dict[str, Any]]:
+        """Return tax billing and payment history for a parcel.
+
+        See REData's ``docs/api-reference.md``, "GET /parcels/{uuid}/tax-payments/".
+        One row per **parcel-year**, carrying ``tax_year``, ``amount``, ``paid``
+        and ``delinquent``. ``delinquent`` is the publisher's own determination
+        rather than something derived from ``paid`` - a row can be unpaid but
+        not yet delinquent, since bills are unpaid before their due date.
+
+        Args:
+            parcel_uuid: The parcel's REData uuid (see :meth:`lookup_parcel_uuid`).
+
+        Returns:
+            The raw payment rows, newest tax year first; empty outside covered
+            counties.
+
+        Raises:
+            PropertyRecordsUnavailableError: The request to REData failed.
+        """
+        body = self._get_json(f"/api/v1/parcels/{parcel_uuid}/tax-payments/") or {}
+        return list(body.get("results") or [])
+
     def lookup_sale_records(self, parcel_uuid: str) -> list[dict[str, Any]]:
         """Return supplementary recorded sales near a parcel.
 

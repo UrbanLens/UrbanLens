@@ -58,6 +58,12 @@ logger = logging.getLogger(__name__)
 _CACHE_SOURCE = "property_records"
 
 
+#: Liens shown on the card. A parcel with a long enforcement history is
+#: interesting, but the card is a summary - the full list belongs to whoever
+#: goes looking in the county records.
+_MAX_LIEN_ROWS = 8
+
+
 def _fetch_payload(location: Location, latitude: float, longitude: float) -> dict[str, Any]:
     """Call REData and return the shared LocationCache payload shape.
 
@@ -126,7 +132,74 @@ def _fetch_payload(location: Location, latitude: float, longitude: float) -> dic
         if supplementary:
             payload["sales_history"] = list(payload.get("sales_history") or []) + supplementary
 
+        # Encumbrances and unpaid tax. For this application these are the most
+        # telling records on the card: an open code-enforcement lien and years
+        # of delinquent tax are what "abandoned" looks like in public records,
+        # long before anything says so in words. Same best-effort stance as
+        # above - the card stands without them.
+        try:
+            lien_rows = gateway.lookup_liens(payload["uuid"])
+        except PropertyRecordsUnavailableError:
+            lien_rows = []
+        if lien_rows:
+            payload["liens"] = _lien_rows(lien_rows)
+
+        try:
+            tax_rows = gateway.lookup_tax_payments(payload["uuid"])
+        except PropertyRecordsUnavailableError:
+            tax_rows = []
+        if tax_rows:
+            payload["tax_status"] = _tax_status(tax_rows)
+
     return payload
+
+
+def _lien_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Shape lien rows for display, newest filing first.
+
+    ``status`` is free text that publishers spell inconsistently, so it is
+    passed through as a label rather than interpreted.
+
+    Args:
+        rows: Raw rows from :meth:`RedataGateway.lookup_liens`.
+
+    Returns:
+        Display rows carrying type, amount, filing date and status.
+    """
+    shaped = [
+        {
+            "lien_type": (row.get("lien_type") or "Lien").strip(),
+            "amount": row.get("amount"),
+            "filed_date": row.get("filed_date"),
+            "status": (row.get("status") or "").strip(),
+        }
+        for row in rows
+        if isinstance(row, dict)
+    ]
+    return sorted(shaped, key=lambda row: row.get("filed_date") or "", reverse=True)[:_MAX_LIEN_ROWS]
+
+
+def _tax_status(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Summarise tax history into the two facts worth showing.
+
+    ``delinquent`` is the publisher's own determination and is not derived from
+    ``paid``: a bill is unpaid before its due date without being delinquent, so
+    counting unpaid rows as delinquency would overstate distress on a property
+    whose current bill simply is not due yet.
+
+    Args:
+        rows: Raw rows from :meth:`RedataGateway.lookup_tax_payments`.
+
+    Returns:
+        The latest year on record and how many years are marked delinquent.
+    """
+    years = [row.get("tax_year") for row in rows if isinstance(row, dict) and isinstance(row.get("tax_year"), int)]
+    delinquent = sorted(row["tax_year"] for row in rows if isinstance(row, dict) and row.get("delinquent") and isinstance(row.get("tax_year"), int))
+    return {
+        "latest_year": max(years) if years else None,
+        "delinquent_years": delinquent,
+        "delinquent_count": len(delinquent),
+    }
 
 
 def _supplementary_sales(rows: list[dict[str, Any]], situs_address: str, apn: str) -> list[dict[str, Any]]:
@@ -365,6 +438,22 @@ def _render_available(data: dict[str, Any], *, show_owner: bool) -> dict[str, An
         # stage matters because a Board of Review figure is post-appeal.
         stage_suffix = f" ({row['value_stage']})" if row.get("value_stage") else ""
         meta.append({"label": f"Assessed {row.get('tax_year') or '?'}", "value": f"${row['total_value']:,.0f}{stage_suffix}"})
+
+    # Distress signals, last because they are the conclusion the rows above
+    # lead to rather than another attribute of the building.
+    tax_status = data.get("tax_status") or {}
+    if tax_status.get("delinquent_count"):
+        years = tax_status.get("delinquent_years") or []
+        span = f"{years[0]}-{years[-1]}" if len(years) > 1 else str(years[0])
+        meta.append({"label": "Tax delinquent", "value": f"{tax_status['delinquent_count']} year{'s' if tax_status['delinquent_count'] != 1 else ''} ({span})"})
+    elif tax_status.get("latest_year"):
+        meta.append({"label": "Tax status", "value": f"Current through {tax_status['latest_year']}"})
+
+    for lien in (data.get("liens") or [])[:5]:
+        amount = f"${float(lien['amount']):,.0f}" if lien.get("amount") not in (None, "") else ""
+        status = f" - {lien['status']}" if lien.get("status") else ""
+        filed = f" (filed {lien['filed_date']})" if lien.get("filed_date") else ""
+        meta.append({"label": lien["lien_type"].title(), "value": f"{amount}{status}{filed}".strip(" -")})
     if data.get("market_value"):
         meta.append({"label": "Market value", "value": f"${data['market_value']:,.0f}"})
     if building.get("outbuilding_value"):
