@@ -23,6 +23,21 @@ injects .env (systemd EnvironmentFile, docker compose, etc.):
     UL_DEPLOY_WEBHOOK_PORT    Bind port. Default: 9000
     UL_DEPLOY_WEBHOOK_PATH    URL path the Git host POSTs to. Default: /webhook
     UL_DEPLOY_LOG_FILE        Log file path. Default: ./deploy_webhook.log
+    UL_OPS_TOKEN              Bearer token for the staging pipeline endpoints
+                              below. Unset disables them entirely.
+    UL_PROD_DIR               Production checkout the staging pipeline copies
+                              data from. Unset skips the data clone.
+
+Beyond the git webhook, three endpoints let a caller drive and observe a full
+staging deploy without shell access. All three need `Authorization: Bearer
+$UL_OPS_TOKEN`:
+
+    POST /staging/deploy[?wait=1][&branch=X][&skip_data=1][&skip_tests=1]
+        Runs pull -> clone prod data -> rebuild -> wait healthy -> verify
+        migrations, row counts and pages -> integration tests. Returns the run
+        id immediately, or the whole record when `wait=1`.
+    GET  /staging/runs/<run_id>       The run record as JSON.
+    GET  /staging/runs/<run_id>/log   The transcript, for when a step failed.
 
 Usage:
     python3 bin/deploy_webhook.py
@@ -39,6 +54,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import threading
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DEPLOY_SCRIPT = REPO_ROOT / "bin" / "deploy.sh"
@@ -74,6 +90,15 @@ BRANCH = os.environ.get("UL_DEPLOY_WEBHOOK_BRANCH", "")
 HOST = os.environ.get("UL_DEPLOY_WEBHOOK_HOST", "127.0.0.1")
 PORT = int(os.environ.get("UL_DEPLOY_WEBHOOK_PORT", "9000"))
 WEBHOOK_PATH = os.environ.get("UL_DEPLOY_WEBHOOK_PATH", "/webhook")
+OPS_TOKEN = os.environ.get("UL_OPS_TOKEN", "")
+PROD_DIR = os.environ.get("UL_PROD_DIR", "")
+
+#: Runs started through this server, by id. Bounded because this process is
+#: long-lived: an unbounded dict here is a slow leak that only shows up on a
+#: host nobody restarts.
+_RUNS: dict[str, dict] = {}
+_RUNS_LIMIT = 50
+_RUNS_LOCK = threading.Lock()
 LOG_FILE = Path(os.environ.get("UL_DEPLOY_LOG_FILE", REPO_ROOT / "deploy_webhook.log"))
 
 
@@ -116,13 +141,117 @@ class WebhookHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(payload)
 
+    def _handle_staging_deploy(self) -> None:
+        """Start a staging deploy, optionally blocking until it finishes.
+
+        ``wait=1`` holds the connection open for the whole run - which is the
+        point: a caller gets one pass/fail answer without polling, and only
+        goes reading logs when the answer is "fail". Without it the run id
+        comes back immediately and the GET endpoints report progress.
+        """
+        if not self._authorized_for_ops():
+            self._respond(403, "forbidden")
+            return
+
+        from urllib.parse import parse_qs, urlparse
+
+        query = parse_qs(urlparse(self.path).query)
+        wait = query.get("wait", ["0"])[0] not in ("0", "", "false")
+        branch = query.get("branch", [BRANCH])[0]
+        skip_data = query.get("skip_data", ["0"])[0] not in ("0", "", "false")
+        skip_tests = query.get("skip_tests", ["0"])[0] not in ("0", "", "false")
+
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from opslib.staging import run_staging_pipeline
+
+        checkout = Path(__file__).resolve().parent.parent
+
+        # Named here, not inside the pipeline: the async branch below returns
+        # this id to the caller, and an id that does not match the run it
+        # started is an id that 404s forever.
+        run_id = f"staging-deploy-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S')}"
+
+        def _execute() -> dict:
+            record = run_staging_pipeline(
+                checkout=checkout,
+                branch=branch,
+                prod_dir=Path(PROD_DIR) if PROD_DIR and not skip_data else None,
+                run_dir=checkout / ".ops-runs",
+                skip_data=skip_data,
+                skip_tests=skip_tests,
+                run_id=run_id,
+            )
+            with _RUNS_LOCK:
+                _RUNS[record["run_id"]] = record
+                # Oldest first, so a long-lived server keeps the recent runs a
+                # caller might still be asking about.
+                for stale in sorted(_RUNS)[:-_RUNS_LIMIT]:
+                    _RUNS.pop(stale, None)
+            return record
+
+        if wait:
+            log(f"Staging deploy (blocking) branch={branch}")
+            self._respond_json(200 if (record := _execute())["status"] == "ok" else 500, record)
+            return
+
+        log(f"Staging deploy (async) branch={branch} run_id={run_id}")
+        # Registered before the thread starts, so a poll that arrives while the
+        # deploy is still running is answered "running" rather than "unknown".
+        with _RUNS_LOCK:
+            _RUNS[run_id] = {"run_id": run_id, "status": "running", "steps": [], "log_path": str(checkout / ".ops-runs" / f"{run_id}.log")}
+        threading.Thread(target=_execute, daemon=True).start()
+        self._respond_json(202, {"run_id": run_id, "status": "started", "poll": f"/staging/runs/{run_id}"})
+
+    def _authorized_for_ops(self) -> bool:
+        """Whether this request carries the ops bearer token.
+
+        Compared with ``compare_digest`` for the same reason the webhook
+        signatures are: a plain ``==`` on a secret leaks its prefix through
+        timing.
+        """
+        if not OPS_TOKEN:
+            return False
+        offered = (self.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
+        return bool(offered) and hmac.compare_digest(offered, OPS_TOKEN)
+
+    def _respond_json(self, status: int, payload: dict) -> None:
+        """Send a JSON body."""
+        body = json.dumps(payload, indent=2).encode()
+        self.send_response(status)
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
     def do_GET(self) -> None:
         if self.path == "/healthz":
             self._respond(200, "ok")
             return
+
+        if self.path.startswith("/staging/runs/"):
+            if not self._authorized_for_ops():
+                self._respond(403, "forbidden")
+                return
+            run_id = self.path.removeprefix("/staging/runs/").removesuffix("/log")
+            with _RUNS_LOCK:
+                record = _RUNS.get(run_id)
+            if record is None:
+                self._respond_json(404, {"error": "unknown run", "run_id": run_id})
+                return
+            if self.path.endswith("/log"):
+                log_path = Path(record.get("log_path", ""))
+                self._respond(200, log_path.read_text(encoding="utf-8") if log_path.is_file() else "(log not found)")
+                return
+            self._respond_json(200, record)
+            return
+
         self._respond(404, "not found")
 
     def do_POST(self) -> None:
+        if self.path.split("?")[0] == "/staging/deploy":
+            self._handle_staging_deploy()
+            return
+
         if self.path != WEBHOOK_PATH:
             self._respond(404, "not found")
             return
