@@ -257,7 +257,12 @@ Deliberately left out of the schema change: wiring a new suppression rule into e
 notification producer is a behaviour change of its own size, and the external API's `is_muted`
 surface (Batch S) needs the flag to exist first.
 
-## OPEN 2026-07-28: 16 pre-existing failures outside every prior sweep's `-k` filter
+## RESOLVED (verified 2026-08-19): 16 pre-existing failures outside every prior sweep's `-k` filter
+
+A full unfiltered run on this branch is green (11,436 passed / 0 failed, 2026-08-18). Whatever these
+were, they are not failing now. Original filing follows for the triage notes.
+
+### (ORIGINAL) OPEN 2026-07-28
 
 Every sweep so far this session used a `-k` keyword filter scoped to pin/wiki/location/friend/
 external-API territory. A full unfiltered run (`pytest src/urbanlens/dashboard/tests`, no `-k`,
@@ -3789,7 +3794,25 @@ Nothing on the remaining task list clears the bar of "worth doing without those 
 blocks are template-coupled or need a Leaflet stub. Stated per the standing instruction to
 say so plainly rather than manufacture work.
 
-## OPEN 2026-08-12: HEIC/HEIF uploads cannot have their GPS stripped
+## RESOLVED 2026-08-19: HEIC/HEIF uploads cannot have their GPS stripped
+
+**Resolution: the second route - refuse, narrowed so it costs nothing to anyone it does not
+protect.** `uploads.unscrubbable_format_error` refuses a HEIC/HEIF upload only from a profile whose
+settings ask for location stripping, with a message telling them to convert first. A user who keeps
+visit logging on is unaffected: they were never promised a scrub, so refusing their iPhone photos
+would take the format away for nothing.
+
+The dependency route stays open and is strictly better if the licensing review lands: adding
+`pillow-heif` empties `_UNSCRUBBABLE_EXTENSIONS`, and the refusal disappears on its own with no
+other change.
+
+What made this worth deciding rather than leaving filed: the failure mode was the app *promising* a
+scrub, failing silently, and keeping the full GPS IFD - for exactly the users who had opted out.
+Covered by `test_heic_gps_refusal.py`.
+
+The original filing follows.
+
+### (ORIGINAL) OPEN 2026-08-12
 
 Discovered while fixing the TIFF/AVIF GPS-strip leaks (both fixed; see the audit report).
 
@@ -3907,7 +3930,13 @@ so an upload slower than the 30s timeout - already having lost the lock to its s
 *that* upload's lock on the way out. It now uses the token-checked release from
 `services.core.locks` (see the 2026-08-12 sweep-lock entry; same defect, same fix).
 
-## URGENT 2026-08-13: commit `c3ae4911` cannot start - it imports five files it did not commit
+## RESOLVED (verified 2026-08-19): commit `c3ae4911` cannot start - it imports five files it did not commit
+
+All five modules are tracked today, and `bin/check_imports_tracked.py` - written in response to
+this very defect - passes on the committed tree. The check is wired into pre-commit, so the class
+cannot recur silently. Original filing follows.
+
+### (ORIGINAL) URGENT 2026-08-13
 
 Worse than, and separate from, the migration gap recorded below. `c3ae4911 audit` committed 139
 files but left **five non-test modules untracked**, and 19 committed files import them:
@@ -3968,7 +3997,12 @@ audit's regression guards exist in the repository.
 Not staged here: this audit does not commit or stage without being asked, and the commit was made
 outside it.
 
-## URGENT 2026-08-13: commit `c3ae4911` ships a model field without its migration
+## RESOLVED (verified 2026-08-19): commit `c3ae4911` ships a model field without its migration
+
+`makemigrations --check` reports no pending changes and `bin/check_migration_graph.py` confirms all
+59 migrations depend only on committed ones. Original filing follows.
+
+### (ORIGINAL) URGENT 2026-08-13
 
 `c3ae4911 audit` committed 139 files, including `maps_url` on `PinImportFailure`
 (`models/pin_import_failures/model.py`). It did **not** commit the two migrations that were sitting
@@ -4026,7 +4060,7 @@ Not a finding: `services/facts/evidence.py:95` looked identical (`Fact.objects.g
 against constraints on `('key','location')`, `('image','key')`, `('key','wiki')`) but supplies the
 second half via `**lookup`, which the static sweep cannot see. It is correct.
 
-## (ORIGINAL FILING) OPEN 2026-08-13: "detach location" on a pin fails with a 500, every time
+### (ORIGINAL FILING) 2026-08-13: "detach location" on a pin fails with a 500, every time
 
 `controllers/pin_edit.py:631` (the `else` branch of the location-change handler, reached when the
 user detaches a pin from its shared `Location`) does:
@@ -5806,7 +5840,7 @@ The eight that *were* mechanically provable (anchored on a `def`/`class` the too
 uniquely) are fixed, and `check_doc_line_refs.py` now runs in CI to keep past-end-of-file citations
 at zero.
 
-## (ORIGINAL FILING) OPEN 2026-08-17: blocking leaves a saved emergency-contact default pointing at the blocked profile
+### (ORIGINAL FILING) 2026-08-17: blocking leaves a saved emergency-contact default pointing at the blocked profile
 
 Found alongside the `MarkupMapShare` revocation, and left for an owner's decision because it is a
 product question rather than a defect.
