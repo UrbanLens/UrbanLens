@@ -53,9 +53,8 @@ UrbanLens's codebase is open under AGPL, but location data, coordinates, and sit
 
    `pre-commit` runs the lint, typecheck and TypeScript tests for you if you have it installed.
 
-   (`package.json` also defines a `lint` script running `pyright`, and `pyrightconfig.json` is
-   configured for a Windows virtualenv - neither is part of the CI gate, so a passing or failing
-   pyright run tells you nothing about whether your PR will merge.)
+   (`package.json` also defines a `lint` script running `pyright`, which is not part of the CI
+   gate - a passing or failing pyright run tells you nothing about whether your PR will merge.)
 5. Open a pull request with a clear description of what changed and why.
 
 ## Questions

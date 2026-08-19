@@ -2,7 +2,7 @@
 	"include": ["src"],
 	"extraPaths": ["src"],
 	"venvPath": ".",
-	"venv": ".venv_windows",
+	"venv": ".venv",
 	"pythonVersion": "3.12",
 	// basedpyright cannot resolve Django ORM reverse accessors (e.g. user.profile)
 	// because it has no plugin API - the mypy_django_plugin that generates those

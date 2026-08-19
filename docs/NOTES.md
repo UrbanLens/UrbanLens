@@ -451,20 +451,6 @@ Inbound-facing, unlike everything else in "Rate limiting and cost tracking" abov
   via OAuth2 where the consent screen enumerates them. `permissions.OAUTH2_ONLY_SCOPES` goes
   further and refuses the `messages:*` scopes to PAT-style keys outright.
 
-## Windows development environment quirks
-
-Applies **only to a Windows checkout**. Linux/macOS checkouts (including every deployed
-environment and the dev hosts) use `.venv` and are unaffected; see `CLAUDE.local.md` for the
-current machine's actual setup, which is authoritative over this section.
-
-- On Windows the venv is `.venv_windows\` (not `.venv`), so tools are invoked via
-  `.venv_windows\Scripts\<tool>.exe`.
-- GeoDjango's GDAL/GEOS dependency is satisfied there via DLLs vendored by `geopandas`'s
-  `pyogrio` dependency, resolved in `settings/_gdal_windows.py`. That module returns immediately
-  unless `os.name == "nt"` **and** `UL_ENVIRONMENT=local`, so it is never involved in
-  Docker/CI/production - don't reach for it when diagnosing GDAL elsewhere.
-- Sass compiles natively on Windows via `bun run sass`, with no Docker needed for asset builds.
-
 ## Migrations churn on squashes
 
 Django's `CreateModel` operation defers index creation to the end of a migration, but

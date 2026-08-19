@@ -671,9 +671,9 @@ adding anything.
 Compact recap of things that have each burned at least one prior agent. Scan before starting;
 details in `CLAUDE.md` and `docs/NOTES.md`.
 
-**Environment**: PowerShell + `.venv_windows\Scripts\*.exe`; Bash sandbox has no `/mnt/c`;
-Docker only on chiron (push branch → pull there → `docker compose up --build -d`); GDAL via
-pyogrio DLLs only when `UL_ENVIRONMENT=local`; sass via bun on Windows.
+**Environment**: see `CLAUDE.local.md` for the machine you are on - it is the authority, and
+differs per checkout. GDAL/GEOS must be present for anything importing `django.contrib.gis`,
+which is why tests run in the `app` container rather than on a bare host.
 
 **Django/ORM**: no `save()` in `post_save`/`__str__`; `dispatch_uid` always; linter strips
 signal guards — make them structurally redundant; migrations: indexes dead last, nullable+unique
