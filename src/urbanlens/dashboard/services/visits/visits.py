@@ -264,6 +264,37 @@ def _mutual_candidates(suggested_to: Profile, suggested_by: Profile | None, cand
     return {p.pk: p for p in combined if are_connections(suggested_to, p)}
 
 
+
+def _suggester_name(recipient: Profile, suggested_by: Profile | None) -> str:
+    """Name the person a visit suggestion came from, as this recipient may see them.
+
+    Masked at *write* time, not render time, for the reason
+    ``calendar_sync._invite_participants`` records for its own identical
+    notification: the message is stored as plain text and is picked up by push
+    delivery and by ``notification_text_alerts``, which builds an SMS body from
+    the stored text. A name masked only in the template has already left the
+    app.
+
+    Being connected is not sufficient permission - ``VisibilityChoice``'s own
+    docstring notes accepted friends qualify for every level *except*
+    ``NO_ONE`` - so someone who has hidden their identity is named by the
+    placeholder here, exactly as they are everywhere else.
+
+    Args:
+        recipient: The profile the suggestion is addressed to.
+        suggested_by: Who suggested it, or None for a system-inferred
+            suggestion.
+
+    Returns:
+        A display name safe to store in the notification body.
+    """
+    if suggested_by is None:
+        return "A connection"
+    from urbanlens.dashboard.services.profile.identity_visibility import resolve_visible_identity
+
+    return resolve_visible_identity(recipient, suggested_by)["display_name"]
+
+
 def create_visit_suggestion(
     *,
     suggested_to: Profile,
@@ -377,14 +408,12 @@ def create_visit_suggestion(
         title = "Confirm your visit?"
         message = f"Your Google Maps activity shows you got directions and were {place} on {when}. Add it to your visit history?"
     elif existing_visit:
-        who = suggested_by.username if suggested_by else "A connection"
         title = "Update your visit?"
-        message = f"{who} says you were also {place} on {when}, which you already logged. Add them to that visit, or log it separately?"
+        message = f"{_suggester_name(suggested_to, suggested_by)} says you were also {place} on {when}, which you already logged. Add them to that visit, or log it separately?"
     else:
-        who = suggested_by.username if suggested_by else "A connection"
         title = "Visit suggestion"
-        message = f"{who} suggested you also visited {place} on {when}."
-    notification = NotificationLog.objects.create(
+        message = f"{_suggester_name(suggested_to, suggested_by)} suggested you also visited {place} on {when}."
+    notification = NotificationLog.objects.notify(
         profile=suggested_to,
         source_profile=suggested_by,
         status=Status.UNREAD,

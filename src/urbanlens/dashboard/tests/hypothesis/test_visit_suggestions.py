@@ -208,6 +208,117 @@ class GetOrCreatePinAtTests(TestCase):
 # create_visit_suggestion
 # ---------------------------------------------------------------------------
 
+class SuggesterIdentityMaskingTests(TestCase):
+    """A visit suggestion must mask its sender like every other notification does.
+
+    The sibling of `test_calendar_sync.CalendarInviteIdentityMaskingTests`, found
+    by `bin/report_defect_history.py`'s incomplete-fix query: the commit that
+    fixed the calendar importer said it masked "like its sibling does", which is
+    exactly the phrase that means more instances exist. This was one.
+
+    The message is stored as plain text and is picked up by push delivery and by
+    `notification_text_alerts`, which builds an SMS body from the stored text -
+    so a name masked only at render time has already left the app. Being
+    connected is not sufficient permission: `VisibilityChoice`'s own docstring
+    notes accepted friends qualify for every level *except* `NO_ONE`.
+    """
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.suggester = baker.make("auth.User", username="hidden_suggester").profile
+        self.recipient = baker.make("auth.User", username="recipient").profile
+        self.location = baker.make(Location, latitude="40.0", longitude="-74.0", official_name="Old Mill")
+        self.visited_at = timezone.make_aware(datetime.datetime(2026, 6, 1, 14, 0))
+
+    def _suggest(self) -> VisitSuggestion | None:
+        origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
+        origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
+        return create_visit_suggestion(
+            suggested_to=self.recipient,
+            suggested_by=self.suggester,
+            visited_at=self.visited_at,
+            location=self.location,
+            latitude=40.0,
+            longitude=-74.0,
+            candidate_profiles=[],
+            origin_visit=origin_visit,
+        )
+
+    def _hide(self, visibility: str) -> None:
+        from urbanlens.dashboard.models.profile.model import Profile
+
+        Profile.objects.filter(pk=self.suggester.pk).update(profile_visibility=visibility)
+        self.suggester.refresh_from_db()
+
+    def test_a_suggester_who_hides_their_identity_is_not_named(self) -> None:
+        from urbanlens.dashboard.models.profile.meta import VisibilityChoice
+
+        self._hide(VisibilityChoice.NO_ONE)
+
+        suggestion = self._suggest()
+
+        assert suggestion is not None
+        self.assertNotIn("hidden_suggester", suggestion.notification.message)
+
+    def test_an_ordinary_suggester_is_still_named(self) -> None:
+        """Anti-vacuity: masking must not swallow the normal case."""
+        from urbanlens.dashboard.models.profile.meta import VisibilityChoice
+
+        self._hide(VisibilityChoice.ANYONE)
+
+        suggestion = self._suggest()
+
+        assert suggestion is not None
+        self.assertIn("hidden_suggester", suggestion.notification.message)
+
+    def test_the_merge_variant_masks_too(self) -> None:
+        """The two message branches are written separately and drifted before."""
+        from urbanlens.dashboard.models.profile.meta import VisibilityChoice
+
+        self._hide(VisibilityChoice.NO_ONE)
+        # An existing visit at the same place and date turns this into the
+        # merge-or-separate wording, which is the other branch.
+        recipient_pin = baker.make(Pin, profile=self.recipient, location=self.location)
+        baker.make(PinVisit, pin=recipient_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
+        other = baker.make("auth.User").profile
+        Friendship.objects.create(from_profile=self.recipient, to_profile=other, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+        Friendship.objects.create(from_profile=self.suggester, to_profile=other, status=FriendshipStatus.ACCEPTED, relationship_type=FriendshipType.FRIEND, permissions=Permission.VIEW_PROFILE)
+
+        origin_pin = baker.make(Pin, profile=self.suggester, location=self.location)
+        origin_visit = baker.make(PinVisit, pin=origin_pin, visited_at=self.visited_at, source=VisitSource.MANUAL)
+        suggestion = create_visit_suggestion(
+            suggested_to=self.recipient,
+            suggested_by=self.suggester,
+            visited_at=self.visited_at,
+            location=self.location,
+            latitude=40.0,
+            longitude=-74.0,
+            candidate_profiles=[other],
+            origin_visit=origin_visit,
+        )
+
+        assert suggestion is not None
+        self.assertTrue(suggestion.offers_merge, "this test is about the merge wording; it did not take that branch")
+        self.assertNotIn("hidden_suggester", suggestion.notification.message)
+
+    def test_a_system_inferred_suggestion_still_says_who_it_is_from(self) -> None:
+        """No sender at all is a different case from a hidden one."""
+        origin_image = baker.make(Image, profile=self.recipient, location=self.location)
+        suggestion = create_visit_suggestion(
+            suggested_to=self.recipient,
+            suggested_by=None,
+            visited_at=self.visited_at,
+            location=self.location,
+            latitude=40.0,
+            longitude=-74.0,
+            candidate_profiles=[],
+            origin_image=origin_image,
+        )
+
+        assert suggestion is not None
+        self.assertIn("A photo you added", suggestion.notification.message)
+
+
 class CreateVisitSuggestionTests(TestCase):
     def setUp(self) -> None:
         super().setUp()
