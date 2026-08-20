@@ -82,6 +82,8 @@
     </form>
 </div>
 
+{% include "dashboard/partials/auth/_demo_cta.html" %}
+
 <div class="auth-footer">
     <span>Don't have an account? <a href="{% url 'signup' %}">Create one</a></span>
     <a href="{% url 'password_reset' %}" style="font-size:.82rem;color:#9ca3af;font-weight:400">Forgot your password?</a>

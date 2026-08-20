@@ -70,6 +70,18 @@ def promote_first_user_if_needed(user: User) -> bool:
     from django.db import transaction
 
     from urbanlens.dashboard.models.site_settings import SiteSettings
+    from urbanlens.dashboard.services.demo import DEMO_USERNAME_PREFIX
+
+    # A seeded demo account must never claim the bootstrap admin slot. The guard
+    # belongs here rather than at the call site, because the caller is a
+    # post_save signal that fires for *every* path that creates a User - so a
+    # call-site guard would have to be repeated at each one and would be missed
+    # by the next one added. On a fresh demo instance the first visitor is by
+    # definition the first user, and the slot is single-claim and permanent:
+    # letting them take it hands a throwaway account the admin panel and leaves
+    # the real operator unable to ever be promoted.
+    if user.username.startswith(DEMO_USERNAME_PREFIX):
+        return False
 
     with transaction.atomic():
         settings = SiteSettings.objects.select_for_update().get_or_create(pk=1)[0]

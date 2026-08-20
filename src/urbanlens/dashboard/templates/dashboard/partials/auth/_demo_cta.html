@@ -1,0 +1,21 @@
+{% comment %}
+"Try the demo" entry point, shared by the login and registration pages.
+
+Renders only when UL_DEMO_URL names a provisioned demo instance, so the button
+can never advertise a destination that does not exist. The demo is a separate
+deployment with its own database - see docs/DEMO.md for why isolation is the
+deployment boundary rather than a filter in this codebase.
+
+Opens in a new tab: someone part-way through signing up should not lose the
+form they were filling in to go and look at the demo.
+{% endcomment %}
+{% if demo_url and not demo_mode %}
+<div class="auth-demo-cta">
+    <span class="auth-demo-cta__rule"><span>or</span></span>
+    <a class="btn btn--ghost auth-demo-cta__btn" href="{{ demo_url }}" target="_blank" rel="noopener">
+        <i class="material-symbols-outlined">explore</i>
+        Try the demo &mdash; no account needed
+    </a>
+    <p class="auth-demo-cta__note">A sandbox with sample data. Nothing you do there touches the real site.</p>
+</div>
+{% endif %}

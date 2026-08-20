@@ -191,6 +191,25 @@ class AppSettings(BaseSettings, metaclass=AppSettingsMeta):
         ),
     )
 
+    demo_mode: bool = Field(
+        default=False,
+        description=(
+            "This deployment IS the public demo instance. Enables the demo-login endpoint and the "
+            "demo banner. Isolation is the deployment boundary itself - a demo instance runs against "
+            "its own database, seeded synthetically, and never against real data. Setting this true "
+            "on an instance holding real user data would expose it: see docs/DEMO.md."
+        ),
+    )
+    demo_url: str = Field(
+        default="",
+        description=(
+            "Absolute URL of the demo instance, e.g. https://demo.urbanlens.org. Set on the *real* "
+            "site to show the 'Try the demo' button on the login and registration pages; empty hides "
+            "it. Deliberately a URL rather than a boolean, so the button cannot appear without a "
+            "destination that someone has actually provisioned."
+        ),
+    )
+
     # Classes
     default_auto_field: str = Field(default="django.db.models.BigAutoField", description="The default auto field")
     wsgi_application: str = Field(default="urbanlens.UrbanLens.wsgi.application", description="The wsgi application")

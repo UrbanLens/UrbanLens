@@ -466,3 +466,52 @@ button.auth-inline-link {
         }
     }
 }
+
+// -- "Try the demo" call to action (login + registration) --------------------
+// Rendered by partials/auth/_demo_cta.html, and only when a demo instance has
+// been provisioned. Deliberately quieter than the primary submit and the social
+// buttons: it is an escape hatch for people not ready to sign up, not the
+// action either page is asking for.
+.auth-demo-cta {
+    margin-top: 1.25rem;
+
+    &__rule {
+        display: flex;
+        align-items: center;
+        gap: .75rem;
+        margin-bottom: .9rem;
+        color: var(--ul-grey-5, #9ca3af);
+        font-size: .78rem;
+        text-transform: uppercase;
+        letter-spacing: .06em;
+
+        &::before,
+        &::after {
+            content: "";
+            flex: 1;
+            height: 1px;
+            background: var(--ul-surface-raised-border, #e5e7eb);
+        }
+    }
+
+    &__btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: .5rem;
+        width: 100%;
+        text-decoration: none;
+
+        .material-symbols-outlined {
+            font-size: 1.15rem;
+        }
+    }
+
+    &__note {
+        margin: .55rem 0 0;
+        text-align: center;
+        font-size: .78rem;
+        line-height: 1.35;
+        color: var(--ul-grey-6, #6b7280);
+    }
+}

@@ -105,6 +105,28 @@ def add_environment_indicator(request: HttpRequest) -> dict[str, str]:
         return {"env_indicator_type": "", "env_indicator_label": ""}
 
 
+def add_demo_context(request: HttpRequest) -> dict[str, object]:
+    """Expose the demo flags to every template.
+
+    Two separate facts, deliberately not one:
+
+    - ``demo_url`` is set on the **real** site and is where its "Try the demo"
+      button points. Empty means no demo has been provisioned, and the button
+      does not render - it cannot advertise a destination that does not exist.
+    - ``demo_mode`` is set on the **demo instance itself** and drives the
+      persistent banner. An instance should never have both.
+
+    Args:
+        request: The current HttpRequest.
+
+    Returns:
+        dict with ``demo_url`` and ``demo_mode``.
+    """
+    from urbanlens.UrbanLens.settings.app import settings as app_settings
+
+    return {"demo_url": app_settings.demo_url, "demo_mode": app_settings.demo_mode}
+
+
 #: URL-name prefixes that belong to a nav-bar section other than their own, e.g.
 #: pin detail pages (``pin.*``) are reached from the map and should keep "Map" active.
 _NAV_SECTION_ALIASES = {"pin": "map", "spotguessr": "games", "trivia": "games"}
